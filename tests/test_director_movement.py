@@ -12,7 +12,12 @@ import time
 
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from tests.helpers import fanout_resolve_agent
+from tests.director_fakes import prose_resolve_agent
+import pytest
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 def _make_ctx(temp_db, to_room):
     chat_id = temp_db.qi(
@@ -88,18 +93,18 @@ def test_movement_into_disconnected_room_is_blocked(temp_db, monkeypatch):
     import agents.director as director
 
     ctx = _make_ctx(temp_db, "cliff_path")  # no adjacency to keeper_room
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert "The Stranger" not in (out["state_diff"].get("positions") or {})
     assert any("Blocked movement" in w for w in ctx.warnings)
 
 def test_movement_into_adjacent_room_is_applied(temp_db, monkeypatch):
     import agents.director as director
 
     ctx = _make_ctx(temp_db, "lamp_room")  # open adjacency to keeper_room
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -114,13 +119,13 @@ def test_blocked_movement_strips_llm_asserted_position(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, "cliff_path")
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {
+        prose_resolve_agent({"state_diff": {
             "positions": {"The Stranger": "cliff_path"}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert "The Stranger" not in (out["state_diff"].get("positions") or {})
     assert any("Blocked movement" in w for w in ctx.warnings)
 
 def test_movement_through_closed_door_is_contested_not_forced(
@@ -134,11 +139,11 @@ def test_movement_through_closed_door_is_contested_not_forced(
     import agents.director as director
 
     ctx = _make_ctx(temp_db, "vault")
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert "The Stranger" not in (out["state_diff"].get("positions") or {})
     assert any("Contested movement" in w for w in ctx.warnings)
 
 def test_movement_through_closed_door_honors_resolve_assertion(
@@ -151,7 +156,7 @@ def test_movement_through_closed_door_honors_resolve_assertion(
     ctx = _make_ctx(temp_db, "vault")
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {"positions": {"The Stranger": "vault"}}}),
+        prose_resolve_agent({"state_diff": {"positions": {"The Stranger": "vault"}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
@@ -169,7 +174,7 @@ def test_movement_through_door_opened_this_beat_is_applied(
     ctx = _make_ctx(temp_db, "vault")
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {"rooms": {"keeper_room": {
+        prose_resolve_agent({"state_diff": {"rooms": {"keeper_room": {
             "name": "Keeper's Room",
             "adjacent": [
                 {"to": "lamp_room", "barrier": "open", "distance": "near"},
@@ -338,7 +343,7 @@ def test_anchored_near_group_reconciles_positions_and_delivers_every_line(
     ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent(_travelling_group_resolve_output(with_near=True)),
+        prose_resolve_agent(_travelling_group_resolve_output(with_near=True)),
     )
 
     resolved = director.director_resolve(ctx, nonce=0)
@@ -367,7 +372,7 @@ def test_split_positions_without_fresh_near_evidence_remain_separate(
     ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent(_travelling_group_resolve_output(with_near=False)),
+        prose_resolve_agent(_travelling_group_resolve_output(with_near=False)),
     )
 
     resolved = director.director_resolve(ctx, nonce=0)
@@ -438,7 +443,7 @@ def test_mutual_near_group_without_anchor_follows_ordinary_player_move(
         "movement": {"to_room": "trail_c", "mover": "self", "arrives": True},
     })
     monkeypatch.setattr(
-        director, "_agent_json", fanout_resolve_agent(_unanchored_split_output()))
+        director, "_agent_json", prose_resolve_agent(_unanchored_split_output()))
 
     resolved = director.director_resolve(ctx, nonce=0)
 
@@ -468,7 +473,7 @@ def test_unanchored_near_repair_never_teleports_a_separated_companion(
         "movement": {"to_room": "trail_c", "mover": "self", "arrives": True},
     })
     monkeypatch.setattr(
-        director, "_agent_json", fanout_resolve_agent(_unanchored_split_output()))
+        director, "_agent_json", prose_resolve_agent(_unanchored_split_output()))
 
     resolved = director.director_resolve(ctx, nonce=0)
 
@@ -494,7 +499,7 @@ def test_unanchored_near_repair_never_grants_running_pursuit(
         "movement": {"to_room": "trail_c", "mover": "self", "arrives": True},
     })
     monkeypatch.setattr(
-        director, "_agent_json", fanout_resolve_agent(_unanchored_split_output()))
+        director, "_agent_json", prose_resolve_agent(_unanchored_split_output()))
 
     resolved = director.director_resolve(ctx, nonce=0)
 
@@ -530,7 +535,7 @@ def test_unanchored_near_repair_respects_explicit_npc_follow_stop(
         "follow_op": {"op": "stop", "reason": "chooses to hang back"},
     }}
     monkeypatch.setattr(
-        director, "_agent_json", fanout_resolve_agent(_unanchored_split_output()))
+        director, "_agent_json", prose_resolve_agent(_unanchored_split_output()))
 
     resolved = director.director_resolve(ctx, nonce=0)
 
@@ -584,7 +589,7 @@ def test_npc_can_choose_to_start_following_and_travels_with_target(
     mara_id = ctx.cast[0]["id"]
     ctx.character_results[mara_id] = _quiet_character_result(
         {"op": "start", "target": "The Stranger", "reason": "go together"})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "state_diff": {"positions": {"The Stranger": "trail_b"}},
     }))
 
@@ -609,7 +614,7 @@ def test_npc_can_stop_following_before_target_moves(temp_db, monkeypatch):
     mara_id = ctx.cast[0]["id"]
     ctx.character_results[mara_id] = _quiet_character_result(
         {"op": "stop", "reason": "chooses to stay"})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "state_diff": {"positions": {"The Stranger": "trail_b"}},
     }))
 
@@ -636,7 +641,7 @@ def test_following_does_not_grant_speed_when_target_runs(temp_db, monkeypatch):
         "sequence": [{"type": "action", "attempt": "runs down the trail",
                       "observable": "runs down the trail", "verb": "run"}],
     })
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "state_diff": {"positions": {"The Stranger": "trail_b"}},
     }))
 
@@ -663,7 +668,7 @@ def test_player_is_not_auto_carried_when_npc_target_runs_away(
     mara_id = ctx.cast[0]["id"]
     ctx.character_results[mara_id] = _quiet_character_result(
         verb="run", attempt="runs away down the trail")
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "state_diff": {"positions": {"Mara": "trail_b"}},
     }))
 
@@ -684,7 +689,7 @@ def test_following_does_not_teleport_an_already_separated_follower(
     ctx = _make_ctx(temp_db, "trail_b")
     temp_db.wset(ctx.chat.id, "scene", scene)
     ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "state_diff": {"positions": {"The Stranger": "trail_b"}},
     }))
 
@@ -707,7 +712,7 @@ def test_following_does_not_cross_a_barrier_the_target_got_through(
     ctx = _make_ctx(temp_db, "trail_b")
     temp_db.wset(ctx.chat.id, "scene", scene)
     ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         # The resolver owns this contested success for the player alone.
         "state_diff": {"positions": {"The Stranger": "trail_b"}},
     }))
@@ -729,7 +734,7 @@ def test_player_incompatible_movement_stops_following(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, "side_path")
     temp_db.wset(ctx.chat.id, "scene", scene)
     ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "state_diff": {"positions": {
             "The Stranger": "side_path", "Mara": "trail_b",
         }},

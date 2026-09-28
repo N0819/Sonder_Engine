@@ -85,7 +85,7 @@ def _transfer(relation=None) -> dict:
 
 
 def _inventory_chunk(language: str) -> str:
-    return _card(language)["specialists"]["objects"]["chunks"]["inventory_ops"]
+    return _card(language)["encoder"]["inventory_ops"]
 
 
 class TestTheRelationVocabularyIsPublishedToTheHandThatWritesIt:

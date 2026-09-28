@@ -1617,6 +1617,11 @@ class ChatAccess:
 #: `docs/design/DESIGN_FRAME_COHERENT_READS.md`), so the name is here now, and
 #: the rule that put the comment there stands: a name goes in when the
 #: behaviour lands and never before.
+#:
+#: ONE NAME HAS LEFT while `ext_api` stayed 1: `list_channels`
+#: (`add_director_specialist(list_channels=...)`), withdrawn 2026-09-27 with
+#: the Director specialists it described. The call now raises, and a name
+#: still promising it would be the lie this set exists to prevent.
 HOST_CAPABILITIES = frozenset({
     "frame_coherent_reads",
     # `api.char_state(chat_id, char_id)` -- per-character per-story state.
@@ -1639,9 +1644,6 @@ HOST_CAPABILITIES = frozenset({
     # against bounded file counts and bytes, and reports `file_count` and
     # `extracted_bytes` on the install record.
     "install_limits",
-    # `api.add_director_specialist(..., list_channels=[...])` -- declare which
-    # of your channels carry lists, so the merge does not coerce them away.
-    "list_channels",
     # `api.add_model_lane` -- a configurable model role of your own.
     "model_lanes",
     # `api.on_character_payload` -- rewrite what one mind is given, with
@@ -1806,58 +1808,24 @@ class SonderExtensionAPI:
         _record_commit_domain(self.id, name, fn, on_error)
         return f"ext:{self.id}:{name}"
 
-    def add_director_specialist(self, name, *, channels, prompt, gate=None,
-                                role="default", label=None,
+    def add_director_specialist(self, name, *, channels=None, prompt=None,
+                                gate=None, role=None, label=None,
                                 list_channels=None):
-        """Add a Director specialist family of your own.
+        """Refused, with the reason: there is no Director specialist to add.
 
-        The Director is no longer one mind: each stage fans out to a prose
-        author plus five scoped specialists, each owning a subset of
-        `state_diff`'s channels. This adds a sixth, on the same fan-out, with
-        the same scope gating, the same fail-open (your specialist failing
-        leaves the stage author's channels standing and never kills a beat) and
-        the same canonical merge order.
-
-        Three things it is NOT, each stated because the alternative would be
-        found out fifty beats later:
-
-        * **Your channels are namespaced `ext:<your-id>:<channel>`.** You cannot
-          take ownership of `attire` or `positions`; a family that could would
-          silently replace the body or spatial specialist's work.
-        * **Your channels are evidence, not causality.** No engine commit domain
-          reads an `ext:` channel, so what you write lands in the merged
-          `state_diff` and changes nothing by itself. Act on it from your own
-          `add_commit_domain` or stage.
-        * **Nothing narrates it.** The prose author's sheet is assembled from
-          in-tree chunks, so a change you record is in the ledger and not in the
-          prose unless you put it there yourself.
-
-        `gate(facts) -> bool` decides whether this beat has work for the family;
-        omit it and it runs on physical beats, which is the fail-open rule the
-        engine's own gates follow.
-
-        `list_channels` names the subset of `channels` whose value is a LIST.
-        The merge coerces every other channel to a keyed table, so an undeclared
-        list arrives as `{}` -- your family dispatched, paid for and discarded
-        with nothing said. Declare the shape or return a dict.
+        This added a sixth scoped model call to the causal Director's fan-out.
+        That Director, its five specialists and the fan-out were deleted on
+        2026-09-27: the Director writes prose and ONE encoder records every
+        channel, so a family of one's own has nothing to run on. An extension
+        that records its own evidence can still do so from `add_commit_domain`
+        or `add_stage`. Raised rather than removed, so an extension written
+        against the old API fails at registration with this sentence instead
+        of an `AttributeError`.
         """
-        from agents.director import register_specialist
-        from . import _record_specialist
-
-        # `register_specialist` raises `ValueError`, because it is the
-        # Director's function and knows nothing about extensions. A host reads
-        # this on a settings row beside every other registration refusal, so
-        # it arrives in the same shape and names the same thing they do.
-        try:
-            full = register_specialist(self.id, name, channels=channels,
-                                       prompt=prompt, gate=gate, role=role,
-                                       label=label,
-                                       list_channels=list_channels)
-        except ValueError as exc:
-            raise ExtensionError(
-                f"extension {self.id!r} specialist {name!r}: {exc}") from exc
-        _record_specialist(self.id, full)
-        return full
+        raise ExtensionError(
+            f"extension {self.id!r} specialist {name!r}: the Director no longer "
+            "fans out to specialists (removed 2026-09-27); record your own "
+            "evidence from add_commit_domain or add_stage")
 
     def on_character_payload(self, fn):
         """Alter what one mind is about to be given. The routing seam.

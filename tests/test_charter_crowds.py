@@ -450,9 +450,10 @@ class TestTheDirectorIsShownWhatItMayActOn:
         assert derived[0]["room"] == "square"
 
     def test_the_prompt_states_the_derived_law(self):
-        from llm.prompts import DEFAULT_PROMPTS
-        sheet = DEFAULT_PROMPTS["director_social"]
-        assert "crowd:charter:" in sheet
+        from llm.prompts import unified_specialist_prompt
+        for lang in ("en", "ja"):
+            sheet = unified_specialist_prompt(["crowd_ops"], lang, None)
+            assert "crowd:charter:" in sheet, lang
 
 
 class TestReceiptRidesTheExistingSeam:

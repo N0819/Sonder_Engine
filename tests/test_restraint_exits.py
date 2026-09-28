@@ -362,9 +362,9 @@ class TestPublishedVocabulary:
         specialist was handed a parenthetical of examples, and the model
         wrote the consistent name while the reader asked for the
         inconsistent one."""
-        from llm.prompts import DEFAULT_PROMPTS
+        from llm.prompts import unified_specialist_prompt
 
-        body = DEFAULT_PROMPTS["director_body"]
+        body = unified_specialist_prompt(["conditions"], "en", None)
         assert "kind:'restraint'" in body
         assert "level ∈ {held|bound|pinned|encased}" in body
         assert "active_restraints" in body

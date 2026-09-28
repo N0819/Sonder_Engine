@@ -28,9 +28,11 @@ see it. Verified by ablation rather than asserted: deleting each of the four
 earlier fixes in turn makes
 `test_every_hand_is_shown_the_scene_ledgers_it_is_asked_to_write` name that
 exact channel and hand ("director_spatial writes `comms_ops` and cannot see
-scene.comms"). Under the current causal contract, the owning specialists
-receive these standing ledgers; dedicated checks also preserve the exact
-contact endpoint and overlay records the hands need to end them.
+scene.comms"). Since 2026-09-27 the one encoder receives these standing
+ledgers -- each granted channel's owner's world slice
+(`director_prose.encoder_payload`) -- in place of the five causal hands;
+dedicated checks also preserve the exact contact endpoint and overlay records
+it needs to end them.
 
 SCOPE, stated because it is the honest half. The guard covers ledgers that
 live in the frame-scoped `world.scene` blob, which is one object a test can
@@ -57,6 +59,7 @@ from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.character_schema import default_character_data
 
 import agents.director as director
+from tests.director_fakes import _fake_agent
 
 
 # The scene every gate in `director_scopes._CHANNEL_GATES` fires on, with one
@@ -222,14 +225,6 @@ def _every_channel():
     return fields
 
 
-def _owner_step(channel):
-    """The step key of the hand that writes `channel`."""
-    # Through the facade: `tools/project_check.py` allows a test to name a
-    # `director` sibling only to patch or introspect it, and this only reads.
-    owner = director._CHANNEL_SPECIALISTS.get(channel)
-    return f"director_{owner}" if owner else "director_resolve"
-
-
 def _make_ctx(temp_db, *, scene, interp):
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -278,57 +273,43 @@ def _interp():
     }
 
 
-def _fake_agent(calls):
-    """Records every call. The Director's own answer rules for EVERY hand,
-    because a hand the ruling does not reach is not dispatched
-    (`director_scopes._dispatch_specialists`) and an undispatched hand has
-    no payload to check."""
-    from agents.director import SPECIALISTS
-
-    def fake(role, step_key, system, payload, **kw):
-        calls.append({"step_key": step_key, "payload": payload})
-        if step_key == "director_resolve":
-            return {"ledger_notes": {name: f"{name}: settled this beat"
-                                     for name in SPECIALISTS}}
-        return {}
-    return fake
+PROSE = {"prose": "The keeper tends the lamp while the storm howls."}
 
 
-def _resolve_payloads(temp_db, monkeypatch, scene=None):
-    """Run one resolve over the rich scene; return {step_key: payload}."""
+def _encoder_payload(temp_db, monkeypatch, scene=None, *, survival=True, crowds=True,
+                     interp=None, events=()):
     from world.spatial import contact_id
     from world.survival import set_survival_enabled
 
     scene = json.loads(json.dumps(scene or RICH_SCENE))
-    # The effect ledger is keyed on its parent contact, and
-    # `_live_contact_actions` drops an orphan -- so the id has to be the one
-    # the engine itself would stamp on the standing contact.
-    cid = contact_id(scene["contacts"][0])
-    scene["contacts"][0]["contact_id"] = cid
-    scene["contact_actions"] = [{"actor": "Mara", "contact_id": cid,
-                                 "action": "zolstroke"}]
-
+    if scene.get("contacts"):
+        cid = contact_id(scene["contacts"][0])
+        scene["contacts"][0]["contact_id"] = cid
+        scene["contact_actions"] = [{"actor": "Mara", "contact_id": cid,
+                                     "action": "zolstroke"}]
     calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls))
-    ctx = _make_ctx(temp_db, scene=scene, interp=_interp())
-    # `vitals` is gated on the survival setting, and `crowd_ops` and its
-    # siblings on a crowd standing in reach -- without these two the body and
-    # offscreen hands are never dispatched and the check would pass by never
-    # asking.
-    set_survival_enabled(ctx.chat.id, True)
-    temp_db.wset(ctx.chat.id, "crowds", [
-        {"uid": "crowd_1", "room_uid": "lamp_room", "band": "a dozen",
-         "composition": "keepers", "mood": "restless"}])
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": PROSE,
+        "director_specialist": {"events": list(events), "missing_tools": [],
+                                "missing_referents": [], "notes": []},
+    }))
+    ctx = _make_ctx(temp_db, scene=scene, interp=interp or _interp())
+    if survival:
+        set_survival_enabled(ctx.chat.id, True)
+    if crowds:
+        temp_db.wset(ctx.chat.id, "crowds", [
+            {"uid": "crowd_1", "room_uid": "lamp_room", "band": "a dozen",
+             "composition": "keepers", "mood": "restless"}])
     director.director_resolve(ctx, nonce=0)
-    return scene, {c["step_key"]: c["payload"] for c in calls}
+    payloads = {c["step_key"]: c["payload"] for c in calls}
+    return scene, payloads, calls
 
 
 # ---------------------------------------------------------------------------
 # The general guard.
 # ---------------------------------------------------------------------------
 
-def test_every_hand_is_shown_the_scene_ledgers_it_is_asked_to_write(
-        temp_db, monkeypatch):
+def test_every_hand_is_shown_the_scene_ledgers_it_is_asked_to_write(temp_db, prose_director, monkeypatch):
     """The guard that would have caught all five, before any of them shipped.
 
     For each channel whose standing value lives in the scene blob: the hand
@@ -338,36 +319,37 @@ def test_every_hand_is_shown_the_scene_ledgers_it_is_asked_to_write(
     key, because the delivery key is what the defect changes and several
     ledgers arrive reshaped -- a key-name assertion would pass on a payload
     that showed the hand the wrong ledger under the right name.
+
+    Ported 2026-09-27: the encoder receives, for every channel granted, its
+    owner's world slice (`director_prose.encoder_payload`); one payload now
+    carries what the five hands were shown.
     """
-    scene, payloads = _resolve_payloads(temp_db, monkeypatch)
-
-    missing_hands = [step for step in {
-        _owner_step(channel) for channel, (key, _t) in LEDGERS.items() if key
-    } if step not in payloads]
-    assert not missing_hands, (
-        "a hand was never dispatched, so this run proves nothing about its "
-        "payload: %s" % missing_hands)
-
+    scene, payloads, calls = _encoder_payload(temp_db, monkeypatch)
+    enc = payloads["director_specialist"]
+    granted = set(enc["granted_tools"])
+    ungranted = sorted(ch for ch, (key, _t) in LEDGERS.items() if key and ch not in granted)
     blind = []
     for channel, (key, token) in sorted(LEDGERS.items()):
         if not key:
             continue
-        assert scene.get(key), (channel, key)  # the fixture, not the engine
-        step = _owner_step(channel)
-        if token.casefold() not in json.dumps(payloads[step]).casefold():
-            blind.append(f"{step} writes `{channel}` and cannot see "
-                         f"scene.{key}")
+        assert scene.get(key), (channel, key)
+        if token.casefold() not in json.dumps(enc).casefold():
+            blind.append(f"encoder writes `{channel}` and cannot see scene.{key}")
     assert not blind, blind
+    assert not ungranted
 
 
 @pytest.mark.parametrize("has_clock", [False, True])
-def test_current_causal_spatial_hand_sees_standing_scene_and_clock(
-        temp_db, monkeypatch, has_clock):
+def test_current_causal_spatial_hand_sees_standing_scene_and_clock(temp_db, prose_director, monkeypatch, has_clock):
     """The current row contract must carry the state its new owner writes.
 
     A scene predating the clock still has an authored time-of-day label. The
     payload can expose that label without inventing a clock or its elapsed
     time; a real existing clock must arrive unchanged.
+
+    Ported 2026-09-27: the encoder receives, for every channel granted, its
+    owner's world slice (`director_prose.encoder_payload`); one payload now
+    carries what the five hands were shown.
     """
     scene = json.loads(json.dumps(RICH_SCENE))
     ctx = _make_ctx(temp_db, scene=scene, interp={"sequence": []})
@@ -376,27 +358,15 @@ def test_current_causal_spatial_hand_sees_standing_scene_and_clock(
     if has_clock:
         temp_db.wset(ctx.chat.id, "simulation_clock", clock)
     calls = []
-
-    def fake(role, step_key, system, payload, **kw):
-        calls.append({"step_key": step_key, "payload": payload})
-        if step_key == "director_resolve":
-            return {"ledgers": [{
-                "chrono_id": 1, "item_ids": [1], "item_names": ["Zolwarden"],
-                "source_entity_id": "Zolwarden", "commitment": "asserted",
-                "event": "Zolwarden stops following as dawn arrives at the lighthouse.",
-                "resolution_notes": "Record the travel relation and scene-wide changes.",
-                "categories": ["following_ops", "location", "time", "weather"],
-            }]}
-        return {"results": [{"status": "already_true", "transforms": [], "settled": {}}]}
-
-    monkeypatch.setattr(director, "_agent_json", fake)
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": PROSE,
+        "director_specialist": {"events": [], "missing_tools": [],
+                                "missing_referents": [], "notes": []},
+    }))
     director.director_resolve(ctx, nonce=0)
-    spatial = next(call["payload"] for call in calls
-                   if call["step_key"] == "director_spatial")
-    assert len(spatial["ledgers"]) == 1
-    assert "director_note" not in spatial  # current categories dispatch the hand
+    spatial = next(c["payload"] for c in calls if c["step_key"] == "director_specialist")
     for key in ("following", "location", "weather", "time_of_day"):
-        assert spatial[key] == scene[key]
+        assert spatial[key] == scene[key], key
     if has_clock:
         assert spatial["simulation_clock"] == clock
         assert temp_db.wget(ctx.chat.id, "simulation_clock", None) == clock
@@ -406,8 +376,7 @@ def test_current_causal_spatial_hand_sees_standing_scene_and_clock(
         assert temp_db.wget(ctx.chat.id, "simulation_clock", None) is None
 
 
-def test_resolve_and_its_hands_see_the_room_interpret_just_authored(
-        temp_db, monkeypatch):
+def test_resolve_and_its_hands_see_the_room_interpret_just_authored(temp_db, prose_director, monkeypatch):
     """`docs/guides/PIPELINE.md`: director_resolve "receives the same
     previewed world". It did not -- only `contacts` came from the preview;
     rooms, positions and stations came from the stored scene. Chat 117 turn
@@ -416,7 +385,12 @@ def test_resolve_and_its_hands_see_the_room_interpret_just_authored(
     never saw it, wrote the same room blind under another name with neither
     field, and the merge let the blind version win. The causal Director's
     world index must include the asserted room and occupants, while the
-    spatial hand receives the full room record it owns."""
+    spatial hand receives the full room record it owns.
+
+    Ported 2026-09-27: the encoder receives, for every channel granted, its
+    owner's world slice (`director_prose.encoder_payload`); one payload now
+    carries what the five hands were shown.
+    """
     interp = _interp()
     interp["onset_state_assertions"] = {
         "rooms": {"asserted_attic": {
@@ -426,77 +400,18 @@ def test_resolve_and_its_hands_see_the_room_interpret_just_authored(
                           "vertical": "down", "name": "the loft hatch"}]}},
         "positions": {"Mara": "asserted_attic"},
     }
-    calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls))
-    scene = json.loads(json.dumps(RICH_SCENE))
-    from world.spatial import contact_id
-    cid = contact_id(scene["contacts"][0])
-    scene["contacts"][0]["contact_id"] = cid
-    scene["contact_actions"] = [{"actor": "Mara", "contact_id": cid,
-                                 "action": "zolstroke"}]
-    ctx = _make_ctx(temp_db, scene=scene, interp=interp)
-    director.director_resolve(ctx, nonce=0)
-    payloads = {c["step_key"]: c["payload"] for c in calls}
-
-    spatial = payloads["director_spatial"]
-    assert "asserted_attic" in spatial["rooms"], sorted(spatial["rooms"])
-    assert spatial["rooms"]["asserted_attic"]["adjacent"][0]["vertical"] == "down"
-    assert spatial["positions"]["Mara"] == "asserted_attic"
-
-    causal = payloads["director_resolve"]
+    scene, payloads, _ = _encoder_payload(temp_db, monkeypatch, interp=interp,
+                                          survival=False, crowds=False)
+    enc = payloads["director_specialist"]
+    causal = payloads["director_prose"]
     rooms = causal["world_index"]["rooms"]
     assert "asserted_attic" in rooms, sorted(rooms)
     assert "keeper_room" in rooms["asserted_attic"]["exits"]
     assert any(body["id"] == "Mara" for body in rooms["asserted_attic"]["holds"])
     assert causal["standing_relations"]["positions"]["Mara"] == "asserted_attic"
-
-
-def test_a_world_pressure_tick_dispatches_the_hand_that_owns_sensory_events(
-        temp_db, monkeypatch):
-    """The must-tick floor forces a stalled pressure to act on the page every
-    third beat, and the author obliges -- in resolved_event, in the tick's
-    note, in a dust overlay -- but a hand runs only if the ruling ADDRESSED
-    it, and the author ticks without writing an `objects` note. Chat 117,
-    beats 60-115: 18 forced tremors, 9 of them never in the player's view,
-    because the one hand that owns `sensory_events` never ran. A tick is a
-    structured op, so it addresses that hand the way a note does, and the
-    hand is shown the ticks it is being asked to encode. No other hand is
-    woken by it."""
-    from world.spatial import contact_id
-    from world.survival import set_survival_enabled
-
-    calls = []
-
-    def fake(role, step_key, system, payload, **kw):
-        calls.append({"step_key": step_key, "payload": payload})
-        if step_key == "director_resolve":
-            return {"ledger_notes": {},
-                    "world_pressure": [{"op": "tick", "id": "wp:0:0",
-                                        "subject": "Euclid breach spread",
-                                        "note": "a concussive tremor rolls "
-                                                "through the slab"}]}
-        return {}
-
-    monkeypatch.setattr(director, "_agent_json", fake)
-    scene = json.loads(json.dumps(RICH_SCENE))
-    cid = contact_id(scene["contacts"][0])
-    scene["contacts"][0]["contact_id"] = cid
-    scene["contact_actions"] = [{"actor": "Mara", "contact_id": cid,
-                                 "action": "zolstroke"}]
-    ctx = _make_ctx(temp_db, scene=scene, interp=_interp())
-    set_survival_enabled(ctx.chat.id, True)
-    director.director_resolve(ctx, nonce=0)
-    payloads = {c["step_key"]: c["payload"] for c in calls}
-
-    assert "director_objects" in payloads, sorted(payloads)
-    ticks = payloads["director_objects"]["pressure_ticks"]
-    assert ticks == [{"id": "wp:0:0", "subject": "Euclid breach spread",
-                      "note": "a concussive tremor rolls through the slab"}]
-    # A ruling that names nobody wakes nobody else: the tick reaches the
-    # hand that can make it perceptible and no other.
-    for other in ("director_body", "director_social", "director_contact",
-                  "director_spatial"):
-        assert other not in payloads, other
+    assert enc["positions"]["Mara"] == "asserted_attic"
+    assert enc["world_index"] == causal["world_index"]
+    assert "asserted_attic" in enc["rooms"], sorted(enc["rooms"])
 
 
 def test_the_ledger_table_covers_every_channel_a_hand_writes():
@@ -516,18 +431,22 @@ def test_the_ledger_table_covers_every_channel_a_hand_writes():
     }
 
 
-def test_contact_and_body_hands_can_see_the_ledgers_they_are_asked_to_end(
-        temp_db, monkeypatch):
+def test_contact_and_body_hands_can_see_the_ledgers_they_are_asked_to_end(temp_db, prose_director, monkeypatch):
     """The current owners receive the exact records an ending addresses.
 
     Chat 111 turn 54 ended a mark that the old prose author had never been
     shown. Causal dispatch assigns those endings to contact and body; those
     hands must see the standing endpoint and overlay rather than reconstruct
     them from the transcript.
+
+    Ported 2026-09-27: the encoder receives, for every channel granted, its
+    owner's world slice (`director_prose.encoder_payload`); one payload now
+    carries what the five hands were shown.
     """
-    scene, payloads = _resolve_payloads(temp_db, monkeypatch)
-    assert payloads["director_body"]["overlays"] == scene["overlays"]
-    contacts = payloads["director_contact"]["contacts"]
+    scene, payloads, _ = _encoder_payload(temp_db, monkeypatch)
+    enc = payloads["director_specialist"]
+    assert enc["overlays"] == scene["overlays"]
+    contacts = enc["contacts"]
     assert [row["actor_part"] for row in contacts] == ["hand"]
     assert "zolgrip" in json.dumps(contacts)
     assert contacts[0]["contact_id"] == scene["contacts"][0]["contact_id"]
@@ -537,21 +456,25 @@ def test_contact_and_body_hands_can_see_the_ledgers_they_are_asked_to_end(
 # The sky, which is the instance this file was written for.
 # ---------------------------------------------------------------------------
 
-def test_the_spatial_hand_can_see_the_sky_it_owns(temp_db, monkeypatch):
+def test_the_spatial_hand_can_see_the_sky_it_owns(temp_db, prose_director, monkeypatch):
     """Weather's current owner sees the standing sky without rewriting it.
 
     The spatial weather chunk asks for an edit only when the event changes
     the sky. The engine may have drifted the weather since its last edit.
     The stored record here predates operational axes and carries the retired
     `thundersnow` flag; payload assembly must preserve that record too.
+
+    Ported 2026-09-27: the encoder receives, for every channel granted, its
+    owner's world slice (`director_prose.encoder_payload`); one payload now
+    carries what the five hands were shown.
     """
-    scene, payloads = _resolve_payloads(temp_db, monkeypatch)
-    view = payloads["director_spatial"]
+    scene, payloads, _ = _encoder_payload(temp_db, monkeypatch)
+    view = payloads["director_specialist"]
     assert view["weather"] == scene["weather"]
     assert view["weather"]["thundersnow"] is True
 
 
-def test_an_undeclared_sky_costs_two_characters(temp_db, monkeypatch):
+def test_an_undeclared_sky_costs_two_characters(temp_db, prose_director, monkeypatch):
     """The cost, and why it is bounded rather than proportional.
 
     `overlays` cost 449 chars on chat 111 and 2 on a scene with no marks:
@@ -566,30 +489,30 @@ def test_an_undeclared_sky_costs_two_characters(temp_db, monkeypatch):
     live record carries after the first declaration -- against 4,187-8,463
     for `attire` on the
     same scenes. The record this test measures is a shorter pre-axis one.
+
+    Ported 2026-09-27: the encoder receives, for every channel granted, its
+    owner's world slice (`director_prose.encoder_payload`); one payload now
+    carries what the five hands were shown.
     """
     bare = json.loads(json.dumps(RICH_SCENE))
     bare.pop("weather")
-    _scene, payloads = _resolve_payloads(temp_db, monkeypatch, scene=bare)
-    assert payloads["director_spatial"]["weather"] == {}
-    assert len(json.dumps(
-        payloads["director_spatial"]["weather"])) == 2
-
-    _scene, payloads = _resolve_payloads(temp_db, monkeypatch)
-    cost = len(json.dumps(payloads["director_spatial"]["weather"]))
+    _scene, payloads, _ = _encoder_payload(temp_db, monkeypatch, scene=bare)
+    assert payloads["director_specialist"]["weather"] == {}
+    assert len(json.dumps(payloads["director_specialist"]["weather"])) == 2
+    _scene, payloads, _ = _encoder_payload(temp_db, monkeypatch)
+    cost = len(json.dumps(payloads["director_specialist"]["weather"]))
     assert 100 < cost < 160, cost
 
 
 @pytest.mark.parametrize("weather", [
-    {"sky": s, "precipitation": p, "intensity": i, "wind": w,
-     "temperature": t}
+    {"sky": s, "precipitation": p, "intensity": i, "wind": w, "temperature": t}
     for s, p, i, w, t in (
         ("clear", "none", "none", "still", "hot"),
         ("overcast", "drizzle", "light", "breeze", "mild"),
         ("storm", "hail", "heavy", "gale", "freezing"),
         ("fog", "snow", "moderate", "wind", "cold"),
     )])
-def test_the_sky_reaches_the_payload_in_the_vocabulary_it_is_stored_in(
-        weather, temp_db, monkeypatch):
+def test_the_sky_reaches_the_payload_in_the_vocabulary_it_is_stored_in(weather, temp_db, prose_director, monkeypatch):
     """No re-spelling on the way out.
 
     The sheet asks for `{sky, precipitation, intensity, wind, temperature}`
@@ -597,10 +520,14 @@ def test_the_sky_reaches_the_payload_in_the_vocabulary_it_is_stored_in(
     is what it was shown -- so the payload must carry the stored words, not a
     prose rendering of them. `weather_words` exists for the reader-facing
     side and is deliberately not what goes here.
+
+    Ported 2026-09-27: the encoder receives, for every channel granted, its
+    owner's world slice (`director_prose.encoder_payload`); one payload now
+    carries what the five hands were shown.
     """
     from world.weather import normalize_weather
-
     scene = json.loads(json.dumps(RICH_SCENE))
     scene["weather"] = normalize_weather(weather)
-    scene, payloads = _resolve_payloads(temp_db, monkeypatch, scene=scene)
-    assert payloads["director_spatial"]["weather"] == scene["weather"]
+    scene, payloads, _ = _encoder_payload(temp_db, monkeypatch, scene=scene)
+    assert payloads["director_specialist"]["weather"] == scene["weather"]
+

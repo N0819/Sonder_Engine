@@ -14,9 +14,14 @@ import time
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from persist import commit
 from story.character_schema import default_character_data
-from tests.helpers import fanout_resolve_agent
+from tests.director_fakes import prose_resolve_agent
 from tests.test_director_movement import (_following_scene, _make_ctx,
                                           _quiet_character_result)
+import pytest
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 
 def test_a_start_op_across_rooms_puts_the_follower_with_the_target(
@@ -30,7 +35,7 @@ def test_a_start_op_across_rooms_puts_the_follower_with_the_target(
     mara_id = ctx.cast[0]["id"]
     ctx.character_results[mara_id] = _quiet_character_result(
         {"op": "start", "target": "The Stranger", "reason": "go to him"})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "state_diff": {"positions": {}},
     }))
 
@@ -55,7 +60,7 @@ def test_no_open_route_leaves_the_follower_and_the_relation(
     mara_id = ctx.cast[0]["id"]
     ctx.character_results[mara_id] = _quiet_character_result(
         {"op": "start", "target": "The Stranger", "reason": "go to him"})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "state_diff": {"positions": {}},
     }))
 
@@ -114,9 +119,10 @@ def test_a_tick_with_the_body_moving_is_not_reported(temp_db):
     assert not any("ticked without movement" in w for w in ctx.warnings)
 
 
-def test_the_causal_sheet_says_where_a_walk_ends():
-    from llm.prompts import get_prompt_body
-    sheet = get_prompt_body("director_interpret", "en")
-    assert "never the row's own source" in sheet
-    assert "where the walk ENDS" in sheet
-    assert "carries a body out of its room is a positions row" in sheet
+def test_the_encoder_is_told_where_a_walk_ends():
+    """The encoder writes each movement and each body the world moves; the
+    causal Director's interpret sheet that said this was deleted 2026-09-27."""
+    from llm.prompts import unified_specialist_prompt
+    sheet = unified_specialist_prompt(["positions"], "en", [])
+    assert "to_room is where the walk ends" in sheet
+    assert "WHERE THE WORLD PUTS IT IS YOURS TO WRITE" in sheet

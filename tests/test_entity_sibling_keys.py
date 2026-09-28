@@ -11,6 +11,10 @@ scene, and sat in `scene.entities` as furniture for the rest of the story.
 Three layers each hold the line: validation hoists (or drops debris),
 the scene merge refuses and HEALS (so a live story needs no migration),
 and get_scene tolerates a stored scene that still carries the keys.
+
+The specialist-path hoist and its two tests went with the causal hands on
+2026-09-27. The encoder's patch path does not hoist (UNBUILT_PIPELINE §1.1),
+so today the merge and get_scene layers are what stand.
 """
 
 from __future__ import annotations
@@ -24,47 +28,6 @@ _CHAIR = {
     "aliases": [], "portable": False,
     "state": {"restraints": "engaged at wrists and ankles"},
 }
-
-
-def test_specialist_hoists_siblings_nested_inside_entities():
-    """A sibling field written one nesting level too deep moves up intact
-    (the same repair the resolve diff has always had), and never survives as
-    an entity."""
-    out = preprocess_llm_output("director_objects", {
-        "entities": {
-            "interview_chair": dict(_CHAIR),
-            "remove_entities": ["old_lamp"],
-            "notes": ["the chair is bolted down"],
-        },
-    })
-    assert set(out["entities"]) == {"interview_chair"}
-    assert out["remove_entities"] == ["old_lamp"]
-    assert out["notes"] == ["the chair is bolted down"]
-
-
-def test_specialist_drops_entity_shaped_debris_under_sibling_keys():
-    """The measured chat 80 shape: entity-def copies keyed by sibling field
-    names. Neither an entity (the key is a field name) nor the sibling (the
-    value is an entity def) -- hoisting would turn a chair copy into a
-    `destruction` declaration or a `remove_entities` order, so it is dropped
-    outright."""
-    out = preprocess_llm_output("director_objects", {
-        "entities": {
-            "interview_chair": dict(_CHAIR),
-            "remove_entities": dict(_CHAIR),
-            "inventory_ops": dict(_CHAIR),
-            "artifact_ops": dict(_CHAIR),
-            "destruction": dict(_CHAIR),
-            "notes": dict(_CHAIR),
-            "resolved_events": dict(_CHAIR),
-        },
-    })
-    assert set(out["entities"]) == {"interview_chair"}
-    # Dropped, not hoisted: a chair def must not become a removal order, a
-    # destruction declaration, or a manifest verdict.
-    assert "remove_entities" not in out or out["remove_entities"] == []
-    assert "destruction" not in out or not out["destruction"]
-    assert "resolved_events" not in out or out["resolved_events"] == []
 
 
 def test_resolve_diff_hoists_objects_channels_too():
@@ -137,3 +100,4 @@ def test_non_entity_field_keys_cover_every_declared_sibling():
     for key in ("remove_entities", "inventory_ops", "artifact_ops",
                 "destruction", "notes", "resolved_events"):
         assert key in NON_ENTITY_FIELD_KEYS
+

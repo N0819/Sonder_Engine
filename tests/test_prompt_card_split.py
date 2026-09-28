@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from language_runtime import card_source, raw_card
+from language_runtime import card_source
 from language_runtime.card_source import (
     canonical_part_path,
     card_parts_dir,
@@ -49,7 +49,14 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 302   # -1 (2026-09-27): `prompts.character`, the full character
+PART_COUNT = 254   # -48 (2026-09-27, prose is the only Director): the causal
+                   # Director's sheet (`causal_director`), the five hands'
+                   # cores and 34 of their chunks (`specialists.*`; the
+                   # spatial hand's three room chunks stay for the room
+                   # author), the five `co_hands` notes, `director_note`,
+                   # `prose_author_output_shape` and the compatibility
+                   # sheet's one part (`prose_author_sheet/00`).
+                   # -1 (2026-09-27): `prompts.character`, the full character
                    # card, deleted -- the bare card is the only contract.
                    # +2 (2026-09-27): the memory picker's two graded
                    # questions (`character_jev.memory_situation`,
@@ -275,8 +282,10 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
     # 38 since 2026-09-27: `character_bare`, the bare character card; 37
     # the same day, `character`, the full card, deleted with its contract.
     assert len(card["prompts"]) == 37
+    # The five hands survive as channel order (and the spatial hand's room
+    # chunks); their cores went with the causal Director on 2026-09-27.
     assert len(card["specialists"]) == 5
-    assert len(card["prose_author_sheet"]) == 1
+    assert "prose_author_sheet" not in card
     # Fragments resolve AFTER assembly, so the loaded card must carry none.
     # (The loaded card is deeply frozen, so walk it rather than serialize it.)
     unresolved = [_dotted(path) for path, value in _leaves(card)
@@ -381,10 +390,11 @@ def test_part_files_are_in_canonical_written_form(language):
 def test_en_and_ja_declare_the_same_part_paths():
     """Closes a blind spot the loader structurally cannot see.
 
-    `_leaf_paths` treats `prose_author_sheet` as ONE path, so a pack shipping
-    28 segments instead of 29 passes the loader's card-parity comparison
-    today. The file layer sees every part, and a missing segment there is
-    a missing paragraph in an assembled sheet.
+    `_leaf_paths` treats a list as ONE path -- the case was the (deleted
+    2026-09-27) `prose_author_sheet` -- so a pack shipping 28 segments instead
+    of 29 passed the loader's card-parity comparison. The file layer sees
+    every part, and a missing segment there is a missing paragraph in an
+    assembled sheet.
     """
     paths = {language: {rel for _leaf, rel, _text
                         in part_plan(read_card_source(_pack_dir(language), CARD))}
@@ -393,53 +403,6 @@ def test_en_and_ja_declare_the_same_part_paths():
         f"only in en: {sorted(paths['en'] - paths['ja'])[:8]}; "
         f"only in ja: {sorted(paths['ja'] - paths['en'])[:8]}")
     assert len(paths["en"]) == PART_COUNT
-
-
-@pytest.mark.parametrize("language", LANGUAGES)
-def test_no_assembled_sheet_id_has_a_part_file(language):
-    """The `director_spatial` drift class, at the file layer.
-
-    Seven prompt ids are BUILT from specialists/`prose_author_sheet` and never
-    stored. A split that gives every prompt id a file of its own is exactly
-    the shape that re-creates one sheet with two spellings -- and the stored
-    English one was 1,518 characters short of its own assembly while the
-    prompt editor showed it as the sheet.
-    """
-    from llm.prompts import ASSEMBLED_SHEET_IDS
-
-    parts_dir = card_parts_dir(_pack_dir(language), CARD)
-    for pid in sorted(ASSEMBLED_SHEET_IDS):
-        assert not (parts_dir / "prompts" / f"{pid}.txt").exists(), (
-            f"{language}: prompts/{pid}.txt exists, but {pid} is assembled "
-            "from its parts and must have no body of its own")
-    assert not set(read_card_source(_pack_dir(language), CARD)["prompts"]
-                   ) & set(ASSEMBLED_SHEET_IDS)
-
-
-@pytest.mark.parametrize("language", LANGUAGES)
-def test_both_director_invocations_reference_one_causal_prompt(language):
-    """Interpret and resolve have one contract, not synchronized copies."""
-    raw = raw_card(language)
-    reference = "{{fragment:causal_director}}"
-    assert raw["prose_author_sheet"] == [[None, reference]]
-    assert "director_interpret" not in raw["prompts"]
-
-    from language_runtime import installed_language_packs
-    from llm.prompts import get_prompt_body
-
-    card = installed_language_packs()[language].card(CARD)
-    resolved = card["prose_author_sheet"][0][1]
-    assert resolved == card["causal_director"]
-    assert resolved == get_prompt_body("director_resolve_lean", language)
-    assert resolved == get_prompt_body("director_interpret", language)
-
-
-def test_the_assembled_director_sheet_carries_the_causal_output_shape():
-    from llm.prompts import DEFAULT_PROMPTS
-
-    sheet = DEFAULT_PROMPTS["director_resolve_lean"]
-    assert '"ledgers"' in sheet
-    assert '"state_diff"' not in sheet
 
 
 def test_a_missing_part_file_fails_the_load_rather_than_shortening_a_prompt(
@@ -517,17 +480,16 @@ def test_a_card_with_no_parts_passes_straight_through(tmp_path):
     assert read_card_source(pack, "plain") == body
 
 
-def test_canonical_part_path_covers_exactly_the_five_prose_shapes():
-    """The path function is total and has no discretion in it."""
+def test_canonical_part_path_covers_exactly_the_three_prose_shapes():
+    """The path function is total and has no discretion in it.
+
+    Five shapes until 2026-09-27; a hand's `core` and the prose-author
+    sheet's indexed segments went with the causal Director, and a leaf of
+    either shape is now refused rather than given a file.
+    """
     assert canonical_part_path(("prompts", "narrator")) == "prompts/narrator.txt"
-    assert canonical_part_path(
-        ("specialists", "body", "core")) == "specialists/body/core.txt"
-    assert canonical_part_path(("specialists", "body", "chunks", "attire")) == (
-        "specialists/body/chunks/attire.txt")
-    assert canonical_part_path(("prose_author_sheet", 0, 1), "voices") == (
-        "prose_author_sheet/00_voices.txt")
-    assert canonical_part_path(("prose_author_sheet", 27, 1)) == (
-        "prose_author_sheet/27.txt")
+    assert canonical_part_path(("specialists", "spatial", "chunks", "rooms")) == (
+        "specialists/spatial/chunks/rooms.txt")
     assert canonical_part_path(("nsfw_overlay",)) == "nsfw_overlay.txt"
     assert canonical_part_path(("encoder", "entities__transit")) == (
         "encoder/entities__transit.txt")
@@ -539,11 +501,7 @@ def test_canonical_part_path_covers_exactly_the_five_prose_shapes():
     assert not is_part_leaf(("prose_author_sheet", 0, 0))
     assert not is_part_leaf(("character_block_keys", 0, 0))
 
+    # The retired shapes.
+    assert not is_part_leaf(("specialists", "body", "core"))
+    assert not is_part_leaf(("prose_author_sheet", 0, 1))
 
-def test_the_compatibility_sheet_has_one_canonical_part():
-    card = raw_card("en")
-    keys = [entry[0] for entry in card["prose_author_sheet"]]
-    assert keys == [None]
-    names = [rel for leaf, rel, _text in part_plan(card)
-             if leaf[0] == "prose_author_sheet"]
-    assert names == ["prose_author_sheet/00.txt"]

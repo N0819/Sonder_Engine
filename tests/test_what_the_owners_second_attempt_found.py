@@ -14,19 +14,7 @@
    view.
 """
 from agents.director import restore_declared_quotes, substitute_player_token
-from llm.schemas import RoomDef, semantic_output_errors
-
-
-def test_a_transform_is_a_verdict():
-    out = {"results": [{"transforms": [{"patch": {"stations": {"M": {"at": None}}}}]}]}
-    errors = semantic_output_errors(
-        "director_spatial", out,
-        source_payload={"ledgers": [{"item_id": 1, "categories": ["stations"]}]})
-    assert errors == []
-    assert out["results"][0]["status"] == "encoded"
-    bad = {"results": [{"status": "done", "transforms": [{"patch": {}}]}]}
-    assert semantic_output_errors(
-        "director_spatial", bad, source_payload={"ledgers": [{"item_id": 1}]})
+from llm.schemas import RoomDef
 
 
 def test_an_exit_names_its_far_room_under_to():
@@ -78,3 +66,4 @@ def test_a_line_already_filed_as_speech_is_left_alone_and_a_bare_verb_goes():
     rows = out["ledgers"]
     assert [r.get("categories") for r in rows] == [["speech"], ["poses"], ["speech"]]
     assert rows[2]["event"] == "It's not often I see a succubus." and rows[2]["targets"] == ["Mirelle"]
+

@@ -23,7 +23,7 @@ from agents import director_repair as repair
 from llm import decisions
 from llm.providers import Aborted
 
-from tests.test_director_orchestration import _action_interp, _fake_agent, _make_ctx, _steps
+from tests.director_fakes import _action_interp, _fake_agent, _make_ctx, _steps
 
 
 # ---- sentences ------------------------------------------------------------
@@ -524,7 +524,6 @@ def _repair_answers(payload):
 
 
 def test_a_line_the_draft_dropped_is_recovered(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
     temp_db.set_setting(repair.REPAIR_SETTING, "1")
 
     def jev(state, questions):
@@ -569,7 +568,6 @@ def test_a_line_the_draft_dropped_is_recovered(temp_db, monkeypatch):
 
 
 def test_off_by_default_nothing_changes(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", lambda state, q: {
         key: {"type": "noul", "noul": 0.95 if key == "positions" else 0.02} for key in q})
     calls = []

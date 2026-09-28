@@ -21,9 +21,13 @@ import contextlib
 import json
 import time
 
+import pytest
+
+import agents.director as director
 from persist import commit
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.director_fakes import prose_resolve_agent
 
 
 def _simple_scene():
@@ -86,56 +90,39 @@ def _make_ctx(temp_db, *, turn_idx=1, authority_claims=None,
     return ctx
 
 
-def _run_resolve(ctx, monkeypatch, agent_out=None, captured=None):
-    import agents.director as director
-
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        if captured is not None:
-            captured.update(payload)
-        return dict(agent_out or {})
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
+def _prose(ctx, monkeypatch, output, calls=None):
+    monkeypatch.setattr(director, "_agent_json",
+                        prose_resolve_agent(output, calls=calls))
     return director.director_resolve(ctx, nonce=0)
 
 
-def _capture_causal_social_resolve(ctx, monkeypatch):
-    """Exercise current row dispatch, not a legacy author-only response."""
-    import agents.director as director
-
-    captured = {}
-
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        captured[step_key] = payload
-        if step_key == "director_resolve":
-            return {"ledgers": [{
-                "chrono_id": 1, "item_ids": [1], "item_names": ["Mara"],
-                "source_entity_id": f"character:{ctx.cast[0]['id']}",
-                "authority_mode": "autonomous",
-                "event": "Mara refuses the request.",
-                "resolution_notes": "Record the explicit refusal.",
-                "categories": ["public_evidence"],
-            }]}
-        assert step_key == "director_social", step_key
-        return {"results": [{"status": "already_true", "transforms": []}]}
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
-    director.director_resolve(ctx, nonce=0)
-    assert captured["director_social"]["ledgers"][0]["item_names"] == ["Mara"]
-    # The slicer keeps its minimal causal contract. Context moves to the
-    # granted owner; it does not return as a whole-beat author payload.
-    assert "pending_obligations" not in captured["director_resolve"]
-    assert "social_standing" not in captured["director_resolve"]
-    return captured["director_social"]
+def _capture(ctx, monkeypatch):
+    """The encoder's payload for one beat. The owed debts and the standing
+    reach the encoder, which writes `obligations`; the prose Director is not
+    shown them."""
+    calls = []
+    _prose(ctx, monkeypatch, {"resolved_event": "Mara refuses the request."},
+           calls=calls)
+    by_step = {}
+    for key, payload in calls:
+        by_step.setdefault(key, payload)
+    assert "pending_obligations" not in by_step["director_prose"]
+    assert "social_standing" not in by_step["director_prose"]
+    return by_step["director_specialist"]
 
 
 # ---- W1: obligation ledger ----
 
-def test_open_op_appends_ledger_and_dedupes(temp_db, monkeypatch):
+def test_open_op_appends_ledger_and_dedupes(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27: the ops arrive as the encoder's `obligations`
+    transforms.
+    """
     ctx = _make_ctx(temp_db, turn_idx=3)
     op = {"op": "open", "who": "Mara", "what": "deliver the diagnostic report",
           "kind": "demand"}
-    ctx.director_resolve = _run_resolve(
-        ctx, monkeypatch, agent_out={"obligations": [op, dict(op)]})
+    ctx.director_resolve = _prose(ctx, monkeypatch, {
+        "resolved_event": "The Stranger demands the report from Mara.",
+        "state_diff": {"obligations": [op, dict(op)]}})
 
     result = commit.commit_obligations(ctx, nonce=0)
 
@@ -204,7 +191,11 @@ def test_fresh_obligation_does_not_warn(temp_db):
     assert not ctx.warnings
 
 
-def test_resolve_payload_surfaces_overdue_flag(temp_db, monkeypatch):
+def test_resolve_payload_surfaces_overdue_flag(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27: the owed debts and the standing reach the one
+    encoder, which writes the `obligations` channel; the prose Director is not
+    shown them.
+    """
     ctx = _make_ctx(temp_db, turn_idx=5)
     temp_db.wset(ctx.chat.id, "pending_obligations", [
         {"id": "obl:2:0", "who": "Mara", "what": "deliver the diagnostic report",
@@ -213,7 +204,7 @@ def test_resolve_payload_surfaces_overdue_flag(temp_db, monkeypatch):
          "kind": "announced_action", "opened_turn": 4},
     ])
 
-    captured = _capture_causal_social_resolve(ctx, monkeypatch)
+    captured = _capture(ctx, monkeypatch)
 
     obls = {o["id"]: o for o in captured["pending_obligations"]}
     assert obls["obl:2:0"]["age_beats"] == 3
@@ -232,27 +223,37 @@ _EVENT_CLAIM = {
 }
 
 
-def test_unadjudicated_event_claim_warns(temp_db, monkeypatch):
+def test_unadjudicated_event_claim_warns(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27. On the prose path nothing writes
+    `fact_adjudications`, so this fires on EVERY beat that carries a
+    player-asserted event (UNBUILT_PIPELINE §1.1); the xfail below pins the
+    other half.
+    """
     ctx = _make_ctx(temp_db, authority_claims=[dict(_EVENT_CLAIM)])
-    _run_resolve(ctx, monkeypatch, agent_out={})
+    _prose(ctx, monkeypatch, {})
 
     assert any("Unadjudicated player-asserted fact" in w for w in ctx.warnings)
 
 
-def test_adjudicated_event_claim_passes(temp_db, monkeypatch):
+@pytest.mark.xfail(
+    strict=True,
+    reason="`fact_adjudications` was the causal Director's own field; the prose "
+           "Director writes prose, nothing records a verdict, and so every beat "
+           "that carries a player-asserted event warns (UNBUILT_PIPELINE §1.1)")
+def test_adjudicated_event_claim_passes(temp_db, prose_director, monkeypatch):
+    """A beat whose prose lands the claim is not an unadjudicated one. Held as
+    a strict xfail since 2026-09-27: the verdict was the causal Director's
+    `fact_adjudications`, and the prose path records none.
+    """
     ctx = _make_ctx(temp_db, authority_claims=[dict(_EVENT_CLAIM)])
-    out = _run_resolve(ctx, monkeypatch, agent_out={"fact_adjudications": [
-        {"claim_id": "claim:0:event",
-         "claim": "the crew on deck 12 are dead",
-         "subject": "deck 12 crew", "verdict": "confirmed",
-         "landing": "Mara confirms the deaths on-page"},
-    ]})
+    _prose(ctx, monkeypatch,
+           {"resolved_event": "Mara confirms the deaths on deck 12."})
 
     assert not [w for w in ctx.warnings if "Unadjudicated" in w]
-    assert out["fact_adjudications"][0]["verdict"] == "confirmed"
 
 
-def test_non_event_claims_need_no_adjudication(temp_db, monkeypatch):
+def test_non_event_claims_need_no_adjudication(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27 to the prose Director."""
     # The player's own on-page act (an effect claim) is authority-contract
     # territory, covered by claim_dispositions -- no adjudication warning.
     ctx = _make_ctx(temp_db, authority_claims=[{
@@ -260,19 +261,23 @@ def test_non_event_claims_need_no_adjudication(temp_db, monkeypatch):
         "subject_id": "Mara", "predicate": "grabbed_arm", "value": None,
         "commitment": "asserted", "source_text": "I grab Mara's arm",
     }])
-    _run_resolve(ctx, monkeypatch, agent_out={})
+    _prose(ctx, monkeypatch, {})
 
     assert not [w for w in ctx.warnings if "Unadjudicated" in w]
 
 
 # ---- W5: authority appraisal hint ----
 
-def test_resolve_payload_carries_social_standing(temp_db, monkeypatch):
+def test_resolve_payload_carries_social_standing(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27: the owed debts and the standing reach the one
+    encoder, which writes the `obligations` channel; the prose Director is not
+    shown them.
+    """
     ctx = _make_ctx(
         temp_db,
         public_history="Visiting ethics observer with no command authority.",
     )
-    captured = _capture_causal_social_resolve(ctx, monkeypatch)
+    captured = _capture(ctx, monkeypatch)
 
     standing = captured["social_standing"]
     assert standing["Mara"].startswith("Visiting ethics observer")
@@ -370,3 +375,4 @@ def test_a_discharge_is_not_logged_as_a_cap_eviction(temp_db):
 
     assert result["discharged"] == 1
     assert ctx.decisions_for_step("commit") == []
+

@@ -322,7 +322,7 @@ cannot leave a stale file executing.
 | `api.provenance(chat_id)` | what you recorded when you provisioned it |
 | `api.generate_lived_location(chat_id, request)` | add an inhabited place — people, duties, goods, a prehistory (§7.6) |
 | `api.living_world_job(chat_id)` | whether a previous generation was interrupted (§7.6) |
-| `api.add_director_specialist(name, channels=..., prompt=...)` | a sixth Director family |
+| `api.add_director_specialist(...)` | removed 2026-09-27 -- raises `ExtensionError` (see Director specialists, removed) |
 | `api.add_route(path, fn, methods=...)` | serve your own HTTP route |
 | `api.llm_json(system, payload, role=...)` / `api.llm_text(...)` | a model call on a configured role |
 | `api.add_model_lane(name, *, label=..., description=...)` | a model lane of your own in the host's settings; returns the role string |
@@ -536,47 +536,22 @@ Four edges, each deliberate:
   it inherits `default`; a manifest choosing a model would be an install
   choosing spend.
 
-### Adding a Director specialist
+### Director specialists (removed 2026-09-27)
 
-The Director is not one mind: each stage fans out to a prose author plus five
-scoped specialists, each owning a subset of `state_diff`'s channels. You can add
-a sixth.
+`api.add_director_specialist` raises `ExtensionError`. It added a sixth scoped
+model call to the Director's fan-out, and the fan-out is gone: the Director
+writes prose, and ONE encoder records every engine channel from its own card,
+which is built from in-tree chunks an extension cannot add to. The call is
+kept only so an extension written against it fails at registration with that
+sentence rather than an `AttributeError`.
 
-```python
-api.add_director_specialist(
-    "morale",
-    channels=["morale_ops"],
-    prompt="Judge how the crew's morale moved this beat.",
-    gate=lambda facts: facts["physical_beat"] or facts["speech_present"],
-)   # -> "ext:<your-id>:morale", owning "ext:<your-id>:morale_ops"
-```
-
-It joins the real fan-out: same parallelism, same fail-open (a failed
-specialist leaves the stage author's channels standing and never kills a beat),
-same canonical merge order. One difference in how it is DISPATCHED: the
-engine's own five hands run only when the Director's ruling reaches them — a
-`ledger_notes` line or a `changes_asserted` entry naming the hand or one of
-its channels — and a ruling cannot name a family the author's sheet does not
-know. So your family runs on its `gate` alone, read from the same scene facts
-the engine's gates read. Omit `gate` and it runs on physical beats, which is
-the fail-open rule the engine's gates followed before the ruling took over.
-
-Three things it deliberately is **not**:
-
-- **Your channels are namespaced `ext:<id>:<channel>`.** You cannot own `attire`
-  or `positions`. A family that could would not error — it would silently take
-  the body or spatial specialist's channel in the merge.
-- **Your channels are evidence, not causality.** No engine commit domain reads an
-  `ext:` channel, so what you write lands in the merged `state_diff` and changes
-  nothing by itself. Act on it from your own commit domain or stage.
-- **Nothing narrates it.** The prose author's sheet is assembled from in-tree
-  chunks and you cannot add one, so a change you record reaches the ledger and
-  not the prose unless you put it there. "It committed but nobody mentioned it"
-  is otherwise a fifty-beat mystery.
-
-Your specialist also gets only the **shared** payload — the beat, declared
-attempts, final dice, the roster. The per-family ledgers (`attire` for body,
-contact ledgers for contact) belong to the families that own them.
+What a family of your own did -- record your judgement of a beat -- you do
+where you always acted on it: read the resolve from your own commit domain
+(`api.add_commit_domain`, inside the turn's transaction) or from a stage of
+your own spliced after `director_resolve` (`api.add_stage`), and keep what you
+decide in your own `chat_state`. Your `ext:` channels were evidence and never
+causality -- no engine commit domain read them -- so nothing the engine did
+changes with them gone.
 
 ### Rerouting what a mind receives
 
@@ -669,8 +644,8 @@ Two things to get right, neither of them the firewall:
   reader and cannot be taken back.
 
 Still unbuilt, and it is the neighbouring gap rather than this one: an extension
-cannot add a chunk to the **Director's prose author**, whose sheet is assembled
-from in-tree `PROSE_DUTY_CHUNKS`. A `state_diff` channel you own still reaches
+cannot add a chunk to the **Director's own sheet** or to the encoder's card,
+both built from in-tree cards. A `state_diff` channel you own still reaches
 the ledger and not the prose on its own — put it in front of the narrator here,
 or nothing mentions it.
 
@@ -861,7 +836,7 @@ def sealed(result, info):
 A validator runs **last** — after every deterministic floor the engine owns
 (player-act authority, the movement backstop, the passability floor, the
 reconciliation repair) — so what it judges is what would actually be committed,
-not a prose-author draft or one specialist's channel.
+not the Director's draft prose or one channel owner's share.
 
 Returning a correction buys **exactly one** re-resolution, with every
 extension's violations attached. That second answer goes back through every
@@ -1052,8 +1027,8 @@ defaults do less than they look like they do.
 def register(api):
     api.api_version        # -> 1, the `ext_api` your manifest must declare
     api.capabilities       # -> frozenset of names
-    if "list_channels" in api.capabilities:
-        api.add_director_specialist(..., list_channels=["morale_ops"])
+    if "commit_domains" in api.capabilities:
+        api.add_commit_domain("morale", record_morale, on_error="fail")
 ```
 
 The browser half gets the same answer from `GET /api/extensions`, as `ext_api`
@@ -1071,7 +1046,6 @@ The names today:
 | Name | What it promises |
 |---|---|
 | `stage_anchors` | `api.add_stage` with the anchor grammar below |
-| `list_channels` | `api.add_director_specialist(list_channels=…)` |
 | `commit_domains` | `api.add_commit_domain`, including `on_error="fail"` |
 | `director_corrections` | `api.on_director_result` + `api.correction` |
 | `payload_routing` | `api.on_character_payload`, with attribution |
@@ -1086,6 +1060,13 @@ The names today:
 | `frame_coherent_reads` | `api.at_frame` — several reads resolving against one chosen era |
 | `living_world_provisioning` | `api.provision_story(..., offscreen_life=, living_world=)`, and the effective ladder read back (§7.6) |
 | `living_world_generation` | `api.generate_lived_location` / `api.living_world_job` (§7.6) |
+
+One name has left this table while `ext_api` stayed 1: `list_channels`
+(`api.add_director_specialist(list_channels=…)`), withdrawn on 2026-09-27
+with the Director specialists it described. The call it promised now
+raises, and a name still promising it would be the lie this table exists
+to prevent; an extension that branched on it finds it absent, which is the
+true answer.
 
 **Two names for one subject, on purpose** — `frame_state` is a claim about
 *scope* and `frame_coherent_reads` about *coherence*, and the same split is why
@@ -1132,18 +1113,10 @@ there is nothing to collide — with one exception, which is loud.
 | commit domain | replaced by name | impossible — `ext:<id>:<name>` |
 | route | replaced by `METHOD path` | impossible — served under `/api/extensions/<id>/x/` |
 | model lane | replaced by name | impossible — role is `ext:<id>:<name>` |
-| specialist channel | replaced by name | **refused** — see below |
-
-A Director specialist's channels are the exception because they are not
-addressed by owner: the merge resolves a channel to exactly one family. A
-second family claiming a channel that already has an owner is refused at
-registration with an `ExtensionError` naming both, rather than silently taking
-it. A name that would collide with an engine channel (`attire`, `positions`, …)
-cannot arise: yours are namespaced `ext:<id>:<channel>` for you.
 
 Re-registration is what an **enable after disable** does, and it is exactly
-once: disable drops the whole record — stages, routes, hooks, commit domains,
-specialists and the imported Python package with every submodule it pulled in —
+once: disable drops the whole record — stages, routes, hooks, commit domains
+and the imported Python package with every submodule it pulled in —
 so the next enable executes the files as they are on disk now, not the copy
 that was loaded before.
 
@@ -1164,26 +1137,6 @@ that was loaded before.
   after another extension's hook; each is handed the previous one's result, and
   every top-level key you change is attributed to you either way.
 
-### List channels, validation, and the merge
-
-`add_director_specialist(channels=[...], list_channels=[...])`.
-
-- `list_channels` must be a **subset of `channels`**. Naming one you do not own
-  is refused at registration.
-- Validation is otherwise shape-only: a channel is a name, and what your
-  specialist returns for it is yours.
-- At merge, every channel **not** declared list-shaped is coerced to a keyed
-  table. A list-valued channel you forgot to declare therefore arrives as `{}`
-  — dispatched, paid for, and discarded with nothing said. This is the failure
-  the flag exists to prevent; it has happened to the engine's own channels once
-  already (`_schema_list_channels`, seventeen op-lists silently emptied under
-  Pydantic 2).
-- Engine channels do not use this flag. Their shape is read from
-  `schemas.StateDiff`'s annotations, because it is already declared once there.
-  Yours is in no schema, so you declare it.
-- Your channels are **evidence, not causality**: no engine commit domain reads
-  an `ext:` channel. Act on it from your own commit domain or stage.
-
 ### Failure, and what a failed extension can still do
 
 Nothing. "Enabled" and "live" are two different states: if your `register(api)`
@@ -1191,7 +1144,7 @@ raises, you are switched on and have registered nothing, and the host treats
 you as absent everywhere —
 
 - no stage in the plan, no `STEP_HANDLERS` entry, no route, no commit domain,
-  no hook, no specialist;
+  no hook;
 - **no assets**: `/asset/…`, your `ui.js` and your `ui.css` are all refused, so
   your browser half is not left calling routes that do not exist;
 - **no stored context**: standing narration and Director blocks written in a
@@ -1429,8 +1382,7 @@ impossible. A seam for it would make the whole boundary advisory.
 If you want the reader told something, there are three legitimate routes and
 one of them is right for your case:
 
-1. **Make it true.** A Director specialist you registered owns a `state_diff`
-   channel; a commit domain writes inside the turn's transaction. Then
+1. **Make it true.** A commit domain writes inside the turn's transaction. Then
    perception distributes it and the narrator renders it because it happened.
 2. **Put standing context in front of the narrator** — `api.narration_context`,
    for setting and situation rather than world fact the engine also tracks.
@@ -1813,7 +1765,7 @@ None of them touches an engine file. That is the point.
 Tests to read next: [`tests/test_extensions.py`](../../tests/test_extensions.py)
 (discovery, isolation, plan splices, the state gate),
 [`tests/test_extension_seams.py`](../../tests/test_extension_seams.py) (commit
-domains, routing hooks, routes, specialists, hot-loadable assets),
+domains, routing hooks, routes, the refused specialist call, hot-loadable assets),
 [`tests/test_extension_narration.py`](../../tests/test_extension_narration.py)
 (narration blocks and hooks, and `overlay-demo` end to end),
 [`tests/test_extension_modules.py`](../../tests/test_extension_modules.py) (the

@@ -713,13 +713,13 @@ Still missing:
   designed alongside `on_character_payload` but not built: `on_admission` and
   `on_view`, which would let an extension alter what perception ADMITS rather
   than only what the assembled payload carries.
-- **An extension still cannot reach the Director's PROSE AUTHOR**, though the
-  narrator seam is built. A registered specialist family writes its channel to
-  the merged `state_diff` and nothing narrates it *from there*; closing it means
-  a prose-chunk registry with
-  `test_every_delegated_block_has_exactly_one_owner` extended across the
-  boundary. Deliberately left — the narrator seam already delivers the
-  reader-visible result without touching a one-owner invariant.
+- **An extension still cannot add to the Director's sheet or the encoder's
+  card**, though the narrator seam is built and `api.director_context` puts a
+  standing block in front of the Director. Registering a specialist family of
+  one's own was removed with the fan-out on 2026-09-27; an extension records
+  its judgement of a beat from its own commit domain or stage, and the narrator
+  seam delivers the reader-visible result. Closing the rest would mean a chunk
+  registry for the encoder's card -- deliberately left.
 - **`tools/project_check.py --extension <path>`** — the author-facing
   self-check. The checks exist and the AUDIT half has a Python entry point
   (`extension_runtime.audit_extension_source`); the lints have no way in from

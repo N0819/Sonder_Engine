@@ -8,11 +8,13 @@ engine's own layout lint before it submits. These pin the tools and the loop;
 
 from __future__ import annotations
 
+import time
+
 import agents.director as director
 from agents import director_rooms
 from llm import decisions
 
-from tests.test_director_orchestration import _action_interp, _fake_agent, _make_ctx
+from tests.director_fakes import _action_interp, _fake_agent, _make_ctx
 
 SCENE = {
     "rooms": {
@@ -90,7 +92,6 @@ def test_a_planned_room_the_beat_enters_is_developed_under_its_id(temp_db, monke
     passage enters the planned stub; the designer develops it under the
     plan's id, and the encoder places into that id from the start."""
     from agents import director_prose
-    temp_db.set_setting("director_contract", "prose")
     planned = {"lamp_gallery": {"name": "Lamp Gallery", "purpose": "the keeper's walk",
                                 "exits": {"lamp_room": {"to": "lamp_room"}}}}
     original = director_prose.run
@@ -125,6 +126,123 @@ def test_a_planned_room_the_beat_enters_is_developed_under_its_id(temp_db, monke
     assert "lamp_gallery" in out["state_diff"]["rooms"]
     rooms = out["orchestration"]["prose_contract"]["room_author"]
     assert rooms["develop"] == ["lamp_gallery"] and rooms["stopped"] == "submitted"
+
+
+def _planned_room_beat(temp_db, monkeypatch, rooms_answer, calls):
+    """The beat of the test above: a planned room the passage enters, so the
+    room author runs in the pool BESIDE the encoder. `rooms_answer(payload)`
+    answers the author's call."""
+    from agents import director_prose
+    planned = {"lamp_gallery": {"name": "Lamp Gallery", "purpose": "the keeper's walk",
+                                "exits": {"lamp_room": {"to": "lamp_room"}}}}
+    original = director_prose.run
+
+    def run_with_plan(ctx, stage, sc, model_payload, view, extras, facts=None):
+        return original(ctx, stage, sc, model_payload, view,
+                        dict(extras, planned_rooms=planned), facts)
+
+    monkeypatch.setattr(director_prose, "run", run_with_plan)
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: {
+        key: {"type": "noul", "noul": 0.95 if key in ("positions", "enter__lamp_gallery")
+              else 0.0} for key in questions})
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara steps out onto the lamp gallery."},
+        "director_rooms": rooms_answer,
+        "director_specialist": {"events": [
+            {"source_entity_id": "character:1", "event": "Mara steps out.",
+             "item_names": ["Mara"],
+             "transforms": [{"item": "Mara", "patch": {
+                 "positions": {"Mara": "lamp_gallery"}}}]}]},
+    }))
+    return _make_ctx(temp_db, interp=_action_interp())
+
+
+_DRAW_THE_GALLERY = {"calls": [
+    {"tool": "draft_room", "args": {"room_id": "lamp_gallery", "room": {
+        "name": "Lamp Gallery", "desc": "A narrow iron walk.",
+        "adjacent": [{"to": "lamp_room", "barrier": "open", "dir": "s"}]}}},
+    {"tool": "submit", "args": {}}]}
+
+
+def test_the_room_author_never_streams(temp_db, monkeypatch):
+    """Only prose streams. The room author runs BESIDE the encoder, so it
+    must see a CLEARED token sink even though the step has one set -- as it
+    always does in the live pipeline -- or two streams would interleave in
+    one step. The Director's own prose, on the step's thread, keeps it."""
+    from llm import providers
+
+    observed = {}
+
+    def probing(payload):
+        observed["director_rooms"] = providers.token_sink.get()
+        return _DRAW_THE_GALLERY
+
+    calls = []
+    ctx = _planned_room_beat(temp_db, monkeypatch, probing, calls)
+    real = director._agent_json
+
+    def seeing(role, step_key, system, payload, **kw):
+        observed.setdefault(step_key, providers.token_sink.get())
+        return real(role, step_key, system, payload, **kw)
+
+    monkeypatch.setattr(director, "_agent_json", seeing)
+    token = providers.token_sink.set(lambda delta: None)  # the step's sink
+    try:
+        director.director_resolve(ctx, nonce=0)
+    finally:
+        providers.token_sink.reset(token)
+
+    assert observed["director_prose"] is not None
+    assert "director_rooms" in observed, "the room author did not run"
+    assert observed["director_rooms"] is None
+
+
+def test_the_stage_variant_carries_the_room_authors_call(temp_db, monkeypatch):
+    """The ledger defect the per-call ledger first found (variant v26648):
+    a worker does not inherit the submitting thread's contextvars, so a copy
+    made INSIDE it is of an empty context, and the ledger sink, the warning
+    sink and the cancel event were all None in every pooled call. The room
+    author is the call that still runs in a pool: what it reports lands on
+    the stage's own ledger slice and notes, and an abort reaches it."""
+    import threading
+
+    from agents.runtime import _with_engine_notes
+    from agents.storage import ENGINE_NOTES_KEY
+    from core.pipeline_context import (current_step_key, current_warning_sink,
+                                       note_step_warning)
+    from llm import providers
+
+    seen_cancel = []
+
+    def reporting(payload):
+        providers._log_usage("director_rooms", "m-rooms", time.time() - 0.1,
+                             {"prompt_tokens": 10, "completion_tokens": 5})
+        note_step_warning("director_rooms: repair ladder fired")
+        seen_cancel.append(providers.cancel_event.get())
+        return _DRAW_THE_GALLERY
+
+    ctx = _planned_room_beat(temp_db, monkeypatch, reporting, [])
+    abort = threading.Event()
+    tokens = (current_step_key.set("director_resolve"),
+              current_warning_sink.set(ctx.add_warning),
+              providers.call_ledger_sink.set(ctx.note_llm_call),
+              providers.cancel_event.set(abort))
+    try:
+        out = director.director_resolve(ctx, nonce=0)
+    finally:
+        providers.cancel_event.reset(tokens[3])
+        providers.call_ledger_sink.reset(tokens[2])
+        current_warning_sink.reset(tokens[1])
+        current_step_key.reset(tokens[0])
+
+    assert [e["role"] for e in ctx.llm_calls_for_step("director_resolve")] \
+        == ["director_rooms"]
+    saved = _with_engine_notes(out, ctx, "director_resolve")
+    assert {e["role"] for e in saved[ENGINE_NOTES_KEY]["llm_calls"]} \
+        == {"director_rooms"}
+    assert "director_rooms: repair ladder fired" in \
+        saved[ENGINE_NOTES_KEY]["warnings"]
+    assert seen_cancel and all(event is abort for event in seen_cancel)
 
 
 def _stacked(anchors):
@@ -180,7 +298,6 @@ def test_rooms_beside_the_player_are_prepared_between_turns(temp_db, monkeypatch
     import agents.common as common
     from core import jobs
     from world import structure
-    temp_db.set_setting("director_contract", "prose")
     ctx = _make_ctx(temp_db, interp=_action_interp())
     temp_db.wset(ctx.chat.id, "scene", dict(SCENE, positions={"The Stranger": "hall"}))
     brief = {"study": {"name": "Study", "purpose": "a quiet room", "exits": {}}}
@@ -198,11 +315,6 @@ def test_rooms_beside_the_player_are_prepared_between_turns(temp_db, monkeypatch
     assert job.state == "done", job.as_dict()
     assert director_rooms.prepared_rooms(ctx.chat.id, ["study"])["study"]["desc"] == \
         "Shelves and a desk."
-
-
-def test_nothing_is_prepared_under_the_causal_contract(temp_db):
-    ctx = _make_ctx(temp_db, interp=_action_interp())
-    assert director_rooms.schedule_room_predevelopment(ctx) is None
 
 
 # ---- code takes the steps a model did not need to (2026-09-27) --------------

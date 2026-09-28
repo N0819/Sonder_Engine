@@ -170,9 +170,15 @@ class TestWhatIsTold:
 
 
 class TestTheSheetsAskForTheRecord:
-    """The two clauses that make the objects hand WRITE the answer the view
-    now delivers. Pinned by a distinctive phrase in each pack, so a rewrite
-    that drops the case fails here rather than fifty beats into a story."""
+    """The two clauses that make the Director WRITE the answer the view now
+    delivers. Pinned by a distinctive phrase in each pack, so a rewrite that
+    drops the case fails here rather than fifty beats into a story.
+
+    Since 2026-09-27 the writer is the encoder: the decision model's
+    `entities__examined` question routes a read, and that part of the encoder's
+    card says what to write. The part ships only with its channel, and the
+    `entities` question answers no for a thing "only described as it already
+    is" -- so a pure read may never reach the part (UNBUILT_PIPELINE §1.1)."""
 
     PACKS = ROOT / "language_packs"
 
@@ -181,19 +187,32 @@ class TestTheSheetsAskForTheRecord:
             encoding="utf-8")
 
     def test_the_interpret_sheet_routes_a_read_to_entities(self):
-        en = self._leaf("en", "causal_director.txt")
-        assert "A READ OF IT ANSWERS FROM IT" in en
-        ja = self._leaf("ja", "causal_director.txt")
-        assert "物を読む行為はその物から答えを得ます" in ja
+        """The causal sheet's "A READ OF IT ANSWERS FROM IT" until
+        2026-09-27; the route is a decision-model question now."""
+        from llm.prompts import jev_channel_questions
+
+        en = jev_channel_questions(["entities__examined"], "en")
+        assert ("Does someone look closely at, read, inspect, check or handle "
+                "a particular thing to learn something about it"
+                in en["entities__examined"])
+        ja = jev_channel_questions(["entities__examined"], "ja")
+        assert ("誰かが特定の物を、それについて何かを知るために間近に見る、読む、"
+                "調べる、確かめる、または扱いますか" in ja["entities__examined"])
 
     def test_the_objects_sheet_writes_harm_and_readings_as_state(self):
-        rel = "specialists/objects/chunks/entities.txt"
+        """The objects hand's `entities` chunk until 2026-09-27; the encoder's
+        `entities__examined` part since, as the sheet assembles it."""
+        from llm.prompts import unified_specialist_prompt
+
+        rel = "encoder/entities__examined.txt"
         en = self._leaf("en", rel)
-        assert "WHAT A THING SHOWS OF ITSELF IS ITS state" in en
+        assert "WHAT A THING SHOWS OF ITSELF IS ITS STATE" in en
         assert "AUTHOR IT FROM THREE THINGS AND NOTHING ELSE" in en
         ja = self._leaf("ja", rel)
         assert "受けた損傷もまた state" in ja
         assert "次の三つからのみ行い" in ja
+        assert "AUTHOR IT FROM THREE THINGS AND NOTHING ELSE" in (
+            unified_specialist_prompt(["entities"], "en", ["entities__examined"]))
 
     def test_the_establish_sheet_mints_a_vehicle_with_a_state(self):
         rel = "prompts/director_establish.txt"

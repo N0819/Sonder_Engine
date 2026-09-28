@@ -44,18 +44,16 @@ def _script(monkeypatch, responses, candidates=1):
         llm_quality, "role_candidate_count", lambda role: candidates)
     return llm
 
-def test_well_formed_director_resolve_passes_on_first_call(monkeypatch):
+def test_well_formed_director_prose_passes_on_first_call(monkeypatch):
+    """`director_resolve` until 2026-09-27; the Director's one call is
+    `director_prose` since."""
     llm = _script(monkeypatch, [json.dumps({
-        "resolved_event": "The door creaks open.",
-        "summary": "door opened",
-        "state_diff": {},
-    })])
+        "prose": "The door creaks open.", "places": []})])
 
-    out = _agent_json("director", "director_resolve", "sys", {"x": 1})
+    out = _agent_json("director", "director_prose", "sys", {"x": 1})
 
-    assert out["resolved_event"] == "The door creaks open."
-    assert out["summary"] == "door opened"
-    assert isinstance(out["state_diff"], dict)
+    assert out["prose"] == "The door creaks open."
+    assert out["places"] == []
     # Success path: exactly one call, no repair invoked.
     assert len(llm.calls) == 1
 
@@ -116,38 +114,20 @@ def test_empty_narrator_prose_costs_no_second_call(monkeypatch):
     assert out["prose"] == ""
     assert len(llm.calls) == 1
 
-def test_director_interpret_semantic_check_uses_source_payload(monkeypatch):
-    payload = {"player_raw_input": "I open the door"}
-    llm = _script(monkeypatch, [
-        # Valid JSON/schema but empty sequence despite nonempty input.
-        json.dumps({"sequence": [], "flow": {}}),
-        json.dumps({"sequence": [{"type": "action",
-                                  "attempt": "open the door"}],
-                    "flow": {}}),
-    ])
 
-    out = _agent_json("director", "director_interpret", "sys", payload)
-
-    assert out["sequence"][0]["attempt"] == "open the door"
-    assert len(llm.calls) == 2
-
-
-def test_empty_causal_json_reasks_the_original_before_repair(monkeypatch):
+def test_an_empty_director_answer_reasks_the_original_before_repair(monkeypatch):
+    """The causal Director's `{}` until 2026-09-27; the prose Director's
+    since, whose schema requires the prose."""
     payload = {"event_inputs": [{
         "entity_id": "persona:1", "authority_mode": "world_author",
         "events": [{"event_id": "e1", "raw_text": "I open the door"}],
     }], "identity_index": {"persona:1": "Corin"}}
-    good = {"ledgers": [{
-        "chrono_id": 1, "item_id": 1, "object_name": "door",
-        "source_entity_id": "persona:1", "source_event_id": "e1",
-        "event": "opens the door", "commitment": "asserted",
-        "resolution_notes": "The door is open.", "categories": ["entities"],
-    }]}
+    good = {"prose": "Corin opens the door.", "places": []}
     llm = _script(monkeypatch, ["{}", json.dumps(good)])
 
-    out = _agent_json("director", "director_interpret", "original", payload)
+    out = _agent_json("director", "director_prose", "original", payload)
 
-    assert out["ledgers"][0]["event"] == "opens the door"
+    assert out["prose"] == "Corin opens the door."
     assert len(llm.calls) == 2
     assert llm.calls[1]["system"] == "original"
     assert json.loads(llm.calls[1]["user"]) == payload
@@ -165,45 +145,53 @@ def test_unparseable_output_triggers_repair(monkeypatch):
     assert len(llm.calls) == 2
 
 def test_failed_repair_falls_back_to_next_candidate(monkeypatch):
-    """Driven through `mapping_stage` rather than `narrator`. The escalation
-    itself is unchanged; narrator is simply no longer a stage that can fail
-    a content check, so it can no longer stand in for one."""
-    payload = {"player_raw_input": "I open the door"}
+    """Driven through the prose Director (the causal interpret's semantic
+    check until 2026-09-27): an empty prose, then a wordless one, both fail
+    its schema. The cheap field-patch rung is stubbed so the ladder under
+    test is the repair and then the fallback candidate. Narrator can no
+    longer stand in: it fails no content check."""
+    monkeypatch.setattr(llm_quality, "_targeted_field_patch",
+                        lambda *a, **kw: None)
     llm = _script(monkeypatch, [
-        json.dumps({"sequence": [], "flow": {}}),       # primary: invalid
-        json.dumps({"sequence": [], "flow": {}}),       # repair: still invalid
-        json.dumps({"sequence": [{"type": "action",     # candidate fallback
-                                  "attempt": "open the door"}],
-                    "flow": {}}),
+        json.dumps({"prose": "", "places": []}),        # primary: invalid
+        json.dumps({"prose": ",", "places": []}),       # repair: still invalid
+        json.dumps({"prose": "Corin opens the door.",   # candidate fallback
+                    "places": []}),
     ], candidates=2)
 
-    out = _agent_json("director", "director_interpret", "sys", payload)
+    out = _agent_json("director", "director_prose", "sys", {"x": 1})
 
-    assert out["sequence"][0]["attempt"] == "open the door"
+    assert out["prose"] == "Corin opens the door."
     assert len(llm.calls) == 3
     assert llm.calls[2]["candidate_offset"] == 1
 
 def test_exhausted_validation_raises_step_error(monkeypatch):
-    payload = {"player_raw_input": "I open the door"}
+    monkeypatch.setattr(llm_quality, "_targeted_field_patch",
+                        lambda *a, **kw: None)
     _script(monkeypatch, [
-        json.dumps({"sequence": [], "flow": {}}),
-        json.dumps({"sequence": [], "flow": {}}),
+        json.dumps({"prose": "", "places": []}),
+        json.dumps({"prose": ",", "places": []}),
     ], candidates=1)
 
     # This RuntimeError propagates out of the stage function, which is
     # exactly what makes the step fail as a normal rerunnable step
     # instead of committing a malformed dict.
     with pytest.raises(RuntimeError,
-                       match="director_interpret failed JSON validation"):
-        _agent_json("director", "director_interpret", "sys", payload)
+                       match="director_prose failed JSON validation"):
+        _agent_json("director", "director_prose", "sys", {"x": 1})
 
 # ---- source-level wiring guard ----
 
 _AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 
 _STAGE_STEP_KEYS = {
-    "director.py": ["director_establish", "director_interpret",
-                    "director_resolve"],
+    # The opening stays on the Director's own module; every later beat's
+    # calls are the prose Director's (2026-09-27): its account and the
+    # encoder, the optional repair pass and the room author.
+    "director.py": ["director_establish"],
+    "director_prose.py": ["director_prose", "director_specialist"],
+    "director_repair.py": ["director_repair"],
+    "director_rooms.py": ["director_rooms"],
     # The bare contract is the only one (2026-09-27): one call a beat.
     "character.py": ["character_bare"],
     "background.py": ["background_react"],
@@ -262,17 +250,20 @@ def test_an_empty_object_from_any_step_reasks_the_original_before_repair(monkeyp
     the owner's database 2026-09-14: eight bare `{}` replies across five roles
     since 09-08, none of them the causal Director; on chat 123 turn 9 the
     contact and objects hands each stalled, were handed their `{}` to repair,
-    and stalled again -- two fruitless calls and a lost door state."""
-    payload = {"ledgers": [{"item_id": 1, "object_name": "door"}],
-               "source": "causal_ledger"}
-    good = {"results": [{"status": "already_true", "transforms": [],
-                         "reroute_to": ""}], "notes": []}
+    and stalled again -- two fruitless calls and a lost door state.
+
+    Driven through the encoder since the hands went (2026-09-27), whose every
+    field defaults -- so a `{}` validates, and only the stall rule stands
+    between it and a beat that encodes nothing."""
+    payload = {"prose": "Corin opens the door.", "event_inputs": []}
+    good = {"events": [{"source_entity_id": "persona:1",
+                        "event": "Corin opens the door."}],
+            "missing_tools": [], "missing_referents": [], "notes": []}
     llm = _script(monkeypatch, ["{}", json.dumps(good)])
 
-    out = _agent_json("director_contact", "director_contact", "original",
-                      payload)
+    out = _agent_json("encoder", "director_specialist", "original", payload)
 
-    assert out["results"][0]["status"] == "already_true"
+    assert out["events"][0]["event"] == "Corin opens the door."
     assert len(llm.calls) == 2
     assert llm.calls[1]["system"] == "original"
     assert json.loads(llm.calls[1]["user"]) == payload

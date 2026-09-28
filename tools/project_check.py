@@ -404,25 +404,11 @@ def check_empty_tests(errors: list[str]) -> None:
 #: tiny: an entry here is a promise that the stage is DESCRIBING another
 #: stage's field rather than asking for one, and every addition should be
 #: justified in the same breath as it is made.
-OPS_MENTIONED_BUT_NOT_OWNED: dict[str, set[str]] = {
-    # The spatial specialist's stations/poses chunks name contact_ops
-    # precisely to DISCLAIM it ("Stations are not contact: contact_ops says
-    # what a body is AGAINST...") -- contact is the contact specialist's
-    # channel, and the shared segments reference it to draw that boundary.
-    # Complementary completion requests name these owners' channels in
-    # required_channels; they still cannot write them inside patch.
-    "director_spatial": {"contact_ops", "inventory_ops"},
-    "director_body": {"contact_ops", "inventory_ops"},
-    "director_objects": {"contact_ops"},
-    "director_contact": {"inventory_ops"},
-}
+OPS_MENTIONED_BUT_NOT_OWNED: dict[str, set[str]] = {}
 
-#: Prompt ids validated against another stage's model: the orchestrated
-#: prose author's lean sheet is the SAME step (same schema, same step key)
-#: as the monolithic resolve, under a different prompt id.
-PROMPT_MODEL_ALIASES = {
-    "director_resolve_lean": "director_resolve",
-}
+#: Prompt ids validated against another stage's model (none since the causal
+#: Director's lean sheet went, 2026-09-27).
+PROMPT_MODEL_ALIASES: dict[str, str] = {}
 
 OPS_NAME = re.compile(r"\b([a-z][a-z0-9]*(?:_[a-z0-9]+)*_ops)\b")
 
@@ -867,107 +853,77 @@ def check_prompt_card_parts(errors: list[str]) -> None:
                     "one segment passes its card-parity check.")
 
 
-def check_specialist_prompt_chunks(errors: list[str]) -> None:
-    """The orchestrated Director's scoping is only real if the prompts are
-    CHUNKED to match it (design note 19, hierarchical gating): a specialist's
-    sheet is core + one chunk per channel in the granted scope, and scope
-    selects chunks with no other logic. An unchunked prompt silently defeats
-    the mechanism -- a specialist whose instructions all live in its core
-    loads everything on every beat while appearing scoped. Three files spell
-    the ownership (agents/director.SPECIALISTS, prompts.
-    SPECIALIST_PROMPT_SPECS, schemas.SPECIALIST_CHANNELS); this holds them
-    level and enforces the chunk structure:
+def check_channel_owners(errors: list[str]) -> None:
+    """The channel owners and the encoder's card, held level.
 
-      * every channel a specialist owns has a chunk, and no chunk exists for
-        a channel it does not own (an orphan means a channel changed hands
-        and its instructions did not);
-      * the three registries agree on channels per specialist;
-      * a specialist's CORE never names its own channels (word-boundary
-        match): channel-specific instruction lives in chunks ONLY. This is
-        the honest approximation of "no channel-specific instruction in the
-        core" -- it cannot see a paraphrase, and that limitation is
-        accepted and recorded in design note 19 rather than papered over
-        with a semantic check that would pass for the wrong reason.
+    The ONE encoder writes every channel (`agents/director_prose.py`); its
+    sheet is its core plus an `encoder.<channel>` chunk for each granted
+    channel, in each owner's pack `order` (`prompts.unified_specialist_prompt`),
+    and its answer is split by owner (`agents/director_scopes.SPECIALISTS`)
+    and validated against `schemas.SPECIALIST_CHANNELS`. Three ways that
+    silently breaks, each held here in every pack:
+
+      * an owner's channels disagree with `SPECIALIST_CHANNELS` -- a share
+        validated against the wrong model;
+      * a pack's `specialists.<owner>.order` does not cover exactly the
+        owner's channels -- an unordered channel's chunk never ships, so the
+        encoder is granted a channel it was never taught;
+      * a channel has no `encoder.<channel>` chunk -- the sheet cannot be
+        built at all, mid-turn.
+
+    Replaced the causal specialists' chunk check on 2026-09-27 (their cores
+    and chunks went with them).
     """
     sys.path.insert(0, str(ROOT))
     try:
-        from llm import prompts
         from llm import schemas
         from agents import director
+        from language_runtime.card_source import read_card_source
     except Exception as exc:  # pragma: no cover - import failure is its own error
-        errors.append(f"could not check specialist prompt chunks: {exc}")
+        errors.append(f"could not check the channel owners: {exc}")
         return
 
-    prompt_specs = getattr(prompts, "SPECIALIST_PROMPT_SPECS", {})
-    runtime_specs = getattr(director, "SPECIALISTS", {})
+    owners = getattr(director, "SPECIALISTS", {})
     schema_channels = getattr(schemas, "SPECIALIST_CHANNELS", {})
-
-    if set(prompt_specs) != set(runtime_specs):
-        errors.append(
-            "specialist registries disagree: prompts.SPECIALIST_PROMPT_SPECS "
-            f"has {sorted(prompt_specs)} but agents/director.SPECIALISTS has "
-            f"{sorted(runtime_specs)}")
-        return
-
-    for name, runtime in sorted(runtime_specs.items()):
+    for name, runtime in sorted(owners.items()):
         owned = set(runtime.get("channels") or ())
-        prompt_spec = prompt_specs.get(name) or {}
-        chunks = set((prompt_spec.get("chunks") or {}).keys())
-        order = list(prompt_spec.get("order") or ())
         step_key = runtime.get("step_key")
         schema_owned = set(schema_channels.get(step_key) or ())
-        defaults = set(runtime.get("default_channels") or ())
-        if defaults - owned:
-            errors.append(
-                f"specialist {name!r} defaults to unowned channels "
-                f"{sorted(defaults - owned)}")
-
-        for missing in sorted(owned - chunks):
-            errors.append(
-                f"specialist {name!r} owns channel {missing!r} but its "
-                "prompt has no chunk for it -- the scoped sheet can never "
-                "teach that channel and every grant of it loads nothing")
-        for orphan in sorted(chunks - owned):
-            errors.append(
-                f"specialist {name!r} prompt carries a chunk for "
-                f"{orphan!r}, a channel it does not own -- the channel "
-                "changed hands and its instructions did not")
         if owned != schema_owned:
             errors.append(
-                f"specialist {name!r} channels disagree with schemas."
+                f"channel owner {name!r} disagrees with schemas."
                 f"SPECIALIST_CHANNELS[{step_key!r}]: {sorted(owned)} vs "
                 f"{sorted(schema_owned)}")
-        if set(order) != chunks:
+
+    for pack_dir in sorted(
+            path for path in (ROOT / "language_packs").iterdir()
+            if path.is_dir()):
+        try:
+            card = read_card_source(pack_dir, "system_prompts")
+        except Exception as exc:
             errors.append(
-                f"specialist {name!r} chunk order {order} does not cover "
-                f"exactly its chunks {sorted(chunks)} -- an unordered chunk "
-                "never loads")
-
-        core = str(prompt_spec.get("core") or "")
-        for channel in sorted(owned):
-            if re.search(r"(?<![\w.])%s\b" % re.escape(channel), core):
+                f"could not read {pack_dir.name}/system_prompts: {exc}")
+            continue
+        encoder = card.get("encoder") or {}
+        specs = card.get("specialists") or {}
+        if set(specs) != set(owners):
+            errors.append(
+                f"language pack {pack_dir.name!r} orders owners {sorted(specs)} "
+                f"but the engine has {sorted(owners)}")
+        for name, runtime in sorted(owners.items()):
+            owned = set(runtime.get("channels") or ())
+            order = list((specs.get(name) or {}).get("order") or ())
+            if set(order) != owned:
                 errors.append(
-                    f"specialist {name!r} core names its own channel "
-                    f"{channel!r} -- channel-specific instruction belongs "
-                    "in that channel's chunk, or scoping silently stops "
-                    "meaning anything")
-
-        # The same `_ops` drift check the stage prompts get, against the
-        # FULLY assembled sheet: every _ops name the sheet can ask for must
-        # exist on this specialist's model, or validation silently drops
-        # every one the model sends (the project_ops lesson, one level in).
-        model = schemas.SCHEMA_MAP.get(step_key)
-        if model is not None:
-            sheet = core + "".join(
-                str(chunk) for chunk in
-                (prompt_spec.get("chunks") or {}).values())
-            allowed = OPS_MENTIONED_BUT_NOT_OWNED.get(step_key, set())
-            for op_name in sorted(set(OPS_NAME.findall(sheet))
-                                  - _field_names(model) - allowed):
+                    f"language pack {pack_dir.name!r}: specialists.{name}.order "
+                    f"{order} does not cover exactly its channels "
+                    f"{sorted(owned)} -- an unordered channel's encoder chunk "
+                    "never ships")
+            for channel in sorted(owned - set(encoder)):
                 errors.append(
-                    f"specialist {name!r} sheet asks for {op_name!r} and "
-                    f"{model.__name__} has no such field, so validation "
-                    "will drop every one the model sends")
+                    f"language pack {pack_dir.name!r} has no encoder.{channel} "
+                    "chunk -- the encoder's sheet cannot be built when the "
+                    "channel is granted")
 
 
 def check_nsfw_overlay_roster(errors: list[str]) -> None:
@@ -1031,89 +987,6 @@ def check_nsfw_overlay_roster(errors: list[str]) -> None:
                 "it differently")
 
 
-#: The former prose-author sheet is now the causal Director's one ungated
-#: contract. These markers hold the model boundary level without preserving
-#: retired player/character, whole-beat prose, or state-encoding instructions.
-PROSE_AUTHOR_NEVER_GATED = (
-    "event_inputs",
-    "authority_mode",
-    "chrono_id",
-    "item_ids",
-    "item_names",
-    "resolution_notes",
-    "categories",
-    "Output STRICT JSON",
-)
-
-CAUSAL_DIRECTOR_FORBIDDEN = (
-    "player_declaration",
-    "changes_asserted",
-    "ledger_notes",
-    "resolved_event",
-    "state_diff",
-)
-
-
-def check_prose_author_chunks(errors: list[str]) -> None:
-    """Hold the one causal Director prompt to its deliberately small shape.
-
-    The compatibility names remain because presets and diagnostics still call
-    this the prose-author sheet. It must now contain exactly one ungated core,
-    share no old duty registry, publish the causal join fields, and never
-    regress to the retired prose/manifest/state-diff contract.
-    """
-    sys.path.insert(0, str(ROOT))
-    try:
-        from llm import prompts
-        from agents import director
-    except Exception as exc:  # pragma: no cover - import failure is its own error
-        errors.append(f"could not check prose author chunks: {exc}")
-        return
-
-    sheet = getattr(prompts, "PROSE_AUTHOR_SHEET", ())
-    chunk_names = set(getattr(prompts, "PROSE_DUTY_CHUNKS", ()))
-    gates = set(getattr(director, "_PROSE_DUTY_GATES", {}))
-    audits = set(getattr(director, "_PROSE_DUTY_SHIPPED", {}))
-
-    if chunk_names != gates:
-        errors.append(
-            "prose-author registries disagree: prompts.PROSE_DUTY_CHUNKS "
-            f"has {sorted(chunk_names)} but agents/director."
-            f"_PROSE_DUTY_GATES has {sorted(gates)} -- an ungated chunk "
-            "never loads on the orchestrated path, and a chunkless gate "
-            "grants nothing")
-    for orphan in sorted(audits - chunk_names):
-        errors.append(
-            f"agents/director._PROSE_DUTY_SHIPPED audits {orphan!r}, which "
-            "is not a prose-duty chunk -- the audit can never fire")
-
-    named = sorted({str(name) for name, _text in sheet if name is not None})
-    if named:
-        errors.append(
-            "the causal Director sheet still has gated prose duties: "
-            + ", ".join(named))
-
-    core = "".join(text for name, text in sheet if name is None)
-    for marker in PROSE_AUTHOR_NEVER_GATED:
-        if marker not in core:
-            errors.append(
-                f"never-gated prose-author block {marker!r} is missing "
-                "from the sheet's core -- it must load on every beat")
-    for marker in CAUSAL_DIRECTOR_FORBIDDEN:
-        if marker in core:
-            errors.append(
-                f"causal Director core still names retired surface "
-                f"{marker!r}")
-
-    full = "".join(text for _name, text in sheet)
-    if prompts.DEFAULT_PROMPTS.get("director_resolve_lean") != full:
-        errors.append(
-            "DEFAULT_PROMPTS['director_resolve_lean'] is not the full-scope "
-            "assembly of PROSE_AUTHOR_SHEET -- the _ops drift check and "
-            "preset editing would see a different sheet than the "
-            "orchestrated path can load")
-
-
 def check_generated_map(errors: list[str]) -> None:
     expected = generate()
     actual = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
@@ -1134,25 +1007,12 @@ def check_language_pack_surfaces(errors: list[str]) -> None:
     if english is None:
         errors.append("built-in English language pack is missing")
         return
-    # The card STORES a body for most prompts and assembles six of them --
-    # the five specialist sheets and the prose author's -- from
-    # `specialists`/`prose_author_sheet` instead. Storing an assembled sheet
-    # as well is what let the published `director_spatial` drift 1,518
-    # characters short of the one the engine actually sends, so the absence is
-    # deliberate and the registry is still the inventory both must agree on.
-    prompt_ids = (set(english.card("system_prompts")["prompts"])
-                  | set(prompts.ASSEMBLED_SHEET_IDS))
+    # Every prompt the runtime registry publishes is a body the card stores:
+    # the assembled sheets -- the causal Director's five specialists' and its
+    # author's -- went with it on 2026-09-27.
+    prompt_ids = set(english.card("system_prompts")["prompts"])
     if prompt_ids != set(prompts.DEFAULT_PROMPTS):
         errors.append("English system-prompt card and runtime registry disagree")
-    stored_assembled = sorted(
-        set(english.card("system_prompts")["prompts"])
-        & set(prompts.ASSEMBLED_SHEET_IDS))
-    if stored_assembled:
-        errors.append(
-            "English pack stores a body for assembled sheet(s) "
-            f"{stored_assembled}; an assembled sheet has no stored body, and "
-            "one that grows a second copy is free to drift from the sheet the "
-            "engine sends")
     for pid, text in prompts.DEFAULT_PROMPTS.items():
         if "LANGUAGE AND SCHEMA CONTRACT" not in text:
             errors.append(f"system prompt {pid!r} lacks the language/schema contract")
@@ -1387,8 +1247,7 @@ def check_no_dead_prompts(errors: list[str]) -> None:
     from llm import prompts as _prompts
 
     ids = set(installed_language_packs()["en"].card("system_prompts")["prompts"])
-    used = set(_prompts.SPECIALISTS_BY_NAME.values())
-    used.add("director_resolve_lean")  # assembled, not fetched by id
+    used = set()
     for path in engine_python_paths():
         used.update(_re.findall(
             r'get_prompt(?:_body)?\(\s*["\']([a-z_0-9]+)["\']',
@@ -3433,8 +3292,7 @@ def main() -> int:
     check_prompt_shape_covers_prose(errors)
     check_time_channel_vocabulary(errors)
     check_prompt_card_parts(errors)
-    check_specialist_prompt_chunks(errors)
-    check_prose_author_chunks(errors)
+    check_channel_owners(errors)
     check_nsfw_overlay_roster(errors)
     check_language_pack_surfaces(errors)
     check_python_version_agreement(errors)

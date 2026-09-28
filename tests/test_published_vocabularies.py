@@ -78,9 +78,17 @@ LANGUAGES = ("en", "ja")
 
 
 def _chunk(language: str, specialist: str, chunk: str) -> str:
-    """The sheet text one specialist actually receives for one channel."""
+    """A channel owner's chunk the pack still ships -- since 2026-09-27 only
+    the spatial room chunks, which the room author reads."""
     card = installed_language_packs()[language].card("system_prompts")
     return card["specialists"][specialist]["chunks"][chunk]
+
+
+def _encoder_chunk(language: str, key: str) -> str:
+    """The encoder's card text for one channel, or one `<channel>__<part>`
+    part: what the one writer of every channel is told."""
+    card = installed_language_packs()[language].card("system_prompts")
+    return card["encoder"][key]
 
 
 def _inline_membership_sets(func) -> list[tuple[str, ...]]:
@@ -128,7 +136,7 @@ class TestTheDestructibleKindsArePublished:
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_every_kind_the_gate_accepts_is_named_in_the_entities_chunk(
             self, language):
-        chunk = _chunk(language, "objects", "entities")
+        chunk = _encoder_chunk(language, "entities__new")
         missing = sorted(k for k in destructible_kinds() if k not in chunk)
         assert not missing, (
             f"{language}: the hand that writes `kind` is not told these words "
@@ -139,16 +147,20 @@ class TestTheDestructibleKindsArePublished:
         """`interior_rooms` grants the same channel and is the answer for
         anything the five words do not cover -- a cave system, a hive. Without
         it the published list reads as the whole test, which it is not."""
-        assert "interior_rooms" in _chunk(language, "objects", "entities")
+        assert "interior_rooms" in _encoder_chunk(language, "entities")
 
     def test_a_published_kind_opens_the_channel(self, temp_db):
-        """The publication is only true if the engine honours it."""
-        from agents.director import _CHANNEL_GATES, _gate_facts
+        """The publication is only true if the engine honours it: the
+        decision model is asked about `destruction` only when the world holds
+        something destructible (`director_prose._RECORD_FACTS`)."""
+        from agents import director_prose
+        from agents.director import _gate_facts
         ctx = SimpleNamespace(chat={"id": 1}, turn={"idx": 3})
         for kind in destructible_kinds():
             facts = _gate_facts(ctx, {"entities": {"e": {"kind": kind}}},
                                 physical=True, speech=False)
-            assert _CHANNEL_GATES["destruction"](facts), kind
+            assert "destruction" in director_prose.candidate_channels(
+                "resolve", facts), kind
 
     @pytest.mark.parametrize("kind", ["airship", "warehouse", "tower",
                                       "barge", "keep"])
@@ -160,11 +172,13 @@ class TestTheDestructibleKindsArePublished:
         or any later one. Widening the tuple to chase these words is the
         alias table that is always one spelling short; the fix is that the
         writing hand now knows which word to use."""
-        from agents.director import _CHANNEL_GATES, _gate_facts
+        from agents import director_prose
+        from agents.director import _gate_facts
         ctx = SimpleNamespace(chat={"id": 1}, turn={"idx": 3})
         facts = _gate_facts(ctx, {"entities": {"e": {"kind": kind}}},
                             physical=True, speech=False)
-        assert not _CHANNEL_GATES["destruction"](facts)
+        assert "destruction" not in director_prose.candidate_channels(
+            "resolve", facts)
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +268,7 @@ class TestTheSubstanceMagnitudeVocabularyIsPublished:
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_all_three_fields_a_partial_transfer_needs_are_named(
             self, language):
-        chunk = _chunk(language, "contact", "substance_ops")
+        chunk = _encoder_chunk(language, "substance_ops")
         missing = [f for f in PARTIAL_TRANSFER_FIELDS if f not in chunk]
         assert not missing, (
             f"{language}: a partial transfer is read from these and the "
@@ -262,14 +276,14 @@ class TestTheSubstanceMagnitudeVocabularyIsPublished:
 
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_both_closed_value_sets_are_named(self, language):
-        chunk = _chunk(language, "contact", "substance_ops")
+        chunk = _encoder_chunk(language, "substance_ops")
         missing = [v for v in (*SUBSTANCE_AMOUNT_BANDS, *SUBSTANCE_PORTIONS)
                    if v not in chunk]
         assert not missing, f"{language}: unpublished magnitude words {missing}"
 
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_the_shape_line_carries_the_two_new_fields(self, language):
-        chunk = _chunk(language, "contact", "substance_ops")
+        chunk = _encoder_chunk(language, "substance_ops")
         shape = [line for line in chunk.splitlines()
                  if "substance_ops:[" in line]
         assert shape, f"{language}: no shape line in the substance chunk"
@@ -303,8 +317,8 @@ class TestEveryCommitmentKindCanActuallyArrive:
         assert len(commitment_kinds()) == 9
 
     @pytest.mark.parametrize("language", LANGUAGES)
-    def test_every_kind_is_offered_to_the_social_specialist(self, language):
-        chunk = _chunk(language, "social", "public_evidence")
+    def test_every_kind_is_offered_to_the_encoder(self, language):
+        chunk = _encoder_chunk(language, "public_evidence")
         missing = [k for k in commitment_kinds() if k not in chunk]
         assert not missing, (
             f"{language}: the ledger acts on these and the sheet does not "
@@ -436,42 +450,14 @@ class TestBothRoomSizingHandsSeeTheWholeScale:
 
 
 # ---------------------------------------------------------------------------
-# (g) the DELEGATED CHANNELS paragraphs -- one per Director stage
+# (g) the channel owners' registry -- what the encoder's card and the
+#     decision model's questions have to cover
 # ---------------------------------------------------------------------------
 #
-# Not a value vocabulary but the same failure one level up: a closed set the
-# engine owns (`director_scopes.SPECIALISTS`) restated by hand in a prompt and
-# drifted from. That paragraph is an author's ONLY statement of what is
-# not its to write, and it presents itself as the complete delegation -- so a
-# channel missing from it reads as one the author may still encode, and what
-# it writes in a delegated channel is discarded unread. `comms_ops` was the
-# costly absence: it is in SPEECH_WRITTEN_CHANNELS ("a line carried by a
-# device IS the op"), so a beat of pure dialogue settles it, which is the beat
-# the author is least likely to think a specialist is involved in.
-#
-# THERE ARE TWO OF THESE PARAGRAPHS, and binding only one is how the second
-# drifted (review E43): `director_interpret` fans out to the same hands, so
-# the note appended to it enumerates the same closed set -- and while the
-# resolve sheet was completed on 2026-09-01 the interpret note stayed short by
-# `public_evidence`, `charter_ops` and `contact_action_ops`. Both are checked
-# here; a paragraph that restates SPECIALISTS anywhere belongs in DELEGATIONS.
-
-def _causal_delegation(card) -> list:
-    """The one causal prompt both Director invocation points execute."""
-    text = str(card["causal_director"])
-    return [text] if "remove_adjacent" in text else []
-
-
-DELEGATIONS = {"causal": _causal_delegation}
-
-
-def _delegation_block(language: str, stage: str = "resolve") -> str:
-    card = installed_language_packs()[language].card("system_prompts")
-    blocks = DELEGATIONS[stage](card)
-    assert len(blocks) == 1, (
-        f"{language}/{stage}: expected one delegated-channels block, got "
-        f"{len(blocks)}")
-    return blocks[0]
+# The causal Director restated this closed set by hand in a DELEGATED
+# CHANNELS paragraph on each of its sheets, and the two drifted; both sheets
+# went with it on 2026-09-27. Coverage of the set by the encoder's card and
+# the decision model's questions is `tests/test_the_encoder_has_its_own_card.py`.
 
 
 def delegated_channels() -> list[str]:
@@ -482,8 +468,10 @@ def delegated_channels() -> list[str]:
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
     def test_the_engine_owns_thirty_seven(self):
-        """Bounds the tests below: a specialist that gains a channel moves
-        this count, and the sheet has to move in the same commit. 31 until
+        """A channel owner that gains a channel moves this count, and the
+        encoder's card and the decision model's questions have to move in the
+        same commit (the causal Director's sheets had to until 2026-09-27,
+        when the causal Director went). 31 until
         2026-09-04, when `offscreen_plan_ops` left the Director's diff with
         the offscreen hand (a plan is a character's own declaration); 31
         again on 2026-09-05, when the objects hand took `sensory_events` --
@@ -510,54 +498,22 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         record."""
         assert len(delegated_channels()) == 37
 
-    @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
-    @pytest.mark.parametrize("language", LANGUAGES)
-    def test_the_sheet_names_all_of_them(self, language, stage):
-        from llm.schemas import CAUSAL_CATEGORY_REDIRECTS
-
-        block = _delegation_block(language, stage)
-        # Body always assesses surface marks. Its engine output channel is
-        # intentionally absent from the Director's routing vocabulary.
-        routes = {CAUSAL_CATEGORY_REDIRECTS.get(c, c) for c in delegated_channels()}
-        missing = sorted(c for c in routes if c not in block)
-        assert not missing, (
-            f"{language}/{stage}: specialist routes the causal sheet does "
-            f"not name: {missing}. Every owned output needs a published "
-            "route, either its exact channel or its default-duty owner.")
-
-    @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
-    @pytest.mark.parametrize("language", LANGUAGES)
-    def test_the_channel_names_stay_identifiers_in_both_packs(
-            self, language, stage):
-        """The ja pack had translated eleven of them, and one translation was
-        wrong in a way prose cannot be: `stations` as 駅, a railway station.
-        A state_diff channel name is an identifier -- a sheet cannot name a
-        channel it has translated out of existence. The interpret note had the
-        same damage a week longer (review E43): `attire` as 服装, `containment`
-        as 封じ込め, `introductions` as 紹介."""
-        from llm.schemas import CAUSAL_CATEGORY_REDIRECTS
-
-        block = _delegation_block(language, stage)
-        for channel in delegated_channels():
-            route = CAUSAL_CATEGORY_REDIRECTS.get(channel, channel)
-            assert route in block, f"{language}/{stage}: {route!r}"
-
-
 # ---------------------------------------------------------------------------
 # (h) entities[].ubiquitous -- the flag that says a thing has no place at all
 # ---------------------------------------------------------------------------
 
 class TestTheBodilessVoiceFlagReachesTheHandThatMintsEntities:
     @pytest.mark.parametrize("language", LANGUAGES)
-    def test_the_objects_specialist_is_told_the_field_exists(self, language):
-        """`director_establish` published it and the specialist that owns
+    def test_the_encoder_is_told_the_field_exists(self, language):
+        """`director_establish` published it and the hand that owned
         `entities` on every NORMAL turn did not, so a bodiless voice first
-        written mid-story could not be flagged at all."""
-        assert "ubiquitous" in _chunk(language, "objects", "entities")
+        written mid-story could not be flagged at all. Its meaning rides the
+        part the encoder reads when it mints a thing."""
+        assert "ubiquitous:true" in _encoder_chunk(language, "entities__new")
 
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_the_field_is_in_the_shape_line(self, language):
-        chunk = _chunk(language, "objects", "entities")
+        chunk = _encoder_chunk(language, "entities")
         shape = [line for line in chunk.splitlines()
                  if "entities:{entity_id:{" in line]
         assert shape, f"{language}: no shape line in the entities chunk"

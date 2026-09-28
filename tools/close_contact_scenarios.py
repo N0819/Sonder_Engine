@@ -437,7 +437,7 @@ def _copy_provider_configuration(db, source_path):
                 tuple(row[key] for key in (
                     "id", "name", "kind", "base_url", "api_key", "enabled")),
             )
-        for key in ("agent_models", "reasoning_effort", "director_fanout_mode"):
+        for key in ("agent_models", "reasoning_effort"):
             row = conn.execute(
                 "SELECT value FROM settings WHERE key=?", (key,)).fetchone()
             if row is not None:

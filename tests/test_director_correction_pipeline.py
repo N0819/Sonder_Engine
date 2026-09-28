@@ -29,10 +29,14 @@ import extension_runtime
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
-from tests.helpers import fanout_resolve_agent
+from tests.director_fakes import prose_resolve_agent
 from tests.test_extensions import (  # noqa: F401 - fixtures are used by name
     _enable, _write_extension, ext_root, real_ext_root,
 )
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 SEALED = "deck_4"
 
@@ -90,10 +94,12 @@ def _ctx(temp_db):
 
 
 def _responses(monkeypatch, outputs):
-    """Serve one whole-beat resolve per Director call, in order.
+    """Serve one whole-beat resolve per Director attempt, in order.
 
-    Records every `director_resolve` payload so a test can count the calls and
-    read what the second request was actually told.
+    Records every `director_prose` payload -- the Director's own request, one
+    per attempt -- so a test can count the attempts and read what the second
+    request was actually told. The encoder answers from the attempt it
+    follows.
     """
     import agents.director as director
 
@@ -101,15 +107,11 @@ def _responses(monkeypatch, outputs):
     served = {"n": 0}
 
     def fake(role, step_key, system, payload, **kw):
-        if step_key == "director_resolve":
-            index = min(served["n"], len(outputs) - 1)
+        if step_key == "director_prose":
             served["n"] += 1
             seen.append(payload)
-            return fanout_resolve_agent(outputs[index])(
-                role, step_key, system, payload, **kw)
-        # Specialists answer from whichever whole-beat output is current.
         current = outputs[min(max(served["n"] - 1, 0), len(outputs) - 1)]
-        return fanout_resolve_agent(current)(role, step_key, system, payload,
+        return prose_resolve_agent(current)(role, step_key, system, payload,
                                              **kw)
 
     monkeypatch.setattr(director, "_agent_json", fake)

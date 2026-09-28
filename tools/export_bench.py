@@ -64,7 +64,7 @@ Tables the scratch database receives from the source, and nothing else:
   owner has it: `agent_models` whole (every role, `fallbacks`, sampler
   keys), `reasoning_effort`, `max_output_tokens`, `openrouter_routing`,
   `providers_no_json_schema`, the prompt-cache lists, `prompt_presets` and
-  `active_preset`, `director_fanout_mode`, `director_orchestration`,
+  `active_preset`, `director_orchestration`,
   `resolve_deep_audit`, `narrator_history_turns`, `exemplars`,
   `attire_beneath`, `affect_habituation`, `auto_promote`, the log level,
   `ui_language`, the research provider and key, the extension settings.

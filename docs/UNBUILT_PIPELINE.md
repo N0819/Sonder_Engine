@@ -8,188 +8,163 @@ lands it.
 
 <a id="unbuilt-1-1"></a>
 
-### 1.1 The specialist contract: BUILT, with two parts still open
+### 1.1 The prose Director is the only Director: what it does not yet do
 
-**BUILT 2026-09-10, and DELIVERING since later the same day**
-(`DESIGN_SPECIALIST_CONTRACT.md` sections 4d and 4g). The Director emits one
-list of categorized, numbered, annotated spans; the hands get their
-scene-scoped ledgers and their work items and nothing of the beat; each record
-names the chunk it resolves. A span may name SEVERAL ledger families and be
-settled by several hands, each answering for its own part, and a hand is told
-what the other owners of its span settle (`co_hands/<hand>.txt`, five shared
-chunks per pack). `changes_asserted` is retired -- no sheet asks for it, and it
-is still read so a stored variant from before the migration still reconciles.
-TWO PARTS REMAIN OPEN, below.
+**Found 2026-09-27**, by porting the causal Director's tests when it was
+deleted: every test of a floor that still exists was re-run through the prose
+Director (`tests/director_fakes.py`), and each item below is a test that
+passed on the causal path's fixtures and fails on the prose path's -- pinned
+as a STRICT xfail, so the day one closes the suite says so -- or a rule the
+deleted sheets taught that no prose card carries, or a defect the port
+surfaced on the path that remains (items 6-15). The causal Director did most
+of these things; nothing on the prose path does yet.
 
-**THIS ENTRY SAID "BUILT" WHILE NOT ONE WORK ITEM HAD EVER REACHED A HAND.**
-The measurement behind it counted what the Director EMITTED -- "13 of 22 spans
-carrying a category and a note" -- and nothing counted what a specialist
-RECEIVED. Playing beats live found four defects in series, each hidden behind
-the one in front: `norm_sequence` rebuilt every element from a key list that
-never learned `category` or `note`, so the span channel died before the view
-was built; the payload carried two different fields named `event_id`, so hands
-cited the phase graph instead of the chronology; a citation the engine never
-issued failed the whole call rather than the receipt; and the scope gates
-overruled the Director on every beat, so a hand was handed a span and denied
-the ledger to settle it in. Section 4g has each one, its live cost, and the
-tests repinned for it. The lesson for this file: a stage's OUTPUT is not
-evidence about its CONSUMER, and "built" needs a measurement taken at the far
-end of the seam.
-
-The measurements that motivated it, kept because they are what the design was
-argued from: The owner's contract: a hand receives its scene-scoped slice
-of world state, plus one or more dissected chunks of player/character input,
-each carrying a chronological id and a natural-language note on how the
-Director thinks it should resolve — and nothing else. It renders those through
-its own output format, which is already built.
-
-What happens instead, measured over 632 resolve-side specialist calls:
-
-| the hand is sent | calls | size |
-|---|---|---|
-| `resolved_event` — the whole beat as prose, declared AUTHORITATIVE | 632/632 (100%) | 910 ch |
-| `director_note` — what the Director asked of this hand | 311/632 (49%) | 147 ch |
-| `changes_asserted` — the categorized events for this hand | 172/632 (27%) | 459 ch |
-
-So 73% of specialist calls run on narrative alone, and the hands derive the
-events themselves as a private step — which is what 90-97% of their output
-tokens are spent on.
-
-Five specific gaps, each with its measurement in the note: the dissection
-(`sequence`) carries neither category nor id; categories and ids live on a
-second, non-corresponding decomposition (`changes_asserted`, defined in its own
-docstring as derived FROM the prose); the resolution intent exists only
-per-HAND (`ledger_notes`) rather than per-event; and the chronological ids
-never reach perception, where ordering is list position and `event_id` is used
-only as a dedupe key.
-
-**The Director is still asked to work out things code already knows.**
-`flow.reactors` asks for "every awake character who could plausibly PERCEIVE
-this beat" while perception is DETERMINISTIC and `agents/runtime.py` already
-filters the answer through a presence gate -- the sheet's own text records the
-model naming fewer reactors than witnesses on 79% of multi-witness beats, and
-the gate's comment records six `character_major` calls at 13-22s each spent on
-minds the scene placed nowhere. The paragraph is cut from 1,319 to 616 chars
-(the pacing judgement is genuinely the model's); DERIVING the list is a
-behaviour change to who speaks in every beat and wants its own measurement.
-Same shape, unmeasured: MOVEMENT DIRECTION (996 chars, and
-`world/spatial_orientation.py` owns bearing math), FOLLOWING STATE (863),
-LOCATION & SYSTEM DETECTION (589). See `DESIGN_SPECIALIST_CONTRACT.md` 4f for
-the table and the test each row has to pass.
-
-**Room minting is the one exception, and the prose removal exposed it.** The
-spatial hand authors a room's `desc`, name, anchors, `light` and `quiet` -- its
-own sheet calls `desc` "the only durable record of how this place reads" -- and
-`DESIGN_ROOM_FIDELITY.md` records it reading the Director's narration to do so
-("the road run's spatial hand read the sentence and wrote `{w: 15, d: 20},
-round` from it"). That input is gone as of the prose removal, correctly, and
-nothing replaced it. The owner's proposal (2026-09-09) is a specialised
-room-mint agent that spatial calls for a PLANNED room (Story Planner, not yet
-fleshed out) or a NEW one (player declaration), taking the plan, purpose and
-lore rather than a beat's narration. Not built: it is a new model role needing
-its own scope, its own gate, and a measurement of current room fidelity first.
-See `DESIGN_SPECIALIST_CONTRACT.md` section 6a.
-
-**The migration order is decided (owner, 2026-09-09).** `sequence` becomes the
-four-field chunk list (chunk / id / note / category) and `changes_asserted` is
-deleted at the end; the endpoint-matching question is answered FIRST. It is
-answered: the op carries the chunk id. `phase_sources` was the cheaper
-candidate and failed on measurement -- emitted on 25% of productive calls, 68%
-of `encoded` claims cited, and never once by `director_social` across 91 calls
-(`tools/provenance_coverage.py`), because it is a second structure filled in
-beside the work rather than a field inside it. See
-`DESIGN_SPECIALIST_CONTRACT.md` sections 4a and 4b.
-
-**THE BEAT IS NOW REASSEMBLED AND KEPT (2026-09-10).** The recompiler
-(`DESIGN_SPECIALIST_CONTRACT.md` 4k) answers what happened, to whom and when
-off four engine-issued identifiers, and `world/beat_ledger.py` (4m) makes the
-beat's events WORLD STATE -- written at the composition rather than the commit,
-expiring by beat number with nothing sweeping them, and read by perception for
-the beat's chronology. Ingestion was widened to read a category in whatever
-shape it arrived (4n), an unroutable span is now offered to every hand to
-decline rather than reaching none (4o, on the owner's rule that "a ledger not
-reaching a specialist is as good as that ledger not existing"), and a known
-name is recovered from beside an unknown one (4p, `any` not `all` -- and a
-stray separator no longer costs the name).
-
-**A LONG BEAT COMPRESSES, AND THE OMISSION DETECTOR COULD NOT SEE IT.** Measured 2026-09-10 on paragraphs of
-hand-counted acts, all confined to one room so movement's own backstops were
-not in play:
-
-| acts written | interpret elements | speech acts kept |
-|---|---|---|
-| 12 | 11 | n/a |
-| 20 | 18 | 2 of 2 |
-| 31 | **11** | **0 of 3** |
-
-Twelve and twenty acts dissect near 1:1. Thirty-one collapse to eleven
-compound elements -- one covers three acts, another four -- and all three
-declared speech acts vanish from the typed sequence (`{'action': 11}`, where
-the twenty-act beat gave `{'action': 16, 'communication': 2}`).
-`_uncovered_declarations` reported ZERO uncovered for it, and the reason is
-structural rather than a threshold: `_declaration_units` splits on sentence
-boundaries and coordination, NOT on plain commas, so a comma-chained paragraph
-is 2 units for 31 acts. The detector then asks whether each coarse unit's
-significant tokens are present, and compression that KEEPS THE NOUNS while
-dropping the acts passes it cleanly. Note the corpus is already deliberately
-not `notes` -- coverage came from the sequence's own compressed `attempt`
-strings.
-
-**FIXED 2026-09-10, on the owner's choice of remedy, AND MEASURED BEFORE IT
-SHIPPED.** `_CLAUSE_SPLIT_RE` now ends a declaration unit at a BARE COMMA. The
-risk was the one the owner ruled on 2026-09-06 -- more units means more chances
-to fire the bounded self-repair on an interpretation that was already complete,
-the "guards that fire on valid output" class -- so it was measured across 171
-stored interpret beats first:
-
-| | before | after |
-|---|---|---|
-| declaration units | 261 | 311 (+19%) |
-| uncovered reported | 0 | 4 |
-| beats firing the repair | 0 | 2 (1.2%) |
-
-**All four newly-reported units are real drops, not false positives**, checked
-by reading each interpretation: the three speech acts of the 31-act beat, whose
-sequence held none (`{'action': 11}`), and "tell her she can't hear me now" --
-an input declaring two speech acts whose interpretation carried one, which is
-the dramatically load-bearing line of the owner's own tardis example. 169 of
-171 beats are untouched.
-
-What this does NOT fix is the compression itself: a 31-act paragraph still
-dissects to 11 compound elements, and the detector's answer to that is the
-bounded self-repair, which is one model call and is capped at
-`_RECONCILE_INTERPRET_MAX_UNITS` (4) units per beat -- deliberately, because
-"a fully off-the-rails interpretation is better re-run than repaired unit by
-unit". A beat losing more than four declarations is still losing them. Whether
-the prompt should also be sharpened is the open half, and wants its own
-measurement rather than being assumed from this one.
-
-`_CLAUSE_SPLIT_RE` is per-pack, so this is an ENGLISH change; the Japanese
-pattern already breaks on the Japanese comma only before a conjunction
-(`、(?:そして|しかし|だが)`), which is the same gap one alphabet over, and is
-covered by the standing deferral in s 1.0.
-
-**THE RESIDUAL EDGE IN THE SPLIT RULE, named so it is not rediscovered as a
-bug.** A sentence containing a bare routing word as its own delimited fragment
-does split: "the belt comes off, body, and it lands" yields three parts, of
-which `body` routes and two are reported as unknown names. The span reaches
-the right hand and the cost is two junk entries in the unrouted report -- the
-cheap direction to be wrong in, since the change is delivered. Prose in a
-category field has never actually been observed: across the long-beat run's 54
-categories, 49 plain strings, 5 lists, zero prose.
-
-**AND ONE REPORTING GAP, deliberate.** `_unrouted_rulings` reads `ledger_notes`
-keys and `spans`, so a change filed the older way -- as a `changes_asserted`
-entry -- is DELIVERED to every hand but not reported. Delivery is the half the
-owner's ruling is about, and the manifest is what spans replace when the
-migration finishes.
-
-**Open, and not to be papered over:** record-shaped channels (`poses`,
-`overlays`, `conditions`, `attire`) are whole current-state records rather than
-events, so there is often no chunk to attach an instruction to. `director_body`
-owns four such channels and no others, which is why the manifest can never
-dispatch it. That needs a second instruction shape before an event-only
-pipeline is worth building.
+1. **Hard player authority refuses nothing.** `apply_player_authority`
+   downgrades a claim whose sequence element is a world `event`, and the
+   causal author filed a player's world assertion that way. An encoder event
+   has no such field: the row reads as the player's own act, granted at every
+   rung, so `explicit_outcomes` and `actor_only` record no downgrade. And a
+   prose record carries no `from_event`, so `void_span_records` would drop
+   nothing even if one were recorded. `world_author`, the default, is
+   unaffected. (`tests/test_director_orchestration.py`,
+   `TestADialRefusesTheSpanAndTheRecordWithIt`, two xfails.)
+2. **Nothing can stop a walk under way.** `travel_interrupted` was the causal
+   Director's own structured field, and `director_movement._travel_continues`
+   still reads it; the prose Director writes prose, and nothing asks it
+   whether the beat stopped anybody. A declared walk carries on through any
+   beat until it arrives or its route shuts. Candidate: one decision-model
+   question per walker in flight ("does the passage stop X walking toward
+   Y?"), the pattern the planned-room `enter__` questions use.
+   (`tests/test_travel_continues.py`, xfail.)
+3. **Every deterministic floor of the resolve reconciliation is skipped on a
+   beat with rows -- and has been since 2026-09-12, on BOTH contracts.**
+   `director_resolve` calls `_reconcile_resolution` only
+   `if not out.get("causal_ledger")` (c452a50d). Its comment says the point
+   was not to ask a model to rediscover a missing transform from prose; the
+   gate covers the whole seam instead: the awareness onset drops (player and
+   cast), the waking exits, the restraint release exits, the RESTRAINT
+   MOVEMENT BLOCK, the blank-placeholder strip, the shed-garment recovery,
+   articulation stamping, the unconsciousness / untracked-restraint /
+   destruction / scale scans and the player-claim findings. Every beat whose
+   Director wrote rows -- every causal beat since that commit, every prose
+   beat -- skips all of them; the tests that pinned them passed on fixtures
+   with no rows, a shape no live beat has had since. Shown: a bound body walks
+   on with a continued walk (`tests/test_travel_continues.py`, xfail).
+   Recommended cut, the owner's call because several of these read prose:
+   run the structural floors always (restraint block, placeholder strip,
+   shed-garment recovery, articulation, scale conflicts), measure the
+   prose-reading ones (awareness onset and exits, restraint releases, the
+   unconsciousness and destruction scans) on the encoder's rows before
+   enabling them, and keep the model repair off for beats with rows.
+4. **Rules the deleted sheets taught that no prose card carries:**
+   - the movement row's fields: the encoder core lists
+     `{to_room, why, mover, arrives, to_anchor?, pace?}` and never says that
+     `arrives` means the beat ends there, that `to_anchor` is the destination
+     feature named, or that `pace` is a run when the step runs; and never
+     that a target is not the row's own source;
+   - dwelling entry: the resolve payload carries `dwellings` and each
+     figure's `home`, and the rule that adjudicated entry (leave is a line
+     the resident speaks; a request ends at the threshold; forcing the way is
+     an act) was a prose-author clause (`Design.md`, "A room someone sleeps
+     in is theirs");
+   - dealing answers: `present_figures[].answers` reaches the resolve, and
+     "rule the outcome to match; the words, manner and cost are yours" was
+     the prose-author sheet's (`Design.md`, "The Director is shown what a
+     townsperson's ledgers answer");
+   - an unplanned place: "A PLACE NOBODY PLANNED" is on the opening's sheet
+     only (it was already absent from a later beat's sheet before the
+     causal Director went);
+   - a claim is not an objective fact: the causal sheet said so, and the
+     prose cards keep only the interpret sheet's "speech about a plan, a
+     wish or a command is something said, not something done";
+   - absence makes no row: "silence, stillness and a bare statement that
+     nothing changed do not create extra rows" (the encoder core keeps "a
+     step that changes no record has none", which is about writes, not
+     events);
+   - work on a thing changes it: the causal sheet's "WORK ON A THING CHANGES
+     IT, AND A READ OF IT ANSWERS FROM IT" (route the thing's own channel
+     when it would be different next beat) and "A body's posture, grip and
+     place are never the record of its work";
+   - and two lost on 2026-09-12, when the prose-author sheet became the
+     causal one, on both contracts since: the resolve-time author-notes duty
+     ("AN AUTHOR'S NOTE SAYS WHAT THE PLAN MEANS" is on the opening's sheet
+     alone, while `author_notes` rides every resolve payload), and A88's
+     "a sky flashes when `electrical` says so, and no name implies it".
+   Each is a prompt edit to every story, which is the owner's to make.
+5. **Tooling.** `tools/contract_bench.py` benches no prose Director step (its
+   causal steps went with it), and extension Director channels have no path:
+   `add_director_specialist` raises (`docs/guides/EXTENSIONS.md`).
+6. **The Director's authority limits warn and never correct.** A character
+   handed an act or a line it never declared, a player handed one, and a
+   quoted line no declaration supports are all read on the prose
+   (`_check_character_act_authority`, `_check_player_act_authority`,
+   `_check_prose_quote_authority`) and reported on the step as
+   `player_act_warnings` -- and the fabrication commits. The causal path
+   re-asked the Director once and kept the rewrite only if it lowered the
+   count; the prose contract chose warn-only at the time because a retry
+   re-runs author, decision model and encoder and the readings'
+   false-positive rate on prose is unmeasured. That rate is the thing to
+   measure before choosing. (`tests/test_director_character_authority.py`,
+   `tests/test_director_dialogue_ownership.py`.) The world-pressure
+   must-tick retry went the same way: a flagged pressure is now an input
+   group of its own and a row sourced to it ticks it, with silence still
+   warned at commit (`tests/test_world_pressure.py`).
+7. **A player-asserted event is never adjudicated.** `fact_adjudications`
+   was the causal Director's field and nothing on the prose path writes it,
+   so every beat that carries an actor-less `event` claim warns
+   "Unadjudicated player-asserted fact", adjudicated in the prose or not
+   (`tests/test_director_obligations.py`, strict xfail). Either the verdict
+   moves onto the prose path (a decision-model question is the obvious
+   shape) or the warning retires with the field.
+8. **A declared line the encoder files back is not re-stamped.** Echoed as a
+   speech event with its own tags, or none, a declared whisper or concealed
+   line reaches `dialogue_log` as normal and overt -- a concealment leak
+   (`tests/test_speech_concealment.py`, strict xfail).
+9. **A line the Director originates reaches no view, and one it invents for
+   the cast reaches the record.** An encoder speech event for a figure or a
+   creature lands in `state_diff.speech` only: no `dialogue_log` entry, so
+   no hearer's view carries it, and `dialogue_order` and
+   `routed_to_background` are never populated, which leaves their floors
+   dead. An undeclared line for a registered character is kept out of
+   `dialogue_log` but lands in `state_diff.speech`, the resolve's sequence
+   and its rows -- measured: in no view and in no self-memory, but in the
+   record later beats read.
+10. **The encoder is not shown the room graph** a channel's owner was: the
+    first owner to supply a payload key wins, and for `rooms` that is not
+    the spatial owner, so the encoder never sees `adjacent` or `vertical`
+    (`tests/test_director_payload_shows_its_ledgers.py` holds its attic
+    assert back).
+11. **A malformed encoder transform crashes or vanishes.** A list-valued
+    `positions` transform crashes `declared_moves`; a transform wrapped in
+    `patch.state_diff` reaches no owner and is dropped without a word; and
+    the encoder's patch path has no entity-sibling hoist, so a sibling field
+    nested inside `entities` takes the real entity down with it (the
+    hand-path tests for chat 80's shape went with the hands).
+12. **The encoder's same-provider repair loses its sheet.** The rebuild is
+    sent `repair_json` alone with an empty example, where the causal hands
+    kept their own sheet on it (the fallback candidate keeps it)
+    (`tests/test_capture_records_every_provider_call.py`, strict xfail).
+13. **Every interpret builds all five world views** (crowds, artifacts,
+    couriers, carried reports, unratified claims): the decision model's
+    candidates are read from the same facts before it answers, so the C8
+    saving (48 ms of 205 ms on a 307-body town) is gone.
+14. **Card findings, each a prompt edit and so the owner's:** the encoder's
+    `contact_ops` chunk (en and ja) names `item_matches` and
+    `target_matches`, which no payload carries; `entities__examined` ships
+    only with its channel, and the `entities` question answers no for a
+    thing "only described as it already is", so a pure read may never reach
+    the part; `jev_questions/entities.txt` enumerates verbs; the prose
+    Director's sheets never take the adult overlay (the encoder's and the
+    room author's do, by their owners); and the prompt editor shows no
+    turn-pipeline Director sheet, because `prose_contract.*` is not in
+    `DEFAULT_PROMPTS`.
+15. **Dead code the deletion left.** `_note_for`, `_SPECIALIST_DICT_CHANNELS`
+    / `_SPECIALIST_LIST_CHANNELS`, the `required_channels` and verdict
+    branches, `pressure_ticks`, `MINTED_THING_NAME_WORDS`, and
+    `semantic_output_errors`' `director_interpret` / `director_resolve`
+    branches with `_name_what_was_discarded` -- none is reached by a live
+    call. `ext_api` stayed at 1 although `list_channels` left
+    `HOST_CAPABILITIES`.
 
 <a id="unbuilt-1-1a"></a>
 
@@ -1454,11 +1429,11 @@ calls, ~176k input tokens, for one beat.
 ### 1.163 The opening is still one call with its own sheet
 
 `director_establish` is the last Director monolith. Resolve and interpret
-each fan out to a prose author plus five hands whose sheets are assembled
-from chunks (`llm/prompts._assembled_sheets`), so a rule the spatial hand
-learns is a rule every beat reads; the opening runs one model call over one
-hand-written prompt, and by 2026-09-16 that prompt had drifted 23 rule
-headings behind the hands -- the owner's chat 126 opened with every anchor
+run the prose Director, whose encoder's sheet is assembled from chunks
+(`prompts.unified_specialist_prompt`; until 2026-09-27 they fanned out to five
+hands assembled the same way), so a rule a chunk learns is a rule every beat
+reads; the opening runs one model call over one hand-written prompt, and by
+2026-09-16 that prompt had drifted 23 rule headings behind the hands -- the owner's chat 126 opened with every anchor
 written without a height and a back room nobody had seen written as a
 described room with a guessed `light: dim`.
 
@@ -1493,7 +1468,10 @@ builder (an "establish" case), the `DirectorEstablish` schema and
 validator, `_establish_identity_floor`, and the rows contract, which is
 event-shaped and would need "what holds at the opening" rows. Owner decision
 2026-09-16: the fan-out is the destination; the fragment is the step that
-holds the line until it is built.
+holds the line until it is built. (2026-09-27: the fan-out was deleted; its
+successor is the prose Director -- the Director writes the opening, the
+encoder records what holds -- and whether the opening should run it is the
+same decision, not yet re-asked.)
 
 **The Japanese sheet carries the vocabulary and not the stub rule.** Under
 the english-first mandate (2026-09-09) the ja fragment is the same paragraphs
@@ -1538,6 +1516,11 @@ thin.'". Both packs' sheets carry the clauses. Residuals:
 
 <a id="unbuilt-1-164"></a>
 ### 1.164 The Director's doctrine moved to the hands and what did not move was dropped
+
+**The hands this entry is about were deleted on 2026-09-27** with the causal
+Director. Read each item below as a duty the prose Director's card or the
+encoder's may still need: none was re-checked against those cards when the
+hands went, and the prose path's own gaps are § 1.1.
 
 `38b560c6` (2026-09-12, "The Director stops encoding the world and only
 slices, routes and rules") retired the monolithic resolve sheet: the
@@ -1709,52 +1692,17 @@ work.
 
 <a id="unbuilt-2-18"></a>
 
-### 2.18 The orchestrated Director: what is left after it landed
+### 2.18 The orchestrated Director -- DELETED 2026-09-27
 
-**LANDED 2026-08-14.** The fan-out is the only Director path: there is no
-`DEFAULT_PROMPTS["director_resolve"]`, no `director_orchestration` setting,
-and `director_fanout_mode` chooses concurrency rather than a different set of
-hands. `Design.md`'s conformance row says Built, and it is right.
-
-This entry used to be the whole proposal — the argument, the measurements,
-the retracted framings and the build log — with its landing recorded in a
-paragraph at the bottom. A reader triaging §2 read the shipped architecture
-as an open experiment, and this register is supposed to WIN when the status
-lists disagree. The argument and the numbers live in
-[`design_notes/19-director-orchestration.md`](../design_notes/19-director-orchestration.md)
-and in the alpha 9.2 changelog; what belongs here is only what is still
-unbuilt:
-
-- **The prose author's PAYLOAD is still the full monolithic one.** Its SHEET
-  was carved (14 duty chunks, `_PROSE_DUTY_GATES`); the payload was not. The
-  next real token win.
-- **`director_interpret`'s own sheet is not chunked.** The delegated channels
-  are suppressed at the source (`llm/prompts.interpret_delegation_note`, called from `agents/director.py`; the constant `INTERPRET_DELEGATION_NOTE` this entry used to name does not exist — corrected 2026-08-19), but the blocks
-  teaching them still load on every call.
-- **The specialist chunks have never been rewritten for leanness.** Permitted
-  — they exist only on the orchestrated path, so there is no monolith to keep
-  them compatible with.
-- **The offscreen SIMULATOR** (out-of-band propose/ratify) remains
-  owner-deferred. The `offscreen` specialist ships the ops surface only, and
-  schedules nothing.
-- **The dispatch rate under ruling-keyed dispatch is unmeasured.** Since
-  2026-09-02 a hand runs only when the author's `ledger_notes` or
-  `changes_asserted` reaches it. The 1.75-of-6 mean and the five-of-six
-  physical beat were both measured under the gate-keyed dispatch; the
-  9.10 arms found the author writing about a fifth of its channels with no
-  ruling, and under the new rule that fifth is a hand not run rather than a
-  hand run without a note -- the reconciliation seam's owner-routed repair
-  is what catches it, at one serial call. Measure both before trusting the
-  saving.
-- **The replaced-channel warning rate has never been re-measured live.**
-  Stored variants hold only the MERGED output, so the after-rate cannot be
-  read from run 20's own beats.
-- **Provider cache affinity is configuration, not code.** Run 20 diagnosed
-  the 19% prefix-cache rate as provider replica routing rather than byte
-  instability; honest ceiling ~57%, since the per-beat payload is inherently
-  uncacheable. Recorded rather than chased.
-
-## 3. Information-pipeline leaks still open
+The fan-out this entry tracked (a prose author plus five specialist model
+calls, `director_fanout_mode`, the owner-routed repair) is gone: the Director
+writes prose and ONE encoder records every channel (`agents/director_prose.py`,
+`docs/design/DESIGN_PROSE_CONTRACT.md`). Its open items went with it -- the
+prose author's payload, the unchunked interpret sheet, the specialist chunks'
+leanness, the dispatch and replaced-channel rates -- and the one that is not
+about the fan-out, provider prefix-cache affinity, is configuration rather than
+code. What the prose Director does not yet do is § 1.1. The argument and the
+measurements stay in `design_notes/19-director-orchestration.md`.
 
 <a id="unbuilt-3-1"></a>
 

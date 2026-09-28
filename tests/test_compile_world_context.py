@@ -316,15 +316,15 @@ def test_world_context_reads_the_compiler_or_a_retired_stage(temp_db):
 
 
 def test_the_director_payloads_carry_needs_and_no_proposal(temp_db, monkeypatch):
-    """The spatial hand receives `planning_needs`; the mapping proposal and
-    old prose-author gate are gone with the model that authored them."""
+    """The spatial owner's slice carries `planning_needs`; the mapping
+    proposal is gone with the model that authored it, and the prose-author
+    duty gates with the causal Director (2026-09-27)."""
     import inspect
     from agents import director, director_fanout
     src = inspect.getsource(director) + inspect.getsource(director_fanout)
     assert "mapping_scene_proposal" not in src
     assert '"planning_needs"' in src
-    assert director._PROSE_DUTY_GATES == {}
-    assert "mapping_proposal" not in director._PROSE_DUTY_GATES
+    assert not hasattr(director, "_PROSE_DUTY_GATES")
 
 
 def test_a_vehicle_moving_toward_no_room_raises_a_room_need(temp_db, no_retrieval):

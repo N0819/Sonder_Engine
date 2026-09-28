@@ -201,16 +201,19 @@ def test_ending_one_ends_every_transformation_on_that_body():
 
 @pytest.mark.parametrize("clause", [
     "PHYSICAL TRANSFORMATION",
-    "This is NOT a disguise",
+    "It is NOT a disguise",
     "never give it known_to",
     "REVERSIBILITY IS THE DEFAULT",
     "re-emit it with active:false",
     "may ALSO be disguised",
 ])
 def test_the_director_is_told_the_distinction(clause):
-    from llm import prompts
+    """The encoder writes a body's form (`conditions`), and the distinction
+    rides the part it reads when a form changes."""
+    from llm.prompts import unified_specialist_prompt
 
-    assert clause in json.dumps(prompts.DEFAULT_PROMPTS)
+    assert clause in unified_specialist_prompt(["conditions"], "en",
+                                               ["conditions__form"])
 
 
 def test_a_transformation_wins_over_a_disguise_that_outlived_it(temp_db,

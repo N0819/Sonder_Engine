@@ -64,18 +64,23 @@ def test_english_is_an_installed_complete_default_pack():
     # `offscreen.profile_summary_record`, which makes the same bounded call
     # out of band and into state fields rather than prose).
     #
-    # Counted over what the pack PUBLISHES, not what it stores: the seven
-    # Director sheets are assembled from `specialists`/`prose_author_sheet`
-    # and deliberately carry no stored body of their own.
-    assert len(default_prompts_for("en")) >= 40
+    # Counted over what the pack PUBLISHES. Until 2026-09-27 that was the
+    # stored prompts plus the seven causal Director sheets assembled from
+    # `specialists`/`prose_author_sheet`; those went with the causal
+    # Director, and what is published is now exactly what is stored.
+    assert len(default_prompts_for("en")) >= 37
     # Perception composes every view deterministically and has no model role,
     # so it must carry no prompt: one in the pack is 28k characters shipped to
     # nobody, surfaced in the host's prompt editor as if it were editable, and
     # paid for again in every translation.
     assert "perception" not in packs["en"].card("system_prompts")["prompts"]
-    # The Director monolith is gone; only the scoped prose-author sheet remains.
-    assert "director_resolve" not in default_prompts_for("en")
-    assert "director_resolve_lean" in default_prompts_for("en")
+    # The Director monolith is gone, and since 2026-09-27 so is every causal
+    # sheet the editor used to publish: the prose Director's sheets are
+    # `prose_contract.*`, which the editor does not show.
+    for retired in ("director_resolve", "director_resolve_lean",
+                    "director_interpret", "director_body", "director_social",
+                    "director_contact", "director_objects", "director_spatial"):
+        assert retired not in default_prompts_for("en")
     assert "agents.common" in packs["en"].card("linguistics")
     assert len(packs["en"].ui_catalog) > 1000
 
@@ -353,63 +358,6 @@ def test_pack_lookup_rejects_invalid_and_uninstalled_ids():
     assert language_pack("en-US").id == "en"
 
 
-def _assembled_specialist_sheet(card, name):
-    spec = card["specialists"][name]
-    return spec["core"] + "".join(
-        spec["chunks"][channel] for channel in spec["order"])
-
-
-def test_every_director_sheet_the_editor_publishes_is_the_one_a_beat_assembles():
-    """The prompt editor must show the sheet the runtime actually loads.
-
-    A specialist sheet has exactly one authored source -- its core plus the
-    per-channel chunks scoping selects from. Publishing a second, separately
-    stored body under the same prompt id is a sheet with two spellings, and
-    the editor shows the copy no beat runs. Saving that copy as a preset
-    replaces the assembled sheet with it for every beat afterwards.
-    """
-    from language_runtime import apply_prompt_policy
-    from llm import prompts as prompt_module
-
-    for pack in installed_language_packs(refresh=True).values():
-        if not pack.story:
-            continue
-        card = pack.card("system_prompts")
-        published = prompt_module.default_prompts_for(pack.id)
-        for name in card["specialists"]:
-            pid = f"director_{name}"
-            expected = apply_prompt_policy(
-                _assembled_specialist_sheet(card, name), pack.id, pid)
-            assert published[pid] == expected, (
-                f"{pack.id} pack publishes a {pid} sheet that is not the "
-                f"assembly the runtime loads "
-                f"({len(published[pid])} chars vs {len(expected)})")
-        lean = apply_prompt_policy(
-            "".join(text for _name, text in card["prose_author_sheet"]),
-            pack.id, "director_resolve_lean")
-        assert published["director_resolve_lean"] == lean
-
-
-def test_no_pack_stores_a_second_copy_of_an_assembled_director_sheet():
-    """The duplication itself, refused at the source.
-
-    Byte-equal copies are drift in waiting; these had already drifted (the
-    English `director_spatial` body was 1,518 characters short of its own
-    assembly -- the whole `comms_ops` chunk -- and every Japanese sheet
-    differed). Keeping the bodies out of the card is what makes the equality
-    above unbreakable rather than merely currently true.
-    """
-    from llm.prompts import ASSEMBLED_SHEET_IDS
-
-    for pack in installed_language_packs(refresh=True).values():
-        stored = set(pack.card("system_prompts")["prompts"])
-        duplicated = sorted(stored & set(ASSEMBLED_SHEET_IDS))
-        assert not duplicated, (
-            f"language pack {pack.id!r} stores a second body for "
-            f"{', '.join(duplicated)}; those sheets are assembled from "
-            "`specialists`/`prose_author_sheet` and must live there only")
-
-
 # --- Decision 2: the deterministic recognizers inside `mind/` ---------------
 #
 # Two dozen recognizers -- belief-confidence calibration, claim similarity,
@@ -576,12 +524,16 @@ def test_every_nsfw_prompt_id_names_a_prompt_that_exists():
     no-op waiting to be useful -- it is a claim that a sheet gets the overlay,
     made in a place where being wrong is invisible. `perception` sat in both
     packs' lists after the perception prompt was retired (perception composes
-    every view deterministically and has no model role at all)."""
-    from llm.prompts import ASSEMBLED_SHEET_IDS
+    every view deterministically and has no model role at all).
 
+    Since 2026-09-27 a `director_<hand>` id names no prompt: it is the key
+    the encoder's sheet reads for a hand whose channel ships
+    (`unified_specialist_prompt`), and `director_spatial` the room author's
+    (`room_author_prompt`)."""
     for pack in installed_language_packs(refresh=True).values():
         card = pack.card("system_prompts")
-        known = set(card["prompts"]) | set(ASSEMBLED_SHEET_IDS)
+        known = set(card["prompts"]) | {
+            f"director_{hand}" for hand in card["specialists"]}
         unmatched = sorted(set(card["nsfw_prompt_ids"]) - known)
         assert not unmatched, (
             f"language pack {pack.id!r} marks {unmatched} NSFW-overlaid, and "
@@ -619,7 +571,7 @@ def test_every_level_rung_the_engine_accepts_is_published_in_every_pack():
     """A condition whose `state.level` the engine reads must publish the whole
     ladder in the sheet that writes it, in every story pack.
 
-    `awareness` does: the body specialist's chunk carries
+    `awareness` does: the body specialist's chunk carried
     `level in {unconscious|sedated|asleep|dazed}`. `restraint` did not -- what
     the specialist was handed was a parenthetical of examples, and `encased`
     appeared nowhere in either pack. `_normalize_restraint_level` then folded
@@ -628,7 +580,13 @@ def test_every_level_rung_the_engine_accepts_is_published_in_every_pack():
     An unpublished rung is unreachable in practice and silently wrong in the
     record, which is why this asserts over the enums rather than over a list
     of words: the next `level` ladder is caught by adding its constant here.
+
+    Since 2026-09-27 the sheet that writes a condition is the encoder's, and
+    each ladder lives in its kind's part (`conditions__<kind>`), shipped when
+    the decision model picks it -- so the part alone must carry the kind and
+    its whole ladder.
     """
+    from llm.prompts import unified_specialist_prompt
     from story.scene import AWARENESS_LEVELS, RESTRAINT_LEVELS
 
     ladders = {
@@ -639,8 +597,9 @@ def test_every_level_rung_the_engine_accepts_is_published_in_every_pack():
     for pack in installed_language_packs(refresh=True).values():
         if not pack.story:
             continue
-        chunk = pack.card("system_prompts")["specialists"]["body"]["chunks"]["conditions"]
         for kind, rungs in ladders.items():
+            chunk = unified_specialist_prompt(
+                ["conditions"], pack.id, [f"conditions__{kind}"])
             assert f"kind:'{kind}'" in chunk, (
                 f"{pack.id} never names the {kind} condition to the "
                 "specialist that has to write it")
@@ -935,3 +894,4 @@ def test_every_percept_kind_the_engine_defines_has_a_japanese_rendering():
     for kind, (label, data) in sorted(JAPANESE_PERCEPT_FIXTURES.items()):
         view = render_view([_ja_percept(kind, label, data)], language="ja")
         assert view.text.strip(), "no Japanese rendering for percept %r" % kind
+

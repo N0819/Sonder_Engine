@@ -34,10 +34,7 @@ from core.db import get_setting, q, wget
 from mind.memory import lorebook_manifest
 from world.paradox import paradox_visible_to
 from llm.prompts import (
-    PROSE_DUTY_CHUNKS,
     get_prompt,
-    prose_author_prompt,
-    specialist_prompt,
 )
 from story.scene import (
     NON_AWAKE_GATED,
@@ -326,30 +323,14 @@ from .director_scopes import (
     note_key_targets,
     manifest_category_targets,
     _LIST_DELEGATED,
-    _CHANNEL_GATES,
     _CHANNEL_SPECIALISTS,
-    _default_channel_gate,
     _rebuild_channel_owners,
-    register_specialist,
-    unregister_specialists,
-    _extension_specialist_call,
-    _shipped_transit_state,
-    _shipped_darkened_room,
-    _shipped_bodiless_definition,
-    _PROSE_DUTY_SHIPPED,
     _STRUCTURAL_CHANNEL_FACTS,
     _gate_facts,
-    _ruling_for,
-    _unrouted_rulings,
-    unnamed_work,
-    ENGINE_CATEGORIES,
-    _dispatch_specialists,
-    specialist_scope,
 )
 from . import director_prose
 from .director_fanout import (
     addressed_figures, addressed_house,
-    fanout_is_parallel,
     _note_for,
     _resolve_beat_view,
     _interpret_beat_view,
@@ -358,11 +339,8 @@ from .director_fanout import (
     _specialist_span_slice,
     span_categories,
     span_owners,
-    specialist_co_hands,
-    co_hand_view,
     _without_private_keys,
     _specialist_payload,
-    _specialist_ledger,
     _anchor_names,
     _anchor_payload_desc,
     _beat_rooms,
@@ -372,9 +350,6 @@ from .director_fanout import (
     _EVENT_VERDICTS,
     _resolved_event_verdicts,
     _index_addressed_events,
-    _author_emitted_channels,
-    _structurally_absent_channels,
-    _orchestration_scope_backstop,
 )
 from .director_reconcile import (
     _deep_audit_mode,
@@ -387,8 +362,6 @@ from .director_reconcile import (
     _verify_no_referent,
     _verify_already_true,
     _acquit_addressed_events,
-    _REROUTE_FULL_SCOPE,
-    _route_repair_omissions,
 )
 
 
@@ -1751,24 +1724,15 @@ def director_interpret(ctx, nonce):
             "pending_obligations": pending_obligation_view(chat["id"], ctx.turn.idx),
         }
 
-    # THE PROSE CONTRACT (agents/director_prose.py): see director_resolve.
-    _prose_contract = director_prose.enabled()
-    if _prose_contract:
-        out = director_prose.run(
-            ctx, "interpret", sc, _interpret_model_payload,
-            _interpret_beat_view(ctx, {}, p_name), _interpret_extras({}),
-            _gate_facts(ctx, sc, physical=True, speech=True,
-                        crowds_rows=_icrowds, notices_rows=_inotices,
-                        couriers_rows=_icouriers, reports_rows=_ireports,
-                        unratified_rows=_iunratified))
-    else:
-        out = _agent_json(
-            "director",
-            "director_interpret",
-            prose_author_prompt(set(), ctx.language),
-            _interpret_model_payload,
-            max_tokens=None,   # the configured ceiling; see complete_validated_json
-        )
+    # THE DIRECTOR WRITES PROSE (agents/director_prose.py): see
+    # director_resolve.
+    out = director_prose.run(
+        ctx, "interpret", sc, _interpret_model_payload,
+        _interpret_beat_view(ctx, {}, p_name), _interpret_extras({}),
+        _gate_facts(ctx, sc, physical=True, speech=True,
+                    crowds_rows=_icrowds, notices_rows=_inotices,
+                    couriers_rows=_icouriers, reports_rows=_ireports,
+                    unratified_rows=_iunratified))
     # A QUOTED SPAN IN THE INPUT IS THE PLAYER'S LINE, whatever row the
     # author filed it under (`restore_declared_quotes`).
     restore_declared_quotes(out, ctx.input, warn=ctx.add_warning)
@@ -1975,20 +1939,9 @@ def director_interpret(ctx, nonce):
     _address_from_spans(out, [str(_f.get("name") or "")
                               for _f in _interpret_figures], cast_info)
     _iview = _interpret_beat_view(ctx, out, p_name)
-    # The four views the gate and the payload both read, built once, and only
-    # if one of them reads them.
-    if _prose_contract:
-        _idispatch, _ianswers = director_prose.dispatch(ctx, "interpret")
-    else:
-        _ianswers = None
-        _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
-            ctx, sc,
-            physical=_beat_has_physical_activity(out, {}, []),
-            speech=bool(player_speech_lines(out)),
-            crowds_rows=_icrowds, notices_rows=_inotices,
-            couriers_rows=_icouriers, reports_rows=_ireports,
-            unratified_rows=_iunratified,
-        ), _iview)
+    # The encoder's answer, split by channel owner, is what each hand's
+    # binding, validation and fold judge (`director_prose.dispatch`).
+    _idispatch, _ianswers = director_prose.dispatch(ctx, "interpret")
     # The remaining extras -- three DB-backed condition views, sightlines,
     # exits, the cast's authored body parts -- exist only for a hand's
     # payload; on a beat that dispatches no hand (most declarations) they
@@ -2001,8 +1954,7 @@ def director_interpret(ctx, nonce):
         _iextras = {"nonce": nonce, "clock": clock}
     _run_specialists(ctx, out, sc, _idispatch, _iview, _iextras, "interpret",
                      answer_for=_ianswers)
-    if _prose_contract:
-        director_prose.attach_record(ctx, out)
+    director_prose.attach_record(ctx, out)
     _settle_minted_interior_movements(sc, out, p_name)
 
     _declared_actions = [
@@ -2326,9 +2278,6 @@ def director_interpret(ctx, nonce):
     # treats the player as having already arrived before anyone (the
     # player included) has moved.
 
-    # Interpret's own scope backstop, on the FINAL interpretation -- the
-    # same single check resolve runs, pointed at this stage's containers.
-    _orchestration_scope_backstop(ctx, out, "interpret", sc)
     _span_coherency_report(ctx, out, "interpret", _idispatch, _iview)
 
     return out
@@ -2566,142 +2515,6 @@ def _deep_audit_omissions(ctx, out, sd, scene_slice, dlog_compact,
             continue
         audit_omissions.append(entry)
     return audit_omissions[:_RECONCILE_MAX_AUDIT_OMISSIONS]
-
-
-def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
-    """Tier 2 on the orchestrated path: the omitted channel's OWNER repairs.
-
-    Measured reason (chat 71 turn 10): the seam's one repair call re-ran the
-    PROSE AUTHOR -- an extra sequential call on the director role with the
-    full-core repair sheet -- to re-encode a change one specialist owned,
-    and still shipped `state_diff still does not encode it` warnings. Under
-    orchestration the wrong repairer was asked: a scoped specialist call
-    measured ~1s against a full-core resolve at tens of seconds, and the
-    specialist is the authority the omitted channel already belongs to.
-
-    Detection is untouched -- this changes only WHO repairs (the
-    `changes_asserted` seam stays the single reconciliation mechanism). At
-    most ONE call per owning specialist, no retries beyond `_agent_json`'s
-    own validation ladder: a repair that cannot succeed stops, and the
-    residual reaches the existing unresolved/warning channel below instead
-    of a repeat spend. Merging is the same additive `_merge_repair_into_
-    diff` contract as the core repair -- scoped to the specialist's granted
-    channels, never deleting what the diff already asserts. A failed call
-    is fail-open exactly like the fan-out: warn, keep the beat, let the
-    re-check below file the omission as unresolved.
-
-    Returns (repaired, verdicts). `verdicts` maps event_id -> the settling
-    answer its owner gave ON THE REPAIR CALL, which is the fan-out's
-    analogue of the core repair's `dispositions` and closes the same hole
-    the monolith closed: a hand asked to encode something it can see is
-    ALREADY carried could otherwise only mend or stay silent, and silence
-    ships a `still does not encode it` warning against a change the owner
-    just certified (v26625, on the core path). Believing it costs nothing:
-    an `encoded` claim is still checked against the merged diff by
-    `_evidence_present` downstream, and an `already_true` against standing
-    state by `_verify_already_true`, exactly as a dispatch verdict is.
-    """
-    repaired = False
-    reports = {}
-    verdicts = {}
-    for name in SPECIALISTS:          # canonical order, like the fan-out
-        entries = routed.get(name)
-        if not entries:
-            continue
-        spec = SPECIALISTS[name]
-        omitted = {channel for channel, _om in entries}
-        scope = ([ch for ch in spec["channels"]]
-                 if _REROUTE_FULL_SCOPE in omitted
-                 else [ch for ch in spec["channels"] if ch in omitted])
-        scope = specialist_scope(name, scope)
-        report = {"scope": scope, "ok": False}
-        reports[name] = report
-        payload = _specialist_payload(name, ctx, sc, view, extras)
-        payload["previous_channels"] = {
-            ch: copy.deepcopy(sd.get(ch)) for ch in scope}
-        payload["detected_omissions"] = [
-            {k: om.get(k) for k in ("category", "subject", "change",
-                                    "evidence", "source")}
-            for _ch, om in entries]
-        payload["correction_notes"] = (
-            "REPAIR PASS: the finished beat asserts persistent changes in "
-            "your channels that the committed encoding does not carry -- "
-            "detected_omissions lists them, previous_channels is what "
-            "currently stands. Your answer is merged ADDITIVELY over "
-            "previous_channels (it cannot delete existing entries), so "
-            "emit ONLY your channels, encoding each detected omission; "
-            "leave a channel empty when its omission is already covered. "
-            "Echo every listed event in resolved_events with its verdict -- "
-            "'encoded' when you are adding it here, 'already_true' when "
-            "standing state carries it and no delta is correct. Silence on "
-            "an event reads as unencoded and ships a staleness warning "
-            "against the beat, so say already_true rather than nothing when "
-            "that is the answer.")
-        try:
-            if spec.get("ext_id"):
-                result = _extension_specialist_call(
-                    spec, scope, payload, ctx.language)
-            else:
-                result = _agent_json(
-                    spec["role"], spec["step_key"],
-                    specialist_prompt(name, scope, ctx.language,
-                                      specialist_co_hands(name, view)),
-                    payload,
-                    temperature=0.0,
-                    max_tokens=None,   # the configured ceiling
-                )
-        except Aborted:
-            raise
-        except Exception as exc:
-            report["error"] = str(exc)
-            ctx.add_warning(
-                f"{name} specialist repair failed; the unencoded change "
-                f"will be warned, never fabricated (fail-open): {exc}")
-            continue
-        report["ok"] = True
-        # The owner's verdict on the events it was handed AGAIN. Same
-        # filter as the dispatch echo: an id this call was not given is
-        # discarded, so a repairer cannot acquit a sibling's omission.
-        granted_ids = [om.get("event_id") for _ch, om in entries
-                       if om.get("event_id")]
-        settled = _resolved_event_verdicts(result, granted_ids)
-        if settled:
-            report["events_resolved"] = settled
-            for entry in settled:
-                if entry["status"] in _SETTLING_VERDICTS:
-                    verdicts[entry["event_id"]] = {
-                        "status": entry["status"], "owner": name}
-        patch = {}
-        for channel in scope:
-            value = _normalized_channel_value(channel, result.get(channel))
-            if value:
-                patch[channel] = value
-        if not patch:
-            # A HAND THAT ANSWERED IS NOT A HAND THAT ENCODED. `ok` says the
-            # call returned; on its own it reads as a repair that worked,
-            # and a repairer may answer perfectly well and encode nothing --
-            # by declaring a structural blocker, or by judging the change
-            # not its own. Measured, descent chat 117 turn 13: a pry bar
-            # rerouted from the contact hand to the objects hand came back
-            # `{"scope": [...], "ok": true}` with the omission still sitting
-            # in `unresolved`, and the record read as a success beside a
-            # `repaired: false` two lines below it. The reconciliation's own
-            # verdict was always right; this is the row that says why.
-            report["encoded"] = False
-            continue
-        report["encoded"] = True
-        # Same hygiene as the core repair: canonical shapes, no reintroduced
-        # placeholder noise, canonicalized position keys, additive merge.
-        patch = _normalize_diff_shape(patch)
-        _strip_blank_diff_placeholders(patch)
-        patch["positions"] = canonicalize_positions(
-            patch.get("positions") or {}, ctx.cast)
-        report["channels"] = sorted(
-            ch for ch in scope if patch.get(ch))
-        _merge_repair_into_diff(sd, patch)
-        repaired = True
-    recon["specialist_repairs"] = reports
-    return repaired, verdicts
 
 
 # ---------------------------------------------------------------------------
@@ -3132,33 +2945,15 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         return
 
     # ---- Tier 2: bounded self-repair (the only common-path LLM spend,
-    # and only on a real detected gap). One shot per repairer. ------------
+    # and only on a real detected gap). One shot. -------------------------
     #
-    # WHO repairs depends on the path. Monolithic: the Director itself, with
-    # the full-core repair sheet, exactly as always. Orchestrated: each
-    # omission in a delegated channel goes to that channel's OWNING
-    # specialist (~1s scoped call), and only the omissions no specialist can
-    # answer -- player claims, undelegated categories -- still buy the
-    # full-core call. Detection above is identical on both paths; only the
-    # repairer changes (see _specialist_repairs).
+    # The Director's own repair (`resolve_repair`) answers every omission.
+    # Under the causal Director an omission in a delegated channel went to
+    # that channel's owning specialist instead; their model calls were
+    # deleted 2026-09-27. Under the prose Director this seam runs only on a
+    # beat whose encoder returned no rows at all.
     core_omissions = omissions
     repair_verdicts = {}
-    orch_repair = None
-    _orch_record = out.get("orchestration")
-    if isinstance(_orch_record, dict) and _orch_record.get("enabled"):
-        orch_repair = ctx.get("_orch_repair")
-    if isinstance(orch_repair, dict) \
-            and isinstance(orch_repair.get("view"), dict):
-        routed, core_omissions = _route_repair_omissions(
-            omissions,
-            (_orch_record or {}).get('events_addressed'))
-        if routed:
-            _mended, repair_verdicts = _specialist_repairs(
-                ctx, orch_repair.get("scene") or sc, sd, routed,
-                orch_repair["view"], orch_repair.get("extras") or {},
-                recon)
-            if _mended:
-                recon["repaired"] = True
 
     dispositions = []
     if core_omissions:
@@ -3316,185 +3111,6 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         ctx.add_warning(restraint_warning)
 
 
-#: Prose-duty gates for the orchestrated PROSE AUTHOR's own sheet (the same
-#: mechanism as _CHANNEL_GATES, pointed at prompts.PROSE_AUTHOR_SHEET's
-#: chunks): per chunk, does this beat have possible work for that prose
-#: duty? Same rules, verbatim: every input is standing scene state, a
-#: structured declaration, or the payload ledger the duty is ABOUT -- never
-#: prose -- and FAIL OPEN is the rule, which matters MORE here than for the
-#: specialists: a needlessly-run specialist costs a second and a few hundred
-#: tokens, while a wrongly-omitted prose block changes what the Director
-#: WRITES. A chunk is gated out only when its subject provably does not
-#: exist; several gates are EXACT (the duty is about a payload list, and the
-#: gate reads that list), and the rest degrade to `physical_beat`/
-#: `speech_present` where structure cannot decide.
-#:
-#: KNOWLEDGE FIREWALL, CHANGES MANIFEST, PLAYER-ASSERTED FACTS, DIALOGUE
-#: LOG, the authority contract, the delegation contract, CONSEQUENCES ON THE
-#: CLOCK and WEATHER have no gate here ON PURPOSE: the first five are
-#: every-beat contract blocks (the firewall is an invariant, not an
-#: optimization target), and the last two are undecidable from state (any
-#: beat can set a future consequence; a window can show a changed sky from
-#: an "enclosed" room) -- considered and left loaded rather than gated
-#: optimistically.
-#:
-#: Documented residuals, all in the wrongly-cheap direction and all caught
-#: by the prose half of `_orchestration_scope_backstop`: a bodiless voice
-#: DEFINED on the very beat it first speaks (voices gates on one already
-#: existing); a brand-new vehicle minted in a scene that had none (transit);
-#: a light doused mid-beat in a fully-lit scene (light); a size change cast
-#: on a beat the gate read as speech-only cannot happen (size gates on
-#: physical_beat, and a spell is a declared action).
-# The causal Director has one invariant prompt and no optional prose chunks.
-# This name remains as an empty compatibility export for project diagnostics.
-_PROSE_DUTY_GATES = {}
-
-
-def _true_on_error(read):
-    """Fail open, per fact: a fact whose read fails is True, so its duty
-    block loads. Never gate a prose block out on an error."""
-    try:
-        return bool(read())
-    except Exception:
-        return True
-
-
-def _prose_gate_facts(ctx, sc, payload, facts, p_name):
-    """The scene facts the prose-duty gates read, computed once at resolve
-    time on top of the channel-gate facts (one `_gate_facts` call feeds
-    both levels, so they cannot disagree about the scene). Standing scene
-    state and the payload ledgers only; no prose anywhere."""
-
-    def bodiless():
-        from story.scene import ubiquitous_speaker_names
-        return ubiquitous_speaker_names(sc)
-
-    def minds_apart():
-        # A remote listener is possible unless every tracked mind (player,
-        # active cast, background presences) stands in ONE known room. Any
-        # unknown position is undecidable -> True.
-        names = [p_name] + [character_name_from_text(c["sheet"])
-                            for c in ctx.cast]
-        rooms = set()
-        for name in names:
-            room = room_of(sc, name)
-            if not room:
-                return True
-            rooms.add(room)
-        for presence in payload.get("background_presence_knowledge") or []:
-            room = (presence or {}).get("room")
-            if not room:
-                return True
-            rooms.add(room)
-        return len(rooms) > 1
-
-    def transit_capable():
-        if sc.get("contained"):
-            return True
-        for room in (sc.get("rooms") or {}).values():
-            if isinstance(room, dict) and room.get("parent_entity"):
-                return True
-        for entity in (sc.get("entities") or {}).values():
-            if not isinstance(entity, dict):
-                continue
-            if entity.get("interior_rooms") or entity.get("parent_entity"):
-                return True
-            state = entity.get("state") \
-                if isinstance(entity.get("state"), dict) else {}
-            if state.get("transit") or state.get("link"):
-                return True
-        return False
-
-    def planning_needs_content():
-        # Exact presence: the compiler either raised a need this beat or it
-        # did not, and it is empty on the great majority of beats.
-        return bool(payload.get("planning_needs"))
-
-    def not_fully_lit():
-        # The engine's own sight semantics (spatial.effective_light: absent
-        # means lit, spill lifts dark to dim): the light block is dead
-        # weight only when EVERY room provably offers ordinary sight.
-        from world.spatial import effective_light
-        rooms = sc.get("rooms") or {}
-        if not rooms:
-            return True
-        return any(effective_light(sc, rid) not in ("lit", "bright")
-                   for rid in rooms)
-
-    def sun_can_move():
-        # The day is anchored (`scene.day_phase` is derived) and the beat
-        # carries an act the interpret stage staged as SUSTAINED
-        # (`schemas.ActionStage`): hours may pass, and the sun with them.
-        # Measured (Harrowmere replay, 2026-09-03, t9): "I sleep right
-        # through until first light" was staged sustained, the resolve
-        # skipped twenty-one hours to dawn, and the author set the room dim
-        # with no light duty loaded -- the backstop's manifest half caught
-        # it, which is a warning, not a duty.
-        if not sc.get("day_phase"):
-            return False
-        interp = ctx.get("director_interpret") or {}
-        for element in interp.get("sequence") or ():
-            if not isinstance(element, dict):
-                continue
-            if str(element.get("stage") or "").strip().casefold() == "sustained":
-                return True
-        return False
-
-    return {
-        "physical_beat": facts["physical_beat"],
-        "speech_present": facts["speech_present"],
-        "scales_active": facts["scales_active"],
-        "unratified_claims_present": facts["unratified_claims_present"],
-        "road_subjects_present": (
-            facts["crowds_present"] or facts["couriers_present"]
-            or facts["reports_carried"] or facts["notices_in_scene"]),
-        "bodiless_present": _true_on_error(bodiless),
-        "obligations_pending": _true_on_error(
-            lambda: payload.get("pending_obligations")),
-        "other_players_declared": _true_on_error(
-            lambda: payload.get("other_players_declarations")),
-        "minds_apart": _true_on_error(minds_apart),
-        "transit_capable": _true_on_error(transit_capable),
-        "travel_in_flight": _true_on_error(
-            lambda: payload.get("travel_in_flight")),
-        "planning_needs_present": _true_on_error(planning_needs_content),
-        "author_notes_present": _true_on_error(
-            lambda: payload.get("author_notes")),
-        "due_events_present": _true_on_error(
-            lambda: payload.get("due_authored_events")),
-        "pressure_ledger_open": _true_on_error(
-            lambda: payload.get("world_pressure")),
-        "residue_present": _true_on_error(
-            lambda: payload.get("destination_residue")),
-        "scene_not_fully_lit": _true_on_error(not_fully_lit),
-        "sun_can_move": _true_on_error(sun_can_move),
-    }
-
-
-def _prose_author_scope(ctx, sc, payload, facts, p_name):
-    """The prose author's granted scope: every prose-duty chunk whose gate
-    reads possible work this beat. The same value selects the sheet
-    (prompts.prose_author_prompt) and is what the backstop audits shipped
-    duties against -- one computation, so the sheet and the audit cannot
-    disagree. Fails open at every level: a failed fact read grants its
-    chunk, a failed gate grants its chunk, and a failure computing the
-    facts at all grants everything."""
-    try:
-        prose_facts = _prose_gate_facts(ctx, sc, payload, facts, p_name)
-    except Exception:
-        return list(PROSE_DUTY_CHUNKS)
-    scope = []
-    for name in PROSE_DUTY_CHUNKS:
-        gate = _PROSE_DUTY_GATES.get(name)
-        try:
-            granted = True if gate is None else bool(gate(prose_facts))
-        except Exception:
-            granted = True
-        if granted:
-            scope.append(name)
-    return scope
-
-
 def _span_coherency_report(ctx, out, stage, dispatch, view):
     """Say what does not add up about each span's assembled result.
 
@@ -3525,120 +3141,39 @@ def _span_coherency_report(ctx, out, stage, dispatch, view):
 
 
 
-def _run_specialists(ctx, out, sc, dispatch, view, extras, stage,
-                     answer_for=None):
-    """Fan out to every dispatched specialist and assemble by ownership.
+def _run_specialists(ctx, out, sc, dispatch, view, extras, stage, *,
+                     answer_for):
+    """Split the encoder's answer by channel owner and assemble by ownership.
 
-    Runs AFTER the stage's own output has settled (retries and validation
-    done), because every specialist reads the finished beat -- and because
-    the finished beat's `ledger_notes` and `changes_asserted` are what
-    dispatched them (`_dispatch_specialists`); and BEFORE the
-    stage's deterministic seams, so the movement backstop, the assertion
-    validators, the restraint floor and the reconciliation manifest all
-    judge the MERGED result -- the cross-channel judgments stay with the
-    orchestrator, which is the deterministic code downstream of this call.
+    `answer_for(name, state)` supplies each channel owner's share of what the
+    ONE encoder wrote (`agents/director_prose.py`), in chronological order,
+    so the binding, validation and fold below judge it exactly as they once
+    judged a hand's own model call -- the five causal hands, their dispatch
+    from a ruling and their forwarding round were deleted 2026-09-27.
 
-    Assembly is ownership per GRANTED channel: a specialist's answer
-    replaces the stage model's content in the channels it was scoped to
-    (the lean sheet told the author to leave them empty). A channel the
-    specialist emitted OUTSIDE its scope -- despite its sheet carrying no
-    block for it -- is under-grant evidence: never discarded (fail-open, it
-    merges wherever the author left the channel empty) and always reported.
-    A specialist that FAILS ordinarily leaves the author's channels standing
-    untouched. The exception is a required entity-interior mint: an open view
-    of no room has no truthful fail-open representation, so the post-fan-out
-    integrity floor raises before perception instead of inviting placeholder
-    prose about an interior nobody authored.
+    Runs BEFORE the stage's deterministic seams, so the movement backstop,
+    the assertion validators, the restraint floor and the reconciliation
+    manifest all judge the MERGED result -- the cross-channel judgments stay
+    with the deterministic code downstream of this call.
 
-    `answer_for(name, state)`, when given, supplies each hand's answer
-    instead of a model call. The prose contract (`agents/director_prose.py`)
-    uses it: its ONE encoder has already written every hand's transforms in
-    chronological order, and they are split here by channel owner so the
-    binding, validation and fold below judge them exactly as they judge a
-    hand's own. Its answers carry no forwarding requests, so no forwarding
-    round runs."""
-    record = {"enabled": True, "stage": stage, "specialists": dispatch,
-              # Before any hand merges: what the author itself put in the
-              # delegated channels, which is the scope backstop's subject.
-              "author_emitted": _author_emitted_channels(out, stage)}
+    Assembly is ownership per GRANTED channel. A channel an owner's share
+    carries OUTSIDE its scope is under-grant evidence: never discarded
+    (fail-open, it merges wherever the channel is empty) and always
+    reported. A share that FAILS leaves its channels standing untouched. The
+    exception is a required entity-interior mint: an open view of no room
+    has no truthful fail-open representation, so the post-fan-out integrity
+    floor raises before perception instead of inviting placeholder prose
+    about an interior nobody authored."""
+    record = {"enabled": True, "stage": stage, "specialists": dispatch}
     out["orchestration"] = record
-    # A ruling keyed by a name no hand answers to is a decision the engine
-    # cannot deliver. Reported, never guessed at: the next beat's author sees
-    # the key it used beside the names that route, and this beat's hands
-    # stand as the routable rulings dispatched them.
-    unrouted = _unrouted_rulings(view)
-    if unrouted:
-        record["unrouted_rulings"] = list(unrouted)
-        ctx.tell_director(
-            "ledger_notes: " + ", ".join(repr(k) for k in unrouted)
-            + " reached no hand -- key each line by the hand it rules for ("
-            + "|".join(SPECIALISTS) + ") or by a channel that hand owns; "
-            "a hand no line reaches does not run this beat.")
 
-    # ---- Fan out: genuinely parallel, never streaming ------------------
-    # Specialists produce structured output, not player-facing prose, so
-    # they do not stream and there is nothing to interleave: each call runs
-    # under a COPY of the caller's context with both streaming sinks
-    # cleared. THE COPY IS MADE IN THE PARENT, ONE PER JOB, and handed to
-    # the worker -- the narration.py precedent, whose comment is the whole
-    # law: ThreadPoolExecutor workers do NOT inherit the submitting
-    # thread's contextvars, so `contextvars.copy_context()` executed
-    # INSIDE the worker copies an EMPTY context. This function did exactly
-    # that for one release, and everything the copy exists to carry was
-    # silently None inside every multi-specialist fan-out: `cancel_event`
-    # (an aborted turn could not interrupt in-flight specialists),
-    # `call_ledger_sink` (five specialist calls per resolve, zero ledger
-    # entries -- measured on live variant v26648, one recorded call
-    # against five ran=True specialists), `current_warning_sink` (a repair
-    # ladder firing inside a specialist left no stored trace), and db's
-    # `active_frame_id` (a frame-scoped read inside the fan-out resolved
-    # to the PRESENT frame). The single-specialist path ran in the parent
-    # thread and worked, which is what kept the defect quiet. A fresh copy
-    # per job, never one shared -- a Context can only be entered by one
-    # thread at a time.
-    #
-    # With the parent context carried in, `current_step_key` inside a
-    # specialist call is the STAGE's own key, so its ledger entries and
-    # warnings persist on the stage variant that owns the fan-out; the
-    # entry's `role` (director_body, ...) keeps saying which specialist it
-    # was. Results are collected per specialist and merged BELOW in
-    # canonical SPECIALISTS order, never completion order, so the same
-    # inputs produce the same merged diff on a rerun whatever order the
-    # network answered in. A failed call becomes that specialist's
-    # recorded error and never touches a sibling's completed work; Aborted
-    # is the one exception that propagates, because a cancelled turn has
-    # no beat to fail open into.
-    def _call_isolated(name, state, context, seen=None):
-        # `seen`: the view this call answers -- the beat's, or the slice a
-        # forwarding round hands on (below).
-        seen = view if seen is None else seen
-
-        def run():
-            token_sink.set(None)
-            generation_event_sink.set(None)
-            if answer_for is not None:
-                return answer_for(name, state)
-            spec = SPECIALISTS[name]
-            if spec.get("ext_id"):
-                # An extension-owned family: same isolation, same fail-open,
-                # same canonical merge below -- only the sheet and the
-                # validation differ, because neither prompts.py nor
-                # schemas.SCHEMA_MAP knows a step key from outside this tree.
-                return _extension_specialist_call(
-                    spec, state["scope"],
-                    _specialist_payload(name, ctx, sc, seen, extras),
-                    ctx.language)
-            return _agent_json(
-                spec["role"],
-                spec["step_key"],
-                specialist_prompt(name, state["scope"], ctx.language,
-                                  specialist_co_hands(name, seen)),
-                _specialist_payload(name, ctx, sc, seen, extras),
-                temperature=0.2,
-                max_tokens=None,   # the configured ceiling
-            )
-        return context.run(run)
-
+    # ---- The encoder's answer, owner by owner ---------------------------
+    # A pure split of one answer the encoder already gave: no model call is
+    # made here, so there is nothing to run at once or in turn. Results are
+    # merged BELOW in canonical SPECIALISTS order. A failed split becomes
+    # that owner's recorded error and never touches a sibling's share;
+    # Aborted propagates, because a cancelled turn has no beat to fail open
+    # into.
     jobs = [(name, state) for name, state in dispatch.items()
             if state.get("run")]
     # Recorded BEFORE the call, from the same filters that build the
@@ -3658,145 +3193,20 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage,
         ]
         state["event_ids"] = _granted_event_ids(name, view)
     results = {}
-    if len(jobs) > 1 and not fanout_is_parallel():
-        # SEQUENTIAL, by host choice. Same context copy per job, same
-        # canonical assembly below, same fail-open -- the only difference is
-        # that the calls do not overlap. Still cheaper than the monolith
-        # was: under the gate-keyed dispatch a beat ran a mean 1.75 of 6
-        # specialists, the ruling-keyed dispatch runs no more, and each
-        # carries a 1-4k sheet against the single sheet's ~21k, so the work
-        # is smaller even when none of it runs at once.
-        for name, state in jobs:
-            try:
-                results[name] = _call_isolated(name, state,
-                                               contextvars.copy_context())
-            except Aborted:
-                raise
-            except Exception as exc:
-                results[name] = exc
-    elif len(jobs) == 1:
-        name, state = jobs[0]
+    for name, state in jobs:
         try:
-            results[name] = _call_isolated(name, state,
-                                           contextvars.copy_context())
+            results[name] = answer_for(name, state)
         except Aborted:
             raise
         except Exception as exc:
             results[name] = exc
-    elif jobs:
-        with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
-            # The comprehension runs on THIS thread, so every copy is of
-            # the parent's live context (see the fan-out comment above).
-            futures = {
-                name: pool.submit(_call_isolated, name, state,
-                                  contextvars.copy_context())
-                for name, state in jobs
-            }
-        # The pool's __exit__ has joined every worker, so collection below
-        # cannot block out of order and a first failure cannot orphan a
-        # sibling still in flight.
-        aborted = None
-        for name, _state in jobs:
-            try:
-                results[name] = futures[name].result()
-            except Aborted as exc:
-                aborted = exc
-            except Exception as exc:
-                results[name] = exc
-        if aborted is not None:
-            raise aborted
 
-    # Completion belongs to one (span, item, hand), not the whole event.
-    # A valid local write may still need a complementary owner. Forward each
-    # missing owner once. An inserted earlier write can invalidate this
-    # owner's later already_true verdicts, so replace that owner's whole
-    # chronological suffix in the same call. Second declines remain explicit
-    # diagnostics rather than an unbounded call loop.
+    # Completion belongs to one (span, item, owner), not the whole event: a
+    # valid local write may still need a complementary owner. There is no
+    # second model to forward it to -- the encoder had every granted tool,
+    # and its widening pass is its own (director_prose) -- so an unmet
+    # request stays a reported diagnostic.
     requests = _completion_requests(jobs, results, scene=sc)
-    # No second hand exists to forward to under a supplied answer: the one
-    # encoder already had every granted tool, and its widening pass is its
-    # own (director_prose). An unmet request stays a reported diagnostic.
-    forwards = {} if answer_for is not None else _rows_to_forward(
-        jobs, results, dispatch, requests=requests)
-    for target, entries in forwards.items():
-        state = dispatch.get(target)
-        fresh = not (state and state.get("run"))
-        if fresh:
-            state = {
-                "run": True, "scope": [], "gated": None,
-                "addressed_by": [],
-                "channels": list(SPECIALISTS[target]["channels"]),
-                "ledger_items": [], "event_ids": [],
-            }
-            dispatch[target] = state
-        elif isinstance(results.get(target), Exception) \
-                or results.get(target) is None:
-            continue
-        boundary, prefix, suffix = _completion_suffix_rows(
-            target, entries, state.get("ledger_items") or [])
-        seen = dict(view, spans=suffix)
-        prior = _earlier_specialist_work(target, boundary, dispatch, results, sc)
-        if prior:
-            # The answer will supply every row from the boundary onward.
-            # None of the superseded suffix's old decisions may be shown as
-            # prior work, including to later rows within this same call.
-            suffix[0]["_prior_work"] = prior
-        required = {channel for entry in entries for channel in entry["channels"]}
-        if any(entry["full_scope"] for entry in entries):
-            required.update(SPECIALISTS[target]["channels"])
-        state["scope"] = specialist_scope(
-            target, required | set(state["scope"]))
-        state["forwarded"] = [
-            {"chrono_id": entry["chrono_id"], "from": entry["from"]}
-            for entry in entries]
-        for entry in entries:
-            ctx.add_warning(
-                f"{entry['from']} specialist forwarded row "
-                f"{entry['chrono_id']} to {target}")
-        try:
-            answer = _call_isolated(target, state,
-                                    contextvars.copy_context(), seen)
-            positional = answer.get("results") if isinstance(answer, dict) else None
-            if not isinstance(positional, list) or len(positional) != len(suffix) \
-                    or not all(isinstance(row, dict) for row in positional):
-                raise ValueError("completion response does not align with its chronological suffix")
-        except Aborted:
-            raise
-        except Exception as exc:
-            ctx.add_warning(f"{target} specialist failed on a forwarded "
-                            f"row (fail-open): {exc}")
-            if fresh:
-                results[target] = exc
-            continue
-        rows = [dict(_without_private_keys(span),
-                     requested_channels=list(span["_requested_channels"]))
-                for span in seen["spans"]]
-        chronos = _granted_event_ids(target, seen)
-        # Replace requests made by answers that this call superseded, too.
-        # Any new requests are recorded but cannot open another round.
-        requests = [request for request in requests
-                    if request["from"] != target or request["chrono_id"] < boundary]
-        requests.extend(_completion_requests(
-            [(target, {"ledger_items": rows})], {target: answer}, scene=sc))
-        if fresh or not isinstance(results.get(target), dict):
-            results[target] = answer if isinstance(answer, dict) else {}
-            state["ledger_items"] = rows
-            state["event_ids"] = chronos
-        else:
-            replaced = dict(results[target])
-            original_answers = replaced.get("results") or []
-            replaced["results"] = [original_answers[index] for index, _ in prefix
-                                   if index < len(original_answers)]
-            _append_forwarded_answer(replaced, answer)
-            results[target] = replaced
-            state["ledger_items"] = [row for _, row in prefix] + rows
-            state["event_ids"] = [event_id for event_id in state.get("event_ids") or []
-                                  if event_id < boundary] + chronos
-        record.setdefault("recompiled_rows", {})[target] = chronos
-    if forwards:
-        record["forwards"] = {
-            target: [entry["chrono_id"] for entry in entries]
-            for target, entries in forwards.items()}
 
     # Bind the complete set before validating partial updates. A later hand
     # may use another key for the item an earlier row minted; validating it
@@ -3933,15 +3343,6 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage,
                     alignment_errors.append(
                         f"result {index + 1} says encoded without a transform")
                     continue
-                # Per-thing verdicts tell one hand's silence from another
-                # hand's ownership; a single encoder (`answer_for`) has no
-                # other hand, so its answer carries no verdicts to account.
-                if answer_for is None:
-                    _account_for_every_thing(
-                        ledger, row, raw_transforms, chrono_id, status,
-                        state.setdefault("item_verdicts", []),
-                        state.setdefault("things_unaccounted", []),
-                        alignment_errors, index, sc)
                 # Keep valid writes, but an incomplete or malformed row is
                 # not a receipt settling every item for this owner.
                 if status and len(alignment_errors) == row_error_count:
@@ -4906,9 +4307,6 @@ def _bind_specialist_patches(results, dispatch, scene, identities):
     return patches, bindings, shape_notes + notes
 
 
-_THING_VERDICTS = ("not_mine", "no_referent")
-
-
 def _completion_reference_scene(scene, transforms):
     """Identity-only lookup including things minted by these typed patches."""
     reference = dict(scene or {})
@@ -5182,132 +4580,6 @@ def _completion_requests(jobs, results, scene=None):
     return requests
 
 
-def _rows_to_forward(jobs, results, dispatch, requests=None):
-    """One chronologically ordered call per missing owner, deduped per span."""
-    forwards = {}
-    for request in requests if requests is not None else _completion_requests(jobs, results):
-        target, chrono = request["to"], request["chrono_id"]
-        if target not in SPECIALISTS or target == request["from"]:
-            continue
-        answered = dispatch.get(target) or {}
-        if answered.get("run") and chrono in (answered.get("event_ids") or []):
-            continue
-        entries = forwards.setdefault(target, [])
-        entry = next((entry for entry in entries if entry["chrono_id"] == chrono), None)
-        if entry is None:
-            entries.append(dict(request, channels=list(request["channels"])))
-        else:
-            entry["channels"] = sorted(set(entry["channels"]) | set(request["channels"]))
-            entry["full_scope"] |= request["full_scope"]
-    for entries in forwards.values():
-        entries.sort(key=lambda entry: entry["chrono_id"])
-    return forwards
-
-
-def _completion_suffix_rows(target, entries, ledger_items):
-    """Keep an owner's prefix and replay its rows after the first insertion.
-
-    A missing set-down changes the starting state for a later pickup. The
-    later answer must therefore be recomputed in the same chronological batch,
-    not appended beside an already_true verdict made without the set-down.
-    """
-    boundary = min(entry["chrono_id"] for entry in entries)
-    prefix, suffix = [], {}
-    for index, row in enumerate(ledger_items):
-        chrono = int(row.get("chrono_id") or row.get("event_id") or 0)
-        if chrono < boundary:
-            prefix.append((index, row))
-        else:
-            suffix[chrono] = dict(
-                row, _forwarded_to=[target],
-                _requested_channels=list(row.get("requested_channels") or []))
-    for entry in entries:
-        suffix[entry["chrono_id"]] = dict(
-            entry["span"], _forwarded_to=[target],
-            _requested_channels=list(entry["channels"]))
-    return boundary, prefix, [suffix[chrono] for chrono in sorted(suffix)]
-
-
-def _earlier_specialist_work(name, chrono, dispatch, results, scene):
-    """This owner's earlier admissible writes, without private correlation ids.
-
-    A forwarded release must see its earlier pickup rather than mistake the
-    initial world's table placement for proof that the release is already true.
-    Never include a later answer or another owner's standing channel state.
-    """
-    result = results.get(name)
-    if not isinstance(result, dict):
-        return []
-    spec = SPECIALISTS[name]
-    owned = set(spec["channels"])
-    ordered = sorted(zip((dispatch.get(name) or {}).get("ledger_items") or [],
-                         result.get("results") or []),
-                     key=lambda pair: int(pair[0].get("chrono_id")
-                                          or pair[0].get("event_id") or 0))
-    work, minted = [], {}
-    for ledger, answer in ordered:
-        prior_chrono = int(ledger.get("chrono_id") or ledger.get("event_id") or 0)
-        if prior_chrono >= chrono:
-            continue
-        if not isinstance(answer, dict):
-            continue
-        attached, item_names, row_minted = [], [], dict(minted)
-        for transform in answer.get("transforms") or []:
-            raw = transform.get("patch") if isinstance(transform, dict) else None
-            if not isinstance(raw, dict):
-                continue
-            if isinstance(raw.get("state_diff"), dict) and set(raw) <= {"state_diff", "notes"}:
-                raw = raw["state_diff"]
-            raw = {channel: value for channel, value in raw.items() if channel in owned}
-            try:
-                hydrated = _hydrate_existing_entity_patch(scene, raw, row_minted)
-                if spec["step_key"] in schemas.SCHEMA_MAP:
-                    patch, _ = schemas.validated_specialist_patch_channels(
-                        spec["step_key"], hydrated)
-                else:
-                    # Extension output already passed its own schema at the
-                    # call boundary; core StateDiff cannot validate it again.
-                    patch = hydrated
-            except (TypeError, ValueError):
-                continue
-            if patch:
-                attached.append({
-                    "chrono_id": prior_chrono,
-                    "item_id": _transform_item_id(
-                        ledger, transform, int(ledger.get("item_id") or 0), [], 0),
-                    "patch": patch,
-                })
-                item_names.append(str(transform.get("item") or ""))
-                row_minted.update(patch.get("entities") or {})
-        _, history, _ = compile_transforms(
-            attached, allowed_channels=owned, ledger_items=[ledger],
-            allowed_chrono_ids=[prior_chrono], specialist=name)
-        transforms = [{"item": item_names[entry["response_order"]],
-                       "patch": _without_provenance(entry["patch"])}
-                      for entry in history]
-        status = str(answer.get("status") or "").strip().casefold()
-        if status == "already_true":
-            if not transforms:
-                continue
-            status = "encoded"
-        if status == "encoded" and not transforms:
-            # Do not tell the next call an unsupported speech-derived fact
-            # or an unowned patch was encoded when assembly will reject it.
-            continue
-        for entry in history:
-            minted.update(entry["patch"].get("entities") or {})
-        known = {_thing_forms(value) for value in ledger.get("item_names") or []}
-        if not known and ledger.get("object_name"):
-            known.add(_thing_forms(ledger["object_name"]))
-        settled = {key: value for key, value in (answer.get("settled") or {}).items()
-                   if value in _THING_VERDICTS and _settled_forms(scene, key) & known}
-        work.append({"ledger": _specialist_ledger(ledger),
-                     "result": {"status": status,
-                                "transforms": transforms,
-                                "settled": settled}})
-    return work
-
-
 def _unfulfilled_completion_requests(requests, dispatch, history):
     """Check requests against their exact owner's accepted chronological work."""
     missing, seen = [], set()
@@ -5351,21 +4623,6 @@ def _unfulfilled_completion_requests(requests, dispatch, history):
     return missing
 
 
-def _append_forwarded_answer(first, answer):
-    """A hand's answer to a forwarded slice, appended positionally after
-    its own round's answer, so one attach loop reads both."""
-    if not isinstance(answer, dict):
-        return
-    first.setdefault("results", [])
-    if not isinstance(first["results"], list):
-        first["results"] = []
-    first["results"].extend(
-        row for row in (answer.get("results") or []) if isinstance(row, dict))
-    notes = [str(n) for n in (answer.get("notes") or []) if str(n).strip()]
-    if notes:
-        first["notes"] = [str(n) for n in (first.get("notes") or [])] + notes
-
-
 def _thing_forms(text):
     """A name as it is compared: casefolded, its leading determiner gone."""
     form = str(text or "").strip().casefold()
@@ -5400,279 +4657,6 @@ def _settled_forms(sc, key):
 #: already a sentence. `commit_mapping.NEED_SUBJECT_WORDS` is 12 for the same
 #: judgement about a PLANNING subject, which may legitimately be a phrase.
 MINTED_THING_NAME_WORDS = 6
-
-
-def _beat_room(out, scene, identity_index=None):
-    """The one room this beat's acting bodies stand in, or "".
-
-    A minted thing has to be SOMEWHERE, and the only honest answer is where
-    the beat that reached for it happened. Read from the beat's own ledger
-    rather than from the player, because a bubble's beat has no player and
-    the body acting is the only body there.
-
-    TWO READINGS, IN ORDER, BECAUSE THE FIRST ONE ANSWERS ITSELF. A ledger's
-    things place the beat when the world already holds them -- but the beat
-    that needs a mint is exactly the beat whose thing it does NOT hold, so
-    on the only case this function exists for, the things resolve to
-    nothing. Measured (two_lives v5, 2026-09-19, turn 17): the ledger's one
-    object was "brass collar seam", the world had no such record and so no
-    position for it, no room could be derived, and the mint that would have
-    created it refused for want of the room it was being created in. The
-    ACTOR always has a position: `source_entity_id` is the acting body's
-    handle and `identity_index` is the same id->display map every hand is
-    handed.
-
-    REFUSES TO GUESS when the beat's bodies stand in more than one room. A
-    thing stood in the wrong room is worse than a thing nobody minted: it is
-    perceivable by the wrong people, and the firewall's whole floor is that
-    presence and channel are two readings of one world.
-    """
-    positions = (scene or {}).get("positions") or {}
-    ledgers = [row for row in ((out or {}).get("ledgers") or [])
-               if isinstance(row, dict)]
-    rooms = set()
-    for ledger in ledgers:
-        for name in ([ledger.get("object_name")]
-                     + list(ledger.get("item_names") or [])):
-            room = positions.get(str(name or "").strip())
-            if room:
-                rooms.add(str(room))
-    if rooms:
-        return rooms.pop() if len(rooms) == 1 else ""
-    index = {str(k): str(v) for k, v in (identity_index or {}).items()}
-    for ledger in ledgers:
-        handle = str(ledger.get("source_entity_id") or "").strip()
-        room = positions.get(index.get(handle) or handle)
-        if room:
-            rooms.add(str(room))
-    return rooms.pop() if len(rooms) == 1 else ""
-
-
-def mint_unreferenced_things(out, scene, diff, room, figures=()):
-    """Stand up the things this beat acted on that the world does not hold.
-
-    THE HAND ALREADY SAID SO. The contact sheet tells it to resolve a target
-    against `entity_names` "or request the channel that owns its record;
-    otherwise mark the unresolved item no_referent and explain the missing
-    referent" -- and it does, in `settled`, which is a typed field. Nothing
-    answered the "otherwise", so every transform on such a row was dropped.
-
-    Measured (Aldermill, two causality bubbles, 2026-09-19): 29 of 93
-    specialist results came back `no_referent`. Emory Vane worked a sluice
-    gate for twenty-three consecutive beats -- ran a hand along its timber
-    frame, pressed into the runner groove, hooked packed grit out of it -- and
-    `scene.entities` in his frame held one record, himself. Nothing could
-    record that he was touching anything, so nothing changed, so his next
-    appraisal had no evidence, so he did it again. Two runs of sixty beats
-    changed the world three times between them.
-
-    THE PERSON HALF OF THIS ALREADY EXISTS.
-    `commit_background.track_background_presences` takes a person the Director
-    wrote into a beat who has no record and mints bookkeeping for them from
-    structured fields only, never NER over prose; `planning_needs.NEED_KINDS`
-    already carries "thing" beside "person" and "room". A person the world did
-    not plan got a record and a thing did not. This reads the same kind of
-    field and obeys the same rule.
-
-    MINTS THE BARE FACT AND NOTHING ELSE: a name, an inert kind and the room
-    the beat happened in. What the thing IS, what it looks like and what state
-    it is in are the objects hand's to write and the Writers' Room's to plan
-    -- this only ensures there is something for them to write ABOUT.
-
-    NO PLANNING NEED IS FILED HERE, and the attempt is recorded so it is not
-    made again. `commit_mapping._drop_needs_the_beat_answers` rules that "a
-    need is what nobody has planned, and what the beat was holding is
-    planned", reading the scene the beat committed -- and this mint puts the
-    thing in that scene on the same beat, so a need filed behind it is
-    dropped every time, correctly. The trigger that WOULD survive is not
-    "the beat minted it" but "a mind attended to it and it had nothing to
-    say", which is a question the read path asks and this function cannot.
-
-    Four refusals, each because minting would be worse than the gap:
-
-    * anything but `no_referent`. `not_mine` means another hand owns the
-      record, not that the world lacks one;
-    * a name the world already holds under any spelling, alias or position
-      key -- that is a resolution failure, and a second copy of a thing is
-      worse than one nobody found;
-    * a PERSON -- one the world holds as `kind: person`, OR one this beat is
-      already simulating as a charter figure or an authored plan. `settled`
-      named "Emory Vane" `no_referent` on two live beats; a hand failing to
-      resolve a body is a different fault, and answering it by standing
-      furniture in the room wearing their name is not a repair. The scene
-      half of that test cannot fire for a body the world does not hold yet,
-      which is exactly the case a hand reports `no_referent` for, so the
-      figures this beat was shown are read beside it;
-    * a name longer than `MINTED_THING_NAME_WORDS`, which is a description.
-    """
-    specialists = ((out or {}).get("orchestration") or {}).get("specialists")
-    room = str(room or "").strip()
-    if not isinstance(specialists, dict) or not room:
-        return []
-
-    scene = scene if isinstance(scene, dict) else {}
-    held, bodies = set(), set()
-    for channel in ("entities", "rooms"):
-        for key, record in (scene.get(channel) or {}).items():
-            forms = {_thing_forms(key)}
-            if isinstance(record, dict):
-                forms.add(_thing_forms(record.get("name")))
-                forms.update(_thing_forms(alias)
-                             for alias in record.get("aliases") or [])
-            held |= forms
-            if channel == "entities" and isinstance(record, dict) \
-                    and str(record.get("kind") or "").strip().casefold() == "person":
-                bodies |= forms
-    held |= {_thing_forms(key) for key in (scene.get("positions") or {})}
-    # ...AND WHAT THIS BEAT HAS ALREADY STOOD UP. The refusal above -- "a name
-    # the world already holds under any spelling, alias or position key" -- was
-    # right and its evidence was one beat short: it read the SCENE, which is
-    # the world before this beat, while the hand that owns a thing's record
-    # mints it into THIS diff. So a thing the objects hand established a
-    # moment ago was unknown here, and a sibling hand reporting the same thing
-    # missing got a second copy of it. Measured (two_lives v13, 2026-09-20,
-    # turn 8): the objects hand minted `copper_coin` with a kind, a
-    # description, an alias and `portable`, this function minted `copper_coin`
-    # again from a `missing_referents` line, the key-collision guard below
-    # renamed the duplicate `copper_coin_2`, and the taproom held two coins
-    # for one. Invisible until things in a room became visible at all, and
-    # then the view said "There is the copper coin here" twice.
-    for channel in ("entities", "rooms"):
-        for key, record in ((diff or {}).get(channel) or {}).items():
-            held.add(_thing_forms(key))
-            if isinstance(record, dict):
-                held.add(_thing_forms(record.get("name")))
-                held.update(_thing_forms(alias)
-                            for alias in record.get("aliases") or [])
-    held |= {_thing_forms(key) for key in ((diff or {}).get("positions") or {})}
-    # ...AND WHOEVER THIS BEAT IS ALREADY SIMULATING. The refusal above reads
-    # `kind == "person"` off the SCENE, so it can only recognise a body the
-    # world already HOLDS -- and a hand reports `no_referent` precisely
-    # because no record exists. For a villager the beat has only just named,
-    # the person-refusal was therefore structurally unable to fire, and the
-    # name was stood up as furniture instead. Measured (chat 151 turn 8,
-    # 2026-09-21): `gushiga_toriki` minted as
-    # `{"name": "Gushiga Toriki", "kind": "fixture"}` beside the charter
-    # figure of that name who spoke and acted in the same beat, and
-    # `_bind_minted_entities_to_present_figures` then declined to bind the
-    # two because an inert kind is a thing -- leaving one villager as two
-    # records, the simulated one and the furniture wearing his name.
-    # A name this beat is simulating as a figure is a BODY, whatever the
-    # world holds yet.
-    for fig in figures or ():
-        if not isinstance(fig, dict):
-            continue
-        bodies.add(_thing_forms(fig.get("name")))
-        bodies.update(_thing_forms(alias)
-                      for alias in fig.get("aliases") or [])
-
-    held.discard("")
-    bodies.discard("")
-
-    wanted = []
-    for spec in specialists.values():
-        if not isinstance(spec, dict):
-            continue
-        for result in spec.get("results") or []:
-            if not isinstance(result, dict):
-                continue
-            # TWO PLACES A HAND CAN NAME WHAT IS MISSING, and they answer
-            # different questions. `settled` is keyed per thing ON THE ROW, and
-            # a row's thing is usually the acting body -- so a hand that cannot
-            # find a target says `no_referent` about the PERSON. Measured
-            # (two_lives v5, 2026-09-19): 9 of 10 `no_referent` verdicts named
-            # a character while the notes beside them named "apron timber" and
-            # "wheel shroud", and this function refused every one of them,
-            # correctly, and minted nothing all run. `missing_referents` is the
-            # hand saying what the WORLD lacks, which is the question this
-            # function was always asking.
-            labels = [str(x) for x in (result.get("missing_referents") or [])
-                      if str(x or "").strip()]
-            labels += [name for name, verdict
-                       in (result.get("settled") or {}).items()
-                       if str(verdict or "") == "no_referent"]
-            for name in labels:
-                label = " ".join(str(name or "").split())
-                form = _thing_forms(label)
-                if not form or form in held or form in bodies:
-                    continue
-                if len(form.split()) > MINTED_THING_NAME_WORDS:
-                    continue
-                if form not in {_thing_forms(w) for w in wanted}:
-                    wanted.append(label)
-    if not wanted:
-        return []
-
-    entities = diff.setdefault("entities", {})
-    positions = diff.setdefault("positions", {})
-    taken = set(held) | {_thing_forms(k) for k in entities}
-    minted = []
-    for label in wanted:
-        base = re.sub(r"[^a-z0-9]+", "_", _thing_forms(label)).strip("_")
-        key, suffix = base or "thing", 2
-        while key in entities or key in (scene.get("entities") or {}):
-            key, suffix = "%s_%d" % (base, suffix), suffix + 1
-        entities[key] = {"name": label, "kind": "fixture"}
-        positions[key] = room
-        taken.add(_thing_forms(label))
-        minted.append(key)
-    return minted
-
-
-def _account_for_every_thing(ledger, row, raw_transforms, chrono_id, status,
-                             verdicts, unaccounted, notes, index, sc=None):
-    """Every thing on a granted row is either changed or accounted for.
-
-    The owner, 2026-09-15: "the verdict follows the thing". A row's status
-    was a thing's verdict while a row was one thing; a row about three
-    things is satisfied by one transform, and silence about the other two
-    was invisible by construction (the fair, turn 188: a pencil named on
-    two rows, three runs, never minted). So a result carries `settled`,
-    name -> verdict, for the things it did not transform, and this records
-    one verdict per thing: encoded for a thing a transform names, the
-    hand's word for the rest, and `things_unaccounted` for a thing with
-    neither. Valid writes stand, but the caller cannot use an incomplete
-    row as a completion receipt. A row about one thing is accounted for by
-    its status."""
-    ids = ledger.get("item_ids") if isinstance(ledger.get("item_ids"), list) else []
-    names = ledger.get("item_names") if isinstance(ledger.get("item_names"), list) else []
-    if len(ids) <= 1:
-        return
-    reference_scene = _completion_reference_scene(sc, raw_transforms)
-    changed = set().union(*(
-        _transform_covered_items(ledger, transform, reference_scene)
-        for transform in raw_transforms
-        if int(transform.get("chrono_id") or 0) == int(chrono_id)))
-    settled = row.get("settled") if isinstance(row.get("settled"), dict) else {}
-    known = {_thing_forms(n) for n in names} - {""}
-    by_name = {}
-    for k, v in settled.items():
-        forms = _settled_forms(sc, k) & known
-        if not forms:
-            notes.append(f"result {index + 1} settles {str(k)!r}, which the "
-                         "row does not carry")
-            continue
-        for form in forms:
-            by_name[form] = str(v or "").strip().casefold()
-    for one, name in zip(ids, names):
-        key = _thing_forms(name)
-        if int(one) in changed:
-            verdict = "encoded"
-        elif by_name.get(key) in _THING_VERDICTS:
-            verdict = by_name[key]
-        elif by_name.get(key):
-            verdict = ""
-            notes.append(f"result {index + 1} settles {name!r} with "
-                         f"{by_name[key]!r}, which is not a verdict")
-        else:
-            verdict = ""
-        entry = {"chrono_id": int(chrono_id), "item_id": int(one),
-                 "item": str(name or ""), "status": verdict}
-        verdicts.append(entry)
-        if not verdict and status == "encoded":
-            unaccounted.append(entry)
-            notes.append(f"result {index + 1}: {name!r} was neither "
-                         "changed nor accounted for")
 
 
 def _bodies_addressed_as(ctx, scene, speaker, addresses):
@@ -6175,8 +5159,9 @@ def director_resolve(ctx, nonce, _corrections=None):
                 chat["id"], _present_figures, p_name,
                 frame_id=ctx.turn.frame_id)
         # The rooms in the same reach that are somebody's HOME, and whose:
-        # the player's room, its scope and the declared target. Read by
-        # the prose author's threshold clause (prose_author_sheet/17).
+        # the player's room, its scope and the declared target. The causal
+        # sheet's threshold clause read them; no prose-path sheet states
+        # that rule yet (UNBUILT_PIPELINE §1.1, the lost prompt rules).
         from .common import dwellings_in_reach
         _dwellings = dwellings_in_reach(
             chat["id"], _fig_rooms, frame_id=ctx.turn.frame_id)
@@ -6253,20 +5238,15 @@ def director_resolve(ctx, nonce, _corrections=None):
             # is the one place where showing it a passage phrase under the
             # name `time` taught it to write one back.
             "time_of_day": sc.get("time_of_day"),
-            # THE STANDING SKY, for the one hand that owns it. `weather` is a
-            # prose-author channel -- it is not in `_DELEGATED_CHANNELS`, and
-            # the output shape names it as one of the five fields this hand's
-            # own state_diff carries -- and its sheet
-            # (prose_author_sheet/08.txt) asks for an edit ONLY when the beat
-            # changes the sky, while telling it the engine drifts the weather
-            # in between (`weather.advance_weather`, written back to
+            # THE STANDING SKY. `weather` is the spatial owner's channel; its
+            # sheet (the encoder's `weather` chunk) asks for an edit ONLY when
+            # the prose changes the sky, and the engine drifts the weather in
+            # between (`weather.advance_weather`, written back to
             # `sc["weather"]` at commit_scene_state.py:1032). Both halves need
             # the current value: "did THIS beat change it" is unanswerable
             # against a sky nobody showed you, and so is "may the flash I am
             # about to write reach this room" -- which since A88 (review
-            # 2026-09-07) is the `electrical` axis and nothing else, the same
-            # chunk telling this hand that a sky flashes when `electrical`
-            # says so and that no name implies it and no fall forbids it.
+            # 2026-09-07) is the `electrical` axis and nothing else.
             #
             # Same class as `stations`, `contacts` and `overlays` above: a
             # ledger the Director is asked to maintain and was never allowed
@@ -6488,15 +5468,9 @@ def director_resolve(ctx, nonce, _corrections=None):
         "variant_seed": nonce,
     }
 
-    # Orchestrated Director (design note 19): the scene facts every scope
-    # reads are computed HERE, at this stage's own time, from the scene as
-    # it stands after every character declared, never inherited from
-    # interpret. They scope the prose author's sheet now; the specialists'
-    # dispatch waits for the author's RULING (`ledger_notes` and
-    # `changes_asserted`), below, because that is what decides which hands
-    # run. The prose author keeps the same role, step key, schema and
-    # payload; the instruction sheet is lean because the delegated
-    # machinery is cold-stored in the specialists.
+    # The scene facts the decision model's channel choice reads, computed
+    # HERE, at this stage's own time, from the scene as it stands after every
+    # character declared -- never inherited from interpret.
     _orch_facts = _gate_facts(
         ctx, sc,
         physical=_beat_has_physical_activity(interp, char_actions, dice),
@@ -6509,14 +5483,12 @@ def director_resolve(ctx, nonce, _corrections=None):
         reports_rows=payload.get("carried_reports"),
         unratified_rows=payload.get("unratified_claims"),
     )
-    # One causal Director contract, with no prose-author duty sheet. The large
-    # payload above remains an internal staging cache for deterministic floors
-    # and specialist entitlements; the Director sees only events, authority,
-    # identity joins, and the small amount of standing context needed to settle
-    # causality. In particular, asserted input from a human-controlled entity
-    # is absent from event_inputs because it already entered the preview world.
-    _prose_scope = set()
-    _resolve_prompt = prose_author_prompt(_prose_scope, ctx.language)
+    # The large payload above remains an internal staging cache for
+    # deterministic floors and each channel owner's slice; the Director sees
+    # only events, authority, identity joins, and the small amount of standing
+    # context needed to settle causality. In particular, asserted input from a
+    # human-controlled entity is absent from event_inputs because it already
+    # entered the preview world.
     _primary_persona_id = getattr(ctx.chat, "persona_id", None) \
         if not isinstance(ctx.chat, dict) else ctx.chat.get("persona_id")
     _identity_index = {
@@ -6535,9 +5507,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     })
     _resolve_event_inputs = _causal_event_inputs(
         ctx, interp, decls, dice, payload.get("world_pressure") or [])
-    if director_prose.enabled():
-        _name_declared_targets(ctx, resolve_sc, _resolve_event_inputs,
-                               _identity_index)
+    _name_declared_targets(ctx, resolve_sc, _resolve_event_inputs,
+                           _identity_index)
     _resolve_actor_names = [
         _identity_index.get(str(group.get("entity_id")))
         for group in _resolve_event_inputs if isinstance(group, dict)
@@ -6631,27 +5602,16 @@ def director_resolve(ctx, nonce, _corrections=None):
         "carried_reports": payload.get("carried_reports") or [],
         "unratified_claims": payload.get("unratified_claims") or [],
     }
-    # THE PROSE CONTRACT (`director_contract = prose`, agents/director_prose.py):
-    # the Director writes the beat as prose, the decision model picks the
-    # encoder's tools, one encoder writes the ordered rows and their
-    # transforms. Its output lands HERE as the same `{"ledgers": [...]}` the
-    # causal Director returned, so everything below reads it unchanged.
-    _prose_contract = director_prose.enabled()
-    if _prose_contract:
-        out = director_prose.run(
-            ctx, "resolve", resolve_sc, _model_payload,
-            _resolve_beat_view({"ledgers": []}, decls, char_actions, dice,
-                               p_name, interp, ctx.cast, sc),
-            _orch_extras, _orch_facts)
-    else:
-        out = _agent_json(
-            "director",
-            "director_resolve",
-            _resolve_prompt,
-            _model_payload,
-            temperature=0.5,
-            max_tokens=None,   # the configured ceiling; see complete_validated_json
-        )
+    # THE DIRECTOR WRITES PROSE (agents/director_prose.py): the decision model
+    # picks the encoder's tools, and one encoder writes the ordered rows and
+    # their transforms. Its output lands HERE as `{"ledgers": [...]}`, the
+    # shape the causal Director it replaced (deleted 2026-09-27) returned, so
+    # everything below reads it unchanged.
+    out = director_prose.run(
+        ctx, "resolve", resolve_sc, _model_payload,
+        _resolve_beat_view({"ledgers": []}, decls, char_actions, dice,
+                           p_name, interp, ctx.cast, sc),
+        _orch_extras, _orch_facts)
     # THE TWO LIMITS THE PROSE DIRECTOR KEEPS ARE CHECKED ON ITS PROSE. The
     # authority readings below were written against `resolved_event`, which
     # under this contract is still empty here (it is synthesised from the
@@ -6661,7 +5621,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # false-positive rate of these readings on prose is unmeasured.
     _authority_prose = (
         ((ctx.get(director_prose.CTX_KEY) or {}).get("record") or {}).get("prose")
-        or "") if _prose_contract else ""
+        or "")
     normalize_causal_ledger(
         out, authority_by_entity(_model_payload.get("event_inputs")),
         _identity_index,
@@ -6703,68 +5663,6 @@ def director_resolve(ctx, nonce, _corrections=None):
             if isinstance(pressure, dict)
             and f"world_pressure:{pressure.get('id')}" in _ledger_by_source
         ]
-    # Current causal-ledger outputs route a due process to specialists and the
-    # engine records its lifecycle below. The old prose retry remains only for
-    # legacy provider outputs during migration.
-    _must_tick = [] if out.get("causal_ledger") or _prose_contract else [
-        p for p in _pressures if p.get("must_tick_this_beat")]
-
-    def _unticked_pressures(res_out):
-        ops = res_out.get("world_pressure")
-        ops = ops if isinstance(ops, list) else []
-        tick_ids, tick_subjects = set(), []
-        for op in ops:
-            if isinstance(op, dict) \
-                    and str(op.get("op") or "").strip().lower() == "tick":
-                tick_ids.add(str(op.get("id") or "").strip())
-                subj = str(op.get("subject") or "").strip().casefold()
-                if subj:
-                    tick_subjects.append(subj)
-        missing = []
-        for p in _must_tick:
-            pid = str(p.get("id") or "").strip()
-            subj = str(p.get("subject") or "").strip().casefold()
-            if pid and pid in tick_ids:
-                continue
-            if subj and any(subj in s or s in subj for s in tick_subjects):
-                continue
-            missing.append(p)
-        return missing
-
-    _wp_missing = _unticked_pressures(out)
-    if _wp_missing:
-        _wp_note = (
-            "WORLD PRESSURE HARD RULE violated: these ongoing world processes "
-            "have already been held past their window and MUST advance this "
-            "beat -- "
-            + "; ".join(f"{p.get('id')}: {p.get('subject')}"
-                        for p in _wp_missing)
-            + ". Rewrite your resolution keeping every player and character "
-            "fact identical, but make each listed process visibly act ON-PAGE "
-            "this beat: one concrete external development drawn from the "
-            "process itself (a reading changes, a response arrives, the "
-            "hazard spreads, the authority moves), emit {op:'tick', id, note} "
-            "for it in world_pressure, and encode any persistent effect in "
-            "state_diff."
-        )
-        _wp_retry = _agent_json(
-            "director",
-            "director_resolve",
-            _resolve_prompt,
-            {**_model_payload, "correction_notes": _wp_note},
-            temperature=0.3,
-            max_tokens=None,   # the configured ceiling; see complete_validated_json
-        )
-        if len(_unticked_pressures(_wp_retry)) < len(_wp_missing):
-            out = _wp_retry
-            _wp_missing = _unticked_pressures(out)
-        for _p in _wp_missing:
-            ctx.add_warning(
-                f"World pressure must-tick violated: {_p.get('subject')!r} "
-                f"(id {_p.get('id')}) was not ticked this beat despite being "
-                "flagged must_tick_this_beat."
-            )
-
     # PLAYER-ACT AUTHORITY, enforced. The prompt rule alone measurably reduced
     # this (a live reroll dropped an invented drink-and-nod down to a single
     # invented "Hinami straightens") but did not eliminate it, and a warning
@@ -6899,102 +5797,6 @@ def director_resolve(ctx, nonce, _corrections=None):
     _pcontacts = _check_player_contact_authority(
         (out.get("state_diff") or {}).get("contact_ops"),
         _declared_player_actions, _player_name, _standing_ids, ctx.cast)
-    if (_invented or _mute or _felt or _cacts or _quotes or _pcontacts) \
-            and not _prose_contract:
-        # ONE retry covering every violation. They are the same boundary from
-        # several sides, they are detected at the same moment, and asking
-        # separately would cost a call apiece to say the same thing.
-        _parts = []
-        if _invented:
-            _parts.append(
-                "Your previous resolved_event gave the PLAYER physical acts they "
-                "did not declare this beat. The player declared "
-                + ("no action at all -- only speech."
-                   if not _declared_player_actions else "only the listed actions.")
-                + " Rewrite it keeping every other fact identical: describe what "
-                "OTHER characters do, and the player ONLY as they declared. An NPC "
-                "may offer, hold out, brace or wait -- the player accepts on their "
-                "own turn. You may add sensory detail to a declared act; you may "
-                "not add an act. Offending sentences: "
-                + " | ".join(w.split(": ", 1)[-1] for w in _invented))
-        if _felt:
-            _parts.append(
-                "Your previous resolved_event named what the PLAYER FEELS. "
-                "Their interior state is theirs to declare, not yours to "
-                "assert -- and an observer cannot know it is genuine. Report "
-                "only what a body SHOWS (trembling, wide eyes, a shrill cry, "
-                "a step back) and let the reader infer the rest. Rewrite "
-                "keeping every other fact identical. Offending sentences: "
-                + " | ".join(w.split(": ", 1)[-1] for w in _felt))
-        if _mute:
-            _parts.append(
-                "Your previous resolved_event attributed SPEECH to a character "
-                "who declared none this beat. Silence is a declaration: a "
-                "character who said nothing said nothing, and you may not give "
-                "them a comment, a reply or a murmur. They may still act, react "
-                "and be described -- write what they DO, or let the silence "
-                "stand. Offending sentences: "
-                + " | ".join(w.split(": ", 1)[-1] for w in _mute))
-        if _cacts:
-            _parts.append(
-                "Your previous resolved_event gave a CHARACTER physical acts "
-                "they did not declare this beat -- most likely moving someone "
-                "who declared no movement. A character's declared act is "
-                "yours to RESOLVE, not to extend: you decide whether it "
-                "works, what it achieves and what it costs. You do not decide "
-                "that they also stepped closer, reached out or turned away. "
-                "Distance especially is theirs -- a character who chose to "
-                "keep their distance kept it. Rewrite keeping every other "
-                "fact identical. Offending sentences: "
-                + " | ".join(w.split(": ", 1)[-1] for w in _cacts))
-        if _quotes:
-            _parts.append(
-                "Your previous resolved_event contains spoken lines that "
-                "nobody declared this beat. You may not write dialogue for a "
-                "character with a sheet -- their words come from their own "
-                "declaration and from nowhere else, and a line you invent for "
-                "them becomes their memory of having said it. Remove the "
-                "invented lines; describe what is done and let the silence "
-                "stand. Offending lines: "
-                + " | ".join(w.split(": ", 1)[-1] for w in _quotes))
-        _note = " ".join(_parts)
-        _retry = _agent_json(
-            "director",
-            "director_resolve",
-            _resolve_prompt,
-            {**_model_payload, "correction_notes": _note},
-            temperature=0.0,
-            max_tokens=None,   # the configured ceiling; see complete_validated_json
-        )
-        _retry_invented = _check_player_act_authority(
-            _retry.get("resolved_event") or "",
-            _declared_player_actions, _player_name, _all_names,
-            ctx.input or "")
-        _retry_mute = _check_character_speech_authority(
-            _retry.get("resolved_event") or "", _silent_names, _all_names,
-            pronouns=_body_pronouns)
-        _retry_cacts = []
-        for _cname in _declared_names:
-            _retry_cacts.extend(_check_character_act_authority(
-                _retry.get("resolved_event") or "",
-                char_actions.get(_cname) or [], _cname, _all_names,
-                pronouns=_body_pronouns))
-        _retry_quotes = _check_prose_quote_authority(
-            _retry.get("resolved_event") or "", _allowed_quote_bodies)
-        _retry_felt = _check_player_interiority_authority(
-            _retry.get("resolved_event") or "", _player_name,
-            _player_declared_text, _all_names)
-        # Kept only if it reduces the TOTAL, so a rewrite that fixes the
-        # player's acts by inventing a line for a silent character loses.
-        if (len(_retry_invented) + len(_retry_mute) + len(_retry_felt)
-                + len(_retry_cacts) + len(_retry_quotes)
-                < len(_invented) + len(_mute) + len(_felt)
-                + len(_cacts) + len(_quotes)):
-            out, _invented, _mute, _felt, _cacts, _quotes = (
-                _retry, _retry_invented, _retry_mute, _retry_felt,
-                _retry_cacts, _retry_quotes)
-        for _w in _invented + _mute + _felt + _cacts + _quotes:
-            ctx.add_warning(_w)
     for _i, _w in _pcontacts:
         ctx.add_warning(_w)
     # Surfaced on the step itself, not only in ctx.warnings -- a content
@@ -7031,11 +5833,6 @@ def director_resolve(ctx, nonce, _corrections=None):
     # validation (the schema dump drops unknown keys).
     if _authority_warnings:
         out["player_act_warnings"] = list(_authority_warnings)
-    if _wp_missing:
-        out["world_pressure_warnings"] = [
-            f"must-tick pressure not ticked: {p.get('id')}: "
-            f"{p.get('subject')}" for p in _wp_missing
-        ]
 
     # Orchestrated fan-out (design note 19): specialists read the FINAL
     # prose, so they run after the authority retries and validation have
@@ -7044,43 +5841,17 @@ def director_resolve(ctx, nonce, _corrections=None):
     # all judge the MERGED diff exactly as they judge a monolithic one.
     _orch_view = _resolve_beat_view(out, decls, char_actions, dice,
                                     p_name, interp, ctx.cast, sc)
-    # Dispatch from the FINAL ruling: which hands the author's ledger_notes
-    # and changes_asserted addressed, scoped by the facts computed above.
-    if _prose_contract:
-        _orch_dispatch, _orch_answers = director_prose.dispatch(ctx, "resolve")
-    else:
-        _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts, _orch_view)
-        _orch_answers = None
+    # The encoder's answer, split by channel owner, is what each hand's
+    # binding, validation and fold judge (`director_prose.dispatch`).
+    _orch_dispatch, _orch_answers = director_prose.dispatch(ctx, "resolve")
     # The hands see the previewed world too (see the payload's `scene`
     # comment above): the spatial hand in particular is "the one specialist
     # entitled to the full graph", and the full graph includes the room the
     # interpret stage's spatial hand authored a moment ago.
     _run_specialists(ctx, out, resolve_sc, _orch_dispatch, _orch_view,
                      _orch_extras, "resolve", answer_for=_orch_answers)
-    if _prose_contract:
-        director_prose.attach_record(ctx, out)
+    director_prose.attach_record(ctx, out)
     _settle_minted_interior_movements(resolve_sc, out, p_name)
-    # Kept for the reconciliation seam below: when it detects an
-    # omission in a delegated channel, the CHANNEL'S OWNER is re-asked
-    # with the same beat view and entitlement slice, never the prose
-    # author with the full core (see _specialist_repairs). In-memory
-    # only -- never persisted with the step.
-    # The previewed scene rides with it: the dispatch pass above read
-    # `resolve_sc` and the repair pass read the pre-beat `sc`, so a hand
-    # re-asked about an omission was shown a world without the room, the
-    # hold or the position the beat had already established (chat 117 t82).
-    ctx["_orch_repair"] = {"view": _orch_view, "extras": _orch_extras,
-                           "scene": resolve_sc}
-    # The prose author's granted scope, persisted beside the
-    # specialists' -- what the scope backstop audits shipped prose
-    # duties against, and the per-beat measurement the sheet scoping
-    # is judged by (gated_out is the saving; a prose gate_flag below
-    # is the misprediction).
-    out["orchestration"]["prose_scope"] = {
-        "granted": sorted(_prose_scope or ()),
-        "gated_out": sorted(
-            set(PROSE_DUTY_CHUNKS) - set(_prose_scope or ())),
-    }
 
     # Safety net: LLM sometimes returns a string/list where an object belongs.
     sd = _normalize_diff_shape(out.get("state_diff"))
@@ -7212,21 +5983,6 @@ def director_resolve(ctx, nonce, _corrections=None):
         ))
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
-
-    # A THING THIS BEAT ACTED ON AND THE WORLD DOES NOT HOLD BECOMES ONE.
-    # The hands report it themselves (`settled: {<name>: "no_referent"}`) and
-    # nothing answered them, so every transform on such a row was dropped and
-    # a body could work an object for twenty-three beats without the world
-    # recording that it had been touched. See `mint_unreferenced_things`.
-    _minted_things = mint_unreferenced_things(
-        out, sc, sd, _beat_room(out, sc, _identity_index),
-        figures=list(_present_figures) + list(_reserved_figures))
-    for _key in _minted_things:
-        ctx.add_warning(
-            "minted %r: the beat acted on it and the world held no record"
-            % sd["entities"][_key].get("name"))
-    if _minted_things:
-        out["minted_things"] = list(_minted_things)
 
     # A walk the player declared once and this beat did not mention carries
     # on. Written HERE, before every movement backstop, so a continued leg
@@ -7669,7 +6425,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     _declared_moves = director_prose.declared_moves(
         (interp.get("orchestration") or {}).get("prose_contract"),
         (out.get("orchestration") or {}).get("prose_contract"),
-    ) if _prose_contract else None
+    )
     for _body, _from, _to in _unreachable_position_writes(
             _route_sc, route_scene_for(ctx, _route_sc, sd), sd["positions"],
             _bodies, exempt=_spared, declared=_declared_moves):
@@ -7731,7 +6487,7 @@ def director_resolve(ctx, nonce, _corrections=None):
                             if _fd.get("name") and _fd.get("room")},
             acting=[str(_r.get("source_entity_id") or "")
                     for _r in (out.get("ledgers") or [])
-                    if isinstance(_r, dict)] if _prose_contract else ()):
+                    if isinstance(_r, dict)]):
         ctx.add_warning("charter body %r is in contact on screen; the scene "
                         "stands it (leased)" % _stood)
 
@@ -8335,12 +7091,6 @@ def director_resolve(ctx, nonce, _corrections=None):
             "history_entries": len(_history),
         }
 
-    # Orchestration's scope backstop runs on the FINAL output -- after the
-    # reconciliation seam, whose repair can itself recover a delegated
-    # change the prose asserted -- so a wrongly-skipped specialist or a
-    # wrongly-omitted chunk is reported against what actually ships, never
-    # against a draft.
-    _orchestration_scope_backstop(ctx, out, "resolve", sc)
     _span_coherency_report(ctx, out, "resolve", _orch_dispatch,
                            _orch_view)
 

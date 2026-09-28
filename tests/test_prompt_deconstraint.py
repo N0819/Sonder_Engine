@@ -16,6 +16,10 @@ could write would reach it.
 No firewall clause was cut. The one that lived on a channel that moved
 (`contact_assertions` -> the contact specialist's `contact_ops`) moved with it
 and is pinned in `tests/test_player_contact_onset.py`.
+
+Since 2026-09-27 the Director writes prose (`prose_director_prompt`) and names
+no channel; every field it used to be told about is the encoder's
+(`unified_specialist_prompt`).
 """
 
 from __future__ import annotations
@@ -24,7 +28,8 @@ import inspect
 
 import pytest
 
-from llm.prompts import DEFAULT_PROMPTS, get_prompt, prose_author_prompt
+from llm.prompts import (get_prompt, prose_director_prompt,
+                         unified_specialist_prompt)
 from llm.schemas import (ActionElement, DirectorEstablish, RoomDef,
                          SceneEntityDef, _fields)
 
@@ -33,7 +38,12 @@ PACKS = ("en", "ja")
 
 
 def _interpret(language="en"):
-    return prose_author_prompt(set(), language)
+    return prose_director_prompt("interpret", language)
+
+
+def _encoder_core(language="en"):
+    """The encoder's sheet with no channel granted and no part picked."""
+    return unified_specialist_prompt([], language, [])
 
 
 def _establish(language="en"):
@@ -94,28 +104,27 @@ class TestTheEngineWritesItSoTheSheetStoppedAskingForIt:
         assert "never duplicated here" not in _establish()
 
 
-class TestOneCausalDirectorContract:
-    """The old interpret suffix and prose-author sheet are both retired."""
-
-    def test_the_director_only_decomposes_and_routes(self):
-        prompt = _interpret()
-        assert "Convert event_inputs into ordered event ledgers" in prompt
-        assert "categories" in prompt
-        assert "state_diff" not in prompt
-        assert "contact_assertions" not in prompt
+class TestTheDirectorSheetNamesNoChannel:
+    """The old interpret suffix, the prose-author sheet and (2026-09-27) the
+    causal ledger contract are all retired: the Director writes prose."""
 
     def test_the_sheet_no_longer_enumerates_the_delegated_channels(self):
+        """`contestable` is the encoder's to write now. `authority_mode` was
+        asserted here too, and no prose-path sheet names it
+        (UNBUILT_PIPELINE §1.1, player authority)."""
         prompt = _interpret()
         assert "the FULL state_diff structure director_resolve uses" not in prompt
         assert "the same channels, the same shapes, no subset" not in prompt
-        assert "authority_mode" in prompt
-        assert "contestable" in prompt
+        assert "state_diff" not in prompt
+        assert "contact_assertions" not in prompt
+        assert "contestable" in _encoder_core()
 
     def test_the_contact_grammar_lives_on_the_hand_that_writes_contacts(self):
         assert "DIRECT FELT CONTACT" not in _interpret()
         assert "crossed_target_part" not in _interpret()
         # ...and is intact where the beat's contact_ops are actually authored.
-        assert "crossed_target_part" in DEFAULT_PROMPTS["director_contact"]
+        assert "crossed_target_part" in unified_specialist_prompt(
+            ["contact_ops"], "en", [])
 
 
 # --- invitations: fields the engine reads that no sheet named ---------------
@@ -135,9 +144,12 @@ class TestACapabilityNobodyIsToldAboutIsACapabilityNobodyHas:
         """The field defaults TRUE and the guard fires only on FALSE, so a
         model reading the closing output shape as the contract silently
         disabled the whole approach-vs-arrival mechanism the paragraph above
-        it exists to feed."""
+        it exists to feed.
+
+        The model that writes `movement` is the encoder since 2026-09-27, and
+        its core carries the field on every beat, whatever is granted."""
         for language in PACKS:
-            prompt = _interpret(language)
+            prompt = _encoder_core(language)
             assert "movement" in prompt
             assert "arrives" in prompt
 
@@ -182,3 +194,4 @@ class TestTheFieldsWithNoReaderAreGone:
         assert "opening" not in _fields(DirectorEstablish)
         for language in PACKS:
             assert "opening:''" not in _establish(language), language
+

@@ -2766,8 +2766,9 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
             "source_entity_id": source_entity_id,
             # Filled by the engine from what it handed this source, never
             # read back off the row. It stays on the INTERNAL ledger because
-            # the deterministic floors want it; `_specialist_ledger` strips
-            # it before any hand sees it.
+            # the deterministic floors want it. (The hands' row slice
+            # stripped it; the encoder is handed authority per source, on
+            # purpose, through `event_inputs`.)
             "authority_mode": (
                 (authority or {}).get(source_entity_id)
                 or str(entry.get("authority_mode") or "").strip()

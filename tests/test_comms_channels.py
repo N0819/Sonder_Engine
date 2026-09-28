@@ -429,20 +429,20 @@ class TestItRidesTheEngine:
                            "rooms": ["observation", "cell"]}]})
         assert out["comms_ops"][0]["id"] == "cell_intercom"
 
-    def test_the_spatial_specialist_owns_it(self):
-        from agents import director
+    def test_the_spatial_owner_keeps_it_and_both_stages_can_grant_it(self):
+        from agents import director, director_prose
 
         assert "comms_ops" in director.SPECIALISTS["spatial"]["channels"]
-        assert "comms_ops" in director._CHANNEL_GATES
+        for stage in ("interpret", "resolve"):
+            assert "comms_ops" in director_prose.candidate_channels(stage), stage
 
-    def test_the_specialist_sheet_can_teach_it(self):
+    def test_the_encoder_card_can_teach_it(self):
         """An owned channel with no chunk loads nothing when granted."""
         from llm import prompts
 
-        chunks = prompts.SPECIALIST_PROMPT_SPECS["spatial"]["chunks"]
-        assert "comms_ops" in chunks
-        assert "carriers" in chunks["comms_ops"]
-        assert "broadcast" in chunks["comms_ops"]
+        chunk = prompts.unified_specialist_prompt(["comms_ops"], "en", [])
+        assert "ENDPOINTS are rooms OR carriers" in chunk
+        assert "'broadcast' carries ONE way" in chunk
 
 
 # ---------------------------------------------------------------- one-way sight

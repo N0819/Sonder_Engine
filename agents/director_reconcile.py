@@ -1,11 +1,10 @@
 """Resolve-seam support that makes no model call.
 
 Player-claim coverage findings, verdict settling and acquittal
-(`_verify_already_true`, `_acquit_addressed_events`), repair routing by
-channel owner (`_route_repair_omissions`), the deep-audit mode switch and
-dialogue articulation stamping. The seam itself -- `_reconcile_resolution`
-and its block comment, plus the model-calling `_deep_audit_omissions` and
-`_specialist_repairs` -- stays in `agents/director.py`.
+(`_verify_already_true`, `_acquit_addressed_events`), the deep-audit mode
+switch and dialogue articulation stamping. The seam itself --
+`_reconcile_resolution` and its block comment, plus the model-calling
+`_deep_audit_omissions` -- stays in `agents/director.py`.
 
 Import direction: nothing outside `agents/director*.py` may import an
 `agents/director_*` submodule, and no `director_*` module may import
@@ -558,53 +557,3 @@ def _acquit_addressed_events(out, omissions, sc=None):
     return owed, acquitted, refused
 
 
-#: Sentinel channel for a REROUTED omission: the hand that declined the
-#: event named the owner but not which of its channels fits -- only the
-#: owner knows that -- so it repairs with its full granted scope.
-_REROUTE_FULL_SCOPE = "*"
-
-
-def _route_repair_omissions(omissions, addressed=None):
-    """Partition detected omissions by REPAIRER, for the orchestrated path.
-
-    Returns (routed, core): `routed` maps specialist name -> [(channel,
-    omission), ...] for every omission whose category names a delegated
-    channel -- that channel's owner is who should be asked again, with its
-    own 1-4k sheet, not the prose author with the full core. `core` keeps
-    everything only a whole-diff authority can answer: player claims (their
-    coverage check is whole-diff and they are non-rejectable), and
-    categories no specialist owns (time, transit, 'other').
-    """
-    routed, core = {}, []
-    index = addressed or {}
-    for om in omissions:
-        if om.get("source") == "player_claim":
-            core.append(om)
-            continue
-        # A FORWARDING NOTE BEATS THE CATEGORY MAP. The hand that was given
-        # this event declined it AND named the hand it belongs to, in a
-        # structured field. Routing by category here would re-ask the hand
-        # that just said no -- measured live, where contact and objects both
-        # explained in prose that a posture change was not theirs while the
-        # category kept sending it back. The address is a PROPOSAL, checked
-        # against the roster before it is acted on: an unknown name, or a
-        # hand that already had this event, falls back to the category.
-        entry = index.get(om.get("event_id")) or index.get(
-            str(om.get("event_id")))
-        target = str((entry or {}).get("reroute_to") or "").strip()
-        if (target in SPECIALISTS and target != (entry or {}).get("owner")
-                and om.get("event_id")):
-            routed.setdefault(target, []).append((_REROUTE_FULL_SCOPE, om))
-            continue
-        category = _normalize_omission_category(om.get("category"))
-        if category in CAUSAL_CATEGORY_REDIRECTS:
-            owner = CAUSAL_CATEGORY_REDIRECTS[category]
-            routed.setdefault(owner, []).append((_REROUTE_FULL_SCOPE, om))
-            continue
-        channel = _CATEGORY_CHANNELS.get(category)
-        owner = _CHANNEL_SPECIALISTS.get(channel) if channel else None
-        if owner:
-            routed.setdefault(owner, []).append((channel, om))
-        else:
-            core.append(om)
-    return routed, core

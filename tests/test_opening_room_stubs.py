@@ -20,7 +20,8 @@ sheet had drifted 23 rule headings behind the spatial hand's. Both are one
 class: the opening contract was a copy, and copies drift.
 
 What holds now: `director_establish` and the spatial hand's rooms chunk embed
-one `room_vocabulary` fragment by reference; `RoomDef` declares `planned`,
+one `room_vocabulary` fragment by reference (since 2026-09-27 that chunk is
+the room author's sheet, and the encoder's own rooms chunk embeds it too); `RoomDef` declares `planned`,
 `purpose` and `access`, so an opening can write a neighbour it has not seen
 in the same shape the registry's planted stubs use, and the first beat that
 enters or looks into it is handed a brief and furnishes it.
@@ -30,7 +31,8 @@ from __future__ import annotations
 
 import copy
 
-from llm.prompts import get_prompt, prompt_fragment, specialist_prompt
+from llm.prompts import (get_prompt, prompt_fragment, room_author_prompt,
+                         unified_specialist_prompt)
 from llm.schemas import validate_llm_output
 from world.spatial import merge_scene_with_diff
 from world.structure import (
@@ -50,21 +52,26 @@ VOCABULARY_HEADINGS = (
 # One text, two readers
 # ---------------------------------------------------------------------------
 
-def test_the_place_vocabulary_reaches_both_sheets_from_one_fragment():
+def test_the_place_vocabulary_reaches_every_reader_from_one_fragment():
+    """Two readers until 2026-09-27 (the opening and the spatial hand); three
+    since: the opening, the room author and the encoder granted `rooms`."""
     fragment = prompt_fragment("room_vocabulary")
-    establish = get_prompt("director_establish")
-    spatial = specialist_prompt("spatial", ["rooms"])
+    readers = {
+        "director_establish": get_prompt("director_establish"),
+        "room author": room_author_prompt("en"),
+        "encoder, rooms": unified_specialist_prompt(["rooms"], "en", []),
+    }
     for heading in VOCABULARY_HEADINGS:
         assert heading in fragment, heading
-        assert heading in establish, heading
-        assert heading in spatial, heading
-    # Resolved at card load, so the bytes are identical in both readers.
-    assert fragment.strip() in establish
-    assert fragment.strip() in spatial
-    # And nowhere else does a copy live: a hand not granted `rooms` does not
-    # carry the vocabulary, which is what proves it rides the chunk.
-    assert "ANCHORS ARE PLACES A BODY CAN BE" not in specialist_prompt(
-        "spatial", ["positions"])
+        for name, sheet in readers.items():
+            assert heading in sheet, (name, heading)
+    # Resolved at card load, so the bytes are identical in every reader.
+    for name, sheet in readers.items():
+        assert fragment.strip() in sheet, name
+    # And nowhere else does a copy live: an encoder not granted `rooms` does
+    # not carry the vocabulary, which is what proves it rides the chunk.
+    assert "ANCHORS ARE PLACES A BODY CAN BE" not in unified_specialist_prompt(
+        ["positions"], "en", None)
 
 
 def test_the_fragment_speaks_to_no_particular_hand():

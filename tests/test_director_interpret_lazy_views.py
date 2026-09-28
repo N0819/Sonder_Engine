@@ -24,6 +24,12 @@ are for:
 * on the beat that saves the work, the record says so (`gated: None`) rather
   than recording an empty list, which would read as "the scene admitted no
   channel".
+
+Since 2026-09-27 the saving is gone: `_dispatch_specialists` went with the
+causal Director, and a prose interpret builds all five views on every beat --
+the decision model's candidate channels are read from the same facts before
+it answers (UNBUILT_PIPELINE §1.1). What is still pinned: one build per stage,
+and the thunk giving the same facts as the rows.
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.character_schema import default_character_data
 
 import agents.director as director
+from tests.director_fakes import _fake_agent, encoder_event
 
 
 BASE_SCENE = {
@@ -91,24 +98,8 @@ def _make_ctx(temp_db, *, player_input):
     return ctx
 
 
-def _interpret_out(*, ledger_notes=None):
-    out = {
-        "kind": "action",
-        "sequence": [{"type": "action", "attempt": "pull off my wool coat",
-                      "commitment": "asserted", "targets": [],
-                      "raw_text": "I pull off my wool coat"}],
-        "speech": None, "action": {"attempt": "pull off my wool coat"},
-        "movement": None,
-        "flow": {"reactors": [], "authority_claims": [], "dice": [],
-                 "resolution_flags": {}, "fiction_frame": {}},
-    }
-    if ledger_notes:
-        out["ledger_notes"] = dict(ledger_notes)
-    return out
-
-
-def _run(temp_db, monkeypatch, *, ledger_notes=None):
-    """One interpret, with the model stubbed and every view build counted."""
+def _run(temp_db, monkeypatch):
+    """One interpret, with the models stubbed and every view build counted."""
     counts = {}
     for name in _VIEWS:
         real = getattr(director, name)
@@ -119,61 +110,29 @@ def _run(temp_db, monkeypatch, *, ledger_notes=None):
 
         monkeypatch.setattr(director, name, counted)
 
-    interp = _interpret_out(ledger_notes=ledger_notes)
-
-    def fake(role, step_key, system, payload, **kw):
-        if step_key == "director_interpret":
-            return json.loads(json.dumps(interp))
-        return {}
-
-    monkeypatch.setattr(director, "_agent_json", fake)
+    coat_off = encoder_event(
+        "Mara pulls off her wool coat.", transforms=[{
+            "item": "Mara",
+            "patch": {"attire": {"Mara": {"remove": ["wool coat"]}}}}])
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], {
+        "director_prose": {"prose": "Mara pulls off her wool coat."},
+        "director_specialist": {"events": [coat_off], "missing_tools": [],
+                                "missing_referents": [], "notes": []}}))
     ctx = _make_ctx(temp_db, player_input="I pull off my wool coat")
     return director.director_interpret(ctx, nonce=0), counts
 
 
-def test_a_beat_whose_ruling_reaches_no_hand_builds_no_world_view(
-        temp_db, monkeypatch):
-    """C8: no hand, no payload, no gate that could change a scope -- so none
-    of the five views is built, and the record says the gates were not
-    consulted instead of recording an empty gate list."""
-    out, counts = _run(temp_db, monkeypatch)
+def test_an_interpret_builds_each_view_once(temp_db, monkeypatch,
+                                           prose_director):
+    """Each view built EXACTLY once (the `crowds_rows` rule: the gate and the
+    payload read the same rows).
 
-    specialists = out["orchestration"]["specialists"]
-    assert all(not state["run"] for state in specialists.values())
-    assert counts == {}, f"a view was built for nobody: {counts}"
-    for name, state in specialists.items():
-        assert state["gated"] is None, name
-        # The cheap facts -- standing scene state, one indexed row, the
-        # survival setting -- are recorded as they always were.
-        assert state["facts"]["anyone_wears"] is True
-        assert state["facts"]["physical_beat"] is True
-        assert "vitals_tracked" in state["facts"]
-        # The view-derived five are absent rather than guessed at.
-        for fact in ("crowds_present", "couriers_present", "notices_in_scene",
-                     "reports_carried", "unratified_claims_present"):
-            assert fact not in state["facts"], fact
+    Named `test_a_beat_that_dispatches_a_hand_builds_each_view_once` until
+    2026-09-27, when it also pinned the gates' recorded facts per hand; the
+    prose plan records none (`gated: None`, `facts: {}` for every owner)."""
+    _out, counts = _run(temp_db, monkeypatch)
 
-
-def test_a_beat_that_dispatches_a_hand_builds_each_view_once(
-        temp_db, monkeypatch):
-    """The other half: a ruling reaches the body hand, so the gates are
-    consulted and the payload is assembled -- each view built EXACTLY once
-    (the `crowds_rows` rule: the gate and the payload read the same rows),
-    and every fact recorded, including one no gate asked for."""
-    out, counts = _run(temp_db, monkeypatch,
-                       ledger_notes={"body": "the coat comes off"})
-
-    specialists = out["orchestration"]["specialists"]
-    assert specialists["body"]["run"] is True
     assert counts == {name: 1 for name in _VIEWS}, counts
-    for name, state in specialists.items():
-        assert isinstance(state["gated"], list), name
-        for fact in ("crowds_present", "couriers_present", "notices_in_scene",
-                     "reports_carried", "unratified_claims_present"):
-            assert fact in state["facts"], (name, fact)
-    # One facts object for every hand, as before.
-    values = list(specialists.values())
-    assert all(state["facts"] == values[0]["facts"] for state in values)
 
 
 def test_the_thunk_and_the_rows_give_the_same_facts(temp_db):
@@ -214,19 +173,3 @@ def test_a_view_that_raises_still_fails_open(temp_db):
     assert facts["crowds_present"] is True
     assert facts["reports_carried"] is True
 
-
-def test_a_plain_dict_of_facts_still_dispatches(temp_db):
-    """`_dispatch_specialists` is called with a hand-built dict in three
-    tests and by any caller without a stage payload; nothing pending means
-    the gates are read exactly as they always were."""
-    ctx = _make_ctx(temp_db, player_input="hello")
-    facts = dict(director._gate_facts(
-        ctx, json.loads(json.dumps(BASE_SCENE)), physical=True, speech=False,
-        crowds_rows=[], notices_rows=[], couriers_rows=[], reports_rows=[],
-        unratified_rows=[]))
-    assert isinstance(facts, dict)
-    dispatch = director._dispatch_specialists(None, None, facts, {})
-
-    assert all(isinstance(state["gated"], list)
-               for state in dispatch.values())
-    assert dispatch["body"]["facts"] is facts

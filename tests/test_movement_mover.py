@@ -14,8 +14,13 @@ import time
 
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from tests.helpers import fanout_resolve_agent
+from tests.director_fakes import prose_resolve_agent
 from world.spatial import merge_scene_with_diff
+import pytest
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 
 def _make_ctx(temp_db, movement):
@@ -110,7 +115,7 @@ def test_vehicle_move_updates_entity_position_not_player(temp_db, monkeypatch):
     import agents.director as director
 
     ctx = _make_ctx(temp_db, {"to_room": "ferry_deck", "mover": "van"})
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
     sd = out["state_diff"]
@@ -136,7 +141,7 @@ def test_vehicle_move_resolves_mover_by_name_or_alias(temp_db, monkeypatch):
     import agents.director as director
 
     ctx = _make_ctx(temp_db, {"to_room": "ferry_deck", "mover": "delivery van"})
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -156,11 +161,11 @@ def test_vehicle_move_route_checks_the_vehicle_not_the_player(
     import agents.director as director
 
     ctx = _make_ctx(temp_db, {"to_room": "cliff_path", "mover": "van"})
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "van" not in out["state_diff"]["positions"]
+    assert "van" not in (out["state_diff"].get("positions") or {})
     assert any("Blocked movement" in w for w in ctx.warnings)
 
 
@@ -173,7 +178,7 @@ def test_vehicle_move_strips_conflated_player_position(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, {"to_room": "ferry_deck", "mover": "van"})
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {"positions": {
+        prose_resolve_agent({"state_diff": {"positions": {
             "van": "ferry_deck", "The Stranger": "ferry_deck"}}}),
     )
 
@@ -193,12 +198,12 @@ def test_self_move_still_moves_the_player_body(temp_db, monkeypatch):
     sc = temp_db.wget(ctx.chat.id, "scene", {})
     sc["positions"]["The Stranger"] = "van_interior"
     temp_db.wset(ctx.chat.id, "scene", sc)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
     assert out["state_diff"]["positions"]["The Stranger"] == "dock_road"
-    assert "van" not in out["state_diff"]["positions"]
+    assert "van" not in (out["state_diff"].get("positions") or {})
 
 
 def test_unknown_mover_moves_nobody_with_warning(temp_db, monkeypatch):
@@ -210,9 +215,9 @@ def test_unknown_mover_moves_nobody_with_warning(temp_db, monkeypatch):
     import agents.director as director
 
     ctx = _make_ctx(temp_db, {"to_room": "dock_road", "mover": "the zeppelin"})
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert out["state_diff"]["positions"].get("The Stranger") != "dock_road"
+    assert (out["state_diff"].get("positions") or {}).get("The Stranger") != "dock_road"
     assert any("moves nobody" in w for w in ctx.warnings)

@@ -31,7 +31,7 @@ def test_one_contact_patch_accounts_for_actor_and_object_without_duplicate_ops()
     patch = {"contact_ops": [{"op": "add", "actor": "Sera", "actor_part": "hand",
                               "target": "tin", "target_part": "", "manner": "touch",
                               "relation": "surface"}]}
-    ledger, history, requirements = _requirements(before, patch, ["Sera", "Brass tin"])
+    _, history, requirements = _requirements(before, patch, ["Sera", "Brass tin"])
     assert [r["status"] for r in requirements] == ["proposed", "proposed", "proposed"]
     assert requirements[-1]["transform_indices"] == [0]
     after = merge_scene_with_diff(before, patch)
@@ -39,11 +39,9 @@ def test_one_contact_patch_accounts_for_actor_and_object_without_duplicate_ops()
         "transforms": history, "requirements": requirements})
     assert receipt["status"] == "applied"
     assert len(receipt["effects"]) == 1
-    verdicts, missing, notes = [], [], []
-    director._account_for_every_thing(ledger, {"settled": {}}, history, 1, "encoded",
-                                      verdicts, missing, notes, 0, before)
-    assert [v["status"] for v in verdicts] == ["encoded", "encoded"]
-    assert not missing and not notes
+    # The per-thing verdicts a hand's answer was checked against
+    # (`_account_for_every_thing`) went with the causal hands on 2026-09-27;
+    # the requirements and the receipt above are what account for it now.
 
 
 def test_one_transfer_accounts_for_object_and_both_holders():

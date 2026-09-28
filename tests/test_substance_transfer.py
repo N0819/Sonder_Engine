@@ -11,12 +11,11 @@ import json
 from types import SimpleNamespace
 
 from agents.director import (_character_material_effects, _evidence_present,
-                             _manifest_items,
                              _merge_character_material_effects,
                              _normalize_diff_shape)
 from agents import composer
 from story.character_schema import character_embodiment_capabilities
-from llm.prompts import DEFAULT_PROMPTS
+from llm.prompts import unified_specialist_prompt
 from llm.schemas import CharacterOutput, StateDiff, validate_llm_output_strict
 from world.spatial import (apply_substance_ops, merge_scene_with_diff,
                      resolve_substance_ops, substance_event_clause,
@@ -80,10 +79,10 @@ class TestSchemaAndPromptContract:
         # The two `perception` assertions that were here asserted a prompt no
         # model reads; it is gone from the packs. Everything below is a live
         # model call and can still regress.
-        resolve = DEFAULT_PROMPTS["director_contact"]
-        assert "MATERIAL TRANSFER — MATTER HAS ITS OWN LEDGER" in resolve
-        assert "A material is NOT a body part" in resolve
-        assert "exactly one standing relation:'interior' contact" in resolve
+        resolve = unified_specialist_prompt(["substance_ops"], "en", None)
+        assert "MATTER HAS ITS OWN LEDGER" in resolve
+        assert "Matter is NOT a body part" in resolve
+        assert "exactly one standing interior contact" in resolve
         # The character's half went with the full card (2026-09-27): the
         # bare reply files no material effects, which are the Director's to
         # write from the act (docs/UNBUILT_CHARACTERS.md §6.17).
@@ -104,13 +103,13 @@ class TestSchemaAndPromptContract:
 
         op = _release(target="Vessel", placement="interior",
                       target_interior="reservoir", target_part="inlet")
-        omission = _manifest_items({"changes_asserted": [{
+        omission = {
             "category": "substance", "subject": "Emitter",
             "change": "Coolant remains in the reservoir.",
             "actor": "Emitter", "actor_part": "nozzle",
             "target": "Vessel", "substance": "coolant",
             "placement": "interior", "target_interior": "reservoir",
-        }]})[0]
+        }
         assert _evidence_present({"substance_ops": [op]}, omission)
         wrong = dict(omission, target_interior="feed line")
         assert not _evidence_present({"substance_ops": [op]}, wrong)
@@ -484,7 +483,7 @@ class TestOneReleaseIsOneRecord:
         """Live (turn 63 of the same story): matter recorded on the TARGET
         with the SOURCE's own part in target_part -- a part the target's body
         does not have."""
-        resolve = DEFAULT_PROMPTS["director_contact"]
+        resolve = unified_specialist_prompt(["substance_ops"], "en", None)
         assert "places on the TARGET's own body" in resolve
         assert "One release is ONE op" in resolve
 

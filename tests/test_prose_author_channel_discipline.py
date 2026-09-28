@@ -1,4 +1,11 @@
-"""No prose-author block may instruct writing a channel it has no field for.
+"""No Director sheet may instruct writing a channel it has no field for.
+
+Since 2026-09-27 the Director writes prose and nothing else
+(`agents/director_prose.py`); the encoder writes every channel. So neither of
+the Director's sheets (`prose_contract/director_interpret`, `.../director_resolve`)
+may address a channel as somewhere to write, and neither may address
+`state_diff` at all. The history below is the causal Director's, whose prose
+author owned half of `state_diff`; the guard it motivated is the same guard.
 
 `prose_author_sheet/12.txt` states the contract: every delegated channel is
 owned by a scoped specialist that reads the finished `resolved_event`, none of
@@ -39,7 +46,6 @@ import pytest
 
 from agents.director import _DELEGATED_CHANNELS
 from language_runtime import installed_language_packs
-from llm.schemas import StateDiff
 
 
 LANGUAGES = ("en", "ja")
@@ -47,14 +53,6 @@ LANGUAGES = ("en", "ja")
 
 def _delegated() -> list:
     return sorted(_DELEGATED_CHANNELS)
-
-
-def _own_state_diff_fields() -> set:
-    try:
-        fields = set(StateDiff.model_fields)      # pydantic 2
-    except AttributeError:                        # pragma: no cover
-        fields = set(StateDiff.__fields__)        # pydantic 1
-    return fields - set(_DELEGATED_CHANNELS)
 
 
 def _write_position_re() -> re.Pattern:
@@ -77,48 +75,42 @@ def _write_position_re() -> re.Pattern:
 
 
 def _blocks(language: str):
+    """The prose Director's two sheets."""
     card = installed_language_packs()[language].card("system_prompts")
-    for index, (name, text) in enumerate(card["prose_author_sheet"]):
-        yield index, name, str(text)
+    for stage in ("director_interpret", "director_resolve"):
+        yield stage, str(card["prose_contract"][stage])
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_no_prose_author_block_writes_a_delegated_channel(language):
+def test_no_director_sheet_writes_a_channel(language):
     pattern = _write_position_re()
     offences = []
-    for index, name, text in _blocks(language):
+    for name, text in _blocks(language):
         for match in pattern.finditer(text):
             start = max(0, match.start() - 70)
             offences.append(
-                f"{language} prose_author_sheet[{index}] ({name}): "
-                f"...{text[start:match.end() + 40]}")
+                f"{language} {name}: ...{text[start:match.end() + 40]}")
     assert not offences, (
-        "a prose-author block instructs writing a channel absent from its own "
-        "output shape; the author's tokens there are discarded unread. State "
-        "the judgment and let the specialist encode it:\n"
+        "a Director sheet instructs writing a channel; the Director writes "
+        "prose and nothing else, so its tokens there are discarded unread. "
+        "State the judgment in the prose and let the encoder record it:\n"
         + "\n".join(offences))
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_every_state_diff_address_names_a_field_the_author_owns(language):
+def test_the_director_is_addressed_at_no_state_diff_field(language):
     """The same rule from the positive side, so a NEW field cannot be invented.
 
-    `12.txt` publishes the author's own half of `state_diff` in prose; this
-    checks the sheet against the schema instead, which is what the engine
-    parses.
+    The causal prose author owned half of `state_diff`, and this checked its
+    sheet against the schema; the prose Director owns none of it, so every
+    address would be a field it is told to write and cannot.
     """
-    own = _own_state_diff_fields()
     addressed = re.compile(r"state_diff\.([A-Za-z_][A-Za-z0-9_]*)")
-    strays = []
-    for index, name, text in _blocks(language):
-        for field in addressed.findall(text):
-            if field not in own:
-                strays.append(
-                    f"{language} prose_author_sheet[{index}] ({name}): "
-                    f"state_diff.{field}")
+    strays = [f"{language} {name}: state_diff.{field}"
+              for name, text in _blocks(language)
+              for field in addressed.findall(text)]
     assert not strays, (
-        "the prose author is addressed at a state_diff field it does not own: "
-        + "; ".join(strays))
+        "the Director is addressed at a state_diff field: " + "; ".join(strays))
 
 
 class TestTheGuardStillCatchesWhatItWasWrittenFor:

@@ -47,6 +47,7 @@ from story.room_frontier import FRONTIER_DEPTH_HOPS
 from world.structure import plant_structure
 
 import agents.director as director
+from tests.director_fakes import prose_resolve_agent
 
 PLAYER = "Sarah Moon"
 CAST = "Hinami"
@@ -174,23 +175,14 @@ def _interp():
     }
 
 
-def _capture(monkeypatch, run, systems=None):
-    """Every payload `run()` hands a model, keyed by step; the system sheet
-    of each into ``systems`` when given. The Director's own answer rules for
-    every hand, so every specialist is dispatched and has a payload to check
-    (see test_director_payload_shows_its_ledgers)."""
-    from agents.director import SPECIALISTS
-    systems = systems if systems is not None else {}
+def _capture(monkeypatch, run):
+    """Every payload `run()` hands a model, keyed by step. A resolve beat is
+    answered through the prose Director, so the encoder runs and has a payload
+    to check too (see test_director_payload_shows_its_ledgers); the opening's
+    own step is answered with nothing, as before."""
     sent = []
-
-    def fake(role, step_key, system, payload, **kw):
-        sent.append((step_key, payload))
-        systems[step_key] = system
-        if step_key == "director_resolve":
-            return {"ledger_notes": {name: f"{name}: settled" for name in SPECIALISTS}}
-        return {}
-
-    monkeypatch.setattr(director, "_agent_json", fake)
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": "The lift car shudders and settles."}, calls=sent))
     monkeypatch.setattr(director, "validate_llm_output", lambda step, value: (value, []))
     try:
         run()
@@ -452,14 +444,17 @@ def test_the_opening_brief_is_uncapped(temp_db, monkeypatch):
     assert len(sent["director_establish"]["planned_rooms"]) == 60
 
 
-def test_resolve_without_a_note_is_unchanged(temp_db, monkeypatch):
+def test_resolve_without_a_note_is_unchanged(temp_db, monkeypatch,
+                                            prose_director):
+    """Both resolve calls, the prose Director's and the encoder's.
+
+    This also pinned the author-notes duty chunk out of the resolve sheet on
+    a beat with no note. No resolve sheet has carried that duty since
+    2026-09-12 (the opening's does), so the assertion went with the causal
+    sheet on 2026-09-27 (UNBUILT_PIPELINE §1.1, the lost prompt rules)."""
     cid, persona_id = _story(temp_db, scene=LIFT_SCENE, turns=3)
     ctx = _ctx(temp_db, cid, persona_id, idx=3, interp=_interp())
-    systems = {}
-    sent = _capture(monkeypatch, lambda: director.director_resolve(ctx, nonce=0),
-                    systems)
+    sent = _capture(monkeypatch, lambda: director.director_resolve(ctx, nonce=0))
+    assert {"director_prose", "director_specialist"} <= set(sent), sorted(sent)
     for step, payload in sent.items():
         assert "author_notes" not in payload, step
-    # The duty chunk stays out of the sheet, as every gated duty does when
-    # the beat carries no work for it.
-    assert "AN AUTHOR'S NOTE SAYS WHAT THE PLAN MEANS" not in systems["director_resolve"]

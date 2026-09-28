@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from agents import composer
 from agents.perception import _standing_contacts_for
-from llm.prompts import DEFAULT_PROMPTS
+from llm.prompts import prose_director_prompt, unified_specialist_prompt
 from world.spatial import (apply_contact_ops, contact_manner_kind, contact_motion,
                      contact_relation, contact_sensation)
 
@@ -106,14 +106,14 @@ class TestTheMannerReading:
         assert contact_motion(contact) == "moving"
 
     def test_resolve_prompt_requires_both_contact_axes(self):
-        prompt = DEFAULT_PROMPTS["director_contact"]
+        prompt = unified_specialist_prompt(["contact_ops"], "en", None)
 
         assert "relation is surface|interior and motion is settled|moving" in prompt
-        assert "ALWAYS emit both" in prompt
-        assert "An inserted part can be interior and moving simultaneously" in prompt
+        assert "ALWAYS give both" in prompt
+        assert "interior and moving at once" in prompt
         assert "target_interior names the enclosing passage" in prompt
-        assert "target_part names the contacted boundary or endpoint" in prompt
-        assert "body-to-body, body-to-object and object-to-object contact" in prompt
+        assert "target_part the boundary or endpoint touched" in prompt
+        assert "body to body, body to object, object to object" in prompt
         assert "CROSSING AN ENDPOINT IS AN EXPLICIT TRANSITION" in prompt
 
 
@@ -666,19 +666,15 @@ def test_contact_prompt_accepts_any_body_part_as_actor_part():
     `detail`. The patient's standing percept named 'mouth' rather than 'tongue'
     for every beat the seal held.
 
-    The fix: the resolve prompt contract opens actor_part to whatever the
-    prose describes, and the contact specialist encodes the named part
-    directly. The Director resolves the act; the specialist uses the named
-    part or reports a structural blocker without substituting a different
-    part or outcome.
+    The fix: the contract opens actor_part to whatever the prose describes,
+    and the encoder writes the named part directly -- or says a record
+    proves the part absent, without substituting another.
     """
-    prompt = DEFAULT_PROMPTS["director_contact"]
-    assert "ANY BODY PART THE FICTION DESCRIBES" in prompt
-    assert "THE FICTION SUPPLIES THE PARTS; THE DIRECTOR RESOLVES THE ACT" in prompt
-    assert "valid actor_part without membership in a fixed anatomy list" in prompt
-    assert "Encode the resolved contact using that part" in prompt
-    assert "report the structural blocker" in prompt
-    assert "do not silently replace the part or invent a different outcome" in prompt
+    prompt = unified_specialist_prompt(["contact_ops"], "en", None)
+    assert "ANY BODY PART THE FICTION DESCRIBES CAN BE THE TOUCHING PART" in prompt
+    assert ("A part established in this fiction is valid without being on "
+            "any anatomy list") in prompt
+    assert "rather than substituting another" in prompt
     assert "CONTAINER'S SEAL IS A SEPARATE CONTACT" in prompt
 
 
@@ -694,14 +690,12 @@ def test_resolve_manifest_takes_endpoints_from_prose():
     reflected the manifest, not the prose, for every reroll.
 
     STRUCTURALLY IMPOSSIBLE NOW, which is the stronger form of the same
-    guarantee. The author no longer writes a manifest at all: its work items
-    are the categorized spans of the beat, and endpoints are not among their
-    fields (DESIGN_SPECIALIST_CONTRACT.md 4a). The contact hand derives
-    actor_part from the span and its own ledgers, which is its scoped job.
-    So there is no endpoint for the author to get wrong -- the defect above
-    cannot be spelled.
+    guarantee. The Director writes prose and no manifest at all, and the
+    encoder derives actor_part from the prose and its own ledgers. So there
+    is no endpoint for the Director to get wrong -- the defect above cannot
+    be spelled.
     """
-    resolve = DEFAULT_PROMPTS["director_resolve_lean"]
+    resolve = prose_director_prompt("resolve", "en")
     assert "copy actor/actor_part/target/target_part" not in resolve
     for endpoint in ("actor_part", "target_part", "contact_ref"):
         assert endpoint not in resolve, endpoint

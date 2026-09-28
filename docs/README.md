@@ -119,8 +119,8 @@ World and body:
 - [`DESIGN_DISGUISE_AND_RECOGNITION.md`](design/DESIGN_DISGUISE_AND_RECOGNITION.md)
   — what an observer SEES of a disguised body versus whether they know WHO it
   is. Floors built; the graded half designed and registered in `UNBUILT.md`
-  §1.43, including why it is a deterministic ladder and not a seventh
-  Director specialist.
+  §1.43, including why it is a deterministic ladder and not a Director
+  model call.
 - [`DESIGN_SCENT.md`](design/DESIGN_SCENT.md) — what smells, where the
   fact lives, and why a muffled smell arrives without its source. Built
   (v1); decay, drift and trails deliberately unbuilt.
@@ -228,8 +228,10 @@ Elsewhere:
   greeting-seeded openings. Shipped, under a materially different architecture
   than proposed; its header records the deviation.
 
-The Director's fan-out — what its five specialists are FOR, which is a
-different question from how the modules are split:
+The Director's fan-out, as it was until 2026-09-27 -- what its five
+specialists were FOR. The fan-out is deleted; the prose Director that replaced
+it is [`DESIGN_PROSE_CONTRACT.md`](design/DESIGN_PROSE_CONTRACT.md). These stay
+as the argument for why:
 
 - [`DESIGN_SPECIALIST_CONTRACT.md`](design/DESIGN_SPECIALIST_CONTRACT.md) —
   the intended contract (2026-09-09): a hand receives its scene-scoped world
@@ -355,7 +357,7 @@ are in [`UNBUILT.md`](UNBUILT.md) §6.
 | [16](../design_notes/16-blocking-fixes.md) | Six blocking fixes and the re-measurement. Complete |
 | [17](../design_notes/17-garment-displacement.md) | What a worn garment no longer covers. Built |
 | [18](../design_notes/18-dim-light-proximity.md) | Dim light up close vs at range. Built |
-| [19](../design_notes/19-director-orchestration.md) | The Director as orchestrator over scoped specialists. Built |
+| [19](../design_notes/19-director-orchestration.md) | The Director as orchestrator over scoped specialists. Superseded 2026-09-27 by the prose Director |
 | [20](../design_notes/20-observer-epithet-floor.md) | A minted epithet is not a name. Built |
 | [21](../design_notes/21-numbered-beat-events.md) | Numbered beat events, closing an ambiguity note 19 created |
 

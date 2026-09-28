@@ -1,18 +1,19 @@
-"""The Director's specialist registry, channel ownership, work gates and dispatch.
+"""The Director's channel ownership, and the scene facts its routing reads.
 
-INVARIANT -- sole writer: this module is the only writer of `SPECIALISTS`,
-`_CHANNEL_GATES` and `_CHANNEL_SPECIALISTS`. `register_specialist`,
-`unregister_specialists`, `_rebuild_channel_owners` and
-`_default_channel_gate` stay with the registries they mutate, even though
-the first two are the extension seam: lifting them elsewhere would make
-two modules co-writers of all three dicts, and a partial registration is
-a KeyError inside the Director on every beat.
+`SPECIALISTS` is the channel-ownership table: which owner (a "hand") answers
+for which `state_diff` channels. The five hands were model calls under the
+causal Director; since 2026-09-27 (the causal contract deleted) they are
+owners only -- the ONE encoder writes every channel
+(`agents/director_prose.py`), and its answer is split by this table so each
+owner's binding, validation and fold judge it (`director._run_specialists`).
 
-Also here: the prose-duty shipped-anyway table (`_PROSE_DUTY_SHIPPED`),
-the per-stage gate facts (`_gate_facts`) and dispatch
-(`_dispatch_specialists`). The prose-duty GATES themselves
-(`_PROSE_DUTY_GATES`, `_prose_gate_facts`, `_prose_author_scope`) stay in
-`agents/director.py` with the stage bodies.
+INVARIANT -- sole writer: this module is the only writer of `SPECIALISTS`
+and `_CHANNEL_SPECIALISTS` (`_rebuild_channel_owners` keeps the derived
+registries level with the table).
+
+Also here: the per-stage scene facts the decision model's channel choice
+reads (`_gate_facts`), and the note-key readers `director_fanout.span_owners`
+uses to say which owner a span is for.
 
 Import direction: nothing outside `agents/director*.py` may import an
 `agents/director_*` submodule, and no `director_*` module may import
@@ -20,7 +21,6 @@ Import direction: nothing outside `agents/director*.py` may import an
 """
 
 from collections.abc import Mapping
-from typing import get_origin
 
 from core.db import q
 from world.survival import survival_enabled
@@ -34,79 +34,19 @@ from .director_views import (
     _unratified_background_claims,
 )
 
-# ---------------------------------------------------------------------------
-# Director orchestration (design note 19, `docs/UNBUILT.md` §2.18).
-#
-# The resolve stage stays ONE pipeline step -- one steps/variants row, the
-# same step key, nothing new in agents/runtime.py -- and fans out INSIDE
-# itself, on every beat: a deterministic
-# dispatch decides which scoped specialists this beat needs, one prose author
-# owns resolved_event (with the delegated instruction blocks cold-stored out
-# of its sheet), each dispatched specialist reads the finished prose and owns
-# its state_diff channels, and deterministic assembly merges the channels
-# back before the existing cross-channel seams (movement backstop,
-# reconciliation, restraint floor) run on the merged diff exactly as they do
-# on an unsplit one. There is no unsplit path any more: it shipped behind
-# a flag while the two were measured against each other, the fan-out won on
-# stability, tokens and wall clock, and keeping the loser would only have
-# preserved a way to make the engine worse. What remains a choice is
-# CONCURRENCY -- see `fanout_is_parallel`.
-#
-# A HAND RUNS WHEN THE DIRECTOR'S RULING REACHES IT. The prose author (and
-# the interpret author, its structural mirror) rules to its bookkeepers
-# through two structured fields of its own output: `ledger_notes`, one line
-# per hand whose channels the beat settled, and `changes_asserted`, the
-# manifest of persistent changes with their categories. A specialist is
-# dispatched when either names it -- a note keyed by the hand or by one of
-# its channels, or a manifest entry in a category one of its channels
-# answers for. A hand neither names does not run: every sheet already tells
-# a hand with no note that "the Director settled nothing in your channels",
-# so a call made anyway was a call whose correct answer was `{}`. Measured
-# before this rule, with the six hands registered then: five of them ran on
-# an ordinary physical beat, and the sheet's own absence rule made most of
-# those answers empty by instruction.
-#
-# The per-channel gates below survive with a narrower job. They key on
-# SCENE STATE, never on the beat's prose -- prose matching as a boundary is
-# the silent-drop surface `docs/UNBUILT.md` §3.1 refuses -- and they decide
-# how much SHEET an addressed hand is assembled with: a channel whose subject
-# provably does not exist (nobody wears anything, no vitals tracked) loads no
-# chunk. Within an addressed hand they fail open, and the ruling can widen
-# them: a note keyed by channel puts that channel in scope whatever the gate
-# read, because a ruling is direct evidence and a gate is a prediction.
-#
-# What is still never silent: `_orchestration_scope_backstop` audits shipped
-# content against the SERVED scopes and reports through `tell_director`, and
-# a note keyed by a name no hand answers to is reported as unrouted rather
-# than guessed at (`_unrouted_rulings`). Neither guard drops anything.
-#
-# Dispatch is decided at THIS stage's time, from that stage's own output.
-# Nothing here assumes a plan fixed at the top of the turn, and
-# `director_interpret` does the same: it has its own specialists and its own
-# dispatch, against the ruling IT wrote, because characters declare between
-# the two stages and bring channels into play nothing at interpret time
-# could predict.
-# ---------------------------------------------------------------------------
 
-#: The specialists, one authority for channel ownership on the runtime side.
-#: prompts.SPECIALIST_PROMPT_SPECS holds each one's sheet material keyed by
-#: the same channel names, and schemas.SPECIALIST_CHANNELS the same map by
-#: step key; tools/project_check.py holds all three level. Dict order is the
-#: CANONICAL assembly order: merges happen in this order whatever order the
-#: parallel calls complete in, so a rerun with the same inputs produces the
-#: same merged diff.
+#: The channel owners, one authority for channel ownership on the runtime
+#: side; schemas.SPECIALIST_CHANNELS holds the same map by step key, and the
+#: pack's `specialists.<hand>.order` the order their chunks join the encoder's
+#: sheet. Dict order is the CANONICAL assembly order: owners' shares merge in
+#: this order, so a rerun with the same inputs produces the same merged diff.
 SPECIALISTS = {
     "body": {
         "step_key": "director_body",
-        "role": "director_body",
         "channels": ("attire", "conditions", "vitals", "overlays"),
-        # Surface appearance is part of every body job, not a category the
-        # Director must remember to request separately.
-        "default_channels": ("overlays",),
     },
     "social": {
         "step_key": "director_social",
-        "role": "director_social",
         # ...and, since 2026-09-04, the world's traffic: crowds, couriers,
         # tellings and the hearsay verdict, which the retired offscreen hand
         # carried. A crowd is a charter projection already and a courier is
@@ -123,13 +63,11 @@ SPECIALISTS = {
     },
     "contact": {
         "step_key": "director_contact",
-        "role": "director_contact",
         "channels": ("contact_ops", "contact_action_ops", "substance_ops",
                      "containment", "scales"),
     },
     "objects": {
         "step_key": "director_objects",
-        "role": "director_objects",
         "channels": ("entities", "remove_entities", "inventory_ops",
                      "artifact_ops", "destruction", "sensory_events"),
     },
@@ -140,7 +78,6 @@ SPECIALISTS = {
     # the last word on them.
     "spatial": {
         "step_key": "director_spatial",
-        "role": "director_spatial",
         # No `time`: a hand receives the rows selected for it, never the
         # beat, so the sum its sheet asked for ("a beat that holds several
         # things in sequence spans all of them") was over terms it could not
@@ -296,10 +233,10 @@ def _schema_list_channels():
     return list_shaped_fields(StateDiff)
 
 #: Channels that exist at ONE Director stage and not the other. Distinct from
-#: `_CHANNEL_GATES` below, and the distinction decides what happens to content:
-#: a gate says "this BEAT has no work here", so an emission is under-grant
-#: evidence and is KEPT (fail-open); this table says "this STAGE has nowhere to
-#: put it at all", so an emission is dropped. Anything absent here serves both
+#: a channel the decision model did not grant, and the distinction decides
+#: what happens to content: an ungranted emission is under-grant evidence and
+#: is KEPT (fail-open); this table says "this STAGE has nowhere to put it at
+#: all", so an emission is dropped. Anything absent here serves both
 #: stages.
 #:
 #: Measured, chat 98 turns 6, 26 and 30: the social specialist emitted
@@ -328,126 +265,6 @@ def channel_serves_stage(channel, stage):
 
 
 
-#: Per-CHANNEL sheet gates: can this beat have work in this channel? Every
-#: input is standing scene state or a structured declaration -- never prose.
-#: They decide how much sheet an ADDRESSED hand is assembled with, not
-#: whether it runs (`_dispatch_specialists`: the Director's ruling decides
-#: that). FAIL OPEN is the rule: a channel is gated out only when its
-#: subject provably does not exist (nobody wears anything, no vitals
-#: tracked, no notice posted and nothing carried to post, nothing
-#: destructible standing); where structure cannot decide, the channel is in
-#: scope, which is why most gates degrade to `physical_beat`. The scope a
-#: specialist is granted is the union the orchestrator measures itself by
-#: (scope_report), and `_orchestration_scope_backstop` reports any channel
-#: that shipped content without having been in a served scope.
-#:
-#: Two residuals are documented rather than closed, both backstopped:
-#: dressing a fully bare body (attire gated on `anyone_wears`; caught by the
-#: manifest half of the backstop) and posting an INVENTED claim with no
-#: notice standing and nothing carried (artifact_ops; caught by the
-#: reconciliation seam). `destruction` gates on a destructible ENTITY;
-#: a narrated destruction of a bare room keeps its own deterministic
-#: tripwire (`_narrated_destruction_subjects`), which stays core.
-_CHANNEL_GATES = {
-    "attire": lambda f: f["physical_beat"] and f["anyone_wears"],
-    "conditions": lambda f: f["physical_beat"] or f["active_conditions"],
-    "vitals": lambda f: f["physical_beat"] and f["vitals_tracked"],
-    "overlays": lambda f: f["physical_beat"] or f["overlays_present"],
-    "cast_changes": lambda f: f["physical_beat"],
-    "introductions": lambda f: f["speech_present"],
-    "obligations": lambda f: f["speech_present"] or f["physical_beat"],
-    # Evidence describes only a FINISHED beat.  Interpret serves the same
-    # specialists but has not adjudicated attempts yet, so granting it there
-    # would turn an intention into a witnessed outcome.
-    "public_evidence": lambda f: f["resolved_stage"] and (
-        f["speech_present"] or f["physical_beat"]),
-    "contact_ops": lambda f: f["physical_beat"] or f["contacts_standing"],
-    "contact_action_ops": lambda f: (
-        f["physical_beat"] or f["contacts_standing"]),
-    "substance_ops": lambda f: (f["physical_beat"]
-                                or f["material_effects_declared"]),
-    "containment": lambda f: f["physical_beat"] or f["containment_active"],
-    "scales": lambda f: f["physical_beat"] or f["scales_active"],
-    "entities": lambda f: f["physical_beat"],
-    "remove_entities": lambda f: f["physical_beat"],
-    "inventory_ops": lambda f: f["physical_beat"],
-    "artifact_ops": lambda f: f["physical_beat"] and (
-        f["notices_in_scene"] or f["reports_carried"]),
-    "destruction": lambda f: f["physical_beat"] and f["destructible_entity"],
-    # Geography: every one of these changes by an act (moving, building,
-    # sealing, sitting, rising), so the structural physical-beat fact is the
-    # gate. A room's light changing on a pure time-skip beat (dusk falls)
-    # is undecidable from state for the CHANNEL, which ships under
-    # `rooms` on the physical-beat fact anyway; the prose author's light
-    # DUTY reads the interpret stage's sustained acts for it
-    # (`director._prose_gate_facts`, `sun_can_move`).
-    "positions": lambda f: f["physical_beat"],
-    "rooms": lambda f: f["physical_beat"],
-    "remove_rooms": lambda f: f["physical_beat"],
-    "remove_adjacent": lambda f: f["physical_beat"],
-    "stations": lambda f: f["physical_beat"],
-    "poses": lambda f: f["physical_beat"],
-    # A channel is opened, closed, carried or installed by an ACT, so the
-    # structural physical-beat fact gates it -- but a beat where anyone is
-    # SPEAKING can also key a mic, which is the ordinary way an intercom gets
-    # used. Fails open across both, per the rule this table follows.
-    "comms_ops": lambda f: f["physical_beat"] or f["speech_present"],
-    "following_ops": lambda f: f["physical_beat"],
-    "location": lambda f: f["physical_beat"],
-    "weather": lambda _f: True,
-    # The world's traffic: gated on its subjects EXISTING, which is what
-    # makes this family cold in practice (0 fires in 2,243 beats) while
-    # staying genuinely dispatchable the moment a crowd stands in a room or
-    # a report is carried. Residuals, documented: a send/telling built on an
-    # INVENTED claim with nothing carried, and minting a brand-new crowd in
-    # a scene that had none -- both undecidable from state, both left to
-    # the reconciliation seam, and both 0-fire channels today.
-    "crowd_ops": lambda f: f["crowds_present"],
-    "courier_ops": lambda f: f["couriers_present"] or f["reports_carried"],
-    "telling_ops": lambda f: f["reports_carried"] or f["crowds_present"],
-    "ratified_claims": lambda f: f["unratified_claims_present"],
-    "contradicted_claims": lambda f: f["unratified_claims_present"],
-    "claim_dispositions": lambda _f: True,
-    "consequences": lambda _f: True,
-}
-
-
-# ---------------------------------------------------------------- extensions
-#
-# A sixth family, and a seventh, authored outside this tree.
-#
-# Every registry above is one an extension could only reach by mutating a
-# module global, and there are SIX of them (`SPECIALISTS`, `_CHANNEL_GATES`,
-# `_CHANNEL_SPECIALISTS`, `schemas.SPECIALIST_CHANNELS` + a model +
-# `SCHEMA_MAP`, `prompts.SPECIALIST_PROMPT_SPECS`, `providers.ROLES`). Patching
-# five of the six is not a degraded specialist -- `_dispatch_specialists` reads
-# `SPECIALISTS` live and then indexes `_CHANNEL_GATES` by channel, so an
-# unregistered gate is a KeyError inside the Director on every beat. This is
-# the same shape `add_stage` was built to end: the execution half already
-# worked, the REGISTRATION half was the part that forced a third party to edit
-# an engine file.
-#
-# Three deliberate differences from an in-tree specialist, each because the
-# alternative would be a quiet lie:
-#
-# * **Channels are namespaced `ext:<id>:<channel>`.** A family that could claim
-#   `attire` would silently take ownership of the body specialist's channel and
-#   replace it in the merged diff.
-# * **Its channels are EVIDENCE, not causality.** No commit domain reads an
-#   `ext:` channel, so a registered specialist's output lands in `state_diff`
-#   and changes nothing by itself. The extension acts on it from its own commit
-#   domain or stage -- which keeps the engine's own persistence honest and is
-#   the same annotator default `ext:` steps already have.
-# * **No prose-author chunk.** `PROSE_AUTHOR_SHEET` and its one-owner test live
-#   in this tree; an extension cannot add a block to the sheet, so a registered
-#   channel is written to the ledger and NOT narrated. Stated plainly in the
-#   guide, because "it committed but nobody mentioned it" is otherwise a
-#   fifty-beat mystery.
-#
-# The default gate fails open on `physical_beat`, which is the rule
-# `_CHANNEL_GATES` already states: over-dispatch costs one call, under-dispatch
-# silently drops work.
-
 #: channel -> the specialist that owns it. The reconciliation repair router
 #: reads this: an omission in a delegated channel is that channel's OWNER's to
 #: repair, at specialist cost, never the prose author's at full-core cost.
@@ -456,40 +273,6 @@ _CHANNEL_GATES = {
 #: was invisible to `_route_repair_omissions` while being perfectly visible to
 #: dispatch: a split that routes a repair to nobody.
 _CHANNEL_SPECIALISTS = {}
-
-#: THE CATEGORIES THE ENGINE SETTLES ITSELF, and therefore the ones that
-#: correctly reach no hand.
-#:
-#: Every other category resolves to a specialist, so a category that resolves
-#: to nobody is a change the engine cannot deliver -- which is exactly what
-#: `_unrouted_rulings` and `unnamed_work` exist to report. `speech` is the one
-#: category for which "no hand" is the right answer rather than a failure: the
-#: words come off the Director's own ledger row and are compiled straight into
-#: the `speech` channel (`director_evidence.speech_transforms`), because a
-#: hand asked to author dialogue is a hand inventing lines nobody said.
-#:
-#: A TOLERANCE, NOT AN INSTRUCTION -- and the prompt deliberately does not ask
-#: for it. `speech_transforms` keys off the row's `kind`, so the channel is
-#: built whether or not the Director ever writes this word. Asking for it was
-#: measured to be worse than silent: on the first live run the Director filed
-#: its spoken rows under `telling_ops`, which is CORRECT -- a telling is a
-#: social record and that is the hand that keeps it -- and an instruction to
-#: write `speech` instead would have diverted exactly those spans away from
-#: the social hand to no hand at all. So the word is accepted where a Director
-#: reaches for it and never requested.
-#:
-#: Kept here beside `_CHANNEL_SPECIALISTS` because this is the module that
-#: owns the ownership table, and a second table saying who owns what is the
-#: failure this file already carries three notes about.
-#: The categories no hand owns because the ENGINE settles them: `speech`
-#: (the delivered line) and, since 2026-09-15, `attention` -- a row that
-#: turns or looks, whose `look` field the commit reads into the facing.
-ENGINE_CATEGORIES = frozenset({"speech", "attention"})
-
-
-def _default_channel_gate(facts):
-    return facts["physical_beat"]
-
 
 def _rebuild_channel_owners():
     """The three channel registries, rebuilt together from `SPECIALISTS`.
@@ -520,129 +303,6 @@ def _rebuild_channel_owners():
 
 #: The engine's own five, populated the same way an extension's sixth will be.
 _rebuild_channel_owners()
-
-
-def register_specialist(ext_id, name, *, channels, prompt, gate=None,
-                        role="default", label=None, list_channels=None):
-    """Add a Director specialist family owned by an extension.
-
-    Returns its registered name. Raises on a name or channel that would
-    collide with the engine's own, because a silent collision here transfers
-    ownership of a real channel.
-
-    `list_channels` names the subset of `channels` whose value is a LIST.
-    Assembly coerces every other channel to a keyed table, so a list-valued
-    channel left undeclared arrives as `{}` -- dispatched, paid for and
-    discarded with nothing said.
-    """
-    ext_id = str(ext_id or "").strip()
-    name = str(name or "").strip()
-    if not ext_id or not name:
-        raise ValueError("a specialist needs an extension id and a name")
-    full_name = f"ext:{ext_id}:{name}"
-    wanted = [str(channel or "").strip() for channel in (channels or [])]
-    if not wanted or not all(wanted):
-        raise ValueError(f"specialist {full_name!r} declares no channels")
-    if not str(prompt or "").strip():
-        raise ValueError(f"specialist {full_name!r} declares no prompt")
-    listed = [str(channel or "").strip() for channel in (list_channels or [])]
-    unknown = sorted(set(listed) - set(wanted))
-    if unknown:
-        raise ValueError(
-            f"specialist {full_name!r} declares {unknown} list-shaped, "
-            "but does not own them")
-    owned = [f"ext:{ext_id}:{channel}" for channel in wanted]
-    for channel in owned:
-        existing = _CHANNEL_SPECIALISTS.get(channel)
-        if existing and existing != full_name:
-            raise ValueError(
-                f"channel {channel!r} already belongs to {existing!r}")
-
-    SPECIALISTS[full_name] = {
-        "step_key": full_name,
-        "role": str(role or "default"),
-        "channels": tuple(owned),
-        "ext_id": ext_id,
-        "list_channels": tuple(f"ext:{ext_id}:{channel}" for channel in listed),
-        "prompt": str(prompt),
-        "label": str(label or f"Specialist · {ext_id} · {name}"),
-    }
-    for channel in owned:
-        _CHANNEL_GATES[channel] = gate if callable(gate) else _default_channel_gate
-    _rebuild_channel_owners()
-    return full_name
-
-
-def unregister_specialists(ext_id):
-    """Drop every specialist one extension registered. Returns their names."""
-    prefix = f"ext:{str(ext_id or '')}:"
-    dropped = [name for name in SPECIALISTS if name.startswith(prefix)]
-    for name in dropped:
-        for channel in SPECIALISTS[name]["channels"]:
-            _CHANNEL_GATES.pop(channel, None)
-        del SPECIALISTS[name]
-    _rebuild_channel_owners()
-    return dropped
-
-
-def _extension_specialist_call(spec, scope, payload, language=None):
-    """Run an extension-owned specialist. The CALL itself lives elsewhere.
-
-    Deliberately a one-line delegation to `extension_runtime`. An extension
-    owns the shape of its own channels, so its call cannot go through
-    `_agent_json` -- that path validates against `schemas.SCHEMA_MAP`, which
-    only knows this engine's own steps. But the permissive parse that follows
-    from that must not live in THIS file: `test_stage_modules_stay_on_strict_path`
-    forbids `jparse` in a stage module, and the rule is right -- a Director
-    stage's own output reaches `commit.py` and must be strictly validated. The
-    extension's does not (no commit domain reads an `ext:` channel), so the
-    looseness is correct and belongs in the extension package, where it cannot
-    be reached for by a future engine stage.
-    """
-    from extension_runtime import run_specialist_call
-
-    return run_specialist_call(spec, scope, payload)
-
-
-def _shipped_transit_state(sd):
-    for entity in (sd.get("entities") or {}).values():
-        if not isinstance(entity, dict):
-            continue
-        if entity.get("interior_rooms"):
-            return True
-        state = entity.get("state") \
-            if isinstance(entity.get("state"), dict) else {}
-        if state.get("transit") or state.get("link"):
-            return True
-    return any(isinstance(room, dict) and room.get("parent_entity")
-               for room in (sd.get("rooms") or {}).values())
-
-
-def _shipped_darkened_room(sd):
-    from world.spatial import normalize_light
-    return any(
-        isinstance(room, dict) and room.get("light") is not None
-        and normalize_light(room.get("light")) in ("dim", "dark")
-        for room in (sd.get("rooms") or {}).values())
-
-
-def _shipped_bodiless_definition(sd):
-    from story.scene import is_ubiquitous_entity
-    return any(is_ubiquitous_entity(entity)
-               for entity in (sd.get("entities") or {}).values()
-               if isinstance(entity, dict))
-
-
-#: The prose half of the scope backstop: per gated chunk, deterministic
-#: evidence in the FINAL output that its duty shipped anyway. Only the
-#: chunks whose gate is a PREDICTION appear here; the exact-payload gates
-#: (other_players, mapping_proposal, hearsay, due_events, world_pressure,
-#: residue) read the very list their duty is about and cannot mispredict,
-#: and `road`'s op channels are already audited by the specialist-channel
-#: half (its gate facts are a superset of the offscreen dispatch gates).
-# The causal Director has no conditional prose duties. Kept as an empty
-# compatibility export for diagnostics that import the registry.
-_PROSE_DUTY_SHIPPED = {}
 
 
 #: The gate facts, in the order the record carries them.
@@ -918,9 +578,10 @@ def manifest_category_targets(category):
 
     Coarser, and that is the whole cost. A category naming a CHANNEL grants
     that channel; a category naming a HAND grants the hand its story's
-    channels, by the rule `_dispatch_specialists` already follows for a note
-    keyed by hand alone -- "a ruling that reached it is better evidence than
-    a prediction that nothing there could change". Fail-open, as that gate is.
+    channels, by the rule the causal dispatcher (`_dispatch_specialists`,
+    deleted 2026-09-27) followed for a note keyed by hand alone -- "a ruling
+    that reached it is better evidence than a prediction that nothing there
+    could change". Fail-open, as that gate was.
 
     Widening only: the union, not the fallback, because `note_key_targets`
     stops at the first kind that matched and `contact` matches BOTH -- the
@@ -937,307 +598,3 @@ def manifest_category_targets(category):
     return targets
 
 
-def _work_item_categories(item):
-    """The category names one work item lists, blank ones dropped."""
-    listed = item.get("categories") if isinstance(item, dict) else None
-    names = ([str(c) for c in listed]
-             if isinstance(listed, (list, tuple)) and listed
-             else [(item or {}).get("category")])
-    return [str(c).strip() for c in names if str(c or "").strip()]
-
-
-def unnamed_work(view):
-    """Work items whose categories reach NO hand and NO channel.
-
-    An item naming nothing at all is not one of these -- an element that
-    changes no ledger gets no category, and that is the common case (a
-    glance, a question, a look). This is the other thing: an item that DID
-    name a family, in a word the engine does not know.
-    """
-    orphans = []
-    for item in (list((view or {}).get("manifest") or [])
-                 + list((view or {}).get("spans") or [])):
-        if not isinstance(item, dict):
-            continue
-        names = [name for name in _work_item_categories(item)
-                 if name not in ENGINE_CATEGORIES]
-        if names and not any(manifest_category_targets(c) for c in names):
-            orphans.append(item)
-    return orphans
-
-
-def _ruling_for(name, view):
-    """What the Director's ruling addressed to this hand.
-
-    Returns ``(addressed_by, channels)``: which structured fields named the
-    hand -- ``"note"`` for a `ledger_notes` line keyed by the hand or by one
-    of its channels, ``"manifest"`` for a `changes_asserted` entry in a
-    category one of its channels answers for -- and the channels those
-    fields named DIRECTLY, in the hand's canonical order. A note keyed by
-    the hand's own name addresses it without naming a channel, which is
-    the one case dispatch has to fill in from the gates.
-
-    Keyed by hand OR by channel for the same reason `_note_for` is: measured
-    on gemini-3.6-flash, 8 of 11 notes were keyed by channel and 1 by hand,
-    and insisting on the hand's name would have left the hand undispatched
-    against a correct ruling about its own ledger.
-
-    A WORLD-PRESSURE TICK ADDRESSES THE HAND THAT CAN MAKE IT PERCEPTIBLE
-    (``"pressure"``, 2026-09-07). The must-tick floor forces a stalled
-    pressure to act on the page, and the author ticks it -- a structured op,
-    not prose -- without necessarily writing a note for the hand that owns
-    `sensory_events`. Measured in chat 117: 9 of 18 forced tremors never
-    reached the player's view. A tick names that channel directly, so the
-    hand runs and is shown the ticks (`_specialist_payload`); a tick with no
-    local manifestation costs one small call that emits nothing, which is
-    the fail-open rule the gate table already follows.
-    """
-    spec = SPECIALISTS[name]
-    addressed_by = []
-    named = []
-    own = set(spec["channels"])
-    # A LINE AIMED AT AN UNREGISTERED FIGURE ADDRESSES THE SOCIAL HAND.
-    # What a charter body does with a request -- carries the word, tells
-    # it on, refuses -- is written in this hand's ledgers (courier, telling
-    # and charter ops), and no category the author files on a speech span
-    # names them: speech is the one channel no hand writes. A message
-    # handed to the master of ceremonies therefore reached no hand at all
-    # and left the room by nobody's legs (scratch play 2026-09-14, chat 9
-    # turns 2-3). The addressee is the ruling.
-    if name == "social" and (view or {}).get("addressed_figures"):
-        addressed_by.append("addressee")
-    for key, value in ((view or {}).get("ledger_notes") or {}).items():
-        if not (isinstance(value, str) and value.strip()):
-            continue
-        for kind, target in note_key_targets(key):
-            if kind == "hand" and target == name:
-                if "note" not in addressed_by:
-                    addressed_by.append("note")
-            elif kind == "channel" and target in own:
-                if target not in named:
-                    named.append(target)
-                if "note" not in addressed_by:
-                    addressed_by.append("note")
-    # SPANS DISPATCH TOO, by the same categories as the manifest. A hand is
-    # addressed by any work item in its ledgers, whether the Director filed it
-    # as a categorized span of the input (`chunks`) or as an asserted change
-    # (`changes_asserted`) -- the second is what the first becomes when
-    # `DESIGN_SPECIALIST_CONTRACT.md`'s migration finishes.
-    work = list((view or {}).get("manifest") or []) \
-        + list((view or {}).get("spans") or [])
-    for item in work:
-        if not isinstance(item, dict):
-            continue
-        _listed = item.get("categories")
-        _names = ([str(c) for c in _listed]
-                  if isinstance(_listed, (list, tuple)) and _listed
-                  else [item.get("category")])
-        for kind, target in {t for c in _names
-                             for t in manifest_category_targets(c)}:
-            if kind == "hand" and target != name:
-                continue
-            if kind == "channel":
-                if target not in own:
-                    continue
-                if target not in named:
-                    named.append(target)
-            if "manifest" not in addressed_by:
-                addressed_by.append("manifest")
-    # A SPAN NAMED FOR NOBODY IS EVERYBODY'S TO DECLINE.
-    #
-    # "A ledger not reaching a specialist is as good as that ledger not
-    # existing" (the owner). A category in a word the engine does not know --
-    # `geography` for what `spatial` owns, measured twice on the drift run --
-    # addressed no hand at all, so the change was never written and the only
-    # remedy was a report that reaches the NEXT beat.
-    #
-    # Stated as the complement rather than as a table of synonyms, because a
-    # table can only ever cover the words somebody already saw: a span whose
-    # categories name somebody goes to whoever was named, and a span that
-    # names NOBODY goes to everybody. Safe by construction -- the hands own
-    # DISJOINT channels, so a hand handed a span outside its ledgers can only
-    # answer `not_mine`, which is the answer the scope comment below already
-    # expects of it.
-    if unnamed_work(view):
-        if "unnamed_work" not in addressed_by:
-            addressed_by.append("unnamed_work")
-    if (view or {}).get("pressure_ticks") and "sensory_events" in own:
-        if "sensory_events" not in named:
-            named.append("sensory_events")
-        if "pressure" not in addressed_by:
-            addressed_by.append("pressure")
-    named.sort(key=spec["channels"].index)
-    return addressed_by, named
-
-
-def _unrouted_rulings(view):
-    """The ledger_notes keys that reach no hand: not a hand's name, not a
-    channel any hand owns, under any spelling `_note_key_forms` accepts.
-
-    A ruling under such a key is the Director deciding something and the
-    engine being unable to say for whom, and the honest answer is to REPORT
-    it -- through `tell_director`, so the next beat's author sees the key it
-    used and the names that would have worked -- rather than to guess a hand
-    from the wording. Measured on the channel's first live week: 2 of 11
-    notes arrived as `pose` and `transit`; the first is `poses` with a letter
-    missing and is caught by the plural tolerance, the second names no
-    ledger and is exactly this case.
-    """
-    unrouted = []
-    for key, value in ((view or {}).get("ledger_notes") or {}).items():
-        if not (isinstance(value, str) and value.strip()):
-            continue
-        if not note_key_targets(key):
-            unrouted.append(str(key))
-    # AND A WORK ITEM IN A CATEGORY NOTHING ANSWERS TO. A chunk is the beat's
-    # unit of work now, so a category that resolves to no hand is a change the
-    # engine cannot deliver -- the same silence this function was written for,
-    # one field over.
-    #
-    # Measured 2026-09-10: with `reasoning_effort=low` on the Director the
-    # category vocabulary DRIFTS -- it filed `geography` twice for what
-    # `spatial` owns, on a run that was otherwise clean. Reported rather than
-    # guessed at, deliberately: a synonym table would have the engine
-    # inventing vocabulary on the Director's behalf and getting it wrong
-    # quietly, which is the failure `_note_key_forms` refuses in as many
-    # words. The next beat's author sees the word it used beside the names
-    # that route.
-    for item in (view or {}).get("spans") or []:
-        if not isinstance(item, dict):
-            continue
-        for category in _work_item_categories(item):
-            # `speech` reaches no hand ON PURPOSE (see `ENGINE_CATEGORIES`):
-            # the engine compiles it. Reporting it here would tell the next
-            # beat's author that the word it used routes nowhere and invite
-            # it to pick another one.
-            if category in ENGINE_CATEGORIES:
-                continue
-            if not manifest_category_targets(category):
-                if category not in unrouted:
-                    unrouted.append(category)
-    return unrouted
-
-
-def specialist_scope(name, channels):
-    """An invoked hand's granted channels, including its standing duties.
-
-    This widens a call already selected by dispatch, forwarding or repair;
-    it never selects a hand or adds completion requirements to a row.
-    """
-    spec = SPECIALISTS[name]
-    granted = set(channels or ()) | set(spec.get("default_channels") or ())
-    return [channel for channel in spec["channels"] if channel in granted]
-
-
-def _dispatch_specialists(ctx, sc, facts, view):
-    """The orchestrator measuring how much of a job each specialist needs
-    to do, from the Director's own ruling.
-
-    Per specialist: whether the ruling ADDRESSED it (`_ruling_for` -- a
-    `ledger_notes` line keyed by the hand or a channel it owns, or a
-    `changes_asserted` entry in one of its categories), and if so its
-    SCOPE -- the channels its sheet is assembled from. Scope is the union
-    of the channels the gates leave open and the channels the ruling named
-    directly; a hand addressed by name alone on a beat whose gates are all
-    closed is granted every channel its story keeps, because a ruling that
-    reached it is better evidence than a prediction that nothing there
-    could change. A hand the ruling did not address has an empty scope and
-    is not dispatched: no prompt, no payload, no output surface.
-
-    Dispatch is `bool(scope)`, not a second decision that could disagree
-    with the sheet assembly (prompts.specialist_prompt reads the same
-    value), and `_orchestration_scope_backstop` audits shipped content
-    against the same value. The record carries the two halves separately
-    -- `gated` (what the scene admitted) and `addressed_by` (what the ruling
-    said) -- so a reader of the step can tell "the ruling never reached this
-    hand" from "this story has no such ledger". `gated` is None, and the
-    view-derived facts absent, on a beat whose ruling reached no hand: there
-    the gates were never asked, because nothing they could say would change
-    a scope (C8).
-    """
-    dispatch = {}
-    rulings = {name: _ruling_for(name, view) for name in SPECIALISTS}
-    # THE GATES ARE CONSULTED WHEN A HAND COULD RUN, OR WHEN CONSULTING THEM
-    # IS FREE. They decide how much sheet an ADDRESSED hand loads, so on a
-    # beat whose ruling reached no hand at all they decide nothing -- and
-    # reading them would build five world views (crowds, couriers, notices,
-    # carried reports, unratified hearsay) that no payload will carry: 48 ms
-    # of a 205 ms deterministic interpret, measured on a copy of chat 114 at
-    # turn 13 (C8, review 2026-09-07). One decision for the whole beat, never
-    # per hand, so the record cannot say one hand's gates were read and its
-    # neighbour's were not. `facts` is a plain dict for callers that build one
-    # themselves -- nothing pending, so the gates are read exactly as before.
-    _consult = (
-        any(addressed for addressed, _named in rulings.values())
-        or any(spec.get("ext_id") for spec in SPECIALISTS.values())
-        or not getattr(facts, "pending", lambda: False)())
-    for name, spec in SPECIALISTS.items():
-        # `.get` with a fail-open default, not `[]`: a channel whose gate is
-        # missing is a registration bug, and raising KeyError here would turn
-        # it into a dead Director on every beat rather than one specialist
-        # running more often than it needs to.
-        gated = [channel for channel in spec["channels"]
-                 if _CHANNEL_GATES.get(channel, _default_channel_gate)(facts)
-                 ] if _consult else None
-        addressed_by, named = rulings[name]
-        scope = []
-        if spec.get("ext_id"):
-            # An extension family has no chunk in the prose author's sheet
-            # and no name in its output shape (docs/guides/EXTENSIONS.md), so
-            # no ruling can reach it. Its registered gate stays its dispatch:
-            # the fail-open rule the engine's own gates followed before the
-            # ruling took over.
-            scope = gated
-            addressed_by = ["gate"] if gated else []
-        elif addressed_by:
-            # A ruling widens a closed gate, never a ledger the story does
-            # not keep: a `vitals` entry in a survival-off story is a
-            # mis-categorisation for the backstop to say so about, not a
-            # reason to load the reserves chunk (chat 71's shape).
-            kept = [channel for channel in spec["channels"]
-                    if facts.get(_STRUCTURAL_CHANNEL_FACTS.get(channel),
-                                 True)]
-            # THE RULING NAMED A CHANNEL, OR IT NAMED ONLY THE HAND. Where it
-            # named one, the gates may add to it -- both are evidence about
-            # this beat. Where it named none, there is nothing for the gates
-            # to narrow: the Director said this hand has work and did not say
-            # which ledger, so every ledger the story keeps is in play. A
-            # narrower sheet there does not save the call, it wastes it --
-            # the hand runs, finds no block for the work it was handed, and
-            # answers `not_mine` about its own span.
-            _stage = "resolve" if facts.get("resolved_stage") else "interpret"
-            scope = ([channel for channel in kept
-                      if channel in gated or channel in named]
-                     if named else
-                     [channel for channel in kept
-                      if channel_serves_stage(channel, _stage)])
-            if not scope:
-                scope = kept
-            scope = specialist_scope(name, scope)
-        dispatch[name] = {
-            "run": bool(scope),
-            "scope": scope,
-            # None where the gates were not consulted (see `_consult`): the
-            # honest record of "nothing asked", never an empty list, which
-            # would read as "the scene admitted no channel".
-            "gated": gated,
-            "addressed_by": addressed_by,
-            "channels": list(spec["channels"]),
-        }
-    # ONE facts object shared by every hand, as before: the facts actually
-    # read. A BEAT THAT DISPATCHED A HAND RECORDS ALL OF THEM -- that hand's
-    # payload builds every one of these views a moment later
-    # (`director_interpret`'s extras), so completing the record costs the beat
-    # nothing it was not about to pay, and a fact a gate skipped by
-    # short-circuit (`artifact_ops` never asks about notices on a beat with no
-    # physical activity) stays in the record where it always was.
-    if hasattr(facts, "consulted"):
-        if any(state["run"] for state in dispatch.values()):
-            for key in facts:
-                facts[key]
-        consulted = facts.consulted()
-    else:
-        consulted = facts
-    for state in dispatch.values():
-        state["facts"] = consulted
-    return dispatch

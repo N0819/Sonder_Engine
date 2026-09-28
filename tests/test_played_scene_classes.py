@@ -1825,7 +1825,7 @@ def test_a_beat_that_says_nothing_about_a_running_source_is_told_nothing(temp_db
     assert temp_db.wget(cid, "engine_notices", []) == []
 
 
-def test_the_objects_hand_is_told_an_event_is_not_a_state():
+def test_the_encoder_is_told_an_event_is_not_a_state():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "language_packs"
     # The clause named the distinction from 2026-09-04 and had nowhere to
@@ -1833,11 +1833,13 @@ def test_the_objects_hand_is_told_an_event_is_not_a_state():
     # `_action` state key, neither of which anybody can hear. Since
     # 2026-09-05 there is a channel, so the clause points at THAT
     # (`docs/UNBUILT.md` \u00a7 1.117) -- the distinction is unchanged and the
-    # destination is real.
+    # destination is real. It rides the encoder's part for things that give
+    # something off (the objects hand that first carried it was deleted
+    # 2026-09-27).
     for lang, phrase in (("en", "AN EMISSION IS A STATE"),
                          ("ja", "\u767a\u3059\u308b\u3053\u3068\u306f\u72b6\u614b")):
-        text = (root / lang / "cards" / "system_prompts" / "specialists"
-                / "objects" / "chunks" / "entities.txt").read_text("utf-8")
+        text = (root / lang / "cards" / "system_prompts" / "encoder"
+                / "entities__emits.txt").read_text("utf-8")
         assert phrase in text, lang
         assert "sensory_events" in text, lang
         assert "state.running" in text, lang
@@ -2454,10 +2456,10 @@ def test_a_walk_stopped_by_one_shut_door_lands_at_the_door(temp_db,
     meets one shut one: she is in the hallway, and the bedroom is contested
     -- not "position unchanged"."""
     import agents.director as director
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
 
     ctx = _movement_ctx(temp_db, _flat_4b_scene(), "noors_bedroom")
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         # The beat wrote the arrival's prose without asserting the position.
         {"state_diff": {
             "poses": {"The Stranger": {
@@ -2484,10 +2486,10 @@ def test_the_resolve_still_owns_whether_the_door_opened(temp_db, monkeypatch):
     beat itself says she went through, the walk stands -- the same trust the
     one-hop branch has always extended."""
     import agents.director as director
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
 
     ctx = _movement_ctx(temp_db, _flat_4b_scene(), "noors_bedroom")
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"The Stranger": "noors_bedroom"}}}))
 
     sd = director.director_resolve(ctx, nonce=0)["state_diff"]
@@ -2502,10 +2504,10 @@ def test_a_walk_through_a_wall_is_still_refused_whole(temp_db, monkeypatch):
     counted, so none of the contest rule applies: the position is stripped
     and the refusal is recorded for the merge to subtract."""
     import agents.director as director
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
 
     ctx = _movement_ctx(temp_db, _flat_4b_scene(), "balcony")
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"The Stranger": "balcony"}}}))
 
     sd = director.director_resolve(ctx, nonce=0)["state_diff"]
@@ -2522,10 +2524,10 @@ def test_a_companion_stops_where_the_mover_stops(temp_db, monkeypatch):
     edges, so it reaches what the mover reached -- never the room past the
     door the mover could not open, and never one the mover cannot reach."""
     import agents.director as director
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
 
     ctx = _movement_ctx(temp_db, _flat_4b_scene(), "noors_bedroom")
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"Mara": "noors_bedroom"}}}))
 
     sd = director.director_resolve(ctx, nonce=0)["state_diff"]
@@ -2535,14 +2537,16 @@ def test_a_companion_stops_where_the_mover_stops(temp_db, monkeypatch):
     assert any("Held the group together" in w for w in ctx.warnings)
 
 
-def test_a_fully_passable_multi_hop_walk_is_unchanged(temp_db, monkeypatch):
+def test_a_fully_passable_multi_hop_walk_is_unchanged(temp_db, monkeypatch,
+                                                      prose_director):
     """The counter-case that keeps the rule honest: with the door open the
     walk commits its destination and says nothing about doors."""
     import agents.director as director
+    from tests.director_fakes import prose_resolve_agent
 
     ctx = _movement_ctx(temp_db, _flat_4b_scene(hall_to_bedroom="open_door"),
                         "noors_bedroom")
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     sd = director.director_resolve(ctx, nonce=0)["state_diff"]
 
@@ -3542,16 +3546,15 @@ def test_a_way_through_is_the_edges_and_never_a_things_state():
 
 
 def test_both_packs_say_a_way_through_is_not_a_things_state():
-    """The rule lives in the objects card, where the hand that would write
-    it reads -- and in both packs, like every other rule the engine leans
-    on."""
+    """The rule lives in the encoder's entities chunk, where the one writer
+    of a thing's state reads -- and in both packs, like every other rule the
+    engine leans on."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "language_packs"
     for lang, needle in (
-            ("en", "AND WHETHER A WAY THROUGH IS OPEN IS NEVER ONE OF THEM"),
-            ("ja", "通り道が開いているかどうかも、それらのキーには決して含まれません")):
-        card = (root / lang / "cards" / "system_prompts" / "specialists"
-                / "objects" / "chunks" / "entities.txt").read_text(
-                    encoding="utf-8")
+            ("en", "WHETHER A WAY THROUGH IS OPEN IS NEVER A STATE KEY EITHER"),
+            ("ja", "通り道が開いているかどうかも決して state のキーではありません")):
+        card = (root / lang / "cards" / "system_prompts" / "encoder"
+                / "entities.txt").read_text(encoding="utf-8")
         assert needle in card, lang

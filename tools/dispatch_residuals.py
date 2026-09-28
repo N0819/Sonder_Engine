@@ -30,78 +30,19 @@ from __future__ import annotations
 import argparse
 import collections
 import os
-import sqlite3
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.dispatch_replay import (BUCKET_SECONDS, DIRECTOR_STEPS,  # noqa: E402
-                                   NOT_CHANNEL_CONTENT, _parse, _produced)
 
 
 def residuals(db_path):
-    from agents.director import _ruling_for
-    from agents.director_scopes import SPECIALISTS
-    try:
-        from agents.director_evidence import _normalize_omission_category as norm
-    except ImportError:                                   # pragma: no cover
-        def norm(value):
-            return str(value or "").strip().lower()
-
-    db = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True)
-    try:
-        blobs = dict(db.execute("select hash, body from llm_blobs"))
-        rows = db.execute(
-            "select turn_id, step_key, role, started, response_hash "
-            "from llm_capture where ok=1 and step_key in (?, ?) "
-            "and response_hash is not null", DIRECTOR_STEPS)
-        beats = collections.defaultdict(list)
-        where = {}
-        for turn, step, role, started, digest in rows:
-            key = (turn, step, round((started or 0) / BUCKET_SECONDS))
-            beats[key].append((role, digest))
-            where[key] = (turn, step)
-    finally:
-        db.close()
-
-    by_role = {spec["role"]: name for name, spec in SPECIALISTS.items()}
-    found = []
-    for key, calls in beats.items():
-        author = [d for role, d in calls if role == "director"]
-        if not author:
-            continue
-        ruling = _parse(blobs.get(author[0]))
-        if not isinstance(ruling, dict):
-            continue
-        manifest = [dict(item, category=norm(item.get("category")))
-                    for item in (ruling.get("changes_asserted") or [])
-                    if isinstance(item, dict)]
-        if not manifest:
-            continue                       # `--filed-only`, which is the case
-        notes = ruling.get("ledger_notes") or {}
-        today = {"ledger_notes": notes, "manifest": manifest}
-        categories_only = {"ledger_notes": {}, "manifest": manifest}
-        for role, digest in calls:
-            name = by_role.get(role)
-            if name is None:
-                continue
-            if not _ruling_for(name, today)[0]:
-                continue
-            if _ruling_for(name, categories_only)[0]:
-                continue
-            parsed = _parse(blobs.get(digest))
-            if not _produced(parsed):
-                continue                   # skipped, and empty anyway: a save
-            found.append({
-                "turn": where[key][0], "step": where[key][1], "hand": name,
-                "note": str((notes or {}).get(name) or ""),
-                "note_keys": sorted(notes) if isinstance(notes, dict) else [],
-                "categories": sorted({str(i.get("category"))
-                                      for i in manifest}),
-                "filled": sorted(k for k, v in (parsed or {}).items()
-                                 if v and k not in NOT_CHANNEL_CONTENT),
-            })
-    return found
+    """Retired with the causal dispatch (see `dispatch_replay.replay`)."""
+    raise SystemExit(
+        "this replays the causal Director's ruling-keyed dispatch "
+        "(`director_scopes._ruling_for`), deleted with it on 2026-09-27; "
+        "run it from a checkout of an earlier commit (e.g. a8c41fde) "
+        "against a copy of the database")
 
 
 def main(argv=None):

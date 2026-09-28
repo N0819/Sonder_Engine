@@ -16,13 +16,15 @@ time work item in the first place. Every beat therefore fell to
 froze the off-screen world.
 
 The prose author is the one agent that sees the beat whole, because it cuts
-the steps. So it prices each step it cut and code adds them up.
+the steps. So it prices each step it cut and code adds them up. Since
+2026-09-27 the steps are the encoder's events -- the encoder cuts the prose
+Director's account into them -- so the encoder prices each one.
 """
 
 import json
 
 from agents.director import (SPECIALISTS, _DELEGATED_CHANNELS,
-                             _specialist_ledger, normalize_causal_ledger)
+                             normalize_causal_ledger)
 from llm import prompts, schemas
 from world.mechanics import (UNCLAIMED_BEAT_SECONDS, beat_end_elapsed,
                              beat_time_from_spans, time_diff_claims)
@@ -107,6 +109,9 @@ class TestTheRowCarriesIt:
         entry = schemas.CausalLedgerEntry(**_row(1, seconds=7))
         assert entry.seconds == 7.0
         assert schemas.CausalLedgerEntry(**_row(1)).seconds is None
+        # And on the encoder's event, the model its answer validates against
+        # since 2026-09-27.
+        assert schemas.UnifiedEvent(seconds=7).seconds == 7.0
 
 
 class TestTheBeatIsBothLedgers:
@@ -146,17 +151,14 @@ class TestNoHandIsAskedForIt:
     def test_no_spatial_sheet_still_teaches_the_channel(self):
         """The chunk went with the grant. A sheet that still asked for a
         duration would be instructing a hand to write a channel the
-        orchestrator now drops from it -- the inverse of the defect."""
-        spec = prompts.SPECIALIST_PROMPT_SPECS["spatial"]
-        assert "time" not in spec["chunks"]
-        assert "time" not in spec["order"]
+        orchestrator now drops from it -- the inverse of the defect.
 
-    def test_a_hand_is_never_shown_the_price(self):
-        """What a hand could do with a duration is re-derive a total it cannot
-        see the terms of -- the same reasoning that keeps `authority_mode`
-        off a hand's row."""
-        visible = _specialist_ledger(_row(1, seconds=30))
-        assert "seconds" not in visible
+        Since 2026-09-27 the sheet is the encoder's card: no `time` chunk on
+        it, and `time` in no owner's channel order."""
+        for language in ("en", "ja"):
+            card = prompts._prompt_card(language)
+            assert "time" not in card["encoder"], language
+            assert "time" not in card["specialists"]["spatial"]["order"], language
 
 
 class TestTheAuthorIsAsked:
@@ -164,14 +166,22 @@ class TestTheAuthorIsAsked:
     how `time` came to have a typed home and zero writers."""
 
     def test_every_shipped_author_sheet_asks_for_the_span(self):
-        for language in ("en", "ja"):
-            sheet = prompts.prose_author_prompt(None, language=language)
-            assert "seconds" in sheet, language
+        """The encoder's core, which ships on every beat whatever is granted
+        (the prose author's sheet until 2026-09-27)."""
+        asks = {
+            "en": ("- seconds: how long this step took in story seconds, at "
+                   "the scale the prose gives it. Code adds them up."),
+            "ja": ("- seconds: この段階にかかった物語上の秒数。記述が与える尺度で。"
+                   "合計はコードが出します。"),
+        }
+        for language, line in asks.items():
+            sheet = prompts.unified_specialist_prompt([], language, [])
+            assert line in sheet, language
 
     def test_the_worked_example_prices_its_own_steps(self):
-        """The example is the shape the model copies. An envelope whose rows
+        """The example is the shape the model copies. An envelope whose events
         carry no span teaches that the field is optional in practice."""
-        sheet = prompts.prose_author_prompt(None, language="en")
-        envelope = sheet[sheet.index('{"ledgers"'):]
-        rows = json.loads(envelope[:envelope.rindex("}") + 1])["ledgers"]
-        assert rows and all("seconds" in row for row in rows)
+        sheet = prompts.unified_specialist_prompt([], "en", [])
+        envelope = sheet[sheet.index('{"events"'):]
+        events = json.loads(envelope[:envelope.rindex("}") + 1])["events"]
+        assert events and all("seconds" in event for event in events)

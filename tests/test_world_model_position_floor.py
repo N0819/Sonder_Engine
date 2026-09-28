@@ -29,7 +29,12 @@ import time
 
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.character_schema import default_character_data
-from tests.helpers import fanout_resolve_agent
+from tests.director_fakes import prose_resolve_agent
+import pytest
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 
 def _ctx(temp_db, *, rooms, positions, entities=None, to_room="hall",
@@ -92,7 +97,7 @@ def test_a_legal_declared_move_does_not_exempt_a_body_in_another_room(
 
     ctx = _ctx(temp_db, rooms=WALLED,
                positions={"The Stranger": "lobby", "Mara": "cell"})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"The Stranger": "hall",
                                       "Mara": "hall"}}}))
 
@@ -119,7 +124,7 @@ def test_a_co_located_body_still_crosses_with_the_honoured_contested_move(
     }
     ctx = _ctx(temp_db, rooms=contested,
                positions={"The Stranger": "lobby", "Mara": "lobby"})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"The Stranger": "hall",
                                       "Mara": "hall"}}}))
 
@@ -147,7 +152,7 @@ def test_a_co_destined_body_with_its_own_route_still_passes(
     }
     ctx = _ctx(temp_db, rooms=rooms,
                positions={"The Stranger": "lobby", "Mara": "cell"})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"The Stranger": "hall",
                                       "Mara": "hall"}}}))
 
@@ -170,7 +175,7 @@ def test_an_unregistered_presence_is_a_body_the_floor_knows(
                entities={"hotel_clerk": {"kind": "person",
                                          "name": "Hotel Clerk"}},
                to_room="hall")
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"hotel_clerk": "hall"}}}))
 
     out = director.director_resolve(ctx, nonce=0)
@@ -191,7 +196,7 @@ def test_a_vehicle_stays_a_vehicle(temp_db, monkeypatch):
                    "kind": "contraption", "name": "Service Lift",
                    "interior_rooms": ["lift_interior"]}},
                to_room="hall")
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"service_lift": "hall"}}}))
 
     out = director.director_resolve(ctx, nonce=0)

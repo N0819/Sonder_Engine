@@ -309,13 +309,18 @@ def test_the_perception_view_carries_a_repaired_bodys_pronouns(
 
 
 def test_the_director_roster_carries_a_repaired_bodys_pronouns(
-        temp_db, monkeypatch):
+        temp_db, monkeypatch, prose_director):
     """`director_resolve`'s `_body_pronouns` roster exists because a pronoun
     was continued onto a he/him body across the room (PM22, 2026-09-05). A
-    body the roster holds no paradigm for is that defect again."""
+    body the roster holds no paradigm for is that defect again.
+
+    Since 2026-09-27 the prose Director writes pronouns itself, so its own
+    payload carries the same paradigm (`director_prose.pronouns_of_people`)."""
     import agents.director as director
+    from tests.director_fakes import prose_resolve_agent
     ctx, _char_id = _pronoun_ctx(temp_db)
     rosters = []
+    calls = []
 
     # Patched on `agents.director`: the caller binds the guard by name at
     # import, so that is the module resolving it (patching `agents.common`,
@@ -326,10 +331,12 @@ def test_the_director_roster_carries_a_repaired_bodys_pronouns(
 
     monkeypatch.setattr(director, "_check_character_speech_authority",
                         fake_check)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "resolved_event": "The hall stands quiet.", "dialogue_log": []})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": "The hall stands quiet."}, calls=calls))
     director.director_resolve(ctx, nonce=0)
 
     assert rosters, "the speech-authority guard was never handed a roster"
     assert rosters[0].get("Kessa", {}).get("subject") == "she", (
         f"the roster read pronouns off the stored blob: {rosters[0]!r}")
+    prose_payload = next(sent for key, sent in calls if key == "director_prose")
+    assert prose_payload["pronouns"]["Kessa"]["subject"] == "she"

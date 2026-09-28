@@ -130,10 +130,10 @@ def test_noop_when_no_quote_repeats():
 
 
 def test_director_and_narrator_carry_the_authority_rules():
-    """Entity-local authority at the causal Director; B4 at the narrator."""
-    from llm.prompts import DEFAULT_PROMPTS
-    assert ("Authority belongs to the adjacent identity" in
-            DEFAULT_PROMPTS["director_interpret"])
-    assert "actor_only" in DEFAULT_PROMPTS["director_interpret"]
+    """Entity-local authority at the Director; B4 at the narrator."""
+    from llm.prompts import DEFAULT_PROMPTS, prose_director_prompt
+    interpret = prose_director_prompt("interpret", "en")
+    assert "Authority belongs to the adjacent identity" in interpret
+    assert "actor_only" in interpret
     assert "PERCEPTION IS NOT MEMORY" in DEFAULT_PROMPTS["narrator"]
     assert "NO ORIGINATED PLAYER CONDUCT" in DEFAULT_PROMPTS["narrator"]

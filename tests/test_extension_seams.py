@@ -37,12 +37,6 @@ def _api(ext_id):
     return extension_runtime._apis[ext_id]
 
 
-def io_read(relative):
-    from pathlib import Path
-    return (Path(__file__).resolve().parents[1] / relative).read_text(
-        encoding="utf-8")
-
-
 @pytest.fixture
 def bare(ext_root):
     """One installed, enabled extension with a python entry that does nothing.
@@ -527,252 +521,6 @@ class TestHotLoadableAssets:
         assert extension_runtime.ui_styles() == ""
 
 
-# ------------------------------------------------------------ specialists
-
-
-class TestDirectorSpecialists:
-    """A sixth Director family, authored outside this tree.
-
-    The reason this needed an API rather than a documented monkeypatch: the
-    six registries a specialist lives in are not independent. `SPECIALISTS` is
-    read live by `_dispatch_specialists`, which then indexes `_CHANNEL_GATES`
-    by channel -- so patching five of six is not a degraded specialist, it is a
-    KeyError inside the Director on every beat.
-    """
-
-    def test_a_registered_family_joins_the_fan_out(self, temp_db, bare):
-        from agents import director
-
-        full = bare.add_director_specialist(
-            "morale", channels=["morale_ops"],
-            prompt="Judge the crew's morale from the beat.")
-
-        assert full == "ext:seams:morale"
-        assert full in director.SPECIALISTS
-        assert director.SPECIALISTS[full]["channels"] == ("ext:seams:morale_ops",)
-
-    def test_channels_are_namespaced_so_a_family_cannot_steal_one(
-            self, temp_db, bare):
-        """Owning `attire` would silently replace the body specialist's work.
-
-        The merge assigns a channel to whichever family was scoped to it, so a
-        collision is not an error downstream -- it is a takeover.
-        """
-        from agents import director
-
-        bare.add_director_specialist(
-            "wardrobe", channels=["attire"], prompt="Track clothing.")
-
-        assert director._CHANNEL_SPECIALISTS["attire"] == "body"
-        assert director._CHANNEL_SPECIALISTS["ext:seams:attire"] == "ext:seams:wardrobe"
-
-    def test_two_extensions_cannot_claim_the_same_channel(self, temp_db,
-                                                          ext_root):
-        for name in ("first", "second"):
-            _write_extension(ext_root, name, {
-                "id": name, "version": "1.0.0", "ext_api": 1, "name": name,
-                "capabilities": {"python": "extension.py"},
-            }, {"extension.py": "def register(api):\n    pass\n"})
-        _enable("first", "second")
-        _api("first").add_director_specialist(
-            "a", channels=["shared"], prompt="one")
-        # Namespacing means they do NOT collide -- each owns its own.
-        _api("second").add_director_specialist(
-            "b", channels=["shared"], prompt="two")
-
-        from agents import director
-        assert director._CHANNEL_SPECIALISTS["ext:first:shared"] == "ext:first:a"
-        assert director._CHANNEL_SPECIALISTS["ext:second:shared"] == "ext:second:b"
-
-    def test_the_channel_owner_map_is_rebuilt_not_frozen_at_import(
-            self, temp_db, bare):
-        """It used to be a module-level comprehension over `SPECIALISTS`.
-
-        A family registered afterwards was then invisible to
-        `_route_repair_omissions` while being perfectly visible to dispatch --
-        a split that routes a repair to nobody and reports nothing.
-        """
-        from agents import director
-
-        bare.add_director_specialist(
-            "weather", channels=["front"], prompt="Track the weather.")
-        assert "ext:seams:front" in director._CHANNEL_SPECIALISTS
-
-    def test_the_delegated_channel_list_is_rebuilt_not_frozen_at_import(
-            self, temp_db, bare):
-        """The sibling of the owner map, and it was frozen the same way.
-
-        `_DELEGATED_CHANNELS` is what the scope backstop walks to ask "did
-        anything produce content in a channel nobody was scoped to?" Frozen at
-        import, it names only the engine's own -- so the gate-mispredict report
-        is blind to every extension channel there is.
-        """
-        from agents import director
-
-        bare.add_director_specialist(
-            "morale", channels=["ops"], prompt="p")
-        assert "ext:seams:ops" in director._DELEGATED_CHANNELS
-        extension_runtime.disable_extension("seams")
-        assert "ext:seams:ops" not in director._DELEGATED_CHANNELS
-
-    def test_a_family_may_declare_a_channel_list_shaped(self, temp_db, bare):
-        """Assembly coerces a channel to dict unless it is known list-shaped.
-
-        For the engine's own that shape is derived from `StateDiff`. An
-        extension's channel is in no schema, so the shape has to be declared --
-        and before it could be, a family that emitted a list had its entire
-        output replaced by `{}` at assembly: dispatched, paid for, discarded,
-        with no warning anywhere.
-        """
-        from agents import director
-
-        bare.add_director_specialist(
-            "morale", channels=["ops", "meter"], list_channels=["ops"],
-            prompt="p")
-
-        assert director._normalized_channel_value(
-            "ext:seams:ops", [{"note": "steady"}]) == [{"note": "steady"}]
-        # Undeclared stays dict-shaped, which is the documented default.
-        assert director._normalized_channel_value(
-            "ext:seams:meter", [{"note": "steady"}]) == {}
-        assert director._normalized_channel_value(
-            "ext:seams:meter", {"level": 3}) == {"level": 3}
-
-    def test_a_list_channel_must_be_one_of_the_declared_channels(
-            self, temp_db, bare):
-        """Otherwise the typo is a shape that never applies, silently.
-
-        `ExtensionError`, not the `ValueError` the Director's own function
-        raises: a host reads this on a settings row beside every other
-        registration refusal, so it arrives in the same shape and names the
-        same extension they do.
-        """
-        with pytest.raises(ExtensionError, match="seams"):
-            bare.add_director_specialist(
-                "morale", channels=["ops"], list_channels=["opz"], prompt="p")
-
-    def test_a_family_is_gated_and_defaults_to_failing_open(self, temp_db,
-                                                            bare):
-        from agents import director
-
-        bare.add_director_specialist(
-            "always", channels=["a"], prompt="p")
-        bare.add_director_specialist(
-            "never", channels=["b"], prompt="p", gate=lambda facts: False)
-
-        facts = {"physical_beat": True}
-        assert director._CHANNEL_GATES["ext:seams:a"](facts) is True
-        assert director._CHANNEL_GATES["ext:seams:b"](facts) is False
-        assert director._CHANNEL_GATES["ext:seams:a"]({"physical_beat": False}) is False
-
-    def test_dispatch_scopes_the_family_like_any_other(self, temp_db, bare):
-        from agents import director
-
-        bare.add_director_specialist(
-            "morale", channels=["ops"], prompt="p",
-            gate=lambda facts: facts["physical_beat"])
-        # Mirrors `director_scopes._gate_facts`'s returned keys. A gate reads
-        # `facts[key]`, so a fact this list has not heard of raises rather
-        # than gating -- which is what happened when `public_evidence` landed
-        # keying on `resolved_stage`. The list is hand-kept because the real
-        # builder needs a chat row and does DB reads; when it next drifts, the
-        # symptom is a KeyError naming the missing fact, which is a legible
-        # enough failure to be worth the duplication.
-        facts = {key: False for key in (
-            "physical_beat", "speech_present", "resolved_stage",
-            "anyone_wears",
-            "active_conditions", "vitals_tracked", "overlays_present",
-            "contacts_standing", "containment_active", "scales_active",
-            "material_effects_declared", "notices_in_scene", "reports_carried",
-            "destructible_entity", "crowds_present", "couriers_present",
-            "unratified_claims_present")}
-
-        # No ruling in the view: the engine's own hands would all stay
-        # home, and an extension family -- which no ruling can name --
-        # is dispatched by its gate alone.
-        cold = director._dispatch_specialists(None, None, facts, {})
-        assert cold["ext:seams:morale"]["run"] is False
-
-        hot = director._dispatch_specialists(None, None,
-                                             {**facts, "physical_beat": True},
-                                             {})
-        assert hot["ext:seams:morale"]["run"] is True
-        assert hot["ext:seams:morale"]["scope"] == ["ext:seams:ops"]
-        assert hot["ext:seams:morale"]["addressed_by"] == ["gate"]
-        assert all(not state["run"] for name, state in hot.items()
-                   if not name.startswith("ext:"))
-
-    def test_disabling_takes_the_family_back_out(self, temp_db, bare):
-        """A disabled extension whose specialist stayed would be dispatched --
-        and paid for -- on every beat forever."""
-        from agents import director
-
-        bare.add_director_specialist("morale", channels=["ops"], prompt="p")
-        extension_runtime.disable_extension("seams")
-
-        assert "ext:seams:morale" not in director.SPECIALISTS
-        assert "ext:seams:ops" not in director._CHANNEL_GATES
-        assert "ext:seams:ops" not in director._CHANNEL_SPECIALISTS
-
-    def test_the_engines_own_six_are_untouched_throughout(self, temp_db, bare):
-        from agents import director
-
-        before = {name: spec["channels"]
-                  for name, spec in director.SPECIALISTS.items()
-                  if not spec.get("ext_id")}
-        bare.add_director_specialist("morale", channels=["ops"], prompt="p")
-        extension_runtime.disable_extension("seams")
-        after = {name: spec["channels"]
-                 for name, spec in director.SPECIALISTS.items()
-                 if not spec.get("ext_id")}
-
-        assert before == after
-        assert set(before) == {"body", "social", "contact", "objects",
-                               "spatial"}
-
-    def test_a_family_with_no_channels_or_no_prompt_is_refused(self, temp_db,
-                                                               bare):
-        for kwargs in ({"channels": [], "prompt": "p"},
-                       {"channels": ["ops"], "prompt": "  "},
-                       {"channels": [""], "prompt": "p"}):
-            with pytest.raises(ExtensionError, match="seams"):
-                bare.add_director_specialist("bad", **kwargs)
-
-    def test_it_runs_loose_because_schema_map_cannot_know_it(self, temp_db,
-                                                             bare, monkeypatch):
-        """An extension owns the shape of its own channels.
-
-        `_agent_json` validates against `schemas.SCHEMA_MAP`, which only knows
-        this engine's steps, so a registered family must take the parse and not
-        the schema -- the same split `api.llm_json` makes.
-        """
-        from llm import schemas
-        from agents import director
-
-        full = bare.add_director_specialist(
-            "morale", channels=["ops"], prompt="Judge morale.")
-        assert full not in schemas.SCHEMA_MAP
-
-        captured = {}
-
-        def fake_complete(role, system, user, **kwargs):
-            captured.update({"role": role, "system": system})
-            return '{"ext:seams:ops": [{"note": "steady"}]}'
-
-        monkeypatch.setattr("llm.providers.chat_complete", fake_complete)
-        out = director._extension_specialist_call(
-            director.SPECIALISTS[full], ["ext:seams:ops"], {"beat": "x"})
-        # The permissive parse lives in extension_runtime, not in the Director:
-        # `test_stage_modules_stay_on_strict_path` forbids `jparse` in a stage
-        # module, and that rule is protecting the engine's own stages, whose
-        # output DOES reach commit.py.
-        assert "jparse(" not in io_read("agents/director.py")
-
-        assert out == {"ext:seams:ops": [{"note": "steady"}]}
-        assert "Judge morale." in captured["system"]
-        assert "ext:seams:ops" in captured["system"]
-
-
 # ------------------------------------------------------------ introspection
 
 
@@ -788,20 +536,15 @@ class TestRegistrationListings:
         assert extension_runtime.registered_commit_domains() == [
             {"ext_id": "seams", "name": "keep", "on_error": "fail"}]
 
-        bare.add_director_specialist("morale", channels=["ops"], prompt="p")
-        assert extension_runtime.registered_specialists() == [
-            {"ext_id": "seams", "name": "ext:seams:morale"}]
-
     def test_disabling_forgets_every_registration(self, temp_db, bare):
         bare.add_route("/one", lambda request: {})
         bare.add_commit_domain("keep", lambda view: None)
         bare.on_character_payload(lambda payload, info: None)
-        bare.add_director_specialist("morale", channels=["ops"], prompt="p")
 
         extension_runtime.disable_extension("seams")
 
         assert extension_runtime.registered_routes() == []
         assert extension_runtime.registered_commit_domains() == []
-        assert extension_runtime.registered_specialists() == []
         assert extension_runtime.dispatch_character_payload(
             _StubCtx(chat_id=_chat(temp_db)), 7, {"a": 1}) == {"a": 1}
+

@@ -2,7 +2,7 @@
 
 from agents.director import (
     _unfulfilled_completion_requests,
-    _granted_event_ids, _specialist_span_slice, _specialist_ledger,
+    _granted_event_ids, _specialist_span_slice,
 )
 
 
@@ -36,16 +36,6 @@ def test_legacy_social_rows_without_chrono_keep_their_original_order():
     assert _specialist_span_slice("social", view) == view["spans"]
 
 
-def test_public_ledger_keeps_source_citation_but_hides_all_correlation_numbers():
-    visible = _specialist_ledger({
-        "chrono_id": 3, "event_id": 3, "item_id": 7, "item_ids": [7],
-        "item_names": ["Cup"], "_items": [{"id": 7, "name": "Cup"}],
-        "source_event_id": "turn:1:raw", "event": "sets down the cup",
-    })
-    assert visible == {"item_names": ["Cup"], "source_event_id": "turn:1:raw",
-                       "event": "sets down the cup"}
-
-
 def test_already_true_station_does_not_acquit_a_pose_the_hand_was_never_asked_for():
     span = {"chrono_id": 2, "event_id": 2, "item_id": 7,
             "item_ids": [7], "item_names": ["Mara"], "categories": ["stations"]}
@@ -63,3 +53,4 @@ def test_already_true_station_does_not_acquit_a_pose_the_hand_was_never_asked_fo
     state["scope"] = ["stations", "poses"]
     state["ledger_items"] = [{**span, "categories": ["stations", "poses"]}]
     assert not _unfulfilled_completion_requests([request], {"spatial": state}, [])
+

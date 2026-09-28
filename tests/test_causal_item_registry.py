@@ -24,24 +24,6 @@ def report(*rows):
         "director_interpret", {"ledgers": list(rows)}, source_payload=PAYLOAD)
 
 
-def test_handle_cannot_change_from_ilya_to_sera_across_spans():
-    result = report(row(1, [1], ["Ilya"]), row(2, [1], ["Sera"]))
-    assert not result.valid
-    assert any("changed stable item_name" in error for error in result.errors)
-    # A failed answer remains available for repair, with no guessed identity.
-    assert [entry["item_names"] for entry in result.output["ledgers"]] == [["Ilya"], ["Sera"]]
-
-
-@pytest.mark.parametrize("handles,names", [
-    ([1, 2], ["tin"]), ([1], ["tin", "key"]),
-    ([], ["tin"]), ([1], []), ([1, 1], ["tin", "tin"]),
-    ([0], ["tin"]), ([-1], ["tin"]), ([True], ["tin"]),
-    ([1.2], ["tin"]), ([1], ["   "]),
-])
-def test_explicit_list_faults_require_author_repair(handles, names):
-    assert not report(row(1, handles, names)).valid
-
-
 def test_same_handle_with_case_and_outer_whitespace_variation_is_stable():
     result = report(row(1, [1], ["Blue tin"]), row(2, [1], ["  BLUE TIN  "]))
     assert result.valid, result.errors
@@ -97,17 +79,6 @@ def test_related_transfer_object_cannot_replace_a_standing_actor_identity():
     assert any(note["reason"] == "related world keys are not item aliases" for note in notes)
 
 
-def test_current_specialist_shape_repairs_an_out_of_row_item():
-    from llm.schemas import semantic_output_errors
-    payload = {"completion_contract": "verified_effects_v1", "ledgers": [
-        {"item_names": ["Ivo", "Grey satchel"], "categories": ["inventory_ops"]}]}
-    result = {"results": [{"status": "encoded", "settled": {}, "transforms": [
-        {"item": "Yellow tag", "patch": {"inventory_ops": [
-            {"op": "transfer", "object_id": "tag", "to_id": "Ivo"}]}}]}]}
-    errors = semantic_output_errors("director_objects", result, source_payload=payload)
-    assert any("must name exactly one item" in error for error in errors)
-
-
 @pytest.mark.parametrize('reference', ['tag', 'Yellow tag', 'CLIPPED MARKER'])
 def test_related_object_names_and_aliases_cannot_replace_actor_identity(reference):
     from world.causal_program import bind_items
@@ -129,3 +100,4 @@ def test_new_related_entity_cannot_overwrite_a_standing_actor():
     bound, bindings, _ = bind_items(rows, scene)
     assert bound[0]['patch']['entities'] == rows[0]['patch']['entities']
     assert not bindings
+

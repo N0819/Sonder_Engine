@@ -36,9 +36,10 @@ language_packs/<language-id>/
     system_prompts/              <- the PROSE: one .txt per prompt leaf
       <top-level note>.txt
       prompts/<id>.txt
-      specialists/<name>/core.txt
-      specialists/<name>/chunks/<op>.txt
-      prose_author_sheet/<NN>[_<key>].txt
+      encoder/core.txt, encoder/<channel>[__<part>].txt   <- the encoder's card
+      prose_contract/<id>.txt       <- the Director's sheets, the room author's
+      specialists/spatial/chunks/<op>.txt   <- the room author's three room chunks
+      <card>/<leaf>.txt             <- the character and decision-model cards
 ```
 
 Use a normalized lowercase BCP-47-like id (`ja`, `es`, `pt-br`). The directory
@@ -127,11 +128,7 @@ into an accidental reflow of everything around it.
 **The path is derived, never chosen.** `canonical_part_path` maps a leaf path
 to exactly one file path, and the loader REJECTS a reference that spells it
 any other way. So the paths stay greppable (`grep -rn
-'prompts/character.txt'`) while drift stays impossible. The prose-author sheet
-is named index-first, key-second (`00_voices.txt` ... `27.txt`) because the
-index is the identity: `mapping_proposal` is the gate name at both 11 and 15,
-and 12 of the 28 segments have no name at all. Index-first also sorts the
-files into assembly order in any listing.
+'prompts/character.txt'`) while drift stays impossible.
 
 **The file format, and the one convention in it.** A part file is the leaf's
 exact text plus a single trailing newline. Reading strips exactly one trailing
@@ -139,18 +136,18 @@ newline if present, and nothing else.
 
 That convention exists because the dominant real-world corruption is an editor
 adding a final newline on save. Of the 226 English leaves, **163 end with no
-newline at all**, 48 end with `\n\n` and 15 with `\n` -- and the specialist
-and prose-author sheets are built by bare `"".join` with no separator, so
-every one of those terminators is a live joint in a shipped sheet. Under a
+newline at all**, 48 end with `\n\n` and 15 with `\n` -- and the sheets then
+assembled from several leaves were built by bare `"".join` with no separator,
+so every one of those terminators was a live joint in a shipped sheet. (The
+two assemblies left, the encoder's and the room author's, strip each part and
+join with a blank line.) Under a
 no-convention scheme, `files.insertFinalNewline` would silently change 163 of
 226 prompts. Under this one, every file already ends with a newline, so the
 editor's "fix" is a no-op.
 
-**Never let an editor tidy these files.** Not one character. Two live
-examples of why: `prose_author_sheet/20_world_pressure.txt` ends in a
-SIGNIFICANT single space, and `prose_author_sheet/16.txt` is a single newline
-and nothing else -- a paragraph break between two segments. Both are erased
-by a `trimTrailingWhitespace` save. `.editorconfig` and `.gitattributes` at
+**Never let an editor tidy these files.** Not one character: a leaf's
+whitespace is part of the prompt the model reads, and a `trimTrailingWhitespace`
+save changes it without a word. `.editorconfig` and `.gitattributes` at
 the repo root say so to the tools; `tests/test_prompt_card_split.py` catches
 it if they are ignored.
 
@@ -179,20 +176,6 @@ JSON file (since the split it holds no prose, so a grep over it passes by
 finding nothing), and do not use `pack.card(...)` for an audit of authored
 text: that one is frozen and has already substituted four fragments into
 seventeen bodies.
-
-**Two things that must not be done.**
-
-1. `prose_author_sheet[27][1]` is byte-identical to
-   `prose_author_output_shape`. They get two files and stay duplicated.
-   Deduping them behind a shared reference is a behaviour change wearing a
-   refactor's clothes: the two are read by different assemblies and either
-   may legitimately change without the other.
-2. The seven ids in `llm.prompts.ASSEMBLED_SHEET_IDS` are BUILT from
-   specialists and `prose_author_sheet` and must never get a part file of
-   their own. A stored body beside the parts is one sheet with two
-   spellings, free to drift -- and English `director_spatial` had already
-   drifted 1,518 characters short of its own assembly while the prompt
-   editor displayed the stored one as the sheet.
 
 `authoring.json`, `compositor.json` and `linguistics.json` are NOT split and
 should not be. `linguistics` is regexes and verb inventories -- machine data,

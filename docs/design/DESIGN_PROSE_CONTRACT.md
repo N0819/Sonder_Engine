@@ -1,9 +1,12 @@
 # The prose contract: an author that writes, one encoder that builds
 
-**Status: EXPERIMENT, 2026-09-22, branch `worktree-jev-prose-director`.** Off
-by default. Selected by the setting `director_contract = "prose"`; the causal
-ledger contract ([`DESIGN_SPECIALIST_CONTRACT.md`](DESIGN_SPECIALIST_CONTRACT.md))
-stays the default and is untouched when the setting is absent.
+**Status: THE DIRECTOR (2026-09-27).** Begun as an experiment on 2026-09-22
+(branch `worktree-jev-prose-director`), behind a `director_contract` setting
+beside the causal ledger contract
+([`DESIGN_SPECIALIST_CONTRACT.md`](DESIGN_SPECIALIST_CONTRACT.md)). On
+2026-09-27 the causal contract, its five specialists and the setting were
+deleted: this is the only Director. What it does not yet do that the causal
+one did is `docs/UNBUILT_PIPELINE.md` § 1.1.
 
 ## Why
 
@@ -72,7 +75,7 @@ off.
 | Stage outputs: `ledgers`/`sequence`/`causal_ledger`, `state_diff`, `state_assertions` | The causal Director sheet (`causal_director.txt`) at both stages |
 | `normalize_causal_ledger`, the authority checks, every post-fan-out floor | Director-authored spans, item handles and categories |
 | Bind, validation and fold in `_run_specialists` | Five parallel hand calls, forwarding, positional reconciliation |
-| Channel chunks, verbatim | `_dispatch_specialists`' gates, as the predictor of which tools a beat needs |
+| Channel rules (the encoder's own card since 2026-09-24) | `_dispatch_specialists`' gates, as the predictor of which tools a beat needs |
 | Commit, perception, narrator | — |
 
 ## Where it lives
@@ -87,7 +90,7 @@ off.
   channel, and `<channel>__<part>` parts for the rarer changes inside the big
   channels; `jev_questions/*.txt`, one decision-model question per channel
   and per part. English and Japanese.
-- `agents/director.py`: the two call-site branches and `_run_specialists(answer_for=)`.
+- `agents/director.py`: the two call sites and `_run_specialists(answer_for=)`.
 - `tests/test_prose_contract.py`, `tests/test_the_encoder_has_its_own_card.py`.
 
 Each stage's record persists at `orchestration.prose_contract`: the prose,
@@ -96,23 +99,30 @@ and the raw events.
 
 ## Known gaps
 
-- **Extension specialist families are not absorbed.** Their sheets are not
-  built from engine chunks. Under this contract they do not run.
+- **What the causal Director did that this does not yet do** is
+  `docs/UNBUILT_PIPELINE.md` § 1.1 (the list was made when the causal path
+  was deleted, 2026-09-27, by porting its tests).
+- **Extension specialist families are gone.** `add_director_specialist`
+  raises since 2026-09-27 (`docs/guides/EXTENSIONS.md`); their sheets were
+  never built from engine chunks, so this contract never ran them.
 - **The encoder's card is a fork of the hands' chunks** (2026-09-24). It
   used to read the causal chunks verbatim, behind a core paragraph telling
   it how to reread their several-hands dialect; the owner read the sheet in
   the debug capture ("Seems absurdly long", then "specific prompts for this
-  version of the director sound necessary?"), and it now has its own. The
-  cost is two copies of every rule: a rule changed for the causal hands has
-  to be carried to `encoder/` by hand, and nothing checks that it was.
+  version of the director sound necessary?"), and it now has its own. Since
+  the hands were deleted (2026-09-27) it is the only copy of those rules.
   `test_no_record_shape_drifts_from_the_hands` guards the printed record
   shapes and `test_every_ops_field_the_card_asks_for_exists_on_a_hand` the
   `_ops` fields; the prose of the rules has no guard.
 - **Establish is out of scope.** The opening turn keeps its own Director.
-- **Author-side retries** (world-pressure must-tick, player-authority) re-ask
-  the causal Director with corrections. Under this contract they read the
-  converted rows, which carry the same fields. That path is untested under
-  this contract.
+- **No author-side retries.** The causal Director was re-asked with a
+  correction when a must-tick world pressure went untouched, or when an
+  authority reading found conduct nobody declared (once, kept only if it
+  lowered the count). This contract has neither: a must-tick pressure is an
+  input group of its own and a row sourced to it is its tick
+  (`tests/test_world_pressure.py`), and the authority readings warn on the
+  step and never retry, so a flagged fabrication commits
+  (`docs/UNBUILT_PIPELINE.md` § 1.1, item 6).
 
 ## Measurements (2026-09-22, chat 153 turns 23/25/26, copies of `engine.db`)
 

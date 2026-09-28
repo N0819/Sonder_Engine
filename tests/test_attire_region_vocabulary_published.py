@@ -32,10 +32,10 @@ ATTIRE_REGION_LANGUAGES = ("en", "ja")
 
 
 def _body_attire_sheet(language: str) -> str:
-    """Everything the body specialist receives when `attire` is granted."""
+    """What the encoder's card says when `attire` is granted: its core and
+    the attire chunk."""
     card = installed_language_packs()[language].card("system_prompts")
-    spec = card["specialists"]["body"]
-    return str(spec["core"]) + str(spec["chunks"]["attire"])
+    return str(card["encoder"]["core"]) + str(card["encoder"]["attire"])
 
 
 @pytest.mark.parametrize("language", ATTIRE_REGION_LANGUAGES)

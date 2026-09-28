@@ -9,8 +9,9 @@ What is pinned is the ARCHITECTURE the contract exists for:
   the causal contract produced, through the same bind/validate/fold;
 - the decision model failing grants every channel (fail-open);
 - a tool the encoder names as missing buys ONE widened call, whose answer
-  replaces the first;
-- the causal contract stays the default.
+  replaces the first.
+
+Since 2026-09-27 it is the only Director: the causal contract is deleted.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import agents.director as director
 from agents import director_prose
 from llm import decisions
 
-from tests.test_director_orchestration import (
+from tests.director_fakes import (
     _action_interp,
     _fake_agent,
     _make_ctx,
@@ -37,7 +38,6 @@ ATTIRE_CHUNK = "CLOTHING HAS THREE SEPARATE AXES"
 
 @pytest.fixture
 def prose_contract(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
     asked = []
 
     def answer(state, questions):
@@ -116,7 +116,7 @@ def test_resolve_runs_author_then_one_encoder(temp_db, monkeypatch,
 def _between_rooms(barrier):
     """The base lighthouse with `barrier` on both sides of the one way from
     the keeper's room up to the lamp room."""
-    from tests.test_director_orchestration import BASE_SCENE
+    from tests.director_fakes import BASE_SCENE
     import copy
 
     scene = copy.deepcopy(BASE_SCENE)
@@ -153,7 +153,6 @@ def test_a_crossing_the_resolve_encoder_wrote_takes_the_shut_door(
 
 
 def test_decision_model_failure_grants_every_channel(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
 
     def boom(state, questions):
         raise decisions.DecisionError("unreachable")
@@ -377,6 +376,35 @@ def test_interpret_runs_the_same_contract(temp_db, monkeypatch, prose_contract):
                for row in out.get("ledgers") or [])
 
 
+def test_the_encoder_never_sees_what_the_player_typed(temp_db, monkeypatch,
+                                                      prose_contract):
+    """The X19 lesson under the prose Director: raw input can carry a private
+    thought only the interpreting Director is entitled to read. The Director
+    reads it; the encoder -- and anything after it -- gets each act's id to
+    attribute its events to, never the typed text. Found by the survey that
+    mapped the causal Director's removal (2026-09-27): the causal hands were
+    only ever handed the structured declaration, and the encoder was handed
+    `event_inputs` whole."""
+    import json as _json
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "The Stranger pulls off the coat."},
+        "director_specialist": {"events": [
+            {"source_entity_id": "persona:primary", "event": "The Stranger pulls off the coat.",
+             "observable": "pulls off the coat", "item_names": ["The Stranger"],
+             "transforms": []}]},
+    }))
+    ctx = _make_ctx(temp_db, player_input="(I secretly hate this coat) I pull off my coat")
+    director.director_interpret(ctx, nonce=0)
+    assert "secretly" in _json.dumps(calls[0]["payload"])  # the Director reads it
+    downstream = [c for c in calls if c["step_key"] != "director_prose"]
+    assert downstream, "no encoder call was made"
+    for call in downstream:
+        flat = _json.dumps(call["payload"])
+        assert "secretly" not in flat, call["step_key"]
+        assert ":primary:raw" in flat, "the act's id must still reach the encoder"
+
+
 def test_authority_is_read_on_the_prose_and_never_retries(temp_db, monkeypatch,
                                                          prose_contract):
     """The prose Director keeps two limits; the readings that enforce them
@@ -475,7 +503,6 @@ def test_an_unreserved_new_place_is_built_after_and_bound_by_the_decision_model(
     author: a grant is as ready for a place described as for one entered
     (owner, 2026-09-23: "The designer does not need to redo rooms it has
     already made")."""
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE",
                         _jev({"rooms", "positions"}, bind_to="lighthouse_gallery"))
     calls = []
@@ -515,7 +542,6 @@ def test_a_room_grant_with_nothing_to_build_starts_no_designer(temp_db, monkeypa
     on six of seven runs, 73-163 s a beat, because a room grant started it
     whatever the beat entered. Nothing reserved, nothing planned, nothing
     named new: no designer."""
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", _jev({"rooms", "positions"}))
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
@@ -561,7 +587,6 @@ def test_the_encoder_may_turn_a_doorway_and_build_nothing():
 
 
 def test_a_new_place_named_as_minted_binds_without_asking(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
     asked = []
 
     def jev(state, questions):
@@ -583,7 +608,6 @@ def test_a_new_place_named_as_minted_binds_without_asking(temp_db, monkeypatch):
 def test_an_unforeseen_place_runs_the_room_author_after(temp_db, monkeypatch):
     """The decision model did not grant rooms; the encoder named a new place
     anyway. The author still writes it whole, serially."""
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE",
                         _jev({"positions"}, bind_to="lighthouse_gallery"))
     calls = []
@@ -632,7 +656,6 @@ def test_the_directors_three_fields_reserve_a_room_both_workers_use(
     its id before either worker starts, so the encoder places into it at once
     while the room author fleshes it out -- keeping the Director's size and
     shape over its own."""
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", _dup_jev(False))
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
@@ -655,7 +678,6 @@ def test_the_directors_three_fields_reserve_a_room_both_workers_use(
 
 
 def test_a_reserved_room_the_author_left_out_still_stands(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", _dup_jev(False))
     monkeypatch.setattr(director, "_agent_json", _fake_agent([], {
         "director_prose": {"prose": "Mara steps out onto the gallery.",
@@ -679,7 +701,6 @@ def test_a_furnishing_the_encoder_also_made_is_removed_from_the_room(
     """Both workers can write the same object at once. The encoder's is the
     one the beat used; the designer's copy goes when the designer itself, in
     its short reconcile call, names it as the same thing."""
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", _dup_jev(False))
     monkeypatch.setattr(director, "_agent_json", _fake_agent([], {
         "director_rooms_reconcile": {"duplicates": [
@@ -698,7 +719,6 @@ def test_a_furnishing_the_encoder_also_made_is_removed_from_the_room(
 
 
 def test_a_feature_the_designer_does_not_name_is_kept(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", _dup_jev(False))
     monkeypatch.setattr(director, "_agent_json", _fake_agent([], {
         "director_rooms_reconcile": {"duplicates": []},
@@ -770,16 +790,6 @@ def test_the_director_is_handed_each_persons_pronouns(temp_db, monkeypatch,
     assert author["pronouns"]["Mara"]["subject"] == "she"
     assert encoder["pronouns"] == author["pronouns"]
     assert "pronouns" in calls[0]["system"]
-
-
-def test_the_causal_contract_stays_the_default(temp_db, monkeypatch):
-    calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
-        "director_resolve": {"ledgers": []}}))
-    ctx = _make_ctx(temp_db, interp=_action_interp())
-    director.director_resolve(ctx, nonce=0)
-    assert _steps(calls)[0] == "director_resolve"
-    assert "director_prose" not in _steps(calls)
 
 
 def test_the_encoder_is_told_silence_ends_a_contact(temp_db):
@@ -1165,21 +1175,18 @@ def test_volume_is_how_far_the_words_are_meant_to_carry():
     everything hinami says as muttered which is... obnoxious." Two places
     wrote it: the prose writer added delivery the input never gave ("then,
     quieter, almost a murmur"), and both Directors read how a line sounds
-    as how far it goes. Affect is not reach."""
+    as how far it goes. Affect is not reach. (The causal Director's sheet
+    said it too, until that Director went on 2026-09-27.)"""
     from llm import prompts
     card_en, card_ja = prompts._prompt_card("en"), prompts._prompt_card("ja")
     encoder = prompts.unified_specialist_prompt(["poses"])
-    causal = str(card_en["causal_director"])
     writer = str(card_en["prose_contract"]["director_interpret"])
     assert "how far the speaker means the words to carry, never how they sound" in encoder
-    assert "Volume is reach, not sound" in causal
-    assert "is pitched for them" in causal
     assert "pitched for whoever it is aimed at" in encoder
     assert "The player's line keeps the reach their input gave it -- read in event_inputs" in encoder
     assert "or a sound with no words in it -- carries as any voice does" in encoder
     assert "how far a line carries is conduct" in writer
     assert "言葉をどこまで届かせるつもりか" in prompts.unified_specialist_prompt(["poses"], "ja")
-    assert "volume は届き方であって音色ではありません" in str(card_ja["causal_director"])
     assert "台詞がどこまで届くかも行為です" in str(card_ja["prose_contract"]["director_interpret"])
 
 
@@ -1229,12 +1236,11 @@ def test_a_places_text_never_describes_who_is_in_it():
     the wedge of moonlit sand visible past them" on an anchor. The player
     shut the doors, the edge went `closed_door`, and the same view said both
     "Nothing shows through the shut door" and the moonlit sand past the open
-    doors. So the rule is now ONE clause in the rooms chunk, which reaches
-    every writer of a place: the prose contract's designer and the causal
-    spatial hand alike."""
+    doors. So the rule is ONE clause in the rooms chunk the room designer
+    ships (the causal spatial hand that also read it was deleted
+    2026-09-27)."""
     from llm import prompts
-    for sheet in (prompts.room_author_prompt(),
-                  prompts.specialist_prompt("spatial", ["rooms"])):
+    for sheet in (prompts.room_author_prompt(),):
         assert "A PLACE'S TEXT IS READ AS THE PLACE" in sheet
         # people, as before -- each case the designer's own sentence named
         assert ("who they are, how they look, where they stand, what they are "
@@ -1243,8 +1249,7 @@ def test_a_places_text_never_describes_who_is_in_it():
         assert "whether a doorway stands open or shut, and what shows through it" in sheet
         # bookkeeping: the minted room's notes read "parented to the_tardis"
         assert "Nor is the text about the record" in sheet
-    for sheet in (prompts.room_author_prompt("ja"),
-                  prompts.specialist_prompt("spatial", ["rooms"], "ja")):
+    for sheet in (prompts.room_author_prompt("ja"),):
         assert "場所の文は、誰かが書き直すまで" in sheet
         assert "それが誰で、どう見え、どこに立ち、何をしていて、何を持ち、何を所有しているか" in sheet
         assert "出入口が開いているか閉まっているか、その向こうに何が見えるか" in sheet

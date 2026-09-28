@@ -38,11 +38,9 @@ alternative -- not as an audit.
 from __future__ import annotations
 
 import argparse
-import collections
 import json
 import os
 import re
-import sqlite3
 import sys
 
 DIRECTOR_STEPS = ("director_interpret", "director_resolve")
@@ -73,74 +71,13 @@ def _produced(parsed):
 
 
 def replay(db_path, filed_only=False):
-    from agents.director_scopes import SPECIALISTS, _ruling_for
-    try:
-        from agents.director_evidence import _normalize_omission_category as norm
-    except ImportError:                                   # pragma: no cover
-        def norm(value):
-            return str(value or "").strip().lower()
-
-    uri = "file:%s?mode=ro" % db_path
-    db = sqlite3.connect(uri, uri=True)
-    try:
-        blobs = dict(db.execute("select hash, body from llm_blobs"))
-        rows = db.execute(
-            "select turn_id, step_key, role, started, response_hash "
-            "from llm_capture where ok=1 and step_key in (?, ?) "
-            "and response_hash is not null", DIRECTOR_STEPS)
-        beats = collections.defaultdict(list)
-        for turn, step, role, started, digest in rows:
-            beats[(turn, step, round((started or 0) / BUCKET_SECONDS))].append(
-                (role, digest))
-    finally:
-        db.close()
-
-    by_role = {spec["role"]: name for name, spec in SPECIALISTS.items()}
-    stats = collections.Counter()
-    lost = collections.Counter()
-    saved = collections.Counter()
-    no_manifest_beats = 0
-
-    for calls in beats.values():
-        author = [d for role, d in calls if role == "director"]
-        if not author:
-            continue
-        ruling = _parse(blobs.get(author[0]))
-        if not isinstance(ruling, dict):
-            continue
-        manifest = [dict(item, category=norm(item.get("category")))
-                    for item in (ruling.get("changes_asserted") or [])
-                    if isinstance(item, dict)]
-        if not manifest:
-            no_manifest_beats += 1
-            if filed_only:
-                continue
-        today = {"ledger_notes": ruling.get("ledger_notes") or {},
-                 "manifest": manifest}
-        categories_only = {"ledger_notes": {}, "manifest": manifest}
-
-        for role, digest in calls:
-            name = by_role.get(role)
-            if name is None:
-                continue
-            addressed_today, _ = _ruling_for(name, today)
-            addressed_cats, _ = _ruling_for(name, categories_only)
-            produced = _produced(_parse(blobs.get(digest)))
-            stats["calls"] += 1
-            stats["produced"] += bool(produced)
-            if addressed_today and not addressed_cats:
-                if produced:
-                    stats["false_negative"] += 1
-                    lost[name] += 1
-                else:
-                    stats["saved"] += 1
-                    saved[name] += 1
-            elif addressed_cats:
-                stats["kept"] += 1
-                stats["kept_but_empty"] += not produced
-            else:
-                stats["unreconstructed"] += 1
-    return stats, lost, saved, no_manifest_beats
+    """Retired with the causal dispatch; the module's helpers stay, because
+    other tools read captured causal steps through them."""
+    raise SystemExit(
+        "this replays the causal Director's ruling-keyed dispatch "
+        "(`director_scopes._ruling_for`), deleted with it on 2026-09-27; "
+        "run it from a checkout of an earlier commit (e.g. a8c41fde) "
+        "against a copy of the database")
 
 
 def main(argv=None):

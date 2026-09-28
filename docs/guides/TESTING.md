@@ -473,7 +473,7 @@ the engine holds for model wiring, not a subset -- so a provider key moves
 between two files without being read into Python. `SETTINGS_FORCED` then
 turns adult content, backdrops and ambience off and CAPTURE ON with full
 bodies, because `read_trace` (over `persist.pipeline_trace.export_turn_debug`)
-is how a run reads what each stage was SENT, the Director's specialist
+is how a run reads what each stage was SENT, the Director's own
 sub-calls included; Writers' Room calls are not captured (only
 `agents/runtime.py` records) and that gap is noted, not built. `run_beat`
 wraps `room_bench.run_beat` with the F1 rule (a reasoning-only reply is

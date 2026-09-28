@@ -455,20 +455,6 @@ class TestBothDirectorInvocationsCarryOneCausalLedger:
         for model in (DirectorInterpret, DirectorResolve):
             assert "ledgers" in _fields(model), model.__name__
 
-    def test_both_prompts_publish_only_the_causal_work_item(self):
-        from llm.prompts import prose_author_prompt
-
-        text = prose_author_prompt(None)
-        for name in ("director_interpret", "director_resolve"):
-            assert '"ledgers"' in text, name
-            assert "resolution_notes" in text, name
-            assert "item_names" in text, name
-            assert "item_ids" in text, name
-            assert "categories" in text, name
-            assert "state_diff" not in text, name
-            assert "changes_asserted" not in text, name
-            assert "ledger_notes" not in text, name
-
     def test_one_span_can_address_several_hands(self):
         from agents import director
 
@@ -486,3 +472,4 @@ class TestBothDirectorInvocationsCarryOneCausalLedger:
         view = director._interpret_beat_view(_Ctx(), out, "entity:1")
         assert set(view["spans"][0]["categories"]) == {
             "attire", "entities", "positions"}
+

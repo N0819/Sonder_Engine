@@ -207,12 +207,14 @@ def test_a_follower_is_not_told_where_a_target_it_cannot_see_went(
 
 
 def test_prompts_define_following_as_voluntary_and_speed_bounded():
-    from llm.prompts import DEFAULT_PROMPTS
+    from llm.prompts import jev_channel_questions, unified_specialist_prompt
 
-    assert "following_ops" in DEFAULT_PROMPTS["director_interpret"]
-    spatial_prompt = DEFAULT_PROMPTS["director_spatial"]
-    assert "voluntary persistent travel relation" in spatial_prompt
-    assert "grants no speed" in spatial_prompt
+    # The decision model is asked whether a beat touches the channel, and
+    # the encoder's chunk says what the channel is.
+    assert jev_channel_questions(["following_ops"], "en").get("following_ops")
+    encoder = unified_specialist_prompt(["following_ops"], "en", None)
+    assert "voluntary, lasting travel relation" in encoder
+    assert "grants no speed" in encoder
     # The character card no longer explains following (2026-09-27): the
     # payload's `self.following` names the target and whether it is in the
     # same room, the decision model reads a start or stop from what the mind

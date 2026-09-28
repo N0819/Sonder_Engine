@@ -29,7 +29,12 @@ import time
 
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from tests.helpers import fanout_resolve_agent
+from tests.director_fakes import prose_resolve_agent
+import pytest
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 
 def _make_ctx(temp_db, scene, to_room, mover="self"):
@@ -125,7 +130,7 @@ def test_multi_hop_walk_through_open_doors_is_committed(temp_db, monkeypatch):
     import agents.director as director
 
     ctx = _make_ctx(temp_db, _station_scene(), "engine_room")
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -155,7 +160,7 @@ def test_multi_hop_route_through_closed_door_is_contested_not_blocked(
     )
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {
+        prose_resolve_agent({"state_diff": {
             "positions": {"The Stranger": "engine_room"}}}),
     )
 
@@ -180,7 +185,7 @@ def test_multi_hop_route_the_resolve_did_not_assert_walks_its_prefix(
         temp_db, _station_scene(corridor_to_lobby="closed_door"),
         "engine_room",
     )
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -202,7 +207,7 @@ def test_multi_hop_route_opened_this_beat_is_committed(temp_db, monkeypatch):
     )
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {"rooms": {"corridor": {
+        prose_resolve_agent({"state_diff": {"rooms": {"corridor": {
             "name": "Corridor",
             "adjacent": [
                 {"to": "lobby", "barrier": "open_door", "distance": "near"},
@@ -226,13 +231,13 @@ def test_unreachable_target_is_still_blocked_and_stripped(
     ctx = _make_ctx(temp_db, _station_scene(), "isolated_vault")
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {
+        prose_resolve_agent({"state_diff": {
             "positions": {"The Stranger": "isolated_vault"}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert "The Stranger" not in (out["state_diff"].get("positions") or {})
     assert any("Blocked movement" in w for w in ctx.warnings)
 
 
@@ -247,11 +252,11 @@ def test_directly_adjacent_closed_door_is_still_contested(
     scene = _station_scene(corridor_to_lobby="closed_door")
     scene["positions"]["The Stranger"] = "corridor"
     ctx = _make_ctx(temp_db, scene, "lobby")
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert "The Stranger" not in (out["state_diff"].get("positions") or {})
     assert any("Contested movement" in w for w in ctx.warnings)
 
 
@@ -303,7 +308,7 @@ def test_same_beat_vehicle_arrival_allows_occupant_deboard(
     ctx = _make_ctx(temp_db, _elevator_scene(), "generator_room")
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {
+        prose_resolve_agent({"state_diff": {
             "positions": {"elevator": "generator_room",
                           "The Stranger": "generator_room"},
             "entities": {"elevator": {
@@ -332,13 +337,13 @@ def test_sealed_vehicle_still_blocks_occupant_exit(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, _elevator_scene(), "generator_room")
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {
+        prose_resolve_agent({"state_diff": {
             "positions": {"The Stranger": "generator_room"}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert "The Stranger" not in (out["state_diff"].get("positions") or {})
     assert any("Blocked movement" in w for w in ctx.warnings)
 
 
@@ -362,7 +367,7 @@ def test_a_blocked_move_does_not_leave_the_companion_on_the_far_side(
     ctx = _make_ctx(temp_db, _station_scene(), "isolated_vault")
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {"positions": {
+        prose_resolve_agent({"state_diff": {"positions": {
             "The Stranger": "isolated_vault",   # the declarer
             "Mara": "isolated_vault",           # swept along with her
         }}}),
@@ -387,7 +392,7 @@ def test_a_body_going_somewhere_else_is_none_of_the_guard_s_business(
     ctx = _make_ctx(temp_db, _station_scene(), "isolated_vault")
     monkeypatch.setattr(
         director, "_agent_json",
-        fanout_resolve_agent({"state_diff": {"positions": {
+        prose_resolve_agent({"state_diff": {"positions": {
             "The Stranger": "isolated_vault",
             "Mara": "lobby",
         }}}),
@@ -395,5 +400,5 @@ def test_a_body_going_somewhere_else_is_none_of_the_guard_s_business(
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert "The Stranger" not in (out["state_diff"].get("positions") or {})
     assert out["state_diff"]["positions"].get("Mara") == "lobby"

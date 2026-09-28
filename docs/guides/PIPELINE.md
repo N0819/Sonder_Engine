@@ -75,10 +75,10 @@ landed notes of visible packages whose rooms, if any, meet the rooms the
 scenario names and their planned neighbours). Both keys are ABSENT when there
 is nothing to carry, so a story with no plan produces the payload it always
 did. The same two keys, scoped to where the cast stands or is beside, ride
-`director_interpret` and `director_resolve`, and `author_notes` is forwarded
-to the objects and spatial hands (`agents/director_fanout.py`) and gates the
-prose author's `author_notes` duty chunk. Author knowledge only: no mind and no
-narrator receives either.
+`director_interpret` and `director_resolve`, and `author_notes` also rides the
+objects and spatial owners' world slices (`agents/director_fanout.py`), which
+reach the encoder whenever one of their channels is granted. Author knowledge
+only: no mind and no narrator receives either.
 
 Character and persona cards expose only their public `initial_outfit`
 projection to establishment. A non-empty outfit is authoritative and is copied
@@ -251,8 +251,9 @@ projected back only from that body. Co-location never copies knowledge;
 explicit speech, a staffed reporting line, a courier/caravan handoff, or
 reading an artifact does.
 
-`charter_observations` follows that domain. The resolve social specialist has
-classified the beat's engine-authored player/major-character sources once;
+`charter_observations` follows that domain. The resolve encoder has classified
+the beat's engine-authored player/major-character sources once (`public_evidence`,
+a channel `social` owns);
 deterministic grounding restores actor, target, exact quote/action surface,
 volume and concealment from those sources and accepts semantic content only as
 an exact span of the utterance. The commit domain then delivers each source to
@@ -348,44 +349,46 @@ it in a way nothing in this repository will catch.
 
 ### `director_interpret`
 
-This is the first invocation of the shared causal Director. Its model input is
-an `event_inputs` array grouped by `{entity_id, authority_mode, events}` plus
-small identity, object-name, position, and contact indexes. The prompt does one
-job: split prose into ordered event-ledger rows and decide causal commitment.
-It does not write narration or any engine state shape.
+This is the first invocation of the Director (`agents/director_prose.py`;
+the causal Director that preceded it was deleted 2026-09-27). Its model input
+is an `event_inputs` array grouped by `{entity_id, authority_mode, events}`
+plus small identity, object-name, position, and contact indexes. It runs four
+steps: the Director writes PROSE (`prompts.prose_director_prompt`) and nothing
+else; the decision model (`llm/decisions.py`) asks one yes/no question per
+channel this stage can carry, per encoder part and per planned room in reach,
+and grants every channel when it cannot answer; ONE encoder (role `encoder`,
+step key `director_specialist`) writes the beat as ordered events carrying
+typed transforms; and code converts the events into ledger rows. Neither model
+call writes narration.
 
 Its world index is the union of the acting bodies' immediate sight apertures:
 their rooms and physically visible adjacent rooms. Room rows expose exits;
 entities in that slice expose only identity, placement, and existing interior
 room ids. A disconnected room or entity is absent.
 
-Each row is one causal step and carries `chrono_id` (the row's own
-number, unique to it), `item_ids` (the Director's handle for each thing the
-step changes or attempts to change -- the same number wherever that thing appears in the beat,
-whether or not the world knows it; for the recompiler only) with `item_names`
-in step (for the hands, to match against the world or to mint), source
-identity and authority, an objective event, a short `resolution_notes` ruling,
-and zero or more exact state channel categories. A row can name several
-categories and is therefore routed to several specialists. `item_id` and
-`object_name` remain on every row as the first of each list, for readers
-that predate the lists (the owner's contract, 2026-09-15).
+Each encoder event is one causal step: its source identity and the declared
+event it carries out (`source_event_id`), an objective statement (for speech
+the words alone, exactly as the prose quotes them, with `speech: true`), its
+outward `observable`, `targets`, delivery facts, its duration in `seconds`,
+any `movement`, its commitment, the names of the things it changes
+(`item_names`) and one `{item, patch}` transform per change. Its order IS the
+chronology. Code converts each event into a row (`ledger_from_events`):
+`chrono_id` is its position, each distinct item name (case folded) gets one
+handle wherever it recurs, and the categories are the channels its transforms
+actually wrote, plus `speech` for a spoken event and `attention` for one that
+looks. `item_id` and `object_name` remain on every row as the first of each
+list, for readers that predate the lists (the owner's contract, 2026-09-15).
 
-The prompt explains the entire job before its field definitions: prose is
-decomposed into ordered causal steps, specialists match actual world objects
-and encode desired effects, and code executes the recompiled transforms for
-perception. A sentence can contain several steps: pickup and attachment retain
-the intervening held state. Conversely, a simultaneous two-object pickup or a
-handover needing several channels remains one step. A failed attempt remains
-an event without inventing its successful outcome; quoted plans and commands
-remain speech. Unchanged supports and destinations can be references in
-`targets` without creating item duties. The complete worked example in both
-language packs demonstrates these distinctions with repeated object handles,
-multiple objects, exact speech and complementary channels. Channel choice follows
-the effect being represented: `contact_ops` records topology, while
-`contact_action_ops` is a persistent tactile dynamic through that topology.
-An insertion, withdrawal or failed turn does not by itself establish an
-ongoing dynamic. A visible attempt with no state effect can use empty
-categories and still retain its observable event.
+The encoder's own card (`system_prompts/encoder/`) explains the job before its
+fields: a step that leaves a state a later step uses is its own event (lift,
+carry, set down are three), every spoken line is its own event, and a brief
+reaction of a body is an event with an observable and no transform. A failed
+attempt remains an event without inventing its successful outcome; quoted
+plans and commands remain speech. Unchanged supports and destinations can be
+references in `targets` without a transform. Channel choice follows the effect
+being represented: `contact_ops` records topology, while `contact_action_ops`
+is a persistent tactile dynamic through that topology. An insertion,
+withdrawal or failed turn does not by itself establish an ongoing dynamic.
 
 Compatibility code projects those ledgers into the older `sequence`, movement,
 dice, and flow surfaces still read by onset perception and plan construction.
@@ -404,23 +407,25 @@ was spoken, not that the quote is true. An independently authored or mechanical
 event changes the world on its own non-speech row, in the channel that owns
 what changed.
 
-Specialists run inside this stage for asserted changes that must exist in the
-onset preview. Their transforms land in `state_assertions` (contact in
-`contact_assertions`) before the ordinary deterministic validators. These
-assertions are previewed for reaction and later merged once at resolution.
-Opening or uncovering an entity is spatial work when its inside does not yet
-exist: the spatial hand creates and furnishes a room parented to that entity
-before outcome perception, without waiting for entry. Entry reuses an existing
-interior and puts the mover there. Character and player bodies are excluded
-from the ordinary entity-interior roster unless the event explicitly names
-that body as the interior holder (for example, ``inside Sera`` or ``Sera's
-interior``). Merely mentioning or spatially relating to a person does not opt
-their body into room minting; their anatomy is not ambient map topology. A position naming neither an existing room
-nor a room created in the same diff is refused; no low-detail fallback room is
-minted. Specialist fail-open holds here as everywhere: after the specialist's
-repair/provider ladder, a required interior with no fully parented room—or a
-new `interior_rooms` reference naming no standing or same-diff room—is reported
-as a stage warning and the beat continues with every other hand's work.
+The encoder writes, inside this stage, the asserted changes that must exist in
+the onset preview. Its transforms land in `state_assertions` (contact in
+`contact_assertions`) before the ordinary deterministic validators, and a
+channel this stage cannot carry (`CHANNEL_STAGES`) is dropped and said to be
+dropped. These assertions are previewed for reaction and later merged once at
+resolution. Opening or uncovering an entity is room work when its inside does
+not yet exist: a room parented to that entity is written and furnished before
+outcome perception -- by the encoder, or by the room author
+(`agents/director_rooms.py`) beside it -- without waiting for entry. Entry
+reuses an existing interior and puts the mover there. Character and player
+bodies are excluded from the ordinary entity-interior roster unless the event
+explicitly names that body as the interior holder (for example, ``inside
+Sera`` or ``Sera's interior``). Merely mentioning or spatially relating to a
+person does not opt their body into room minting; their anatomy is not ambient
+map topology. A position naming neither an existing room nor a room created in
+the same diff is refused; no low-detail fallback room is minted. Fail-open holds
+here as everywhere: a required interior with no fully parented room -- or a new
+`interior_rooms` reference naming no standing or same-diff room -- is reported
+as a stage warning and the beat continues with every other channel's work.
 
 ### `compile_world_context`
 
@@ -877,40 +882,32 @@ relationships.
 
 ### `director_resolve`
 
-This is the second invocation of exactly the same causal prompt and schema.
-Its `event_inputs` contain autonomous declarations, mechanical outcomes, world
+This is the second invocation of exactly the same four steps. Its
+`event_inputs` contain autonomous declarations, mechanical outcomes, world
 pressures, and only the still-contestable rows from human-controlled entities.
 Asserted human input is deliberately absent because interpret already applied
-it to the onset preview; feeding it back here would execute it twice.
-The final beat event log therefore joins asserted interpret spans before the
-resolved spans. Dedupe uses each stage's individual span identity, not the raw
-paragraph's shared source ID. Every span keeps its typed speech or outward
-action surface, and actor handles join to the scene's display identities.
-The provider's generation schema requires each row's event, ruling, source,
-item lists, chronology, commitment and categories. Compatibility-only singular
-item fields and authority are absent from that schema; archive validation
-remains lenient.
-Current explicit item lists must have equal widths and positive handles,
-without repeating a handle within one row or changing its stable item label
-across rows. These checks reject inconsistent bookkeeping; they never infer
-object identity from prose. Distinct objects may share a readable name.
-Repeated actions or quotations at different chronos remain separate events.
-Typed causal speech bypasses the legacy narration-stripping heuristic so an
+it to the onset preview; feeding it back here would execute it twice, so the
+Director is told what it put into the world (`already_happened`) instead. The
+final beat event log joins asserted interpret spans before the resolved spans.
+Dedupe uses each stage's individual span identity, not the raw paragraph's
+shared source ID. Every span keeps its typed speech or outward action surface,
+and actor handles join to the scene's display identities. Code builds each
+row's item lists from the encoder's item names, so their widths always agree
+and a handle names one label across the beat; distinct objects may still share
+a readable name, and repeated actions or quotations at different chronos
+remain separate events. Typed causal speech bypasses the legacy narration-stripping heuristic so an
 embedded quotation cannot erase the spoken recollection or refusal around it.
 
-The Director again returns one or more event ledgers, not prose or a
-`state_diff`. Categories dispatch the five channel owners (`body`, `social`,
-`contact`, `objects`, `spatial`). A specialist may receive several ordered
-rows, and one row may reach several specialists.
+The Director writes prose and no `state_diff`; the encoder's events are the
+beat's state. `director._run_specialists` splits each event's transforms among
+the five channel OWNERS (`body`, `social`, `contact`, `objects`, `spatial`)
+through `director_prose.dispatch`'s `answer_for` -- a pure split, no model
+call: an owner runs when one of its channels was granted or written, and its
+share is validated against its own model and folded. One event may carry
+several owners' transforms.
 
-Surface appearance routes to `body`, with no separate `overlays` or `marks`
-category. Every invoked body hand receives the surface-appearance chunk,
-including exact attire/condition/vital calls, forwarded work and repairs.
-`director_scopes.specialist_scope` adds this default grant to the recorded
-scope; it never dispatches an otherwise unaddressed body hand. The specialist
-still writes the existing `overlays` patch channel, and leaves it absent when
-the assigned row changes no mark. Granting it creates no additional completion
-requirement. Old surface category spellings redirect to body for compatibility.
+Surface appearance is `body`'s `overlays` channel; the encoder leaves it absent
+when a step changes no mark, and granting it creates no completion requirement.
 Surface effects are verified against each chronological world's actual marks:
 additions must carry the requested mark, and endings must leave that mark absent.
 An unidentified or unapplied effect remains unresolved instead of being delivered
@@ -918,38 +915,26 @@ as an accomplished action. The onset preview applies overlays through the same
 merger as final composition, inside each span before verification and perception;
 it never reapplies the flattened final overlay patch after a causal program.
 
-Dispatch strips `item_ids`; each specialist returns exactly one positional result per input row,
-containing zero or more `{item, patch:{channel:value}}` transforms and a
-verdict -- each transform names its changed thing in `item`, using an exact
-unique label from the row's `item_names`, including single-item rows.
-One typed relationship can cover both mutable endpoints without duplicate
-operations. An unchanged support listed among the items receives `not_mine`
-from a hand with no effect on it; mentioning it does not require a write.
-Row-local `item_matches` (per name) and `world_matches` let it use the keys
-of objects that already exist in its scoped world view; a name absent from
-`item_matches` is new or unresolved. A missing lookup is not proof of novelty:
-mint only when the resolved event clearly establishes a previously unrecorded
-thing and the hand owns its record; otherwise report `no_referent`. The thing
-need not have been physically created this beat. A failed lookup or ambiguous
-pronoun alone cannot establish it. Declare the new record in the same result
-before any op names it. Targets are world/identity
-keys or readable names. For the current
-list contract, an accidentally emitted private numeric target is replaced
-only by its unambiguous supplied item name before fanout; existing world and
-identity keys and legacy numeric targets retain their meanings.
-Positioned entities are not automatically body candidates: explicit body
-ledgers or the identity index vouch for entity-backed bodies. Garment matches
-also name `worn_by`, keeping the outer `attire` key (the wearer) separate from
-the garment handles inside its operations.
-Each owner receives the standing state its channels maintain. The spatial
-hand receives `following`, `location`, `weather`, and `time_of_day` alongside
+Each transform names its changed thing in `item` (a transform naming nothing
+is filed under its event's first thing). One typed relationship can cover both
+mutable endpoints without duplicate operations. Targets are world/identity keys
+or readable names. A thing the prose needs that the world does not hold, and no
+granted tool can make, is reported in `missing_referents`, which grants
+`entities` and `positions` for the one widening pass; the encoder never forces
+a change into a tool that does not own it. Positioned entities are not
+automatically body candidates: an explicit body event or the identity index
+vouches for an entity-backed body. Worn garments reach the encoder as
+`worn_garments` (name and `worn_by`), keeping the outer `attire` key (the
+wearer) separate from the garment handles inside its operations.
+The encoder receives the standing state of every granted channel's owner (the
+union of the owners' world slices). The spatial slice carries `following`, `location`, `weather`, and `time_of_day` alongside
 its geometry and `simulation_clock`. The scene's time label remains available
 when an older scene has no clock record; payload assembly does not create or
 alter a clock to supply that label.
-At both Director stages, the social hand receives `pending_obligations` with their ages
+At both Director stages, the social slice carries `pending_obligations` with their ages
 and overdue flags, plus `social_standing` from public history only. These are
 standing context for its granted channels, not new event inputs or permission
-to invent a discharge. The social hand owns `obligations`: explicit open,
+to invent a discharge. `obligations` is `social`'s channel: explicit open,
 discharge and abandonment operations remain in chronological transform history
 and on their stage envelope, outside the scene patch. Commit takes asserted
 interpret operations only from the final composed program's surviving spans,
@@ -957,61 +942,32 @@ then applies resolve operations in order, exactly once. An empty final program
 does not fall back to an earlier stage's unfiltered operations. Age alone never
 discharges a debt. Current causal operations match an exact debt identity;
 archived operations retain their historical compatibility path.
-Completion is verified after chronological execution. Current specialist
-payloads carry `completion_contract: verified_effects_v1`. Each owned effect
-requires its typed desired patch, even when the specialist believes it already
-holds. `encoded` acknowledges submission only; model `already_true` verdicts
-are not proof. Current wire schemas and semantic repair reject those bare
-claims. Archives remain readable, but a bare old claim cannot settle assigned
-work or enter `prior_work` as accepted evidence. `settled` accounts for
-non-applicable or unresolved items through `not_mine` / `no_referent`.
-A mixed result with any valid transforms keeps `status: encoded`; unresolved
-other items are recorded in `settled`. A bare no-op label does not certify
-completion or waive an assigned effect. Worked channel examples live inside
-their granted chunks; the always-loaded core teaches the shared job and
-output envelope.
+Completion is verified after chronological execution:
+`world.causal_verification` checks each requested effect against the world at
+its span, and `world.causal_completion` accounts for the work each item owes
+each owner. An owned effect needs its typed desired patch even when it is
+believed to hold already. An unmet requirement stays unresolved and is
+reported (`unfulfilled_requests`); there is no second model to forward it to,
+because the encoder held every granted tool and its one widening pass is its
+own.
 
-`required_channels` requests complementary work beside a valid desired patch.
-Row-local `assigned_hands` is the actual assignment; batch-wide `co_hands`
-only supplies context. Code retains required work by row, item and owner in
-the engine-only causal program. A missing assigned effect or required channel
-stays unresolved; one valid patch cannot settle another item's missing work.
-A hand with no applicable work must forward to an actual owner or leave the
-row unresolved, rather than call an empty answer complete.
-Code also requests the body hand for a typed `inventory_ops` transition to
+Code also requires `body`'s `attire` for a typed `inventory_ops` transition to
 `worn` when the object is an established garment. The wardrobe must agree
 with its carriage; a containment relation alone cannot make an empty wardrobe
 complete. Generic wearable objects do not acquire garment semantics by guess.
 
-Forwarded rows carry `requested_channels` and the receiving hand's earlier
-public ledgers/results as `prior_work`. The hand supplies the desired effects for each forwarded row. Code checks
-them against the state at that chronological point, including earlier writes. A completion call includes the missing rows
-and that owner’s original rows from the earliest missing span onward, in
-chronological order. Its answers replace that suffix: an inserted set-down
-can invalidate a later pickup decision. Only the unchanged prefix is
-shown as `prior_work`. There is one bounded follow-up per owner, with no
-recursive forwarding (`_rows_to_forward`; `orchestration.forwards`).
-Exact hand names accidentally supplied in `required_channels` are read as
-compatibility referrals to that hand; unknown names remain diagnostics.
-The attach site resolves `item` back to the handle, and
-`compile_transforms` orders every transform by its row's `chrono_id` and
-files it under its item; an entity a hand declared on an earlier row of the
-same answer is a standing record for its later rows. No Director-invented
-handle is used as world identity. Each hand's raw answer is kept under
-`orchestration.specialists.<hand>.results`.
-The wire schema requires a named item, a nonempty patch with owned channels,
-and each result's status and per-item verdicts. A legacy sole `patch.state_diff`
-wrapper is unwrapped before the same ownership checks. Malformed station
-records discarded during validation are reported. An unambiguous typed pose
-table nested under `stations.poses` is lifted to its sibling channel when no
-outer poses write competes; a valid station named `poses` is left alone.
-An encoded receipt with no usable owned writes enters scoped repair, as does
-an attire subject that is a known garment rather than a known wearer.
+The attach site resolves `item` back to its handle, and `compile_transforms`
+orders every transform by its row's `chrono_id` and files it under its item;
+an entity declared on an earlier event is a standing record for later ones. No
+encoder-chosen handle is used as world identity. The encoder's events as it
+gave them are kept on `orchestration.prose_contract.events`, and each owner's
+share under `orchestration.specialists.<owner>.results`. A legacy sole
+`patch.state_diff` wrapper is unwrapped before the ownership checks. Malformed
+station records discarded during validation are reported. An unambiguous typed
+pose table nested under `stations.poses` is lifted to its sibling channel when
+no outer poses write competes; a valid station named `poses` is left alone.
 Resolve's `public_evidence` validates against the social schema and remains
 on the resolve envelope and in history, outside the scene execution program.
-A causal repair receives
-the original scoped instructions; its worked example illustrates the envelope
-and cannot replace the hand's channel protocols.
 
 Interpret validates causal contacts within their chronological span and keeps
 the normalized operation in that span before rebuilding the flat projection.
@@ -1022,15 +978,15 @@ may establish contacts involving any of its named actors, while `actor_only`
 keeps the player-contact authority boundary. Archived noncausal outputs keep
 their original onset validation path.
 
-After every parallel call finishes, deterministic code zips each result to
-its hidden input row and restores `item_id` and `chrono_id`. Before validating
+After the split, deterministic code joins each share to its row and restores
+`item_id` and `chrono_id`. Before validating
 partial patches, `world.causal_program.bind_items` binds each item's primary
 record to a standing world key or its first minted key. It rewrites typed
 references, never arbitrary prose, and keeps an entity separate from its
 interior rooms. Ambiguous standing identities are reported without guessing.
 A transform's item must identify exactly one of its row's things. An absent,
 unknown or ambiguous label on a multi-item row is rejected; it never borrows
-the first item's identity. Current semantic repair asks the hand to fix it.
+the first item's identity.
 A standing body named by the item remains that body even when its patch also
 transfers another object. Related world keys are not aliases of the actor.
 The attire projection compares garment handles across string removals and
@@ -1073,14 +1029,15 @@ legacy diffs without a program retain the existing single-merge path. The
 program is stored in step variants, while intermediate scene snapshots stay
 in the transient composition and never become durable scene state.
 
-The old direct specialist fields and Director prose/manifest remain readable
-for saved outputs and fixtures. There is no additional fixed pipeline stage;
-specialist repair and missing-owner completion calls remain bounded. The
-engine commits once after composing the complete beat.
+Stored outputs of the deleted causal Director -- its ledger author's rows and
+manifest, and its specialists' direct fields -- remain readable for replay.
+There is no additional fixed pipeline stage; the encoder's one widening pass
+and the room author are the only further model calls, both bounded. The engine
+commits once after composing the complete beat.
 
 ### `background_react`
 
-Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`story/scene.py`) key `scene_life`. Three rules apply to both paths since 2026-09-02 (the identity family, `AGENTS.md` § Background presence reactions): a debt does not cross a doorway (`demand_reaches(..., aimed=)` — an owed reply, aimed by nobody now, needs the presence and an authored mind in one room; the player's words naming the person, or the body's own act, ride the hearing channel as before), a name in a line aimed at someone else is a subject and is not voiced once the beat has a precise addressee, and a line aimed at one person is answered by one person (`_one_answer_per_line` demotes a second answer to a background claim). The stage is also non-fatal: a provider failure inside a voice call is a warning and silence (`_voice_call`), never an aborted turn — the beat was resolved before this stage ran, and only a causal stage may abort. The Director's own `intended_target` on the player's lines is the third source of the address channel, after the flow refs and the structured fallback, so "market trader" binds to a present body when interpret marked no address. The stage's upstream half lives in `director_resolve`: `present_figures` shows the prose author and the `objects` hand the charter bodies standing in the beat's rooms with their posts, and `_bind_minted_entities_to_present_figures` rebinds a minted person a listed body already is.
+Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`story/scene.py`) key `scene_life`. Three rules apply to both paths since 2026-09-02 (the identity family, `AGENTS.md` § Background presence reactions): a debt does not cross a doorway (`demand_reaches(..., aimed=)` — an owed reply, aimed by nobody now, needs the presence and an authored mind in one room; the player's words naming the person, or the body's own act, ride the hearing channel as before), a name in a line aimed at someone else is a subject and is not voiced once the beat has a precise addressee, and a line aimed at one person is answered by one person (`_one_answer_per_line` demotes a second answer to a background claim). The stage is also non-fatal: a provider failure inside a voice call is a warning and silence (`_voice_call`), never an aborted turn — the beat was resolved before this stage ran, and only a causal stage may abort. The Director's own `intended_target` on the player's lines is the third source of the address channel, after the flow refs and the structured fallback, so "market trader" binds to a present body when interpret marked no address. The stage's upstream half lives in `director_resolve`: `present_figures` shows the Director and the encoder the charter bodies standing in the beat's rooms with their posts, and `_bind_minted_entities_to_present_figures` rebinds a minted person a listed body already is.
 
 - **`off` (default) — one presence.** `persist/commit_background.py`'s `pick_background_reactors` is a deterministic, LLM-free check that returns `[]` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. It is the function `agents/background.py` actually calls, with `cap=background_config.max_reactors`; `pick_background_reactor` (singular) is only a convenience wrapper that takes the top pick. Both are re-exported from `persist/commit.py`, which is why older notes name that module. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only. `max_reactors` defaults to 1 and is capped at 3, so "one presence" is the default rather than an invariant.
 - **`ambient` / `full` — the scene manager.** One batched call voices every managed presence in the room at once (roster from `managed_presences`, capped by `max_managed`), partitioned by `spatial.ambient_scope` and filtered per presence by a `hear_level` audience map. The plan label changes to "Scene life · manager (ambient|full)" accordingly. Voicing is batched; **writing is not** — each attributed entry is routed to its own record at commit, which is what keeps one call from becoming one shared mind. Design and its still-unbuilt half: [`BACKGROUND_LIFE_DESIGN.md`](../design/BACKGROUND_LIFE_DESIGN.md), [`UNBUILT.md`](../UNBUILT.md) §6.1.

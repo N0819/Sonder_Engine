@@ -222,10 +222,13 @@ class TestTheWiring:
         import agents.director as director
 
         source = inspect.getsource(director.director_resolve)
-        backstop = source.index('_orchestration_scope_backstop(ctx, out, "resolve"')
+        # The last floor before the validators: the beat's own event ledger.
+        # (Anchored on `_orchestration_scope_backstop` until it went with the
+        # causal Director on 2026-09-27.)
+        ledger = source.index('out["beat_events"] = beat_event_ledger(')
         validate = source.index("_validate_campaign_result(ctx, out)")
 
-        assert validate > backstop
+        assert validate > ledger
 
     def test_a_refusal_re_enters_the_whole_stage(self):
         """Not a patch applied in place. Re-entering is what makes the

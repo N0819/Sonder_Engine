@@ -509,9 +509,8 @@ class TestAMindIsEarnedAndTheEngineSaysWhen:
         assert "Munda Thornhurst" in told and "promotion" in told
 
     @pytest.mark.parametrize("lang", ["en", "ja"])
-    def test_the_social_hand_is_told_whom_it_may_name(self, lang):
-        text = raw_card(lang)["specialists"]["social"]["chunks"][
-            "cast_changes"]
+    def test_the_encoder_is_told_whom_it_may_name(self, lang):
+        text = raw_card(lang)["encoder"]["cast_changes"]
         lowered = text.lower()
         assert ("attached" in lowered and "promotion" in lowered) or (
             "attached" in lowered and "昇格" in text)

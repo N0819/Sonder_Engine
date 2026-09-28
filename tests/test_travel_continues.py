@@ -1,6 +1,12 @@
 """The next step of a walk somebody already declared."""
 
+import pytest
+
 from world.spatial import passable_route_next_step
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 SCENE = {"rooms": {
     "forecourt": {"name": "Forecourt", "adjacent": [
@@ -83,7 +89,7 @@ import time
 
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from tests.helpers import fanout_resolve_agent
+from tests.director_fakes import prose_resolve_agent
 
 WALK_SCENE = {
     "location": "Ferry Port",
@@ -160,7 +166,7 @@ def test_a_silent_beat_continues_the_walk(temp_db, monkeypatch):
 
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
     monkeypatch.setattr(director, "_agent_json",
-                        fanout_resolve_agent(_resolved()))
+                        prose_resolve_agent(_resolved()))
     monkeypatch.setattr(movement, "paces_for", lambda seconds=None: 4)
 
     out = director.director_resolve(ctx, nonce=0)
@@ -174,7 +180,7 @@ def test_a_whole_silent_beat_carries_the_walk_to_its_end(temp_db, monkeypatch):
 
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
     monkeypatch.setattr(director, "_agent_json",
-                        fanout_resolve_agent(_resolved()))
+                        prose_resolve_agent(_resolved()))
     out = director.director_resolve(ctx, nonce=0)
     assert out["state_diff"]["positions"]["The Stranger"] == "lobby"
     assert out["travel"]["arrived"] == ["The Stranger"]
@@ -186,7 +192,7 @@ def test_the_walk_ends_by_arriving_and_the_record_is_cleared(temp_db,
 
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "hotel"}})
     monkeypatch.setattr(director, "_agent_json",
-                        fanout_resolve_agent(_resolved()))
+                        prose_resolve_agent(_resolved()))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -194,6 +200,11 @@ def test_the_walk_ends_by_arriving_and_the_record_is_cleared(temp_db,
     assert out["travel"]["arrived"] == ["The Stranger"]
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="`travel_interrupted` was the causal Director's own field; the prose "
+           "Director writes prose and nothing asks it whether the beat stopped a "
+           "walk (UNBUILT_PIPELINE §1.1, the prose-only gaps)")
 def test_the_director_may_say_the_beat_interrupted_the_walk(temp_db,
                                                             monkeypatch):
     """The nuance the engine cannot enumerate lives with the authority that
@@ -203,7 +214,7 @@ def test_the_director_may_say_the_beat_interrupted_the_walk(temp_db,
     import agents.director as director
 
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         _resolved(travel_interrupted=[
             {"subject": "The Stranger",
              "reason": "She plants herself and takes him by the shoulders."}])))
@@ -214,6 +225,11 @@ def test_the_director_may_say_the_beat_interrupted_the_walk(temp_db,
     assert out["travel"]["interrupted"][0]["subject"] == "The Stranger"
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="the restraint floor runs inside `_reconcile_resolution`, which "
+           "`director_resolve` skips on any beat with a causal ledger -- every "
+           "live beat (UNBUILT_PIPELINE §1.1, the prose-only gaps)")
 def test_a_restrained_body_does_not_walk_whatever_anyone_says(temp_db,
                                                               monkeypatch):
     """The deterministic floor, which the Director cannot argue with: a
@@ -229,7 +245,7 @@ def test_a_restrained_body_does_not_walk_whatever_anyone_says(temp_db,
                      "kind": "restraint",
                      "state": {"level": "bound", "by": "the Doctor"}})))
     monkeypatch.setattr(director, "_agent_json",
-                        fanout_resolve_agent(_resolved()))
+                        prose_resolve_agent(_resolved()))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -244,7 +260,7 @@ def test_a_walk_whose_route_has_shut_does_not_advance(temp_db, monkeypatch):
     ctx = _walk_ctx(temp_db, scene=scene,
                     approach={"The Stranger": {"to_room": "lobby"}})
     monkeypatch.setattr(director, "_agent_json",
-                        fanout_resolve_agent(_resolved()))
+                        prose_resolve_agent(_resolved()))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -259,7 +275,7 @@ def test_declaring_a_fresh_move_this_beat_is_left_alone(temp_db, monkeypatch):
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "office"}})
     ctx.director_interpret["movement"] = {
         "to_room": "hotel", "mover": "self", "arrives": True}
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         _resolved(state_diff={"positions": {"The Stranger": "hotel"}})))
 
     out = director.director_resolve(ctx, nonce=0)
@@ -280,7 +296,7 @@ def test_nobody_walks_when_no_walk_was_ever_declared(temp_db, monkeypatch):
 
     ctx = _walk_ctx(temp_db)
     monkeypatch.setattr(director, "_agent_json",
-                        fanout_resolve_agent(_resolved()))
+                        prose_resolve_agent(_resolved()))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -331,7 +347,7 @@ def test_a_station_anchor_cannot_relocate_a_group_that_agrees(temp_db,
     # The live shape: the resolve DOES write a position for the newcomer, so
     # the repair operates on the real diff. With no `positions` key at all it
     # mutates a throwaway and warns about a move it never made.
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         _resolved(state_diff={
             "positions": {"Mara": "lobby"},
             "stations": {
@@ -356,7 +372,7 @@ def test_a_genuine_disagreement_resolves_to_the_players_room(temp_db,
     scene = json.loads(json.dumps(STATION_SCENE))
     scene["positions"]["Mara"] = "office"
     ctx = _walk_ctx(temp_db, scene=scene)
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         _resolved(state_diff={
             "positions": {"Mara": "office"},
             "stations": {
@@ -380,7 +396,7 @@ def test_a_continued_walk_keeps_the_end_it_was_given(temp_db, monkeypatch):
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby",
                                                         "to_anchor": "desk"}})
     monkeypatch.setattr(director, "_agent_json",
-                        fanout_resolve_agent(_resolved()))
+                        prose_resolve_agent(_resolved()))
     monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 4)
     out = director.director_resolve(ctx, nonce=0)
     leg = next(a for a in out["travel"]["advanced"] if a["subject"] == "The Stranger")

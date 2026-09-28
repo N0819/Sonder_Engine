@@ -10,7 +10,7 @@ from __future__ import annotations
 from agents.director import (_evidence_present, _normalize_diff_shape,
                              _opening_pose_snapshots)
 from agents import composer
-from llm.prompts import DEFAULT_PROMPTS
+from llm.prompts import unified_specialist_prompt
 from llm.schemas import DirectorEstablish, StateDiff, validate_llm_output_strict
 from world.spatial import merge_scene_with_diff, pose_facts
 
@@ -230,8 +230,8 @@ class TestObserverProjection:
     def test_prompts_forbid_default_standing_and_appearance_roll_calls(self):
         # The perception half of this test asserted a prompt no model reads --
         # perception composes deterministically and its prompt is gone from
-        # the packs. The spatial specialist is a live model call, so its half
-        # is the half that can still regress.
-        resolve = DEFAULT_PROMPTS["director_spatial"]
+        # the packs. The encoder is a live model call, so its half is the half
+        # that can still regress.
+        resolve = unified_specialist_prompt(["poses"], "en", None)
         assert "BODY POSE AND RELATIVE ARRANGEMENT" in resolve
         assert "Never default an unspecified pose to standing" in resolve

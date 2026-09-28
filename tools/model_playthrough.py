@@ -297,11 +297,6 @@ def main():
                          "this is the largest untested lever on the Director. "
                          "Whether less thinking costs resolution QUALITY is "
                          "the open question; measure it, do not assume it.")
-    ap.add_argument("--sequential-fanout", action="store_true",
-                    help="run the Director's specialists one at a time "
-                         "instead of at once (default parallel, as in "
-                         "production) -- for a provider that will not take "
-                         "concurrent requests")
     ap.add_argument("--role-model", action="append", default=[],
                     metavar="ROLE=[PROVIDER:]MODEL",
                     help="override ONE role, repeatable. The point of the "
@@ -373,9 +368,6 @@ def main():
             print("  reasoning effort: %s -> %s" % (role, level), flush=True)
         db_module.set_setting("reasoning_effort", _json.dumps(efforts))
 
-    if args.sequential_fanout:
-        db_module.set_setting("director_fanout_mode", "sequential")
-        print("  director fan-out: SEQUENTIAL", flush=True)
     author = QuestAuthor()
     author.capture_dir = args.capture
     install(author)

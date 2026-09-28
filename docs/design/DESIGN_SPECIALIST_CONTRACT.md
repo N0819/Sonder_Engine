@@ -1,5 +1,7 @@
 # The causal ledger and specialist contract
 
+**SUPERSEDED 2026-09-27.** The causal Director this describes -- and its specialists -- was deleted; the Director writes prose and ONE encoder records every channel ([`DESIGN_PROSE_CONTRACT.md`](DESIGN_PROSE_CONTRACT.md)). Kept as the argument and the measurements; nothing below describes running code.
+
 **BUILT 2026-09-12.** This opening section is the current contract. The later
 sections retain the measurements and intermediate designs that led to it; when
 they describe whole-beat prose, manifest ids, `ledger_notes`, model-authored

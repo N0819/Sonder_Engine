@@ -32,12 +32,11 @@ validates the whole pack before it can be selected for a story. It compares
 every story pack's prompt ids and every UI pack's message ids against English,
 so an omitted surface fails installation instead of falling back silently.
 
-The built-in `en` pack is the compatibility reference. Its cards own all 43
-system-prompt families — 36 authored bodies plus the seven Director sheets
-assembled from `specialists` and `prose_author_sheet`, which are never stored
-a second time (this line read "42 — 35 authored" until 2026-08-29; the
-measured counts are `len(prompts.DEFAULT_PROMPTS)` and
-`len(prompts.ASSEMBLED_SHEET_IDS)`) — authoring defaults, compositor vocabulary/templates, 114
+The built-in `en` pack is the compatibility reference. Its cards own all 37
+system-prompt families, each an authored body (the measured count is
+`len(prompts.DEFAULT_PROMPTS)`; the causal Director's seven sheets assembled
+from parts went on 2026-09-27 with the cards they were built from), plus the
+cards the prose Director, the encoder and the decision model read — authoring defaults, compositor vocabulary/templates, 114
 deterministic linguistic structures, and the browser/API source-message
 catalog. The linguistic card includes quote and sentence rules, morphology,
 agreement, pronouns, action/authority cues, title handling, narration-person

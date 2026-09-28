@@ -21,12 +21,15 @@ TRAFFIC = ("crowd_ops", "courier_ops", "telling_ops",
 
 def test_the_hand_is_gone_from_every_registry():
     from agents.director import SPECIALISTS
-    from llm.prompts import DEFAULT_PROMPTS, SPECIALIST_PROMPT_SPECS
+    from llm.prompts import DEFAULT_PROMPTS, _prompt_card
     from llm.providers import ROLES
     from llm.schemas import SCHEMA_MAP, SPECIALIST_CHANNELS
 
     assert "offscreen" not in SPECIALISTS
-    assert "offscreen" not in SPECIALIST_PROMPT_SPECS
+    for language in ("en", "ja"):
+        card = _prompt_card(language)
+        assert "offscreen" not in card["specialists"], language
+        assert not [key for key in card["encoder"] if "offscreen" in key], language
     assert "director_offscreen" not in ROLES
     assert "director_offscreen" not in SCHEMA_MAP
     assert "director_offscreen" not in SPECIALIST_CHANNELS
@@ -37,15 +40,19 @@ def test_the_hand_is_gone_from_every_registry():
 
 
 def test_the_social_hand_owns_the_traffic_in_all_three_registries():
+    """The owners table, the owner's schema, and the pack: the social owner's
+    order and the encoder's card, in both packs."""
     from agents.director import SPECIALISTS
-    from llm.prompts import SPECIALIST_PROMPT_SPECS
+    from llm.prompts import _prompt_card
     from llm.schemas import SPECIALIST_CHANNELS
 
     for channel in TRAFFIC:
         assert channel in SPECIALISTS["social"]["channels"]
         assert channel in SPECIALIST_CHANNELS["director_social"]
-        assert channel in SPECIALIST_PROMPT_SPECS["social"]["chunks"]
-        assert channel in SPECIALIST_PROMPT_SPECS["social"]["order"]
+        for language in ("en", "ja"):
+            card = _prompt_card(language)
+            assert channel in card["specialists"]["social"]["order"], language
+            assert channel in card["encoder"], language
 
 
 def test_the_reactive_plan_channel_left_the_directors_diff():
@@ -56,17 +63,6 @@ def test_the_reactive_plan_channel_left_the_directors_diff():
     assert "offscreen_plan_ops" not in _fields(schemas.DirectorSocialSpecialist)
     assert not hasattr(schemas, "OffscreenPlanOp")
     assert not hasattr(schemas, "DirectorOffscreenSpecialist")
-
-
-def test_no_hand_lists_offscreen_as_a_forwarding_address():
-    """Every core carries the same hands table for `reroute_to`; an address
-    nobody answers to would send the work nowhere."""
-    for language in ("en", "ja"):
-        base = ROOT / "language_packs" / language / "cards" / "system_prompts" / "specialists"
-        for core in base.glob("*/core.txt"):
-            text = core.read_text(encoding="utf-8")
-            assert "  offscreen --" not in text, core
-            assert "offscreen_plan_ops" not in text, core
 
 
 def test_the_gate_facts_no_longer_read_the_planning_floor(temp_db):

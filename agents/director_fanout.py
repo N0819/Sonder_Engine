@@ -1,10 +1,9 @@
-"""The Director fan-out's deterministic frame: views, payloads, assembly, backstop.
+"""The Director fan-out's deterministic frame: views, payloads, assembly.
 
-Concurrency choice (`fanout_is_parallel`), the per-stage beat views each
-specialist reads, scoped payload assembly, manifest slicing, channel
-merge normalisation, the event-verdict echo, and the orchestration scope
-backstop. The fan-out call itself (`_run_specialists`) and the repair
-pass (`_specialist_repairs`) are model-calling and stay in
+The per-stage beat views, each channel owner's world slice (the union of
+which is the encoder's payload, `director_prose.encoder_payload`), manifest
+and span slicing, channel merge normalisation and the event-verdict echo.
+The split of the encoder's answer by owner (`_run_specialists`) stays in
 `agents/director.py`.
 
 Import direction: nothing outside `agents/director*.py` may import an
@@ -13,10 +12,9 @@ Import direction: nothing outside `agents/director*.py` may import an
 """
 
 from story.character_schema import character_name_from_text
-from core.db import get_setting, wget
+from core.db import wget
 from world.survival import survival_enabled, vitals_of
 from world.spatial import (contact_action_ledger_index, contact_id,
-                           passage_id_for,
                            crossing_of, effective_anchors, room_of,
                            scene_room_id, substance_ledger_index)
 from world.spatial import anchor_cells, body_cell, door_cell, room_grid
@@ -28,36 +26,10 @@ from .director_scopes import (
     SPECIALISTS,
     _CHANNEL_SPECIALISTS,
     reads_dialogue,
-    _CATEGORY_CHANNELS,
     note_key_targets,
     manifest_category_targets,
-    _DELEGATED_CHANNELS,
     _LIST_DELEGATED,
-    _PROSE_DUTY_SHIPPED,
-    _STRUCTURAL_CHANNEL_FACTS,
 )
-
-def fanout_is_parallel():
-    """Whether the Director's specialists run at once (default) or in turn.
-
-    PARALLEL IS THE DEFAULT and is what the fan-out is for: the specialists
-    are handed disjoint channels of the same finished beat, so they have
-    nothing to say to each other and the beat's cost is its slowest hand
-    rather than the sum of them.
-
-    Sequential exists because concurrency is not free everywhere -- a
-    provider with a one-request-at-a-time key, a rate limit measured in
-    concurrent connections, a local runtime serving one model on one GPU.
-    Under those, parallel dispatch does not go faster and can fail. It is
-    NOT a fallback to the monolith: the same specialists run with the same
-    scopes, assembled in the same canonical order, and a beat still
-    dispatches a mean 1.75 of 6 hands carrying 1-4k sheets. Sequential
-    fan-out is expected to beat the single ~21k-token sheet it replaced;
-    parallel simply beats it by more.
-    """
-    value = str(get_setting("director_fanout_mode") or "").strip().casefold()
-    return value not in ("sequential", "serial", "one_at_a_time")
-
 
 def _normalized_ledger_notes(out):
     """The Director's rulings, blank lines dropped.
@@ -377,20 +349,6 @@ def _specialist_span_slice(name, view):
     return sorted(rows, key=chronology)
 
 
-def specialist_co_hands(name, view):
-    """The OTHER hands settling a part of some span this one was handed.
-
-    Empty on the ordinary beat where every span this hand got is wholly its
-    own, which is what keeps the chunks off the sheet the rest of the time.
-    """
-    others = []
-    for item in _specialist_span_slice(name, view or {}):
-        for hand in span_owners(item):
-            if hand != name and hand not in others:
-                others.append(hand)
-    return [hand for hand in SPECIALISTS if hand in others]
-
-
 def span_categories(item):
     """Every ledger family one span names, normalized, as a list."""
     if not isinstance(item, dict):
@@ -625,145 +583,6 @@ def _without_private_keys(item):
             if not str(key).startswith("_")}
 
 
-def _specialist_ledger(item):
-    """A Director ledger row after its private join key is removed.
-
-    ``item_id`` belongs to the deterministic dispatch/recompile seam.  A
-    specialist is correlated with that row by response position, so showing
-    the id to a second model only creates an avoidable opportunity to alter or
-    mis-copy it.
-    """
-    visible = _without_private_keys(item)
-    if not isinstance(visible, dict):
-        return visible
-    visible = dict(visible)
-    visible.pop("item_id", None)
-    visible.pop("item_ids", None)
-    visible.pop("chrono_id", None)
-    # _span_items aliases the private chrono as event_id for legacy readers.
-    # Positional specialist results need neither spelling of that join key.
-    visible.pop("event_id", None)
-    # AUTHORITY IS THE DIRECTOR'S WORKING INPUT, NOT A HAND'S.
-    #
-    # It is how an asserted act is judged contestable or not, and that
-    # judgement is made before a row is routed anywhere -- the answer arrives
-    # as `commitment`, which is on the row. Passing the reasoning along with
-    # the ruling invites a hand to re-derive the ruling, and a hand that
-    # disagrees with the Director about whether something happened is the one
-    # thing the fan-out has no way to reconcile.
-    visible.pop("authority_mode", None)
-    # THE BEAT'S SPAN IS NOT A HAND'S BUSINESS, and this is the reason the
-    # `time` channel stopped being one: a hand receives the rows selected for
-    # it, so what it could do with a duration is re-derive a total it cannot
-    # see the terms of. The author prices each row it cut and
-    # `world.mechanics.beat_time_from_spans` sums them.
-    visible.pop("seconds", None)
-    return visible
-
-
-#: What each hand shows a CO-OWNER of a span it is sharing: identity, and the
-#: one fact that says which thing it is. Never a ledger's own state -- see the
-#: module note on `worn_index`, which is this rule's unconditional ancestor.
-#: Keyed by the hand being LOOKED AT, not the hand looking, because what the
-#: body hand holds is the same answer whoever asks (`co_hands/<hand>.txt` makes
-#: the same collapse for the prose).
-def _co_view_body(sc):
-    """Who is wearing what. Not coverage, not condition, not what afflicts."""
-    return {"worn": [
-        {"garment": str(garment), "worn_by": str(who)}
-        for who, entry in (sc.get("attire") or {}).items()
-        if isinstance(entry, dict)
-        for garment in (entry.get("wearing") or [])
-        if str(garment).strip()
-    ]}
-
-
-def _co_view_objects(sc):
-    """What things there are, and where. Not their state."""
-    return {"things": [
-        {"id": str(eid), "name": str((entity or {}).get("name") or eid),
-         "at": str((sc.get("positions") or {}).get(eid) or "")}
-        for eid, entity in (sc.get("entities") or {}).items()
-        if isinstance(entity, dict)
-    ]}
-
-
-def _co_view_spatial(sc):
-    """Where bodies stand and which ways exist. Not poses, not distances."""
-    rooms = sc.get("rooms") or {}
-    return {
-        "standing": [{"who": str(who), "in": str(room)}
-                     for who, room in (sc.get("positions") or {}).items()
-                     if str(room).strip()],
-        # `way` is the doorway's OWN id (`passage_id_for`, sorted so the two
-        # mirrored edges of one doorway agree), and it is the same token
-        # `span_pairings` groups by. A hand handed the id can say where its
-        # record went; a hand handed only a name has to invent one.
-        "ways": [
-            {"way": passage_id_for(rid, str(edge.get("to") or "")),
-             "from": str(rid), "to": str(edge.get("to") or ""),
-             "barrier": str(edge.get("barrier") or "open"),
-             **({"name": str(edge["name"])} if edge.get("name") else {})}
-            for rid, room in rooms.items() if isinstance(room, dict)
-            for edge in (room.get("adjacent") or [])
-            if isinstance(edge, dict) and str(edge.get("to") or "").strip()
-        ],
-    }
-
-
-def _co_view_contact(sc):
-    """Who is touching whom, and what is inside what. Not manner, not scale."""
-    return {
-        "touching": [
-            {"actor": str(row.get("actor") or ""),
-             "target": str(row.get("target") or "")}
-            for row in (sc.get("contacts") or [])
-            if isinstance(row, dict) and str(row.get("actor") or "").strip()
-        ],
-        "inside": [
-            {"what": str(what), "in": str((entry or {}).get("in") or "")}
-            for what, entry in (sc.get("contained") or {}).items()
-            if isinstance(entry, dict)
-        ],
-    }
-
-
-def _co_view_social(sc):
-    """Who is present under what name. Not what anyone knows or believes."""
-    return {"present": [
-        {"who": str(who)} for who in (sc.get("positions") or {})
-        if str(who).strip()
-    ]}
-
-
-_CO_HAND_VIEWS = {
-    "body": _co_view_body,
-    "objects": _co_view_objects,
-    "spatial": _co_view_spatial,
-    "contact": _co_view_contact,
-    "social": _co_view_social,
-}
-
-
-def co_hand_view(name, view, sc):
-    """The identity slices of every OTHER owner of a span this hand received.
-
-    Empty on the ordinary beat, where every span a hand got is wholly its own
-    -- which is the point, and the same gate `specialist_co_hands` uses, so the
-    paragraph and the rows that make it actionable arrive together or not at
-    all.
-    """
-    slices = {}
-    for hand in specialist_co_hands(name, view):
-        builder = _CO_HAND_VIEWS.get(hand)
-        if not builder:
-            continue
-        rows = {key: value for key, value in builder(sc or {}).items() if value}
-        if rows:
-            slices[hand] = rows
-    return slices
-
-
 def addressed_house(ctx, names, cap=40):
     """``{charter_key: [{name, post, place}, ...]}`` for the institution of
     every addressed figure -- the bodies an errand may name. Fail-open: a
@@ -803,19 +622,15 @@ def addressed_house(ctx, names, cap=40):
 
 
 def _specialist_payload(name, ctx, sc, view, extras):
-    """One specialist's scoped payload -- its written entitlement, applied
-    to whichever invocation's causal ledger it was handed. The shared part is
-    only the routed ledgers plus a deterministic variant seed. Each row carries
-    its source identity, adjacent authority mode, chronology, object name, and
-    resolution note. Its numeric item id remains private to dispatch and the
-    recompiler. Per-specialist context contains only that hand's standing
-    ledgers and the minimal indexes needed to address them."""
+    """One channel owner's world slice: its standing ledgers and the minimal
+    indexes needed to address them. The encoder's payload is the union of the
+    slices its granted channels' owners supply
+    (`director_prose.encoder_payload`). What a causal hand was also handed --
+    its routed ledger rows, the Director's note, the asserted manifest and its
+    co-owners' rows -- went with the hands on 2026-09-27; the encoder never
+    received any of it."""
     spec = SPECIALISTS[name]
-    payload = {
-        "source": view["source"],
-        "variant_seed": extras.get("nonce"),
-        "completion_contract": "verified_effects_v1",
-    }
+    payload = {}
     if extras.get("identity_index"):
         # Causal rows retain stable persona/character ids.  Hands write scene
         # ledgers under display subjects, so give every hand the same small,
@@ -831,181 +646,10 @@ def _specialist_payload(name, ctx, sc, view, extras):
         house = addressed_house(ctx, view["addressed_figures"])
         if house:
             payload["addressed_house"] = house
-    # The Director's ruling for THIS hand's channels, when it made one, AT
-    # BOTH STAGES. Scoped like every other slice: a specialist sees its own
-    # note and no one else's, so this carries authority without carrying
-    # another hand's ledger. Absent when the beat settled nothing here.
-    # Keyed by SPECIALIST or by any CHANNEL that specialist owns. Measured
-    # 2026-09-01: gemini-3.6-flash returned {"contact": ..., "vitals": ...}
-    # -- `contact` is a hand and `vitals` is one of `body`'s channels, and
-    # the Director was right both times. Insisting on the hand's name
-    # would have silently dropped a correct ruling, which is the failure
-    # this whole channel exists to prevent.
-    #
-    # Above the source branch since 2026-09-07: the interpret view carries
-    # `ledger_notes` and dispatches hands BY them, and the payload attached
-    # the note only on the resolve side -- so an interpret-side hand was run
-    # because of a ruling and then shown no ruling. Its sheet ends with the
-    # note card ("no note and no manifest entry: encode nothing"), and the
-    # interpret manifest is always empty, so a player's asserted coat-off or
-    # sit-down reached the onset preview only when a model disobeyed its
-    # sheet.
-    notes = view.get("ledger_notes") or {}
-    note = _note_for(notes, name)
-    if isinstance(note, str) and note.strip():
-        payload["director_note"] = note.strip()
-    # Both Director invocations now expose the same source: a causal ledger.
-    # No specialist receives a role-specific declaration wrapper or the raw
-    # input. Spoken data is included only for channels that can persist a
-    # social consequence.
+    # Spoken data is included only for channels that can persist a social
+    # consequence.
     if reads_dialogue(name) and view.get("dialogue"):
         payload["dialogue_log"] = view["dialogue"]
-    manifest = _specialist_manifest_slice(name, view)
-    if manifest:
-        payload["changes_asserted"] = manifest
-    selected_spans = _specialist_span_slice(name, view)
-    internal_rows = [_without_private_keys(span) for span in selected_spans]
-    if internal_rows:
-        ledgers = [_specialist_ledger(row) for row in internal_rows]
-        identity_index = extras.get("identity_index") or {}
-        for span, ledger in zip(selected_spans, ledgers):
-            if not isinstance(ledger, dict):
-                continue
-            ledger["assigned_hands"] = span_owners(span)
-            if name not in ledger["assigned_hands"]:
-                ledger["assigned_hands"].append(name)
-            if span.get("_requested_channels"):
-                ledger["requested_channels"] = list(span["_requested_channels"])
-            if span.get("_prior_work"):
-                ledger["prior_work"] = span["_prior_work"]
-            source_name = identity_index.get(str(
-                ledger.get("source_entity_id") or ""))
-            if source_name:
-                # A hand writes scene subjects, not causal identity handles.
-                # Keep the stable source id for provenance and put its exact
-                # display join beside it.  This prevents a contact hand from
-                # guessing that ``persona:10`` meant the Doctor when it was
-                # Hinami, without asking another model to infer identity.
-                ledger["source_name"] = str(source_name)
-        # OBJECT MATCHING COMES FROM THE WORLD, NOT FROM DIRECTOR PROSE.
-        # The Director supplies only a readable object_name. Deterministic
-        # code matches it against standing scene records and embeds the
-        # canonical candidates on that row. Director-authored ids and the
-        # private item_id never cross the specialist boundary. An unmatched
-        # name is simply new or unresolved; no fuzzy guess is fabricated.
-        # AND THE SAME RESOLUTION FOR WHAT THE ACT WAS AIMED AT. `targets`
-        # already reached every hand, but as bare strings while `object_name`
-        # beside them arrived resolved -- so a hand could see
-        # `targets: ["north_door", "Sera"]` and have no way to tell a room id
-        # from a body from a word the Director invented. Asking it to guess
-        # is asking it to read prose for identity, which is the one thing
-        # this whole seam exists to stop. One index, both fields.
-        queries = {}
-
-        def want(text):
-            query = str(text or "").strip().casefold()
-            # A name as prose writes it carries its determiner ("the
-            # notebook"); a world name does not. The determiner is grammar,
-            # not identity, so it is dropped before matching.
-            for article in ("the ", "a ", "an "):
-                if query.startswith(article) and len(query) > len(article):
-                    query = query[len(article):].strip()
-                    break
-            if query:
-                queries.setdefault(query, set())
-            return query
-
-        row_queries = []
-        for row in ledgers:
-            names = row.get("item_names") if isinstance(row.get("item_names"), list) else []
-            row_queries.append((
-                want(row.get("object_name")),
-                [want(target) for target in row.get("targets") or []],
-                [want(name) for name in names],
-            ))
-
-        def match(kind, key, display, aliases=(), **details):
-            forms = {str(key).strip().casefold(),
-                     str(display).strip().casefold()}
-            forms.update(str(value).strip().casefold()
-                         for value in (aliases or []) if str(value).strip())
-            found = {
-                "kind": kind,
-                "world_key": str(key),
-                "world_name": str(display or key),
-                **details,
-            }
-            for query in forms & set(queries):
-                queries[query].add(tuple(sorted(found.items())))
-
-        # Positions also contains portable objects and fixtures. Calling
-        # every placed key a body made a jacket a candidate wearer of itself
-        # in live causal output. Keep the legacy placed-subject convention
-        # only for subjects without entity records; explicit body ledgers
-        # and registered identities can vouch for an entity-backed body.
-        entities = sc.get("entities") or {}
-        bodies = set(sc.get("positions") or {}) - set(entities)
-        bodies.update(sc.get("attire") or {})
-        bodies.update(sc.get("scales") or {})
-        bodies.update(str(who) for who in identity_index.values() if who)
-        for who in sorted(bodies):
-            match("body", who, who)
-        for entity_id, entity in (sc.get("entities") or {}).items():
-            entity = entity if isinstance(entity, dict) else {}
-            match("entity", entity_id, entity.get("name") or entity_id,
-                  entity.get("aliases") or [])
-        for room_id, room in (sc.get("rooms") or {}).items():
-            room = room if isinstance(room, dict) else {}
-            match("room", room_id, room.get("name") or room_id,
-                  room.get("aliases") or [])
-        for who, attire in (sc.get("attire") or {}).items():
-            if not isinstance(attire, dict):
-                continue
-            for garment in attire.get("wearing") or []:
-                match("garment", garment, garment, worn_by=str(who))
-        def candidates(query):
-            return sorted(
-                (dict(entry) for entry in queries.get(query) or ()),
-                key=lambda found: (found["kind"], found["world_key"]))
-
-        for index, (name_query, target_queries, item_queries) in enumerate(row_queries):
-            found = candidates(name_query) if name_query else []
-            if found:
-                ledgers[index]["world_matches"] = found
-            # EACH THING THE ROW IS ABOUT, RESOLVED ON ITS OWN: `item_matches`
-            # is {item name: candidates}; a name absent from it is new or
-            # unresolved, which is what the hand mints under.
-            names = ledgers[index].get("item_names") if isinstance(
-                ledgers[index].get("item_names"), list) else []
-            matched = {}
-            for item_name, query in zip(names, item_queries):
-                resolved = candidates(query) if query else []
-                if resolved and str(item_name).strip():
-                    matched[str(item_name).strip()] = resolved
-            if matched:
-                ledgers[index]["item_matches"] = matched
-            aimed = {}
-            for position, query in enumerate(target_queries):
-                resolved = candidates(query) if query else []
-                if resolved:
-                    aimed[str((ledgers[index].get("targets")
-                               or [])[position])] = resolved
-            if aimed:
-                # Keyed by the Director's own spelling, so the hand can look
-                # up the target it was handed rather than re-derive it. An
-                # unmatched target is simply absent: new or unresolved, and
-                # never a fabricated guess.
-                ledgers[index]["target_matches"] = aimed
-        payload["ledgers"] = ledgers
-    # WHAT THE OTHER OWNERS OF THOSE SPANS ARE HOLDING, identity only. The
-    # sheet already tells this hand WHO is settling the other half
-    # (`co_hands/<hand>.txt`); without the rows that is a paragraph it cannot
-    # act on, and a hand that cannot name its co-owner's thing invents one --
-    # which is how a second record of an existing thing gets made.
-    _co = co_hand_view(name, view, sc)
-    if _co:
-        payload["co_hands"] = _co
-
     rooms_index = {
         rid: str((room or {}).get("name") or rid)
         for rid, room in (sc.get("rooms") or {}).items()
@@ -1492,196 +1136,3 @@ def _index_addressed_events(dispatch):
     return index
 
 
-def _author_emitted_channels(out, stage):
-    """The delegated channels the STAGE AUTHOR itself put content in.
-
-    Read once, before any specialist merges, and kept on the orchestration
-    record as `author_emitted`, because it is the only thing the scope
-    backstop's channel half is about: the author's lean sheet says to leave
-    every delegated channel empty, so author content in a channel no served
-    hand owns is the mis-emission worth reporting. Everything else that
-    can stand in a delegated channel at the end of the beat is legitimate
-    and was being mistaken for it once dispatch stopped running every hand
-    on every physical beat -- the engine's own seams (`_ground_public_evidence`
-    mints `public_evidence` from the beat's source list on every beat with a
-    line or an act; the movement backstop writes a declared, unblocked move
-    into `positions` itself), and an owner's repair call landing in a
-    channel its hand was not dispatched for. Under the gate-keyed dispatch
-    the social and spatial hands ran on exactly those beats, so the
-    confusion never surfaced; under the ruling-keyed one it fired on a
-    quiet line of dialogue and on a plain walk through an open door.
-    """
-    emitted = []
-    for channel in _DELEGATED_CHANNELS:
-        container, key = _stage_container(out, stage, channel)
-        if container.get(key):
-            emitted.append(channel)
-    return emitted
-
-
-def _structurally_absent_channels(specialists):
-    """Channels that cannot be served in this story whatever the beat holds."""
-    facts = {}
-    for state in (specialists or {}).values():
-        if isinstance(state, dict) and isinstance(state.get("facts"), dict):
-            facts = state["facts"]
-            break
-    return {channel for channel, fact in _STRUCTURAL_CHANNEL_FACTS.items()
-            if fact in facts and not facts.get(fact)}
-
-
-def _orchestration_scope_backstop(ctx, out, stage, scene=None):
-    """`changes_asserted` reconciliation pointed at the SCOPE.
-
-    Runs LAST, on the final reconciled output, and only on the orchestrated
-    path. One check covers both an unserved hand and a wrongly omitted
-    chunk, because both are the same fact: a channel was not in any SERVED
-    scope (granted to a specialist that ran) and content for it shipped
-    anyway -- a manifest entry in that channel's category, or channel
-    content in the final output (the stage model's own, or the repair
-    seam's). Every such channel is REPORTED through `tell_director` and
-    never dropped: fail-open means the unowned content stands and the
-    existing deterministic seams keep judging it.
-
-    Since dispatch keyed on the Director's ruling, an unserved CHANNEL has
-    one ordinary cause: the ruling never reached its hand -- no
-    `ledger_notes` line and no `changes_asserted` entry in its categories
-    -- and the author encoded the change itself anyway (`author_emitted`
-    is the snapshot that tells the author's content from an engine seam's
-    or a repair's), or a hand that was addressed failed. A manifest entry
-    always addresses its hand, so the manifest half of this check now
-    fires only for a failed call or a ledger the story does not keep. An
-    unserved PROSE DUTY is still a gate prediction that the beat proved
-    wrong.
-
-    The record also carries the per-beat scope measurement the experiment
-    is judged by: granted vs served vs produced, where over-grant is only
-    cost and under-grant is the dangerous direction this backstop exists
-    to catch."""
-    record = out.get("orchestration") or {}
-    if not record.get("enabled"):
-        return
-    specialists = record.get("specialists") or {}
-    granted, served = set(), set()
-    failed = []
-    for name, state in specialists.items():
-        scope = set(state.get("scope") or ())
-        granted |= scope
-        if state.get("run") and state.get("ran"):
-            served |= scope
-        elif state.get("run"):
-            failed.append(name)
-    produced = []
-    flags = []
-    # Only the AUTHOR's own content in an unserved channel is a flag; an
-    # engine seam's write or an owner's repair is not (see
-    # `_author_emitted_channels`). A record without the snapshot -- there
-    # is none on the live path -- falls back to flagging everything.
-    emitted = record.get("author_emitted")
-    for channel in _DELEGATED_CHANNELS:
-        container, key = _stage_container(out, stage, channel)
-        if container.get(key):
-            produced.append(channel)
-            if channel not in served \
-                    and (emitted is None or channel in emitted):
-                flags.append(f"{key} carries content for {channel!r}")
-    if stage == "resolve":
-        # A channel can be unserved for two different reasons, and only one
-        # of them is a gate mispredict. "No work in it THIS BEAT" is a
-        # prediction, and a manifest item naming it is evidence the
-        # prediction was wrong. "This story has no such ledger AT ALL" is
-        # not a prediction -- a story with survival off has no vitals to
-        # change, ever -- so a manifest item naming it says the Director
-        # mis-categorised, not that the gate misfired.
-        #
-        # Measured live (chat 71, survival off): the resolve filed a
-        # climax's spent-ness under `vitals` because 8.2.2 told it to take
-        # the CLOSEST category and never omit, and the backstop announced
-        # "the scope gate mispredicted" about a channel that shipped
-        # nothing and could never have shipped anything. A warning that
-        # fires when nothing is wrong is how a reader learns to skip
-        # warnings, so this one is told apart from the real thing and sent
-        # to the Director as the categorisation note it actually is.
-        structural = _structurally_absent_channels(specialists)
-        # The same (cast, scene) pair the dispatch view and the
-        # reconciliation seam pass (A41): three readers of one manifest, and
-        # a fold that folded differently here would report a channel the
-        # other two had already merged away.
-        for item in _manifest_items(out, ctx.cast, scene):
-            channel = _CATEGORY_CHANNELS.get(item.get("category"))
-            if not channel or channel in served:
-                continue
-            subject = item.get("subject") or "an unnamed subject"
-            if channel in structural:
-                ctx.tell_director(
-                    f"categorisation: a {item['category']} change was "
-                    f"asserted for {subject!r}, but this story keeps no "
-                    f"{channel} ledger, so nothing can record it. File a "
-                    f"change like this under the closest category this "
-                    f"story DOES keep, or leave it to the prose.")
-                continue
-            flags.append(
-                f"the prose asserts a {item['category']} change for "
-                f"{subject!r} ({channel} was not in any served scope)")
-    # The prose half, same mechanism: the beat's final output shows a duty
-    # whose prose-author block was not loaded. Only on records that carry a
-    # prose scope (the orchestrated resolve; interpret's sheet is not yet
-    # leaned), and only for the chunks whose gate is a prediction
-    # (_PROSE_DUTY_SHIPPED). Reported, never dropped: the model did the
-    # duty anyway, so the flag is gate-misprediction evidence, not a loss.
-    prose = record.get("prose_scope")
-    if stage == "resolve" and isinstance(prose, dict):
-        prose_granted = set(prose.get("granted") or ())
-        final_diff = out.get("state_diff")
-        final_diff = final_diff if isinstance(final_diff, dict) else {}
-        for name, probe in _PROSE_DUTY_SHIPPED.items():
-            if name in prose_granted:
-                continue
-            try:
-                evidence = probe(out, final_diff)
-            except Exception:
-                evidence = None
-            if evidence:
-                flags.append(
-                    f"{evidence}, and the prose author's {name!r} duty "
-                    "block was not loaded (widen its gate if this recurs)")
-    record["scope_report"] = {
-        "granted": sorted(granted),
-        "served": sorted(served),
-        "produced": sorted(produced),
-    }
-    if not flags:
-        return
-    # A FAILED specialist is not a mispredicted gate. Its scope was granted
-    # correctly and simply went unserved, so the author's own content
-    # standing in that channel is fail-open working exactly as designed --
-    # blaming the gate for it sends the next reader to widen a gate that
-    # was already right. Measured live: a contact call died on a provider
-    # returning reasoning with no answer, and the backstop reported "the
-    # scope gate mispredicted" for a channel the gate had granted.
-    if failed:
-        note = (
-            "orchestration: "
-            + ", ".join(failed) + " specialist call(s) failed, so their "
-            "granted scope went unserved and the stage model's own content "
-            "stands there (fail-open, working as designed) -- "
-            + "; ".join(flags)
-            + ". Nothing was dropped and the reconciliation seam stands. "
-            "The gate is not implicated; the CALL failed.")
-        ctx.tell_director(note)
-        ctx.add_warning(note)
-        return
-    note = (
-        "orchestration scope: content shipped for channels or prose duties "
-        "outside any served scope -- "
-        + "; ".join(flags)
-        + ". Nothing was dropped (fail-open); the stage model's encoding "
-        "and the reconciliation seam stand. A channel here means the "
-        "Director's ruling never reached the hand that owns it (no "
-        "ledger_notes line and no changes_asserted entry in its categories) "
-        "and the author encoded the change itself; a prose duty here means "
-        "its gate mispredicted."
-    )
-    record["gate_flags"] = flags
-    ctx.tell_director(note)
-    ctx.add_warning(note)

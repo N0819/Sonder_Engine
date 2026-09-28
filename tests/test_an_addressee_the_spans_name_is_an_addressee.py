@@ -6,10 +6,14 @@ errand with `targets: ["Mr Pellew"]` and left `flow.addressed_to` empty, so
 the master of ceremonies ranked as nobody's addressee, the reactor list held
 the captain alone, no hand was addressed for what the figure would do with
 the message, and the errand "did not leave the room by his legs".
+
+Dispatch by ruling (`_ruling_for`) went with the causal hands on 2026-09-27.
+On the prose path the addressed figure still reaches the social owner's
+work items, which only matters for a row the encoder gave `social` writes.
 """
 
 from agents.director import _address_from_spans
-from agents.director import _ruling_for, addressed_figures
+from agents.director import addressed_figures
 
 
 CAST = [{"id": 11, "name": "Captain Edmund Hale"}]
@@ -53,14 +57,11 @@ def test_a_filled_list_stands_and_an_action_target_is_not_an_address():
 
 
 def test_an_addressed_figure_addresses_the_social_hand_and_no_other():
+    """The figure is read off the refs, and a cast member's id is not one.
+    (Which hand a ruling then reached went with the causal dispatch.)"""
     interp = {"flow": {"addressed_to": [], "addressed_to_refs": ["Mr Pellew"]}}
     assert addressed_figures(interp) == ["Mr Pellew"]
     assert addressed_figures({"flow": {"addressed_to_refs": [11]}}) == []
-    view = {"ledger_notes": {}, "manifest": [], "spans": [],
-            "addressed_figures": ["Mr Pellew"]}
-    assert "addressee" in _ruling_for("social", view)[0]
-    assert _ruling_for("spatial", view)[0] == []
-    assert _ruling_for("social", {**view, "addressed_figures": []})[0] == []
 
 
 def test_the_line_aimed_at_a_figure_is_the_social_hands_work_item():

@@ -50,7 +50,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 DEFAULT_CORPUS = ROOT / "tests/data/causal_stress_holdout.json"
-REPLAY_SETTINGS = ("ui_language", "director_fanout_mode", "director_orchestration",
+REPLAY_SETTINGS = ("ui_language", "director_orchestration",
                    "resolve_deep_audit", "attire_beneath")
 WORLD_FIELDS = ("entities", "positions", "stations", "poses", "contacts",
                 "contained", "attire", "substances", "rooms")

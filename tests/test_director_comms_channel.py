@@ -25,18 +25,13 @@ channel that arrives without a published category, not only for this one.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from agents import director
-from agents.director import (
-    _CATEGORY_CHANNELS,
-    SPECIALISTS,
-    _normalize_omission_category,
-)
+from agents.director import SPECIALISTS
 from language_runtime.card_source import read_card_source
 from world import spatial
 
@@ -163,32 +158,6 @@ def test_a_guessed_channel_id_fails_silently_in_three_directions():
     assert "ship_intercom" not in scene["comms"]
 
 
-def _published_manifest_categories(language):
-    """The `changes_asserted` category vocabulary, read out of the sheet that
-    publishes it (`prose_author_sheet/04.txt`) rather than restated here -- a
-    hand-copy of a vocabulary is free to disagree with the prompt that is
-    actually sent."""
-    card = read_card_source(ROOT / "language_packs" / language,
-                            "system_prompts")
-    text = card["prose_author_output_shape"]
-    if isinstance(text, (list, tuple)):
-        text = "\n".join(str(part) for part in text)
-    match = re.search(r"specialist is one of ([a-z|]+)", str(text))
-    # `project_check` imports `generate_code_map` as a sibling, so the tools
-    # directory has to be importable -- the same line
-    # `test_language_pack_integrity.py` carries for the same reason.
-    import sys as _sys
-    _sys.path.insert(0, str(ROOT / "tools"))
-    from tools.project_check import DEFERRED_PACK_PARITY
-    if not match and language in DEFERRED_PACK_PARITY:
-        pytest.skip(
-            f"{language!r} has not been migrated to the chunk contract "
-            "(DESIGN_SPECIALIST_CONTRACT.md); protocol parity for it is "
-            "deferred to the end of the English pass. Debt: docs/UNBUILT.md")
-    assert match, f"{language}: no category vocabulary found in the sheet"
-    return {token.strip() for token in match.group(1).split("|")}
-
-
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_the_reconcile_auditor_has_a_word_for_a_comms_change(language):
     """The pass that reports what the diff LEFT OUT is folded by the same
@@ -214,16 +183,21 @@ def test_establish_can_install_a_channel_at_beat_zero(language):
     assert "comms_ops:[" in shape, (
         f"{language}: director_establish teaches comms_ops and omits it from "
         "the output shape")
-    # And the teaching must not be the MID-BEAT chunk pasted verbatim. That
-    # chunk's closing sentence is "emit nothing when no equipment CHANGED --
-    # an installed channel keeps working without being restated", which is
-    # true of every beat except this one: at establishment nothing has changed
-    # and nothing is already installed, so it reads as an instruction to emit
-    # nothing on the one stage whose job is to state what already stands. EN
-    # carried it and JA did not; derived from the chunk so a future paste into
-    # either pack is caught rather than a hand-copied English string.
-    chunk = card["specialists"]["spatial"]["chunks"]["comms_ops"]
-    closing = [line for line in chunk.strip().splitlines() if line.strip()][-1]
+    # And the teaching must not be the MID-BEAT chunk pasted verbatim. Its
+    # sentence that an installed channel keeps working without being restated
+    # is true of every beat except this one: at establishment nothing has
+    # changed and nothing is already installed, so it reads as an instruction
+    # to emit nothing on the one stage whose job is to state what already
+    # stands. EN carried it and JA did not. The sentence is named per pack
+    # and checked to be in the encoder's chunk first, so a rewording there
+    # fails here rather than leaving this check vacuous.
+    chunk = card["encoder"]["comms_ops"]
+    closing = {
+        "en": "a channel already installed keeps working without being restated.",
+        "ja": "既に設置されたチャンネルは、書き直さなくても働き続けます。",
+    }[language]
+    assert closing in chunk, f"{language}: the encoder chunk no longer says it"
     assert closing not in text, (
         f"{language}: director_establish carries the mid-beat chunk's closing "
         "sentence unadapted; at beat zero it points away from emitting")
+

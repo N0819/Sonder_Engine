@@ -74,7 +74,7 @@ from .common import (
     rooms_in_view,
 )
 from .director import (director_establish, director_interpret,
-                       director_resolve, fanout_is_parallel)
+                       director_resolve)
 from .loops import deterministic_micro_perception, interaction_loop, reaction_loop
 from .mapping import compile_world_context, merge_lore
 from .narration import narrator, narrator_extra

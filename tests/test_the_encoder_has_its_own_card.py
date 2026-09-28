@@ -30,7 +30,7 @@ from agents.director import SPECIALISTS
 from llm import decisions, prompts
 from language_runtime import raw_card
 
-from tests.test_director_orchestration import (
+from tests.director_fakes import (
     _action_interp,
     _fake_agent,
     _make_ctx,
@@ -106,13 +106,15 @@ def _shape_fields(text):
 
 
 def test_no_record_shape_drifts_from_the_hands():
-    """The engine binds the encoder's patches with the hands' own schemas,
-    so a native chunk may say a rule differently but may not print a record
-    with a field the hand's shape has and it has not."""
+    """The engine binds the encoder's patches with the channel owners'
+    schemas, so a native chunk may say a rule differently but may not print
+    a record with a field a hand-written reference shape has and it has not.
+    Since the hands went (2026-09-27) the only hand-written references left
+    are the three room chunks the room author reads."""
     card = raw_card("en")
     lost = {}
     for spec in card["specialists"].values():
-        for channel, chunk in spec["chunks"].items():
+        for channel, chunk in spec.get("chunks", {}).items():
             hand = _shape_fields(chunk)
             native = set()
             for name, text in card["encoder"].items():
@@ -184,7 +186,6 @@ def _scores(scores):
 
 def test_the_decision_model_picks_parts_only_with_their_channel(
         temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", _scores({
         "entities": 0.9, "entities__transit": 0.9, "entities__emits": 0.1,
         "contact_ops": 0.1, "contact_ops__interior": 0.9}))
@@ -196,7 +197,6 @@ def test_the_decision_model_picks_parts_only_with_their_channel(
 
 
 def test_a_failed_decision_model_ships_every_part(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
 
     def broken(state, questions):
         raise RuntimeError("decision model down")
@@ -210,7 +210,6 @@ def test_a_failed_decision_model_ships_every_part(temp_db, monkeypatch):
 
 
 def test_a_part_the_encoder_asks_for_buys_the_widened_call(temp_db, monkeypatch):
-    temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", _scores({"entities": 0.9}))
     first = {"events": [{"source_entity_id": "character:1",
                          "event": "The lift sets off.", "item_names": ["lift"],

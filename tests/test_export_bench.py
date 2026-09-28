@@ -57,7 +57,7 @@ def source_db(tmp_path):
         db.set_setting("host_pw_hash", "hash-that-must-not-travel")
         db.set_setting("host_username", "owner")
         db.set_setting("research_key", RESEARCH_KEY)
-        db.set_setting("director_fanout_mode", "serial")
+        db.set_setting("prose_contract_threshold", "0.4")
         db.set_setting("reasoning_effort", json.dumps({"director": "high"}))
         db.set_setting("llm_capture_enabled", "0")
     finally:
@@ -102,7 +102,7 @@ def test_prepare_exports_read_only_imports_and_copies_the_rows(source_db, tmp_pa
         # Settings: everything the owner's engine has for model wiring came
         # (the owner's ruling, 2026-09-05), the host account did not, and the
         # forced values won over the source's -- capture ON among them.
-        assert db.get_setting("director_fanout_mode") == "serial"
+        assert db.get_setting("prose_contract_threshold") == "0.4"
         assert json.loads(db.get_setting("reasoning_effort")) == {"director": "high"}
         assert db.q("SELECT value=? AS same FROM settings WHERE key='research_key'",
                     (RESEARCH_KEY,), one=True)["same"] == 1

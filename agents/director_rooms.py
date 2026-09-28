@@ -1035,7 +1035,7 @@ def schedule_room_predevelopment(ctx):
     from world.spatial import room_of
     from agents import director_prose
 
-    if not (director_prose.enabled() and director_prose.room_agent_enabled()):
+    if not director_prose.room_agent_enabled():
         return None
     chat = ctx.chat
     cid = chat["id"] if isinstance(chat, dict) else chat.id

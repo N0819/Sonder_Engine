@@ -467,7 +467,6 @@ class _Registration:
     director_hooks: list[Callable] = field(default_factory=list)
     result_validators: list[dict] = field(default_factory=list)
     routes: dict[str, dict] = field(default_factory=dict)
-    specialists: list[str] = field(default_factory=list)
     model_lanes: list[dict] = field(default_factory=list)
     error: str | None = None
 
@@ -549,13 +548,6 @@ def _record_narration_hook(ext_id, fn) -> None:
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.narration_hooks.append(fn)
-
-
-def _record_specialist(ext_id, full_name) -> None:
-    with _lock:
-        record = _registered.setdefault(ext_id, _Registration(ext_id))
-        if full_name not in record.specialists:
-            record.specialists.append(full_name)
 
 
 def _record_model_lane(ext_id, name, role, *, label, description) -> None:
@@ -682,16 +674,6 @@ def _deregister(ext_id: str, *, error: str | None = None) -> None:
             STEP_HANDLERS.pop(stage["full_key"], None)
     except Exception:
         log.exception("could not unregister steps for extension %s", ext_id)
-    if record.specialists:
-        # Director specialists live in that module's own registries, so
-        # disabling has to reach in and take them back out -- otherwise a
-        # disabled extension keeps being dispatched every beat.
-        try:
-            from agents.director import unregister_specialists
-            unregister_specialists(ext_id)
-        except Exception:
-            log.exception(
-                "could not unregister specialists for extension %s", ext_id)
     # Modules go in BOTH cases. A failed `register(api)` leaves the entry and
     # every sibling it imported in `sys.modules`, and the next enable then
     # executes a stale copy of a file the host may have replaced in between --
@@ -1505,44 +1487,6 @@ def registered_routes() -> list[dict]:
             key=lambda row: (row["ext_id"], row["path"], row["method"]))
 
 
-def run_specialist_call(spec, scope, payload):
-    """The model call an extension-owned Director specialist runs as.
-
-    Lives HERE rather than in `agents/director.py` because of what it does:
-    it parses permissively, and `test_stage_modules_stay_on_strict_path`
-    forbids that in a stage module. The rule is right and worth keeping exactly
-    as strict as it is -- a Director stage's own output reaches `commit.py`, so
-    it must go through `schemas.validate_llm_output_strict` or a malformed
-    answer commits as junk. An extension specialist's output does not: its
-    channels are namespaced `ext:<id>:<channel>` and no commit domain reads
-    one, so nothing it writes can commit by itself. An extension also owns the
-    shape of its own channels, which `SCHEMA_MAP` cannot know. Same split, and
-    same reason, as `api.llm_json`.
-    """
-    from agents.common import jparse
-    from llm.providers import chat_complete
-
-    sheet = (
-        f"{spec['prompt']}\n\n"
-        "Answer with a JSON object. Emit ONLY these keys, and only where this "
-        "beat gives them content:\n"
-        + "\n".join(f"- {channel}" for channel in scope)
-    )
-    return jparse(chat_complete(
-        spec["role"], sheet,
-        json.dumps(payload, ensure_ascii=False, default=str),
-        temperature=0.2, max_tokens=8000))
-
-
-def registered_specialists() -> list[dict]:
-    with _lock:
-        return sorted(
-            ({"ext_id": record.ext_id, "name": name}
-             for record in _registered.values()
-             for name in record.specialists),
-            key=lambda row: (row["ext_id"], row["name"]))
-
-
 def registered_model_lanes() -> list[dict]:
     """Every enabled extension's declared model lanes, for the host's panel.
 
@@ -1818,8 +1762,8 @@ __all__ = [
     "load_errors",
     "notify_step_saved", "observer_failures", "registered_commit_domains",
     "registered_model_lanes",
-    "registered_routes", "registered_specialists", "registered_stages",
-    "reload", "routing_notes", "run_commit_domains", "run_specialist_call",
+    "registered_routes", "registered_stages",
+    "reload", "routing_notes", "run_commit_domains",
     "safe_mode", "ui_bundle", "ui_styles", "update_extension",
 ]
 

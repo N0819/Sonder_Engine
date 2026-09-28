@@ -2380,7 +2380,7 @@ function renderFullApiSettings(b) {
       levelSel.value = S.boot.log_level || "INFO";
       b.append(el("h4", {}, "Debug capture"),
         el("div", { class: "small dim" },
-          "Records what was sent to each provider and what came back, including reasoning, so a turn can be exported and read in order from the pipeline drawer. Without it an export still lists the steps and what the engine decided, but every provider call is missing — including the Director's five specialists, which have no step of their own."),
+          "Records what was sent to each provider and what came back, including reasoning, so a turn can be exported and read in order from the pipeline drawer. Without it an export still lists the steps and what the engine decided, but every provider call is missing — including the Director's encoder and room designer, which have no step of their own."),
         el("div", { class: "row", style: "margin:6px 0" },
           el("label", {}, capBox, " Capture provider calls"),
           bodiesSel, levelSel,
@@ -2476,10 +2476,9 @@ function renderFullApiSettings(b) {
     }
 
     // How a body's feeling settles. It lives HERE, beside the character
-    // models it governs, for the same reason the Director's orchestration
-    // toggle sits beside its specialist roles: a switch a host cannot find
-    // next to the thing it changes is a switch that becomes folklore. This
-    // one was live in a real story with no visible off.
+    // models it governs: a switch a host cannot find next to the thing it
+    // changes is a switch that becomes folklore. This one was live in a real
+    // story with no visible off.
     {
       const habitBox = el("input", {
         type: "checkbox",
@@ -2660,79 +2659,6 @@ function renderFullApiSettings(b) {
           }, "Clear key")));
     }
 
-    // Which contract the Director works under. The causal ledger with its
-    // specialists is the default; the prose contract is the experiment in
-    // docs/design/DESIGN_PROSE_CONTRACT.md. Until this select existed it was
-    // reachable only by editing the database.
-    {
-      const contract = S.boot.director_contract === "prose" ? "prose" : "causal";
-      const contractSel = el("select", { style: "flex:1" }, [
-        el("option", {
-          value: "causal", ...(contract === "causal" ? { selected: "" } : {}),
-        }, "Specialists — the Director writes a ledger for its specialists (default)"),
-        el("option", {
-          value: "prose", ...(contract === "prose" ? { selected: "" } : {}),
-        }, "Writer and encoder — the Director writes prose, one encoder records it (experimental)"),
-      ]);
-      contractSel.onchange = async () => {
-        await api("PUT", "/api/director_contract",
-                  { contract: contractSel.value });
-        await boot();
-        toast(contractSel.value === "prose"
-          ? "The Director will write each beat as prose, and one encoder will record its changes."
-          : "The Director will write a ledger for its specialists.", "ok");
-      };
-      b.append(el("h4", {}, "Director contract"),
-        el("div", { class: "small dim" },
-          "How the Director turns a beat into changes to the world. "
-          + "Specialists: the Director writes a ledger of the beat and the "
-          + "specialist roles below each encode their own kind of change. "
-          + "Writer and encoder: the Director writes the beat as prose, a "
-          + "decision model picks which kinds of change it contains, and the "
-          + "director_specialist role encodes all of them in one call, with "
-          + "director_rooms building any new place (both under Models, "
-          + "falling back to Default like every role). Perception, narration "
-          + "and saving are the same either way. Takes effect on the next "
-          + "beat."),
-        el("div", { class: "row", style: "margin-top:6px" }, contractSel));
-    }
-
-    // Fan-out concurrency, switched where the specialists are configured.
-    // The fan-out itself is not a choice and has no switch -- it is the
-    // only Director path. Whether its specialists run AT ONCE is a choice,
-    // because concurrency is not free everywhere.
-    {
-      const parBox = el("input", {
-        type: "checkbox",
-        ...(S.boot.director_fanout_parallel !== false ? { checked: "" } : {})
-      });
-      parBox.onchange = async () => {
-        await api("PUT", "/api/director_fanout_mode",
-                  { parallel: parBox.checked });
-        await boot();
-        toast(parBox.checked
-          ? "The Director's specialists will run at once."
-          : "The Director's specialists will run one at a time.", "ok");
-      };
-      b.append(el("h4", {}, "Director specialists"),
-        el("div", { class: "small dim" },
-          "The Director works as a writer plus specialists: one call writes "
-          + "the beat's account, and the roles below encode only the "
-          + "kinds of change the beat actually contains — a scene with no "
-          + "clothing change never loads the clothing rules at all. Most "
-          + "beats need about two of them."),
-        el("div", { class: "small dim", style: "margin-top:4px" },
-          "They are handed separate parts of the same finished beat and have "
-          + "nothing to say to each other, so by default they run at once and "
-          + "the beat costs its slowest one rather than all of them added up. "
-          + "Turn this off if your provider takes one request at a time — a "
-          + "key limited by concurrent connections, or a local runtime "
-          + "serving one model on one GPU. Everything else is identical: the "
-          + "same specialists, the same scopes, the same order."),
-        el("label", { class: "row", style: "margin-top:6px" },
-          parBox, el("span", {}, "Run the specialists at the same time")));
-    }
-
     // The narrator's voice anchor. `agents/narration.py` has always read
     // `settings.exemplars` and the narrator prompt has always carried a STYLE
     // EXEMPLARS clause -- and there was no way to put anything in it, so the
@@ -2795,8 +2721,7 @@ function renderFullApiSettings(b) {
         el("summary", {}, "What do these roles do?"),
         el("div", { class: "small dim", style: "margin-top:6px" },
           el("div", {}, el("b", {}, "Setting only Default is enough to start playing"), " — every other role falls back to it automatically, with one exception: embeddings, which needs a model of a different KIND and so is never inherited. The rest let you assign a faster or cheaper model to a specific stage of each turn without touching quality where it matters most."),
-          el("div", { style: "margin-top:8px" }, el("b", {}, "director"), " — reads what you typed and decides what actually happens: whether an action succeeds, what an NPC's action resolves to. Gets this wrong and the story stops making sense, so keep it on a strong model."),
-          el("div", {}, el("b", {}, "director_body / _social / _contact / _objects / _spatial"), " — scoped specialists that encode bodies (clothing, wounds, vitals, overlays), the scene roster, physical contact and matter, the object world, the room graph and positions, and the world's traffic (crowds, couriers, hearsay) from the beat the Director authored. Left unset each follows ", el("b", {}, "Default"), " like every other role — so where Default is a cheap model, set these rows too rather than leaving the engine's most failure-prone stage on it."),
+          el("div", { style: "margin-top:8px" }, el("b", {}, "director"), " — reads what you typed and decides what actually happens: whether an action succeeds, what an NPC's action resolves to, told as prose. Gets this wrong and the story stops making sense, so keep it on a strong model."),
           el("div", {}, el("b", {}, "encoder"), " — writes each beat into the world's records: the Director tells the beat as prose, and this ONE model turns it into the changes the engine keeps — bodies, clothing, contact, objects, positions. ", el("b", {}, "Use a model that does not reason."), " It copies down a beat that is already decided, and a reasoning model spends its time on a trace nobody reads (measured: 102–198 s a beat with reasoning on, 3–11 s with it off, the same changes written). Its reasoning is off unless you set it on its row."),
           el("div", {}, el("b", {}, "director_rooms"), " — the room designer: writes the places a beat establishes, in full detail, at the same time as the encoder."),
           el("div", { class: "small dim" }, "There is no ", el("b", {}, "perception"), " role any more, and that is not an omission: what each character can see, hear and know is now worked out in code rather than asked of a model, so it costs nothing, cannot be got wrong by a cheap model, and has no setting to tune."),
@@ -2843,17 +2768,13 @@ function renderFullApiSettings(b) {
     // provider, the engine silently falls back to the local hash, and play
     // continues looking fine while memory quietly stops working by meaning.
     // Everything else announces itself in the prose.
-    // `embeddings` first, then Default, then the Director and — DIRECTLY
-    // BENEATH IT — its five specialists, which are the roles whose meaning
-    // depends on it: each is inert unless the orchestrated Director is on,
-    // and each falls back to the `director` model rather than to Default.
-    // Sorting them next to the stage they serve is the difference between a
-    // list of seventeen roles and a list that explains itself.
+    // `embeddings` first, then Default, then the Director and -- DIRECTLY
+    // BENEATH IT -- the two roles that work from its prose: the encoder and
+    // the room designer. Sorting them next to the stage they serve is the
+    // difference between a list of roles and a list that explains itself.
     const ROLE_ORDER = {
       embeddings: -2, default: -1, director: 0,
-      director_body: 1, director_social: 2, director_contact: 3,
-      director_objects: 4, director_spatial: 5, encoder: 6,
-      director_rooms: 6.5,
+      encoder: 1, director_rooms: 2,
       repair: 7,
     };
     const orderedRoles = [...S.boot.roles].sort(

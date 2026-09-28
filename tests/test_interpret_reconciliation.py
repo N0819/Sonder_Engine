@@ -11,8 +11,10 @@ first-class actor-less environmental events.
 import json
 import time
 
+import agents.director as director
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.director_fakes import _fake_agent, _steps, encoder_event
 
 
 # ---- gap (A): _extract_authority_claims raw_input fallback ---------------
@@ -209,59 +211,57 @@ _REPAIR = {
 }
 
 
-def _run_interpret(temp_db, monkeypatch, interpret_out, repair_out=None,
-                   repair_raises=False):
-    import agents.director as director
+INPUT = "I wave to Mara, then I duck into the armory and grab a rifle"
 
-    ctx = _make_ctx(
-        temp_db, "I wave to Mara, then I duck into the armory and grab a rifle")
+PROSE = {"prose": "You wave to Mara, then duck into the armory and grab a rifle."}
+
+NO_EVENTS = {"events": [], "missing_tools": [], "missing_referents": [], "notes": []}
+
+
+def _run(temp_db, monkeypatch, encoder=NO_EVENTS, repair=None):
+    ctx = _make_ctx(temp_db, INPUT)
     calls = []
-
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        calls.append(step_key)
-        if step_key == "director_interpret":
-            return json.loads(json.dumps(interpret_out))
-        if step_key == "interpret_repair":
-            if repair_raises:
-                raise RuntimeError("repair model unavailable")
-            return json.loads(json.dumps(repair_out or {}))
-        raise AssertionError(f"unexpected step {step_key}")
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": PROSE,
+        "director_specialist": encoder,
+        **({"interpret_repair": repair} if repair is not None else {}),
+    }))
     out = director.director_interpret(ctx, nonce=0)
-    return ctx, out, calls
+    return ctx, out, _steps(calls)
 
 
-def test_dropped_declaration_is_detected_and_repaired(temp_db, monkeypatch):
-    ctx, out, calls = _run_interpret(
-        temp_db, monkeypatch, _WEAK_INTERPRET, repair_out=_REPAIR)
+def _full_repair(**movement):
+    repair = json.loads(json.dumps(_REPAIR))
+    repair["sequence"] = [{"type": "action", "attempt": "wave to Mara",
+                           "raw_text": "I wave to Mara", "commitment": "asserted"}] \
+        + repair["sequence"]
+    repair["movement"].update(movement)
+    return repair
 
-    assert "interpret_repair" in calls
+
+def test_dropped_declaration_is_detected_and_repaired(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27 to the prose Director, on an interpret whose encoder
+    returned no events: the only interpret on which the repair runs
+    (`docs/UNBUILT_PIPELINE.md` § 1.1, item 3). The repair then carries every
+    clause, so it holds the wave too.
+    """
+    ctx, out, steps = _run(temp_db, monkeypatch, repair=_full_repair())
+    assert "interpret_repair" in steps
     recon = out["interpret_reconciliation"]
-    assert recon["uncovered"], "the armory/rifle clause must be detected"
+    assert recon["uncovered"]
     assert recon["repaired"]
     assert recon["unresolved"] == []
-
-    attempts = [e.get("attempt") for e in out["sequence"]
-                if e.get("type") == "action"]
+    attempts = [e.get("attempt") for e in out["sequence"] if e.get("type") == "action"]
     assert "duck into the armory" in attempts
     assert "grab a rifle" in attempts
-    # Existing interpretation is never replaced -- additions come after.
-    assert attempts[0] == "wave to Mara"
-
-    # The repaired movement fills in and feeds the ordinary new-room
-    # mapping trigger downstream.
     assert out["movement"]["to_room"] == "armory"
     fl = out["flow"]
     assert fl["needs_mapping"] is True
-    assert fl["generation_requests"], "the captured declaration reaches mapping"
-    # Authority claims are extracted AFTER the repair, so the asserted
-    # rifle grab is covered by the resolve seam's player-claim check.
-    assert any(c.get("subject_id") == "rifle"
-               for c in fl["authority_claims"])
+    assert fl["generation_requests"]
+    assert any(c.get("subject_id") == "rifle" for c in fl["authority_claims"])
 
 
-def test_the_repair_carries_arrives_through(temp_db, monkeypatch):
+def test_the_repair_carries_arrives_through(temp_db, prose_director, monkeypatch):
     """A repaired movement is the ONLY movement on that beat, so dropping
     `arrives` from the rebuild silently upgraded every repaired approach to an
     arrival.
@@ -271,45 +271,42 @@ def test_the_repair_carries_arrives_through(temp_db, monkeypatch):
     that correctly read "I head for the treeline" as arrives:false was
     rewritten into a body standing at the treeline. The repair SHEET already
     asked for the field; the seam's own dict literal threw it away.
-    """
-    repair = json.loads(json.dumps(_REPAIR))
-    repair["movement"]["arrives"] = False
-    ctx, out, calls = _run_interpret(
-        temp_db, monkeypatch, _WEAK_INTERPRET, repair_out=repair)
 
-    assert "interpret_repair" in calls
+    Ported 2026-09-27 to the prose Director, on an interpret whose encoder
+    returned no events: the only interpret on which the repair runs
+    (`docs/UNBUILT_PIPELINE.md` § 1.1, item 3). The repair then carries every
+    clause, so it holds the wave too.
+    """
+    ctx, out, steps = _run(temp_db, monkeypatch, repair=_full_repair(arrives=False))
+    assert "interpret_repair" in steps
     assert out["movement"]["to_room"] == "armory"
     assert out["movement"]["arrives"] is False
 
 
-def test_a_repair_that_says_nothing_about_arriving_still_arrives(
-        temp_db, monkeypatch):
+def test_a_repair_that_says_nothing_about_arriving_still_arrives(temp_db, prose_director, monkeypatch):
     """The default is the pre-existing behaviour and must stay it: silence on
-    the field is an arrival, not a stalled walk."""
-    ctx, out, calls = _run_interpret(
-        temp_db, monkeypatch, _WEAK_INTERPRET, repair_out=_REPAIR)
+    the field is an arrival, not a stalled walk.
 
+    Ported 2026-09-27 to the prose Director, on an interpret whose encoder
+    returned no events: the only interpret on which the repair runs
+    (`docs/UNBUILT_PIPELINE.md` § 1.1, item 3). The repair then carries every
+    clause, so it holds the wave too.
+    """
+    ctx, out, steps = _run(temp_db, monkeypatch, repair=_REPAIR)
     assert out["movement"]["arrives"] is True
 
 
-def test_covered_interpretation_makes_no_repair_call(temp_db, monkeypatch):
-    covered = json.loads(json.dumps(_WEAK_INTERPRET))
-    covered["sequence"] = [
-        {"type": "action", "attempt": "wave to Mara",
-         "raw_text": "I wave to Mara"},
-        {"type": "action", "attempt": "duck into the armory",
-         "raw_text": "duck into the armory"},
-        {"type": "action", "attempt": "grab a rifle",
-         "raw_text": "grab a rifle"},
-    ]
-    ctx, out, calls = _run_interpret(temp_db, monkeypatch, covered)
-
-    # The interpret-side fan-out is baseline, not extra: the assertion is
-    # that no REPAIR was bought, which is what "zero extra spend" was always
-    # about on a beat with nothing uncovered.
-    assert "interpret_repair" not in calls, \
-        "no omission -> zero extra LLM spend on the common path"
-    assert calls[0] == "director_interpret"
+def test_covered_interpretation_makes_no_repair_call(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27: the encoder's three events cover the three clauses.
+    """
+    encoder = {"events": [
+        encoder_event("wave to Mara"),
+        encoder_event("duck into the armory"),
+        encoder_event("grab a rifle"),
+    ], "missing_tools": [], "missing_referents": [], "notes": []}
+    ctx, out, steps = _run(temp_db, monkeypatch, encoder=encoder)
+    assert "interpret_repair" not in steps
+    assert steps[0] == "director_prose"
     assert out["interpret_reconciliation"]["uncovered"] == []
 
 
@@ -341,45 +338,48 @@ def test_tone_and_observable_cover_authored_dialogue_progression():
     assert _uncovered_declarations(raw, interpreted) == []
 
 
-def test_failed_repair_falls_back_to_verbatim_generation_request(
-    temp_db, monkeypatch,
-):
+def test_failed_repair_falls_back_to_verbatim_generation_request(temp_db, prose_director, monkeypatch):
     """NEVER fabricate: with the repair unavailable, the seam must not
     invent a structured act -- it forwards the player's verbatim clause to
-    mapping as a generation request and warns."""
-    ctx, out, calls = _run_interpret(
-        temp_db, monkeypatch, _WEAK_INTERPRET, repair_raises=True)
+    mapping as a generation request and warns.
 
+    Ported 2026-09-27 to the prose Director, on an interpret whose encoder
+    returned no events: the only interpret on which the repair runs
+    (`docs/UNBUILT_PIPELINE.md` § 1.1, item 3). The repair then carries every
+    clause, so it holds the wave too.
+    """
+    ctx, out, steps = _run(temp_db, monkeypatch,
+                           repair=RuntimeError("repair model unavailable"))
     recon = out["interpret_reconciliation"]
-    assert recon["unresolved"], "clause stays flagged when repair fails"
-    # No fabricated sequence element.
-    attempts = [e.get("attempt") for e in out["sequence"]
-                if e.get("type") == "action"]
-    assert attempts == ["wave to Mara"]
+    assert recon["unresolved"]
+    attempts = [e.get("attempt") for e in out["sequence"] if e.get("type") == "action"]
+    assert attempts == []
     fl = out["flow"]
-    synthesized = [g for g in fl["generation_requests"]
-                   if g.get("kind") == "player_declaration"]
-    assert synthesized, "verbatim clause forwarded to mapping"
+    synthesized = [g for g in fl["generation_requests"] if g.get("kind") == "player_declaration"]
+    assert synthesized
     assert any("armory" in str(g.get("subject")) for g in synthesized)
     assert fl["needs_mapping"] is True
     assert any("PLAYER AUTHORITY" in w for w in ctx.warnings)
 
 
-def test_generation_requests_become_planning_needs(temp_db, monkeypatch):
+def test_generation_requests_become_planning_needs(temp_db, prose_director, monkeypatch):
     """Item 2 gap (C): the revived generation_requests channel must actually
     arrive somewhere. It used to arrive in the mapping model's payload; the
-    world-context compiler records each one as a typed planning need."""
-    import agents.mapping as mapping
+    world-context compiler records each one as a typed planning need.
 
-    ctx, out, _ = _run_interpret(
-        temp_db, monkeypatch, _WEAK_INTERPRET, repair_raises=True)
+    Ported 2026-09-27 to the prose Director, on an interpret whose encoder
+    returned no events: the only interpret on which the repair runs
+    (`docs/UNBUILT_PIPELINE.md` § 1.1, item 3). The repair then carries every
+    clause, so it holds the wave too.
+    """
+    import agents.mapping as mapping
+    ctx, out, _ = _run(temp_db, monkeypatch,
+                       repair=RuntimeError("repair model unavailable"))
     ctx.director_interpret = out
     monkeypatch.setattr(mapping, "search_lore", lambda *a, **k: [])
-
     compiled = mapping.compile_world_context(ctx, nonce=0)
-
     needs = compiled["planning_needs"]
-    assert needs, "captured declarations must be recorded as planning needs"
+    assert needs
     assert any(n["reason"] == "generation_request" and "armory" in n["subject"]
                for n in needs)
 
@@ -401,3 +401,29 @@ def test_a_generation_request_raises_a_need_without_any_movement(temp_db, monkey
     assert result["planning_needs"][0]["kind"] == "thing"
     assert result["planning_needs"][0]["surface"]["declared_kind"] == "player_declaration"
     assert result["staged_lore"] == [] and result["movement"]["status"] is None
+
+
+def test_the_existing_interpretation_is_never_replaced(temp_db, monkeypatch):
+    """The repair ADDS what the interpretation dropped and never rewrites what
+    it already had: the wave the weak interpretation carried stays first.
+    Called directly since 2026-09-27 -- on the prose path the repair runs only
+    on an interpret whose encoder returned no events, where there is nothing
+    existing to keep (`docs/UNBUILT_PIPELINE.md` § 1.1, item 3)."""
+    from agents.common import norm_sequence
+
+    ctx = _make_ctx(temp_db, INPUT)
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "interpret_repair": _REPAIR}))
+    out = json.loads(json.dumps(_WEAK_INTERPRET))
+    norm_sequence(out)
+    director._reconcile_interpretation(
+        ctx, out, {"rooms": {"guard_post": {}, "hallway": {}}})
+    recon = out["interpret_reconciliation"]
+    assert "interpret_repair" in _steps(calls)
+    assert recon["uncovered"] and recon["repaired"] and recon["unresolved"] == []
+    attempts = [e.get("attempt") for e in out["sequence"] if e.get("type") == "action"]
+    assert attempts[0] == "wave to Mara"
+    assert "duck into the armory" in attempts and "grab a rifle" in attempts
+    assert out["movement"]["to_room"] == "armory"
+

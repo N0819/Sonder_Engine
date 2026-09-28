@@ -12,8 +12,11 @@ Mechanism under test:
   a must_tick_this_beat flag into the resolve payload.
 - SILENCE about an open pressure is recorded as an implicit hold AND warned,
   so an inert world is always a visible choice.
-- A pressure held past WORLD_PRESSURE_STALL_AGE is flagged must-tick; the
-  director enforces the flag with one bounded correction retry.
+- A pressure held past WORLD_PRESSURE_STALL_AGE is flagged must-tick, and
+  the Director is handed it as an input of its own; a row sourced to it is
+  its tick. (The bounded correction retry that enforced the flag went with
+  the causal Director on 2026-09-27; silence is still recorded and warned at
+  commit.)
 """
 
 import contextlib
@@ -23,6 +26,7 @@ import time
 from persist import commit
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.director_fakes import _fake_agent, encoder_event
 
 
 def _simple_scene():
@@ -211,49 +215,34 @@ def test_establish_openers_apply_on_opening_turn(temp_db):
 # ---- director integration ----
 
 
-def test_must_tick_violation_triggers_one_retry(temp_db, monkeypatch):
+def test_a_must_tick_pressure_reaches_the_director_and_its_row_ticks_it(
+        temp_db, monkeypatch, prose_director):
+    """Named `test_must_tick_violation_triggers_one_retry` until 2026-09-27,
+    when the causal Director enforced the flag with one correction retry. The
+    prose path has none. What stands: the pressure is an input group of its
+    own (`world_pressure:<id>`), and a row the encoder sources to it becomes
+    its tick."""
     import agents.director as director
 
     ctx = _make_ctx(temp_db, turn_idx=7)
     _entry(temp_db, ctx.chat.id, held_streak=2)
 
     calls = []
-
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        calls.append(dict(payload))
-        if len(calls) == 1:
-            return {"resolved_event": "Everyone talks.", "world_pressure": []}
-        return {"resolved_event": "The Array answers with a pulse.",
-                "world_pressure": [{"op": "tick", "id": "wp:1:0",
-                                    "note": "the Array answers"}]}
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
+    pulse = "The Array answers with a pulse."
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": pulse},
+        "director_specialist": {
+            "events": [encoder_event(pulse, source="world_pressure:wp:1:0")],
+            "missing_tools": [], "missing_referents": [], "notes": []}}))
     out = director.director_resolve(ctx, nonce=0)
 
-    assert len(calls) >= 2
-    assert "WORLD PRESSURE HARD RULE" in calls[1].get("correction_notes", "")
+    groups = next(call["payload"] for call in calls
+                  if call["step_key"] == "director_prose")["event_inputs"]
+    assert any(group["entity_id"] == "world_pressure:wp:1:0"
+               for group in groups), groups
     ticks = [op for op in out.get("world_pressure") or []
              if op.get("op") == "tick"]
     assert ticks and ticks[0]["id"] == "wp:1:0"
-    assert not any("must-tick violated" in w for w in ctx.warnings)
-
-
-def test_must_tick_violation_that_survives_retry_warns(temp_db, monkeypatch):
-    import agents.director as director
-
-    ctx = _make_ctx(temp_db, turn_idx=7)
-    _entry(temp_db, ctx.chat.id, held_streak=2)
-
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        return {"resolved_event": "Everyone keeps talking.",
-                "world_pressure": []}
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
-    out = director.director_resolve(ctx, nonce=0)
-
-    assert any("must-tick violated" in w.lower() or
-               "must-tick" in w for w in ctx.warnings)
-    assert out.get("world_pressure_warnings")
 
 
 # ---- the cap is a resolution, so its evictions must be recorded ----

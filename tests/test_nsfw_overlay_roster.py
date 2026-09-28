@@ -1,15 +1,19 @@
 """`nsfw_prompt_ids` is the only thing that decides the adult overlay.
 
-Review finding B11: three sites answered one question. `specialist_prompt`
-read a per-hand `specialists.<name>.nsfw` flag, `prose_author_prompt` appended
-the overlay unconditionally, and `get_prompt_body` read the roster. All three
-agreed on the shipped packs -- which is why the disagreement would have been
-invisible: a pack that names `director_body` in the roster and clears its flag
-gets the overlay from one spelling and not from the other, and the sheet a
-model is actually sent depends on which function assembled it.
+Review finding B11: three sites answered one question. The causal hands'
+`specialist_prompt` read a per-hand `specialists.<name>.nsfw` flag, its prose
+author appended the overlay unconditionally, and `get_prompt_body` read the
+roster. All three agreed on the shipped packs -- which is why the disagreement
+would have been invisible: the sheet a model is actually sent depended on
+which function assembled it.
 
-These tests hand the assembly paths a card whose roster DISAGREES with the old
-per-hand flag, and require the roster to win everywhere.
+Since the causal Director went (2026-09-27) the sheets assembled from a card
+are the encoder's (overlaid by the owners whose channels ship, named
+`director_<owner>` in the roster), the room author's (`director_spatial`) and
+a stored prompt body. These tests hand them a card whose roster the test
+chooses, and require the roster to win everywhere. Whether the prose
+Director's own sheets should take the overlay is an open question
+(`docs/UNBUILT_PIPELINE.md` § 1.1): today they do not.
 """
 
 from __future__ import annotations
@@ -40,30 +44,29 @@ def _overlay(card):
     return str(card["nsfw_overlay"])
 
 
-def test_a_specialist_sheet_takes_the_overlay_only_when_the_roster_names_it(
+def test_an_encoder_sheet_takes_the_overlay_only_when_the_roster_names_it(
         card_with_roster):
-    """The hand's own name in the roster is the whole condition. `social`
-    carried `nsfw: false` and `body` carried `nsfw: true`, so a roster that
-    says the opposite is what separates the two answers."""
+    """An owner's own name in the roster is the whole condition, for the
+    encoder's sheet over that owner's channels. `social` carried
+    `nsfw: false` and `body` `nsfw: true` under the old flag, so a roster
+    that says the opposite is what separates the two answers."""
     card = card_with_roster(["director_social"])
     names = sorted(card["specialists"])
     assert "social" in names and "body" in names
 
     for name in names:
-        sheet = prompts.specialist_prompt(name, card["specialists"][name]["order"])
+        sheet = prompts.unified_specialist_prompt(
+            card["specialists"][name]["order"], "en")
         expected = name == "social"
         assert (_overlay(card) in sheet) is expected, (
-            f"specialist {name!r} disagrees with the roster it was given")
+            f"the encoder over {name!r}'s channels disagrees with the roster")
 
 
-def test_the_causal_director_never_receives_a_content_style_overlay(
-        card_with_roster):
-    """It slices causality; it does not author content at either invocation."""
-    card = card_with_roster(["director_body"])
-    assert _overlay(card) not in prompts.prose_author_prompt(None)
-
-    card = card_with_roster(["director_resolve_lean"])
-    assert _overlay(card) not in prompts.prose_author_prompt(None)
+def test_the_room_author_answers_to_the_spatial_owner(card_with_roster):
+    card = card_with_roster(["director_spatial"])
+    assert _overlay(card) in prompts.room_author_prompt("en")
+    card = card_with_roster(["director_social"])
+    assert _overlay(card) not in prompts.room_author_prompt("en")
 
 
 def test_a_stored_prompt_body_answers_from_the_same_roster(card_with_roster):
@@ -75,14 +78,17 @@ def test_a_stored_prompt_body_answers_from_the_same_roster(card_with_roster):
 
 def test_the_overlay_is_withheld_from_every_sheet_when_nsfw_is_off(
         card_with_roster, monkeypatch):
-    """One switch above the roster, and it must reach all three paths."""
-    card = card_with_roster(list(prompts.DEFAULT_PROMPTS))
+    """One switch above the roster, and it must reach every path."""
+    base = prompts._prompt_card("en")
+    card = card_with_roster(list(prompts.DEFAULT_PROMPTS)
+                            + [f"director_{name}" for name in base["specialists"]])
     monkeypatch.setattr(prompts, "nsfw_enabled", lambda: False)
     overlay = _overlay(card)
-    assert overlay not in prompts.prose_author_prompt(None)
+    assert overlay not in prompts.prose_director_prompt("resolve", "en")
     assert overlay not in prompts.get_prompt_body("narrator")
+    assert overlay not in prompts.room_author_prompt("en")
     for name, spec in card["specialists"].items():
-        assert overlay not in prompts.specialist_prompt(name, spec["order"])
+        assert overlay not in prompts.unified_specialist_prompt(spec["order"], "en")
 
 
 def test_no_pack_carries_a_second_spelling_of_the_roster():
@@ -95,13 +101,10 @@ def test_no_pack_carries_a_second_spelling_of_the_roster():
             assert not second, (
                 f"{pack.id} specialist {name!r} carries {second} beside "
                 "nsfw_prompt_ids")
-    for name, spec in prompts.SPECIALIST_PROMPT_SPECS.items():
-        assert "nsfw" not in spec, name
 
 
 def test_the_shipped_packs_overlay_only_state_writing_hands():
     for pack in installed_language_packs(refresh=True).values():
         roster = set(pack.card("system_prompts")["nsfw_prompt_ids"])
         assert {"director_body", "director_contact", "director_spatial"} <= roster, pack.id
-        assert not {"director_interpret", "director_resolve_lean"} & roster
         assert not {"director_social", "director_objects"} & roster, pack.id

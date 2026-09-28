@@ -9,10 +9,14 @@ floors -- each asking the same inputs the same question.
 
 This REPLAYS stored resolve beats. It reads each turn's stored
 `director_interpret` and `director_resolve` variants and the previous turn's
-checkpoint scene, serves the stored resolve output back through the specialist
-fan-out (`tests.helpers.fanout_resolve_agent`), and runs the real
-`director_resolve` over it. So it makes NO model calls, and everything it
-counts is the deterministic floor work a live beat does.
+checkpoint scene, serves the stored resolve output back as the prose
+Director's two answers (`tests.director_fakes.prose_resolve_agent`: the stored
+prose, and one encoder event per stored ledger row carrying the stored diff's
+channels), answers the decision model with every channel granted, keeps the
+room author off, and runs the real `director_resolve` over it. So it makes NO
+model calls, and everything it counts is the deterministic floor work a live
+beat does. The figures below were measured before the causal Director was
+deleted (2026-09-27), replaying through its specialist fan-out.
 
 It writes only to a scratch database of its own, and reads the story database
 read-only. Point it at a COPY, never a live one::
@@ -165,7 +169,8 @@ def _count_merges():
 def _run_beat(db, cid, scene, resolve_out, interpret, idx):
     from agents import director
     from core.pipeline_context import ChatData, PipelineContext, TurnData
-    from tests.helpers import fanout_resolve_agent
+    from llm import decisions
+    from tests.director_fakes import prose_resolve_agent
     db.wset(cid, "scene", scene)
     row = db.q("SELECT * FROM chats WHERE id=?", (cid,))[0]
     cast = db.q("SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
@@ -180,14 +185,22 @@ def _run_beat(db, cid, scene, resolve_out, interpret, idx):
                       created=time.time()),
         cast=cast, input="bench")
     ctx.director_interpret = interpret
-    saved = director._agent_json
-    director._agent_json = fanout_resolve_agent(resolve_out)
+    saved, saved_override = director._agent_json, decisions.OVERRIDE
+    director._agent_json = prose_resolve_agent(resolve_out, strict=False)
+    decisions.OVERRIDE = _grant_every_channel
     try:
         started = time.perf_counter()
         out = director.director_resolve(ctx, nonce=0)
         return out, (time.perf_counter() - started) * 1000, list(ctx.warnings)
     finally:
         director._agent_json = saved
+        decisions.OVERRIDE = saved_override
+
+
+def _grant_every_channel(state, questions):
+    """The decision model, answered without the network: every channel and
+    part granted, which is what an unreachable one fails open to."""
+    return {key: {"type": "noul", "noul": 0.99} for key in questions}
 
 
 def _answer(out, warnings):
@@ -221,6 +234,9 @@ def main(argv):
     from core import db
     db.configure(scratch)
     db.init()
+    # The stored diffs carry their rooms; the encoder writes them here, as it
+    # does whenever the room author is off (the scratch database only).
+    db.set_setting("prose_contract_room_agent", "0")
 
     beats = stored_beats(path, chat)
     if not beats:

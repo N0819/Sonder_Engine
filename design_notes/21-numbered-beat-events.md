@@ -1,5 +1,7 @@
 # 21 — Numbered beat events
 
+**SUPERSEDED 2026-09-27.** The causal Director this describes -- and its specialists -- was deleted; the Director writes prose and ONE encoder records every channel ([`DESIGN_PROSE_CONTRACT.md`](../docs/design/DESIGN_PROSE_CONTRACT.md)). Kept as the argument and the measurements; nothing below describes running code.
+
 ## The problem this closes
 
 Under the orchestrated Director (design note 19) the beat is written once and

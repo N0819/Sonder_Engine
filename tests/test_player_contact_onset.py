@@ -20,7 +20,7 @@ from agents.director import (
 )
 from story.character_schema import default_character_data, default_persona_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from llm.prompts import DEFAULT_PROMPTS
+from llm.prompts import unified_specialist_prompt
 from llm.schemas import validate_llm_output
 from world.spatial import apply_contact_ops
 
@@ -64,12 +64,12 @@ def _assertion(target_part="cervix"):
 
 
 def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
-    """The channel is still the interpret contract; the VOCABULARY now lives
-    on the hand that writes it.
+    """The channel is still the interpret contract; the VOCABULARY lives on
+    the one writer of contacts.
 
-    The interpret sheet taught the full contact grammar for its own
-    `contact_assertions`; the causal contract now routes `contact_ops` and
-    leaves the grammar solely on the contact specialist, whose output reaches
+    The interpret sheet once taught the full contact grammar for its own
+    `contact_assertions`; the encoder writes `contact_ops` now, its card
+    carries the grammar, and its output reaches
     `_validated_player_contact_assertions`.
     """
     parsed, warnings = validate_llm_output(
@@ -77,22 +77,19 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
 
     assert not warnings
     assert parsed["contact_assertions"][0]["target_part"] == "cervix"
-    # The causal Director names only the routed channel; its specialist owns
-    # the contact grammar and the compatibility field remains schema-only.
-    assert "contact_ops" in DEFAULT_PROMPTS["director_interpret"]
-    assert "contact_assertions" not in DEFAULT_PROMPTS["director_interpret"]
-
-    contact = DEFAULT_PROMPTS["director_contact"]
-    assert "coarse visibility region" in contact
+    # The encoder's card owns the contact grammar, and the compatibility
+    # field remains schema-only.
+    contact = unified_specialist_prompt(["contact_ops"], "en", None)
+    assert "contact_assertions" not in contact
+    assert "never the larger part or a coarse region" in contact
     assert "relation is surface|interior" in contact
     assert "motion is settled|moving" in contact
     assert "target_interior names the enclosing" in contact
-    assert "target_part names the contacted boundary or endpoint" in contact
+    assert "target_part the boundary or endpoint touched" in contact
     assert "op:'cross'" in contact
-    # The firewall half moved with the rest and is now pinned, which it never
-    # was: `detail` is free prose, so no key whitelist can hold this and the
-    # sheet is the only thing standing there.
-    assert ("never the other participant's thoughts, pleasure, pain, or "
+    # The firewall half: `detail` is free prose, so no key whitelist can hold
+    # this and the sheet is the only thing standing there.
+    assert ("CONTACT ONLY -- never anyone's thoughts, pleasure, pain or "
             "intention") in contact
 
     character, warnings = validate_llm_output(
@@ -108,7 +105,7 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
                        contacts=[{"ref": "contact:0", "text": "your hand on Mara's sleeve"}])
     acted = {"sequence": [{"do": "lets go of her sleeve", "why": "enough"}]}
     assert "contact:0" in jev.after_questions(held, acted)
-    assert "character_contact_endings" in DEFAULT_PROMPTS["director_contact"]
+    assert "character_contact_endings" in contact
 
 
 def test_character_contact_endings_remove_only_selected_contacts():

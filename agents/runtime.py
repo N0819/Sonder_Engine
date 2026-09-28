@@ -1152,8 +1152,6 @@ SIDE_CHANNELS = {
                      "each mouth has already said this beat",
     "_manager_demand_why": "in-stage: the scene manager's gate working, read "
                            "back inside `background_react`",
-    "_orch_repair": "in-stage: the fan-out's repair view, read back inside "
-                    "`director_resolve`",
     "_prose_contract": "in-stage: the prose contract's encoder answer, set at "
                        "a Director stage's model call and read back at that "
                        "same stage's fan-out (`director_prose`)",

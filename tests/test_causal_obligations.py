@@ -5,10 +5,10 @@ from copy import deepcopy
 import pytest
 
 from agents import director
-from llm.prompts import specialist_prompt
+from llm.prompts import unified_specialist_prompt
 from llm.schemas import validated_specialist_patch_channels
 from persist import commit
-from tests.test_director_orchestration import _fake_agent, _make_ctx
+from tests.director_fakes import _fake_agent, _make_ctx, encoder_event
 
 
 def _op(verb="open", what="bring the report"):
@@ -35,19 +35,24 @@ def test_obligation_patch_has_a_social_owner_and_preserves_its_metadata():
     clean, dropped = validated_specialist_patch_channels("director_social", {"obligations": [_op()]})
     assert clean["obligations"] == [_op()]
     assert not dropped
-    assert "OBLIGATIONS:" in specialist_prompt("social", {"obligations"})
+    # The encoder's `obligations` chunk since 2026-09-27; the social hand's
+    # before.
+    assert "OBLIGATIONS:" in unified_specialist_prompt(["obligations"])
 
 
 @pytest.mark.parametrize("stage", ["interpret", "resolve"])
-def test_current_specialist_pipeline_keeps_debts_outside_scene_state(temp_db, monkeypatch, stage):
+def test_current_specialist_pipeline_keeps_debts_outside_scene_state(
+        temp_db, monkeypatch, prose_director, stage):
+    """Through the prose Director and its encoder since 2026-09-27: the
+    promise is spoken, and the one event carrying it writes `obligations`."""
     calls = []
-    rows = [{"chrono_id": 1, "item_ids": [1], "item_names": ["The Stranger"],
-             "source_entity_id": "persona:primary", "event": "I promise to bring the report.",
-             "commitment": "asserted", "resolution_notes": "The speaker promises to bring the report.",
-             "categories": ["speech", "obligations"]}]
-    responses = {f"director_{stage}": {"ledgers": rows}, "director_social": {
-        "results": [{"status": "encoded", "settled": {}, "transforms": [
-            {"item": "The Stranger", "patch": {"obligations": [_op()]}}]}]}}
+    promise = encoder_event(
+        "I promise to bring the report.", speech=True,
+        transforms=[{"item": "The Stranger", "patch": {"obligations": [_op()]}}])
+    responses = {
+        "director_prose": {"prose": 'The Stranger says, "I promise to bring the report."'},
+        "director_specialist": {"events": [promise], "missing_tools": [],
+                                "missing_referents": [], "notes": []}}
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, responses))
     ctx = _make_ctx(temp_db, interp={"sequence": []}, player_input="I promise to bring the report.")
     temp_db.wset(ctx.chat.id, "pending_obligations", [{"id": "old", "who": "Mara", "what": "answer", "opened_turn": 0}])
@@ -57,7 +62,8 @@ def test_current_specialist_pipeline_keeps_debts_outside_scene_state(temp_db, mo
     assert "obligations" not in state
     assert all("obligations" not in step["patch"] for step in state["causal_steps"])
     assert any(row["patch"].get("obligations") for row in out["orchestration"]["transform_history"])
-    payload = next(call["payload"] for call in calls if call["step_key"] == "director_social")
+    payload = next(call["payload"] for call in calls
+                   if call["step_key"] == "director_specialist")
     assert payload["pending_obligations"][0]["id"] == "old"
 
 

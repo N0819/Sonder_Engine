@@ -101,12 +101,14 @@ def main(argv=None):
                     help="ignore identifiers mentioned fewer times than this")
     args = ap.parse_args(argv)
 
-    from llm.prompts import DEFAULT_PROMPTS
+    from llm.prompts import prose_director_prompt
 
     sent = _payload_keys(args.db)
+    # The prose Director's two sheets (the causal Director's were deleted
+    # 2026-09-27).
     sheets = {
-        "interpret": DEFAULT_PROMPTS["director_interpret"],
-        "resolve": DEFAULT_PROMPTS["director_resolve_lean"],
+        "interpret": prose_director_prompt("interpret"),
+        "resolve": prose_director_prompt("resolve"),
     }
 
     for label, text in sheets.items():

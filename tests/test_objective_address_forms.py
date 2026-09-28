@@ -44,8 +44,10 @@ from __future__ import annotations
 import json
 import time
 
+import agents.director as director
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.character_schema import default_character_data, default_persona_data
+from tests.director_fakes import prose_resolve_agent
 
 # The exact string from chat 95 turn 1, verbatim.
 INVENTED = ("Lieutenant Commander Sabine Oyelaran folds the five subspace "
@@ -119,10 +121,10 @@ def _make_ctx(temp_db, persona_sheet, cards):
 
 
 def _resolve(temp_db, monkeypatch, prose, persona_sheet, cards=()):
-    import agents.director as director
+    """The prose Director writes `prose`; the scanned account is that prose."""
     ctx = _make_ctx(temp_db, persona_sheet, list(cards))
     monkeypatch.setattr(director, "_agent_json",
-                        lambda *a, **k: {"resolved_event": prose})
+                        prose_resolve_agent({"resolved_event": prose}))
     director.director_resolve(ctx, nonce=0)
     return ctx
 
@@ -132,7 +134,7 @@ def _address_warnings(ctx):
 
 
 def test_the_objective_account_may_not_mint_a_form_of_address_no_card_carries(
-        temp_db, monkeypatch):
+        temp_db, monkeypatch, prose_director):
     """Chat 95 turn 1, the exact resolved_event, warned at the origin stage.
 
     "Lieutenant Commander Sabine Oyelaran folds the five subspace metric
@@ -152,7 +154,7 @@ def test_the_objective_account_may_not_mint_a_form_of_address_no_card_carries(
 
 
 def test_a_form_of_address_the_card_authored_in_prose_passes_unremarked(
-        temp_db, monkeypatch):
+        temp_db, monkeypatch, prose_director):
     """The authored form, which 82 of chat 95's 294 payloads carried.
 
     Free prose is the only place a card can put this today, so prose is a
@@ -165,7 +167,7 @@ def test_a_form_of_address_the_card_authored_in_prose_passes_unremarked(
 
 
 def test_a_form_of_address_carried_in_aliases_passes_unremarked(
-        temp_db, monkeypatch):
+        temp_db, monkeypatch, prose_director):
     """Chat 95's registered cast carried their forms in `aliases`.
 
     Aliases are an INCLUSION list for recognition matching and defending an
@@ -181,7 +183,7 @@ def test_a_form_of_address_carried_in_aliases_passes_unremarked(
 
 
 def test_a_mind_may_still_be_out_loud_wrong_about_who_someone_is(
-        temp_db, monkeypatch):
+        temp_db, monkeypatch, prose_director):
     """The same mistaken form, inside the quotation marks it was spoken in.
 
     Chat 95 turn 1 again: Data said "Lieutenant Commander." to a body he had
@@ -196,7 +198,7 @@ def test_a_mind_may_still_be_out_loud_wrong_about_who_someone_is(
 
 
 def test_a_name_that_already_carries_its_own_form_of_address_is_left_alone(
-        temp_db, monkeypatch):
+        temp_db, monkeypatch, prose_director):
     """A card storing the form INSIDE identity.name is a different defect.
 
     docs/UNBUILT.md 1.84d: "A character has nowhere to carry a rank, so the
@@ -214,7 +216,7 @@ def test_a_name_that_already_carries_its_own_form_of_address_is_left_alone(
 
 
 def test_a_name_two_people_in_the_scene_share_is_not_scored(
-        temp_db, monkeypatch):
+        temp_db, monkeypatch, prose_director):
     """A token that identifies two bodies identifies neither.
 
     Same rule as `_check_pronoun_fidelity`'s token_owner: the guard reports an

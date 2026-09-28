@@ -177,13 +177,13 @@ def test_the_resolve_prompt_does_not_authorise_the_failure(temp_db):
     The occasion is now named as the body going under, per the standing rule
     that a bare prohibition inverts.
     """
-    from llm.prompts import DEFAULT_PROMPTS
+    from llm.prompts import unified_specialist_prompt
 
-    body = DEFAULT_PROMPTS["director_body"]
+    body = unified_specialist_prompt(["conditions"], "en", None)
     assert "they declare sleeping" not in body, \
         "an announced plan is licensed again"
     assert "ANNOUNCED PLAN IS DIALOGUE" in body
-    assert "NARRATES THE BODY GOING UNDER" in body
+    assert "NARRATES the body going under" in body
 
 
 def test_the_guard_survives_the_scene_being_committed_first(temp_db):

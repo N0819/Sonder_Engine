@@ -131,6 +131,30 @@ def temp_db():
 
 
 @pytest.fixture
+def prose_director(temp_db, monkeypatch):
+    """The prose Director made deterministic for a test that runs a stage.
+
+    The decision model grants every channel and part it is asked about --
+    what an unreachable one fails open to, without the warning -- and the
+    room author is off, so a fixture's room channels ride the encoder like
+    any other channel instead of being left for a designer the test does not
+    answer. Returns the list of batteries the decision model was asked.
+    Pair with the fakes in `tests/director_fakes.py`.
+    """
+    from llm import decisions
+
+    temp_db.set_setting("prose_contract_room_agent", "0")
+    asked = []
+
+    def answer(state, questions):
+        asked.append({"state": state, "questions": dict(questions)})
+        return {key: {"type": "noul", "noul": 0.99} for key in questions}
+
+    monkeypatch.setattr(decisions, "OVERRIDE", answer)
+    return asked
+
+
+@pytest.fixture
 def sample_scene():
     """Return a scene with several rooms and characters."""
     return {

@@ -181,30 +181,30 @@ def test_arrives_defaults_to_true():
     assert MovementDecl(to_room="bridge", arrives=False).arrives is False
 
 
-def test_the_interpret_is_told_how_to_decide_it():
-    """The deterministic half only works if the stage that reads the player's
-    sentence fills the field in. Nothing downstream can recover it -- measured
-    across 1249 live turns, no text test separates an asserted crossing from a
-    declared approach."""
-    from llm.prompts import DEFAULT_PROMPTS
+def test_the_encoder_is_asked_for_the_field():
+    """The deterministic half only works if the stage that writes the move
+    fills the field in. Nothing downstream can recover it -- measured across
+    1249 live turns, no text test separates an asserted crossing from a
+    declared approach. The encoder writes `movement` since the causal
+    Director went (2026-09-27); its core names `arrives` on the movement line
+    and does not yet say what it means (`docs/UNBUILT_PIPELINE.md` § 1.1)."""
+    from llm.prompts import unified_specialist_prompt
 
-    prompt = DEFAULT_PROMPTS["director_interpret"]
-    assert "movement" in prompt
-    assert "arrives" in prompt
-    assert "relocation" in prompt
-    assert "player" not in prompt.casefold()
+    core = unified_specialist_prompt([], "en", [])
+    line = next(row for row in core.splitlines() if row.startswith("- movement:"))
+    assert "to_room" in line and "arrives" in line
 
 
 # --- and the Director is told, not merely clamped -----------------------------
 
 def test_the_prompt_states_the_rule_the_guard_enforces():
-    """The causal prompt stays out of spatial procedure; code owns the clamp."""
-    from llm.prompts import DEFAULT_PROMPTS
+    """The Director's sheet stays out of spatial procedure; code owns the
+    clamp."""
+    from llm.prompts import prose_director_prompt
 
-    prompt = DEFAULT_PROMPTS["director_resolve_lean"]
+    prompt = prose_director_prompt("resolve", "en")
     assert "APPROACHING IS NOT ARRIVING" not in prompt
     assert "state_diff" not in prompt
-    assert "resolution_notes" in prompt
 
 
 class TestAnApproachThatCanComplete:

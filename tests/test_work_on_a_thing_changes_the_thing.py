@@ -21,43 +21,27 @@ work that plainly accumulates. The clause states the boundary using the
 engine's own test -- would the thing be different next beat if nothing else
 happened -- and names the exception as that test's complement, rather than
 listing verbs that count as work.
+
+THE CLAUSE WENT WITH THE CAUSAL DIRECTOR ON 2026-09-27. It lived on the
+ledger author's sheet ("WORK ON A THING CHANGES IT", the "different next beat
+if nothing else happened" boundary, and "A body's posture, grip and place are
+never the record of its work"). On the prose path the decision model's
+`entities` question decides whether the channel is granted, and no prose card
+carries the clause: `docs/UNBUILT_PIPELINE.md` § 1.1. What survives is the
+exception, on the encoder's core.
 """
 
-import pytest
-
-from llm.prompts import DEFAULT_PROMPTS
-
-
-def _sheet():
-    return DEFAULT_PROMPTS["director_resolve_lean"]
-
-
-def test_the_author_is_told_the_consequence_belongs_to_the_thing():
-    sheet = _sheet()
-    assert "WORK ON A THING CHANGES IT" in sheet
-    assert "route its own channel (entities) beside the contact" in sheet
-
-
-def test_the_boundary_is_the_engine_s_own_test_and_not_a_verb_list():
-    """`sensory_events` already decides what outlasts a beat with exactly this
-    sentence. One test stated once reaches the case nobody has hit yet; a list
-    of verbs reaches only what it names."""
-    sheet = _sheet()
-    assert "different next beat if nothing else happened" in sheet
+from llm.prompts import unified_specialist_prompt
 
 
 def test_the_exception_survives_the_reduction():
     """A reduction is real only if it still says everything the child said.
     The child here is the no-record-change rule, and it must still be there
-    and still be reachable -- otherwise the clause licenses inventing a state
+    and still be reachable -- otherwise a sheet licenses inventing a state
     effect for every push that does not give."""
-    sheet = _sheet()
-    assert "invents no state effect to earn a channel" in sheet
-    assert "A span that neither changes nor asks it" in sheet
-    assert "keeps its event and observable" in sheet
-    assert "categories:[]" in sheet
-
-
-def test_a_body_s_posture_is_not_the_record_of_its_work():
-    """The measured failure in one sentence: 118 of 118 tags were the body."""
-    assert "A body's posture, grip and place are never the record of its work" in _sheet()
+    core = unified_specialist_prompt([], "en", [])
+    assert ("A brief reaction of a body changes no record and no tool owns it: "
+            "its observable carries it, with no transforms and no tool asked "
+            "for") in core
+    assert ("Every outward act the prose states is an event, whether or not a "
+            "tool records it") in core

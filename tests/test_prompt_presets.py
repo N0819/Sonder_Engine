@@ -55,17 +55,17 @@ def test_a_japanese_preset_does_not_reach_an_english_prompt(saved):
     assert prompts.get_prompt_body("narrator", JA) == "日本語の上書き"
 
 
-def test_the_specialists_and_prose_author_honour_the_tag(saved):
-    """Every preset-aware assembly path, not just get_prompt_body."""
+def test_the_directors_sheet_honours_the_tag(saved):
+    """Every preset-aware assembly path, not just get_prompt_body. Since the
+    causal Director went (2026-09-27) the Director's sheet is the one
+    preset-aware assembly left; the encoder's and the room author's read no
+    preset."""
     saved("Grittier", DEFAULT_LANGUAGE, {
-        "director_body": "BODY OVERRIDE",
-        "director_resolve_lean": "PROSE OVERRIDE",
+        "prose_director_resolve": "PROSE OVERRIDE",
     })
-    assert "BODY OVERRIDE" in prompts.specialist_prompt(
-        "body", ("attire",), DEFAULT_LANGUAGE)
-    assert "PROSE OVERRIDE" in prompts.prose_author_prompt(None, DEFAULT_LANGUAGE)
-    assert "BODY OVERRIDE" not in prompts.specialist_prompt("body", ("attire",), JA)
-    assert "PROSE OVERRIDE" not in prompts.prose_author_prompt(None, JA)
+    assert "PROSE OVERRIDE" in prompts.prose_director_prompt(
+        "resolve", DEFAULT_LANGUAGE)
+    assert "PROSE OVERRIDE" not in prompts.prose_director_prompt("resolve", JA)
 
 
 def test_default_preset_overrides_nothing(saved):

@@ -1366,6 +1366,11 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     payload = (dict(base_payload) if base_payload is not None
                else encoder_payload(ctx, sc, numbered(units), model_payload, view, extras,
                                     channels))
+    # Where a declared act lies is found by its own words, and the encoder's
+    # payload no longer carries what a player typed (the X19 lesson,
+    # `director_prose.without_raw_text`): code reads the Director's own copy.
+    declared_from = ({"event_inputs": (model_payload or {}).get("event_inputs")}
+                     if (model_payload or {}).get("event_inputs") else payload)
 
     t1 = time.time()
     try:
@@ -1390,7 +1395,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     confident, unsure = findings(about, answers)
     # A DECLARED ACT NO EVENT CARRIES IS CERTAIN, and located by code: its
     # sentences are missing whatever Jev scored them -- asked or not.
-    gaps = declared_gaps(events, units, payload)
+    gaps = declared_gaps(events, units, declared_from)
     if gaps:
         record["declared_gaps"] = [{"event_id": g["event_id"], "sentences": g["sentences"]}
                                    for g in gaps]
@@ -1424,7 +1429,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     jobs = plan_jobs(native, confident, events)
     record["jobs"] = [{k: v for k, v in job.items() if k != "write"} for job in jobs]
     if not jobs:
-        return _declared_left(ctx, stage, events, units, payload, record), record
+        return _declared_left(ctx, stage, events, units, declared_from, record), record
 
     # TWO REPAIR CALLS, IN PARALLEL: recovering events writes long answers,
     # mending writes short ones, and one call doing both skipped the short
@@ -1527,7 +1532,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     for job_id in report["unanswered"]:
         ctx.add_warning(f"{stage}: encoder repair left job {job_id} unanswered")
     repaired = [e for e in repaired if isinstance(e, dict)]
-    return _declared_left(ctx, stage, repaired, units, payload, record), record
+    return _declared_left(ctx, stage, repaired, units, declared_from, record), record
 
 
 def _declared_left(ctx, stage, events, units, payload, record):

@@ -24,8 +24,12 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+
+import agents.director as director
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.director_fakes import encoder_event, prose_resolve_agent
 
 
 def _make_director_ctx(temp_db, character_results=None):
@@ -185,54 +189,68 @@ def _make_corrupted_open_group_ctx(
     return ctx, char_id
 
 
-def test_director_resolve_stamps_concealment_from_player_sequence(temp_db, monkeypatch):
+def _prose_resolve(ctx, monkeypatch, prose="Reya leans in to listen.",
+                   events=None):
+    """One resolve beat on the prose path. `events`, when given, is what the
+    encoder files; otherwise it files the prose as one plain event."""
+    per_step = None
+    if events is not None:
+        per_step = {"director_specialist": {
+            "events": list(events), "missing_tools": [],
+            "missing_referents": [], "notes": []}}
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": prose}, per_step=per_step))
+    return director.director_resolve(ctx, nonce=0)
+
+
+def test_director_resolve_stamps_concealment_from_player_sequence(temp_db, prose_director, monkeypatch):
     """The director model's dialogue_log entry omits visibility/conceal_from
     (as live models reliably do) -- director_resolve must stamp it anyway,
-    from the player's own declared sequence element, not trust the model."""
-    import agents.director as director
+    from the player's own declared sequence element, not trust the model.
 
+    Ported 2026-09-27: on the prose path the declared line reaches
+    `dialogue_log` from the declaration itself. The encoder filing it back as a
+    speech event with its own tags is the case the xfail below pins
+    (UNBUILT_PIPELINE §1.1).
+    """
     ctx, char_id = _make_director_ctx(temp_db)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "The Stranger", "exact_quote": '"The shipment arrives at midnight."',
-            "volume": "normal", "intended_target": None, "tone": "hushed",
-        }],
-    })
 
-    out = director.director_resolve(ctx, nonce=0)
+    out = _prose_resolve(ctx, monkeypatch)
 
     entry = next(d for d in out["dialogue_log"] if "midnight" in d["exact_quote"])
     assert entry["visibility"] == "concealed"
     assert char_id in entry["conceal_from"]
 
 
-def test_director_resolve_stamps_volume_from_player_sequence(temp_db, monkeypatch):
+def test_director_resolve_stamps_volume_from_player_sequence(temp_db, prose_director, monkeypatch):
     """Live play (chat 10, turn 22) found a sibling bug to the concealment
     leak: the director model transcribed a whisper into dialogue_log as
     volume:'normal', which would let hear_level() carry a 200-meter-shaft
     whisper as if spoken normally. The same deterministic backstop that
-    protects visibility/conceal_from must also protect volume."""
-    import agents.director as director
+    protects visibility/conceal_from must also protect volume.
 
+    Ported 2026-09-27: on the prose path the declared line reaches
+    `dialogue_log` from the declaration itself. The encoder filing it back as a
+    speech event with its own tags is the case the xfail below pins
+    (UNBUILT_PIPELINE §1.1).
+    """
     ctx, char_id = _make_director_ctx(temp_db)
     ctx.director_interpret["sequence"][0]["volume"] = "whisper"
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "The Stranger", "exact_quote": '"The shipment arrives at midnight."',
-            "volume": "normal", "intended_target": None, "tone": "hushed",
-        }],
-    })
 
-    out = director.director_resolve(ctx, nonce=0)
+    out = _prose_resolve(ctx, monkeypatch)
 
     entry = next(d for d in out["dialogue_log"] if "midnight" in d["exact_quote"])
     assert entry["volume"] == "whisper"
 
 
-def test_director_resolve_stamps_concealment_from_character_sequence(temp_db, monkeypatch):
-    """Same backstop for an NPC's own concealed speech declaration."""
-    import agents.director as director
+def test_director_resolve_stamps_concealment_from_character_sequence(temp_db, prose_director, monkeypatch):
+    """Same backstop for an NPC's own concealed speech declaration.
 
+    Ported 2026-09-27: on the prose path the declared line reaches
+    `dialogue_log` from the declaration itself. The encoder filing it back as a
+    speech event with its own tags is the case the xfail below pins
+    (UNBUILT_PIPELINE §1.1).
+    """
     ctx, char_id = _make_director_ctx(
         temp_db,
         character_results={
@@ -242,14 +260,8 @@ def test_director_resolve_stamps_concealment_from_character_sequence(temp_db, mo
                           "visibility": "concealed", "conceal_from": ["the_doctor"]}],
         },
     )
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "Reya", "exact_quote": '"Don\'t tell the Doctor."',
-            "volume": "normal", "intended_target": None, "tone": "low",
-        }],
-    })
 
-    out = director.director_resolve(ctx, nonce=0)
+    out = _prose_resolve(ctx, monkeypatch)
 
     entry = next(d for d in out["dialogue_log"] if "tell the Doctor" in d["exact_quote"])
     assert entry["visibility"] == "concealed"
@@ -421,42 +433,49 @@ def test_perception_outcome_does_not_inject_concealed_dialogue(temp_db, monkeypa
         )
 
 
-# --- the contract no longer asks for what the backstop overwrites ---
-# The three tests above established that the engine re-stamps volume,
+# --- a declared line's tags are the declaration's, whatever is filed ---
+# The three resolve tests above establish that the engine stamps volume,
 # visibility and conceal_from onto every DECLARED line from the declaration
-# itself, discarding whatever the model transcribed. Measured cost of asking
-# for them anyway: 41.8 tokens per beat across 2.66 dialogue_log lines, of
-# which ~35 are thrown away. So the ask was trimmed to "supply these only on
-# a line YOU originate". These tests pin that the trim is safe -- that an
-# omitted tag on a declared line is re-stamped rather than defaulted -- and
-# that a line the Director genuinely originates can still carry its own.
+# itself. The causal contract asked its model for them anyway and threw the
+# answer away -- 41.8 tokens a beat across 2.66 dialogue_log lines, ~35 of
+# them discarded -- so the ask was trimmed to "supply these only on a line
+# YOU originate". On the prose path the model that may omit or mistranscribe
+# them is the encoder, filing a declared line back as a speech event. These
+# tests pin that such an echo is re-stamped rather than defaulted, and that a
+# line the Director genuinely originates still carries its own tags.
 
 
-def test_a_declared_whisper_survives_the_model_omitting_volume_entirely(
-        temp_db, monkeypatch):
+@pytest.mark.xfail(
+    strict=True,
+    reason="the encoder's echo of a declared line is filed with its own tags, "
+           "or the defaults, instead of being re-stamped from the declaration "
+           "(UNBUILT_PIPELINE §1.1)")
+def test_a_declared_whisper_survives_the_model_omitting_volume_entirely(temp_db, prose_director, monkeypatch):
     """The trimmed contract invites the model to leave volume out. If the
     re-stamp did not cover omission as well as mis-transcription, the trim
     would turn every declared whisper into `setdefault('normal')` -- the
     exact 200-metre-shaft leak the backstop exists to stop, reintroduced by
-    an optimization."""
-    import agents.director as director
+    an optimization.
 
+    Ported 2026-09-27: the model that may leave the tags off is now the
+    encoder, which files the declared line back as a speech event. Held as a
+    strict xfail: the echo is not re-stamped (UNBUILT_PIPELINE §1.1).
+    """
     ctx, char_id = _make_director_ctx(temp_db)
     ctx.director_interpret["sequence"][0]["volume"] = "whisper"
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "The Stranger",
-            "exact_quote": '"The shipment arrives at midnight."',
-            "intended_target": None, "tone": "hushed",
-        }],
-    })
 
-    out = director.director_resolve(ctx, nonce=0)
+    out = _prose_resolve(ctx, monkeypatch, events=[
+        encoder_event("Reya leans in to listen.", source=f"character:{char_id}"),
+        encoder_event("The shipment arrives at midnight.",
+                      source="persona:primary", speech=True),
+    ])
 
-    entry = next(d for d in out["dialogue_log"] if "midnight" in d["exact_quote"])
-    assert entry["volume"] == "whisper"
-    assert entry["visibility"] == "concealed"
-    assert char_id in entry["conceal_from"]
+    entries = [d for d in out["dialogue_log"] if "midnight" in d["exact_quote"]]
+    assert entries
+    for entry in entries:
+        assert entry["volume"] == "whisper", entry
+        assert entry["visibility"] == "concealed", entry
+        assert char_id in entry["conceal_from"], entry
 
 
 def _voiceable_creature(temp_db, ctx):
@@ -470,45 +489,39 @@ def _voiceable_creature(temp_db, ctx):
     temp_db.wset(ctx.chat.id, "scene", sc)
 
 
-def test_a_line_the_director_originates_keeps_the_tags_it_supplies(
-        temp_db, monkeypatch):
+def test_a_line_the_director_originates_keeps_the_tags_it_supplies(temp_db, prose_director, monkeypatch):
     """The other half of the trim: where there is no declaration to re-stamp
-    from, the model's tags are the only ones there are, and must survive."""
-    import agents.director as director
+    from, the model's tags are the only ones there are, and must survive.
 
+    Ported 2026-09-27: a line the Director originates is the encoder's speech
+    event, and its tags land on `state_diff.speech`.
+    """
     ctx, _char_id = _make_director_ctx(temp_db)
     _voiceable_creature(temp_db, ctx)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "the raven", "exact_quote": '"Nevermore."',
-            "volume": "shout", "intended_target": None, "tone": "",
-            "visibility": "overt", "conceal_from": [],
-        }],
-    })
 
-    out = director.director_resolve(ctx, nonce=0)
+    out = _prose_resolve(ctx, monkeypatch, prose="The raven croaks.", events=[
+        encoder_event("Nevermore.", source="the raven", speech=True,
+                      volume="shout", visibility="overt", conceal_from=[]),
+    ])
 
-    entry = next(d for d in out["dialogue_log"] if "Nevermore" in d["exact_quote"])
+    entry = next(d for d in out["state_diff"]["speech"] if "Nevermore" in d["event"])
     assert entry["volume"] == "shout"
 
 
-def test_an_originated_line_with_no_tags_is_taken_as_normal_and_overt(
-        temp_db, monkeypatch):
-    """What the trimmed prompt now promises the model about omission."""
-    import agents.director as director
+def test_an_originated_line_with_no_tags_is_taken_as_normal_and_overt(temp_db, prose_director, monkeypatch):
+    """What the trimmed prompt now promises the model about omission.
 
+    Ported 2026-09-27: a line the Director originates is the encoder's speech
+    event, and its tags land on `state_diff.speech`.
+    """
     ctx, _char_id = _make_director_ctx(temp_db)
     _voiceable_creature(temp_db, ctx)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "the raven", "exact_quote": '"Nevermore."',
-            "intended_target": None, "tone": "",
-        }],
-    })
 
-    out = director.director_resolve(ctx, nonce=0)
+    out = _prose_resolve(ctx, monkeypatch, prose="The raven croaks.", events=[
+        encoder_event("Nevermore.", source="the raven", speech=True),
+    ])
 
-    entry = next(d for d in out["dialogue_log"] if "Nevermore" in d["exact_quote"])
+    entry = next(d for d in out["state_diff"]["speech"] if "Nevermore" in d["event"])
     assert entry["volume"] == "normal"
     assert entry["visibility"] == "overt"
     assert entry["conceal_from"] == []

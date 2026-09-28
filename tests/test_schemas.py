@@ -211,22 +211,6 @@ def test_observation_defaults_are_the_values_the_compactor_omits():
         assert getattr(parsed, name) == OBSERVATION_DEFAULTS[name], name
 
 
-def test_the_prose_authors_example_shows_only_channels_it_still_owns():
-    """The causal Director example is ledgers only, never a partial diff."""
-    from llm.schemas import OUTPUT_EXAMPLES
-
-    shown = OUTPUT_EXAMPLES["director_resolve"]
-    assert "ledgers" in shown
-    assert "state_diff" not in shown
-    for step in ("director_interpret", "director_resolve"):
-        for row in OUTPUT_EXAMPLES[step]["ledgers"]:
-            assert {"chrono_id", "item_ids", "item_names", "source_entity_id",
-                    "source_event_id", "event", "commitment", "resolution_notes",
-                    "categories"} <= row.keys()
-            assert len(row["item_ids"]) == len(row["item_names"])
-            assert not {"item_id", "object_name", "authority_mode", "kind"} & row.keys()
-
-
 def test_the_character_repair_example_names_the_psychology_tier():
     """A key absent from the object a repair is told to imitate reads as
     "not part of the answer". The example named none of `intent_ops`,
@@ -246,21 +230,6 @@ def test_the_character_repair_example_names_the_psychology_tier():
         assert key in example, key
     for key in ("speech", "action", "actions"):
         assert key not in example, key
-
-
-def test_every_specialist_example_shows_exactly_the_channels_it_owns():
-    """A positional example may demonstrate one channel, never a foreign one."""
-    from llm.schemas import OUTPUT_EXAMPLES, SPECIALIST_CHANNELS
-
-    for step_key, channels in SPECIALIST_CHANNELS.items():
-        example = OUTPUT_EXAMPLES[step_key]
-        assert set(example) == {"results", "notes"}
-        patches = [transform["patch"]
-                   for result in example["results"]
-                   for transform in result["transforms"]]
-        shown = {channel for patch in patches for channel in patch}
-        assert shown and shown <= set(channels), (
-            f"{step_key}: shows {sorted(shown)}, owns {sorted(channels)}")
 
 
 def test_no_schema_model_is_declared_without_anything_reaching_it():
@@ -488,3 +457,4 @@ def test_every_list_valued_director_channel_is_registered_as_one():
     for channel in _DELEGATED_CHANNELS:
         if channel in schema_lists:
             assert channel in _LIST_DELEGATED, channel
+

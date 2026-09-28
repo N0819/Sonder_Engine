@@ -1,5 +1,7 @@
 # The Director as an orchestrator over scoped specialists
 
+**SUPERSEDED 2026-09-27.** The causal Director this describes -- and its specialists -- was deleted; the Director writes prose and ONE encoder records every channel ([`DESIGN_PROSE_CONTRACT.md`](../docs/design/DESIGN_PROSE_CONTRACT.md)). Kept as the argument and the measurements; nothing below describes running code.
+
 **Opened as branch `director-orchestration` 2026-08-12; LANDED on `main`
 2026-08-14.** The architecture below is not a proposal any more -- it is the
 only Director path the engine has, and `AGENTS.md` cites this note as its

@@ -1,82 +1,19 @@
+"""The row machinery the prose Director's events still run through.
+
+The causal Director's contract, its hands' positional envelope, their wire
+grammars and the spatial hand's interior-minting check went with them on
+2026-09-27. What stands here is what reads the rows code builds from the
+encoder's events: normalization, owners, the recompiler, the beat record.
+"""
 from types import SimpleNamespace
 
 from agents import director
-from llm.llm_quality import _step_json_schema
-from llm.prompts import prose_author_prompt, specialist_prompt
-from llm.schemas import semantic_output_errors, validate_llm_output_strict
 from world.causality import compile_transforms
 
 
 _span_items = director._span_items
 normalize_causal_ledger = director.normalize_causal_ledger
 span_owners = director.span_owners
-
-
-def test_both_director_invocations_share_one_minimal_contract():
-    shared = prose_author_prompt(set())
-    assert "Convert event_inputs into ordered event ledgers" in shared
-    assert "state_diff" not in shared
-    assert "resolved_event" not in shared
-    assert "player_declaration" not in shared
-    # The contract explains the job and includes a complete four-row
-    # worked example. Bound its size without forcing causal instructions
-    # back into the ambiguous shorthand exposed by live prose stress.
-    #
-    # RAISED 12,000 -> 12,400 on 2026-09-19, and the 400 bought one clause.
-    # The sheet stood at 11,985 -- fifteen characters of headroom -- so the
-    # bound had stopped being a budget and become a freeze: no measured
-    # defect could be answered without displacing an unrelated rule.
-    #
-    # What it bought: across 60 beats of two playerless runs the author filed
-    # 118 category tags using six words and every one named a BODY
-    # (`contacts` 41, `poses` 38, `attention` 32, `stations` 9, `body` 7,
-    # `positions` 2); `objects`, `entities`, `substance_ops` and
-    # `world_facts` never appeared, and `state_diff.entities` was written
-    # zero times. A man hooked packed grit out of a sluice runner for
-    # twenty-three consecutive beats and the runner was never recorded as
-    # different. The clause states the boundary with the engine's own test
-    # -- would the thing be different next beat if nothing else happened --
-    # and keeps the no-record-change exception as that test's complement.
-    #
-    # The sheet is shared by interpret and resolve, so a beat pays this
-    # twice: ~200 output-equivalent tokens against a measured 4,355 tokens
-    # of author output per beat. The bound is discipline, not cost, and it
-    # stays a bound -- the next clause displaces something or argues here.
-    #
-    # RAISED 12,400 -> 12,600 on 2026-09-20, and the 200 bought the `seconds`
-    # clause: the row's own span, which is what makes the story clock move at
-    # all. `state_diff.time` was the spatial hand's channel, and a hand
-    # receives `_specialist_span_slice` -- the rows selected for it, never the
-    # beat -- so the sum its chunk asked for was over terms it could not see.
-    # It declined on every measured beat: in scope on 38 of 60 playerless
-    # beats and 50 of 118 live beats since 2026-09-15, written on 0 of either,
-    # with the category routed 0 times in 3,000 stored resolve variants. Every
-    # beat fell to `UNCLAIMED_BEAT_SECONDS = 10.0`, which is 0.0028 hours --
-    # against the charter's own "a beat is minutes of story" -- so the
-    # off-screen world had never ticked once: `clock_hours` stood at the
-    # presim's 72.0 and `last_epoch_id` at "presim" after sixty beats.
-    #
-    # Argued rather than displaced, which this comment invites, because there
-    # is nothing here to displace: every other line routes a channel, and this
-    # one is the only thing in the sheet that a clock reads. It was also
-    # REDUCED first -- 856 characters to 330 -- by dropping the floor's
-    # arithmetic and two of three illustrations and keeping the three earned
-    # clauses: this step and not the beat (else code double-counts a total the
-    # author restated), the scale the account gives it (else a night is
-    # charged as seconds), and that nothing has to announce a span for one to
-    # exist (which is EVERY beat where no player declares anything -- the
-    # whole playerless case the charter runs in).
-    #
-    # RAISED 12,600 -> 12,800 on 2026-09-24 for one sentence: "Volume is
-    # reach, not sound". The owner's chat 155, idx 21 and 27 (this contract):
-    # the player's embarrassed, stammered and moaned lines to the woman whose
-    # hands were on her were written `mutter`, and perception then handed her
-    # a fragment of each ("volume mutter, barrier open, tier within_reach")
-    # -- "it is marking everything hinami says as muttered which is...
-    # obnoxious." The field grades a real mutter correctly; the author was
-    # reading how a line sounds as how far it goes. Reduced before it was
-    # argued, 225 characters to 150: the illustrations of affect cut to two.
-    assert len(shared) < 12_800
 
 
 def test_a_body_is_not_a_room_until_the_world_has_made_it_one():
@@ -186,9 +123,6 @@ def test_private_item_targets_become_readable_names_before_dispatch():
     assert ledger["targets"] == ["Nera", "brass box"]
     assert ledger["item_ids"] == [1, 2, 3]
     assert out["sequence"][0]["intended_target"] == "Nera"
-    visible = director._specialist_ledger(ledger)
-    assert visible["targets"] == ["Nera", "brass box"]
-    assert not {"item_id", "item_ids", "chrono_id"} & visible.keys()
 
 
 def test_real_world_and_identity_keys_win_over_private_handle_collisions():
@@ -222,156 +156,6 @@ def test_conflicting_names_for_a_private_handle_do_not_choose_an_object():
     ]}
     normalize_causal_ledger(out)
     assert [row["targets"] for row in out["ledgers"]] == [["1"], ["1"]]
-
-
-def test_both_language_contracts_use_item_lists_and_distinct_public_targets():
-    import json
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parents[1]
-    for language in ("en", "ja"):
-        text = (root / "language_packs" / language / "cards" / "system_prompts"
-                / "causal_director.txt").read_text()
-        example = json.loads(text[text.rfind('{"ledgers":'):].strip())
-        rows = example["ledgers"]
-        payload = {"event_inputs": [{"entity_id": "character:11",
-                    "authority_mode": "world_author", "events": [
-                        {"event_id": "scene:1", "type": "raw_input"}]}],
-                   "identity_index": {"character:11": "Mara", "character:12": "Ivo"}}
-        for stage in ("director_interpret", "director_resolve"):
-            report = validate_llm_output_strict(stage, example, source_payload=payload)
-            assert report.valid, report.errors
-            schema = _step_json_schema(stage)
-            required = schema.get("$defs", schema.get("definitions"))["CausalLedgerEntry"]["required"]
-            assert all(set(required) <= row.keys() for row in rows)
-        assert [row["chrono_id"] for row in rows] == [1, 2, 3, 4]
-        assert rows[0]["item_ids"] == [1, 2]
-        assert rows[0]["item_names"] == ["red tin", "blue tin"]
-        assert rows[2]["item_ids"] == [1] and rows[3]["item_ids"] == [2]
-        assert rows[1]["event"] == "Keep them shut,"
-        assert rows[1]["categories"] == ["speech"]
-        assert set(rows[2]["categories"]) == {"inventory_ops", "contact_ops", "stations"}
-        assert "bench" in rows[2]["targets"] and "bench" not in rows[2]["item_names"]
-        for row in rows:
-            assert not {"item_id", "object_name", "authority_mode", "kind"} & row.keys()
-            public = director._specialist_ledger(row)
-            assert not {"item_ids", "item_id", "chrono_id"} & public.keys()
-        assert "engine: speech, attention" in text
-        target_line = next(line for line in text.splitlines() if line.startswith("- targets"))
-        assert "world/identity" in target_line and "item_ids" in target_line
-
-
-def _spatial_interior_payload(interior_rooms=None, *, movement=True):
-    ledger = {
-        "source_entity_id": "persona:primary",
-        "object_name": "TARDIS", "targets": ["tardis"],
-        "categories": ["rooms", *( ["positions"] if movement else [])],
-    }
-    if movement:
-        ledger["movement"] = {
-            "mover": "self", "to_room": "tardis", "arrives": True}
-    return {
-        "player": "The Stranger",
-        "identity_index": {"persona:primary": "The Stranger"},
-        "positions": {"The Stranger": "alley", "tardis": "alley"},
-        "entity_interiors": {
-            "tardis": {"name": "TARDIS",
-                       "interior_rooms": list(interior_rooms or [])},
-        },
-        "ledgers": [ledger],
-    }
-
-
-def test_spatial_cannot_call_an_unmade_interior_already_true():
-    report = validate_llm_output_strict(
-        "director_spatial",
-        {"results": [{"transforms": [], "status": "already_true"}],
-         "notes": []},
-        source_payload=_spatial_interior_payload(),
-    )
-    assert not report.valid
-    assert any("must mint an interior" in error for error in report.errors)
-
-
-def test_spatial_mints_a_furnished_interior_and_places_the_mover():
-    report = validate_llm_output_strict(
-        "director_spatial",
-        {"results": [{"transforms": [
-            {"patch": {"rooms": {"tardis_console": {
-                "name": "TARDIS Console Room",
-                "desc": "A many-sided control room around a central console.",
-                "light": "bright", "size": "vast",
-                "parent_entity": "tardis", "adjacent": [],
-            }}}},
-            {"patch": {"positions": {
-                "The Stranger": "tardis_console"}}},
-        ], "status": "encoded"}], "notes": []},
-        source_payload=_spatial_interior_payload(),
-    )
-    assert report.valid, report.errors
-
-
-def test_spatial_mints_a_revealed_interior_before_anyone_enters():
-    report = validate_llm_output_strict(
-        "director_spatial",
-        {"results": [{"transforms": [{"patch": {"rooms": {
-            "tardis_console": {
-                "name": "TARDIS Console Room",
-                "desc": "A many-sided control room around a central console.",
-                "light": "bright", "size": "vast",
-                "parent_entity": "tardis", "adjacent": [],
-            },
-        }}}], "status": "encoded"}], "notes": []},
-        source_payload=_spatial_interior_payload(movement=False),
-    )
-    assert report.valid, report.errors
-
-
-def test_spatial_cannot_call_an_unmade_revealed_interior_already_true():
-    report = validate_llm_output_strict(
-        "director_spatial",
-        {"results": [{"transforms": [], "status": "already_true"}],
-         "notes": []},
-        source_payload=_spatial_interior_payload(movement=False),
-    )
-    assert not report.valid
-    assert any("must mint an interior" in error for error in report.errors)
-
-
-def test_spatial_position_accepts_a_causal_identity_join():
-    payload = _spatial_interior_payload()
-    payload["player"] = "Hinami"
-    payload["identity_index"] = {"persona:10": "Hinami"}
-    payload["ledgers"][0]["source_entity_id"] = "persona:10"
-    payload["ledgers"][0]["movement"]["mover"] = "persona:10"
-    payload["positions"] = {"Hinami": "alley", "tardis": "alley"}
-    report = validate_llm_output_strict(
-        "director_spatial",
-        {"results": [{"transforms": [
-            {"patch": {"rooms": {"tardis_console": {
-                "name": "TARDIS Console Room",
-                "desc": "A many-sided control room around a central console.",
-                "light": "bright", "size": "vast",
-                "parent_entity": "tardis", "adjacent": [],
-            }}}},
-            {"patch": {"positions": {"Hinami": "tardis_console"}}},
-        ], "status": "encoded"}], "notes": []},
-        source_payload=payload,
-    )
-    assert report.valid, report.errors
-
-
-def test_spatial_reuses_an_existing_interior():
-    payload = _spatial_interior_payload(["tardis_console"])
-    payload["ledgers"][0]["movement"]["to_room"] = "tardis_console"
-    report = validate_llm_output_strict(
-        "director_spatial",
-        {"results": [{"transforms": [{"patch": {"positions": {
-            "The Stranger": "tardis_console"}}}], "status": "encoded"}],
-         "notes": []},
-        source_payload=payload,
-    )
-    assert report.valid, report.errors
 
 
 def test_recompiler_uses_every_transform_in_chronological_order():
@@ -409,92 +193,6 @@ def test_recompiler_uses_every_transform_in_chronological_order():
     }]
     assert history[1]["patch"]["rooms"]["hall"]["state"] == {
         "open": True}
-
-
-def test_specialist_results_are_positional_and_match_every_input_ledger():
-    payload = {"ledgers": [{"object_name": "coat"},
-                           {"object_name": "scarf"}]}
-    report = validate_llm_output_strict(
-        "director_body",
-        {"results": [{
-            "transforms": [{"patch": {"attire": {
-                "Mara": {"remove": ["coat"]}}}}],
-            "status": "encoded",
-        }]},
-        source_payload=payload,
-    )
-    assert not report.valid
-    assert any("one entry per input ledger" in error
-               for error in report.errors)
-
-
-def test_specialist_cores_teach_the_positional_envelope_without_private_ids():
-    import json
-
-    for name in ("body", "social", "contact", "objects", "spatial"):
-        sheet = specialist_prompt(name, [], "en")
-        assert "same array position" in sheet
-        assert "item_id" not in sheet and "chrono_id" not in sheet
-        assert "required_channels" in sheet and "assigned_hands" in sheet
-        assert "Output STRICT JSON" in sheet
-        example = json.loads(next(line for line in sheet.splitlines()
-                                  if line.startswith('{"results":')))
-        assert set(example) == {"results", "notes"}
-        assert all({"transforms", "status", "settled"} <= row.keys()
-                   for row in example["results"])
-
-
-def test_wire_grammars_expose_only_the_current_contracts():
-    for step in ("director_interpret", "director_resolve"):
-        schema = _step_json_schema(step)
-        assert set(schema["properties"]) == {"ledgers"}
-        row = schema.get("$defs", schema.get("definitions"))["CausalLedgerEntry"]
-        assert {"event", "resolution_notes", "categories", "item_ids", "item_names"} <= set(row["required"])
-        assert not {"item_id", "object_name", "authority_mode"} & set(row["properties"])
-        assert row["properties"]["event"]["minLength"] == 1
-        assert row["properties"]["resolution_notes"]["minLength"] == 1
-    for step in ("director_body", "director_social", "director_contact",
-                 "director_objects", "director_spatial"):
-        schema = _step_json_schema(step)
-        assert set(schema["properties"]) == {"results", "notes"}
-        definitions = schema.get("$defs", schema.get("definitions"))
-        transform = definitions["LedgerPatchTransform"]
-        assert {"item", "patch"} <= set(transform["required"])
-        patch = transform["properties"]["patch"]
-        assert patch["additionalProperties"] is False
-        assert patch["minProperties"] == 1
-        assert "state_diff" not in patch["properties"]
-        assert "status" in definitions["LedgerTransformResult"]["required"]
-
-
-def test_current_director_rejects_invented_sources_and_unknown_channels():
-    payload = {"event_inputs": [{
-        "entity_id": "entity:1", "authority_mode": "autonomous",
-        "events": [{"event_id": "source:1", "type": "action"}],
-    }]}
-    ledger = {
-        "chrono_id": 1, "item_id": 1, "object_name": "door",
-        "source_entity_id": "invented:2", "authority_mode": "autonomous",
-        "source_event_id": "source:1", "kind": "action",
-        "event": "The door opens.", "commitment": "asserted",
-        "resolution_notes": "The door is open.",
-        "categories": ["imaginary_channel"],
-    }
-    report = validate_llm_output_strict(
-        "director_resolve", {"ledgers": [ledger]}, source_payload=payload)
-    assert not report.valid
-    # An invented source is still refused -- it is neither a supplied source
-    # nor an identity the payload names. (A KNOWN identity that supplied no
-    # input of its own IS accepted now; natural prose narrates other people,
-    # and their rows belong to them. See test_speech_is_a_channel.)
-    assert any("neither a supplied source nor a known identity" in error
-               for error in report.errors)
-    # An unroutable channel is REPORTED, not fatal: `_unrouted_rulings`
-    # already names it per span on the next beat, and losing one span beats
-    # losing the beat it was in. See
-    # test_speech_is_a_channel.TestAGuardMayNotDestroyABeatItCannotJustify.
-    assert any("nothing answers to" in str(note)
-               for note in report.warnings), report.warnings
 
 
 def test_recompiler_preserves_list_transforms_and_replaces_scalar_state():
@@ -649,54 +347,15 @@ def test_transforms_join_by_the_row_and_order_by_its_chronology():
     assert compiled["rooms"]["hall"]["state"]["open"] is True, "the later row wins"
 
 
-def test_specialist_matches_distinguish_wearers_from_positioned_garments(monkeypatch):
-    from agents import director_fanout as fanout
-    monkeypatch.setattr(fanout, "survival_enabled", lambda _chat: False)
-    scene = {
-        "rooms": {"bay": {"name": "Bay"}},
-        "positions": {"Nia": "bay", "jacket": "bay", "automaton": "bay"},
-        "entities": {
-            "jacket": {"name": "Orange work jacket"},
-            "automaton": {"name": "Automaton"},
-        },
-        "attire": {"Nia": {"wearing": ["Orange work jacket"]}},
-        "scales": {"automaton": {"ratio": 1}},
-    }
-    view = {"source": "causal_ledger", "player": "Nia", "cast": [], "spans": [{
-        "type": "action", "categories": ["attire"],
-        "item_ids": [1, 2], "item_names": ["Nia", "Orange work jacket"],
-        "object_name": "Orange work jacket", "chrono_id": 1,
-        "targets": ["jacket", "Nia", "automaton"],
-    }]}
-    payload = fanout._specialist_payload(
-        "body", SimpleNamespace(chat={"id": 1}), scene, view,
-        {"identity_index": {"persona:1": "Nia"}})
-    row = payload["ledgers"][0]
-    assert row["target_matches"]["jacket"] == [{
-        "kind": "entity", "world_key": "jacket", "world_name": "Orange work jacket"}]
-    assert row["target_matches"]["Nia"][0]["kind"] == "body"
-    assert {r["kind"] for r in row["target_matches"]["automaton"]} == {"body", "entity"}
-    garment = next(r for r in row["world_matches"] if r["kind"] == "garment")
-    assert garment["worn_by"] == "Nia"
-    assert not {"chrono_id", "item_id", "item_ids"} & row.keys()
-
-
-def test_causal_social_patch_preserves_resolve_evidence_outside_state_diff(temp_db, monkeypatch):
-    from tests.test_director_orchestration import _make_ctx, _fake_agent, _speech_interp
-    calls = []
+def test_causal_social_patch_preserves_resolve_evidence_outside_state_diff(
+        temp_db, monkeypatch, prose_director):
+    """The encoder's `public_evidence` write since 2026-09-27; the social
+    hand's before."""
+    from tests.director_fakes import _make_ctx, _speech_interp, prose_resolve_agent
     evidence = {"source_id": "speech:The Stranger:0", "speech_act": "greeting"}
-    responses = {
-        "director_resolve": {"ledgers": [{
-            "chrono_id": 1, "item_ids": [1], "item_names": ["The Stranger"],
-            "source_entity_id": "persona:primary", "event": "Quiet night.",
-            "resolution_notes": "A greeting is spoken.",
-            "categories": ["speech", "public_evidence"],
-        }]},
-        "director_social": {"results": [{"status": "encoded", "transforms": [
-            {"item": "The Stranger", "patch": {"public_evidence": [evidence]}}
-        ]}]},
-    }
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, responses))
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": "Quiet night.",
+         "state_diff": {"public_evidence": [evidence]}}))
     ctx = _make_ctx(temp_db, interp=_speech_interp())
     out = director.director_resolve(ctx, nonce=0)
     history = out["orchestration"]["transform_history"]
@@ -705,3 +364,4 @@ def test_causal_social_patch_preserves_resolve_evidence_outside_state_diff(temp_
     assert rows[0]["patch"]["public_evidence"][0]["source_id"] == evidence["source_id"]
     assert "public_evidence" not in out["state_diff"]
     assert "public_evidence" in out["orchestration"]["specialists"]["social"]["channels_filled"]
+

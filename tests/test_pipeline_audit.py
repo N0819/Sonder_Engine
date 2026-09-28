@@ -36,6 +36,7 @@ from agents.runtime import (
 from agents.storage import active_content, mark_steps_stale, save_step, variant_count
 from story.character_schema import default_character_data, default_persona_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.director_fakes import prose_resolve_agent
 
 
 # ---- shared setup helpers ----
@@ -237,7 +238,7 @@ class TestContestedAutonomyZeroPlan:
 
 class TestDirectorResolveMergesUncoveredCharacterResults:
     def test_parallel_step_speech_is_not_dropped_when_loop_declarations_exist(
-        self, temp_db, monkeypatch,
+        self, temp_db, monkeypatch, prose_director,
     ):
         """A character whose result lives only in ctx.character_results (a
         parallel character:<id> step) must still reach dialogue_log even
@@ -268,24 +269,18 @@ class TestDirectorResolveMergesUncoveredCharacterResults:
             "sequence": [{"type": "speech", "text": "Everyone calm down."}],
         }
 
-        seen = {}
-
-        def fake_agent_json(role, step_key, system, payload, **kw):
-            # The declaration merge under test is the causal Director's input;
-            # a specialist's payload is a different, narrower slice and would
-            # overwrite it here.
-            if step_key == "director_resolve":
-                seen["payload"] = payload
-            # Declared speech must survive even when the Director omits it.
-            return {"ledgers": []}
-
-        monkeypatch.setattr(director, "_agent_json", fake_agent_json)
+        calls = []
+        # Declared speech must survive even when the Director omits it. The
+        # declaration merge under test is the prose Director's input; the
+        # encoder's payload is a different, narrower slice.
+        monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+            {"resolved_event": "They speak."}, calls=calls))
         monkeypatch.setattr(director, "validate_llm_output",
                             lambda key, out: (out, []))
 
         out = director.director_resolve(ctx, 0)
 
-        payload = seen["payload"]
+        payload = next(sent for key, sent in calls if key == "director_prose")
         declared = {payload["identity_index"][group["entity_id"]]: group["events"]
                     for group in payload["event_inputs"]}
         assert {"Alice", "Bob"} <= declared.keys()
@@ -303,7 +298,8 @@ class TestDirectorResolveMergesUncoveredCharacterResults:
         assert any("Everyone calm down." in quote
                    for quote in by_speaker.get("Bob", []))
 
-    def test_loop_covered_character_is_not_duplicated(self, temp_db, monkeypatch):
+    def test_loop_covered_character_is_not_duplicated(self, temp_db, monkeypatch,
+                                                      prose_director):
         """interaction_loop stores its speakers in ctx.character_results too;
         those ids are covered by loop declarations and must not be merged a
         second time."""
@@ -327,10 +323,8 @@ class TestDirectorResolveMergesUncoveredCharacterResults:
         }], "rounds": []}
         ctx.character_results[ids["Alice"]] = result
 
-        monkeypatch.setattr(
-            director, "_agent_json",
-            lambda *a, **kw: {"resolved_event": "x", "summary": "x",
-                              "dialogue_log": [], "state_diff": {}})
+        monkeypatch.setattr(director, "_agent_json",
+                            prose_resolve_agent({"resolved_event": "x"}))
         monkeypatch.setattr(director, "validate_llm_output",
                             lambda key, out: (out, []))
 

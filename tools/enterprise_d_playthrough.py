@@ -609,7 +609,7 @@ def _copy_providers(db, source_path):
                   " VALUES(?,?,?,?,?,?)",
                   tuple(row[k] for k in ("id", "name", "kind", "base_url",
                                          "api_key", "enabled")))
-        for key in ("agent_models", "reasoning_effort", "director_fanout_mode",
+        for key in ("agent_models", "reasoning_effort",
                     "attire_beneath", "llm_quality"):
             row = conn.execute("SELECT value FROM settings WHERE key=?",
                                (key,)).fetchone()

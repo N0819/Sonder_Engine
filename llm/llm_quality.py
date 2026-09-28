@@ -445,61 +445,6 @@ def _constraint_only_schema(value):
     return value
 
 
-def _causal_director_wire_schema(schema):
-    """Require a usable span on the wire; keep archive readers lenient.
-
-    Live constrained generation returned a single identity-only row while its
-    reasoning described the whole scene. Every field in the compatibility
-    model was optional, so that incomplete object satisfied the grammar.
-    Current output uses item lists; the singular aliases and authority mode
-    are engine projections, not competing fields for the model to fill.
-    """
-    from copy import deepcopy
-    out = deepcopy(schema)
-    definitions = out.get("$defs", out.get("definitions", {}))
-    row = definitions.get("CausalLedgerEntry") or {}
-    properties = row.get("properties") or {}
-    for field in ("item_id", "object_name", "authority_mode"):
-        properties.pop(field, None)
-    row["required"] = [
-        "chrono_id", "item_ids", "item_names", "source_entity_id",
-        "source_event_id", "event", "commitment", "resolution_notes",
-        "categories",
-    ]
-    for field in ("event", "resolution_notes"):
-        properties[field]["minLength"] = 1
-    out["required"] = ["ledgers"]
-    return out
-
-
-def _causal_specialist_wire_schema(schema, channels):
-    """Advertise complete positional results and direct owned-channel patches."""
-    from copy import deepcopy
-    out = deepcopy(schema)
-    definitions = out.get("$defs", out.get("definitions", {}))
-    result = definitions["LedgerTransformResult"]
-    result["required"] = ["transforms", "status", "settled"]
-    result["properties"]["status"]["enum"] = [
-        "encoded", "not_mine", "no_referent"]
-    result["properties"]["settled"]["additionalProperties"] = {
-        "type": "string", "enum": ["not_mine", "no_referent"],
-    }
-    from llm.schemas import SPECIALIST_CHANNELS
-    result["properties"]["required_channels"]["items"] = {
-        "type": "string", "enum": sorted({
-            channel for owned in SPECIALIST_CHANNELS.values() for channel in owned}),
-    }
-    transform = definitions["LedgerPatchTransform"]
-    transform["required"] = ["item", "patch"]
-    transform["properties"]["patch"] = {
-        "type": "object", "minProperties": 1,
-        "properties": {channel: {} for channel in sorted(channels)},
-        "additionalProperties": False,
-    }
-    out["required"] = ["results"]
-    return out
-
-
 def _step_json_schema(step_key: str):
     """The JSON Schema for a step, or None if it has no model or will not build.
 
@@ -514,15 +459,6 @@ def _step_json_schema(step_key: str):
         from llm import schemas
 
         model_cls = (schemas.SCHEMA_MAP or {}).get(step_key)
-        # Current Director and specialist calls have deliberately tiny wire
-        # contracts. Their historical full models remain in SCHEMA_MAP so
-        # archives and fixtures can still be read, but advertising those
-        # obsolete fields to constrained providers recreates the prompt bloat
-        # at the grammar layer and invites the models to write dead channels.
-        if step_key in {"director_interpret", "director_resolve"}:
-            model_cls = schemas.CausalDirectorOutput
-        elif step_key in (schemas.SPECIALIST_CHANNELS or {}):
-            model_cls = schemas.CausalSpecialistOutput
         if model_cls is not None:
             # Pydantic 2 renamed ``schema`` to ``model_json_schema``. The
             # project supports both majors, so use the public method exposed
@@ -531,11 +467,6 @@ def _step_json_schema(step_key: str):
             schema = (schema_builder() if schema_builder is not None
                       else model_cls.schema())
             schema = _constraint_only_schema(schema)
-            if step_key in {"director_interpret", "director_resolve"}:
-                schema = _causal_director_wire_schema(schema)
-            elif step_key in (schemas.SPECIALIST_CHANNELS or {}):
-                schema = _causal_specialist_wire_schema(
-                    schema, schemas.SPECIALIST_CHANNELS[step_key])
     except Exception:
         schema = None
     _SCHEMA_CACHE[step_key] = schema
@@ -1023,18 +954,6 @@ def complete_validated_json(
 
     # Skip same-provider repair when the primary provider itself errored --
     # repairing against a down provider just wastes attempts; go to fallbacks.
-    from llm.schemas import SPECIALIST_CHANNELS
-    causal_repair = isinstance(payload, dict) and (
-        (step_key in ("director_interpret", "director_resolve")
-         and "event_inputs" in payload)
-        or (step_key in SPECIALIST_CHANNELS and "ledgers" in payload))
-    causal_repair_note = (
-        "The required_json_example illustrates the outer response envelope only. "
-        "It does not restrict channels or replace the requested events. Follow "
-        "the original instructions above for channel ownership and patch shapes. "
-        "For specialist replies, preserve one result per input ledger in the "
-        "same array position, and use its item_names for transform.item and settled."
-    )
     for _ in range(0 if provider_errored else max(0, repair_attempts)):
         repair_payload = {
             "original_request": payload,
@@ -1055,12 +974,6 @@ def complete_validated_json(
         # its own payload (A84): the repair sheet, and a payload wrapping the
         # failed attempt and the errors it failed on.
         _repair_system = get_prompt("repair_json")
-        if causal_repair:
-            # A scoped hand's payload names its work but does not repeat its
-            # channel protocols. Throwing away the original sheet on repair
-            # made an inventory hand rebuild transfers as entity definitions
-            # merely because the generic example showed an entities patch.
-            _repair_system = system + "\n\n" + _repair_system + "\n\n" + causal_repair_note
         try:
             previous_raw = chat_complete(
                 role,
@@ -1137,8 +1050,6 @@ def complete_validated_json(
         _t0 = time.monotonic()
         _wall0 = time.time()
         _fallback_system = system + "\n\n" + get_prompt("repair_json")
-        if causal_repair:
-            _fallback_system += "\n\n" + causal_repair_note
         try:
             fallback_raw = chat_complete(
                 role,

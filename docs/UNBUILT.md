@@ -5,6 +5,17 @@ today**, in one register split into category files. Compiled 2026-07-29 against
 alpha 6.1 by re-verifying every claim in every design and audit document against
 source.
 
+**Reading an entry written before 2026-09-27.** Many name the causal
+Director's five specialist HANDS (`body`, `social`, `contact`, `objects`,
+`spatial`), their sheets and their chunks under `specialists/<hand>/`. Those
+hands were deleted on 2026-09-27: the Director writes prose, and ONE encoder
+records every channel from its own card (`system_prompts/encoder/`). The five
+names survive as the channel OWNERS, so read "the body specialist's attire
+chunk" as the encoder's `attire` chunk; an entry that depends on a hand being
+a model call of its own -- its dispatch, scope, forwarding or repair -- is
+moot. What the prose Director does not yet do is
+[`UNBUILT_PIPELINE.md` § 1.1](UNBUILT_PIPELINE.md#unbuilt-1-1).
+
 **This index and its linked category files are the only worklist.**
 `CHANGELOG.md` and the git log are the history; the surviving design notes keep
 the *argument* for an item and are linked from it, but they no longer carry
@@ -154,7 +165,7 @@ Not scheduled and not committed to a phase. See the
 
 **1. Known defects**
 
-- [§1.1 — The specialist contract: BUILT, with two parts still open](UNBUILT_PIPELINE.md#unbuilt-1-1)
+- [§1.1 — The prose Director is the only Director: what it does not yet do](UNBUILT_PIPELINE.md#unbuilt-1-1)
 - [§1.1a — Conduct authority: what the guards still do not reach](UNBUILT_PIPELINE.md#unbuilt-1-1a)
 - [§1.7 — JSON validation stalls cost beats](UNBUILT_PIPELINE.md#unbuilt-1-7)
 - [§1.11 — `ctx.warnings` reaches the pipeline drawer but not the story reader](UNBUILT_PIPELINE.md#unbuilt-1-11)
@@ -185,7 +196,7 @@ Not scheduled and not committed to a phase. See the
 
 **2. Roadmap**
 
-- [§2.18 — The orchestrated Director: what is left after it landed](UNBUILT_PIPELINE.md#unbuilt-2-18)
+- [§2.18 — The orchestrated Director -- DELETED 2026-09-27](UNBUILT_PIPELINE.md#unbuilt-2-18)
 
 **3. Information-pipeline leaks still open**
 

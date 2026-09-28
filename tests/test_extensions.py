@@ -1118,9 +1118,12 @@ class TestTheHostSaysWhatItOffers:
         api = SonderExtensionAPI("probe-ext", "/tmp")
         assert isinstance(api.capabilities, frozenset)
         assert api.capabilities is extension_runtime.HOST_CAPABILITIES
-        for name in ("list_channels", "install_limits", "stage_anchors",
+        for name in ("install_limits", "stage_anchors",
                      "commit_domains", "documents", "routes"):
             assert name in api.capabilities
+        # Withdrawn 2026-09-27 with the causal Director's hands: an extension
+        # Director channel has no path on the prose Director.
+        assert "list_channels" not in api.capabilities
 
     def test_the_version_is_the_loaders_own_constant(self):
         from extension_runtime.api import SonderExtensionAPI
@@ -1161,7 +1164,6 @@ class TestTheHostSaysWhatItOffers:
             "director_corrections": "on_director_result",
             "documents": "documents", "frame_state": "frame_state",
             "frame_coherent_reads": "at_frame",
-            "list_channels": "add_director_specialist",
             "model_lanes": "add_model_lane",
             "payload_routing": "on_character_payload",
             "provision_story": "provision_story",
@@ -1209,6 +1211,11 @@ class TestAnErrorNamesWhoAndWhere:
         lambda api: api.add_route("/ok", lambda r: {}, methods=("TRACE",)),
         lambda api: api.add_model_lane("Bad Name"),
         lambda api: api.add_model_lane("director"),
+        # The Director fans out to no hands since 2026-09-27, so every
+        # specialist registration is refused -- and names who asked, as the
+        # channel collision it replaces did.
+        lambda api: api.add_director_specialist("morale", channels=["ops"],
+                                                prompt="judge morale"),
     ])
     def test_every_registration_refusal_names_the_extension(self, call):
         with pytest.raises(ExtensionError) as caught:
@@ -1228,29 +1235,10 @@ class TestAnErrorNamesWhoAndWhere:
             call(self._api())
         assert "named-ext" in str(caught.value), str(caught.value)
 
-    def test_a_specialist_channel_collision_names_the_extension(self):
-        """The one registration two extensions really can collide on: the
-        merge resolves a channel to exactly one family, so a second claim is
-        refused rather than silently taking it. `register_specialist` raises
-        `ValueError` -- it is the Director's function and knows nothing about
-        extensions -- and a host reads this beside every other registration
-        refusal, so it arrives in the same shape."""
-        from agents.director import unregister_specialists
-
-        api = self._api()
-        try:
-            api.add_director_specialist("morale", channels=["ops"],
-                                        prompt="judge morale")
-            with pytest.raises(ExtensionError) as caught:
-                api.add_director_specialist("spirit", channels=["ops"],
-                                            prompt="also judge morale")
-        finally:
-            unregister_specialists("named-ext")
-        assert "named-ext" in str(caught.value), str(caught.value)
-
     def test_an_unknown_route_lists_what_the_extension_does_serve(
             self, temp_db, ext_root):
         _working(ext_root)
         _enable("good-life")
         with pytest.raises(ExtensionError, match="/ping"):
             extension_runtime.dispatch_route("good-life", "GET", "/nowhere")
+

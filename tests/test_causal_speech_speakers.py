@@ -5,6 +5,14 @@ import time
 from agents import director, perception
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.character_schema import default_character_data, default_persona_data
+from tests.director_fakes import _fake_agent
+
+#: The prose Director writes the beat and the encoder files nothing: the
+#: lines come from the declarations alone, as the causal `{"ledgers": []}`
+#: answer left them (a filed event would add a resolve row to the stream).
+_NO_EVENTS = {"director_prose": {"prose": "Tomas and Pavel speak."},
+              "director_specialist": {"events": [], "missing_tools": [],
+                                      "missing_referents": [], "notes": []}}
 
 
 def _ctx(db):
@@ -48,9 +56,10 @@ def _ctx(db):
     return ctx, ids, scene
 
 
-def test_authored_npc_lines_keep_their_speakers_in_dialogue_and_both_views(temp_db, monkeypatch):
+def test_authored_npc_lines_keep_their_speakers_in_dialogue_and_both_views(temp_db, monkeypatch,
+                                                                           prose_director):
     ctx, ids, _ = _ctx(temp_db)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {"ledgers": []})
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], _NO_EVENTS))
     onset = perception.perception_act(ctx, "n0")
     assert 'Tomas says: "Ready."' in onset["views"][str(ids["Rin"]) ]
     assert 'Pavel says: "Then leave it."' in onset["views"][str(ids["Rin"]) ]
@@ -65,7 +74,8 @@ def test_authored_npc_lines_keep_their_speakers_in_dialogue_and_both_views(temp_
     assert 'Nia says: "Ready."' not in outcome["views"][str(ids["Rin"]) ]
 
 
-def test_same_line_before_and_after_movement_keeps_both_occurrences(temp_db, monkeypatch):
+def test_same_line_before_and_after_movement_keeps_both_occurrences(temp_db, monkeypatch,
+                                                                    prose_director):
     from world.causal_program import event_worlds
     ctx, ids, scene = _ctx(temp_db)
     first = ctx.director_interpret["sequence"][0]
@@ -74,7 +84,7 @@ def test_same_line_before_and_after_movement_keeps_both_occurrences(temp_db, mon
             "from_declaration": first["from_declaration"]}
     second = {**first, "chrono_id": 3, "event_id": "second", "volume": "whisper"}
     ctx.director_interpret["sequence"] = [first, move, second]
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {"ledgers": []})
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], _NO_EVENTS))
     out = director.director_resolve(ctx, "n0")
     assert [(d["speaker"], d["exact_quote"], d["volume"]) for d in out["dialogue_log"]] == [
         ("Tomas", '"Ready."', "normal"), ("Tomas", '"Ready."', "whisper")]
@@ -88,7 +98,8 @@ def test_same_line_before_and_after_movement_keeps_both_occurrences(temp_db, mon
     assert event_worlds(worlds, stream)[2] == {"room": "corridor"}
 
 
-def test_a_line_quoted_with_its_tags_comma_keeps_its_slot(temp_db, monkeypatch):
+def test_a_line_quoted_with_its_tags_comma_keeps_its_slot(temp_db, monkeypatch,
+                                                          prose_director):
     """Playerless Aldermill round 7 (2026-09-23) idx 9: the author quoted
     "Aye. Keep your eyes open down there," before its tag and the dialogue
     log held it ending "."; compared as text the line bound to nothing, was
@@ -100,7 +111,7 @@ def test_a_line_quoted_with_its_tags_comma_keeps_its_slot(temp_db, monkeypatch):
             "actor": first["actor"], "chrono_id": 2, "event_id": "move",
             "from_declaration": first["from_declaration"]}
     ctx.director_interpret["sequence"] = [first, move]
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {"ledgers": []})
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], _NO_EVENTS))
     out = director.director_resolve(ctx, "n0")
     spoken = [dict(d, exact_quote='"Ready."') for d in out["dialogue_log"]]
     stream = perception._outcome_event_stream(

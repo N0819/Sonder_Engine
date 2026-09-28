@@ -36,44 +36,13 @@ def _prompt_card(language=None):
 _ENGLISH = _prompt_card("en")
 
 
-def _assembled_sheets(card):
-    """The Director sheets that are BUILT, never stored.
-
-    A specialist sheet is its core plus one chunk per channel scoping grants,
-    and the prose author's is its own segment list. Storing a finished body
-    for those ids alongside the parts is one sheet with two spellings, free
-    to drift -- and it had: English `director_spatial` was 1,518 characters
-    short of its own assembly (the entire `comms_ops` chunk) while the prompt
-    editor showed it as the sheet, and a preset saved from that view replaces
-    the assembled sheet for every beat afterwards. The parts are the source;
-    this is the only place the whole is made.
-    """
-    sheets = {
-        f"director_{name}": (
-            str(spec["core"]) + "".join(
-                str(spec["chunks"][channel]) for channel in spec["order"]))
-        for name, spec in card["specialists"].items()
-    }
-    causal_director = "".join(
-        str(text) for _name, text in card["prose_author_sheet"])
-    sheets["director_resolve_lean"] = causal_director
-    # Compatibility view for prompt tooling and saved presets. Both runtime
-    # invocation points call ``prose_author_prompt``; this alias has no body
-    # of its own and therefore cannot drift from the one authored source.
-    sheets["director_interpret"] = causal_director
-    return sheets
-
-
 def _prompt_bodies(card):
-    """Every prompt body one pack publishes: stored ones plus assembled ones."""
-    bodies = {pid: str(text) for pid, text in card["prompts"].items()}
-    bodies.update(_assembled_sheets(card))
-    return bodies
+    """Every prompt body one pack publishes. None is assembled any more: the
+    only assembled ids were the causal Director's -- its five specialists'
+    sheets and its prose author's -- deleted 2026-09-27; the encoder's sheet
+    is built per beat from its own card (`unified_specialist_prompt`)."""
+    return {pid: str(text) for pid, text in card["prompts"].items()}
 
-
-#: Prompt ids whose body is assembled rather than authored as one block. A
-#: pack that stores a body under one of these has re-created the duplication.
-ASSEMBLED_SHEET_IDS = frozenset(_assembled_sheets(_ENGLISH))
 
 # Compatibility exports used by the prompt editor, project checks, benches,
 # and tests. They are views of the English pack, not a second authored source.
@@ -86,32 +55,6 @@ DEFAULT_PROMPTS = {
 # replace it: this constant resolves the ENGLISH card at import, so an import
 # running under a Japanese story gets the English note.
 EXTRA_PARTS_NOTE = str(_ENGLISH["extra_parts_note"])
-SPECIALIST_PROMPT_SPECS = {
-    name: {
-        "core": apply_prompt_policy(
-            str(spec["core"]), "en", f"director_{name}"),
-        "order": tuple(spec["order"]),
-        "chunks": dict(spec["chunks"]),
-    }
-    for name, spec in _ENGLISH["specialists"].items()
-}
-SPECIALISTS_BY_NAME = {
-    name: f"director_{name}" for name in SPECIALIST_PROMPT_SPECS
-}
-_ENGLISH_PROSE_AUTHOR_RAW = tuple(
-    (name, text) for name, text in _ENGLISH["prose_author_sheet"]
-)
-_ENGLISH_POLICY = language_pack("en").prompt_suffix(
-    "director_resolve_lean")
-PROSE_AUTHOR_SHEET = _ENGLISH_PROSE_AUTHOR_RAW + (
-    ((None, "\n\n" + _ENGLISH_POLICY),) if _ENGLISH_POLICY else ()
-)
-PROSE_DUTY_CHUNKS = tuple(dict.fromkeys(
-    name for name, _text in PROSE_AUTHOR_SHEET if name
-))
-_PROSE_AUTHOR_OUTPUT_SHAPE = str(_ENGLISH["prose_author_output_shape"])
-
-
 # A preset travels between installs as a self-describing document rather than
 # a bare {pid: text} map, because the receiving engine has to know two things
 # the map cannot say: that the file is a preset at all, and which language its
@@ -334,80 +277,14 @@ def unique_preset_name(name, existing):
     raise ValueError(f"too many presets already named {name!r}")
 
 
-def specialist_prompt(name, scope, language=None, co_hands=()):
-    """Assemble one scoped specialist sheet from the selected pack.
-
-    `co_hands` names the other hands settling a part of some span this one was
-    handed (`director_fanout.specialist_co_hands`). Each contributes ONE shared
-    chunk describing what that hand settles -- five files for all twenty
-    pairings, because what the body hand does is the same sentence whoever is
-    reading it. Empty on the ordinary beat, which is the point: the paragraph
-    costs nothing on a sheet whose spans are wholly its own.
-    """
-    card = _prompt_card(language)
-    spec = card["specialists"][name]
-    pid = f"director_{name}"
-    override = _preset_override(pid, language)
-    if override is not None:
-        sheet = override
-    else:
-        granted = set(scope or ())
-        parts = [spec["core"]]
-        parts.extend(spec["chunks"][channel]
-                     for channel in spec["order"] if channel in granted)
-        sheet = "".join(parts)
-    # One statement, not five. The specialists share no preamble file, so a
-    # rule written into their cores is written five times and drifts five
-    # ways; this is the same seam `nsfw_overlay` already uses. It is appended
-    # for every hand because the rule is about the CHANNEL a note arrives on,
-    # not about any one hand's subject.
-    sheet += str(card["director_note"])
-    # Appended OUTSIDE the override branch, beside `director_note` and the
-    # overlay, because a host's replacement sheet still has no way to know
-    # which of the other four hands got a piece of the same span.
-    shared = card.get("co_hands") or {}
-    for hand in (co_hands or ()):
-        chunk = shared.get(hand)
-        if chunk:
-            sheet += str(chunk)
-    sheet += nsfw_overlay(pid, card)
-    return apply_prompt_policy(sheet, _language(language), pid)
-
-
-def _localized_prose_author_sheet(language=None):
-    return tuple((name, text)
-                 for name, text in _prompt_card(language)["prose_author_sheet"])
-
-
-def prose_author_prompt(scope, language=None):
-    """Assemble the scoped prose-author sheet from the selected pack."""
-    override = _preset_override("director_resolve_lean", language)
-    if override is not None:
-        sheet = override
-    else:
-        localized = _localized_prose_author_sheet(language)
-        duty_names = tuple(dict.fromkeys(
-            name for name, _text in localized if name
-        ))
-        granted = set(duty_names if scope is None else scope)
-        sheet = "".join(text for name, text in localized
-                        if name is None or name in granted)
-    # The causal Director authors no prose, anatomy, or state records. Adult
-    # content rules belong to the scoped specialists that encode such spans;
-    # appending that overlay here would spend it on a model with no channel in
-    # which to apply it.
-    return apply_prompt_policy(
-        sheet, _language(language), "director_resolve_lean")
-
-
 def prose_director_prompt(stage, language=None):
     """The prose-contract Director's sheet for `stage` (interpret|resolve).
 
-    The alternative to `prose_author_prompt` that `agents/director_prose.py`
-    runs when `director_contract` is `prose`: the Director writes the beat as
-    an objective account and nothing else. No adult overlay, for the same
-    reason the causal sheet carries none -- the encoder is the one that
-    writes anatomy into records."""
+    The sheet `agents/director_prose.py` runs at every stage after the
+    opening -- the only Director contract since 2026-09-27: the Director
+    writes the beat as an objective account and nothing else. No adult
+    overlay, for the same reason the causal sheet carried none -- the encoder
+    is the one that writes anatomy into records."""
     pid = f"prose_director_{stage}"
     override = _preset_override(pid, language)
     sheet = override if override is not None else str(

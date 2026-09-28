@@ -511,7 +511,8 @@ class TestFrameScopedVisibilityAndLockouts:
         assert paradox.paradox_visible_to(chat_id, future) is None
         assert paradox.paradox_visible_to(chat_id, None) is None
 
-    def test_director_payload_omits_paradox_for_an_unrelated_frame(self, temp_db, monkeypatch):
+    def test_director_payload_omits_paradox_for_an_unrelated_frame(self, temp_db, monkeypatch,
+                                                                   prose_director):
         import agents.director as director_module
         from core.frames import create_frame
 
@@ -554,9 +555,14 @@ class TestFrameScopedVisibilityAndLockouts:
 
             captured = {}
 
+            # The prose Director's payload is the one that carries `paradox`;
+            # the encoder's is a narrower slice without it.
             def fake_agent_json(role, step_key, system, payload, **kwargs):
-                captured["payload"] = payload
-                return {"flow": {}, "sequence": []}
+                if step_key == "director_prose":
+                    captured["payload"] = payload
+                    return {"prose": "Someone says hello."}
+                return {"events": [], "missing_tools": [],
+                        "missing_referents": [], "notes": []}
 
             monkeypatch.setattr(director_module, "_agent_json", fake_agent_json)
             director_module.director_interpret(future_ctx, 0)

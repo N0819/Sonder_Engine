@@ -2,7 +2,14 @@
 the DIALOGUE LOG prompt instruction now explicitly invites the director
 to voice unsheeted background presences, but that license must not let
 it invent additional lines for a REGISTERED cast member beyond what
-their own character_step declaration actually said."""
+their own character_step declaration actually said.
+
+Since 2026-09-27 the Director writes prose and the encoder files each quoted
+line as a speech event; `dialogue_log` is rebuilt from the beat's declarations
+alone, so a line nobody declared never reaches it. What it still reaches is
+`state_diff.speech`, the resolve's sequence and its rows (no view and no
+self-memory -- UNBUILT_PIPELINE §1.1).
+"""
 
 from __future__ import annotations
 
@@ -11,6 +18,13 @@ import time
 
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.director_fakes import encoder_event, prose_resolve_agent
+
+
+def _speech_events(*events):
+    """What the encoder files: `events` and nothing else."""
+    return {"director_specialist": {"events": list(events), "missing_tools": [],
+                                    "missing_referents": [], "notes": []}}
 
 
 def _make_ctx(temp_db, character_results):
@@ -56,25 +70,27 @@ def _make_ctx(temp_db, character_results):
     return ctx, char_id
 
 
-def test_invented_line_for_a_cast_member_is_dropped(temp_db, monkeypatch):
+def test_invented_line_for_a_cast_member_is_dropped(temp_db, monkeypatch,
+                                                    prose_director):
+    """The encoder files the invented line as Mara's speech; the log, built
+    from declarations, never carries it. (The "Dropped director-invented"
+    warning belonged to a log the Director wrote, which no longer exists.)"""
     import agents.director as director
 
     ctx, char_id = _make_ctx(temp_db, character_results=None)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "Mara", "exact_quote": '"I never said this."',
-            "volume": "normal", "intended_target": None, "tone": "",
-        }],
-    })
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": 'Mara says, "I never said this."'},
+        per_step=_speech_events(encoder_event(
+            "I never said this.", source=f"character:{char_id}", speech=True))))
 
     out = director.director_resolve(ctx, nonce=0)
 
     bodies = [d["exact_quote"] for d in out["dialogue_log"]]
     assert not any("never said this" in b for b in bodies)
-    assert any("Dropped director-invented dialogue line" in w for w in ctx.warnings)
 
 
-def test_line_matching_the_characters_own_declaration_is_kept(temp_db, monkeypatch):
+def test_line_matching_the_characters_own_declaration_is_kept(temp_db, monkeypatch,
+                                                              prose_director):
     import agents.director as director
 
     ctx, char_id = _make_ctx(temp_db, character_results={
@@ -82,12 +98,8 @@ def test_line_matching_the_characters_own_declaration_is_kept(temp_db, monkeypat
         "sequence": [{"type": "speech", "text": "I told you already.", "volume": "normal"}],
         "action": None,
     })
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "Mara", "exact_quote": '"I told you already."',
-            "volume": "normal", "intended_target": None, "tone": "",
-        }],
-    })
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": 'Mara says, "I told you already."'}))
 
     out = director.director_resolve(ctx, nonce=0)
 
@@ -132,82 +144,39 @@ def _make_player_ctx(temp_db, declared_speech):
     return ctx
 
 
-def test_invented_player_line_is_dropped(temp_db, monkeypatch):
+def test_invented_player_line_is_dropped(temp_db, monkeypatch, prose_director):
     """Player-speech authority: the director took a wordless cry and ADDED an
     invented player line (Elevator Adventure t42: 'AaUaa!' -> a fabricated
-    'Can't... not now...'). The declared cry survives; the invention is dropped."""
+    'Can't... not now...'). The declared cry survives; the invention is dropped.
+
+    On the prose path the invention is flagged on the step by the prose-quote
+    reading rather than in ctx.warnings."""
     import agents.director as director
 
     ctx = _make_player_ctx(temp_db, declared_speech="AaUaa!")
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [
-            {"speaker": "Hinami", "exact_quote": '"AaUaa!"', "volume": "loud",
-             "intended_target": None, "tone": "pained"},
-            {"speaker": "Hinami", "exact_quote": '"Can\'t... not now..."',
-             "volume": "normal", "intended_target": None, "tone": "strained"},
-        ],
-    })
+    pid = ctx.chat.persona_id
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": 'Hinami cries out, "AaUaa!" Then: "Can\'t... not now..."'},
+        per_step=_speech_events(
+            encoder_event("AaUaa!", source=f"persona:{pid}", speech=True),
+            encoder_event("Can't... not now...", source=f"persona:{pid}",
+                          speech=True))))
 
     out = director.director_resolve(ctx, nonce=0)
     bodies = [d["exact_quote"] for d in out["dialogue_log"]]
     assert any("AaUaa" in b for b in bodies)           # declared line kept
     assert not any("not now" in b for b in bodies)     # invention dropped
-    assert any("player-speech authority" in w for w in ctx.warnings)
+    assert any("prose-quote authority" in w and "not now" in w
+               for w in (out.get("player_act_warnings") or []))
 
 
-def test_declared_player_line_is_kept(temp_db, monkeypatch):
+def test_declared_player_line_is_kept(temp_db, monkeypatch, prose_director):
     import agents.director as director
 
     ctx = _make_player_ctx(temp_db, declared_speech="Little better...")
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [
-            {"speaker": "Hinami", "exact_quote": '"Little better..."',
-             "volume": "normal", "intended_target": None, "tone": ""},
-        ],
-    })
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": 'Hinami murmurs, "Little better..."'}))
     out = director.director_resolve(ctx, nonce=0)
     bodies = [d["exact_quote"] for d in out["dialogue_log"]]
     assert any("Little better" in b for b in bodies)
     assert not any("player-speech authority" in w for w in ctx.warnings)
-
-
-def test_a_person_shaped_background_line_is_routed_not_silently_kept(
-        temp_db, monkeypatch):
-    """CONTRACT CHANGED 2026-08-08, deliberately. This test asserted that an
-    unsheeted speaker's Director-written line survives untouched, which was
-    right while the Director was the only thing that would ever voice them.
-
-    It is not right any more. Measured across the corpus, background lines
-    written in `director_resolve` run a median of 8 words against the cast's
-    16, and 2,042 of the 2,240 background lines came from there because
-    `pick_background_reactors` stands down for anyone already in the log. The
-    Director now mints presences and moves them; the background stage speaks
-    for them.
-
-    What this test still proves is what it always proved: an unsheeted speaker
-    is NOT run through the registered-character filter, which would drop the
-    line as an invention and lose it. It is re-homed, visibly, and the name is
-    handed on -- so the assertion moved from "kept" to "routed", never to
-    "discarded". A creature keeps the Director's voice; see
-    tests/test_background_dialogue_ownership.py for that side.
-    """
-    import agents.director as director
-
-    ctx, char_id = _make_ctx(temp_db, character_results=None)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "dialogue_log": [{
-            "speaker": "Dr. Crusher", "exact_quote": '"Hold still."',
-            "volume": "normal", "intended_target": None, "tone": "",
-        }],
-    })
-
-    out = director.director_resolve(ctx, nonce=0)
-
-    bodies = [d["exact_quote"] for d in out["dialogue_log"]]
-    assert not any("Hold still" in b for b in bodies)
-    # Handed to the stage that will voice her, NOT dropped on the floor.
-    assert "Dr. Crusher" in (out.get("routed_to_background") or [])
-    assert any("background stage" in w for w in ctx.warnings)
-    # And never mistaken for a registered character's invented line, which is
-    # the failure this test was originally written to catch.
-    assert not any("registered character" in w for w in ctx.warnings)

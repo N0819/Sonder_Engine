@@ -121,17 +121,16 @@ def test_no_two_prose_leaves_hold_the_same_text(language):
 def test_a_second_spacer_is_not_a_second_contract(language):
     """The guard does not fire on a leaf that states nothing (B27 rework).
 
-    `prose_author_sheet[16][1]` is a single newline and IS a part leaf, and
-    the sheet is assembled by a bare join, so a spacer is what separating a
-    newly inserted chunk group costs. Two of them are identical bytes and no
-    contract at all; reporting "stated in more than one prose leaf" about
-    them would be a guard firing on valid content. A leaf with words still
-    fails, so the exclusion did not hollow the guard out.
+    Two whitespace-only leaves are identical bytes and no contract at all;
+    reporting "stated in more than one prose leaf" about them would be a
+    guard firing on valid content. A leaf with words still fails, so the
+    exclusion did not hollow the guard out. (The spacer that motivated this
+    was a part of the prose-author sheet, deleted with the causal Director on
+    2026-09-27; no whitespace-only part leaf ships now.)
     """
     card = raw_card(language)
-    card["prose_author_sheet"].append([None, "\n"])
+    card["prompts"]["spacer_a"] = card["prompts"]["spacer_b"] = "\n"
     assert not _duplicated_prose_leaves(card)
 
-    card["prose_author_sheet"].append(
-        [None, card["prose_author_output_shape"]])
+    card["prompts"]["copied_core"] = card["encoder"]["core"]
     assert _duplicated_prose_leaves(card)

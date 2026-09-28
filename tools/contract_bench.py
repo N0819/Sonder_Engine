@@ -14,22 +14,14 @@ that step really receives, and validates the reply with
 the same Pydantic model and the same semantic checks. A pass here means the
 model can actually do the job.
 
-    python3 tools/contract_bench.py --step director_interpret --models a,b,c
-    python3 tools/contract_bench.py --step character --models a,b --trials 3
-    python3 tools/contract_bench.py --step director_body --models a,b
+    python3 tools/contract_bench.py --step character_bare --models a,b --trials 3
+    python3 tools/contract_bench.py --step narrator --models a,b,c
 
 The request sent is the request the pipeline sends -- same system prompt, same
 role's reasoning effort, same JSON mode -- because a bench that quietly leaves
 reasoning on measures a regime production never runs, and does it worst for
 the thinking models it is meant to rank.
 
-The five Director specialists are benchable steps in their own right. They are
-scoped structural tasks and are where a smaller, cheaper model most plausibly
-belongs (design note 19), so they are the stages worth measuring before tiering
-anything down.
-
-Order the candidates by `model_bench` first; run the survivors through this.
-Speed is only interesting among models that work.
 """
 
 from __future__ import annotations
@@ -63,32 +55,6 @@ SCENE = {
 }
 
 PAYLOADS = {
-    "director_interpret": {
-        "player_input": "You cross to the window and try the latch, then say "
-                        "\"It is stuck fast.\"",
-        "player_name": "Wren",
-        "scene": SCENE,
-        "cast": [{"id": 2, "name": "Vessel", "room": "inn_room"}],
-        "recent_turns": [
-            {"idx": 33, "player_input": "You look around the room.",
-             "narration": "The room is quiet, the hearth low."},
-        ],
-        "spatial_facts": ["Wren is in the Inn Room.",
-                          "Vessel is in the Inn Room.",
-                          "The casement window is shut but unlatched."],
-        "variant_seed": "bench",
-    },
-    "director_resolve": {
-        "interpretation": {
-            "speech": "It is stuck fast.",
-            "action": "cross to the window and try the latch",
-            "sequence": [],
-        },
-        "scene": SCENE,
-        "cast": [{"id": 2, "name": "Vessel", "room": "inn_room"}],
-        "character_results": {},
-        "variant_seed": "bench",
-    },
     "narrator": {
         "present_scene": "You cross to the window. The latch does not give. "
                        "You hear Vessel say: \"Leave it.\"",
@@ -147,82 +113,23 @@ PAYLOADS = {
 }
 
 
-# THE FIVE SPECIALISTS, which had no payloads here at all -- so the stages that
-# actually decide whether a smaller model can be tiered in were the only ones
-# that could not be measured. Each gets the shared beat view (design note 19:
-# the beat, the declared acts, the final dice, the roster) plus its OWN
-# ledgers, and nothing else. Built at resolve, where every specialist runs.
-_SPEC_BASE = {
-    "source": "resolved_beat",
-    "player": "Wren",
-    "cast": ["Vessel"],
-    "declared_actions": [{"actor": "Wren",
-                          "attempt": "cross to the window and try the latch",
-                          "commitment": "contestable"}],
-    "dice_results_final": [],
-    "resolved_event": "Wren crosses to the casement and works the latch; it "
-                      "does not give. Her coat slips from one shoulder as she "
-                      "leans into it. \"It is stuck fast,\" she says.",
-    "dialogue_log": [{"speaker": "Wren", "exact_quote": "It is stuck fast."}],
-    "variant_seed": "bench",
-}
-_ROOMS_INDEX = {"inn_room": "Inn Room", "inn_hallway": "Hallway"}
-
-PAYLOADS.update({
-    "director_body": {
-        **_SPEC_BASE,
-        "attire": {"Wren": {"wearing": ["wool coat", "linen shirt", "boots"]},
-                   "Vessel": {"wearing": ["grey robe"]}},
-        "overlays": {}, "active_awareness": {"Wren": "awake", "Vessel": "awake"},
-        "simulation_clock": {"time_of_day": "late evening"},
-        "rooms": _ROOMS_INDEX,
-    },
-    "director_social": {**_SPEC_BASE, "background_presences": ["innkeeper"]},
-    "director_contact": {
-        **_SPEC_BASE,
-        "contacts": [], "contained": {}, "scales": {},
-        "rooms": _ROOMS_INDEX,
-        "entity_names": {"casement": "casement window", "desk": "writing desk"},
-        "worn_garments": [{"name": "wool coat", "worn_by": "Wren"},
-                          {"name": "grey robe", "worn_by": "Vessel"}],
-    },
-    "director_objects": {
-        **_SPEC_BASE,
-        "entities": {"casement": {"name": "casement window", "kind": "fixture",
-                                  "portable": False,
-                                  "state": {"latch": "stuck"}}},
-        "rooms": _ROOMS_INDEX, "notices": [],
-        "worn_garments": [{"name": "wool coat", "worn_by": "Wren"}],
-    },
-    "director_spatial": {
-        **_SPEC_BASE,
-        "rooms": SCENE["rooms"], "positions": SCENE["positions"],
-        "stations": {"Wren": "at the casement"},
-        "poses": {}, "contained": {}, "movement": None, "movers": {},
-    },
-})
-
 # The engine does not key its prompts, its schemas and its provider roles the
 # same way, and benching the wrong one of the three fails silently or not at
-# all. `director_resolve` is the clearest case: a real SCHEMA_MAP step with no
-# prompt of that name, because the monolith is gone (design note 19) and the
-# prose author's prompt is `director_resolve_lean`. `--step director_resolve`
-# therefore raised KeyError, and the resolve contract -- the one every live
-# failure has been about -- could not be benched at all.
-PROMPT_KEY = {"director_resolve": "director_resolve_lean"}
+# all: a step whose prompt goes by another id is mapped here. None does since
+# the causal Director (whose resolve prompt was `director_resolve_lean`) was
+# deleted, 2026-09-27. The prose Director's sheets are built per stage from
+# their own card (`prompts.prose_director_prompt`), and no step here benches
+# them yet.
+PROMPT_KEY: dict = {}
 
 # Which provider role's reasoning effort each step runs under in production,
 # so _post can send what the pipeline sends. `character` has three tiers and
 # is benched at the most demanding one; a background character running cheaper
 # is a floor, not a ceiling.
 STEP_ROLE = {
-    "director_interpret": "director",
-    "director_resolve": "director",
     "director_establish": "director",
     "character_bare": "character_major",
     "narrator": "narrator",
-    **{f"director_{n}": f"director_{n}" for n in
-       ("body", "social", "contact", "objects", "spatial")},
 }
 
 
@@ -309,7 +216,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--db", default="engine.db")
     ap.add_argument("--provider", type=int, default=1)
-    ap.add_argument("--step", default="director_interpret",
+    ap.add_argument("--step", default="character_bare",
                     choices=sorted(PAYLOADS))
     ap.add_argument("--models", required=True)
     ap.add_argument("--trials", type=int, default=2)

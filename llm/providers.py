@@ -1507,16 +1507,11 @@ ROLES = [
     "character_bg",
     "character_mid",
     "character_major",
-    # The orchestrated Director's specialists (design note 19). Scoped
-    # structural tasks that may not need a frontier model; when no model is
-    # configured for one it follows `default` like every other role, and
-    # either way its calls stay separable in _log_usage under its own role
-    # name.
-    "director_body",
-    "director_social",
-    "director_contact",
-    "director_objects",
-    "director_spatial",
+    # NO "director_body", "director_social", "director_contact",
+    # "director_objects" or "director_spatial". The causal Director's five
+    # specialist model calls were deleted with it on 2026-09-27; the encoder
+    # below writes every channel (RETIRED_ROLES keeps a host's stored
+    # configuration for them).
     # The Director's encoder (`agents/director_prose.py`): one call doing
     # every hand's job, its sheet assembled from the channels the decision
     # model selected. It TRANSCRIBES a beat the Director already decided, so
@@ -1883,7 +1878,8 @@ RENAMED_ROLES = {"director_specialist": "encoder"}
 #: Roles the panel no longer offers. Its save sends only the rows it
 #: rendered, so without this a retired role's stored entry would be deleted
 #: by the host's next unrelated save; it rides through instead.
-RETIRED_ROLES = ("director_specialist",)
+RETIRED_ROLES = ("director_specialist", "director_body", "director_social",
+                 "director_contact", "director_objects", "director_spatial")
 
 
 def with_renamed_roles(mapping):

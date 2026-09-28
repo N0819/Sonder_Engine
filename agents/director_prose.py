@@ -1,11 +1,12 @@
 """The prose contract: a Director that only writes, one encoder that only builds.
 
-An alternative to the causal ledger contract, selected per install by the
-setting `director_contract = "prose"` and used by BOTH Director stages
-(interpret and resolve). Everything downstream of the Director's engine input
-is unchanged: the rows, the per-channel transforms, the bind/validate/fold in
-`director._run_specialists`, every deterministic floor after it, commit,
-perception and the narrator. What changes is who produces that input.
+The Director, at BOTH stages (interpret and resolve), since 2026-09-27 the
+only one: the causal ledger contract it began beside, and the `director_contract`
+setting that chose between them, are deleted. Everything downstream of the
+Director's engine input is what the causal contract fed: the rows, the
+per-channel transforms, the bind/validate/fold in `director._run_specialists`,
+every deterministic floor after it, commit, perception and the narrator. What
+changed is who produces that input.
 
 The causal contract asked the Director to be two things at once -- the author
 of how a beat realistically unfolds, and its dispatcher: cutting spans,
@@ -38,10 +39,10 @@ The encoder may name a tool it needed and was not granted (`missing_tools`);
 the engine grants it and asks ONCE more, and that answer replaces the first
 whole -- a replacement, never a merge, so chronology stays trivial.
 
-Settings (all optional): `director_contract` (`causal` default | `prose`),
-`prose_contract_threshold` (a channel is granted at or above this Jev
-probability; `DEFAULT_THRESHOLD`), `prose_contract_widen` (`1` default: allow
-the one widening pass), and `llm.decisions`' own `jev_model`/`jev_provider`.
+Settings (all optional): `prose_contract_threshold` (a channel is granted
+at or above this Jev probability; `DEFAULT_THRESHOLD`), `prose_contract_widen`
+(`1` default: allow the one widening pass), and `llm.decisions`' own
+`jev_model`/`jev_provider`.
 """
 
 from __future__ import annotations
@@ -68,7 +69,6 @@ from .director_scopes import (
     channel_serves_stage,
 )
 
-CONTRACT_SETTING = "director_contract"
 THRESHOLD_SETTING = "prose_contract_threshold"
 WIDEN_SETTING = "prose_contract_widen"
 #: A channel is granted when Jev's yes-probability reaches this. Named for
@@ -83,12 +83,6 @@ DEFAULT_THRESHOLD = 0.5
 #: The ctx key the stage's in-flight record rides on between the Director
 #: call site and the fan-out site. In-memory only.
 CTX_KEY = "_prose_contract"
-#: Payload keys of a hand's own payload that belong to the several-hands
-#: contract and have no meaning for the one encoder.
-_HAND_ONLY_KEYS = frozenset({
-    "source", "completion_contract", "ledgers", "director_note",
-    "changes_asserted", "co_hands", "variant_seed",
-})
 
 
 #: Channels whose only possible subject is a record the world ALREADY holds
@@ -114,10 +108,6 @@ def _fact(facts, key):
         return bool(facts[key])
     except Exception:
         return True
-
-
-def enabled() -> bool:
-    return str(get_setting(CONTRACT_SETTING) or "").strip().casefold() == "prose"
 
 
 def _threshold() -> float:
@@ -390,13 +380,40 @@ def identities_with_figures(model_payload, extras=None):
     return index
 
 
+#: What a raw declaration carries that only the interpreting Director may
+#: read (`without_raw_text`).
+RAW_DECLARATION_KEYS = frozenset({"raw_text"})
+
+
+def without_raw_text(event_inputs):
+    """`event_inputs` as a model after the Director reads them: each identity,
+    its authority and its acts' ids and types -- NEVER the text a player
+    typed. That text can carry a private thought only the interpreting
+    Director is entitled to read (the X19 lesson): the causal hands were
+    handed the structured declaration alone, and the encoder builds from the
+    Director's account, which quotes every spoken line as given. It needs the
+    ids to attribute an event to what it carries out, and nothing else here.
+    Code that places a declared act in the prose reads the Director's own
+    copy (`director_repair.declarations`)."""
+    out = []
+    for entry in event_inputs or []:
+        if not isinstance(entry, dict):
+            continue
+        events = [{k: v for k, v in act.items() if k not in RAW_DECLARATION_KEYS}
+                  if isinstance(act, dict) else act
+                  for act in entry.get("events") or []]
+        out.append({**entry, "events": events})
+    return out
+
+
 def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
-    """The prose, the Director's own inputs, and the union of the world
-    slices each selected channel's owner would have received. A key two
-    owners both supply is taken once (the first owner in canonical order)."""
+    """The prose, the Director's own inputs without the text a player typed
+    (`without_raw_text`), and the union of the world slices each selected
+    channel's owner would have received. A key two owners both supply is
+    taken once (the first owner in canonical order)."""
     payload = {
         "prose": prose,
-        "event_inputs": model_payload.get("event_inputs") or [],
+        "event_inputs": without_raw_text(model_payload.get("event_inputs") or []),
         "identity_index": identities_with_figures(model_payload, extras),
         "world_index": model_payload.get("world_index") or {},
         "standing_relations": model_payload.get("standing_relations") or {},
@@ -414,7 +431,7 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
             ctx.add_warning(f"prose contract: {name} slice unavailable: {exc}")
             continue
         for key, value in own.items():
-            if key in _HAND_ONLY_KEYS or key in payload:
+            if key in payload:
                 continue
             payload[key] = value
     return payload
@@ -494,8 +511,10 @@ ROOM_BIND_CONFIDENCE = 0.5
 def _isolated(context):
     """Run a call in a COPY of the caller's context, made in the caller's
     thread (a worker does not inherit contextvars), with the streaming sinks
-    cleared: the room author produces structure, never player-facing text.
-    The same isolation `director._run_specialists` gives each hand."""
+    cleared: the room author produces structure, never player-facing text,
+    and it runs BESIDE the encoder, so two streams into one step would
+    interleave. The copy is what carries the call ledger, the warning sink
+    and the cancel event into the worker."""
     def run(fn, *args, **kwargs):
         def inner():
             from llm.providers import generation_event_sink, token_sink
@@ -526,7 +545,7 @@ def _room_payload(ctx, sc, prose, model_payload, view, extras, reserved, develop
         ctx.add_warning(f"room author: spatial slice unavailable: {exc}")
         own = {}
     for key, value in own.items():
-        if key not in _HAND_ONLY_KEYS and key not in payload:
+        if key not in payload:
             payload[key] = value
     return payload
 
@@ -1658,12 +1677,20 @@ def dispatch(ctx, stage):
         scope = [channel for channel in spec["channels"]
                  if (channel in held["channels"] or channel in written)
                  and channel_serves_stage(channel, stage)]
+        # A CHANNEL WRITTEN AT A STAGE THAT CANNOT CARRY IT still runs its
+        # owner, with nothing in scope for it, so `_run_specialists` drops it
+        # LOUDLY (`dropped_channels`, and a note to the Director). Left
+        # unrun, the write vanished without a word whenever its owner held
+        # nothing else that beat -- the silent drop this fold exists to
+        # refuse (`public_evidence` at interpret, chat 98 turn 26).
+        stray = [channel for channel in spec["channels"]
+                 if channel in written and not channel_serves_stage(channel, stage)]
         plan[name] = {
-            "run": bool(scope), "scope": scope, "gated": None,
+            "run": bool(scope or stray), "scope": scope, "gated": None,
             "addressed_by": ["decision_model"] if scope else [],
             "channels": list(spec["channels"]), "facts": {},
         }
-        if scope:
+        if scope or stray:
             # `run`/`ran` are `_run_specialists`'s words for "fold an answer
             # for this hand", and the answer was the encoder's: no call was
             # made. Stored without this, a prose beat's record read as

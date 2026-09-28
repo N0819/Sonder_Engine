@@ -2,44 +2,25 @@
 from copy import deepcopy
 
 from agents import director
-from llm.llm_quality import _step_json_schema
-from llm.schemas import semantic_output_errors
-from tests.test_director_orchestration import BASE_SCENE, _fake_agent, _make_ctx
+from tests.director_fakes import BASE_SCENE, _fake_agent, _make_ctx, encoder_event
 from world.causal_completion import annotate_event_execution
 from world.spatial import merge_scene_with_diff
 
 
-def test_live_wire_requires_desired_effect_for_already_true():
-    wire = _step_json_schema("director_objects")
-    definitions = wire.get("$defs", wire.get("definitions", {}))
-    properties = definitions["LedgerTransformResult"]["properties"]
-    assert "already_true" not in properties["status"]["enum"]
-    assert "already_true" not in properties["settled"]["additionalProperties"]["enum"]
-    payload = {"completion_contract": "verified_effects_v1", "ledgers": [
-        {"item_names": ["Tin"], "categories": ["entities"]}]}
-    result = {"results": [{"status": "already_true", "transforms": [], "settled": {}}]}
-    errors = semantic_output_errors("director_objects", result, source_payload=payload)
-    assert any("typed desired patch" in error for error in errors)
-    # Stored old replies remain readable; current execution does not trust them.
-    assert not semantic_output_errors("director_objects", result,
-                                     source_payload={"ledgers": payload["ledgers"]})
-
-
 def _tin_program(temp_db, monkeypatch, states):
+    """One encoder event per lid state, each writing the tin's `hatch`."""
     initial = deepcopy(BASE_SCENE)
     initial["entities"]["tin"] = {"name": "Tin", "kind": "object", "state": {"hatch": "closed"}}
     initial["positions"]["tin"] = "keeper_room"
-    rows = [{"chrono_id": i, "item_ids": [7], "item_names": ["Tin"],
-             "source_entity_id": "character:mara", "commitment": "asserted",
-             "event": "Changes the tin lid", "observable": "Changes the tin lid",
-             "resolution_notes": "Typed lid state", "categories": ["entities"]}
-            for i, _ in enumerate(states, 1)]
-    answers = [{"status": "encoded", "transforms": [{"item": "Tin", "patch": {
-        "entities": {"tin": {"state": {"hatch": state}}}}}], "settled": {}}
-        if state is not None else {"status": "already_true", "transforms": [], "settled": {}}
+    events = [encoder_event(
+        "Changes the tin lid", source="character:mara",
+        observable="Changes the tin lid",
+        transforms=[{"item": "Tin", "patch": {
+            "entities": {"tin": {"state": {"hatch": state}}}}}])
         for state in states]
-    responses = {"director_resolve": {"ledgers": rows},
-                 "director_objects": {"results": answers}}
+    responses = {"director_prose": {"prose": "Mara works the tin lid, again and again."},
+                 "director_specialist": {"events": events, "missing_tools": [],
+                                         "missing_referents": [], "notes": []}}
     monkeypatch.setattr(director, "_agent_json", _fake_agent([], responses))
     ctx = _make_ctx(temp_db, scene=initial, interp={"sequence": []})
     out = director.director_resolve(ctx, 0)
@@ -48,22 +29,13 @@ def _tin_program(temp_db, monkeypatch, states):
     return out, worlds, final
 
 
-def test_unchanged_is_checked_after_previous_events_not_against_initial_scene(temp_db, monkeypatch):
+def test_unchanged_is_checked_after_previous_events_not_against_initial_scene(
+        temp_db, monkeypatch, prose_director):
     out, worlds, final = _tin_program(temp_db, monkeypatch, ["open", "closed", "closed"])
     assert final["entities"]["tin"]["state"]["hatch"] == "closed"
     assert [world["completion"]["status"] for world in worlds] == ["applied", "applied", "unchanged"]
     events = annotate_event_execution(out["beat_events"], worlds)
     assert [event["execution"] for event in events] == ["applied", "applied", "unchanged"]
-
-
-def test_bare_completion_claim_stays_in_log_as_unresolved(temp_db, monkeypatch):
-    out, worlds, final = _tin_program(temp_db, monkeypatch, [None])
-    assert final["entities"]["tin"]["state"]["hatch"] == "closed"
-    assert worlds[0]["completion"]["status"] == "unresolved"
-    events = annotate_event_execution(out["beat_events"], worlds)
-    assert len(events) == 1
-    assert events[0]["execution"] == "unresolved"
-    assert not out["orchestration"]["specialists"]["objects"]["events_resolved"]
 
 
 def test_unsupported_commit_domain_is_pending_not_a_verified_success():
@@ -93,3 +65,4 @@ def test_legacy_category_routes_owner_without_demanding_a_wrong_representation()
     receipt = execution_receipt(before, after, {"chrono_id": 1, "transforms": history,
                                                "requirements": requirements})
     assert receipt["status"] == "unresolved"
+

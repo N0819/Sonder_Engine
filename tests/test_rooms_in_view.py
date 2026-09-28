@@ -285,7 +285,7 @@ def test_a_bubble_beat_centres_on_the_people_its_scene_holds(temp_db):
     for the absent player (the playerless Aldermill runs, 2026-09-23: empty
     in one arm, a wrong-room chorus in the other)."""
     from agents.common import rooms_in_view
-    from tests.test_director_orchestration import _make_ctx
+    from tests.director_fakes import _make_ctx
     ctx = _make_ctx(temp_db)
     sc = {"rooms": {
         "yard": {"name": "Yard", "adjacent": [{"to": "taproom", "barrier": "open"}]},

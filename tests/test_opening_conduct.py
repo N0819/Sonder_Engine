@@ -30,7 +30,7 @@ import agents.director as director
 
 
 def _establish_ctx(temp_db, *, scenario="", seed=""):
-    from tests.test_director_orchestration import _make_ctx
+    from tests.director_fakes import _make_ctx
     ctx = _make_ctx(temp_db, player_input=seed)
     ctx.chat.scenario = scenario
     return ctx

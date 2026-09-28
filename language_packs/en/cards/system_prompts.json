@@ -32,12 +32,6 @@
   "nsfw_overlay": {
     "$text": "nsfw_overlay.txt"
   },
-  "director_note": {
-    "$text": "director_note.txt"
-  },
-  "causal_director": {
-    "$text": "causal_director.txt"
-  },
   "nsfw_prompt_ids": [
     "background_react",
     "character_bare",
@@ -168,34 +162,14 @@
   },
   "specialists": {
     "body": {
-      "core": {
-        "$text": "specialists/body/core.txt"
-      },
       "order": [
         "attire",
         "conditions",
         "vitals",
         "overlays"
-      ],
-      "chunks": {
-        "attire": {
-          "$text": "specialists/body/chunks/attire.txt"
-        },
-        "conditions": {
-          "$text": "specialists/body/chunks/conditions.txt"
-        },
-        "vitals": {
-          "$text": "specialists/body/chunks/vitals.txt"
-        },
-        "overlays": {
-          "$text": "specialists/body/chunks/overlays.txt"
-        }
-      }
+      ]
     },
     "social": {
-      "core": {
-        "$text": "specialists/social/core.txt"
-      },
       "order": [
         "cast_changes",
         "introductions",
@@ -209,79 +183,18 @@
         "claim_dispositions",
         "consequences",
         "obligations"
-      ],
-      "chunks": {
-        "cast_changes": {
-          "$text": "specialists/social/chunks/cast_changes.txt"
-        },
-        "introductions": {
-          "$text": "specialists/social/chunks/introductions.txt"
-        },
-        "public_evidence": {
-          "$text": "specialists/social/chunks/public_evidence.txt"
-        },
-        "crowd_ops": {
-          "$text": "specialists/social/chunks/crowd_ops.txt"
-        },
-        "courier_ops": {
-          "$text": "specialists/social/chunks/courier_ops.txt"
-        },
-        "telling_ops": {
-          "$text": "specialists/social/chunks/telling_ops.txt"
-        },
-        "ratified_claims": {
-          "$text": "specialists/social/chunks/ratified_claims.txt"
-        },
-        "contradicted_claims": {
-          "$text": "specialists/social/chunks/contradicted_claims.txt"
-        },
-        "charter_ops": {
-          "$text": "specialists/social/chunks/charter_ops.txt"
-        },
-        "claim_dispositions": {
-          "$text": "specialists/social/chunks/claim_dispositions.txt"
-        },
-        "consequences": {
-          "$text": "specialists/social/chunks/consequences.txt"
-        },
-        "obligations": {
-          "$text": "specialists/social/chunks/obligations.txt"
-        }
-      }
+      ]
     },
     "contact": {
-      "core": {
-        "$text": "specialists/contact/core.txt"
-      },
       "order": [
         "contact_ops",
         "contact_action_ops",
         "substance_ops",
         "containment",
         "scales"
-      ],
-      "chunks": {
-        "contact_ops": {
-          "$text": "specialists/contact/chunks/contact_ops.txt"
-        },
-        "substance_ops": {
-          "$text": "specialists/contact/chunks/substance_ops.txt"
-        },
-        "containment": {
-          "$text": "specialists/contact/chunks/containment.txt"
-        },
-        "scales": {
-          "$text": "specialists/contact/chunks/scales.txt"
-        },
-        "contact_action_ops": {
-          "$text": "specialists/contact/chunks/contact_action_ops.txt"
-        }
-      }
+      ]
     },
     "objects": {
-      "core": {
-        "$text": "specialists/objects/core.txt"
-      },
       "order": [
         "entities",
         "remove_entities",
@@ -289,32 +202,9 @@
         "artifact_ops",
         "destruction",
         "sensory_events"
-      ],
-      "chunks": {
-        "entities": {
-          "$text": "specialists/objects/chunks/entities.txt"
-        },
-        "remove_entities": {
-          "$text": "specialists/objects/chunks/remove_entities.txt"
-        },
-        "inventory_ops": {
-          "$text": "specialists/objects/chunks/inventory_ops.txt"
-        },
-        "artifact_ops": {
-          "$text": "specialists/objects/chunks/artifact_ops.txt"
-        },
-        "destruction": {
-          "$text": "specialists/objects/chunks/destruction.txt"
-        },
-        "sensory_events": {
-          "$text": "specialists/objects/chunks/sensory_events.txt"
-        }
-      }
+      ]
     },
     "spatial": {
-      "core": {
-        "$text": "specialists/spatial/core.txt"
-      },
       "order": [
         "positions",
         "rooms",
@@ -328,9 +218,6 @@
         "weather"
       ],
       "chunks": {
-        "positions": {
-          "$text": "specialists/spatial/chunks/positions.txt"
-        },
         "rooms": {
           "$text": "specialists/spatial/chunks/rooms.txt"
         },
@@ -339,54 +226,8 @@
         },
         "remove_adjacent": {
           "$text": "specialists/spatial/chunks/remove_adjacent.txt"
-        },
-        "stations": {
-          "$text": "specialists/spatial/chunks/stations.txt"
-        },
-        "poses": {
-          "$text": "specialists/spatial/chunks/poses.txt"
-        },
-        "comms_ops": {
-          "$text": "specialists/spatial/chunks/comms_ops.txt"
-        },
-        "following_ops": {
-          "$text": "specialists/spatial/chunks/following_ops.txt"
-        },
-        "location": {
-          "$text": "specialists/spatial/chunks/location.txt"
-        },
-        "weather": {
-          "$text": "specialists/spatial/chunks/weather.txt"
         }
       }
-    }
-  },
-  "prose_author_sheet": [
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/00.txt"
-      }
-    ]
-  ],
-  "prose_author_output_shape": {
-    "$text": "prose_author_output_shape.txt"
-  },
-  "co_hands": {
-    "body": {
-      "$text": "co_hands/body.txt"
-    },
-    "social": {
-      "$text": "co_hands/social.txt"
-    },
-    "contact": {
-      "$text": "co_hands/contact.txt"
-    },
-    "objects": {
-      "$text": "co_hands/objects.txt"
-    },
-    "spatial": {
-      "$text": "co_hands/spatial.txt"
     }
   },
   "prose_contract": {

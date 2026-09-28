@@ -6,6 +6,8 @@ from agents.common import prune_blocked_phase_changes
 from world.causality import compile_transforms
 from world.causal_program import bind_items, program_from_history, program_steps
 from world.spatial import merge_scene_with_diff
+from tests.director_fakes import (BASE_SCENE, _action_interp, _fake_agent,
+                                  _make_ctx, encoder_event)
 
 
 def scene():
@@ -23,6 +25,35 @@ def program(*patches):
     assert not rejected
     diff["causal_steps"] = program_from_history(history)
     return diff
+
+
+def _answers(prose, *events):
+    return {"director_prose": {"prose": prose},
+            "director_specialist": {"events": list(events), "missing_tools": [],
+                                    "missing_referents": [], "notes": []}}
+
+
+def _inventory_events(wrapped):
+    operations = [
+        {"op": "transfer", "object_id": "key", "from_id": "table",
+         "to_id": "Mara", "relation": "held"},
+        {"op": "transfer", "object_id": "key", "from_id": "Mara", "to_id": "table"},
+        {"op": "transfer", "object_id": "mug", "from_id": "keeper_room", "to_id": "shelf"},
+    ]
+    names = ["Copper key", "Copper key", "Empty mug"]
+    return [encoder_event(f"transfer {name}", source="Mara", transforms=[
+        {"item": name, "patch": ({"state_diff": {"inventory_ops": [op]}} if wrapped
+                                 else {"inventory_ops": [op]})}])
+        for name, op in zip(names, operations)]
+
+
+def _inventory_scene():
+    scene = deepcopy(BASE_SCENE)
+    scene["entities"].update({
+        "key": {"name": "Copper key", "kind": "item"},
+        "mug": {"name": "Empty mug", "kind": "item"},
+    })
+    return scene
 
 
 def test_remove_then_restore_executes_in_order():
@@ -140,35 +171,29 @@ def test_missing_handle_does_not_take_a_later_authored_handle():
     assert out["ledgers"][0]["item_ids"] != out["ledgers"][1]["item_ids"]
 
 
-def test_binding_happens_before_partial_entity_validation(temp_db, monkeypatch):
-    from tests.test_director_orchestration import _make_ctx, _fake_agent, _action_interp, BASE_SCENE
+def test_binding_happens_before_partial_entity_validation(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27 to the prose Director: the encoder's events carry the
+    transforms.
+    """
     initial = deepcopy(BASE_SCENE)
     initial["entities"]["box"] = {"name": "Brass Box", "kind": "item"}
     initial["positions"]["box"] = "keeper_room"
-    responses = {
-        "director_resolve": {"ledgers": [
-            {"chrono_id": n, "item_ids": [7], "item_names": ["Brass Box"],
-             "source_entity_id": "character:mara", "event": event,
-             "resolution_notes": event, "categories": ["entities"]}
-            for n, event in [(1, "Mara opens the box"), (2, "Mara shuts the box")]
-        ]},
-        "director_objects": {"results": [
-            {"status": "encoded", "transforms": [{"patch": {"entities": {
-                "first_key": {"name": "Brass Box", "state": {"open": True}}}}}]},
-            {"status": "encoded", "transforms": [{"patch": {"entities": {
-                "second_key": {"state": {"open": False}}}}}]},
-        ]},
-    }
     calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, responses))
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, _answers(
+        "Mara opens the box, then shuts it.",
+        encoder_event("Mara opens the box", source="Mara", transforms=[
+            {"item": "Brass Box", "patch": {"entities": {
+                "first_key": {"name": "Brass Box", "state": {"open": True}}}}}]),
+        encoder_event("Mara shuts the box", source="Mara", transforms=[
+            {"item": "Brass Box", "patch": {"entities": {
+                "second_key": {"state": {"open": False}}}}}]),
+    )))
     ctx = _make_ctx(temp_db, scene=initial, interp=_action_interp())
     out = director.director_resolve(ctx, 0)
     assert set(out["state_diff"]["entities"]) == {"box"}
     steps = out["state_diff"]["causal_steps"]
     boxes = [s["patch"]["entities"]["box"] for s in steps if s["patch"].get("entities")]
     assert [box["state"]["open"] for box in boxes] == [True, False]
-    payload = next(c["payload"] for c in calls if c["step_key"] == "director_objects")
-    assert all("item_ids" not in row and "chrono_id" not in row for row in payload["ledgers"])
 
 
 def test_item_binding_does_not_merge_a_primary_object_with_its_interior():
@@ -181,38 +206,20 @@ def test_item_binding_does_not_merge_a_primary_object_with_its_interior():
     assert set(bound[0]["patch"]["rooms"]) == {"inside"}
 
 
-def test_wrapped_live_inventory_patches_keep_their_items_and_chronology(temp_db, monkeypatch):
-    from tests.test_director_orchestration import _make_ctx, _fake_agent, BASE_SCENE
-
-    scene = deepcopy(BASE_SCENE)
-    scene["entities"].update({
-        "key": {"name": "Copper key", "kind": "item"},
-        "mug": {"name": "Empty mug", "kind": "item"},
-    })
-    operations = [
-        {"op": "transfer", "object_id": "key", "from_id": "table",
-         "to_id": "Mara", "relation": "held"},
-        {"op": "transfer", "object_id": "key", "from_id": "Mara", "to_id": "table"},
-        {"op": "transfer", "object_id": "mug", "from_id": "keeper_room", "to_id": "shelf"},
-    ]
-    items = [(7, "Copper key"), (7, "Copper key"), (8, "Empty mug")]
-    responses = {
-        "director_resolve": {"ledgers": [
-            {"chrono_id": n, "item_ids": [item], "item_names": [name],
-             "source_entity_id": "character:mara", "event": f"transfer {name}",
-             "resolution_notes": f"transfer {name}", "categories": ["inventory_ops"]}
-            for n, (item, name) in enumerate(items, 1)]},
-        "director_objects": {"results": [
-            {"status": "encoded", "transforms": [{"item": name,
-                "patch": {"state_diff": {"inventory_ops": [op]}}}]}
-            for (_, name), op in zip(items, operations)]},
-    }
-    monkeypatch.setattr(director, "_agent_json", _fake_agent([], responses))
-    ctx = _make_ctx(temp_db, scene=scene, interp={"sequence": []})
+def test_wrapped_live_inventory_patches_keep_their_items_and_chronology(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27 to the prose Director: the encoder's events carry the
+    transforms. Handles are code's now, one per distinct name, so the key is 1
+    and the mug 2. The wrapped `patch.state_diff` shape this was named for is
+    task #88's regression (a wrapped encoder transform reaches no owner).
+    """
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], _answers(
+        "Mara takes the key, puts it back, and shelves the mug.",
+        *_inventory_events(False))))
+    ctx = _make_ctx(temp_db, scene=_inventory_scene(), interp={"sequence": []})
     out = director.director_resolve(ctx, 0)
     history = [row for row in out["orchestration"]["transform_history"]
                if row["patch"].get("inventory_ops")]
-    assert [row["item_id"] for row in history] == [7, 7, 8]
+    assert [row["item_id"] for row in history] == [1, 1, 2]
     assert [row["chrono_id"] for row in history] == [1, 2, 3]
     assert [row["patch"]["inventory_ops"][0]["to_id"] for row in history] == [
         "Mara", "table", "shelf"]
@@ -242,22 +249,19 @@ def test_wrapper_normalization_does_not_bypass_ownership_or_guess_outer_preceden
     assert any(note.get("channels") == ["state_diff"] for note in notes)
 
 
-def test_exact_nested_pose_channel_is_recovered_before_station_validation(temp_db, monkeypatch):
-    from tests.test_director_orchestration import _make_ctx, _fake_agent
-
-    responses = {
-        "director_resolve": {"ledgers": [{
-            "chrono_id": 1, "item_ids": [1], "item_names": ["Mara"],
-            "source_entity_id": "character:mara", "event": "sits on the chair",
-            "resolution_notes": "Mara sits", "categories": ["stations", "poses"]}]},
-        "director_spatial": {"results": [{"status": "encoded", "transforms": [{
+def test_exact_nested_pose_channel_is_recovered_before_station_validation(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27 to the prose Director: the encoder's events carry the
+    transforms.
+    """
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], _answers(
+        "Mara sits on the chair.",
+        encoder_event("sits on the chair", source="Mara", transforms=[{
             "item": "Mara", "patch": {"stations": {
                 "Mara": {"at": "chair", "near": []},
                 "poses": {"Mara": {"posture": "seated", "support": "chair"}},
                 "invalid_record": {"unused": "value"},
-            }}}]}]},
-    }
-    monkeypatch.setattr(director, "_agent_json", _fake_agent([], responses))
+            }}}]),
+    )))
     out = director.director_resolve(_make_ctx(temp_db, interp={"sequence": []}), 0)
     state = out["orchestration"]["specialists"]["spatial"]
     assert not any("dropped malformed stations record(s): poses" in error
@@ -278,25 +282,24 @@ def test_prevalidation_binding_leaves_malformed_fields_to_the_validator():
     assert bound[0]["patch"]["inventory_ops"] == 42
 
 
-def test_recompilation_cannot_restore_a_channel_dropped_by_the_stage(temp_db, monkeypatch):
-    from tests.test_director_orchestration import _make_ctx, _fake_agent
-    responses = {
-        "director_interpret": {"ledgers": [{
-            "chrono_id": 1, "item_ids": [7], "item_names": ["Mara"],
-            "event": "Mara greets the keeper", "resolution_notes": "A greeting",
-            "categories": ["introductions"],
-        }]},
-        "director_social": {"results": [{"status": "encoded", "transforms": [
-            {"patch": {"public_evidence": [{"source_id": "invented", "speech_act": "greeting"}]}}
-        ]}]},
-    }
-    monkeypatch.setattr(director, "_agent_json", _fake_agent([], responses))
+def test_recompilation_cannot_restore_a_channel_dropped_by_the_stage(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27 to the prose Director: the encoder's events carry the
+    transforms.
+    """
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], _answers(
+        "Mara greets the keeper.",
+        encoder_event("Mara greets the keeper", transforms=[
+            {"item": "Mara", "patch": {"public_evidence": [
+                {"source_id": "invented", "speech_act": "greeting"}]}}]),
+    )))
     ctx = _make_ctx(temp_db, player_input="Mara greets the keeper")
     ctx.director_interpret = None
     out = director.director_interpret(ctx, 0)
+    social = out["orchestration"]["specialists"]["social"]
     assert not out["state_assertions"].get("public_evidence")
     assert all("public_evidence" not in row["patch"]
                for row in out["state_assertions"].get("causal_steps") or [])
+    assert social.get("dropped_channels") == ["public_evidence"]
 
 
 def test_same_span_and_same_item_keeps_every_complementary_transform():
@@ -340,31 +343,26 @@ def test_several_contact_spans_age_the_contacts_only_once(monkeypatch):
     assert calls == [True, False]
 
 
-def test_onset_contact_normalization_preserves_add_remove_chronology(temp_db, monkeypatch):
-    from tests.test_director_orchestration import _make_ctx, _fake_agent
-
+def test_onset_contact_normalization_preserves_add_remove_chronology(temp_db, prose_director, monkeypatch):
+    """Ported 2026-09-27 to the prose Director: the encoder's events carry the
+    transforms.
+    """
     initial = scene()
     initial["positions"]["The Stranger"] = "hall"
     initial["attire"] = {"The Stranger": {}, "Mara": {}}
-    rows = [{"chrono_id": n, "item_ids": [1, 7],
-             "item_names": ["The Stranger", "Brass Box"],
-             "event": text, "observable": text,
-             "source_entity_id": "persona:primary", "commitment": "asserted",
-             "resolution_notes": text, "categories": ["contacts"]}
-            for n, text in enumerate([
-                "The Stranger grips the brass box.",
-                "The Stranger releases the brass box."], 1)]
-    responses = {
-        "director_interpret": {"ledgers": rows},
-        "director_contact": {"results": [
-            {"status": "encoded", "transforms": [{"item": "The Stranger", "patch": {
-                "contact_ops": [{"op": op, "actor": "The Stranger",
-                    "actor_part": "hand", "target": "box", **fields}]}}],
-             "settled": {"Brass Box": "already_true"}}
-            for op, fields in [("add", {"manner": "grip", "relation": "surface",
-                                         "motion": "settled"}), ("remove", {})]]},
-    }
-    monkeypatch.setattr(director, "_agent_json", _fake_agent([], responses))
+    events = []
+    for text, op, fields in [
+            ("The Stranger grips the brass box.", "add",
+             {"manner": "grip", "relation": "surface", "motion": "settled"}),
+            ("The Stranger releases the brass box.", "remove", {})]:
+        events.append(encoder_event(
+            text, observable=text, item_names=["The Stranger", "Brass Box"],
+            transforms=[{"item": "The Stranger", "patch": {"contact_ops": [
+                {"op": op, "actor": "The Stranger", "actor_part": "hand",
+                 "target": "box", **fields}]}}]))
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, _answers(
+        "The Stranger grips the brass box, then releases it.", *events)))
     ctx = _make_ctx(temp_db, scene=initial,
                     player_input="I grip the brass box, then release it.")
     ctx.director_interpret = None

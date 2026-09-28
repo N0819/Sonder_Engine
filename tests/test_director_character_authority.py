@@ -236,15 +236,18 @@ def test_quote_styles_are_all_seen(style):
 #
 # The unit checks above prove the guards see the violation. These prove the
 # guards are actually WIRED -- that `decls`/`char_speech`/`char_actions` reach
-# them, that a violation fires the existing single correction retry, and that
-# the retry's note tells the model what it did. The live defect was not a
-# missing check so much as a check that ran and saw nothing.
+# them and that a violation is flagged on the step, naming what was invented.
+# The live defect was not a missing check so much as a check that ran and saw
+# nothing. On the causal path a violation also fired one correction retry;
+# the prose Director warns and never retries, so `player_act_warnings` is the
+# only record (UNBUILT_PIPELINE §1.1).
 
 import json
 import time
 
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.director_fakes import prose_resolve_agent
 
 
 def _make_ctx(temp_db, character_results):
@@ -313,98 +316,52 @@ CLEAN_REWRITE = (
 )
 
 
-def test_resolve_retries_on_invented_character_conduct(temp_db, monkeypatch):
-    """The live draft must trigger the correction retry, and the note must
-    name what was invented."""
-    import agents.director as director
+def test_resolve_flags_invented_character_conduct(temp_db, monkeypatch,
+                                                 prose_director):
+    """The live draft must be flagged, and the flag must name what was
+    invented -- the half-step and the line nobody declared.
 
-    ctx, _ = _make_ctx(temp_db, character_results=SCAN_ONLY)
-    payloads = []
-    drafts = [{"resolved_event": RUN_RESOLVED_EVENT, "dialogue_log": []},
-              {"resolved_event": CLEAN_REWRITE, "dialogue_log": []}]
-
-    def fake_agent_json(role, key, prompt, payload, **kw):
-        # PROSE AUTHOR ONLY. The retry under test is a second pass over the
-        # prose, so the specialists the beat also fans out to are not what
-        # "another call" means here.
-        if key != "director_resolve":
-            return {}
-        payloads.append(payload)
-        return drafts[min(len(payloads) - 1, len(drafts) - 1)]
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
-    out = director.director_resolve(ctx, nonce=0)
-
-    assert len(payloads) == 2, "the violation did not fire a correction retry"
-    note = payloads[1].get("correction_notes") or ""
-    assert "did not declare" in note
-    assert "half-step" in note, "the note must quote the offending sentence"
-    assert "nobody declared" in note, "the invented line must be named too"
-
-    # The clean rewrite wins, so the fabrications are gone from what commits.
-    assert "half-step closer" not in out["resolved_event"]
-    assert "You're alright" not in out["resolved_event"]
-
-
-def test_a_declared_act_alone_fires_no_retry(temp_db, monkeypatch):
-    """The guard must not cost a second model call on an honest beat."""
+    Named `..._retries_...` until 2026-09-27: the causal path fired one
+    correction retry here, kept only if it lowered the count, so the clean
+    rewrite won and the fabrication never committed. The prose Director warns
+    and never retries, and the fabrication stays in its account
+    (UNBUILT_PIPELINE §1.1).
+    """
     import agents.director as director
 
     ctx, _ = _make_ctx(temp_db, character_results=SCAN_ONLY)
     calls = []
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": RUN_RESOLVED_EVENT}, calls=calls))
+    out = director.director_resolve(ctx, nonce=0)
 
-    def fake_agent_json(role, key, prompt, payload, **kw):
-        # PROSE AUTHOR ONLY -- see the note on the retry test above.
-        if key != "director_resolve":
-            return {}
-        calls.append(payload)
-        return {"resolved_event": CLEAN_REWRITE, "dialogue_log": []}
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
-    director.director_resolve(ctx, nonce=0)
-
-    assert len(calls) == 1, "an honest resolution was retried anyway"
+    assert [key for key, _ in calls].count("director_prose") == 1
+    warnings = out.get("player_act_warnings") or []
+    assert any("character-act authority" in w and "half-step" in w
+               for w in warnings), warnings
+    assert any("nobody declared" in w and "You're alright" in w
+               for w in warnings), warnings
+    assert any("character-speech authority" in w for w in warnings), warnings
 
 
-def test_dialogue_order_drops_a_cast_member_who_never_spoke(temp_db, monkeypatch):
-    """t1391 marked the Doctor a speaker with no line anywhere to support it."""
+def test_a_declared_act_alone_is_not_flagged(temp_db, monkeypatch,
+                                            prose_director):
+    """The guard must not accuse an honest beat. (It must not cost a second
+    model call either: named `..._fires_no_retry` while a flag bought one.)"""
     import agents.director as director
 
     ctx, _ = _make_ctx(temp_db, character_results=SCAN_ONLY)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "resolved_event": CLEAN_REWRITE,
-        "dialogue_order": ["The Doctor"],
-        "dialogue_log": [],
-    })
-
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": CLEAN_REWRITE}, calls=calls))
     out = director.director_resolve(ctx, nonce=0)
 
-    assert out["dialogue_order"] == []
-    assert any("dialogue_order" in w for w in ctx.warnings)
+    assert [key for key, _ in calls].count("director_prose") == 1
+    assert not out.get("player_act_warnings"), out.get("player_act_warnings")
 
 
-def test_dialogue_order_keeps_a_cast_member_who_did_speak(temp_db, monkeypatch):
-    import agents.director as director
-
-    ctx, _ = _make_ctx(temp_db, character_results={
-        "name": "The Doctor",
-        "speech": "Nothing broken.",
-        "sequence": [{"type": "speech", "text": "Nothing broken.",
-                      "volume": "normal"}],
-        "action": None,
-    })
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
-        "resolved_event": 'The Doctor lowers the device. "Nothing broken."',
-        "dialogue_order": ["The Doctor"],
-        "dialogue_log": [],
-    })
-
-    out = director.director_resolve(ctx, nonce=0)
-
-    assert out["dialogue_order"] == ["The Doctor"]
-
-
-def test_actions_declared_in_the_sequence_reach_char_actions(temp_db, monkeypatch):
+def test_actions_declared_in_the_sequence_reach_char_actions(temp_db, monkeypatch,
+                                                            prose_director):
     """A declaration carrying its act only in `sequence` must not read as
     having declared nothing.
 
@@ -420,19 +377,12 @@ def test_actions_declared_in_the_sequence_reach_char_actions(temp_db, monkeypatc
 
     ctx, _ = _make_ctx(temp_db, character_results=SCAN_ONLY)
     assert SCAN_ONLY["action"] is None, "fixture must carry the act in sequence"
-    calls = []
-
-    def fake_agent_json(role, key, prompt, payload, **kw):
-        # PROSE AUTHOR ONLY -- see the note on the retry test above.
-        if key != "director_resolve":
-            return {}
-        calls.append(payload)
-        return {"resolved_event": CLEAN_REWRITE, "dialogue_log": []}
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
-    director.director_resolve(ctx, nonce=0)
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": CLEAN_REWRITE}))
+    out = director.director_resolve(ctx, nonce=0)
 
     # The guard's own verdict is the observable: a character whose act was
-    # seen is not accused of acting from nowhere, so no retry is spent.
-    assert len(calls) == 1, "the act in the sequence was not seen as declared"
-    assert not any("character-act authority" in w for w in ctx.warnings)
+    # seen is not accused of acting from nowhere. (On the prose path the
+    # verdict is on the step, never in ctx.warnings.)
+    assert not any("character-act authority" in w
+                   for w in (out.get("player_act_warnings") or []))

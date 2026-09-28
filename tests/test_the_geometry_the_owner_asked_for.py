@@ -17,6 +17,12 @@ from llm.schemas import MovementDecl
 from world.spatial import (RUN_PACES_PER_SECOND, anchor_cells, body_visibility,
                            door_cell, held_cells, paces_for, walk)
 from tests.test_director_movement import _make_ctx
+import pytest
+from tests.director_fakes import prose_resolve_agent
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 
 def _outdoors():
@@ -95,14 +101,14 @@ def test_a_run_covers_twice_a_walk():
 
 
 def test_companions_walk_with_the_walker(temp_db, monkeypatch):
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
     ctx = _make_ctx(temp_db, "lamp_room")
     sc = temp_db.wget(ctx.chat.id, "scene", {})
     sc["positions"]["Mara"] = "keeper_room"
     temp_db.wset(ctx.chat.id, "scene", sc)
     monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 1)
     # The hand sends Mara to the destination with the mover.
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"positions": {"Mara": "lamp_room"}}}))
     out = director.director_resolve(ctx, nonce=0)
     sd = out["state_diff"]
@@ -117,11 +123,13 @@ def test_every_anchor_is_asked_for_its_height_and_footprint():
     # place vocabulary; the height and footprint the owner asked for stay.
     assert "anchors:{anchor_id:{desc, dir, height, footprint, opacity OPTIONAL:'opaque'|'see_through'}}" in establish
     assert "EVERY anchor you write states its `height` and its `footprint`" in establish
-    from llm.prompts import DEFAULT_PROMPTS
-    spatial = DEFAULT_PROMPTS["director_spatial"]
-    assert "EVERY anchor you write states its `height` and its `footprint`" in spatial
-    assert "anchors?:{anchor_id:{desc,dir,height,footprint,opacity?}}" in spatial
-    assert "pace: run when the span runs" in get_prompt_body("director_interpret", "en")
+    # A beat's rooms are written by the encoder (or the room author, from the
+    # same chunk); the causal Director's spatial hand that carried this was
+    # deleted 2026-09-27.
+    from llm.prompts import unified_specialist_prompt
+    encoder = unified_specialist_prompt(["rooms"], "en", [])
+    assert "EVERY anchor you write states its `height` and its `footprint`" in encoder
+    assert "anchors?:{anchor_id:{desc,dir,height,footprint,opacity?}}" in encoder
 
 
 def test_nobody_lands_in_furniture_and_a_walk_to_a_fixture_ends_beside_it():
@@ -147,12 +155,12 @@ def test_nobody_lands_in_furniture_and_a_walk_to_a_fixture_ends_beside_it():
 
 
 def test_the_hands_station_is_the_walks_destination(temp_db, monkeypatch):
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
     ctx = _make_ctx(temp_db, "lamp_room")
     sc = temp_db.wget(ctx.chat.id, "scene", {})
     sc["rooms"]["lamp_room"]["anchors"] = {"lens": {"desc": "the lens", "dir": "n", "height": "waist"}}
     temp_db.wset(ctx.chat.id, "scene", sc)
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"stations": {"The Stranger": {"at": "lens", "near": []}}}}))
     out = director.director_resolve(ctx, nonce=0)
     sd = out["state_diff"]
@@ -187,7 +195,7 @@ def test_every_mover_on_the_ledger_walks(temp_db, monkeypatch):
     """Skerry Light turn 3, 2026-09-15: the player's walk was walked over
     the cells; a cast member's own movement row (to the foot of the stair)
     was seated by the merge one pace inside the yard door."""
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
     from world.spatial import anchor_stand_cell
     ctx = _make_ctx(temp_db, "lamp_room")
     sc = temp_db.wget(ctx.chat.id, "scene", {})
@@ -207,7 +215,7 @@ def test_every_mover_on_the_ledger_walks(temp_db, monkeypatch):
         "name": "Mara",
         "sequence": [{"type": "action", "attempt": "goes down to the stair foot",
                       "observable": "goes down", "visibility": "overt", "conceal_from": []}]}}
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
         "causal_ledger": [{
             "chrono_id": 1, "item_id": 1, "object_name": "Mara",
             "source_entity_id": f"character:{mara_id}", "source_event_id": "",
@@ -231,7 +239,7 @@ def test_a_line_put_to_the_person_you_see_is_aimed_at_them(temp_db, monkeypatch)
     """Skerry Light turn 3, 2026-09-15: "Coming." with `targets: []` and
     `interaction.addresses: ["the unfamiliar person"]` reached the log aimed
     at nobody, so a pitched line was solved as a normal one."""
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
     from agents.common import observer_label_fn
     ctx = _make_ctx(temp_db, "lamp_room")
     mara_id = int(ctx.cast[0]["id"])
@@ -242,7 +250,7 @@ def test_a_line_put_to_the_person_you_see_is_aimed_at_them(temp_db, monkeypatch)
         "sequence": [{"type": "speech", "text": "Coming.", "volume": "pitched",
                       "tone": "", "visibility": "overt", "conceal_from": [], "targets": []}],
         "interaction": {"addresses": [label], "expects_response": False}}}
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({"state_diff": {}}))
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({"state_diff": {}}))
     out = director.director_resolve(ctx, nonce=0)
     line = next(d for d in out["dialogue_log"] if d["speaker"] == "Mara")
     assert line["intended_target"] == "The Stranger"
@@ -282,7 +290,7 @@ def test_an_answer_to_a_voice_is_aimed_at_the_one_stranger_it_could_be(temp_db, 
     """Skerry Light turn 3 (rerun), 2026-09-15: the keeper was only heard,
     so the view called her the bare stranger label; the answer addressed
     that label and the identity gate's fuller label did not match it."""
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
     from agents.common import _unknown_actor_label
     ctx = _make_ctx(temp_db, "lamp_room")
     mara_id = int(ctx.cast[0]["id"])
@@ -292,7 +300,7 @@ def test_an_answer_to_a_voice_is_aimed_at_the_one_stranger_it_could_be(temp_db, 
                       "tone": "", "visibility": "overt", "conceal_from": [], "targets": []}],
         "interaction": {"addresses": [_unknown_actor_label("The Stranger")],
                         "expects_response": False}}}
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({"state_diff": {}}))
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({"state_diff": {}}))
     out = director.director_resolve(ctx, nonce=0)
     line = next(d for d in out["dialogue_log"] if d["speaker"] == "Mara")
     assert line["intended_target"] == "The Stranger"
@@ -358,7 +366,7 @@ def test_a_station_moved_across_a_room_is_walked(temp_db, monkeypatch):
     him" re-stationed the clerk nine paces across the square to arm's reach
     of the boy in one beat, with no walk. A station the hands move across a
     room covers the paces like any walk and ends where they run out."""
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
     import agents.director_movement as movement
     ctx = _make_ctx(temp_db, "lamp_room")
     # No room move this beat: the scaffold's interpret walks the player to
@@ -372,7 +380,7 @@ def test_a_station_moved_across_a_room_is_walked(temp_db, monkeypatch):
     sc["stations"] = {"The Stranger": {"cell": [1, 4]}}
     temp_db.wset(ctx.chat.id, "scene", sc)
     monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 4)
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
         {"state_diff": {"stations": {"The Stranger": {"at": "hearth", "near": []}}}}))
     out = director.director_resolve(ctx, nonce=0)
     st = out["state_diff"]["stations"]["The Stranger"]
@@ -385,7 +393,7 @@ def test_a_pose_written_for_the_arrival_does_not_survive_a_short_walk(temp_db, m
     """Coldharbour Fair turn 5, 2026-09-15: "standing at the top of the church
     steps looking out over the market square" beside a position at the foot
     of them, and the page put her on the porch."""
-    from tests.helpers import fanout_resolve_agent
+    from tests.director_fakes import prose_resolve_agent
     import agents.director_movement as movement
     ctx = _make_ctx(temp_db, "lamp_room")
     sc = temp_db.wget(ctx.chat.id, "scene", {})
@@ -396,7 +404,7 @@ def test_a_pose_written_for_the_arrival_does_not_survive_a_short_walk(temp_db, m
     sc["stations"] = {"The Stranger": {"cell": [1, 4]}}
     temp_db.wset(ctx.chat.id, "scene", sc)
     monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 3)
-    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({"state_diff": {
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({"state_diff": {
         "positions": {"The Stranger": "lamp_room"},
         "stations": {"The Stranger": {"at": None, "near": []}},
         "poses": {"The Stranger": {"posture": "standing", "detail": "standing in the lamp room, looking out"}}}}))

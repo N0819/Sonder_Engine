@@ -15,15 +15,17 @@ and `exchange_caravan_freight`, and asked for in NO prompt in either pack.
 Three bars, because the stages publish their shape in different ways and one
 rule over all of them would be dishonest:
 
-  * THE CAUSAL-DIRECTOR BAR. Both invocation points publish the same single
-    live field, `ledgers`. Their other schema fields are checkpoint
-    compatibility readers and must stay out of the model contract.
+  * THE PROSE-DIRECTOR BAR. Both invocation points publish the same two
+    fields, `prose` and `places` (the causal Director's single `ledgers`
+    until 2026-09-27). Any other schema field is a checkpoint compatibility
+    reader and must stay out of the model contract.
   * THE TEMPLATE BAR, for the character. Its bare card ends in one
     self-contained `Answer with JSON only: {...}` field list.
-  * THE SHEET BAR, for the five specialists. Their sheets have no single
-    template: each granted chunk states its own channel and `Shape:` line, so
-    the assembled sheet as a whole IS the publication, and a field named
-    anywhere in it has been published to the hand that must write it.
+  * THE SHEET BAR, for the encoder (the five specialists until 2026-09-27).
+    Its sheet has no single template: each granted chunk states its own
+    channel and shape, so the assembled sheet as a whole IS the publication,
+    and a field named anywhere in it has been published to the model that
+    must write it.
 
 Anything not published is enumerated below WITH ITS REASON. That list is the
 point of the test: an engine-authored or retired field is a decision, and a
@@ -35,7 +37,8 @@ bar there; and measured on 2026-09-01 its specialist sheets are missing
 `phase_sources` and `resolved_events.reroute_to` in all six, plus
 `attire.regions` (body) and `resolved_events` (contact, offscreen) -- a
 translation-completeness question with its own owner, which enumerating here
-would bury under this one. en/ja parity for an edit is already the card-split
+would bury under this one. (Those sheets went with the causal Director on
+2026-09-27; the question is the encoder card's now.) en/ja parity for an edit is already the card-split
 divergence ledger's job (tests/test_prompt_card_split.py).
 """
 
@@ -48,21 +51,15 @@ import typing
 import pytest
 
 from llm import schemas
-from llm.prompts import DEFAULT_PROMPTS
+from llm.prompts import (DEFAULT_PROMPTS, prose_director_prompt,
+                         unified_specialist_prompt)
 
 
-#: step key -> the prompt id whose body the stage is actually sent. The prose
-#: author's sheet is ASSEMBLED (`director_resolve_lean`), not stored, which is
-#: why the id and the step key differ for exactly one entry.
+#: step key -> the prompt id whose body the stage is actually sent.
 TEMPLATE_STAGES = {"character_bare": "character_bare"}
 
-CAUSAL_DIRECTOR_STAGES = {
-    "director_interpret": "director_interpret",
-    "director_resolve": "director_resolve_lean",
-}
-
-SHEET_STAGES = ("director_body", "director_contact", "director_objects",
-                "director_social", "director_spatial")
+#: The prose Director is one step (`director_prose`) with a sheet per stage.
+PROSE_DIRECTOR_STAGES = ("interpret", "resolve")
 
 #: The line that opens a stage's JSON field list, one spelling per card.
 _SHAPE_MARKERS = ("Output STRICT JSON", "Answer with JSON only")
@@ -125,7 +122,7 @@ def _names(text, name):
     return bool(re.search(r"\b%s\b" % re.escape(name), text))
 
 
-def _template(step, pid):
+def _template(step, pid, body=None):
     """The JSON field list a template stage ends with, and nothing before it.
 
     Anchored at the marker rather than taking the whole line, because the
@@ -134,7 +131,7 @@ def _template(step, pid):
     prose would make this test pass on exactly the arrangement it exists to
     catch.
     """
-    body = DEFAULT_PROMPTS[pid]
+    body = DEFAULT_PROMPTS[pid] if body is None else body
     index = max(body.rfind(marker) for marker in _SHAPE_MARKERS)
     assert index >= 0, (
         f"{step}: none of {_SHAPE_MARKERS!r} in its assembled prompt. Either the "
@@ -146,12 +143,18 @@ def _template(step, pid):
     return body[index:].split("\n\n", 1)[0]
 
 
-@pytest.mark.parametrize("step", sorted(CAUSAL_DIRECTOR_STAGES))
-def test_causal_director_publishes_only_its_ledger(step):
-    """Compatibility fields parse old checkpoints; they are not live output."""
-    template = _template(step, CAUSAL_DIRECTOR_STAGES[step])
+@pytest.mark.parametrize("stage", PROSE_DIRECTOR_STAGES)
+def test_the_prose_director_publishes_only_prose_and_places(stage):
+    """Compatibility fields parse old checkpoints; they are not live output.
+
+    The causal Director's `ledgers` until 2026-09-27. The retired resolve
+    fields (`travel_interrupted`, `thoughts_omitted`, `state_diff`) had a test
+    of their own; an exact key set already refuses them.
+    """
+    template = _template("director_prose", None,
+                         body=prose_director_prompt(stage))
     published = set(json.loads(template[template.index("{"):]))
-    assert published == {"ledgers"}
+    assert published == {"prose", "places"}
 
 
 @pytest.mark.parametrize("step", sorted(TEMPLATE_STAGES))
@@ -170,15 +173,6 @@ def test_the_output_template_names_every_field_the_stage_owns(step):
         "is concerned (grok-4.3, ledger_notes, 2026-09-01). Add it to the "
         "template in BOTH packs, or add it to UNPUBLISHED with the reason it "
         "is never asked for.")
-
-
-@pytest.mark.parametrize("step", SHEET_STAGES)
-def test_every_specialist_publishes_the_transform_envelope(step):
-    sheet = DEFAULT_PROMPTS[step]
-    for name in ("results", "transforms", "patch", "status", "notes", "required_channels"):
-        assert _names(sheet, name), f"{step} does not publish {name}"
-    assert "item_id" not in sheet and "chrono_id" not in sheet
-    assert "same array position" in sheet
 
 
 def test_the_unpublished_ledger_has_no_stale_entries():
@@ -213,20 +207,17 @@ def test_every_ledger_entry_gives_a_reason():
             f"{key} is listed as unpublished with no usable reason")
 
 
-def test_retired_resolve_fields_are_not_reintroduced_to_the_director():
-    """Runtime-owned compatibility fields must not regrow the old prompt."""
-    template = _template("director_resolve", "director_resolve_lean")
-    assert "travel_interrupted" not in template
-    assert "thoughts_omitted" not in template
-    assert "state_diff" not in template
-
-
 def test_caravan_freight_is_published_to_the_hand_that_writes_it():
     """`freight` is the only field of CourierOp that moves real stock, and it
     was asked for nowhere. The three keys are a closed set the ENGINE owns
     (world/charter_runtime.load_caravan_freight reads exactly `from_holder`,
     `stock` and `wants`), which is the kind of vocabulary that SHOULD be
-    published rather than guessed at."""
-    sheet = DEFAULT_PROMPTS["director_social"]
+    published rather than guessed at.
+
+    The hand that writes it is the encoder since 2026-09-27, and the keys are
+    in the channel's own chunk, not a part the decision model may leave out.
+    """
+    sheet = unified_specialist_prompt(["courier_ops"], "en", [])
     for token in ("freight", "from_holder", "stock", "wants"):
         assert token in sheet, token
+

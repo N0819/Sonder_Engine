@@ -540,9 +540,8 @@ class TestTheDirectorCanActuallySayIt:
         drift is checked here on the field this feature depends on."""
         from llm import prompts
 
-        text = prompts.DEFAULT_PROMPTS["director_social"]
-        assert "crowd_ops" in text
-        assert "state_diff.crowd_ops" in text
+        text = prompts.unified_specialist_prompt(["crowd_ops"], "en", None)
+        assert "crowd_ops: [{op:" in text
 
     def test_the_normalizer_knows_crowd_ops_is_a_list(self):
         """A model returning a string where a list belongs kills the beat.

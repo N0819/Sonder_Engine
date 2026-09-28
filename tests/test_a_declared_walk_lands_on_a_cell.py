@@ -9,12 +9,18 @@ carries it on next beat.
 import agents.director as director
 import agents.director_movement as movement
 from tests.test_director_movement import _make_ctx
+import pytest
+from tests.director_fakes import prose_resolve_agent
+
+# Every Director stage here runs the prose Director, answered
+# deterministically (`prose_director`, tests/conftest.py).
+pytestmark = pytest.mark.usefixtures("prose_director")
 
 
 def test_an_open_adjacent_walk_arrives_inside_the_door_on_a_cell(temp_db, monkeypatch):
     from world.spatial import inside_the_door
     ctx = _make_ctx(temp_db, "lamp_room")
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
     out = director.director_resolve(ctx, nonce=0)
     sd = out["state_diff"]
     assert sd["positions"]["The Stranger"] == "lamp_room"
@@ -25,7 +31,7 @@ def test_an_open_adjacent_walk_arrives_inside_the_door_on_a_cell(temp_db, monkey
 
 def test_a_walk_the_paces_do_not_finish_is_under_way(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, "lamp_room")
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
     monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 1)
     out = director.director_resolve(ctx, nonce=0)
     sd = out["state_diff"]
@@ -43,7 +49,7 @@ def test_a_walk_under_way_continues_in_silence_and_arrives(temp_db, monkeypatch)
     sc = temp_db.wget(ctx.chat.id, "scene", {})
     sc["approach"] = {"The Stranger": {"to_room": "lamp_room", "turn": 0}}
     temp_db.wset(ctx.chat.id, "scene", sc)
-    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({}))
     out = director.director_resolve(ctx, nonce=0)
     sd = out["state_diff"]
     assert sd["positions"]["The Stranger"] == "lamp_room"

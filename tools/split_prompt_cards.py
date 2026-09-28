@@ -94,24 +94,19 @@ def snapshot() -> dict:
                 entry[f"defaults:{tag}"] = dict(
                     prompts.default_prompts_for(language))
                 card = pack.card("system_prompts")
+                # The sheets built per beat (the causal Director's hand and
+                # author sheets went with it, 2026-09-27): the encoder's, per
+                # owner and per channel, and the room designer's.
                 sheets = {}
                 for name, spec in card["specialists"].items():
                     order = list(spec["order"])
-                    sheets[f"{name}|FULL"] = prompts.specialist_prompt(
-                        name, order, language)
-                    sheets[f"{name}|NONE"] = prompts.specialist_prompt(
-                        name, [], language)
+                    sheets[f"{name}|FULL"] = prompts.unified_specialist_prompt(
+                        order, language)
                     for channel in order:
-                        sheets[f"{name}|{channel}"] = prompts.specialist_prompt(
-                            name, [channel], language)
-                entry[f"specialists:{tag}"] = sheets
-                entry[f"prose:{tag}|None"] = prompts.prose_author_prompt(
-                    None, language)
-                entry[f"prose:{tag}|all"] = prompts.prose_author_prompt(
-                    frozenset(prompts.PROSE_DUTY_CHUNKS), language)
-                for duty in prompts.PROSE_DUTY_CHUNKS:
-                    entry[f"prose:{tag}|{duty}"] = prompts.prose_author_prompt(
-                        frozenset({duty}), language)
+                        sheets[f"{name}|{channel}"] = prompts.unified_specialist_prompt(
+                            [channel], language)
+                entry[f"encoder:{tag}"] = sheets
+                entry[f"rooms:{tag}"] = prompts.room_author_prompt(language)
         out[language] = entry
     return out
 
@@ -160,19 +155,9 @@ def _differences(left, right, path: str = "") -> list[str]:
 
 def _split_one(pack_dir: Path, card_name: str) -> int:
     from language_runtime import card_source
-    from llm.prompts import ASSEMBLED_SHEET_IDS
 
     index_path = pack_dir / "cards" / f"{card_name}.json"
     original = json.loads(index_path.read_text(encoding="utf-8"))
-
-    # A part file for an assembled sheet id re-creates the `director_spatial`
-    # class: one sheet with two spellings, free to drift, and the stored one
-    # was 1,518 characters short of its own assembly.
-    stored = set(original.get("prompts") or ()) & set(ASSEMBLED_SHEET_IDS)
-    if stored:
-        print(f"REFUSED {pack_dir.name}/{card_name}: prompts.{{{','.join(sorted(stored))}}} "
-              f"is an ASSEMBLED sheet id and must not be stored as a body")
-        return 1
 
     with tempfile.TemporaryDirectory(prefix="sonder-split-check-") as scratch:
         trial = Path(scratch) / pack_dir.name

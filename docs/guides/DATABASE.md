@@ -47,7 +47,7 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   `frame_id`.
 - `llm_blobs`, `llm_capture`: the debug capture (`persist/llm_capture.py`),
   off by default. One `llm_capture` row per PROVIDER CALL of a turn -- the
-  Director's specialist sub-calls and the Writers' Room's calls included --
+  Director's own sub-calls (its prose, the encoder, the room author) and the Writers' Room's calls included --
   keyed by `turn_id` and ordered by `seq`; the sheet, each top-level payload
   key, the response and the reasoning are stored once each by SHA-256 in
   `llm_blobs` (`body` NULL in `hash_only` mode). Beside what was sent and
@@ -569,6 +569,16 @@ work is intact on branch `character-cognition`), and `host_secret` /
 `host_pw_salt`). Checked because two of them are credentials: nothing sensitive
 is at rest — `host_secret` is empty and `host_secret_hash` is a 64-character
 digest, so `tests/test_host_secret_hashing.py`'s standing claim holds.
+
+Two more joined them on 2026-09-27, when the causal Director was deleted:
+`director_contract` (which chose it or the prose Director) and
+`director_fanout_mode` (which ran its five specialists at once or in turn).
+Neither is read, and neither row is pruned. The per-role rows for the five
+specialists (`director_body` ... `director_spatial`) inside `agent_models`,
+`reasoning_effort` and `response_format` are kept on every save of those
+settings (`providers.keep_retired_roles`), for the same reason: deleting a
+host's stored configuration is the host's call. A row stored under the old
+role `director_specialist` is read as the encoder's (`providers.RENAMED_ROLES`).
 
 **The class: a settings key is the one kind of configuration the engine cannot
 check.** `tools/project_check.py` reads the tree, and the tree is exactly where
