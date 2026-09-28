@@ -12,9 +12,10 @@ Three layers each hold the line: validation hoists (or drops debris),
 the scene merge refuses and HEALS (so a live story needs no migration),
 and get_scene tolerates a stored scene that still carries the keys.
 
-The specialist-path hoist and its two tests went with the causal hands on
-2026-09-27. The encoder's patch path does not hoist (UNBUILT_PIPELINE §1.1),
-so today the merge and get_scene layers are what stand.
+The objects hand's hoist went with the causal hands on 2026-09-27; the
+encoder's transforms are hoisted where they are first read
+(`director_prose.patch_as_written`), so the first layer stands again on the
+path that now writes entities.
 """
 
 from __future__ import annotations
@@ -28,6 +29,82 @@ _CHAIR = {
     "aliases": [], "portable": False,
     "state": {"restraints": "engaged at wrists and ankles"},
 }
+
+
+
+def _encoded(patch):
+    """One encoder event carrying `patch`, as `ledger_from_events` reads it."""
+    from agents.director_prose import ledger_from_events
+    from tests.director_fakes import encoder_event
+
+    _rows, transforms = ledger_from_events([encoder_event(
+        "The chair is bolted down.",
+        transforms=[{"item": "Interview Chair", "patch": patch}])])
+    return transforms[1][0]["patch"]
+
+
+def test_the_encoder_hoists_siblings_nested_inside_entities():
+    """A sibling field written one nesting level too deep moves up intact,
+    and never survives as an entity -- the objects hand's rule, on the
+    encoder's transforms."""
+    patch = _encoded({"entities": {
+        "interview_chair": dict(_CHAIR),
+        "remove_entities": ["old_lamp"],
+    }})
+    assert set(patch["entities"]) == {"interview_chair"}
+    assert patch["remove_entities"] == ["old_lamp"]
+
+
+def test_the_encoder_drops_entity_shaped_debris_under_sibling_keys():
+    """The measured chat 80 shape: entity-def copies keyed by sibling field
+    names. Neither an entity (the key is a field name) nor the sibling (the
+    value is an entity def) -- hoisting would turn a chair copy into a
+    `destruction` declaration or a `remove_entities` order, so it is dropped
+    outright."""
+    patch = _encoded({"entities": {
+        "interview_chair": dict(_CHAIR),
+        "remove_entities": dict(_CHAIR),
+        "inventory_ops": dict(_CHAIR),
+        "artifact_ops": dict(_CHAIR),
+        "destruction": dict(_CHAIR),
+        "notes": dict(_CHAIR),
+        "resolved_events": dict(_CHAIR),
+    }})
+    assert set(patch["entities"]) == {"interview_chair"}
+    for sibling in ("remove_entities", "inventory_ops", "destruction",
+                    "resolved_events"):
+        assert sibling not in patch, sibling
+
+
+def test_a_sibling_nested_in_an_encoder_entity_map_leaves_the_real_entity_standing(
+        temp_db, prose_director, monkeypatch):
+    """End to end, and why the hoist is not cosmetic on this path. Measured
+    before it (2026-09-28): with a sibling nested as a plain value -- a
+    `positions` map beside the chair -- the owner's validator failed the
+    whole `entities` channel, and the beat's diff held no chair, no move and
+    no transform at all. Hoisted where the encoder's answer is first read,
+    the sibling is routed to ITS owner by the same split as any other write."""
+    import agents.director as director
+    from tests.director_fakes import _make_ctx, encoder_event, prose_resolve_agent
+
+    ctx = _make_ctx(temp_db, interp={"sequence": []})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": "The chair is bolted down."},
+        per_step={"director_specialist": {"events": [encoder_event(
+            "The chair is bolted down.", source="character:mara", transforms=[{
+                "item": "Interview Chair", "patch": {"entities": {
+                    "interview_chair": dict(_CHAIR),
+                    "positions": {"Mara": "lamp_room"},
+                    "inventory_ops": dict(_CHAIR),
+                    "notes": dict(_CHAIR)}}}])],
+            "missing_tools": [], "missing_referents": [], "notes": []}}))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    entities = out["state_diff"].get("entities") or {}
+    assert "interview_chair" in entities, entities
+    assert not set(entities) & NON_ENTITY_FIELD_KEYS
+    assert (out["state_diff"].get("positions") or {}).get("Mara") == "lamp_room"
 
 
 def test_resolve_diff_hoists_objects_channels_too():

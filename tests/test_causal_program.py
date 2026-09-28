@@ -210,7 +210,7 @@ def test_wrapped_live_inventory_patches_keep_their_items_and_chronology(temp_db,
     """Ported 2026-09-27 to the prose Director: the encoder's events carry the
     transforms. Handles are code's now, one per distinct name, so the key is 1
     and the mug 2. The wrapped `patch.state_diff` shape this was named for is
-    task #88's regression (a wrapped encoder transform reaches no owner).
+    `tests/test_a_malformed_encoder_transform.py`'s, on the encoder's path.
     """
     monkeypatch.setattr(director, "_agent_json", _fake_agent([], _answers(
         "Mara takes the key, puts it back, and shelves the mug.",

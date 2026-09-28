@@ -54,6 +54,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from core.db import get_setting
 from llm import decisions
+from llm.schemas import NON_ENTITY_FIELD_KEYS, _hoist_misplaced_entity_siblings
 from llm.prompts import (
     ENCODER_PART_SEP,
     ROOM_AUTHOR_CHANNELS,
@@ -1036,7 +1037,11 @@ def declared_moves(*records):
             for transform in event.get("transforms") or []:
                 patch = transform.get("patch") if isinstance(transform, dict) else None
                 positions = patch.get("positions") if isinstance(patch, dict) else None
-                for body, room in (positions or {}).items():
+                if not isinstance(positions, dict):
+                    # A `positions` written as a list declares no body's
+                    # room; read as nothing rather than crash the stage.
+                    continue
+                for body, room in positions.items():
                     if isinstance(room, str) and room.strip() and str(body).strip():
                         moves[str(body).strip().casefold()] = room.strip()
     return moves
@@ -1137,8 +1142,66 @@ def room_event(rooms_answer, events):
     }
 
 
+#: The envelopes of a whole diff, which an encoder copying a diff's structure
+#: writes around one transform's channels.
+_PATCH_WRAPPERS = ("state_diff", "state_assertions")
+
+
+def patch_as_written(patch):
+    """One transform's `patch` in the shape the channel owners read, from the
+    two ways an encoder copying a whole diff's structure malforms it.
+
+    A WRAPPER IS NOT A CHANNEL. `patch: {state_diff: {inventory_ops: ...}}`
+    names no channel an owner holds, so the owner split handed it to nobody
+    and the write vanished without a word (found 2026-09-27). The wrapper's
+    channels are the patch's own; one the patch already carries is kept.
+
+    A FIELD NAME IS NOT AN ENTITY. Chat 80's shape, which the objects hand's
+    output was hoisted for and the encoder's was not: a sibling field written
+    one nesting level too deep inside `entities` moves up intact, and an
+    entity-shaped copy under a sibling's name is dropped
+    (`schemas._hoist_misplaced_entity_siblings`). Left in place, a sibling
+    failed the owner's validation of the whole `entities` channel, taking the
+    real entity -- and every other write in the patch -- down with it.
+
+    Twice over, because either may sit inside the other."""
+    if not isinstance(patch, dict):
+        return patch
+    out = dict(patch)
+    for _ in range(2):
+        for wrapper in _PATCH_WRAPPERS:
+            inner = out.get(wrapper)
+            if isinstance(inner, dict):
+                del out[wrapper]
+                for channel, value in inner.items():
+                    out.setdefault(channel, value)
+        if isinstance(out.get("entities"), dict):
+            out["entities"] = dict(out["entities"])
+            _hoist_misplaced_entity_siblings(
+                out, NON_ENTITY_FIELD_KEYS - {"entities"})
+            if not out["entities"]:
+                del out["entities"]
+    return out
+
+
+def transforms_as_written(events):
+    """`events` with every transform's patch through `patch_as_written`, so
+    every reader of the encoder's answer -- the widening pass, the movement
+    floor's `declared_moves`, the room reconcile, the ledger -- reads one
+    shape."""
+    out = []
+    for event in events or []:
+        if isinstance(event, dict) and isinstance(event.get("transforms"), list):
+            event = {**event, "transforms": [
+                {**transform, "patch": patch_as_written(transform.get("patch"))}
+                if isinstance(transform, dict) else transform
+                for transform in event["transforms"]]}
+        out.append(event)
+    return out
+
+
 def _call_encoder(ctx, channels, payload, parts):
-    return _agent_json(
+    answer = _agent_json(
         "encoder",
         "director_specialist",
         unified_specialist_prompt(channels, ctx.language, parts),
@@ -1146,6 +1209,9 @@ def _call_encoder(ctx, channels, payload, parts):
         temperature=0.2,
         max_tokens=None,
     ) or {}
+    if isinstance(answer, dict) and isinstance(answer.get("events"), list):
+        answer = dict(answer, events=transforms_as_written(answer["events"]))
+    return answer
 
 
 def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=None,
@@ -1448,7 +1514,8 @@ def ledger_from_events(events, known_channels=None):
         for transform in event.get("transforms") or []:
             if not isinstance(transform, dict):
                 continue
-            patch = transform.get("patch")
+            # The repair pass's events reach here without `_call_encoder`.
+            patch = patch_as_written(transform.get("patch"))
             if not isinstance(patch, dict) or not patch:
                 continue
             item = str(transform.get("item") or "").strip()
@@ -1655,6 +1722,16 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     }
     if repair_record is not None:
         record["repair"] = repair_record
+    # A CHANNEL NO OWNER HOLDS IS DROPPED OUT LOUD. The owner split hands
+    # every transform's channels to the owner that holds each; one nobody
+    # holds reached no owner and vanished without a word.
+    owned = {channel for spec in SPECIALISTS.values() for channel in spec["channels"]}
+    unowned = sorted({channel for kept in transforms.values() for transform in kept
+                      for channel in transform["patch"] if channel not in owned})
+    if unowned:
+        record["unowned_channels"] = unowned
+        ctx.add_warning(f"{stage}: the encoder wrote {', '.join(unowned)}, "
+                        "which no channel owner holds; dropped")
     for note in record["notes"]:
         ctx.add_warning(f"encoder: {note}")
     ctx[CTX_KEY] = {"record": record, "transforms": transforms,
