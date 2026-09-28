@@ -525,6 +525,16 @@ def jev_channel_questions(channels, language=None):
             for channel in channels if channel in questions}
 
 
+def jev_question(key, language=None, **fields):
+    """One decision-model question that is not a channel's -- `walk_stopped`
+    -- with each `{field}` filled from `fields`. "" when the pack has none,
+    so the caller asks nothing rather than a question with holes in it."""
+    text = str((_prompt_card(language).get("jev_questions") or {}).get(key) or "").strip()
+    for key, value in fields.items():
+        text = text.replace("{%s}" % key, str(value))
+    return text
+
+
 # Restore part of the pre-compaction character call for controlled A/B
 # measurement. This is code/configuration, not human-language content.
 _PAYLOAD_LEGACY_ARMS = frozenset(

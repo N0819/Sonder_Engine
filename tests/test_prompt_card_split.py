@@ -49,7 +49,9 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 255   # +1 (2026-09-28): `prose_contract.encoder_extensions`,
+PART_COUNT = 256   # +1 (2026-09-28): `jev_questions.walk_stopped`, the
+                   # decision model's question per walk under way.
+                   # +1 (2026-09-28): `prose_contract.encoder_extensions`,
                    # the header the encoder's sheet carries over the story's
                    # extension channels (`api.add_director_channel`).
                    # -48 (2026-09-27, prose is the only Director): the causal

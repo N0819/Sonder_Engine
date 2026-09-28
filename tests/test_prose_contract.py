@@ -373,6 +373,58 @@ def test_a_thing_left_unplaced_stands_where_its_maker_is(temp_db, monkeypatch):
     assert out["state_diff"]["positions"]["storm_lantern"] == "lamp_room"
 
 
+def test_a_bound_body_the_encoder_moves_stays_where_it_is(temp_db, monkeypatch,
+                                                         prose_contract):
+    """The restraint block read only state and lived in the seam a prose
+    beat skips (`_reconcile_resolution`), so the encoder writing a bound
+    body into another room moved it. It runs on every beat now."""
+    import json as _json
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    temp_db.qi(
+        "INSERT INTO world_conditions(chat_id,condition_id,subject_id,kind,"
+        "payload,active,started_at) VALUES(?,?,?,?,?,1,0)",
+        (ctx.chat.id, "cuffs", "Mara", "restraint",
+         _json.dumps({"condition_id": "cuffs", "subject_id": "Mara", "kind": "restraint",
+                      "state": {"level": "bound", "means": "cuffs to the rail"}})))
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara climbs the stair into the lamp room."},
+        "director_specialist": _walk_events(),
+    }))
+    out = director.director_resolve(ctx, nonce=0)
+    assert "Mara" not in (out["state_diff"].get("positions") or {})
+    assert any("Blocked a move by Mara" in str(w) for w in ctx.warnings)
+
+
+def test_a_line_through_a_blocked_mouth_is_stamped_on_a_prose_beat(temp_db, monkeypatch,
+                                                                  prose_director):
+    """The articulation stamp reads only the post-op contacts and substances,
+    and it too lived in the seam a prose beat skips: a line spoken through a
+    filled mouth reached every listener clean. Its own judgement is tested
+    where it lives; this pins that a prose beat's lines reach it."""
+    from tests.director_fakes import prose_resolve_agent
+    from tests.test_director_dialogue_ownership import _make_ctx as _declaring_ctx
+    stamped = []
+
+    def fake_stamp(sc, sd, dialogue_log):
+        for entry in dialogue_log:
+            entry["articulation"] = "stifled"
+            stamped.append(entry.get("speaker"))
+        return []
+
+    monkeypatch.setattr(director, "_stamp_dialogue_articulation", fake_stamp)
+    ctx, _char_id = _declaring_ctx(temp_db, character_results={
+        "name": "Mara", "speech": "I told you already.",
+        "sequence": [{"type": "speech", "text": "I told you already.", "volume": "normal"}],
+        "action": None,
+    })
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
+        {"resolved_event": 'Mara says, "I told you already."'}))
+    out = director.director_resolve(ctx, nonce=0)
+    assert stamped == ["Mara"]
+    assert out["dialogue_log"][0]["articulation"] == "stifled"
+
+
 def test_a_thing_stationed_or_contained_is_placed():
     """The entities card names the placing tools: a position, a transfer, a
     station, a containment. A mint any of them placed -- under its key or

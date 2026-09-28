@@ -1509,7 +1509,8 @@ def _travel_in_flight_view(sc, interp, p_name):
 
     So this is a fact with an out: here is where they are going, here is the
     room this beat puts them in, narrate it -- unless the beat itself stops
-    them, in which case say so in `travel_interrupted` and they stay put.
+    them, which the decision model then reads off the passage, one question
+    per walker (`director_prose.walks_in_flight`), and they stay put.
     """
     pending = _pending_legs(sc)
     if not pending:
@@ -1576,19 +1577,18 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
     what overrides it. An interruption is therefore the thing that has to be
     established, never the default, and it is established two ways:
 
-      * THE DIRECTOR SAYS SO (`travel_interrupted`). "Did what just happened
-        stop you walking" is objective causality, it is nuanced beyond
-        anything worth enumerating here, and the resolve is the one stage
-        that reads the whole beat -- the declaration, every character's act,
-        the dice and the room. It is a structured field rather than a prose
-        inference for the usual reason: prose matching is the boundary this
-        engine exists to stay on the right side of.
+      * THE PASSAGE SAYS SO. "Did what just happened stop you walking" is
+        objective causality, nuanced beyond anything worth enumerating here,
+        and the resolve's account is the one text that holds the whole beat
+        -- the declaration, every character's act, the dice and the room.
+        The Director writes that account and the decision model is asked, per
+        walker, whether it stops them (`director_prose.select_channels`,
+        `record["stopped"]` on the prose contract's `jev`): a model reading
+        the passage, never a string match against it. This was the causal
+        Director's own field, `travel_interrupted`, which nothing wrote once
+        the Director wrote prose (UNBUILT_PIPELINE §1.1).
       * A DETERMINISTIC FLOOR the Director cannot argue with: no passable
-        route left, being carried, or already there. Restraint needs nothing
-        here -- writing into `state_diff.positions` puts this through the
-        same immobilisation block a declared move goes through, which is the
-        point of advancing the walk HERE, before every movement backstop,
-        rather than teleporting after them.
+        route left, being carried, restrained, or already there.
 
     Records what it did on `out['travel']`; `commit.py` reads that to retire
     or keep each standing record, so the ledger and the position can never
@@ -1599,16 +1599,39 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         return
     declared = _declared_movers(interp, p_name)
 
+    jev = (((out.get("orchestration") or {}).get("prose_contract") or {})
+           .get("jev") or {})
+    weights = jev.get("walks") if isinstance(jev.get("walks"), dict) else {}
     stopped = {
-        str(entry.get("subject") or "").strip().casefold(): str(
-            entry.get("reason") or "")
-        for entry in (out.get("travel_interrupted") or [])
-        if isinstance(entry, dict) and str(entry.get("subject") or "").strip()
+        str(subject).strip().casefold(): (
+            "the passage stops them (decision model %.2f)"
+            % float(weights.get(subject) or 0.0))
+        for subject in (jev.get("stopped") or []) if str(subject).strip()
     }
 
     route_scene = route_scene_for(ctx, sc, sd)
     rooms = route_scene.get("rooms") or {}
     record = {"advanced": [], "arrived": [], "interrupted": [], "held": []}
+
+    # RESTRAINT IS JUDGED HERE, not left to a floor that runs later. A later
+    # floor would pop the position and leave this record saying the walker
+    # advanced or arrived, and the commit retires an arrived walk -- so a
+    # body tied to a chair would lose its errand for walking there. And the
+    # floor this relied on, `_reconcile_resolution`'s restraint block, never
+    # ran on a prose beat at all (UNBUILT_PIPELINE §1.1). The same per-record
+    # judgement the block makes (`_restraint_blocked_moves`): a standing
+    # binding always, a live hold while its holder is here and awake.
+    from story.scene import (apply_awareness_diff, apply_restraint_records_diff,
+                             awareness_map, restraint_conditions)
+    from .director_floors import _restraint_blocked_moves, _restraint_holder_pool
+    chat = getattr(ctx, "chat", None)
+    chat_id = chat["id"] if isinstance(chat, dict) else getattr(chat, "id", None)
+    restraints = (apply_restraint_records_diff(restraint_conditions(chat_id), sd)
+                  if chat_id is not None else [])
+    if restraints:
+        amap = apply_awareness_diff(awareness_map(chat_id), sd)
+        holders = _restraint_holder_pool(sc, [
+            character_name_from_text(row["sheet"]) for row in (ctx.cast or [])] + [p_name])
 
     for subject, leg in sorted(pending.items()):
         if not isinstance(leg, dict) or subject in declared:
@@ -1623,12 +1646,16 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         reason = stopped.get(str(subject).casefold())
         if reason is not None:
             record["interrupted"].append(
-                {"subject": subject, "reason": reason, "source": "director"})
+                {"subject": subject, "reason": reason, "source": "decision"})
             continue
         # Being carried is somebody else's doing; their walk resumes when
         # they are put down, and until then their position is not theirs.
         if (route_scene.get("contained") or {}).get(subject):
             record["held"].append({"subject": subject, "reason": "carried"})
+            continue
+        if restraints and _restraint_blocked_moves(
+                {"positions": {subject: destination}}, sc, restraints, amap, holders):
+            record["held"].append({"subject": subject, "reason": "restrained"})
             continue
         step = passable_route_next_step(route_scene, here, destination)
         if not step:

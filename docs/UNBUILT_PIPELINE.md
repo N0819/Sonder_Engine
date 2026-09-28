@@ -28,34 +28,29 @@ of these things; nothing on the prose path does yet.
    nothing even if one were recorded. `world_author`, the default, is
    unaffected. (`tests/test_director_orchestration.py`,
    `TestADialRefusesTheSpanAndTheRecordWithIt`, two xfails.)
-2. **Nothing can stop a walk under way.** `travel_interrupted` was the causal
-   Director's own structured field, and `director_movement._travel_continues`
-   still reads it; the prose Director writes prose, and nothing asks it
-   whether the beat stopped anybody. A declared walk carries on through any
-   beat until it arrives or its route shuts. Candidate: one decision-model
-   question per walker in flight ("does the passage stop X walking toward
-   Y?"), the pattern the planned-room `enter__` questions use.
-   (`tests/test_travel_continues.py`, xfail.)
-3. **Every deterministic floor of the resolve reconciliation is skipped on a
-   beat with rows -- and has been since 2026-09-12, on BOTH contracts.**
+2. *Closed 2026-09-28: a walk under way is stopped by the passage.* One
+   decision-model question per walker in flight (`walk_stopped`, both packs;
+   `director_prose.walks_in_flight`), read by `_travel_continues`; the
+   resolve author is handed `travel_in_flight` again, which the lean payload
+   had dropped. Wording probed on 18 passages x 3: 51 of 54 right, no
+   carrying-on walk stopped.
+3. **The resolve reconciliation's PROSE-READING floors are skipped on a beat
+   with rows -- and have been since 2026-09-12, on BOTH contracts.**
    `director_resolve` calls `_reconcile_resolution` only
-   `if not out.get("causal_ledger")` (c452a50d). Its comment says the point
-   was not to ask a model to rediscover a missing transform from prose; the
-   gate covers the whole seam instead: the awareness onset drops (player and
-   cast), the waking exits, the restraint release exits, the RESTRAINT
-   MOVEMENT BLOCK, the blank-placeholder strip, the shed-garment recovery,
-   articulation stamping, the unconsciousness / untracked-restraint /
-   destruction / scale scans and the player-claim findings. Every beat whose
-   Director wrote rows -- every causal beat since that commit, every prose
-   beat -- skips all of them; the tests that pinned them passed on fixtures
-   with no rows, a shape no live beat has had since. Shown: a bound body walks
-   on with a continued walk (`tests/test_travel_continues.py`, xfail).
-   Recommended cut, the owner's call because several of these read prose:
-   run the structural floors always (restraint block, placeholder strip,
-   shed-garment recovery, articulation, scale conflicts), measure the
-   prose-reading ones (awareness onset and exits, restraint releases, the
-   unconsciousness and destruction scans) on the encoder's rows before
-   enabling them, and keep the model repair off for beats with rows.
+   `if not out.get("causal_ledger")` (c452a50d), and every live beat has
+   rows. The STATE-ONLY floors run on every beat since 2026-09-28 (the
+   restraint movement block, articulation stamping, the blank-placeholder
+   strip and the scale-conflict warnings; the shed-garment recovery was
+   already the commit's too), and a restrained walker is held inside
+   `_travel_continues` itself. Still skipped: the awareness onset drops
+   (player and cast), the waking exits, the prose-asserted restraint
+   releases, the unconsciousness / untracked-restraint / destruction scans
+   and the player-claim findings. Measured before deciding (2026-09-28): a
+   dry run over the 33 distinct prose beats stored in the owner's db and
+   the replay lanes -- none of them would have fired, and no beat wrote an
+   awareness condition, so there is nothing yet to measure a false-positive
+   rate on. Enable them on the first corpus that exercises them, and keep
+   the model repair off for beats with rows.
 4. **Rules the deleted sheets taught that no prose card carries:**
    - the movement row's fields: the encoder core lists
      `{to_room, why, mover, arrives, to_anchor?, pace?}` and never says that
@@ -1030,7 +1025,15 @@ record, not on this one's absence.
 
 ### 1.133 A declaration of stillness is read as silence, and the walk carries on (PQ6)
 
-**Open.** `agents/director_movement.py::_travel_continues` treats a beat with
+**Landed in code 2026-09-28, not yet verified on the run that found it.** The
+walk-stop question (§1.1 item 2) reads the resolve's own account, so a beat
+that says the mover stayed put now ends the walk: probed on passages of this
+shape, "Halla does not move out of the doorway" scored 0.83 and "Halla stays
+in the doorway" 0.62 against 0.14 for a walk carried on (threshold 0.5;
+under the Japanese question 0.54-0.61 against 0.13). What is outstanding is
+the PQ6 turn itself, replayed. The history below is the case as found.
+
+**Was open.** `agents/director_movement.py::_travel_continues` treats a beat with
 no `movement` channel as SILENCE, and silence CONTINUES a standing approach.
 That rule is right and was earned (chat 72: a beat spent grabbing someone by
 the shoulders was read as abandoning a walk that was plainly still under

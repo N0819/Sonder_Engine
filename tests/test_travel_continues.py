@@ -200,40 +200,62 @@ def test_the_walk_ends_by_arriving_and_the_record_is_cleared(temp_db,
     assert out["travel"]["arrived"] == ["The Stranger"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="`travel_interrupted` was the causal Director's own field; the prose "
-           "Director writes prose and nothing asks it whether the beat stopped a "
-           "walk (UNBUILT_PIPELINE §1.1, the prose-only gaps)")
-def test_the_director_may_say_the_beat_interrupted_the_walk(temp_db,
-                                                            monkeypatch):
-    """The nuance the engine cannot enumerate lives with the authority that
-    owns objective causality and reads the whole beat. Saying so HOLDS the
-    position and ends the walk -- picking it up again is a fresh
-    declaration, which is what stopping means."""
+def test_the_passage_may_stop_the_walk(temp_db, monkeypatch):
+    """The nuance the engine cannot enumerate lives in the account the
+    Director writes, and the decision model is asked, per walker, whether it
+    stops them. Saying so HOLDS the position and ends the walk -- picking it
+    up again is a fresh declaration, which is what stopping means."""
     import agents.director as director
+    from agents.director_prose import WALK_PREFIX
+    from llm import decisions
 
+    asked = []
+
+    def answer(state, questions):
+        asked.append(dict(questions))
+        return {key: {"type": "noul",
+                      "noul": 0.93 if key == WALK_PREFIX + "The Stranger" else 0.99}
+                for key in questions}
+
+    monkeypatch.setattr(decisions, "OVERRIDE", answer)
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
     monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(
-        _resolved(travel_interrupted=[
-            {"subject": "The Stranger",
-             "reason": "She plants herself and takes him by the shoulders."}])))
+        _resolved(resolved_event="She plants herself and takes him by the shoulders.")))
 
     out = director.director_resolve(ctx, nonce=0)
 
+    question = asked[0][WALK_PREFIX + "The Stranger"]["instructions"]
+    assert "The Stranger" in question and "Lobby" in question
     assert "The Stranger" not in (out["state_diff"].get("positions") or {})
-    assert out["travel"]["interrupted"][0]["subject"] == "The Stranger"
+    stop = out["travel"]["interrupted"][0]
+    assert stop["subject"] == "The Stranger" and stop["source"] == "decision"
+    assert "0.93" in stop["reason"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the restraint floor runs inside `_reconcile_resolution`, which "
-           "`director_resolve` skips on any beat with a causal ledger -- every "
-           "live beat (UNBUILT_PIPELINE §1.1, the prose-only gaps)")
+def test_a_walk_the_passage_does_not_stop_is_asked_about_and_goes_on(temp_db,
+                                                                     monkeypatch):
+    """The fixture's decision model answers the stop question no: the walker
+    was asked about and walks on, which is the silence the walk survives."""
+    import agents.director as director
+    from agents.director_prose import WALK_PREFIX
+
+    ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(_resolved()))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    jev = out["orchestration"]["prose_contract"]["jev"]
+    assert jev["walks"] == {"The Stranger": 0.01} and jev["stopped"] == []
+    assert out["state_diff"]["positions"]["The Stranger"] == "lobby"
+    assert out["travel"]["arrived"] == ["The Stranger"]
+
+
 def test_a_restrained_body_does_not_walk_whatever_anyone_says(temp_db,
                                                               monkeypatch):
     """The deterministic floor, which the Director cannot argue with: a
-    body that cannot relocate itself does not drift toward its errand."""
+    body that cannot relocate itself does not drift toward its errand -- and
+    is held, not advanced, so the commit keeps the errand rather than
+    retiring it as arrived."""
     import agents.director as director
 
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
@@ -250,6 +272,8 @@ def test_a_restrained_body_does_not_walk_whatever_anyone_says(temp_db,
     out = director.director_resolve(ctx, nonce=0)
 
     assert "The Stranger" not in (out["state_diff"].get("positions") or {})
+    assert {"subject": "The Stranger", "reason": "restrained"} in out["travel"]["held"]
+    assert "The Stranger" not in out["travel"]["arrived"]
 
 
 def test_a_walk_whose_route_has_shut_does_not_advance(temp_db, monkeypatch):

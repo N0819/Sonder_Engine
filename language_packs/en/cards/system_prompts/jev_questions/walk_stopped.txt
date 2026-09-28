@@ -1,0 +1,1 @@
+Does the passage stop {name} short of {destination}? Answer yes whatever stops them -- their own choice, a person, a thing in the way, or somewhere else they go instead. Answer no when they carry on toward it, whatever else they do along the way, and when the passage does not show them at all.

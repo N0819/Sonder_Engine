@@ -2569,6 +2569,46 @@ def _deep_audit_omissions(ctx, out, sd, scene_slice, dlog_compact,
 # successful dice or asserted effect-claims alongside an EMPTY manifest
 # and an empty physical diff).
 # ---------------------------------------------------------------------------
+def _block_restrained_moves(ctx, sd, sc, holder_pool, *, live_restraints=None,
+                            amap=None):
+    """Restraint, enforced rather than merely detected. The omission scan in
+    `_reconcile_resolution` has always asked the Director to RECORD a
+    binding; nothing ever read the result, so a character bound hand and
+    foot could still walk out. A restraint that is in force -- including one
+    applied this same beat -- blocks that body from relocating itself, judged
+    per RECORD: a standing binding always, a live hold only while its named
+    holder is co-present and conscious (`_restraint_blocked_moves`).
+    Everything subtler (what they can still reach, whether they can work
+    free) stays the Director's call.
+
+    STATE ONLY, so it runs on every beat. It lived inside
+    `_reconcile_resolution`, which a prose beat skips, and there it stayed
+    until 2026-09-28 (UNBUILT_PIPELINE §1.1): the encoder writing a bound
+    body into another room moved it. Pops each blocked position from `sd`;
+    returns the names blocked."""
+    chat = ctx.chat
+    chat_id = chat["id"] if isinstance(chat, dict) else chat.id
+    if live_restraints is None:
+        live_restraints = restraint_conditions(chat_id)
+    records = apply_restraint_records_diff(live_restraints, sd)
+    if not records:
+        return []
+    if amap is None:
+        amap = apply_awareness_diff(awareness_map(chat_id), sd)
+    blocked = []
+    for who, record in _restraint_blocked_moves(sd, sc, records, amap, holder_pool):
+        sd["positions"].pop(who, None)
+        blocked.append(who)
+        ctx.add_warning(
+            f"Blocked a move by {who}, who is {record['level']}"
+            + (f" by {record['by']}" if record["by"] else "")
+            + ": a restrained body cannot relocate itself. End the "
+            f"restraint (condition_id {record['condition_id']!r}, "
+            "active:0) first, or have someone carry them."
+        )
+    return blocked
+
+
 def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                           tracked_names):
     """The resolve-reconciliation seam (see the block comment above).
@@ -2704,27 +2744,8 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         if _rexit_warnings:
             out["restraint_warnings"] = list(_rexit_warnings)
 
-    # Restraint, enforced rather than merely detected. The omission scan below
-    # has always asked the Director to RECORD a binding; nothing ever read the
-    # result, so a character bound hand and foot could still walk out. A
-    # restraint that is in force -- including one applied this same beat --
-    # blocks that body from relocating itself, judged per RECORD: a standing
-    # binding always, a live hold only while its named holder is co-present
-    # and conscious (`_restraint_blocked_moves`). Everything subtler (what
-    # they can still reach, whether they can work free) stays the Director's
-    # call.
-    _restraints = apply_restraint_records_diff(_live_restraints, sd)
-    if _restraints:
-        for _who, _record in _restraint_blocked_moves(
-                sd, sc, _restraints, _hold_amap, _holder_pool):
-            sd["positions"].pop(_who, None)
-            ctx.add_warning(
-                f"Blocked a move by {_who}, who is {_record['level']}"
-                + (f" by {_record['by']}" if _record["by"] else "")
-                + ": a restrained body cannot relocate itself. End the "
-                f"restraint (condition_id {_record['condition_id']!r}, "
-                "active:0) first, or have someone carry them."
-            )
+    _block_restrained_moves(ctx, sd, sc, _holder_pool,
+                            live_restraints=_live_restraints, amap=_hold_amap)
 
     signals = _strip_blank_diff_placeholders(sd)
     for name in _untracked_restraint_subjects(
@@ -5556,6 +5577,13 @@ def director_resolve(ctx, nonce, _corrections=None):
         # the one place the beat has to KNOW about it.
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "variant_seed": nonce,
+        # Walks under way that this beat did not mention, which the lean
+        # payload had dropped: the author could not write the leg on the page
+        # nor anything that stops it, and the decision model is asked per
+        # walker whether the account stops them (`director_prose.
+        # walks_in_flight`). Absent on a beat with none.
+        **({"travel_in_flight": payload["travel_in_flight"]}
+           if payload.get("travel_in_flight") else {}),
     }
     _model_payload = _extension_director_payload(
         ctx, _model_payload, phase="resolve")
@@ -7042,6 +7070,27 @@ def director_resolve(ctx, nonce, _corrections=None):
         # architecture and may re-run the source event.
         _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                               tracked_names)
+    else:
+        # THE STRUCTURAL FLOORS RUN ON EVERY BEAT. The seam above is gated
+        # because most of it reads the prose (`resolved_event`), and those
+        # readings are unmeasured on a prose beat's synthesised account: dry-
+        # run over the 33 distinct prose beats stored on 2026-09-28, none of
+        # them would have fired, so there is nothing yet to enable them on.
+        # The parts that read only state run here, and a prose beat skipping
+        # them was an engine failure no model could see: the encoder moving a
+        # bound body, a line spoken through a blocked mouth reaching every
+        # listener clean, an empty placeholder committed as a record, and a
+        # scale its own enclosure rules out committed without a word. (The
+        # shed-garment recovery is the commit's as well, and runs there.)
+        for _notice in _stamp_dialogue_articulation(
+                sc, out["state_diff"], out.get("dialogue_log") or []):
+            ctx.tell_director(_notice)
+        _block_restrained_moves(ctx, out["state_diff"], sc,
+                                _restraint_holder_pool(sc, tracked_names))
+        _strip_blank_diff_placeholders(out["state_diff"])
+        for _conflict in _scale_relation_conflicts(sc, out["state_diff"]):
+            ctx.add_warning(_conflict)
+            ctx.tell_director(_conflict)
 
     # LAST, and the order is the whole fix. This guard DELETES a position, and
     # a deletion is indistinguishable from an omission: the reconciliation pass

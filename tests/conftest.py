@@ -150,8 +150,11 @@ def prose_director(temp_db, monkeypatch):
     The check-and-repair pass is off too, though it is on in play
     (2026-09-28): a decision model that answers yes to everything would flag
     every sentence missing and every write wrong, and the pass has its own
-    tests with their own fakes (`tests/test_encoder_repair.py`).
+    tests with their own fakes (`tests/test_encoder_repair.py`). For the same
+    reason a walk under way is never stopped (`WALK_PREFIX` answers no): a
+    test that means to stop one says so with its own answer.
     """
+    from agents.director_prose import WALK_PREFIX
     from llm import decisions
 
     temp_db.set_setting("prose_contract_room_agent", "0")
@@ -160,7 +163,9 @@ def prose_director(temp_db, monkeypatch):
 
     def answer(state, questions):
         asked.append({"state": state, "questions": dict(questions)})
-        return {key: {"type": "noul", "noul": 0.99} for key in questions}
+        return {key: {"type": "noul",
+                      "noul": 0.01 if key.startswith(WALK_PREFIX) else 0.99}
+                for key in questions}
 
     monkeypatch.setattr(decisions, "OVERRIDE", answer)
     return asked

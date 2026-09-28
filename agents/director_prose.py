@@ -60,6 +60,7 @@ from llm.prompts import (
     ROOM_AUTHOR_CHANNELS,
     encoder_parts,
     jev_channel_questions,
+    jev_question,
     prose_director_prompt,
     unified_specialist_prompt,
 )
@@ -311,6 +312,25 @@ def _jev_state(prose, model_payload, owed=None):
 #: Jev question keys for "does the beat enter this planned room".
 _ENTER_PREFIX = "enter__"
 
+#: Jev question keys for "does the passage stop this walker short of where
+#: they are going" -- one per walk under way (`walks_in_flight`).
+WALK_PREFIX = "walk__"
+
+
+def walks_in_flight(model_payload):
+    """`[{subject, destination}]`: the walks already under way that this beat
+    did not mention (`travel_in_flight`, which the resolve hands the author),
+    the destination by the name the story calls it."""
+    walks = []
+    for entry in (model_payload or {}).get("travel_in_flight") or []:
+        if not isinstance(entry, dict):
+            continue
+        subject = str(entry.get("subject") or "").strip()
+        destination = str(entry.get("destination_name") or entry.get("destination") or "").strip()
+        if subject and destination:
+            walks.append({"subject": subject, "destination": destination})
+    return walks
+
 
 def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
                     owed=None):
@@ -332,7 +352,21 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
     And, for each channel an installed extension keeps at this stage
     (`api.add_director_channel`), its own question in its own words, judged
     against the same threshold. Selected, it rides `selected` beside the
-    engine's channels; fails open with them."""
+    engine's channels; fails open with them.
+
+    And, for each walk already under way that the beat did not mention
+    (`walks_in_flight`), whether the passage stops the walker short of where
+    they are going; `record["stopped"]` lists the walkers it does, which
+    `director_movement._travel_continues` holds and whose walks it ends.
+    Silence continues a declared walk, so this fails the other way: a walk
+    the model could not judge carries on, as the player declared it. The
+    question was the causal Director's own field (`travel_interrupted`), and
+    nothing asked it once the Director wrote prose. Its wording was probed
+    on the live decision model before it shipped (2026-09-28): 18 passages
+    three times each -- the owner's db held one beat the causal Director had
+    stopped and four it let walk on, the rest designed across the class --
+    51 of 54 right, no walk stopped that carried on (the highest carrying-on
+    score 0.31), and the one miss a cart overturned across the lane."""
     candidates = candidate_channels(stage, facts)
     parts = parts_of(candidates, ctx.language)
     questions = jev_channel_questions(candidates + parts, ctx.language)
@@ -352,6 +386,12 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
             "instructions": f"Does the passage enter, open onto or reveal the place "
                             f"called \"{name}\"? Answer no when it is only mentioned "
                             "or lies beyond a door nobody opens."}
+    walks = walks_in_flight(model_payload)
+    for walk in walks:
+        text = jev_question("walk_stopped", ctx.language, name=walk["subject"],
+                            destination=walk["destination"])
+        if text:
+            battery[WALK_PREFIX + walk["subject"]] = {"type": "noul", "instructions": text}
     try:
         answers = decisions.decide(_jev_state(prose, model_payload, owed), battery)
     except Exception as exc:
@@ -361,7 +401,15 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
         record["selected"] = list(candidates) + list(extension)
         record["parts"] = list(parts)
         record["entered"] = list(planned)
+        if walks:
+            record["stopped"] = []
         return list(record["selected"]), record
+    if walks:
+        record["walks"] = {
+            walk["subject"]: round(decisions.probability(
+                answers.get(WALK_PREFIX + walk["subject"])), 4) for walk in walks}
+        record["stopped"] = [subject for subject, p in record["walks"].items()
+                             if p >= record["threshold"]]
     probabilities = {channel: round(decisions.probability(answers.get(channel)), 4)
                      for channel in [*questions, *extension]}
     selected = [channel for channel in candidates
