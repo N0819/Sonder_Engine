@@ -409,8 +409,14 @@ def without_raw_text(event_inputs):
 def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
     """The prose, the Director's own inputs without the text a player typed
     (`without_raw_text`), and the union of the world slices each selected
-    channel's owner would have received. A key two owners both supply is
-    taken once (the first owner in canonical order)."""
+    channel's owner would have received.
+
+    A KEY THAT IS A CHANNEL COMES FROM THAT CHANNEL'S OWNER. Four owners
+    carry `rooms` as a name index -- enough to address a room -- and only the
+    spatial owner carries the records, adjacency and `vertical` included.
+    Keeping the first slice to supply a key meant an encoder granted `rooms`
+    edited a graph it was never shown (found 2026-09-27). Any other key two
+    owners both supply is taken once, from the first in canonical order."""
     payload = {
         "prose": prose,
         "event_inputs": without_raw_text(model_payload.get("event_inputs") or []),
@@ -431,7 +437,7 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
             ctx.add_warning(f"prose contract: {name} slice unavailable: {exc}")
             continue
         for key, value in own.items():
-            if key in payload:
+            if key in payload and _owner(key) != name:
                 continue
             payload[key] = value
     return payload

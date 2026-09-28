@@ -16,7 +16,7 @@ Director (`tests/director_fakes.py`), and each item below is a test that
 passed on the causal path's fixtures and fails on the prose path's -- pinned
 as a STRICT xfail, so the day one closes the suite says so -- or a rule the
 deleted sheets taught that no prose card carries, or a defect the port
-surfaced on the path that remains (items 6-14). The causal Director did most
+surfaced on the path that remains (items 6-13). The causal Director did most
 of these things; nothing on the prose path does yet.
 
 1. **Hard player authority refuses nothing.** `apply_player_authority`
@@ -125,26 +125,21 @@ of these things; nothing on the prose path does yet.
    `dialogue_log` but lands in `state_diff.speech`, the resolve's sequence
    and its rows -- measured: in no view and in no self-memory, but in the
    record later beats read.
-9. **The encoder is not shown the room graph** a channel's owner was: the
-    first owner to supply a payload key wins, and for `rooms` that is not
-    the spatial owner, so the encoder never sees `adjacent` or `vertical`
-    (`tests/test_director_payload_shows_its_ledgers.py` holds its attic
-    assert back).
-10. **A malformed encoder transform crashes or vanishes.** A list-valued
+9. **A malformed encoder transform crashes or vanishes.** A list-valued
     `positions` transform crashes `declared_moves`; a transform wrapped in
     `patch.state_diff` reaches no owner and is dropped without a word; and
     the encoder's patch path has no entity-sibling hoist, so a sibling field
     nested inside `entities` takes the real entity down with it (the
     hand-path tests for chat 80's shape went with the hands).
-11. **The encoder's same-provider repair loses its sheet.** The rebuild is
+10. **The encoder's same-provider repair loses its sheet.** The rebuild is
     sent `repair_json` alone with an empty example, where the causal hands
     kept their own sheet on it (the fallback candidate keeps it)
     (`tests/test_capture_records_every_provider_call.py`, strict xfail).
-12. **Every interpret builds all five world views** (crowds, artifacts,
+11. **Every interpret builds all five world views** (crowds, artifacts,
     couriers, carried reports, unratified claims): the decision model's
     candidates are read from the same facts before it answers, so the C8
     saving (48 ms of 205 ms on a 307-body town) is gone.
-13. **Card findings, each a prompt edit and so the owner's:** the encoder's
+12. **Card findings, each a prompt edit and so the owner's:** the encoder's
     `contact_ops` chunk (en and ja) names `item_matches` and
     `target_matches`, which no payload carries; `entities__examined` ships
     only with its channel, and the `entities` question answers no for a
@@ -154,7 +149,7 @@ of these things; nothing on the prose path does yet.
     room author's do, by their owners); and the prompt editor shows no
     turn-pipeline Director sheet, because `prose_contract.*` is not in
     `DEFAULT_PROMPTS`.
-14. **Dead code the deletion left.** `_note_for`, `_SPECIALIST_DICT_CHANNELS`
+13. **Dead code the deletion left.** `_note_for`, `_SPECIALIST_DICT_CHANNELS`
     / `_SPECIALIST_LIST_CHANNELS`, the `required_channels` and verdict
     branches, `pressure_ticks`, `MINTED_THING_NAME_WORDS`, and
     `semantic_output_errors`' `director_interpret` / `director_resolve`

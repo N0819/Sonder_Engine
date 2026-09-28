@@ -411,7 +411,45 @@ def test_resolve_and_its_hands_see_the_room_interpret_just_authored(temp_db, pro
     assert causal["standing_relations"]["positions"]["Mara"] == "asserted_attic"
     assert enc["positions"]["Mara"] == "asserted_attic"
     assert enc["world_index"] == causal["world_index"]
+    # the full room record, as the spatial owner holds it
     assert "asserted_attic" in enc["rooms"], sorted(enc["rooms"])
+    assert enc["rooms"]["asserted_attic"]["adjacent"][0]["vertical"] == "down"
+
+
+def test_a_channel_key_comes_from_its_owner_whoever_supplied_it_first(
+        monkeypatch):
+    """Four owners carry `rooms` as a name index -- enough to address a room
+    -- and only the spatial owner carries the records, adjacency and
+    `vertical` included. The encoder's payload kept the FIRST slice to supply
+    a key, so an encoder granted `rooms` edited a graph it was never shown
+    (found 2026-09-27, porting the test above). A key that is a channel now
+    comes from that channel's owner, and a non-owner's copy never replaces
+    it, in either order."""
+    import agents.director_prose as director_prose
+
+    full_rooms = {"attic": {"name": "The Attic",
+                            "adjacent": [{"to": "hall", "vertical": "down"}]}}
+    full_attire = {"Mara": {"wearing": ["coat"], "regions": {"torso": ["coat"]}}}
+    slices = {
+        # body answers first: its own `attire`, and a thin `rooms`
+        "body": {"rooms": {"attic": "The Attic"}, "attire": full_attire},
+        # spatial answers last: its own `rooms`, and a thin `attire`
+        "spatial": {"rooms": full_rooms, "attire": {"Mara": "coat"}},
+    }
+    monkeypatch.setattr(director_prose, "_specialist_payload",
+                        lambda name, *a: dict(slices.get(name, {})))
+
+    class _Ctx:
+        def add_warning(self, text):
+            raise AssertionError(text)
+
+    payload = director_prose.encoder_payload(
+        _Ctx(), {}, "The Attic's hatch stands open.", {}, {}, {},
+        ["attire", "rooms"])
+
+    assert payload["rooms"] == full_rooms
+    assert payload["attire"] == full_attire
+    assert payload["prose"] == "The Attic's hatch stands open."
 
 
 def test_the_ledger_table_covers_every_channel_a_hand_writes():

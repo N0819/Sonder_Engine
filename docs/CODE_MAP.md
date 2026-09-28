@@ -20,7 +20,7 @@
 | `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1859 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 1743 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
+| `agents/director_prose.py` | 1749 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1546 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 1099 |  | — |
@@ -401,14 +401,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 1489 | 168 lines |
-| `encode()` | 1145 | 110 lines |
-| `entity_keys_name_held_things()` | 928 | 86 lines |
-| `ledger_from_events()` | 1417 | 70 lines |
-| `dispatch()` | 1659 | 70 lines |
-| `implied_tools()` | 440 | 58 lines |
+| `run()` | 1495 | 168 lines |
+| `encode()` | 1151 | 110 lines |
+| `entity_keys_name_held_things()` | 934 | 86 lines |
+| `ledger_from_events()` | 1423 | 70 lines |
+| `dispatch()` | 1665 | 70 lines |
+| `implied_tools()` | 446 | 58 lines |
 | `select_channels()` | 297 | 56 lines |
-| `bind_new_places()` | 607 | 49 lines |
+| `bind_new_places()` | 613 | 49 lines |
 
 ### `agents/director_reconcile.py`
 
