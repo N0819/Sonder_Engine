@@ -1253,3 +1253,18 @@ def test_a_places_text_never_describes_who_is_in_it():
         assert "場所の文は、誰かが書き直すまで" in sheet
         assert "それが誰で、どう見え、どこに立ち、何をしていて、何を持ち、何を所有しているか" in sheet
         assert "出入口が開いているか閉まっているか、その向こうに何が見えるか" in sheet
+
+
+def test_a_place_the_world_holds_under_another_spelling_is_not_reserved():
+    """Chat 154 replays (2026-09-28): "The TARDIS console room" folded to
+    `the_tardis_console_room` beside the held `tardis_console_room`, and the
+    room author was started for a room it could only redraw."""
+    scene = {"rooms": {"tardis_console_room": {"name": "TARDIS Console Room"},
+                       "moonlit_beach": {"name": "Moonlit Beach"}}}
+    reserved = director_prose.reserve_places([
+        {"name": "The TARDIS console room", "size": "large", "shape": "round"},
+        {"name": "the beach", "size": "vast", "shape": "rectangle"},
+        {"name": "the time vortex", "size": "vast", "shape": "round"},
+    ], scene)
+    assert list(reserved) == ["the_time_vortex"]
+    assert reserved["the_time_vortex"]["name"] == "the time vortex"

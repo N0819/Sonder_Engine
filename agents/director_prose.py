@@ -720,9 +720,17 @@ def reserve_places(places, scene=None):
 
     Three simple fields and nothing else -- the room author does the complex
     work. The id is the engine's own fold of the name (`normalize_room_id`),
-    so both parallel workers hold it before either starts. A place whose id
-    the scene already holds is not new and is not reserved; a size or shape
-    outside the engine's vocabulary falls back to the engine's default."""
+    so both parallel workers hold it before either starts. A place the scene
+    already holds is not new and is not reserved -- under its id, and under
+    the name or words the world knows it by (`_held_room`, the one answer the
+    encoder's binding and the compiler read). By id alone, "The TARDIS
+    console room" folded to `the_tardis_console_room` beside the held
+    `tardis_console_room` on the chat 154 replays (2026-09-28): the room
+    author was started for a room it could only redraw, the redraw was
+    thrown away ("a place the world holds; it stands as it was"), and the
+    busy author kept the serial pass from building the beat's one genuinely
+    new place. A size or shape outside the engine's vocabulary falls back to
+    the engine's default."""
     from world.spatial import (DEFAULT_ROOM_SIZE, DEFAULT_SHAPE, ROOM_SIZES,
                                SHAPES, normalize_room_id)
     held = set(((scene or {}).get("rooms") or {}).keys()) if isinstance(scene, dict) else set()
@@ -732,7 +740,7 @@ def reserve_places(places, scene=None):
             continue
         name = str(place.get("name") or "").strip()
         rid = normalize_room_id(name)
-        if not rid or rid in held or rid in reserved:
+        if not rid or rid in held or rid in reserved or _held_room(scene, name):
             continue
         size = str(place.get("size") or "").strip().casefold()
         shape = str(place.get("shape") or "").strip().casefold()
