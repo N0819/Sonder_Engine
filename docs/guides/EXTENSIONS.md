@@ -322,7 +322,8 @@ cannot leave a stale file executing.
 | `api.provenance(chat_id)` | what you recorded when you provisioned it |
 | `api.generate_lived_location(chat_id, request)` | add an inhabited place — people, duties, goods, a prehistory (§7.6) |
 | `api.living_world_job(chat_id)` | whether a previous generation was interrupted (§7.6) |
-| `api.add_director_specialist(...)` | removed 2026-09-27 -- raises `ExtensionError` (see Director specialists, removed) |
+| `api.add_director_channel(name, *, question, instructions, list_shaped=False, stages=("resolve",), record=None)` | a channel of your own on the Director's record, granted by your own question to the decision model (see Director channels) |
+| `api.add_director_specialist(...)` | removed 2026-09-27 -- raises `ExtensionError`, naming `add_director_channel` |
 | `api.add_route(path, fn, methods=...)` | serve your own HTTP route |
 | `api.llm_json(system, payload, role=...)` / `api.llm_text(...)` | a model call on a configured role |
 | `api.add_model_lane(name, *, label=..., description=...)` | a model lane of your own in the host's settings; returns the role string |
@@ -429,8 +430,9 @@ def apply(turn):
 ```
 
 `turn` is a `CommittedTurn`: `chat_id`, `turn_idx`, `turn_id`,
-`step_content(key)` (context first, then storage), and `state` — the per-story
-`ExtState`, already bound.
+`step_content(key)` (context first, then storage), `channel(name)` (what the
+Director wrote on one of your channels, see Director channels), and `state` —
+the per-story `ExtState`, already bound.
 
 This runs in `persist/commit.py`'s tail, **after** the turn's facts are durable, inside a
 commit scope. A hook that raises produces a turn warning and an entry in the
@@ -451,7 +453,7 @@ api.add_commit_domain("critical", keep, on_error="fail")
 ```
 
 `view` is a `CommitView`: `chat_id`, `turn_idx`, `turn_id`, `step_content(key)`,
-`state`, and `char_state(char_id)`. State reached from here is **ungated** —
+`channel(name)`, `state`, and `char_state(char_id)`. State reached from here is **ungated** —
 outside a transaction the gate exists to stop a write surviving a rollback, and
 inside one that hazard is gone.
 
@@ -536,22 +538,77 @@ Four edges, each deliberate:
   it inherits `default`; a manifest choosing a model would be an install
   choosing spend.
 
-### Director specialists (removed 2026-09-27)
+### Director channels
 
-`api.add_director_specialist` raises `ExtensionError`. It added a sixth scoped
-model call to the Director's fan-out, and the fan-out is gone: the Director
-writes prose, and ONE encoder records every engine channel from its own card,
-which is built from in-tree chunks an extension cannot add to. The call is
-kept only so an extension written against it fails at registration with that
-sentence rather than an `AttributeError`.
+A channel of your own on the Director's record of a beat, written by the same
+encoder that writes the engine's, and granted by a question of your own to the
+decision model:
 
-What a family of your own did -- record your judgement of a beat -- you do
-where you always acted on it: read the resolve from your own commit domain
-(`api.add_commit_domain`, inside the turn's transaction) or from a stage of
-your own spliced after `director_resolve` (`api.add_stage`), and keep what you
-decide in your own `chat_state`. Your `ext:` channels were evidence and never
-causality -- no engine commit domain read them -- so nothing the engine did
-changes with them gone.
+```python
+api.add_director_channel(
+    "quests",
+    question="Does the passage advance, complete or abandon something the "
+             "party set out to do?",
+    instructions="One entry per step the passage takes toward a quest: "
+                 '{"quest": <quest id>, "step": <what was done>}.',
+    list_shaped=True,
+    record=lambda chat_id: open_quests(chat_id),   # optional
+)
+
+def keep(view):
+    for entry in view.channel("quests") or []:
+        advance(view.state, entry)
+
+api.add_commit_domain("quests", keep)
+```
+
+What happens each beat, at the stages the channel names (`("resolve",)` by
+default, the finished beat):
+
+1. **The decision model is asked your question**, verbatim, beside the
+   engine's own channel questions and against the same threshold. It is shown
+   the Director's account and little else, so ask a yes or no about the
+   PASSAGE. The words matter: an option is read by its words, so state the
+   class of change you record and let every instance fall under it -- naming
+   the case you want excluded tends to pull the answer toward it.
+2. **Granted, the encoder holds your channel.** Your `instructions` join its
+   sheet under the channel's name (`ext:<id>:<name>`, the key it writes) and
+   below a header the language pack owns; `record`'s answer, when you give
+   one, is handed over as `extension_records[<channel>]`, so a change is
+   written against what already stands. Refused, the encoder never hears of
+   it. A decision model that cannot answer grants every channel, yours
+   included -- a longer sheet, never a lost change.
+3. **What it wrote is collected for you**, folded across the beat in event
+   order: a list-shaped channel's entries concatenated (one entry written
+   bare is a list of one), any other's objects merged, a later event's key
+   winning. It is filed on the stage's output under
+   `orchestration.extension_channels`, and `view.channel(name)` (inside the
+   transaction) or `turn.channel(name)` (after it) reads it back -- yours
+   only, by your own name.
+
+What it is not:
+
+- **Not causality.** No engine domain reads an `ext:` channel. What the
+  encoder wrote is evidence you act on; the world changes only through the
+  engine's own channels. To make something true in the world, make it true
+  there (§8) and let perception distribute it.
+- **Not a place for a guess.** A value of the other shape, or a write at a
+  stage the channel does not name, is dropped and said so on the step. So is
+  an `ext:` key nothing registered.
+- **Not requestable.** The encoder can ask for an engine channel it lacks
+  mid-beat; yours is granted by your question alone.
+
+`"interpret"` in `stages` is the declared attempt, before anything is
+adjudicated: a record of what was TRIED, never of what happened.
+
+#### The specialists this replaced (removed 2026-09-27)
+
+`api.add_director_specialist` raises `ExtensionError`, naming
+`add_director_channel`. It added a sixth scoped model call to the causal
+Director's fan-out, and the fan-out is gone: the Director writes prose, and
+ONE encoder records every channel. The call is kept only so an extension
+written against it fails at registration with that sentence rather than an
+`AttributeError`.
 
 ### Rerouting what a mind receives
 
@@ -1048,6 +1105,7 @@ The names today:
 | `stage_anchors` | `api.add_stage` with the anchor grammar below |
 | `commit_domains` | `api.add_commit_domain`, including `on_error="fail"` |
 | `director_corrections` | `api.on_director_result` + `api.correction` |
+| `director_channels` | `api.add_director_channel` — a channel of your own, granted by your own question to the decision model |
 | `payload_routing` | `api.on_character_payload`, with attribution |
 | `context_blocks` | `api.narration_context` / `api.director_context` |
 | `documents` | `api.documents()` with `verify` |

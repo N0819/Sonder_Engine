@@ -92,8 +92,7 @@ of these things; nothing on the prose path does yet.
      "a sky flashes when `electrical` says so, and no name implies it".
    Each is a prompt edit to every story, which is the owner's to make.
 5. **Tooling.** `tools/contract_bench.py` benches no prose Director step (its
-   causal steps went with it), and extension Director channels have no path:
-   `add_director_specialist` raises (`docs/guides/EXTENSIONS.md`).
+   causal steps went with it).
 6. **The Director's authority limits warn and never correct.** A character
    handed an act or a line it never declared, a player handed one, and a
    quoted line no declaration supports are all read on the prose

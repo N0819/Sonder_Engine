@@ -468,6 +468,7 @@ class _Registration:
     result_validators: list[dict] = field(default_factory=list)
     routes: dict[str, dict] = field(default_factory=dict)
     model_lanes: list[dict] = field(default_factory=list)
+    director_channels: list[dict] = field(default_factory=list)
     error: str | None = None
 
 
@@ -561,6 +562,70 @@ def _record_model_lane(ext_id, name, role, *, label, description) -> None:
         record.model_lanes.append({"ext_id": ext_id, "name": name,
                                    "role": role, "label": label,
                                    "description": description})
+
+
+def _record_director_channel(ext_id, spec) -> None:
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        # Replace, not append: re-enabling an extension in a live process
+        # re-runs its register(), and one channel declared twice is one
+        # channel, not two questions to the decision model.
+        record.director_channels = [item for item in record.director_channels
+                                    if item["channel"] != spec["channel"]]
+        record.director_channels.append(dict(spec))
+
+
+def director_channels(stage=None) -> list[dict]:
+    """Every live extension's Director channels (`api.add_director_channel`),
+    or only those `stage` can carry, in channel order.
+
+    Live means enabled AND registered: an extension whose `register(api)`
+    raised holds no channel, whatever it declared before the error. Copies,
+    so a caller may annotate what it is handed without reaching the
+    registration.
+    """
+    try:
+        activate()
+    except Exception:                             # pragma: no cover - defensive
+        log.exception("extension activation failed while listing Director "
+                      "channels")
+    with _lock:
+        specs = [dict(spec) for record in _registered.values()
+                 if not record.error for spec in record.director_channels]
+    if stage is not None:
+        specs = [spec for spec in specs if str(stage) in spec["stages"]]
+    specs.sort(key=lambda spec: spec["channel"])
+    return specs
+
+
+def director_channel_records(chat_id, channels) -> tuple[dict, list[str]]:
+    """`(records, failures)`: the current state each of these channels'
+    extensions keeps (`add_director_channel(record=...)`), for the encoder
+    about to write them.
+
+    Only a channel with a reader contributes, and only a value JSON can
+    carry, since the encoder is sent JSON. A reader that raises or answers
+    anything else is left out and named in `failures`: the beat is encoded
+    without it rather than lost to it -- the same total failure posture as
+    every other seam here.
+    """
+    wanted = {str(channel) for channel in channels or ()}
+    records, failures = {}, []
+    for spec in director_channels():
+        reader = spec.get("record")
+        if spec["channel"] not in wanted or not callable(reader):
+            continue
+        try:
+            value = reader(chat_id)
+            json.dumps(value)
+        except Exception as exc:
+            log.exception("extension %s channel %s: record reader failed",
+                          spec["ext_id"], spec["name"])
+            failures.append(f"{spec['channel']}: {type(exc).__name__}: {exc}")
+            continue
+        if value is not None:
+            records[spec["channel"]] = value
+    return records, failures
 
 
 def _record_route(ext_id, path, fn, methods) -> None:
@@ -1749,7 +1814,8 @@ __all__ = [
     "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
     "SonderExtensionAPI", "StepView", "TreeAudit", "activate",
     "apply_plan_splices", "asset_path", "audit_extension_source",
-    "check_update", "check_updates", "disable_extension",
+    "check_update", "check_updates", "director_channel_records",
+    "director_channels", "disable_extension",
     "disabled_reasons",
     "dispatch_character_payload", "dispatch_director_payload",
     "validate_director_result",

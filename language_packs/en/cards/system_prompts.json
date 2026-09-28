@@ -248,6 +248,9 @@
     "encoder_repair": {
       "$text": "prose_contract/encoder_repair.txt"
     },
+    "encoder_extensions": {
+      "$text": "prose_contract/encoder_extensions.txt"
+    },
     "check_missing_event": {
       "$text": "prose_contract/check_missing_event.txt"
     },

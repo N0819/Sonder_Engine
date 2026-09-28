@@ -429,7 +429,8 @@ def encoder_definition(channel, language=None):
     return head[:cut + 1] if cut > 0 else head
 
 
-def unified_specialist_prompt(channels, language=None, parts=None):
+def unified_specialist_prompt(channels, language=None, parts=None, *,
+                              extensions=()):
     """The prose contract's encoder sheet, from its own card.
 
     The core, then every granted channel's `encoder.<channel>` chunk in
@@ -443,7 +444,14 @@ def unified_specialist_prompt(channels, language=None, parts=None):
     (owner, 2026-09-24: "specific prompts for this version of the director
     sound necessary? Otherwise we get a lot of weird confusing wording").
     The adult overlay is appended when any hand whose channel shipped would
-    have received it on its own sheet."""
+    have received it on its own sheet.
+
+    `extensions` are the granted channels of this story's extensions, as
+    `(channel, instructions, list_shaped)` (`api.add_director_channel`):
+    after the engine's chunks, under the card's own header
+    (`prose_contract.encoder_extensions`), each channel's name and its
+    extension's instructions verbatim. Their names are the grant: a channel
+    in `channels` with no entry here reaches no sheet."""
     card = _prompt_card(language)
     encoder = card["encoder"]
     granted = set(channels or ())
@@ -467,6 +475,12 @@ def unified_specialist_prompt(channels, language=None, parts=None):
             sections.extend(
                 piece(part) for part in encoder
                 if part.startswith(prefix) and (picked is None or part in picked))
+    if extensions:
+        block = [str(card["prose_contract"]["encoder_extensions"]).strip("\n")]
+        for channel, instructions, list_shaped in extensions:
+            head = f"`{channel}`" + (" `(list)`" if list_shaped else "")
+            block.append(f"{head}\n{str(instructions).strip()}")
+        sections.append("\n\n".join(block))
     sheet = "\n\n".join(section.strip("\n") for section in sections) + "\n"
     overlay = next((nsfw_overlay(f"director_{name}", card) for name in hands
                     if nsfw_overlay(f"director_{name}", card)), "")

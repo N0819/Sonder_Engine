@@ -1191,6 +1191,23 @@ class StepView:
         return value if isinstance(value, list) else []
 
 
+def _director_channel_value(content, ext_id, name):
+    """One extension channel's value on a stored Director step, or None.
+
+    Kept under `orchestration.extension_channels`: the stage's schema dump
+    keeps `orchestration`, a declared engine-authored field, and drops any
+    key it does not declare.
+    """
+    if not isinstance(content, dict):
+        return None
+    orchestration = content.get("orchestration")
+    values = (orchestration.get("extension_channels")
+              if isinstance(orchestration, dict) else None)
+    if not isinstance(values, dict):
+        return None
+    return values.get(f"ext:{ext_id}:{str(name or '').strip()}")
+
+
 class CommitView:
     """What an `add_commit_domain` callback receives: a turn mid-transaction.
 
@@ -1242,6 +1259,14 @@ class CommitView:
             return getter(key)
         except Exception:
             return None
+
+    def channel(self, name, *, stage="resolve"):
+        """What the Director wrote this beat on one of YOUR channels
+        (`api.add_director_channel`), or None when it wrote nothing there.
+        A list-shaped channel's entries arrive in event order; any other
+        channel's objects merged, a later event's key winning."""
+        return _director_channel_value(
+            self.step_content(f"director_{stage}"), self._api.id, name)
 
 
 class PayloadContext:
@@ -1480,6 +1505,7 @@ class CommittedTurn:
 
     def __init__(self, api, ctx):
         self._ctx = ctx
+        self._ext_id = api.id
         chat = getattr(ctx, "chat", None)
         turn = getattr(ctx, "turn", None)
         self.chat_id = getattr(chat, "id", None)
@@ -1487,6 +1513,12 @@ class CommittedTurn:
         self.turn_id = getattr(turn, "id", None)
         self.state = (_world_state(api.id, self.chat_id)
                       if self.chat_id is not None else None)
+
+    def channel(self, name, *, stage="resolve"):
+        """What the Director wrote this beat on one of your channels, as
+        `CommitView.channel` reads it -- after the turn is durable."""
+        return _director_channel_value(
+            self.step_content(f"director_{stage}"), self._ext_id, name)
 
     def step_content(self, key):
         getter = getattr(self._ctx, "get", None)
@@ -1632,6 +1664,9 @@ HOST_CAPABILITIES = frozenset({
     # `api.narration_context` / `api.director_context` -- standing per-story
     # blocks that colour what the narrator and the Director are told.
     "context_blocks",
+    # `api.add_director_channel` -- a channel of your own on the Director's
+    # record of a beat, granted by your own question to the decision model.
+    "director_channels",
     # `api.on_director_result` + `api.correction` -- refuse a Director result
     # with a coded correction rather than after the fact.
     "director_corrections",
@@ -1808,6 +1843,89 @@ class SonderExtensionAPI:
         _record_commit_domain(self.id, name, fn, on_error)
         return f"ext:{self.id}:{name}"
 
+    def add_director_channel(self, name, *, question, instructions,
+                             list_shaped=False, stages=("resolve",),
+                             record=None):
+        """A channel of your own on the Director's record of a beat, granted
+        by a question of your own to the decision model.
+
+        Each beat the decision model reads the Director's account and asks,
+        for every channel the stage can carry, whether the passage touches
+        it. `question` is asked beside the engine's, in your words: a yes or
+        no about the PASSAGE ("Does the passage ...?"), because the passage
+        is all it is shown. When the answer clears the story's threshold the
+        encoder holds your channel for that beat -- `instructions` are added
+        to its sheet under the channel's name, and it writes the channel into
+        its transforms like any of the engine's. When it does not, the
+        encoder never hears of it. A decision model that cannot answer
+        grants every channel, yours included: a longer sheet, never a lost
+        change.
+
+        What the encoder wrote is yours to act on, and nothing else acts on
+        it: no engine domain reads an `ext:` channel. Read it with
+        `view.channel(name)` in an `add_commit_domain` callback, inside the
+        turn's transaction, or `turn.channel(name)` from `on_turn_committed`.
+
+        `list_shaped`: the value is a list of entries, concatenated across
+        the beat's events in order. Otherwise it is an object, merged across
+        events (a later event's key wins). A value of the other shape is
+        dropped and said so on the step; one entry written bare, without its
+        list, is read as a list of one.
+
+        `stages`: where the channel may be written. `("resolve",)` by
+        default, the finished beat. `"interpret"` is the declared attempt
+        before anything is adjudicated -- a record of what was TRIED, never
+        of what happened. A channel written at a stage it does not name is
+        dropped and said so.
+
+        `record`: optional `fn(chat_id)` answering your channel's current
+        state, anything JSON can carry. It is read when the channel is
+        granted and handed to the encoder under `extension_records`, so a
+        change is written against what already stands -- the rule the
+        engine's own channels follow. A reader that raises is left out and
+        noted on the step; the beat is encoded without it.
+
+        Returns `ext:<id>:<name>`, the key the encoder writes it under.
+        """
+        name = str(name or "").strip()
+        if not _STAGE_KEY.match(name):
+            raise ExtensionError(
+                f"extension {self.id!r} Director channel {name!r}: the name "
+                "must be lowercase letters, digits, '_' or '-', starting with "
+                "a letter")
+        question = str(question or "").strip()
+        instructions = str(instructions or "").strip()
+        if not question:
+            raise ExtensionError(
+                f"extension {self.id!r} Director channel {name!r} asks the "
+                "decision model no question, so nothing could ever grant it")
+        if not instructions:
+            raise ExtensionError(
+                f"extension {self.id!r} Director channel {name!r} gives the "
+                "encoder no instructions, so nothing could ever write it")
+        wanted = tuple(dict.fromkeys(
+            str(stage or "").strip() for stage in (
+                (stages,) if isinstance(stages, str) else (stages or ()))))
+        unknown = [stage for stage in wanted
+                   if stage not in ("interpret", "resolve")]
+        if not wanted or unknown:
+            raise ExtensionError(
+                f"extension {self.id!r} Director channel {name!r}: stages "
+                f"must name 'interpret' and/or 'resolve', not {unknown or wanted!r}")
+        if record is not None and not callable(record):
+            raise ExtensionError(
+                f"extension {self.id!r} Director channel {name!r}: record "
+                "must be a callable fn(chat_id)")
+        channel = f"ext:{self.id}:{name}"
+        from . import _record_director_channel
+        _record_director_channel(self.id, {
+            "channel": channel, "ext_id": self.id, "name": name,
+            "question": question, "instructions": instructions,
+            "list_shaped": bool(list_shaped), "stages": wanted,
+            "record": record,
+        })
+        return channel
+
     def add_director_specialist(self, name, *, channels=None, prompt=None,
                                 gate=None, role=None, label=None,
                                 list_channels=None):
@@ -1816,16 +1934,18 @@ class SonderExtensionAPI:
         This added a sixth scoped model call to the causal Director's fan-out.
         That Director, its five specialists and the fan-out were deleted on
         2026-09-27: the Director writes prose and ONE encoder records every
-        channel, so a family of one's own has nothing to run on. An extension
-        that records its own evidence can still do so from `add_commit_domain`
-        or `add_stage`. Raised rather than removed, so an extension written
-        against the old API fails at registration with this sentence instead
-        of an `AttributeError`.
+        channel, so a family of one's own has nothing to run on. What one was
+        for -- a record of your own, written from the beat -- is
+        `add_director_channel`: a channel the one encoder writes, granted by
+        your own question to the decision model. Raised rather than removed,
+        so an extension written against the old API fails at registration
+        with this sentence instead of an `AttributeError`.
         """
         raise ExtensionError(
             f"extension {self.id!r} specialist {name!r}: the Director no longer "
-            "fans out to specialists (removed 2026-09-27); record your own "
-            "evidence from add_commit_domain or add_stage")
+            "fans out to specialists (removed 2026-09-27); add a channel of "
+            "your own with add_director_channel, which the one encoder writes "
+            "when your own question to the decision model grants it")
 
     def on_character_payload(self, fn):
         """Alter what one mind is about to be given. The routing seam.

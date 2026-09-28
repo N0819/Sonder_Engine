@@ -129,10 +129,27 @@ def _owner(channel):
     return None
 
 
+#: An extension's channel is `ext:<extension>:<name>`
+#: (`api.add_director_channel`); no engine channel is spelled this way.
+EXTENSION_CHANNEL_PREFIX = "ext:"
+
+
+def _extension_channels(stage=None):
+    """The live extensions' Director channels `stage` can carry (every one
+    when None), or none when the extension runtime cannot answer -- a broken
+    extension must not cost the beat."""
+    try:
+        import extension_runtime
+        return extension_runtime.director_channels(stage)
+    except Exception:
+        return []
+
+
 def candidate_channels(stage, facts=None):
-    """Every channel this story keeps that this stage can carry, in canonical
-    hand order. Extension families are left out: their sheets are not built
-    from the engine's chunks, so the one encoder cannot absorb them."""
+    """Every engine channel this story keeps that this stage can carry, in
+    canonical hand order. An extension's channel is not a candidate here: it
+    has no chunk in the card, and is asked by its own question
+    (`select_channels`)."""
     facts = facts if facts is not None else {}
     out = []
     for spec in SPECIALISTS.values():
@@ -310,15 +327,24 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
     And, for each candidate channel with PARTS in the encoder card
     (`<channel>__<part>`: the rules for a rarer kind of change within it),
     whether the passage needs that part; `record["parts"]` lists the ones
-    that ship, only ever with their own channel. Fails open: every part."""
+    that ship, only ever with their own channel. Fails open: every part.
+
+    And, for each channel an installed extension keeps at this stage
+    (`api.add_director_channel`), its own question in its own words, judged
+    against the same threshold. Selected, it rides `selected` beside the
+    engine's channels; fails open with them."""
     candidates = candidate_channels(stage, facts)
     parts = parts_of(candidates, ctx.language)
     questions = jev_channel_questions(candidates + parts, ctx.language)
+    extension = {spec["channel"]: spec["question"]
+                 for spec in _extension_channels(stage)}
     planned = planned if isinstance(planned, dict) else {}
     record = {"candidates": candidates, "threshold": _threshold()}
+    if extension:
+        record["extension_candidates"] = list(extension)
     t0 = time.time()
     battery = {channel: {"type": "noul", "instructions": text}
-               for channel, text in questions.items()}
+               for channel, text in {**questions, **extension}.items()}
     for rid, brief in planned.items():
         name = str((brief or {}).get("name") or rid)
         battery[_ENTER_PREFIX + str(rid)] = {
@@ -332,15 +358,17 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
         record.update(failed=str(exc), seconds=round(time.time() - t0, 3))
         ctx.add_warning(f"{stage}: decision model unavailable, every channel "
                         f"granted (fail-open): {exc}")
-        record["selected"] = list(candidates)
+        record["selected"] = list(candidates) + list(extension)
         record["parts"] = list(parts)
         record["entered"] = list(planned)
-        return list(candidates), record
+        return list(record["selected"]), record
     probabilities = {channel: round(decisions.probability(answers.get(channel)), 4)
-                     for channel in questions}
+                     for channel in [*questions, *extension]}
     selected = [channel for channel in candidates
                 if channel not in questions
                 or probabilities.get(channel, 0.0) >= record["threshold"]]
+    selected += [channel for channel in extension
+                 if probabilities.get(channel, 0.0) >= record["threshold"]]
     chosen = [part for part in parts
               if part_channel(part) in selected
               and (part not in questions
@@ -441,6 +469,22 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
             if key in payload and _owner(key) != name:
                 continue
             payload[key] = value
+    # An extension's channel has no owner here: ITS extension keeps its
+    # record, if it keeps one, and hands it over the same way.
+    granted = [c for c in channels if str(c).startswith(EXTENSION_CHANNEL_PREFIX)]
+    if granted:
+        try:
+            import extension_runtime
+            chat = ctx.chat
+            records, failures = extension_runtime.director_channel_records(
+                chat["id"] if isinstance(chat, dict) else chat.id, granted)
+        except Exception as exc:
+            records, failures = {}, [f"{type(exc).__name__}: {exc}"]
+        for failure in failures:
+            ctx.add_warning(f"prose contract: extension record unavailable "
+                            f"({failure}); encoded without it")
+        if records:
+            payload["extension_records"] = records
     return payload
 
 
@@ -1200,11 +1244,24 @@ def transforms_as_written(events):
     return out
 
 
+def _extension_sections(channels):
+    """`(channel, instructions, list_shaped)` for every granted extension
+    channel still registered, in grant order: what the encoder's sheet adds
+    for it (`unified_specialist_prompt(extensions=)`)."""
+    granted = [c for c in channels if str(c).startswith(EXTENSION_CHANNEL_PREFIX)]
+    if not granted:
+        return []
+    specs = {spec["channel"]: spec for spec in _extension_channels()}
+    return [(c, specs[c]["instructions"], specs[c]["list_shaped"])
+            for c in granted if c in specs]
+
+
 def _call_encoder(ctx, channels, payload, parts):
     answer = _agent_json(
         "encoder",
         "director_specialist",
-        unified_specialist_prompt(channels, ctx.language, parts),
+        unified_specialist_prompt(channels, ctx.language, parts,
+                                  extensions=_extension_sections(channels)),
         dict(payload, granted_tools=list(channels) + list(parts)),
         temperature=0.2,
         max_tokens=None,
@@ -1559,6 +1616,49 @@ def ledger_from_events(events, known_channels=None):
     return rows, transforms
 
 
+def extension_channel_values(transforms, specs, stage, warn=None):
+    """`{channel: value}` for every extension channel the encoder wrote that
+    `stage` carries, folded across the beat in event order: a list-shaped
+    channel's entries concatenated (one entry written bare, without its list,
+    is a list of one), any other's objects merged, a later event's key
+    winning. ``specs`` are the registered channels, every stage's.
+
+    Read, or dropped out loud. A value of the other shape, or a channel its
+    extension keeps at another stage only, is named in a warning and left
+    out: the extension reads what it was promised, never the engine's guess
+    at what a malformed write meant."""
+    values = {}
+    for chrono in sorted(transforms):
+        for transform in transforms[chrono]:
+            for channel, value in transform["patch"].items():
+                spec = specs.get(channel)
+                if spec is None:
+                    continue
+                if stage not in spec["stages"]:
+                    if warn:
+                        warn(f"{stage}: the encoder wrote {channel}, which its "
+                             f"extension keeps at {', '.join(spec['stages'])} "
+                             "only; dropped")
+                    continue
+                if spec["list_shaped"] and isinstance(value, dict):
+                    value = [value]
+                shape = list if spec["list_shaped"] else dict
+                if not isinstance(value, shape):
+                    if warn:
+                        warn(f"{stage}: the encoder wrote {channel} as "
+                             f"{type(value).__name__}, and it takes "
+                             f"{'a list' if shape is list else 'an object'}; "
+                             "dropped")
+                    continue
+                if not value:
+                    continue
+                if shape is list:
+                    values.setdefault(channel, []).extend(value)
+                else:
+                    values.setdefault(channel, {}).update(value)
+    return values
+
+
 def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     """Author, select, encode, convert. Returns the stage's model output
     (`{"ledgers": rows}`) exactly where the causal Director's used to land,
@@ -1722,12 +1822,19 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     }
     if repair_record is not None:
         record["repair"] = repair_record
+    # AN EXTENSION'S CHANNEL IS COLLECTED FOR ITS EXTENSION, never split to
+    # an owner: no engine owner holds it and no engine domain reads it
+    # (`api.add_director_channel`; `attach_record` files what is collected).
+    registered = {spec["channel"]: spec for spec in _extension_channels()}
+    extension_values = extension_channel_values(transforms, registered, stage,
+                                                warn=ctx.add_warning)
     # A CHANNEL NO OWNER HOLDS IS DROPPED OUT LOUD. The owner split hands
     # every transform's channels to the owner that holds each; one nobody
     # holds reached no owner and vanished without a word.
     owned = {channel for spec in SPECIALISTS.values() for channel in spec["channels"]}
     unowned = sorted({channel for kept in transforms.values() for transform in kept
-                      for channel in transform["patch"] if channel not in owned})
+                      for channel in transform["patch"]
+                      if channel not in owned and channel not in registered})
     if unowned:
         record["unowned_channels"] = unowned
         ctx.add_warning(f"{stage}: the encoder wrote {', '.join(unowned)}, "
@@ -1735,7 +1842,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     for note in record["notes"]:
         ctx.add_warning(f"encoder: {note}")
     ctx[CTX_KEY] = {"record": record, "transforms": transforms,
-                    "channels": channels}
+                    "channels": channels, "extension_channels": extension_values}
     return {"ledgers": rows}
 
 
@@ -1813,13 +1920,17 @@ def dispatch(ctx, stage):
 
 def attach_record(ctx, out):
     """Persist the stage's prose-contract record beside the orchestration
-    record, after validation (whose schema dump would drop it)."""
+    record, after validation (whose schema dump would drop it) -- and what
+    the encoder wrote on the story's extension channels, under
+    `orchestration.extension_channels`, which `CommitView.channel` reads."""
     held = ctx.get(CTX_KEY) if hasattr(ctx, "get") else None
     if not held:
         return
     orchestration = out.setdefault("orchestration", {})
     if isinstance(orchestration, dict):
         orchestration["prose_contract"] = held["record"]
+        if held.get("extension_channels"):
+            orchestration["extension_channels"] = held["extension_channels"]
     try:
         ctx[CTX_KEY] = None
     except Exception:

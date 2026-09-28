@@ -20,7 +20,7 @@
 | `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1859 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 1826 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.schemas` |
+| `agents/director_prose.py` | 1937 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1546 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 1099 |  | — |
@@ -52,7 +52,7 @@
 | `llm/decisions.py` | 179 |  | `core.db` |
 | `llm/llm_quality.py` | 1181 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 621 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/prompts.py` | 635 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4997 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 6700 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -401,14 +401,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 1562 | 178 lines |
-| `encode()` | 1217 | 110 lines |
-| `entity_keys_name_held_things()` | 935 | 86 lines |
-| `ledger_from_events()` | 1489 | 71 lines |
-| `dispatch()` | 1742 | 70 lines |
-| `implied_tools()` | 447 | 58 lines |
-| `select_channels()` | 298 | 56 lines |
-| `bind_new_places()` | 614 | 49 lines |
+| `run()` | 1662 | 185 lines |
+| `encode()` | 1274 | 110 lines |
+| `entity_keys_name_held_things()` | 979 | 86 lines |
+| `ledger_from_events()` | 1546 | 71 lines |
+| `dispatch()` | 1849 | 70 lines |
+| `select_channels()` | 315 | 67 lines |
+| `implied_tools()` | 491 | 58 lines |
+| `encoder_payload()` | 438 | 51 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -741,12 +741,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `unified_specialist_prompt()` | 432 | 57 lines |
 | `preset_import_document()` | 269 | 51 lines |
-| `unified_specialist_prompt()` | 432 | 43 lines |
-| `_relocate_character_identity()` | 527 | 28 lines |
+| `_relocate_character_identity()` | 541 | 28 lines |
 | `normalize_preset()` | 116 | 26 lines |
 | `_preset_override()` | 213 | 22 lines |
-| `narrator_sections()` | 581 | 18 lines |
+| `narrator_sections()` | 595 | 18 lines |
 | `_director_sheets()` | 77 | 17 lines |
 | `prose_director_prompt()` | 333 | 17 lines |
 

@@ -1162,6 +1162,7 @@ class TestTheHostSaysWhatItOffers:
             "char_state": "char_state", "commit_domains": "add_commit_domain",
             "context_blocks": "narration_context",
             "director_corrections": "on_director_result",
+            "director_channels": "add_director_channel",
             "documents": "documents", "frame_state": "frame_state",
             "frame_coherent_reads": "at_frame",
             "model_lanes": "add_model_lane",
