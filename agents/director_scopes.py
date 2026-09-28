@@ -502,10 +502,9 @@ def note_key_targets(key):
     """Every hand and channel one `ledger_notes` key addresses.
 
     Returns ``{("hand", name), ("channel", channel), ...}`` -- empty when the
-    key reaches nothing. ONE RESOLVER, read by dispatch (`_ruling_for`), the
-    unrouted report (`_unrouted_rulings`) and the payload's note lookup
-    (`director_fanout._note_for`), so the three cannot disagree about what a
-    key means. In order:
+    key reaches nothing. Its one live reader since the causal hands went
+    (2026-09-27, with dispatch by ruling and the unrouted report) is
+    `manifest_category_targets`. In order:
 
     * a hand's own name, or a retired hand's (`RETIRED_HANDS`);
     * a channel's name, under the spellings `_note_key_forms` accepts;

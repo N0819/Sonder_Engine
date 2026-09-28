@@ -1044,8 +1044,8 @@ _UNREACHABLE_BY_DESIGN = {
     # that do not, and the omission detector would report it missing from
     # the next scene for ever. It reaches its hand the other way the
     # dispatch offers: a `ledger_notes` line keyed by the channel name,
-    # which `_note_for` routes by channel exactly as it routes one keyed by
-    # a hand.
+    # which `note_key_targets` routes by channel exactly as it routes one
+    # keyed by a hand.
     "sensory_events": "a one-beat signal, not a persistent change; reaches "
                       "the objects hand through a ledger note keyed by the "
                       "channel",

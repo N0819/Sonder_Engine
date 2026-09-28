@@ -26,7 +26,6 @@ from .director_scopes import (
     SPECIALISTS,
     _CHANNEL_SPECIALISTS,
     reads_dialogue,
-    note_key_targets,
     manifest_category_targets,
     _LIST_DELEGATED,
 )
@@ -188,20 +187,6 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
         "cast": [str(d.get("name") or "") for d in decls if d.get("name")],
         "addressed_figures": addressed_figures(interp),
         "public_sources": public_sources[:20],
-        # THE BEAT'S WORLD-PRESSURE TICKS, so dispatch can route them. A tick
-        # is a structured op the author emitted -- not prose -- and the
-        # must-tick floor forces one onto the page every third beat of a
-        # stalled pressure. Measured (chat 117, beats 60-115): 18 tremors in
-        # resolved_event, 9 of which never reached the player's view, because
-        # the author ticked without an `objects` note and the one hand that
-        # owns `sensory_events` was never dispatched. `_ruling_for` reads
-        # this as addressing that hand.
-        "pressure_ticks": [
-            {k: op.get(k) for k in ("id", "subject", "note") if op.get(k)}
-            for op in (out.get("world_pressure") or [])
-            if isinstance(op, dict)
-            and str(op.get("op") or "").strip().lower() == "tick"
-        ],
     }
 
 
@@ -251,8 +236,7 @@ def _interpret_beat_view(ctx, out, p_name):
         declared[p_name] = attempts
     return {
         "source": "causal_ledger",
-        # Same key the resolve view uses, so `_note_for` routes an
-        # interpret-side ruling with no change of its own.
+        # Same key the resolve view uses.
         "ledger_notes": _normalized_ledger_notes(out),
         "declaration": {
             "sequence": sequence,
@@ -380,37 +364,6 @@ def span_owners(item):
             owners.append(hand)
     return [name for name in SPECIALISTS if name in owners]
 
-
-def _note_for(notes, name):
-    """This hand's ruling, however the Director spelled the ledger.
-
-    Measured across seven beats on gemini-3.6-flash: 8 of 11 notes were keyed
-    by CHANNEL (`positions`, `conditions`, `overlays`, `entities`) and 1 by
-    specialist name, so a lookup by hand alone would have dropped nearly three
-    quarters of the Director's rulings. Two more arrived as `pose` and
-    `transit`; `pose` is `poses` with a letter missing -- a correct ruling
-    about the very ledger whose staleness motivated this channel, lost to a
-    plural.
-    """
-    if not notes:
-        return None
-    own = set(SPECIALISTS[name].get("channels") or ())
-    lines = []
-    for key, value in notes.items():
-        if not isinstance(value, str) or not value.strip():
-            continue
-        targets = note_key_targets(key)
-        if ("hand", name) in targets or any(
-                kind == "channel" and target in own
-                for kind, target in targets):
-            lines.append(value.strip())
-    if lines:
-        # Every line that reaches this hand, not the first: a note keyed by
-        # the hand and another keyed by one of its channels are two rulings
-        # about the same ledgers, and the resolver that decided both reach
-        # it (`note_key_targets`) is the one dispatch runs on.
-        return "\n".join(dict.fromkeys(lines))
-    return None
 
 def _grid_view(sc, room_ids):
     """Each room of the beat as the cells the senses judge it by: its size
@@ -808,12 +761,6 @@ def _specialist_payload(name, ctx, sc, view, extras):
         payload.update({
             "entities": sc.get("entities") or {},
             "rooms": rooms_index,
-            # The pressures the author ticked this beat: a signal the beat
-            # made, if it made one anywhere a body can perceive it. Shown to
-            # this hand because it is the hand that can encode one, and a
-            # tick it is not shown is a tick it cannot make perceptible.
-            **({"pressure_ticks": view["pressure_ticks"]}
-               if view.get("pressure_ticks") else {}),
             "notices": extras.get("notices") or [],
             "worn_garments": worn_index,
         })

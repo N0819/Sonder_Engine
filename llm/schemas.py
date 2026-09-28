@@ -4761,40 +4761,6 @@ SPECIALIST_CHANNELS = {
 # specialist patch channels where owned, but are no longer routing choices.
 CAUSAL_CATEGORY_REDIRECTS = {"overlays": "body", "marks": "body"}
 
-def _specialist_channel_shapes():
-    """Which empty spelling each specialist channel has to be corrected TO.
-
-    DERIVED, because the two sets used to be written out by hand and had
-    drifted: `comms_ops` is declared `list[CommsOp]` and sat in the dict set,
-    so an empty `comms_ops: []` -- the ordinary way a model says no voice
-    channel changed this beat -- was rewritten to `{}` before validation.
-    Inert only because `LenientModel` turned it back, which is one mechanism
-    covering for another rather than a reason the first was right. A model
-    declares the shape once; nothing else should get to have an opinion.
-
-    Only the unambiguous empty case is ever corrected (see
-    `_coerce_empty_list_to_dict`), so a channel appearing here can cost a
-    beat nothing: a non-empty value of the wrong shape still reaches
-    validation and is still rejected.
-    """
-    dicts, lists = set(), set()
-    for step_key, channels in SPECIALIST_CHANNELS.items():
-        fields = _fields(SCHEMA_MAP.get(step_key)) or {}
-        for channel in channels:
-            field = fields.get(channel)
-            if field is None:
-                continue
-            declared = _declared(field)
-            if declared.is_list:
-                lists.add(channel)
-            elif declared.expects_object:
-                dicts.add(channel)
-    return frozenset(dicts), frozenset(lists)
-
-
-_SPECIALIST_DICT_CHANNELS, _SPECIALIST_LIST_CHANNELS = (
-    _specialist_channel_shapes())
-
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
     "inventory_ops", "artifact_ops", "destruction", "contact_ops",

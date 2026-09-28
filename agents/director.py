@@ -331,7 +331,6 @@ from .director_scopes import (
 from . import director_prose
 from .director_fanout import (
     addressed_figures, addressed_house,
-    _note_for,
     _resolve_beat_view,
     _interpret_beat_view,
     _granted_event_ids,
@@ -4666,18 +4665,6 @@ def _settled_forms(sc, key):
         forms.update(_thing_forms(alias) for alias in entity.get("aliases") or [])
     forms.discard("")
     return forms
-
-
-#: How many words a minted thing's NAME may run to. A hand explaining itself
-#: -- "the packed grit and small stones wedged hard into the submerged runner
-#: groove beneath the waterline" -- has described something rather than named
-#: it, and a description cannot be stood in a room or referred to again next
-#: beat. Six because the live names that needed minting run one to four
-#: ("sluice gate", "submerged oak runner", "packed grit and small stones",
-#: "timber frame of the sluice gate") and the first thing longer than that was
-#: already a sentence. `commit_mapping.NEED_SUBJECT_WORDS` is 12 for the same
-#: judgement about a PLANNING subject, which may legitimately be a phrase.
-MINTED_THING_NAME_WORDS = 6
 
 
 def _bodies_addressed_as(ctx, scene, speaker, addresses):

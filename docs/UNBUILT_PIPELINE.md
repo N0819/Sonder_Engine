@@ -143,13 +143,28 @@ of these things; nothing on the prose path does yet.
     rising in its column, a body at a threshold (0.57-0.72). That part's
     question over-fires; it costs nothing while it cannot ship alone, and it
     is why the rule would have been wrong.
-11. **Dead code the deletion left.** `_note_for`, `_SPECIALIST_DICT_CHANNELS`
-    / `_SPECIALIST_LIST_CHANNELS`, the `required_channels` and verdict
-    branches, `pressure_ticks`, `MINTED_THING_NAME_WORDS`, and
-    `semantic_output_errors`' `director_interpret` / `director_resolve`
-    branches with `_name_what_was_discarded` -- none is reached by a live
-    call. `ext_api` stayed at 1 although `list_channels` left
-    `HOST_CAPABILITIES`.
+11. **Dead code the deletion left.** Cut 2026-09-28: `_note_for`, the two
+    specialist channel-shape tables (with their builder and the drift test
+    that was their only reader), `pressure_ticks` (built from a view the
+    prose path always makes from `{"ledgers": []}`, so it was always empty)
+    and `MINTED_THING_NAME_WORDS`. Still standing, each for a stated reason:
+    - `semantic_output_errors`' `director_interpret` / `director_resolve`
+      branches: no live model call validates under those keys (the author is
+      `director_prose`, the encoder `director_specialist`, and the stage
+      outputs pass the lenient `validate_llm_output`, which runs no semantic
+      check), but ten schema-coercion tests validate strictly through them,
+      so the cut is a move of each test to a live key first.
+      `_name_what_was_discarded` is NOT dead -- it names every step's
+      semantic errors -- and was wrongly listed here.
+    - the `required_channels` and verdict branches in `director.py`'s
+      dispatch code, which the prose path still runs: trace before cutting.
+    - the ledger-notes layer (found while cutting): `note_key_targets`'
+      readers `_ruling_for` and `_unrouted_rulings` went with the hands, its
+      one live reader is `manifest_category_targets`, and the views still
+      carry a `ledger_notes` nothing on the prose path writes.
+    - `ext_api` stayed at 1 although `list_channels` left
+      `HOST_CAPABILITIES`: a published compatibility number, the owner's to
+      bump, not a cleanup.
 
 <a id="unbuilt-1-1a"></a>
 
