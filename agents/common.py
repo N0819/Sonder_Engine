@@ -6017,6 +6017,26 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
             segments[i] = combined.sub(_replace, segments[i])
     if not leaked:
         return view, []
+    # A LABEL BRINGS ITS OWN FIRST WORD, and where the view had already
+    # written that word in front of the name the page doubled it: "facing the
+    # the unfamiliar person's trousers" (a thing named for its owner, chat 154
+    # replay, 2026-09-28). The view's copy goes; the label's stays, taking the
+    # capital the view's had at the head of a sentence. Only the label's own
+    # first word, so no language needs an article table here.
+    for name, label in {v for v in by_group.values() if v}:
+        words = str(label or "").split()
+        if name not in leaked or not words:
+            continue
+        doubled = re.compile(r"(?<![\w-])(" + re.escape(words[0]) + r")\s+("
+                             + re.escape(str(label)) + r")", re.IGNORECASE)
+
+        def _once(match):
+            kept = match.group(2)
+            return (kept[:1].upper() + kept[1:]) if match.group(1)[:1].isupper() else kept
+
+        for i in range(0, len(segments), 2):
+            if segments[i]:
+                segments[i] = doubled.sub(_once, segments[i])
     return "".join(segments), leaked
 
 # Typographic variants folded before quote comparison. A model renders the

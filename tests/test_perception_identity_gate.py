@@ -565,6 +565,24 @@ def test_the_scrub_uses_the_observers_own_label_for_a_dim_stranger():
     assert "Bram" not in text and "young man" in text
 
 
+def test_a_label_after_its_own_first_word_is_not_doubled():
+    """Chat 154 replay (2026-09-28): a thing named for its owner put the
+    owner's name after the view's own article, and the scrub wrote "facing
+    the the unfamiliar person's trousers"."""
+    from agents.common import _scrub_unknown_identities
+    src = [{"name": "Gushiga Toriki", "aliases": [], "appearance": "a sturdy old man"}]
+    labels = {"Gushiga Toriki": "the unfamiliar person"}
+    text, leaked = _scrub_unknown_identities(
+        "You are facing the Gushiga Toriki's trousers.",
+        allowed_forms=["The Doctor"], unknown_sources=src, labels=labels)
+    assert text == "You are facing the unfamiliar person's trousers.", text
+    assert leaked == ["Gushiga Toriki"]
+    text, _ = _scrub_unknown_identities(
+        "The Gushiga Toriki's cap lies here.",
+        allowed_forms=["The Doctor"], unknown_sources=src, labels=labels)
+    assert text == "The unfamiliar person's cap lies here.", text
+
+
 def test_a_title_the_label_uses_survives_and_the_scrub_is_idempotent():
     """Playerless Aldermill (2026-09-23): "Master Miller" was both the
     miller's name form and the head of his label, so every pass rewrote the
