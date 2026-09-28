@@ -379,6 +379,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.85 — A memory's age off a per-beat estimate, not a per-beat record](UNBUILT_CHARACTERS.md#unbuilt-1-85)
 - [§1.99g — Memories the player owns, and the one thing that must be true first](UNBUILT_CHARACTERS.md#unbuilt-1-99g)
 - [§1.107 — `generalization_tags` promises a mechanism that does not exist](UNBUILT_CHARACTERS.md#unbuilt-1-107)
+- [§1.170 — An absorbed mind cannot reach the middle of its recent window](UNBUILT_CHARACTERS.md#unbuilt-1-170)
 
 **2. Roadmap**
 
@@ -490,6 +491,8 @@ Not scheduled and not committed to a phase. See the
 - [§1.94 — A time block that disagrees with itself is not detected](UNBUILT_PLATFORM.md#unbuilt-1-94)
 - [§1.160 — A phantom character id, one past the real one, is written into memory](UNBUILT_PLATFORM.md#unbuilt-1-160)
 - [§1.161 — The 2026-09-07 review: what landed and what is still open](UNBUILT_PLATFORM.md#unbuilt-1-161)
+- [§1.171 — A failed model attempt leaves no trace in the ledger or the log](UNBUILT_PLATFORM.md#unbuilt-1-171)
+- [§1.172 — Every memory write scans the whole retrieval index](UNBUILT_PLATFORM.md#unbuilt-1-172)
 
 **2. Roadmap**
 

@@ -483,6 +483,43 @@ line, evidence and the class rule):
   statements the build order made true or false were corrected in the same
   commit; the rest of the table stands as the list to work through.
 
+<a id="unbuilt-1-171"></a>
+
+### 1.171 A failed model attempt leaves no trace in the ledger or the log
+
+`chat_complete` retries a failed attempt (`llm/providers.py:3355`), but only
+the attempt that succeeds reaches `record_llm_call` (the step's
+`_engine_notes.llm_calls`) and the `llm_call` log line; a failure emits a UI
+`generation_reset` notice and is otherwise unrecorded, reason included. Only
+`llm_capture.duration` times the whole call. On 24 reruns of real character
+steps on 2026-09-28, the two disagreed on 10: 388 s of 827 s of character-call
+time (47%) went to attempts no ledger recorded
+([`MEMORY_WINDOW_REPLAY_2026_09_28.md`](experiments/MEMORY_WINDOW_REPLAY_2026_09_28.md) § 5).
+The two calls that exhausted every attempt died on the degenerate-repetition
+guard, the likeliest cause of the rest. Anyone timing turns from the ledger or
+the log reads the successful attempt alone. Wanted: a ledger entry per failed
+attempt, with its duration and error class.
+
+<a id="unbuilt-1-172"></a>
+
+### 1.172 Every memory write scans the whole retrieval index
+
+`mind/memory_write._replace_memory_fts` and `_delete_memory_fts` find a
+memory's row in `memory_retrieval_fts` with `WHERE memory_id=?`, and
+`memory_id` is an UNINDEXED FTS5 column, so every lookup is a full scan of the
+index across every chat (`SCAN memory_retrieval_fts VIRTUAL TABLE INDEX 0`).
+Measured 2026-09-28 on a copy of `engine.db`: 40.3 ms per lookup at 25,384
+rows, against 0.021 ms by rowid. Each new memory at commit pays one scan; a
+checkpoint restore (every reroll and every rerun from a stage) pays two per row
+of the chat's bank inside `apply_chat_memory_restore`: 23 s for a 292-row bank,
+timed, and by extrapolation about 80 s for chat 64's 1,009. It grows with the
+whole database, not the chat
+([`MEMORY_WINDOW_REPLAY_2026_09_28.md`](experiments/MEMORY_WINDOW_REPLAY_2026_09_28.md) § 5).
+
+The fix is to key each FTS row by rowid = memory id and delete by rowid, which
+needs the existing index rebuilt: migration work, so it waits for §1.58's
+policy.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-5"></a>
