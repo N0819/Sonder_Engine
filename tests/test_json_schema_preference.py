@@ -195,6 +195,29 @@ def test_every_pipeline_step_can_offer_a_schema():
         assert isinstance(schema, dict) and schema, step
 
 
+def test_the_narrators_grammar_requires_a_page_that_its_validation_does_not():
+    """A constrained narrator answered `{}` 9 times in 60 on two captured
+    stall prompts; with `prose` required and non-empty on the wire, 0 in 60
+    (2026-09-28). Validation keeps the default: an empty answer is the stall
+    rung's re-ask, never a repair."""
+    from llm import llm_quality
+    from llm.schemas import validate_llm_output_strict
+
+    schema = llm_quality._step_json_schema("narrator")
+    assert "prose" in schema["required"]
+    assert schema["properties"]["prose"]["minLength"] == 1
+    assert validate_llm_output_strict("narrator", {}).valid
+
+
+def test_a_wire_requirement_on_a_field_that_is_not_a_string_is_dropped():
+    """A model change must not turn the table into a grammar that refuses
+    every answer."""
+    from llm import llm_quality
+
+    schema = {"type": "object", "properties": {"prose": {"type": "array"}}}
+    assert llm_quality._wire_required("narrator", schema) is schema
+
+
 def test_an_unknown_step_offers_none_rather_than_raising():
     """None is a first-class answer -- the caller then sends the flag."""
     from llm import llm_quality

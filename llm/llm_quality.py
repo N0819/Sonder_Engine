@@ -472,6 +472,36 @@ def _constraint_only_schema(value):
     return value
 
 
+# FIELDS THE GRAMMAR REQUIRES AND VALIDATION DOES NOT. Every narrator field
+# defaults, so its grammar let a constrained model answer `{}` -- and a model
+# stalled into exactly that. Measured 2026-09-28 on the two captured narrator
+# stall prompts, 30 sends each on the owner's routing (z-ai/glm-5.2): the
+# step's own grammar came back `{}` 9 times in 60; with `prose` required and
+# non-empty, 0 in 60, the shortest page 714 characters, median time
+# unchanged. The WIRE only: validation keeps the default, because a content
+# judgment may not buy the narrator a repair (the stall rung in
+# `complete_validated_json`), and a provider that samples without the grammar
+# still gets that rung's re-ask on an empty object.
+_WIRE_REQUIRED = {"narrator": ("prose",)}
+
+
+def _wire_required(step_key, schema):
+    """The step's schema with its `_WIRE_REQUIRED` strings required and
+    non-empty. A field the schema does not declare as a string is left as
+    it is, so a model change cannot turn this into a grammar that refuses
+    every answer."""
+    fields = [f for f in _WIRE_REQUIRED.get(step_key, ())
+              if isinstance(schema, dict)
+              and ((schema.get("properties") or {}).get(f) or {}).get("type") == "string"]
+    if not fields:
+        return schema
+    schema = dict(schema)
+    schema["properties"] = {**schema["properties"],
+                            **{f: {**schema["properties"][f], "minLength": 1} for f in fields}}
+    schema["required"] = sorted(set(schema.get("required") or []) | set(fields))
+    return schema
+
+
 def _step_json_schema(step_key: str):
     """The JSON Schema for a step, or None if it has no model or will not build.
 
@@ -493,7 +523,7 @@ def _step_json_schema(step_key: str):
             schema_builder = getattr(model_cls, "model_json_schema", None)
             schema = (schema_builder() if schema_builder is not None
                       else model_cls.schema())
-            schema = _constraint_only_schema(schema)
+            schema = _wire_required(step_key, _constraint_only_schema(schema))
     except Exception:
         schema = None
     _SCHEMA_CACHE[step_key] = schema

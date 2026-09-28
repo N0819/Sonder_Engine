@@ -3323,6 +3323,8 @@ class InterpretRepairOutput(LenientModel):
     notes: str = ""
 
 class NarratorOutput(LenientModel):
+    # Required and non-empty in the GRAMMAR only (`llm_quality._WIRE_REQUIRED`);
+    # the default stays, so an empty answer is re-asked, never repaired.
     prose: str = ""
     new_specifics: list[str] = Field(default_factory=list)
     text: str = ""
