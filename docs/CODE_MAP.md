@@ -60,7 +60,7 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2551 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 282 |  | `llm`, `llm.prompts` |
-| `mind/affect_mix.py` | 639 |  | — |
+| `mind/affect_mix.py` | 702 |  | — |
 | `mind/affect_pass.py` | 452 |  | `llm.prompts`, `mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
 | `mind/character_jev.py` | 782 |  | `llm`, `llm.prompts`, `mind.affect_appraisal` |
@@ -832,14 +832,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `emotions_from_act()` | 325 | 68 lines |
-| `surface_and_undercurrent()` | 578 | 55 lines |
-| `emotions_from_appraisal()` | 283 | 25 lines |
-| `decay()` | 433 | 18 lines |
-| `targets()` | 453 | 18 lines |
-| `concern_emotions()` | 412 | 17 lines |
-| `memory_emotions()` | 395 | 15 lines |
-| `mix()` | 473 | 15 lines |
+| `emotions_from_act()` | 353 | 68 lines |
+| `surface_and_undercurrent()` | 641 | 55 lines |
+| `targets()` | 486 | 48 lines |
+| `emotions_from_appraisal()` | 311 | 25 lines |
+| `memory_emotions()` | 423 | 20 lines |
+| `decay()` | 466 | 18 lines |
+| `concern_emotions()` | 445 | 17 lines |
+| `mix()` | 536 | 15 lines |
 
 ### `mind/affect_pass.py`
 

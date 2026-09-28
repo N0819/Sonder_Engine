@@ -224,6 +224,75 @@ def test_a_feeling_is_about_its_item_never_about_someone():
 
 # --- the mood -----------------------------------------------------------------------------
 
+def test_a_memory_is_felt_as_strongly_as_before_and_moves_the_mood_by_its_intensity():
+    """The owner, 2026-09-28: "memory should have a subtler mood affect.
+    unless it is a particularly intense memory." How strongly it is FELT is
+    untouched; how far it moves the mood follows its strength, curved."""
+    [faint] = mix.memory_emotions(0.3, -1.0, ref="faint")
+    [intense] = mix.memory_emotions(1.0, -1.0, ref="intense")
+    assert faint.intensity == pytest.approx(0.3) and intense.intensity == pytest.approx(1.0)
+    assert faint.mood_weight == pytest.approx(0.3 ** (mix.MEMORY_MOOD_CURVE - 1))
+    assert intense.mood_weight == pytest.approx(1.0)
+    faint_push = mix.targets([faint])["pleasure"][1]
+    linear_push = mix.targets([Emotion("distress", 0.3, source="memory")])["pleasure"][1]
+    assert faint_push < linear_push / 10
+    assert mix.targets([intense])["pleasure"][1] == pytest.approx(
+        mix.targets([Emotion("distress", 1.0, source="memory")])["pleasure"][1])
+    split = mix.memory_emotions(0.9, -1.0, {"grief": 0.5, "regret": 0.5}, ref="split")
+    assert {round(e.mood_weight, 6) for e in split} == {round(0.9 ** (mix.MEMORY_MOOD_CURVE - 1), 6)}
+
+
+def test_many_faint_memories_barely_move_the_moment():
+    """About 69 memories reach a beat now against at most 8 events. Three
+    pleasant events and sixty faintly sore memories: curved, the faint ones
+    shift the target a little; felt at full weight they would take all the
+    say the moment allows them."""
+    events = [Emotion("joy", 0.5, ref=f"e{i}") for i in range(3)]
+    memories = [e for i in range(60) for e in mix.memory_emotions(0.25, -1.0, ref=f"m{i}")]
+    linear = [Emotion(e.name, e.intensity, e.about, e.source, e.ref) for e in memories]
+    alone = mix.targets(events)["pleasure"][0]
+    curved = mix.targets(events + memories)["pleasure"][0]
+    full = mix.targets(events + linear)["pleasure"][0]
+    assert curved > 0
+    assert alone - curved < (alone - full) / 2
+
+
+def test_the_memories_together_never_outpull_the_present_moment():
+    """The owner, 2026-09-28: memory's "intensity still shouldn't exceed presen
+    moment but it should definetly be noticeable". Twenty intense, sore
+    memories against one mildly pleasant event, with the mood where it stood
+    at neutral: the moment keeps at least half the say in where the mood
+    goes, and the memories still plainly move it."""
+    present = [Emotion("joy", 0.4, ref="e")]
+    memories = [e for i in range(20) for e in mix.memory_emotions(1.0, -1.0, ref=f"m{i}")]
+    stood = Mood()
+    joy = mix.EMOTION_EFFECTS["joy"]["pleasure"]
+    sore = mix.EMOTION_EFFECTS["distress"]["pleasure"]
+    target = mix.targets(present + memories, hold=stood)["pleasure"][0]
+    alone = mix.targets(present, hold=stood)["pleasure"][0]
+    # the memories' half of the say pulls toward `sore`; the moment's half
+    # sits between the event and where the mood stood
+    assert target >= sore / 2 + min(joy, stood.get("pleasure")) / 2 - 1e-9
+    assert target < alone - 0.25 * (alone - sore), "and the memories are plainly felt"
+
+
+def test_a_quiet_beat_is_coloured_by_memory_never_swamped():
+    """Nothing new reached the mind: the moment still has its say and holds
+    the mood where it stands, so what is remembered moves it noticeably and
+    at most halfway toward itself -- one intense memory or twenty."""
+    stood = Mood({"pleasure": 0.3})
+    sore = mix.EMOTION_EFFECTS["distress"]["pleasure"]
+    [one] = mix.memory_emotions(1.0, -1.0, ref="one")
+    many = [e for i in range(20) for e in mix.memory_emotions(1.0, -1.0, ref=f"m{i}")]
+    for memories in ([one], many):
+        target, push = mix.targets(memories, hold=stood)["pleasure"]
+        assert target == pytest.approx((stood.get("pleasure") + sore) / 2)
+        # noticeable, and never harder than one intense memory's full pull
+        assert 0.35 <= push <= mix.QUIET_PRESENT + 1e-9
+    moved, _goals = mix.mix(stood, Mood(), [one], 0.0)
+    assert moved.get("pleasure") < stood.get("pleasure") - 0.02, "noticeable"
+
+
 def test_a_target_is_a_weighted_average_and_a_negativity_weight_tilts_it():
     joy, distress = Emotion("joy", 0.5), Emotion("distress", 0.5)
     even = mix.targets([joy, distress], negativity=1.0)["pleasure"][0]

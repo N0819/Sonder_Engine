@@ -274,7 +274,19 @@ Jev job" on.
 5. Code moves the mood: event emotions at full weight, memory-evoked ones at
    a fraction; decay toward temperament in psych units (story minutes where
    the clock runs, turns where it does not), the unit every affect decay
-   already uses.
+   already uses. The fraction is built as the owner stated it on 2026-09-28
+   ("memory should have a subtler mood affect. unless it is a particularly
+   intense memory"; its "intensity still shouldn't exceed presen moment but
+   it should definetly be noticeable"), once a beat carried the recent turns
+   and 30 recalled memories -- about 69 against at most 8 events
+   (`mind/affect_mix.py`): a memory's pull on the mood is `MEMORY_WEIGHT` x
+   its strength cubed (`MEMORY_MOOD_CURVE`: 0.5 keeps 12% of its pull, 0.9
+   keeps 73%), how strongly it is FELT and named left as it was; all the
+   memories together pull at most as hard as the present moment
+   (`MEMORY_OVER_PRESENT`), whose say is never less than one intense
+   memory's (`QUIET_PRESENT`), and what the present's own feelings leave of
+   that say holds the mood where it stands -- so a quiet beat is coloured by
+   what is remembered, at most halfway toward it.
 
 The character receives one block -- emotions with their objects, the mood,
 the undercurrent -- and stops writing affect; the prompt's feelings, pain and

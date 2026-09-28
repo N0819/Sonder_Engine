@@ -202,6 +202,30 @@ NEGATIVITY_WEIGHT = 1.0
 NEGATIVE_DECAY_FACTOR = 1.0
 #: A memory-evoked feeling's weight against an event's.
 MEMORY_WEIGHT = 0.5
+#: How much a memory moves the MOOD by how strongly it stirs now: its feeling
+#: reaches the mix at strength ** MEMORY_MOOD_CURVE, so a memory that stirs a
+#: little barely moves the mood and an intense one still does (the owner,
+#: 2026-09-28: "memory should have a subtler mood affect. unless it is a
+#: particularly intense memory"). At 3, strength 0.25 keeps 2% of its pull,
+#: 0.5 keeps 12%, 0.75 keeps 42% and 0.9 keeps 73%. It matters because a
+#: beat now carries the recent turns and 30 recalled memories, about 69 in
+#: the owner's chats, against at most 8 events: linear, they set most of
+#: where the mood goes. The mood only -- how strongly a memory is FELT, and
+#: whether its feeling is named beneath, is unchanged.
+MEMORY_MOOD_CURVE = 3.0
+#: The present outweighs the past (the owner, 2026-09-28: "intensity still
+#: shouldn't exceed presen moment but it should definetly be noticeable").
+#: In one beat's mix, every memory's pull together is at most this much of
+#: the present's -- what reached the mind this beat, or, after its turn, what
+#: it did -- scaled down together when it would be more, so an intense memory
+#: keeps its place among them and the moment keeps the larger say.
+MEMORY_OVER_PRESENT = 1.0
+#: What the present counts for when nothing, or next to nothing, happened:
+#: one intense memory's full pull, so a quiet beat can still be coloured by
+#: what the mind remembers -- noticeably, never swamped.
+QUIET_PRESENT = MEMORY_WEIGHT
+#: The sources that ARE the present moment.
+PRESENT_SOURCES = frozenset({"event", "act"})
 #: A standing concern's feeling -- what is still unsettled, appraised each
 #: beat (rumination) -- against an event's. Measured 2026-09-26 on 38 of The
 #: Doctor's beats: concerns named the undercurrent the character reported on
@@ -255,6 +279,10 @@ class Emotion:
     about: str = ""
     source: str = "event"
     ref: str = ""
+    #: How much of this feeling reaches the mood, apart from how strongly it
+    #: is felt (`memory_emotions` sets it; everything else moves the mood in
+    #: full). Read by `targets` alone.
+    mood_weight: float = 1.0
 
     @property
     def effects(self):
@@ -406,6 +434,11 @@ def memory_emotions(strength, tone, kinds=None, *, ref="", about="", multiplier=
     plain = _clamp(strength, 0.0, 1.0) * _clamp(multiplier, 0.0, 1.0) * abs(tone) * rest
     if plain > 1e-4:
         out.append(Emotion(MEMORY_TONE_EMOTION[tone >= 0], round(plain, 4), about, "memory", ref))
+    # By the memory's strength as a whole, never each share's: a memory whose
+    # feeling splits between two moods is as intense as one that names one.
+    pull = round(_clamp(strength, 0.0, 1.0) ** max(0.0, MEMORY_MOOD_CURVE - 1.0), 6)
+    for emotion in out:
+        emotion.mood_weight = pull
     return out
 
 
@@ -450,16 +483,39 @@ def decay(mood, home, dt, *, spectrum_half_life=SPECTRUM_HALF_LIFE,
     return out
 
 
-def targets(emotions, *, negativity=NEGATIVITY_WEIGHT, weights=None):
+def targets(emotions, *, negativity=NEGATIVITY_WEIGHT, weights=None, hold=None):
     """Per coordinate this beat's emotions touch: the target -- the weighted
     average of their values on it, weight = intensity x the source's weight x
     `negativity` where the emotion is unpleasant -- and the push strength,
     1 - prod(1 - i x source weight), which grows with every emotion that
-    touches the coordinate and never passes 1."""
+    touches the coordinate and never passes 1.
+
+    A memory's weight is also its `mood_weight` (its strength, curved:
+    `MEMORY_MOOD_CURVE`), and the memories together pull at most
+    `MEMORY_OVER_PRESENT` of the present MOMENT's say -- the beat's events
+    and acts, and never less than `QUIET_PRESENT` -- scaled down together
+    when they would pull more. Where the present's own feelings weigh less
+    than that say, the rest of it holds the target at `hold` (the mood as it
+    stands, which `mix` passes) on the coordinates the memories touch: a
+    quiet moment keeps you where you are, so what you remember colours it
+    and never outweighs it."""
     weights = {**SOURCE_WEIGHT, **(weights or {})}
+
+    def pull(e):
+        return max(0.0, e.intensity) * weights.get(e.source, 1.0) * _clamp(
+            getattr(e, "mood_weight", 1.0), 0.0, 1.0)
+
+    present = sum(pull(e) for e in emotions if e.source in PRESENT_SOURCES)
+    remembered = sum(pull(e) for e in emotions if e.source == "memory")
+    moment = max(present, QUIET_PRESENT)
+    ceiling = MEMORY_OVER_PRESENT * moment
+    memory_share = min(1.0, ceiling / remembered) if remembered > ceiling else 1.0
     acc, rest = {}, {}
+    touched_by_memory = set()
     for e in emotions:
-        scale = weights.get(e.source, 1.0)
+        scale = weights.get(e.source, 1.0) * _clamp(getattr(e, "mood_weight", 1.0), 0.0, 1.0)
+        if e.source == "memory":
+            scale *= memory_share
         w = e.intensity * scale * (negativity if e.valence < 0 else 1.0)
         if w <= 0:
             continue
@@ -467,6 +523,13 @@ def targets(emotions, *, negativity=NEGATIVITY_WEIGHT, weights=None):
             total, weighted = acc.get(name, (0.0, 0.0))
             acc[name] = (total + w, weighted + w * value)
             rest[name] = rest.get(name, 1.0) * (1.0 - min(1.0, e.intensity * scale))
+            if e.source == "memory":
+                touched_by_memory.add(name)
+    still = moment - present
+    if hold is not None and still > 0:
+        for name in touched_by_memory:
+            total, weighted = acc[name]
+            acc[name] = (total + still, weighted + still * hold.get(name))
     return {name: (weighted / total, 1.0 - rest[name]) for name, (total, weighted) in acc.items()}
 
 
@@ -478,7 +541,7 @@ def mix(mood, home, emotions, dt, *, reactivity=REACTIVITY, negativity=NEGATIVIT
     Returns the new mood and the targets."""
     moved = decay(mood, home, dt, spectrum_half_life=spectrum_half_life,
                   standalone_half_life=standalone_half_life, negative_factor=negative_factor)
-    goals = targets(emotions, negativity=negativity, weights=weights)
+    goals = targets(emotions, negativity=negativity, weights=weights, hold=moved)
     k = _clamp(reactivity, 0.0, 1.0)
     for name, (target, strength) in goals.items():
         lo, hi = _bounds(name)
