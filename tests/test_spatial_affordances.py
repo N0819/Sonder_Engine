@@ -424,29 +424,25 @@ class TestNavigationMarkersAreDocumented:
     test is that back-pressure.
     """
 
-    def test_every_marker_is_explained_in_the_character_prompt(self):
-        import re
-        from llm.prompts import DEFAULT_PROMPTS
-        src = open("agents/character.py", encoding="utf-8").read()
-        # The keys _annotate_known_exits actually writes onto an exit.
-        emitted = set(re.findall(r'entry\["([a-z_]+)"\]', src))
-        assert emitted, "found no markers -- has the annotator been renamed?"
-        prompt = DEFAULT_PROMPTS["character"]
-        missing = sorted(k for k in emitted if k not in prompt)
-        assert not missing, (
-            "spatial_frame markers handed to the character with no "
-            f"explanation in its prompt: {missing}. A marker whose meaning "
-            "has to be guessed from its key name is worse than no marker, "
-            "because the guess is confident. Document it in the SPATIAL "
-            "FRAME section of DEFAULT_PROMPTS['character'].")
+    def test_the_markers_are_read_for_the_character_in_plain_words(self):
+        """Under the bare card (2026-09-27) the markers are not named one by
+        one: the engine reads them into each exit's plain `verdict`
+        (`_verdict`), and the way-on section explains the verdict and the
+        history beside it as one class. The markers ride underneath as
+        evidence a mind may disagree from; that they are no longer each
+        explained is recorded in docs/UNBUILT_CHARACTERS.md §6.17."""
+        from llm.prompts import character_bare_module
+        section = character_bare_module("ways_on", "en")
+        assert "`perception.spatial_frame`" in section
+        assert "`verdict`" in section and "history" in section
 
     def test_absent_means_cannot_tell_is_stated(self):
         """The single most dangerous misreading: absent as 'none'. Every
         one of these keys is omitted when it cannot be determined, and a
         character that reads omission as a clear way will walk into things."""
-        from llm.prompts import DEFAULT_PROMPTS
-        prompt = DEFAULT_PROMPTS["character"].upper()
-        assert "CANNOT TELL" in prompt or "COULD NOT TELL" in prompt
+        from llm.prompts import character_bare_module
+        section = character_bare_module("ways_on", "en").upper()
+        assert "CANNOT TELL" in section or "COULD NOT TELL" in section
 
 
 class TestCirclingIsVisible:

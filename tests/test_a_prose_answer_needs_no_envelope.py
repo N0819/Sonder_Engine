@@ -56,7 +56,7 @@ def test_what_is_not_bare_prose_takes_the_ladder(raw):
 
 
 def test_a_step_whose_answer_is_not_prose_takes_the_ladder():
-    assert llm_quality._bare_prose_answer("character_kernel", NARRATION) is None
+    assert llm_quality._bare_prose_answer("character_bare", NARRATION) is None
     assert llm_quality._bare_prose_answer("director_specialist", NARRATION) is None
 
 

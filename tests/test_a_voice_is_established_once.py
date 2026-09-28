@@ -116,9 +116,7 @@ class TestAKnownVoiceSurvivesSilence:
         assert VOICE_KEY in view.standing_keys
 
 
-def test_both_packs_tell_the_character_tone_is_a_departure():
-    for pack, marker in (("en", "YOUR VOICE IS ALREADY KNOWN"),
-                         ("ja", "あなたの声はすでに知られている")):
-        text = pathlib.Path("language_packs", pack, "cards", "system_prompts",
-                            "prompts", "character.txt").read_text(encoding="utf-8")
-        assert marker in text, pack
+# The card's half -- "leave `tone` empty in your ordinary voice" -- went with
+# the full card (2026-09-27): the bare card asks for `how` on a `say` and
+# `compile_bare` files it as the line's `tone`, which this ledger reads as a
+# departure. Recorded as open in docs/UNBUILT_CHARACTERS.md §6.17.

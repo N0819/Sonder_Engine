@@ -232,7 +232,7 @@ def test_the_minds_are_never_told_about_it():
     from llm.prompts import DEFAULT_PROMPTS
 
     assert "mapping_stage" not in DEFAULT_PROMPTS
-    for pid in ("character", "narrator", "director_interpret",
+    for pid in ("character_bare", "narrator", "director_interpret",
                 "perception_act" if "perception_act" in DEFAULT_PROMPTS
                 else "narrator"):
         assert "style_guide" not in DEFAULT_PROMPTS[pid], pid

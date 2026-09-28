@@ -29,39 +29,29 @@ from llm.prompts import DEFAULT_PROMPTS
 
 
 class TestWantsAreNotDerivedFromTheSheet:
+    """'Derive 2-3 beat wants from your drive' was obeyed 197 times -- the
+    deduction was instructed and then measured. The bare card (2026-09-27)
+    names a want as what the mind is going for and never derives it; the
+    full card's "pressure, not premises" framing and its quoted habit
+    ("Given my drive, I would") are not on it (open in
+    docs/UNBUILT_CHARACTERS.md §6.17)."""
+
     def test_the_derivation_instruction_is_gone(self):
-        """'Derive 2-3 beat wants from your drive' was obeyed 197 times --
-        we instructed the deduction and then measured the character
-        performing it. The instruction must not come back under a synonym
-        either: wants are not computed from psychology fields."""
-        prompt = DEFAULT_PROMPTS["character"]
+        from llm.prompts import bare_character_prompt
+        prompt = bare_character_prompt("en")
         assert "Derive 2-3 beat wants from your drive" not in prompt
-        assert "WANTS AND CHOICE" in prompt, (
+        assert "`want` is what you are going for" in prompt, (
             "the wants rule itself must survive -- the fix is how wants "
             "arise, not whether they exist")
 
-    def test_wants_arise_from_the_situation(self):
-        """The replacement frames drive and intentions as the reason some
-        options feel obvious and others never occur -- salience, not a
-        premise in an argument. Without this the sheet is a function the
-        character consistently computes, which is exactly what a person is
-        not."""
-        prompt = DEFAULT_PROMPTS["character"]
-        assert "pressure, not premises" in prompt
-        assert "never occur to you" in prompt
-
-    def test_the_deduction_is_named_and_forbidden(self):
-        """The measured construction is quoted in the prompt so the model
-        recognises the habit itself, not merely a banned phrase."""
-        assert "Given my drive, I would" in DEFAULT_PROMPTS["character"]
-
-    def test_the_serves_contract_survives(self):
+    def test_what_a_want_serves_is_read_back_not_written(self):
         """`serves` is engine machinery (affect resolves it to the drive or
-        an intention id and weights appraisal by it). Softening the
-        derivation instruction must not delete the structured contract, or
-        appraisal loses its goal grounding."""
-        assert "want names what it serves" in DEFAULT_PROMPTS["character"]
-
+        an intention id and weights appraisal by it): the decision model
+        picks it among this mind's own aims, the drive among them."""
+        from mind import character_jev as jev
+        held = jev.Holding(name="Wren", language="en", aims=[
+            {"kind": "drive", "id": "drive", "text": "keep the family safe"}])
+        assert "want:serves" in jev.after_questions(held, {"want": "get the key back"})
 
 class TestValuesArePreferredAsTradeOffs:
     def test_the_fill_prompt_teaches_the_form(self):

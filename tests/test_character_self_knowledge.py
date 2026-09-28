@@ -177,33 +177,10 @@ class TestACharacterKnowsWhatItIsWearing:
     like a model problem fifty beats later.
     """
 
-    def test_the_prompt_tells_the_character_the_field_exists(self):
-        from llm.prompts import DEFAULT_PROMPTS
-        prompt = DEFAULT_PROMPTS["character"]
-        assert "self.attire" in prompt
-
-    def test_it_names_the_three_parts_the_payload_actually_carries(self):
-        """`attire_view` returns wearing/regions/state. A prompt that only said
-        'you have clothes' would leave the structure unusable."""
-        from llm.prompts import DEFAULT_PROMPTS
-        prompt = DEFAULT_PROMPTS["character"]
-        for part in ("wearing", "regions", "state"):
-            assert f"`{part}`" in prompt, part
-
-    def test_it_is_framed_as_the_present_not_the_starting_outfit(self):
-        """`scene.attire` is the mutable story ledger, not `initial_outfit`.
-        A character reading it as 'what I put on this morning' would contradict
-        anything the story has since changed."""
-        from llm.prompts import DEFAULT_PROMPTS
-        assert "LEDGER" in DEFAULT_PROMPTS["character"]
-
-    def test_it_keeps_the_firewall(self):
-        """Own clothing is interoception; another body's is perception's to
-        deliver or withhold. The prompt must not invite reading someone else's
-        off this field."""
-        from llm.prompts import DEFAULT_PROMPTS
-        prompt = DEFAULT_PROMPTS["character"]
-        assert "do not describe another person's clothing" in prompt.lower()
+    # The four prompt pins that stood here went with the full card
+    # (2026-09-27): the bare card says only that `self` is "your body", so
+    # `self.attire` is again unexplained -- the chat 57 failure this class
+    # records. Open in docs/UNBUILT_CHARACTERS.md §6.17.
 
     def test_the_payload_still_carries_it(self, temp_db):
         """The other half of the pair: if this field is ever renamed or
@@ -295,8 +272,8 @@ class TestSilenceIsSomethingThePlayerDid:
         assert note.get("player_said_nothing") is True
 
     def test_the_prompt_forbids_answering_an_older_line(self):
-        from llm.prompts import DEFAULT_PROMPTS
-        prompt = DEFAULT_PROMPTS["character"]
+        from llm.prompts import character_bare_module
+        prompt = character_bare_module("their_silence", "en")
         # The PROJECTED names, not the engine ones. `_player_silence_note`
         # above still returns `player_said_nothing`/`player_name` and is
         # asserted on as such -- `agents.character.PAYLOAD_NAMES` renames
@@ -304,9 +281,10 @@ class TestSilenceIsSomethingThePlayerDid:
         # spell the same field differently, and that seam is the point.
         assert "decision.they_said_nothing" in prompt
         assert "their_name" in prompt
+        assert "Do not answer an older line" in prompt
 
     def test_the_prompt_frames_silence_as_an_act(self):
         """"No input" invites reaching backwards; "they chose not to speak"
         does not."""
-        from llm.prompts import DEFAULT_PROMPTS
-        assert "Silence is something they DID" in DEFAULT_PROMPTS["character"]
+        from llm.prompts import character_bare_module
+        assert "silence is something they did" in character_bare_module("their_silence", "en")

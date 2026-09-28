@@ -3,7 +3,7 @@ from copy import deepcopy
 
 from agents import composer
 from agents.character import _character_perception
-from agents.character_kernel import compact_character_evidence, expand_character_evidence
+from agents.character_evidence import compact_character_evidence
 from llm.schemas import Observation
 
 
@@ -117,7 +117,7 @@ def test_prose_only_archive_stays_context_instead_of_guessed_events():
     assert packet['unstructured_context'][0]['observed']['text'] == text
 
 
-def test_partition_preserves_citation_handles_and_expansion():
+def test_partition_preserves_citation_handles():
     rendered = _rendered(
         ('Alice', 'Alice sits.', 'state', 'pose', 'sight'),
         ('Bob', 'Bob says: "Stay."', 'event', 'speech', 'hearing'))
@@ -128,9 +128,8 @@ def test_partition_preserves_citation_handles_and_expansion():
     state = payload['perception']['current_state'][0]
     assert event['observation_id'] == 'o1'
     assert state['observation_id'] == 'o2'
-    expanded = expand_character_evidence(
-        {'observations_used': ['o1', 'o2']}, handles)
-    assert expanded['observations_used'] == [rows[1]['observation_id'], rows[0]['observation_id']]
+    # One handle per canonical id, in delivery order.
+    assert handles == {'o1': rows[1]['observation_id'], 'o2': rows[0]['observation_id']}
 
 
 def test_observation_schema_preserves_timing_and_owner_on_round_trip():

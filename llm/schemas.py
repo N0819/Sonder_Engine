@@ -3543,81 +3543,6 @@ def _canonical_goal_impact(value):
     })
 
 
-def _canonical_kernel_intention(value):
-    return _canonical_character_row(value, {
-        "op": ("operation",),
-        "id": ("intention_id", "intent_id"),
-    })
-
-
-def _canonical_kernel_decision(value):
-    out = _canonical_character_row(value, {
-        "hinge": ("why", "reason", "decisive_fact"),
-    })
-    if not isinstance(out, dict) or out.get("hinge") not in (None, ""):
-        return out
-    # Observed from JSON-object-only GLM: a punctuation key whose value still
-    # labels itself ``hinge is: ...``. No other decision field can own that
-    # value, so retaining it is safer than paying for a rewrite of the beat.
-    for key, item in out.items():
-        if str(key).strip() or not isinstance(item, str):
-            continue
-        text = item.strip()
-        if text.casefold().startswith("hinge"):
-            out["hinge"] = text.split(":", 1)[-1].strip() or text
-            break
-    return out
-
-
-def _canonical_kernel_active_state(value):
-    if not isinstance(value, dict) or "hedonic" in value:
-        return value
-    out = dict(value)
-    # Same JSON punctuation slip as the decision hinge, but the contained
-    # ``released`` flag makes ownership unambiguous and preserves a true
-    # discharge rather than silently defaulting it away.
-    for key, item in out.items():
-        if (str(key).strip() in {"", ","} and isinstance(item, dict)
-                and "released" in item):
-            out["hedonic"] = item
-            break
-    return out
-
-
-def _canonical_kernel_appraisal(value):
-    out = _canonical_character_row(
-        value, {"goal_impacts": ("goals_impacts",)})
-    if isinstance(out, dict):
-        out.pop("goals_impacts", None)
-    return out
-
-
-def _canonical_character_kernel_output(value):
-    """Lift the one impossible nesting of the top-level physical effects.
-
-    ``updates`` has no direct ``effects`` lane; its only similarly named lane
-    is ``updates.memory.effects``. A model that closes the updates object one
-    brace late has therefore expressed the top-level field unambiguously. The
-    raw replay is retained by the audit, while runtime accepts the same object
-    without asking a model to regenerate its already-good reasoning.
-    """
-    if not isinstance(value, dict):
-        return value
-    updates = value.get("updates")
-    if not isinstance(updates, dict):
-        return value
-    out = dict(value)
-    out_updates = dict(updates)
-    changed = False
-    for key in ("effects", "interaction", "salience"):
-        if key not in out and key in out_updates:
-            out[key] = out_updates.pop(key)
-            changed = True
-    if not changed:
-        return value
-    out["updates"] = out_updates
-    return out
-
 class MindHypothesis(LenientModel):
     about_entity: str
     kind: str
@@ -4004,215 +3929,6 @@ class InteractionControl(LenientModel):
     )
 
 
-class CharacterKernelWant(LenientModel):
-    """One live pull, named locally for this call's decision join."""
-    id: str
-    want: str = Field(max_length=240)
-    urgency: float = Field(default=0.5, ge=0.0, le=1.0)
-    serves: str = "situational"
-    conflicts_with: Optional[str] = None
-
-    _clamp_urgency = validator("urgency", pre=True, allow_reuse=True)(
-        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
-    )
-
-
-class CharacterKernelDecision(LenientModel):
-    """The small inspectable residue of deliberation, not a thought transcript."""
-    # Required even when the answer is ``""``.  These four keys are the
-    # join between the live pulls and the chosen conduct; silently defaulting
-    # a mis-nested decision made a rich appraisal compile into an empty beat
-    # in the first database replay of the kernel.
-    enact: str
-    suppress: str
-    hinge: str = Field(max_length=240)
-    uncertainty: str = Field(max_length=240)
-
-    if _PYDANTIC_V2:
-        from pydantic import model_validator as _model_validator
-
-        _canonicalize = _model_validator(mode="before")(
-            classmethod(lambda cls, value: _canonical_kernel_decision(value)))
-    else:
-        from pydantic import root_validator as _root_validator
-
-        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
-            lambda cls, value: _canonical_kernel_decision(value))
-
-
-class CharacterKernelActiveState(LenientModel):
-    # The object itself is required as a structural checksum.  Values may be
-    # empty, but a brace slip cannot move wants/decision under a sibling and
-    # then pass merely because every missing sibling had a default.
-    # Legacy alias; the surface label now comes from the engine.
-    mood: Any = ""
-    # NOT ASKED FOR ANY MORE: the engine computes the mood and writes this
-    # after the call (mind/affect_pass.py; the owner, 2026-09-26). Optional so
-    # a reply without it validates; a legacy reply's own is overwritten.
-    affect: dict = {}
-    wants: list[CharacterKernelWant]
-    active_concerns: list[str]
-    # The stable models validate these after compilation. Keeping their
-    # provider-facing bodies open avoids repeating two mature ledgers in the
-    # wire grammar merely to ask for coping_mode/released on this beat.
-    stress: dict
-    hedonic: dict
-
-    if _PYDANTIC_V2:
-        from pydantic import model_validator as _model_validator
-
-        _canonicalize = _model_validator(mode="before")(
-            classmethod(
-                lambda cls, value: _canonical_kernel_active_state(value)))
-    else:
-        from pydantic import root_validator as _root_validator
-
-        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
-            lambda cls, value: _canonical_kernel_active_state(value))
-
-
-class CharacterKernelState(LenientModel):
-    # Appraisal is already shown compactly in the prompt and normalized by
-    # CharacterOutput after compilation. The quality regression was the
-    # collapsed cognitive update list, not missing numeric grammar here.
-    appraisal: dict
-    active: CharacterKernelActiveState
-    decision: CharacterKernelDecision
-
-    _canonicalize_appraisal = validator(
-        "appraisal", pre=True, allow_reuse=True)(
-        lambda cls, value: _canonical_kernel_appraisal(value))
-
-
-class CharacterKernelIntentionUpdate(LenientModel):
-    op: str
-    id: str = ""
-    intent: str = ""
-    why: str = ""
-    evidence: list[EvidenceRef] = Field(default_factory=list)
-
-    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
-        lambda cls, v: _coerce_evidence_refs(v))
-
-    if _PYDANTIC_V2:
-        from pydantic import model_validator as _model_validator
-
-        _canonicalize = _model_validator(mode="before")(
-            classmethod(lambda cls, value: _canonical_kernel_intention(value)))
-    else:
-        from pydantic import root_validator as _root_validator
-
-        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
-            lambda cls, value: _canonical_kernel_intention(value))
-
-
-class CharacterKernelProjectUpdate(LenientModel):
-    op: str
-    id: str = ""
-    project: str = ""
-    about: str = ""
-    satisfied_when: str = ""
-    why: str = ""
-
-
-class CharacterKernelDriveUpdate(LenientModel):
-    essence: str
-    expression: str
-    taboo: str
-    because: str
-
-
-class CharacterKernelBeliefEvidence(EvidenceRef):
-    """A live belief update must cite an observation or memory handle."""
-    event_id: str = Field(..., min_length=1)
-
-
-class CharacterKernelBeliefUpdate(BeliefUpdate):
-    """Complete current learning operation; legacy belief updates stay lenient."""
-    operation: Literal["reinforce", "weaken", "contradict", "revise"] = Field(...)
-    target_belief: str = Field(...)
-    confidence: float = Field(..., ge=0.0, le=1.0)
-    evidence: list[CharacterKernelBeliefEvidence] = Field(
-        ..., **({"min_length": 1} if _PYDANTIC_V2 else {"min_items": 1}))
-
-    @validator("confidence", pre=True, allow_reuse=True)
-    def _confidence(cls, value):
-        # The inherited legacy validator treats null as the default. A live
-        # update has no default confidence: the model must make that judgment.
-        if value is None:
-            raise ValueError("belief update requires a confidence")
-        return _clamp_float(value, 0.0, 1.0, 0.5)
-
-    @validator("operation", allow_reuse=True)
-    def _target_for_operation(cls, value, values):
-        # Inherited field order puts target_belief before operation, so this
-        # sees its validated value under either supported Pydantic major.
-        target = str(values.get("target_belief") or "").strip()
-        if value == "revise" and not target:
-            raise ValueError("revise requires a nonempty target_belief")
-        # A target on any other operation is NOT fatal here: commit reads it
-        # and refuses the update, unmutated and said ("belief update rejected:
-        # target_belief requires revise", `psychology_runtime`), which by
-        # `semantic_output_errors`' rule is what a floor that holds looks
-        # like. Fatal, it bought a 43 s repair of a whole character beat on
-        # the owner's chat 120 idx 9 (round 7, 2026-09-23) over one belief.
-        return value
-
-
-class CharacterKernelMemoryUpdates(LenientModel):
-    keep: list[RememberLine]
-    reinterpret: list[MemoryDispute]
-    effects: list[MemoryEffect]
-
-
-class CharacterKernelUpdates(LenientModel):
-    """Independent cognitive apertures; emptiness in one cannot hide another."""
-    # Each lane is required, while the arrays may be empty.  This makes the
-    # sweep inspectable without imposing a quota or confusing absence with a
-    # deliberate "nothing changed" answer.
-    intentions: list[CharacterKernelIntentionUpdate]
-    projects: list[CharacterKernelProjectUpdate]
-    drive: Optional[CharacterKernelDriveUpdate] = Field(...)
-    beliefs: list[CharacterKernelBeliefUpdate]
-    associations: list[AssociationUpdate]
-    people: list[MindHypothesis]
-    relationships: list[RelationshipUpdate]
-    memory: CharacterKernelMemoryUpdates
-
-
-class CharacterKernelOutput(LenientModel):
-    """Small provider-facing contract for one subjective character decision.
-
-    ``agents.character_kernel`` expands this nested contract into the stable
-    ``CharacterOutput`` interface consumed by commit and simulation. Cognitive
-    faculties stay independently named and typed: collapsing them into one
-    heterogeneous list made list order into priority and erased the memory
-    rows at its tail in paired live replays.
-    """
-    state: CharacterKernelState
-    sequence: list[dict]
-    manifest: dict
-    updates: CharacterKernelUpdates
-    effects: list[dict]
-    interaction: InteractionControl
-    salience: float = Field(ge=0.0, le=1.0)
-
-    _clamp_salience = validator("salience", pre=True, allow_reuse=True)(
-        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
-    )
-
-    if _PYDANTIC_V2:
-        from pydantic import model_validator as _model_validator
-
-        _canonicalize = _model_validator(mode="before")(
-            classmethod(
-                lambda cls, value: _canonical_character_kernel_output(value)))
-    else:
-        from pydantic import root_validator as _root_validator
-
-        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
-            lambda cls, value: _canonical_character_kernel_output(value))
-
 def _canonical_bare_step(value):
     """A bare step written in the full card's spelling -- `{type:'speech',
     text}`, `{type:'action', attempt|observable}`, `{type:'ponder', query}`
@@ -4322,8 +4038,8 @@ class CharacterBareOutput(LenientModel):
     """The bare contract (`agents/character_bare.py`): only what a character
     can write. The decision model reads everything else back from it
     (`mind/character_jev.py`), and `compile_bare` expands both into
-    `CharacterOutput`. `sequence` is the one required field, as it is the
-    kernel's: what the character did is what a beat cannot do without.
+    `CharacterOutput`. `sequence` is the one required field: what the
+    character did is what a beat cannot do without.
 
     `notebook` is what the character keeps (`mind/notebook.py`); `people`,
     the lines it replaced, is still read as new notes."""
@@ -4827,7 +4543,6 @@ SCHEMA_MAP = {
     "resolve_repair": ResolveRepairOutput,
     "interpret_repair": InterpretRepairOutput,
     "narrator": NarratorOutput,
-    "character_kernel": CharacterKernelOutput,
     "character_bare": CharacterBareOutput,
     "character": CharacterOutput,
     "background_react": BackgroundReactOutput,
@@ -5737,227 +5452,11 @@ def _lift_swallowed_siblings(step_key, result, *containers):
             result[key] = holder.pop(key)
 
 
-def _empty_for(annotation):
-    """The EMPTY value of a declared type, or `_NO_FILL` when there is none.
-
-    Empty, never invented: `[]`, `{}`, `""`, `0.0`, `None` for an optional,
-    and `{}` for a nested model so its own absent requirements fill the same
-    way. Each of these asserts nothing about the fiction, which is the whole
-    reason filling one is not the thing `LenientModel` refuses to do.
-    """
-    if annotation is None:
-        return _NO_FILL
-    if hasattr(annotation, "model_fields") or hasattr(annotation, "__fields__"):
-        return {}
-    origin = getattr(annotation, "__origin__", None)
-    if origin is not None:
-        args = [a for a in getattr(annotation, "__args__", ()) if a is not type(None)]
-        if len(args) < len(getattr(annotation, "__args__", ())):
-            return None                      # Optional[...] -> the model declined
-        if origin in (list, tuple, set, frozenset):
-            return []
-        if origin is dict:
-            return {}
-        return _NO_FILL
-    for kind, empty in ((list, []), (dict, {}), (str, ""),
-                        (float, 0.0), (int, 0), (bool, False)):
-        if annotation is kind:
-            return empty() if callable(empty) else empty
-    return _NO_FILL
-
-
-_NO_FILL = object()
-
-
-#: WHAT A CHARACTER FUNDAMENTALLY HAS TO DO IS REMEMBER, AND KNOW WHY IT DID
-#: THE THINGS IT DID (owner, 2026-09-16). That is the bar an absence is
-#: measured against, and it cuts the kernel's fourteen required fields in
-#: two.
-#:
-#: FOUR carry it, and an absence in them is worth a retry before anything
-#: else is tried: `sequence` is what the character did, `state.decision` is
-#: why -- which want it enacted, which it suppressed and on what hinge --
-#: `state.active` holds the wants that decision chooses between, so without
-#: it the why dangles, and `state.appraisal` is the reading of the moment
-#: the why rests on. Those are left to fail the first attempt so the repair
-#: gets its chance, and are filled only when the alternative is throwing the
-#: beat away.
-#:
-#: EVERYTHING BELOW is filled before validation and reported nowhere. The
-#: learning lanes are EVENT lanes: a character does not revise a belief,
-#: adopt a project, move a relationship or learn an association every time
-#: it speaks, and an absent one says the event did not happen, which is the
-#: same thing an empty one says and is true far more often than not. An
-#: absent `memory` lane is a beat with nothing worth keeping, which costs
-#: the capacity to remember nothing at all. And `manifest`, `salience` and
-#: `interaction` are demeanour, a weighting and floor control: real losses,
-#: but they touch neither remembering nor knowing why, so no retry is worth
-#: spending on them and a warning per beat would be noise.
-KERNEL_FILL_QUIETLY = frozenset({
-    "effects", "manifest", "salience", "interaction",
-    "updates.associations", "updates.beliefs", "updates.drive",
-    "updates.intentions", "updates.memory", "updates.people",
-    "updates.projects", "updates.relationships",
-})
-
-#: The four the bar rests on, for the last-resort fill that keeps a beat
-#: rather than discarding it (`llm_quality.complete_validated_json`).
-KERNEL_CARRIES_THE_BAR = frozenset({
-    "sequence", "state", "state.appraisal", "state.active", "state.decision",
-})
-
-
-def _under(path, allowed):
-    """Is `path` one of `allowed`, or inside one of them? An event lane
-    filled as an empty object still has to fill its OWN requirements --
-    `updates.memory` is a record with three lanes of its own -- or the fill
-    lands a shape that fails for a new reason."""
-    if path in allowed:
-        return True
-    return any(path.startswith(prefix + ".") for prefix in allowed)
-
-
-def fill_absent_required(model_cls, data, *, notes=None, path="", only=None):
-    """A REQUIRED FIELD THE MODEL SIMPLY DID NOT WRITE READS AS EMPTY.
-
-    `LenientModel` refuses this on purpose -- "inventing a value for something
-    the model was obliged to supply would hide the actual error" -- and that
-    reason is honoured rather than overruled here: the only values written are
-    the EMPTY ones, which invent nothing, and every one is reported.
-
-    The contract is untouched. What a complete answer looks like is still what
-    the schema declares and what the card teaches; this decides only what
-    happens to an INCOMPLETE one, and the answer is now that the beat survives
-    it minus what was left out, rather than being discarded whole.
-
-    Measured on chat 135 (2026-09-16). Three attempts at one beat died on
-    `state.active`, `state.decision`, `state.active.wants.0.want` and
-    `updates.intentions.0.op`, each time throwing away an appraisal, a
-    sequence and a speech that were all sound, and the repair pass -- handed
-    the same complaint, and saying in its own reasoning that it knew which
-    sections to add -- failed the same way. Of the fourteen fields the kernel
-    requires, exactly one is structural: without `sequence` the character does
-    nothing that beat. The rest are its inner life and its learning, and one
-    beat's worth of either is a loss the next beat re-derives.
-
-    Recurses, because the absences are nested: an absent `state` is only
-    fillable if its own required `appraisal`, `active` and `decision` fill too.
-    Present values are never touched.
-    """
-    if not isinstance(data, dict):
-        return data
-    notes = notes if notes is not None else []
-    for name, spec in _fields(model_cls).items():
-        required = getattr(spec, "is_required", None)
-        required = bool(callable(required) and required())
-        annotation = _outer_annotation(spec)
-        here = f"{path}.{name}" if path else name
-        if name not in data:
-            if not required:
-                continue
-            if only is not None and not _under(here, only):
-                continue            # not this pass's business; leave it to fail
-            empty = _empty_for(annotation)
-            if empty is _NO_FILL:
-                continue            # nothing honest to write; let it fail
-            data[name] = empty
-            if notes is not None:
-                notes.append("%s was not written and reads as empty" % here)
-        value = data.get(name)
-        if isinstance(value, dict) and (hasattr(annotation, "model_fields")
-                                        or hasattr(annotation, "__fields__")):
-            fill_absent_required(annotation, value, notes=notes, path=here,
-                                 only=only)
-    return data
-
-
-def _declared_max_length(spec):
-    """The `max_length` a string field declares, on either Pydantic major."""
-    for meta in getattr(spec, "metadata", None) or ():
-        length = getattr(meta, "max_length", None)
-        if isinstance(length, int):
-            return length
-    length = getattr(getattr(spec, "field_info", None), "max_length", None)
-    return length if isinstance(length, int) else None
-
-
-def _model_inside(annotation):
-    """The model an annotation holds: itself, or inside a list or Optional."""
-    if hasattr(annotation, "model_fields") or hasattr(annotation, "__fields__"):
-        return annotation
-    for arg in get_args(annotation) or ():
-        found = _model_inside(arg)
-        if found is not None:
-            return found
-    return None
-
-
-def clip_to_declared_length(model_cls, data, *, notes=None, path=""):
-    """A STRING LONGER THAN ITS FIELD DECLARES IS CUT TO FIT, at a word.
-
-    The salvage's, like `fill_absent_required`: the limit still fails the
-    answer first, so the repair can ask for a shorter one, and only a beat
-    that would otherwise be thrown away is kept with the text cut. The
-    owner's chat 122 idx 8 (round 4, 2026-09-23): one want ran past its 240
-    characters, the repair did the same, and the Doctor's whole beat was
-    lost over the length of a private note. Recurses into nested models and
-    lists of them; every cut is reported."""
-    if not isinstance(data, dict):
-        return data
-    for name, spec in _fields(model_cls).items():
-        if name not in data:
-            continue
-        here = f"{path}.{name}" if path else name
-        value = data[name]
-        length = _declared_max_length(spec)
-        if isinstance(value, str) and length and len(value) > length:
-            cut = value[:length]
-            space = cut.rfind(" ")
-            if space >= length // 2:
-                cut = cut[:space]
-            data[name] = cut.rstrip(" ,;:—–-")
-            if notes is not None:
-                notes.append("%s ran to %d characters against its %d and was cut "
-                             "to fit" % (here, len(value), length))
-            continue
-        inner = _model_inside(_outer_annotation(spec))
-        if inner is None:
-            continue
-        if isinstance(value, dict):
-            clip_to_declared_length(inner, value, notes=notes, path=here)
-        elif isinstance(value, list):
-            for index, item in enumerate(value):
-                if isinstance(item, dict):
-                    clip_to_declared_length(inner, item, notes=notes,
-                                            path=f"{here}.{index}")
-    return data
-
-
 def preprocess_llm_output(step_key: str, raw: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
 
     result = dict(_unwrap_envelope(step_key, raw))
-
-    if step_key == "character_kernel":
-        # LIFT FIRST, THEN FILL, and the order is not cosmetic. The kernel
-        # routinely writes `effects`, `interaction` and `salience` one brace
-        # too deep, inside `updates`, and `_canonical_character_kernel_output`
-        # lifts them back out -- but it runs as the MODEL's own validator,
-        # after this function. Filling first therefore wrote an empty
-        # `salience` and an empty `interaction` at the top level, the lift
-        # then saw them present and left them, and a turn that had answered
-        # 0.6 and named who it was addressing lost both to a repair meant to
-        # cost nothing. Caught before it shipped; the lift is idempotent, so
-        # running it here as well is free.
-        result = _canonical_character_kernel_output(result)
-        # Only what does not carry the bar, and silently
-        # (`KERNEL_FILL_QUIETLY`). A beat that learned nothing is an ordinary
-        # beat, not a defect, and must not cost a retry or a warning. What
-        # the character did and why is left to fail, so the repair gets its
-        # chance at that first.
-        fill_absent_required(SCHEMA_MAP[step_key], result, notes=None,
-                             only=KERNEL_FILL_QUIETLY)
 
     if step_key == "narrator":
         # PARAGRAPHS ARE MARKED WITH <p>...</p> AND RENDERED HERE.
@@ -6542,51 +6041,16 @@ OUTPUT_EXAMPLES = {
         },
         "salience": 0.5,
     },
-    "character_kernel": {
-        "state": {
-            "appraisal": {
-                "goal_relevance": "", "expectation": "", "emotion": "",
-                "uncertainty": "", "novelty": 0.0,
-                "controllability": 0.5, "coping_potential": 0.5,
-                "norm_compatibility": 0.0, "self_congruence": 0.0,
-                "intrinsic_pleasantness": 0.0, "present_evidence": [],
-                "memory_modulation": {
-                    "evidence": [], "familiarity": 0.0, "expectation": "",
-                    "anticipatory_emotion": "", "coping_effect": 0.0,
-                    "somatic_echo": 0.0, "threat_bias": 0.0, "why": "",
-                },
-                "somatic_impact": {
-                    "pain": 0.0, "pleasure": 0.0, "why": "",
-                    "evidence": [],
-                },
-                "goal_impacts": [],
-            },
-            "active": {
-                "wants": [],
-                "active_concerns": [], "stress": {}, "hedonic": {},
-            },
-            "decision": {
-                "enact": "", "suppress": "", "hinge": "",
-                "uncertainty": "",
-            },
-        },
-        "sequence": [],
-        "manifest": {"surface_demeanor": "", "tells": []},
-        "updates": {
-            "intentions": [], "projects": [], "drive": None,
-            "beliefs": [], "associations": [], "people": [],
-            "relationships": [],
-            "memory": {"keep": [], "reinterpret": [], "effects": []},
-        },
-        "effects": [],
-        "interaction": {
-            "addresses": [],
-            "expects_response": False,
-            "yields_floor": True,
-            "urgency": 0.0,
-            "conversation_complete_for_me": False,
-        },
-        "salience": 0.5,
+    # The bare reply, as its card asks for it (`prompts/character_bare.txt`):
+    # the repair and fallback calls hand this over, and they sent `{}` while
+    # the full card was the default -- no shape at all to repair toward.
+    "character_bare": {
+        "want": "", "held_back": "", "hinge": "", "unsure": "",
+        "sequence": [{"say": "", "to": "", "how": "", "why": ""},
+                     {"do": "", "why": ""}, {"ponder": "", "why": ""}],
+        "demeanor": "", "tells": [], "changes": [], "note": "",
+        "notebook": [{"id": "", "about": "", "note": "", "sure": "", "until": "",
+                      "strike": ""}],
     },
     "narrator": {
         # Handed to the model on every repair and fallback call, so it must
@@ -7567,36 +7031,13 @@ def semantic_output_errors(
         if not isinstance(output.get("sequence"), list):
             errors.append("sequence must be an array")
 
-    elif step_key in {"character", "character_kernel"}:
+    elif step_key == "character":
+        # The compiled beat (`character_bare.compile_bare`) every reader after
+        # the call consumes.
         if not isinstance(output.get("sequence"), list):
             errors.append("sequence must be an array")
-
         if not isinstance(output.get("interaction"), dict):
             errors.append("interaction must be an object")
-
-        if step_key == "character_kernel":
-            if not isinstance(output.get("state"), dict):
-                errors.append("state must be an object")
-            if not isinstance(output.get("updates"), dict):
-                errors.append("updates must be an object")
-            if not isinstance(output.get("effects"), list):
-                errors.append("effects must be an array")
-            updates = (output.get("updates")
-                       if isinstance(output.get("updates"), dict) else {})
-            # A NOTE, NOT A FATAL CHECK, by this function's own rule: commit
-            # already reads and reports the field. `affect.apply_intent_ops`
-            # resolves an op that names its goal by text through the fold an
-            # `add` uses, and drops and says one that names nothing; an add
-            # with no text is refused there too. Fatal, it bought a 41-94 s
-            # repair on three real beats and cost a fourth its turn (rounds
-            # 5-7, 2026-09-23) over one bookkeeping row.
-            for index, update in enumerate(updates.get("intentions") or []):
-                missing, op = _intention_row_missing(update)
-                if missing:
-                    noted.append(
-                        f"updates.intentions.{index}.{missing} is required for "
-                        f"{op or 'this operation'}; commit reads the row by its "
-                        "text or drops it")
 
     # NARRATION IS NOT VALIDATED HERE ANY MORE. A narrator answer blocks on
     # being parseable JSON of the declared shape and on nothing else: no
@@ -7617,18 +7058,6 @@ def semantic_output_errors(
     # instead of being rejected.
 
     return errors
-
-def _intention_row_missing(update):
-    """`(field, op)`: the field one intention update needs for its operation
-    and does not carry -- `intent` to add one, `id` for anything done to one
-    that exists -- or `("", op)` when it carries it."""
-    if not isinstance(update, dict):
-        return "", ""
-    op = str(update.get("op") or "").strip().casefold()
-    if op == "add":
-        return ("" if str(update.get("intent") or "").strip() else "intent"), op
-    return ("" if str(update.get("id") or "").strip() else "id"), op
-
 
 def _name_what_was_discarded(step_key, raw, error):
     """Say that WE dropped the sequence, when we did.

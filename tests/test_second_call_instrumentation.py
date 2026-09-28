@@ -184,8 +184,8 @@ def test_decision_review_retry_is_warned_even_when_it_succeeds(
     def fake_agent_json(role, step_key, system, payload, **kwargs):
         calls.append(payload)
         return {"sequence": [
-            {"type": "speech",
-             "text": "The night is calm and the wine is good."}]}
+            {"say": "The night is calm and the wine is good.", "to": "",
+             "why": "a toast"}]}
 
     monkeypatch.setattr(character_module, "_agent_json", fake_agent_json)
     character_module.character_step(ctx, char_id, nonce=0)

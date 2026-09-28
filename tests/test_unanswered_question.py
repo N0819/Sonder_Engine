@@ -329,13 +329,12 @@ class TestWhoeverOwesAnAnswerHasTheFloor:
 
 
 def test_the_prompt_says_what_both_fields_mean():
-    from llm.prompts import get_prompt
-
-    text = get_prompt("character")
-    assert "awaiting_your_answer" in text
-    assert "quiet_for_beats" in text
+    from llm.prompts import character_bare_module
+    owed = character_bare_module("answer_owed", "en")
+    assert "awaiting_your_answer" in owed
+    assert "quiet_for_beats" in character_bare_module("their_silence", "en")
     # Noticing is required; answering is not.
-    assert "not obliged to answer" in text
+    assert "stay silent" in owed
 
 
 class TestADebtNeedsAChannel:

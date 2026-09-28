@@ -62,6 +62,17 @@ def test_the_bare_card_is_short_and_ends_on_its_reply(language):
         assert f'"{key}"' in lines[output], key
 
 
+def test_the_card_supplies_no_default_temperament():
+    """Scope must not quietly author a cautious personality: a turn ends
+    where someone else must answer or the world must decide, never at a
+    size. Carried from the full card's gating tests (2026-09-27)."""
+    card = bare_character_prompt("en")
+    assert "nothing here prefers a small move to a large one" in card
+    for brake in ("Consider silence, a small response", "It is a brake on unearned action",
+                  "must be yielded to"):
+        assert brake not in card
+
+
 def test_a_section_ships_only_when_the_moment_calls_for_it():
     quiet = character_bare.modules_for({"self": {}, "perception": {}})
     assert quiet == []
@@ -328,7 +339,6 @@ def _bare_reply():
 def test_the_bare_contract_runs_the_step_and_its_note_reaches_the_next_call(story, monkeypatch):
     import agents.character as character
     char_id, context, commit = story
-    monkeypatch.setattr(character_bare, "enabled", lambda: True)
     asked, calls = [], []
 
     def jev_answers(state, questions):
@@ -364,7 +374,6 @@ def test_a_kept_note_is_committed_and_shown_in_the_next_calls_notebook(story, mo
     in the notebook, the one place the next payload carries what it keeps."""
     import agents.character as character
     char_id, context, commit = story
-    monkeypatch.setattr(character_bare, "enabled", lambda: True)
     reply = {**_bare_reply(), "notebook": [{"about": "the visitor", "note": "ask where they came from"}]}
     monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: _answer([])(questions))
     monkeypatch.setattr(character, "_agent_json", lambda *a, **k: deepcopy(reply))
@@ -392,7 +401,6 @@ def test_an_unread_reply_stands_on_code_alone_and_buys_no_second_call(story, mon
     filed."""
     import agents.character as character
     char_id, context, _commit = story
-    monkeypatch.setattr(character_bare, "enabled", lambda: True)
 
     def jev_answers(state, questions):
         if any(k.startswith(("say:", "salience")) for k in questions):

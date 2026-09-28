@@ -223,20 +223,8 @@ def test_encoding_affect_round_trips_through_snapshot_restore(temp_db):
     assert tuple(row) == (-.2, .3, .65, .8)
 
 
-def test_character_prompt_does_not_launder_claim_origin_through_memory_form():
-    prompt = DEFAULT_PROMPTS["character"]
-    assert "CLAIM ORIGIN IS NOT MEMORY FORM" in prompt
-    assert "statement was RECEIVED" in prompt
-    assert "still INFERRED" in prompt
-    # Ponder must stay BOUNDED without being talked out of existence. The
-    # old wording carried eight discouragements, one permission and no
-    # occasion, and fired zero times in 3,083 stored character results --
-    # so the prohibitions were replaced by a bound plus a reason to reach
-    # for it. What this pins is the intent the old strings stood for, not
-    # the strings: it is capped at one per beat, it is private, and a beat
-    # the character understands does not call for it.
-    assert "At most one per beat" in prompt
-    assert "a private recall request nobody sees or hears" in prompt
-    assert "a beat you understand needs none" in prompt
-    # And it now names an OCCASION, which is the thing it never had.
-    assert "WHEN TO PONDER" in prompt
+# `test_character_prompt_does_not_launder_claim_origin_through_memory_form`
+# went with the full card (2026-09-27): the bare card does not state that a
+# received line is not a memory of one's own, nor bound `ponder` in words --
+# the memory keys are named for their status (`what_i_was_told`,
+# `what_i_concluded`) and recorded open in docs/UNBUILT_CHARACTERS.md §6.17.

@@ -2,8 +2,10 @@
 
 **Status: PARTLY BUILT, 2026-09-27, branch `worktree-jev-character-tracking`.**
 The affect pass is wired (increment 1, "Wiring the affect pass" below); the
-bare contract is built behind a setting ("The bare contract" below), which
-carries increment 2 and everything the full card's bookkeeping asked for; the
+bare contract is built and, since 2026-09-27, the only character contract
+("The bare contract" below), which carries increment 2 and everything the full
+card's bookkeeping asked for -- the full card and its kernel compiler are
+deleted; the
 memory packet LANDED 2026-09-27 as `mind/memory_jev.py` -- the measured shape
 at equal lane weights, without the moment tag (a schema change still the
 owner's) and at 24 rows (48 still the owner's, after the conduct replay);
@@ -867,11 +869,12 @@ needs a Jev question before its clause can leave the prompt.
 
 ## The bare contract
 
-**Status: BUILT behind a setting, 2026-09-27** (`character_contract: bare`;
-`agents/character_bare.py`, `mind/character_jev.py`,
-`tests/test_character_bare.py`). The full card stays the default until the
-owner has read the replay (below) and the observable floor is settled
-(UNBUILT §6.17).
+**Status: BUILT, 2026-09-27, and the only character contract since that day**
+(`agents/character_bare.py`, `mind/character_jev.py`,
+`tests/test_character_bare.py`): the owner committed the branch to decision
+models, and the full card, its kernel compiler, its prompt paragraphs and the
+`character_contract` setting were deleted so two contracts do not linger. What
+is still open is UNBUILT §6.17.
 
 The owner, 2026-09-26, in order: "Observe what other fields from the
 character prompt can be handled by jev, one of my thoughts is memory
@@ -1229,9 +1232,10 @@ and registered: what `do` says is what observers get (UNBUILT §6.17).
 
 ## Found on the way
 
-- `waiting_ops` is taught (STILL WAITING, `character.txt:41`) and read at commit
-  (`persist/commit_background.py:1655`), but `agents/character_kernel.py`
-  `_UPDATE_LANES` never compiles it: no character can give up on a promise.
+- `waiting_ops` was taught (STILL WAITING, the full card's `character.txt:41`)
+  and read at commit (`persist/commit_background.py:1655`), but the full card's
+  kernel compiler never compiled it: no character could give up on a promise.
+  The bare contract's `stop_waiting` change files it; the kernel is deleted.
 - `docs/guides/MEMORY.md` §3 and §5 say k=16 and that recall bumps the access
   count on the spot; the code uses 24 and writes at commit.
 - Memory `entities` hold the label a row was perceived under ("the beautiful

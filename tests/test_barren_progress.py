@@ -225,8 +225,6 @@ class TestTheCharacterIsTold:
 
         assert annotated[0]["barren_attempts"] == 2
 
-    def test_the_prompt_already_names_it(self):
-        """No second vocabulary for the same fact."""
-        from llm.prompts import get_prompt
-
-        assert "barren_attempts" in get_prompt("character", "en")
+    # `test_the_prompt_already_names_it` went with the full card
+    # (2026-09-27): the bare card leaves `barren_attempts` to its name
+    # (docs/UNBUILT_CHARACTERS.md §6.17).

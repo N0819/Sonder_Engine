@@ -188,8 +188,8 @@ def test_the_bound_holds(temp_db, monkeypatch):
     The bound used to be the mind's own `salience` self-report reaching 0.7,
     and that number is not a bound -- it arrives in the character prompt only
     as the literal 0.5 inside the required JSON shape, with nothing saying
-    what it means, and `KERNEL_FILL_QUIETLY` fills an absent one with the
-    same 0.5 in silence. Measured, two_lives v5 (2026-09-19): across 60 beats
+    what it means, and the full card's `KERNEL_FILL_QUIETLY` (deleted with
+    it 2026-09-27) filled an absent one with the same 0.5 in silence. Measured, two_lives v5 (2026-09-19): across 60 beats
     of two autonomous characters, ONE self row -- the single beat anybody
     spoke -- while a millwright spent twenty of them diagnosing a rotten
     bearing and remembered only the crouch he did it in.

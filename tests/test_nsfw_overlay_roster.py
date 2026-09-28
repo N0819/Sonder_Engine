@@ -70,7 +70,7 @@ def test_a_stored_prompt_body_answers_from_the_same_roster(card_with_roster):
     """The third site, unchanged in behaviour and now sharing the reader."""
     card = card_with_roster(["narrator"])
     assert _overlay(card) in prompts.get_prompt_body("narrator")
-    assert _overlay(card) not in prompts.get_prompt_body("character")
+    assert _overlay(card) not in prompts.get_prompt_body("character_bare")
 
 
 def test_the_overlay_is_withheld_from_every_sheet_when_nsfw_is_off(

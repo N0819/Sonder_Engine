@@ -235,20 +235,17 @@ class TestTheEngineOwnsTheModalitySet:
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_the_sheet_publishes_the_sense_and_not_the_body_parts(self,
                                                                   language):
-        """The whole of the change: six regions become two senses. Both packs
-        must move together, and the enum is the canonical token that has to
-        appear in both."""
-        prompt = _card(language)["prompts"]["character"]
-        assert '"channel":"seen|heard"' in prompt
-        assert "face|eyes|voice|hands|posture|breath" not in prompt
+        """The whole of the change: six regions become two senses. Under the
+        bare card (2026-09-27) the channel is the decision model's choice,
+        and its option set is exactly the two senses, in both packs."""
+        channels = _card(language)["character_jev"]["options"]["channel"]
+        assert set(channels) == set(TELL_CHANNELS)
 
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_the_sheet_states_the_test_the_field_answers(self, language):
         """Not a list of instances: the question is whether the cue reaches a
-        mind that cannot see, and both published values must be named where
-        the rule is stated as well as inside the JSON shape."""
-        prompt = _card(language)["prompts"]["character"]
+        mind that cannot see. Each option of the decision model's question
+        states it in words, never as a body part."""
+        channels = _card(language)["character_jev"]["options"]["channel"]
         for value in TELL_CHANNELS:
-            assert prompt.count(f"`{value}`") >= 1, (
-                f"{language}: {value!r} appears only in the output shape, so "
-                "nothing tells the hand when to choose it")
+            assert str(channels[value]).strip(), (language, value)

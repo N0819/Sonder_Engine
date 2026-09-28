@@ -11,35 +11,27 @@ says the moment calls for it (the owner: "we can now gate parts of the
 prompts, Jev can detect a disput and insert the disput payload
 deterministically").
 
-Selected by the `character_contract` setting ("bare"); the full card
-(`prompts/character.txt`, compiled by `agents/character_kernel.py`) stays
-the default until the replay comparison has been read. This module compiles
-the bare reply and the decision model's answers (`mind/character_jev.py`)
-into the same `CharacterOutput` shape the kernel produces, so everything
-after the call -- validation, grounding, tells, the theory-of-mind caps, the
-concealment floors, commit -- reads one shape whichever card wrote the beat.
+The only character contract since 2026-09-27 (the owner: "we are fully
+committed to decision models on this branch"); the full card that wrote
+every field itself, and the kernel that compiled it, are gone. This module
+compiles the bare reply and the decision model's answers
+(`mind/character_jev.py`) into the `CharacterOutput` shape everything after
+the call reads -- validation, grounding, tells, the theory-of-mind caps, the
+concealment floors, commit.
 """
 
 from __future__ import annotations
 
 import re
 
-from core.db import get_setting
 from llm.prompts import bare_character_prompt, character_bare_module, character_jev_options
 from mind import affect, affect_pass, notebook
 from mind import character_jev as jev
 
-#: The setting that selects the contract, and the value that selects this one.
-CONTRACT_SETTING = "character_contract"
-BARE = "bare"
 NOTE_CHARS = jev.NOTE_CHARS
 #: How many times the reply is put to the decision model before the beat
 #: stands on code alone.
 READ_BACK_ATTEMPTS = 2
-
-
-def enabled():
-    return str(get_setting(CONTRACT_SETTING) or "").strip().casefold() == BARE
 
 
 # --- what this mind holds, from its own payload -----------------------------------
@@ -477,8 +469,8 @@ def _people_picked(answers, prefix, h, reply_index):
 
 def compile_bare(reply, answers, h):
     """`(compiled, warnings)`: the bare reply plus the decision model's
-    answers, in the `CharacterOutput` shape `compile_character_kernel`
-    returns."""
+    answers, in the `CharacterOutput` shape every reader downstream
+    consumes."""
     reply = reply if isinstance(reply, dict) else {}
     answers = answers or {}
     warnings = []

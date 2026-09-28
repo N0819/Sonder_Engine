@@ -3141,20 +3141,20 @@ def check_identity_fold_is_owned(errors: list[str]) -> None:
 
 
 def check_character_payload_names(errors: list[str]) -> None:
-    """The projected payload names, the gate, and the prompt say one thing.
+    """The projected payload names and the prompt say one thing.
 
     `agents.character.PAYLOAD_NAMES` renames a handful of keys AT THE ASSEMBLY
     LINE, so the character reads `they_said_nothing` where every other hand in
-    the tree writes `player_said_nothing`. That is safe only while three things
+    the tree writes `player_said_nothing`. That is safe only while two things
     agree, and nothing about the desync is loud:
 
-      * the paragraph gate (`character_block_keys`) reads the FINISHED payload,
-        so a condition still spelled with the engine name never fires again and
-        the paragraph explaining the field silently disappears;
       * the prompt prose names paths in sentences, so a stale mention tells the
         character to consult a key it does not have;
       * a projected name that collides with a key the payload already carries
         would overwrite it.
+
+    (The full card's paragraph gate, `character_block_keys`, was a third; it
+    went with the full card on 2026-09-27.)
 
     Measured precedent for why this is a check and not a convention: the memory
     split left seven monkeypatches pointing at a facade that no longer defined
@@ -3185,23 +3185,12 @@ def check_character_payload_names(errors: list[str]) -> None:
         card = pack / "cards" / "system_prompts.json"
         if not card.is_file():
             continue
-        index = json.loads(card.read_text(encoding="utf-8"))
-        conditions = {
-            str(field)
-            for _heading, fields in (index.get("character_block_keys") or [])
-            for field in (fields or [])
-        }
         parts = pack / "cards" / "system_prompts"
         prose = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(parts.rglob("*.txt"))) if parts.is_dir() else ""
         for engine_name, seen_as in table.items():
             stale = "decision.%s" % engine_name
-            if stale in conditions:
-                errors.append(
-                    "%s gates a paragraph on %r, but the character payload "
-                    "projects that key to %r -- the condition can never fire"
-                    % (pack.name, stale, "decision.%s" % seen_as))
             if stale in prose:
                 errors.append(
                     "%s prompt prose names %r, which the character payload "

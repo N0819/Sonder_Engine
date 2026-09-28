@@ -721,21 +721,10 @@ def translate_prompts(
         read_card_source(JA, "system_prompts")
         if prompt_ids else deepcopy(english))
 
-    # Translate the character-sheet gating prefixes first, then inject those
-    # exact translations into the sheet through target-valued masks.
-    anchors = [(f"anchor:{i}", row[0])
-               for i, row in enumerate(english["character_block_keys"])]
-    anchor_values = translator.translate_many(
-        anchors, batch_chars=8_000, allow_fragment_fallback=False,
-        mask_protocol=True)
-    anchor_map = {
-        row[0]: anchor_values[f"anchor:{i}"]
-        for i, row in enumerate(english["character_block_keys"])
-    }
-    output["character_block_keys"] = [
-        [anchor_map[row[0]], deepcopy(row[1])]
-        for row in english["character_block_keys"]
-    ]
+    # The full character card's paragraph-gate prefixes were translated first
+    # and injected through target-valued masks; the card and its gate table
+    # went on 2026-09-27, so no leaf carries an anchor any more.
+    anchor_map: dict[str, str] = {}
 
     units: list[tuple[str, str]] = []
     recipes: dict[
@@ -744,8 +733,6 @@ def translate_prompts(
     ] = {}
     translated_leaves = 0
     for path, source in walk_strings(english):
-        if path and path[0] == "character_block_keys":
-            continue
         if prompt_ids and not (
                 len(path) >= 2 and path[0] == "prompts"
                 and path[1] in prompt_ids):

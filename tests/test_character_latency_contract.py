@@ -1,4 +1,11 @@
-"""Feature-preserving character latency surfaces and the isolated wire A/B."""
+"""Character latency surfaces that outlived the full card.
+
+The full card's seven-field kernel, its compact-wire A/B and its prompt
+ceiling went with it (2026-09-27); the bare card's length is pinned in
+`tests/test_character_bare.py`. What stays: the grammar carries constraints
+and no annotation text, the card's name-bearing line sits behind a prefix
+every mind shares, and per-turn reads are made once.
+"""
 
 import json
 
@@ -6,17 +13,15 @@ import json
 def test_provider_schema_drops_annotations_not_constraints():
     from llm import llm_quality, schemas
 
-    builder = getattr(schemas.CharacterOutput, "model_json_schema", None)
-    raw = builder() if builder is not None else schemas.CharacterOutput.schema()
-    offered = llm_quality._step_json_schema("character")
+    model = schemas.SCHEMA_MAP["character_bare"]
+    builder = getattr(model, "model_json_schema", None)
+    raw = builder() if builder is not None else model.schema()
+    offered = llm_quality._step_json_schema("character_bare")
 
     raw_size = len(json.dumps(raw, separators=(",", ":")))
     offered_size = len(json.dumps(offered, separators=(",", ":")))
-    # Pydantic 1 emits far more annotation text than Pydantic 2, so a ratio
-    # against the raw schema measured the dependency's verbosity rather than
-    # the provider payload. Both supported majors must keep the actual wire
-    # under the same useful ceiling while still proving annotations came off.
-    assert offered_size < 8500
+    # 933 bytes on the wire against 2,392 raw, measured 2026-09-27.
+    assert offered_size < 1500
     assert offered_size < raw_size * 0.75
 
     def annotations(value):
@@ -30,188 +35,24 @@ def test_provider_schema_drops_annotations_not_constraints():
                 yield from annotations(item)
 
     assert not list(annotations(offered))
-    assert offered.get("properties")
+    assert "sequence" in offered.get("properties")
     assert offered.get("$defs") or offered.get("definitions")
 
 
-def test_runtime_character_schema_is_the_seven_field_typed_kernel():
-    from llm import llm_quality
+def test_the_bare_card_keeps_its_name_behind_a_shared_prefix():
+    """Everything before the name-bearing line is the same for every mind,
+    so a provider can cache it; the line sits just before the reply shape."""
+    from llm.prompts import bare_character_prompt
 
-    offered = llm_quality._step_json_schema("character_kernel")
-    wire = json.dumps(offered, separators=(",", ":"))
-
-    # The first 665-byte experiment made every cognitive row an untyped item
-    # in one list. Paired GLM-5.2 replays then treated list order as priority:
-    # the memory rows at the tail disappeared. This remains smaller than the
-    # old CharacterOutput grammar while giving each faculty a typed aperture.
-    # Live GLM emitted a belief revision without its target/confidence/evidence,
-    # and another response looped inside a want until truncation. Required
-    # learning fields, nonempty citation ids, and 240-character choice bounds
-    # add ~370 bytes to the former 5,993-byte grammar; keep those constraints.
-    assert len(wire) < 6500
-    assert set(offered["properties"]) == {
-        "state", "sequence", "manifest", "updates", "effects",
-        "interaction", "salience",
-    }
-    for retired in (
-        "active_state", "appraisal", "belief_updates", "mind_model_updates",
-        "relationship_updates", "memory_effects", "contact_ops",
-        "material_effects",
-    ):
-        assert retired not in offered["properties"]
-
-    definitions = offered.get("$defs") or offered.get("definitions") or {}
-    updates_ref = offered["properties"]["updates"].get("$ref", "")
-    updates_name = updates_ref.rsplit("/", 1)[-1]
-    update_fields = set(definitions[updates_name]["properties"])
-    assert update_fields == {
-        "intentions", "projects", "drive", "beliefs", "associations",
-        "people", "relationships", "memory",
-    }
-    beliefs = definitions[updates_name]["properties"]["beliefs"]
-    belief_name = beliefs["items"]["$ref"].rsplit("/", 1)[-1]
-    belief = definitions[belief_name]
-    assert {"belief", "operation", "target_belief", "confidence", "evidence"} <= set(
-        belief["required"])
-    assert belief["properties"]["evidence"]["minItems"] == 1
-    evidence_name = belief["properties"]["evidence"]["items"]["$ref"].rsplit("/", 1)[-1]
-    assert "event_id" in definitions[evidence_name]["required"]
-    assert definitions[evidence_name]["properties"]["event_id"]["minLength"] == 1
-
-    state_name = offered["properties"]["state"]["$ref"].rsplit("/", 1)[-1]
-    active_name = definitions[state_name]["properties"]["active"]["$ref"].rsplit("/", 1)[-1]
-    active = definitions[active_name]["properties"]
-    assert "mood" not in active  # derived from affect.surface by the compiler
-    want_name = active["wants"]["items"]["$ref"].rsplit("/", 1)[-1]
-    assert definitions[want_name]["properties"]["want"]["maxLength"] == 240
-    decision_name = definitions[state_name]["properties"]["decision"]["$ref"].rsplit("/", 1)[-1]
-    for field in ("hinge", "uncertainty"):
-        assert definitions[decision_name]["properties"][field]["maxLength"] == 240
-
-
-def test_runtime_character_prompt_has_a_small_operational_ceiling():
-    from llm.prompts import character_prompt
-
-    prompt = character_prompt({
-        "self": {"name": "Vessel"}, "memory": {},
-        "perception": {}, "decision": {},
-    })
-
-    # This was 65,440 authored characters and roughly 48 KB even after gates.
-    # The ceiling includes the universal language/schema policy.
-    #
-    # RAISED 18,000 -> 18,500 on 2026-09-19, and the cost basis, because a
-    # ceiling nobody can account for gets raised again next week. The prompt
-    # stood at 17,997 -- three characters of headroom -- and the waiting ledger
-    # (`self.still_waiting_for` plus `waiting_ops`) needs 411 of instruction
-    # after being cut twice. What that buys and what it costs:
-    #
-    #   * COST: ~100 tokens of prefill on a call that is decode-bound and
-    #     never cached (~22.5s per character, measured), so the wall-clock
-    #     change is inside the noise of one beat.
-    #   * THE ALTERNATIVE IS THE MEASURED FAILURE, not a saving. A field the
-    #     model is never taught is a field it never sends: `salience` reaches
-    #     this same prompt only as a literal 0.5 in the shape, with nothing
-    #     saying what it means, and the self-memory gate that read it was an
-    #     OFF SWITCH for every character in every story -- 1 self row in 60
-    #     beats (two_lives v5). An untaught field is not cheaper; it is
-    #     silent.
-    #
-    # It went up by 500 rather than by 411 so the next paragraph is a
-    # deliberate decision and not an emergency.
-    assert len(prompt) < 18_500
-
-
-def test_compact_character_wire_is_experimental_and_complete():
-    from llm import llm_quality
-
-    control = llm_quality._step_json_schema("character")
-    compact = llm_quality._step_json_schema("character", wire_variant="compact")
-    control_fields = set(control["properties"])
-    compact_fields = set(compact["properties"])
-
-    # The RETIRED deliberation fields are gone for every caller, compact or
-    # not: the reasoning block does that weighing, so nothing asks for it.
-    retired = llm_quality._CHARACTER_RETIRED_WIRE_FIELDS
-    assert not (retired & control_fields)
-    assert not (retired & compact_fields)
-    # The aliases are still what `compact` alone subtracts.
-    aliases = llm_quality._CHARACTER_COMPACT_WIRE_FIELDS - retired
-    assert aliases <= control_fields
-    assert not (aliases & compact_fields)
-    # The evidence-citation lanes joined the retired set: a character is
-    # isolated by construction (perception composes its payload), so they
-    # could never catch a breach and nothing read them.
-    for canonical in ("sequence", "appraisal", "active_state", "manifest"):
-        assert canonical in compact_fields
-    assert "decision_continuity" not in control_fields
-    assert "decision_continuity" not in compact_fields
-
-
-def test_runtime_prompt_moves_identity_behind_the_stable_prefix():
-    from llm.prompts import character_prompt
-
-    payload = {"self": {"name": "Vessel"}, "memory": {},
-               "perception": {}, "decision": {}}
     for language in ("en", "ja"):
-        prompt = character_prompt(payload, language=language)
-        lines = prompt.splitlines()
+        lines = bare_character_prompt(language).splitlines()
         identity = next(i for i, line in enumerate(lines) if "{name}" in line)
-        # Anchored on keys that are still ASKED FOR. `response_candidates` was
-        # the other half of this pair until the deliberation fields were
-        # retired; llm.prompts uses the same pair to place the identity line.
         output = next(i for i, line in enumerate(lines)
-                      if '"state"' in line
-                      and '"sequence"' in line)
+                      if '"want"' in line and '"sequence"' in line)
 
         assert identity > len(lines) // 2
         assert identity + 1 == output
         assert "{name}" not in "\n".join(lines[:identity])
-
-
-def test_compact_prompt_removes_only_considered_response_scratch():
-    from llm.prompts import character_prompt
-
-    payload = {"self": {"name": "Vessel"}, "memory": {},
-               "perception": {}, "decision": {}}
-    control = character_prompt(payload)
-    compact = character_prompt(payload, wire_variant="compact")
-
-    # Both deliberation fields are already absent from the runtime prompt, so
-    # the compact variant has nothing left to subtract from it. What it still
-    # guarantees is that it subtracts NOTHING ELSE.
-    assert '"considered_responses"' not in control
-    assert '"response_candidates"' not in control
-    assert compact == control
-
-
-def test_the_retired_citation_lanes_are_absent_from_the_ask_not_dead():
-    """An empty field is not a useless field, and a play run cannot tell the
-    difference by looking at it.
-
-    A 2026-09-05 run read `observations_used`, `present_evidence_used`,
-    `memory_evidence_used`, `considered_responses` and `response_candidates`
-    empty in all twenty of a character's stored answers and proposed cutting
-    all five. Every one of them is already gone from the wire -- dropped from
-    the advertised schema for EVERY caller by
-    `llm_quality._CHARACTER_RETIRED_WIRE_FIELDS`, so they cost no payload
-    byte and the model is never invited to fill them. They read empty on the
-    wire because the fix landed, not because nothing uses them.
-
-    Two of the three evidence lanes are then WRITTEN BY THE ENGINE, after
-    grounding, and the third is a compatibility projection over both; a
-    reader downstream of the character step sees them full. That is what this
-    pins, so the next run that finds them empty finds this too.
-    """
-    from llm.prompts import character_prompt
-    from llm.llm_quality import _CHARACTER_RETIRED_WIRE_FIELDS
-
-    control = character_prompt({"self": {"name": "Vessel"}, "memory": {},
-                                "perception": {}, "decision": {}})
-    for field in _CHARACTER_RETIRED_WIRE_FIELDS:
-        assert f'"{field}"' not in control, field
-    assert {"observations_used", "present_evidence_used",
-            "memory_evidence_used"} <= set(_CHARACTER_RETIRED_WIRE_FIELDS)
 
 
 def test_unanswered_question_snapshot_avoids_a_second_history_read(monkeypatch):
@@ -232,39 +73,3 @@ def test_unanswered_question_snapshot_avoids_a_second_history_read(monkeypatch):
 
     assert first == second == {}
     assert len(calls) == 1
-
-
-def test_social_wire_cases_supply_earned_memories_and_score_conduct():
-    from tools.character_wire_ab import _social_memory_cases
-
-    cases = {name: (payload, scorer)
-             for name, payload, scorer in _social_memory_cases()}
-    examples = {
-        "social-memory:kept-confidence": (
-            "That is Bram's to tell. Ask him; I will not expose a confidence.",
-            "His hands shake because he is frightened."),
-        "social-memory:earned-distrust": (
-            "No. I keep the key until you account for the copy and break-in.",
-            "She gives Cyra the archive key."),
-        "social-memory:shared-code": (
-            "Tamsin snuffs the lamp and moves for the back door.",
-            "What does blue lantern mean? Is that our code phrase?"),
-        "social-memory:repaired-hurt": (
-            "You did not abandon me. You left to fetch the physician.",
-            "You abandoned me there, and I will never forgive you."),
-    }
-
-    assert set(cases) == set(examples)
-    for name, (payload, scorer) in cases.items():
-        memories = payload["memory"]["recent_episodes"]
-        assert memories
-        assert all(memory["memory_ref"].startswith("event:social-")
-                   for memory in memories)
-        positive, negative = examples[name]
-        assert scorer(positive)
-        assert not scorer(negative)
-
-    assert cases["social-memory:kept-confidence"][1](
-        "If he wanted you to know, he'd tell you himself.")
-    assert cases["social-memory:earned-distrust"][1](
-        "You said that last time. The key came back copied.")

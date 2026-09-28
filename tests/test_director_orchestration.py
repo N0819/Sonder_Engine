@@ -6197,8 +6197,15 @@ class TestACharactersMoveIsFoundThroughTheCitation:
         """Pinned because it is a DESIGN boundary and not an omission: the
         moment a character sheet asks for one, a mind is doing the Director's
         bookkeeping."""
-        from llm.prompts import DEFAULT_PROMPTS
-        sheet = DEFAULT_PROMPTS["character"]
+        from llm.prompts import DEFAULT_PROMPTS, character_bare_module
+        from agents.character_bare import modules_for
+        sheet = DEFAULT_PROMPTS["character_bare"] + "\n".join(
+            character_bare_module(name, "en") for name in (
+                "their_silence", "answer_owed", "offers", "speech_budget", "crisis",
+                "tell_variety", "tell_payoff", "repetition", "dispute", "drive_rupture",
+                "drive_rupture_forced", "project_review", "still_waiting",
+                "impossible_knowledge", "carried_reports", "ways_on"))
+        assert modules_for  # every gated section is part of the sheet
         assert "category" not in sheet
         assert "from_declaration" not in sheet
 

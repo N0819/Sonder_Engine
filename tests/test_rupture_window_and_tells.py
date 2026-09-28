@@ -11,6 +11,7 @@ payload carries self.crisis at CRISIS_STRAIN_MIN, self.recent_tells from
 the ledger, and the in-window rupture prompt with its worked example.
 """
 
+from llm.prompts import character_bare_module
 import json
 import time
 
@@ -245,15 +246,15 @@ def test_crisis_flag_fed_at_extreme_strain(temp_db, monkeypatch):
     captured = _run_character_step(
         temp_db, monkeypatch, {"interior": {"drive_strain": 0.85}})
     assert captured["payload"]["self"]["crisis"] is True
-    assert "CRISIS" in captured["system"]
-    assert "subtlety <= 0.4" in captured["system"]
+    # The ceiling on a tell's subtlety is code now (`compile_bare`).
+    assert character_bare_module("crisis", "en") in captured["system"]
 
 
 def test_no_crisis_flag_below_threshold(temp_db, monkeypatch):
     captured = _run_character_step(
         temp_db, monkeypatch, {"interior": {"drive_strain": 0.5}})
     assert "crisis" not in captured["payload"]["self"]
-    assert "CRISIS" not in captured["system"]
+    assert character_bare_module("crisis", "en") not in captured["system"]
 
 
 def test_recent_tells_fed_with_variety_rule(temp_db, monkeypatch):
@@ -262,11 +263,11 @@ def test_recent_tells_fed_with_variety_rule(temp_db, monkeypatch):
         {"recent_tells": ["jaw tightens", "glance at the door"]})
     assert captured["payload"]["self"]["recent_tells"] == [
         "jaw tightens", "glance at the door"]
-    assert "TELL VARIETY" in captured["system"]
+    assert character_bare_module("tell_variety", "en") in captured["system"]
     # empty ledger: no flag in payload, no prompt bloat
     captured = _run_character_step(temp_db, monkeypatch, {})
     assert "recent_tells" not in captured["payload"]["self"]
-    assert "TELL VARIETY" not in captured["system"]
+    assert character_bare_module("tell_variety", "en") not in captured["system"]
 
 
 def test_open_rupture_window_prompts_with_compact_contract(temp_db, monkeypatch):
@@ -278,13 +279,10 @@ def test_open_rupture_window_prompts_with_compact_contract(temp_db, monkeypatch)
     assert captured["payload"]["self"]["rupture"]["why"] == (
         "the court executed the clerk")
     system = captured["system"]
-    assert "DRIVE RUPTURE" in system
-    assert "ALREADY changed you" in system
-    assert "{essence,expression,taboo,because}" in system
-    assert "`updates.drive`" in system
+    assert character_bare_module("drive_rupture", "en") in system
     # freshly opened (turns_open 0): optional, not yet forced
     assert captured["payload"]["self"]["rupture"]["forced"] is False
-    assert "FORCED RESOLUTION" not in system
+    assert character_bare_module("drive_rupture_forced", "en") not in system
 
 
 def test_rupture_prompt_escalates_to_forced_after_several_beats(temp_db, monkeypatch):
@@ -298,5 +296,4 @@ def test_rupture_prompt_escalates_to_forced_after_several_beats(temp_db, monkeyp
     }, turn_idx=5)  # opened at 1, now turn 5 -> open 4 beats (>= RUPTURE_FORCE_AFTER)
     assert captured["payload"]["self"]["rupture"]["forced"] is True
     system = captured["system"]
-    assert "FORCED RESOLUTION" in system
-    assert "NOT an available option" in system
+    assert character_bare_module("drive_rupture_forced", "en") in system

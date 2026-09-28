@@ -1033,15 +1033,16 @@ the field itself; or the branch guards a case this story did not reach.
 - **The five `interaction_loop` citation keys** (`observations_used`,
   `present_evidence_used`, `memory_evidence_used`, `considered_responses`,
   `response_candidates`), reported empty in all 20 of a character's answers
-  and proposed for deletion. All five are **already dropped from the wire
-  schema for every caller** (`llm_quality._CHARACTER_RETIRED_WIRE_FIELDS`),
-  so they cost no payload byte and the model is never invited to fill them:
-  they read empty because the fix landed. Two of the evidence lanes are then
-  WRITTEN BY THE ENGINE after grounding (`character.py`'s `ground_refs`), and
-  `observations_used` is a compatibility projection over both that
-  `persist/commit_memory.py` reads. A recorded story on disk
-  (`demos/vale-model-played-14-story.json`) carries all three populated.
-  Pinned by `test_the_retired_citation_lanes_are_absent_from_the_ask_not_dead`.
+  and proposed for deletion. All five were **already dropped from the wire
+  schema for every caller**, so they cost no payload byte and the model was
+  never invited to fill them: they read empty because the fix landed. Two of
+  the evidence lanes are WRITTEN BY THE ENGINE after grounding
+  (`character.py`'s `ground_refs`), and `observations_used` is a
+  compatibility projection over both that `persist/commit_memory.py` reads.
+  A recorded story on disk (`demos/vale-model-played-14-story.json`) carries
+  all three populated. Since 2026-09-27 the ask is moot: the bare reply's
+  grammar (`CharacterBareOutput`) never had them, and the full card's wire
+  shaping went with the full card.
 - **The two speech rescues** (§ 1.121), which I had myself recommended
   deleting. Both are live and both are load-bearing: the addressed rescue is
   what carries an ordinary named call through a wall

@@ -390,7 +390,7 @@ Not scheduled and not committed to a phase. See the
 - [§6.15 — Jev around the character call — `DESIGN_JEV_CHARACTER_PASS.md`](UNBUILT_CHARACTERS.md#unbuilt-6-15)
 - [§6.16 — Good memory — `DESIGN_GOOD_MEMORY.md`](UNBUILT_CHARACTERS.md#unbuilt-6-16)
 - [§6.17 — The bare character contract — `DESIGN_JEV_CHARACTER_PASS.md`](UNBUILT_CHARACTERS.md#unbuilt-6-17)
-- [§6.18 — What the character-reply survey found in the full card's path](UNBUILT_CHARACTERS.md#unbuilt-6-18)
+- [§6.18 — What the character-reply survey found that the switch did not fix](UNBUILT_CHARACTERS.md#unbuilt-6-18)
 
 ### Living world and institutions
 

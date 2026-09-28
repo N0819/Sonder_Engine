@@ -106,7 +106,7 @@ PAYLOADS = {
     # and replay; a BENCH row is a different thing, and offering one reports a
     # model's fitness for work it will never be given. Same argument as
     # providers.ROLES makes for not offering a perception settings row.
-    "character": {
+    "character_bare": {
         "self": {
             "name": "Vessel",
             "psychology": {
@@ -219,7 +219,7 @@ STEP_ROLE = {
     "director_interpret": "director",
     "director_resolve": "director",
     "director_establish": "director",
-    "character": "character_major",
+    "character_bare": "character_major",
     "narrator": "narrator",
     **{f"director_{n}": f"director_{n}" for n in
        ("body", "social", "contact", "objects", "spatial")},

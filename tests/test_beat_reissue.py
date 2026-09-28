@@ -407,16 +407,12 @@ class TestCharacterStepReadsTheLedger(object):
         def fake_agent_json(role, step_key, system, payload, **kwargs):
             payloads.append(payload)
             return {
-                "response_candidates": [{
-                    "response": "confirm the transfer and add the seal",
-                    "selected": True}],
-                "active_state": {"mood": "even",
-                                 "wants": [{"want": "see the ledger moved",
-                                            "urgency": 0.5}]},
+                "want": "see the ledger moved",
                 "sequence": [
-                    _speech("Bring the ledger to the annex before "
-                            "nightfall."),
-                    _speech("And carry the registrar's seal with it."),
+                    {"say": "Bring the ledger to the annex before nightfall.",
+                     "to": "", "why": "the transfer"},
+                    {"say": "And carry the registrar's seal with it.",
+                     "to": "", "why": "the seal"},
                 ],
             }
 

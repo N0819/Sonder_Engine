@@ -54,7 +54,6 @@ from mind.memory import (
     provenance_context_label,
     relationships_for_payload,
 )
-from llm.prompts import character_prompt
 from story import attire as attire_model
 from story.scene import (
     NON_AWAKE_GATED,
@@ -79,16 +78,12 @@ from world.survival import vitals_of
 from world.place_purpose import (affords_here, felt_needs, here_affords,
                            place_options)
 from mind.psychology_runtime import cognitive_absorption, elapsed_psych_units
-from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
+from mind.theory_of_mind import mind_models_for_payload
 
 from .impossible_knowledge import (aired_in_story, folded_tokens,
                                    impossible_knowledge_cues)
 from . import character_bare
-from .character_kernel import (
-    compact_character_evidence,
-    compile_character_kernel,
-    expand_character_evidence,
-)
+from .character_evidence import compact_character_evidence
 
 from .common import (
     _agent_json,
@@ -1595,86 +1590,6 @@ def _attach_unbidden(memory_context, entry, recall_limit=_RECALL_LIMIT):
     memory_context["surfaces_unbidden"] = entry
 
 
-#: The lanes whose presence in the wire contract means a present citation was
-#: ASKED FOR. (What the answer actually cited is collected as every lane is
-#: grounded, so no list has to stay complete on that side.)
-#:
-#: A guard may report the ABSENCE of something only where the answer was
-#: ASKED for it. The three top-level `*_used` lanes were retired from the ask
-#: (`llm_quality._CHARACTER_RETIRED_WIRE_FIELDS`) while `CharacterOutput`
-#: keeps them with an empty-list default, so "the key is present" says
-#: nothing about whether the model was ever invited to fill it. That is how
-#: one line came to emit 45 of one play run's 116 warnings (flat run, PE20)
-#: and to fire on 18 of 19 character steps in another (lighthouse, PA11) --
-#: on beats whose citations were sitting, correctly keyed, in
-#: `appraisal.present_evidence`. Read the advertised schema instead.
-_PRESENT_CITATION_LANES = (
-    "present_evidence_used",
-    "observations_used",
-    "appraisal.present_evidence",
-    "appraisal.somatic_impact.evidence",
-)
-
-
-def _schema_node(root, node):
-    """Follow a schema `$ref` (or a lone `allOf` wrapper) to its definition."""
-    for _hop in range(8):
-        if not isinstance(node, dict):
-            return None
-        ref = node.get("$ref")
-        if not ref and isinstance(node.get("allOf"), list) and \
-                len(node["allOf"]) == 1:
-            inner = node["allOf"][0]
-            if not isinstance(inner, dict):
-                return None
-            node = inner
-            continue
-        if not ref:
-            return node
-        if not isinstance(ref, str) or not ref.startswith("#/"):
-            return None
-        target = root
-        for part in ref[2:].split("/"):
-            if not isinstance(target, dict):
-                return None
-            target = target.get(part)
-        node = target
-    return None
-
-
-def _schema_offers(schema, lane):
-    """Does the advertised wire contract still ask for this dotted lane?"""
-    node = schema
-    for name in lane.split("."):
-        node = _schema_node(schema, node)
-        properties = (node or {}).get("properties") if isinstance(node, dict) \
-            else None
-        if not isinstance(properties, dict) or name not in properties:
-            return False
-        node = properties[name]
-    return True
-
-
-def _requested_present_lanes():
-    """The present-citation lanes THIS build asks a character to fill.
-
-    Derived from the schema actually advertised on the wire, because that is
-    the only thing that answers the question the guard needs answered: was
-    the answer ever asked for this? A build that advertises none of them gets
-    no citation warning at all -- there is nothing to be missing.
-    """
-    try:
-        from llm import llm_quality
-
-        schema = llm_quality._step_json_schema("character")
-    except Exception:
-        schema = None
-    if not isinstance(schema, dict):
-        return ()
-    return tuple(lane for lane in _PRESENT_CITATION_LANES
-                 if _schema_offers(schema, lane))
-
-
 #: The lanes whose rows may name their memory by `event_key` alone -- author
 #: projections and older callers. Every other row is named by `memory_ref`.
 _LEGACY_EVENT_KEY_LANES = frozenset({
@@ -1686,7 +1601,7 @@ def _delivered_memory_rows(memory_context):
     """Every `(row, ref)` the memory context delivered, wherever it sits, and
     every summary id in it.
 
-    WALKED, NOT LISTED. Minting (`character_kernel.compact_character_evidence`)
+    WALKED, NOT LISTED. Minting (`character_evidence.compact_character_evidence`)
     gives a `memory_ref` a handle wherever it appears, and a registry that
     named its lanes one by one missed `resurfaced_without_asking.episodes`:
     on 187 captured replies (2026-09-13 to 2026-09-26) 60 correct citations
@@ -1760,10 +1675,6 @@ def _ground_observation_citations(out, observations, memory_context,
                 row_ids[str(mem["id"])] = ref
 
     warnings = []
-    # Which lanes the answer put a DELIVERED PRESENT citation in. Collected
-    # here rather than read off a list of fields, so a lane added later is
-    # counted by construction instead of being missed by an enumeration.
-    present_cited = set()
 
     def ground_refs(refs, path, *, namespace="either",
                     allow_summaries=True):
@@ -1806,9 +1717,6 @@ def _ground_observation_citations(out, observations, memory_context,
             else:
                 warnings.append(
                     f"dropped ungrounded {path} citation {eid!r}")
-        for item in grounded:
-            if str(item.get("event_id") or "") in current:
-                present_cited.add(path)
         return grounded
 
     # New output has physically separate lanes.  Split legacy mixed output on
@@ -2009,16 +1917,12 @@ def _ground_observation_citations(out, observations, memory_context,
             warnings.append(
                 f"zeroed unsupported relationship_updates.{index}")
 
-    # THE CITATION FLOOR, and the two halves it needs to mean anything.
-    # A guard reports the absence of something the answer was ASKED for
-    # (`_requested_present_lanes` -- gone from the contract is not the same
-    # as omitted by the model), and it accepts that something from wherever
-    # the answer legitimately put it (`present_cited`, filled by every
-    # grounding pass above). Reading one retired lane and ignoring the rest
-    # is a guard measuring itself: 45 of 116 warnings in one play run, and
-    # 18 of 19 character steps in another, on beats that had cited.
-    if current and _requested_present_lanes() and not present_cited:
-        warnings.append("no delivered present observation was cited")
+    # NO CITATION FLOOR. The full card asked the model to cite what it saw,
+    # and a beat that cited nothing was warned about; the bare reply cites
+    # nothing by design and the decision model files the citations after the
+    # call, where "none of these" is a valid answer (2026-09-27). What
+    # remains here is the other job: every citation that WAS filed is
+    # grounded in what this mind was given.
     return warnings
 
 
@@ -3851,12 +3755,9 @@ def character_step(ctx, cid, nonce):
         stored_state.get("mind_models") or {}, ctx.turn.idx,
         elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"),
     )
-    # The stable sheet is SELECTED at commit (where the reconciled beliefs and
-    # the settled end-of-beat body state both exist) and simply read here, so
-    # what the character holds in mind this turn is what they came out of the
-    # last beat holding.
-    active_hypotheses = list(stored_state.get("active_hypotheses") or [])[
-        :sheet_capacity(absorption)]
+    # What the notebook reads of this mind's own store (`notebook_for`): the
+    # store itself, unless a frame masks some of it below.
+    _recognized_state = stored_state
     frame_id = ctx.turn.frame_id
     if frame_id is not None:
         # A frame's own state-swap already starts blank the first time
@@ -3887,6 +3788,15 @@ def character_step(ctx, cid, nonce):
             name: mm for name, mm in mind_models.items()
             if is_recognized_in_frame(name_to_id.get(name, -1), frame_id)
         }
+        # THE NOTEBOOK READS THE STORE, NOT THIS PAYLOAD, and the same mask
+        # has to reach it: `notebook.view` builds "what you make of people and
+        # things" from `stored_state["mind_models"]`, so without this a
+        # character not yet born in this frame could appear in a native's
+        # notebook even though the payload above already removed them.
+        _recognized_state = dict(stored_state, mind_models={
+            name: mm for name, mm in (stored_state.get("mind_models") or {}).items()
+            if is_recognized_in_frame(name_to_id.get(name, -1), frame_id)
+        })
 
     # Everything above is independent of memory retrieval and therefore ran
     # while its embedding request was in flight.  From here on the payload and
@@ -4411,11 +4321,6 @@ def character_step(ctx, cid, nonce):
         "memory": memory_context,
         "relationships": relationships,
         "mind_models": mind_models,
-        # The stable hypothesis sheet: the few open questions this mind is
-        # actively holding, each keyed "i_suspect" so the field itself carries
-        # the epistemic status. mind_models above is the full ledger; this is
-        # what is actually in mind, and its size shrinks with absorption.
-        "active_hypotheses": active_hypotheses,
         "known_pronouns": _known_pronouns(
             ctx.cast, persona_of(chat),
             set(relationships) | set(mind_models),
@@ -4526,160 +4431,104 @@ def character_step(ctx, cid, nonce):
         payload["decision"]["authorial_offers"] = _offers
 
     # LAST contributor to the payload, and therefore the right place for the
-    # projection: every key that is going to exist now exists. The gate below
-    # reads the FINISHED payload, so it must read the projected names -- which
-    # is why `character_block_keys` names them and `tools/project_check.py`
-    # holds the two together.
+    # projection: every key that is going to exist now exists. The bare
+    # card's sections are gated on the FINISHED payload
+    # (`character_bare.modules_for`), so they read the projected names.
     project_payload_names(payload)
 
     role = {"bg": "character_bg", "mid": "character_mid",
             "major": "character_major"}.get(character_tier(sh), "character_mid")
 
-    # The contract, minus the paragraphs whose subject this beat's payload does
-    # not carry. Built from the finished payload on purpose: the gate must read
-    # what the model will actually receive, not re-derive the conditions a
-    # second time and drift from them.
-    _cprompt = character_prompt(
-        payload, language=ctx.language).replace("{name}", character_name(sh))
-    if _carried_reports:
-        _cprompt += (
-            "\n\nCARRIED REPORTS: `carried_reports` is knowledge you physically "
-            "carry. `witnessed_surface` was seen; `told` is only a claim from "
-            "`told_by`, weakened by `retellings`. It may be stale. Do not add "
-            "missing detail, and nobody else learns it unless you communicate it."
-        )
-    if _window_open:
-        # The base contract never documents drive_shift; the instruction to emit
-        # one exists ONLY inside an engine-opened rupture window, so a drive can
-        # never flip-flop turn to turn.
-        _cprompt += (
-            "\n\nDRIVE RUPTURE: the rupture has ALREADY changed you. "
-            "Show the crack in conduct now. If it truly remakes you, emit `updates.drive` "
-            "as `{essence,expression,taboo,because}` and enact the new drive this "
-            "beat. A shift is rare, irreversible, and shown rather than announced.")
-        if _rupture_forced:
-            _cprompt += (
-                "\n\nRUPTURE -- FORCED RESOLUTION: deferral is over; untouched calm is "
-                "NOT an available option. This beat either enact `updates.drive`, "
-                "or reaffirm the old drive through a concrete costly act.")
-    if _crisis:
-        _cprompt += (
-            "\n\nCRISIS: `self.crisis` means composure is failing. Show it in "
-            "`manifest` with a visible tell (`subtlety <= 0.4`); do not explain it "
-            "in dialogue.")
-    if _recent_tells:
-        _cprompt += (
-            "\n\nTELL VARIETY: do not repeat or paraphrase `self.recent_tells`; "
-            "use a different physical cue and body area.")
-        # `channel` is NOT the variety axis and this line used to say it was,
-        # naming the six body regions the sheet published before 2026-09-01.
-        # The field is the SENSE a cue arrives by (`seen|heard`,
-        # perception.TELL_CHANNELS) and has two values; asking a body to vary
-        # it would push every tell back onto the four sight-only words that
-        # lost a swallow or a caught breath on any mind that could hear but
-        # not see. Variety belongs to the cue and the part it shows in, which
-        # is what `cue` carries.
-    if _tell_grounds:
-        _cprompt += (
-            "\n\nTELL PAYOFF: `self.tell_grounds` records what prior cues betrayed. "
-            "When a natural opening exists, let one surface through behavior; do "
-            "not contradict or explain it.")
-    # The routing seam. LAST thing before the model sees the payload, so an
-    # extension edits what is actually sent rather than something the engine
-    # then rebuilds. Total: any failure leaves the payload exactly as assembled
-    # here, and every top-level key a hook changes is attributed to it on the
-    # context and echoed in the turn's commit results.
+    # The routing seam. An extension edits the payload as assembled, in its
+    # canonical shape; the bare contract below then gives its notebook view in
+    # place of the stores it renders and strips what the card gives once.
+    # Total: any failure leaves the payload exactly as assembled here, and
+    # every top-level key a hook changes is attributed to it on the context
+    # and echoed in the turn's commit results.
     payload = _extension_character_payload(ctx, cid, payload, sh)
 
-    # THE BARE CONTRACT (agents/character_bare.py, selected by the
-    # `character_contract` setting). A card about being the character, a
-    # reply that carries only what a character can write, and the decision
-    # model for the rest -- before the call it asks whether the moment casts
-    # a recalled memory in a new light, which gates the dispute section and
-    # its payload in; after it, it reads the reply back into the shape
-    # everything below consumes.
-    _bare = character_bare.enabled()
-    _holding = None
+    # THE CHARACTER CONTRACT (agents/character_bare.py; the only one since
+    # 2026-09-27 -- the owner: "we are fully committed to decision models").
+    # A card about being the character, a reply that carries only what a
+    # character can write, and the decision model for the rest -- before the
+    # call it asks whether the moment casts a recalled memory in a new light,
+    # which gates the dispute section and its payload in; after it, it reads
+    # the reply back into the shape everything below consumes.
+    #
+    # THE NOTEBOOK (mind/notebook.py): what this mind keeps -- concerns,
+    # projects, what it makes of people and things, reminders -- as one
+    # bounded view chosen for the moment. Read from the store as this frame
+    # recognizes it (`_recognized_state`, above).
+    _nb_view = character_bare.notebook_for(
+        _recognized_state, payload, observations, character_name(sh), ctx.turn.idx,
+        absorption=absorption, elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"))
+    _holding = character_bare.holding_from(
+        character_name(sh), sh, payload, observations, memory_context, active,
+        language=ctx.language, rupture_open=_window_open, notebook_view=_nb_view)
+    payload = character_bare.with_notebook(payload, _nb_view)
     # Kept for the read-back: the notes in play are checked before the call,
     # against what reached this mind, before its own reply can restate them.
     _before_answers = {}
-    if _bare:
-        # THE NOTEBOOK (mind/notebook.py): what this mind keeps -- concerns,
-        # projects, what it makes of people and things, reminders -- as one
-        # bounded view chosen for the moment, in place of the four renderings
-        # of the same stores the full card's payload carries.
-        _nb_view = character_bare.notebook_for(
-            stored_state, payload, observations, character_name(sh), ctx.turn.idx,
-            absorption=absorption, elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"))
-        _holding = character_bare.holding_from(
-            character_name(sh), sh, payload, observations, memory_context, active,
-            language=ctx.language, rupture_open=_window_open, notebook_view=_nb_view)
-        payload = character_bare.with_notebook(payload, _nb_view)
-        _disputed = []
-        try:
-            _before_answers = character_jev.ask_before(_holding)
-            _disputed = character_jev.read_before(_before_answers, _holding)
-        except Exception as _exc:  # noqa: BLE001 -- a check that cannot run gates nothing in
-            ctx.add_warning(f"character {character_name(sh)}: no dispute or note check "
-                            f"({type(_exc).__name__}: {str(_exc)[:120]})")
-        if _disputed:
-            # A copy: `memory_context` itself is what grounding reads.
-            payload["memory"] = {**(payload.get("memory") or {}),
-                                 "may_mean_otherwise": [m["text"] for m in _disputed]}
-        _cprompt = character_bare.prompt(
-            character_name(sh),
-            character_bare.modules_for(payload, disputed=_disputed, rupture_open=_window_open,
-                                       rupture_forced=_rupture_forced),
-            language=ctx.language)
+    _disputed = []
+    try:
+        _before_answers = character_jev.ask_before(_holding)
+        _disputed = character_jev.read_before(_before_answers, _holding)
+    except Exception as _exc:  # noqa: BLE001 -- a check that cannot run gates nothing in
+        ctx.add_warning(f"character {character_name(sh)}: no dispute or note check "
+                        f"({type(_exc).__name__}: {str(_exc)[:120]})")
+    if _disputed:
+        # A copy: `memory_context` itself is what grounding reads.
+        payload["memory"] = {**(payload.get("memory") or {}),
+                             "may_mean_otherwise": [m["text"] for m in _disputed]}
+    _cprompt = character_bare.prompt(
+        character_name(sh),
+        character_bare.modules_for(payload, disputed=_disputed, rupture_open=_window_open,
+                                   rupture_forced=_rupture_forced),
+        language=ctx.language)
 
     # The model needs the evidence rows and their provenance, not database- or
-    # observer-sized identifiers.  Short handles are private to this call and
-    # restored before any existing grounding, repetition, or commit reader
-    # sees the answer.  Extensions run first so their public hook continues to
-    # receive the canonical payload shape.
-    _wire_payload, _evidence_handles = compact_character_evidence(payload)
+    # observer-sized identifiers. The bare reply cites nothing -- the decision
+    # model maps its lines to the rows afterwards -- so the handles are not
+    # read back.
+    _wire_payload, _handles = compact_character_evidence(payload)
 
     out = _agent_json(
         role,
-        "character_bare" if _bare else "character_kernel",
+        "character_bare",
         _cprompt,
         _wire_payload,
         temperature=character_temperature(sh),
         sampler=character_sampler(sh) or None,
     )
-    if _bare:
-        from llm.providers import last_reasoning
-        # The model's own thinking, when its provider returned it, is read by
-        # this mind's decision-model request and by nothing else: it never
-        # reaches another mind or the page, and only typed answers -- choices
-        # among rows this mind was given, and grades -- leave it.
-        _holding.reasoning = str(last_reasoning.get() or "")
-        _answers = None
-        for _attempt in range(character_bare.READ_BACK_ATTEMPTS):
-            try:
-                _answers = character_jev.ask_after(_holding, out)
-                break
-            except Exception as _exc:  # noqa: BLE001 -- the beat stands, below
-                _read_back_error = f"{type(_exc).__name__}: {str(_exc)[:120]}"
-        if _answers is None:
-            # NO SECOND CALL. The beat the character wrote stands, read by
-            # code alone: each line goes to whoever its `to` names among the
-            # people here, at a voice pitched for them; acts stay visible.
-            # What the character wrote for itself is kept -- its running note
-            # and its notebook (new entries as reminders, its own strikes and
-            # rewrites) -- and the note check made before the call still
-            # moves the notes it read; nothing else is filed. Speaking in a
-            # room is a channel, and voices lean toward carrying (the owner,
-            # 2026-09-26).
-            ctx.add_warning(f"character {character_name(sh)}: the reply was not read back "
-                            f"({_read_back_error}); the beat stands, and only what the "
-                            f"character wrote for itself is kept")
-        out, _kernel_warnings = character_bare.compile_bare(
-            out, {**_before_answers, **(_answers or {})}, _holding)
-    else:
-        out = expand_character_evidence(out, _evidence_handles)
-        out, _kernel_warnings = compile_character_kernel(out)
-    for _warning in _kernel_warnings:
+    from llm.providers import last_reasoning
+    # The model's own thinking, when its provider returned it, is read by this
+    # mind's decision-model request and by nothing else: it never reaches
+    # another mind or the page, and only typed answers -- choices among rows
+    # this mind was given, and grades -- leave it.
+    _holding.reasoning = str(last_reasoning.get() or "")
+    _answers = None
+    _read_back_error = ""
+    for _attempt in range(character_bare.READ_BACK_ATTEMPTS):
+        try:
+            _answers = character_jev.ask_after(_holding, out)
+            break
+        except Exception as _exc:  # noqa: BLE001 -- the beat stands, below
+            _read_back_error = f"{type(_exc).__name__}: {str(_exc)[:120]}"
+    if _answers is None:
+        # NO SECOND CALL. The beat the character wrote stands, read by code
+        # alone: each line goes to whoever its `to` names among the people
+        # here, at a voice pitched for them; acts stay visible. What the
+        # character wrote for itself is kept -- its running note and its
+        # notebook (new entries as reminders, its own strikes and rewrites) --
+        # and the note check made before the call still moves the notes it
+        # read; nothing else is filed. Speaking in a room is a channel, and
+        # voices lean toward carrying (the owner, 2026-09-26).
+        ctx.add_warning(f"character {character_name(sh)}: the reply was not read back "
+                        f"({_read_back_error}); the beat stands, and only what the "
+                        f"character wrote for itself is kept")
+    out, _compile_warnings = character_bare.compile_bare(
+        out, {**_before_answers, **(_answers or {})}, _holding)
+    for _warning in _compile_warnings:
         ctx.add_warning(f"character {character_name(sh)}: {_warning}")
 
     # Deterministic decision-continuity screen. Semantic similarity is a review

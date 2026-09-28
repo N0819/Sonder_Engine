@@ -198,12 +198,13 @@ existing JSON blobs; no new table or migration is required. Checkpoints,
 archives and branches already carry the whole state, including:
 
 - `decision_continuity: {turn, chosen, suppressed, why, uncertainty}`: one
-  latest private choice record. `agents/character_kernel.py` resolves temporary
-  want ids to the chosen/suppressed text and compiles the hinge and open
-  uncertainty, bounding each text field to 240 characters. Commit adds the
-  turn. The next call reads it as `self.decision_continuity`; it records what
-  the mind chose and why, without proving a world outcome. An explicit empty
-  record clears it; a legacy omission preserves it.
+  latest private choice record. `agents/character_bare.py`'s `compile_bare`
+  copies the reply's want and what it held back as the chosen/suppressed text,
+  with its hinge and open uncertainty, bounding each text field to 240
+  characters. Commit adds the turn. The next call reads it as
+  `self.decision_continuity`; it records what the mind chose and why, without
+  proving a world outcome. An explicit empty record clears it; an omission
+  preserves it.
 - `active_state.wants` with reindexed `enacted_want` and `suppressed_want`:
   commit preserves valid explicit choices through deduplication and trimming,
   protecting the enacted choice first. The existing capacity and one-situational

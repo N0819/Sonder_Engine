@@ -190,6 +190,9 @@ def _firewall_verdict(said, parsed):
     app = parsed.get("appraisal")
     if isinstance(app, dict) and str(app.get("uncertainty") or "").strip():
         return "hedged"
+    # The bare reply states what is still unsettled for it in `unsure`.
+    if str(((parsed.get("_reply") or {}).get("unsure")) or "").strip():
+        return "hedged"
     for upd in (parsed.get("mind_model_updates") or []):
         if isinstance(upd, dict):
             try:
@@ -216,6 +219,14 @@ def _text_of(parsed):
         for v in app.values():
             if isinstance(v, str):
                 bits.append(v)
+    # The bare reply's own reasoning, where the appraisal's strings were.
+    reply = parsed.get("_reply") or {}
+    for step in reply.get("sequence") or []:
+        if isinstance(step, dict):
+            bits.append(str(step.get("why") or ""))
+    for key in ("hinge", "unsure", "note"):
+        bits.append(str(reply.get(key) or ""))
+    bits += [str(line) for line in reply.get("changes") or []]
     return " ".join(b for b in bits if b)
 
 
@@ -272,17 +283,18 @@ def main(argv=None):
     os.environ["ENGINE_DB"] = args.db
     from core import db
     db.configure(args.db)
+    from agents import character_bare
     from llm import llm_quality
-    from llm import prompts
     from llm import schemas
+    from mind.character_jev import Holding
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))
-    # Production sends the contract with the paragraphs whose subject this
-    # beat does not carry removed (prompts.character_prompt). Sending the
-    # whole document here measured a configuration that does not ship --
-    # and these payloads are deliberately sparse, so the gap is widest
-    # exactly where this harness is pointed.
+    # Production sends the bare card with only the gated sections this beat's
+    # payload calls for (`character_bare.modules_for`); the harness does the
+    # same, per puzzle. The reply is read back by code alone (`compile_bare`
+    # with no decision-model answers), and the scorers read the reply's own
+    # whys, hinge and uncertainty beside what it said and did.
     system = None  # built per scenario, from that scenario's own payload
 
     print(f"{len(PUZZLES)} puzzles x {args.trials} trials, "
@@ -294,8 +306,8 @@ def main(argv=None):
         verdicts = {"declined": 0, "hedged": 0, "asserted": 0}
         for puz in PUZZLES:
             payload = _payload(puz["view"], puz["observations"])
-            system = prompts.character_prompt(
-                payload if isinstance(payload, dict) else {})
+            name = str((payload.get("self") or {}).get("name") or "the character")
+            system = character_bare.prompt(name, character_bare.modules_for(payload))
             hits, detail = 0, []
             reasoning = puz["correct"] is not None
             for _ in range(args.trials):
@@ -315,11 +327,13 @@ def main(argv=None):
                     invalid += 1
                     continue
                 report = schemas.validate_llm_output_strict(
-                    "character", parsed, source_payload=payload)
+                    "character_bare", parsed, source_payload=payload)
                 if not report.valid:
                     invalid += 1
                     continue
-                out = report.output or parsed
+                reply = report.output or parsed
+                out, _ = character_bare.compile_bare(reply, {}, Holding(name=name))
+                out["_reply"] = reply
                 said = _text_of(out)
                 if reasoning:
                     ok = bool(puz["correct"](said))

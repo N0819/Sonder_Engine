@@ -40,7 +40,6 @@
   },
   "nsfw_prompt_ids": [
     "background_react",
-    "character",
     "character_bare",
     "director_body",
     "director_contact",
@@ -60,9 +59,6 @@
     },
     "director_establish": {
       "$text": "prompts/director_establish.txt"
-    },
-    "character": {
-      "$text": "prompts/character.txt"
     },
     "character_bare": {
       "$text": "prompts/character_bare.txt"
@@ -371,155 +367,6 @@
       {
         "$text": "prose_author_sheet/00.txt"
       }
-    ]
-  ],
-  "character_block_keys": [
-    [
-      "何も言わないとき：",
-      [
-        "decision.they_said_nothing"
-      ]
-    ],
-    [
-      "誰かがあなたを待っている：",
-      [
-        "decision.awaiting_your_answer"
-      ]
-    ],
-    [
-      "作者からの提案：",
-      [
-        "decision.comes_to_you"
-      ]
-    ],
-    [
-      "要約ウィンドウも過去のもの：",
-      [
-        "memory.summary_citations",
-        "memory.earlier_in_my_life",
-        "memory.where_i_came_from"
-      ]
-    ],
-    [
-      "あなたの人生の初期：",
-      [
-        "memory.earlier_in_my_life"
-      ]
-    ],
-    [
-      "呼ばれざる記憶：",
-      [
-        "memory.surfaces_unbidden"
-      ]
-    ],
-    [
-      "場所とその用途：",
-      [
-        "perception.here_affords",
-        "memory.recalled_places"
-      ]
-    ],
-    [
-      "連絡の終了：",
-      [
-        "self.standing_contacts"
-      ]
-    ],
-    [
-      "あなたが完了する物質的効果：",
-      [
-        "self.embodiment_capabilities"
-      ]
-    ],
-    [
-      "あなたが身に着けているもの：",
-      [
-        "self.attire"
-      ]
-    ],
-    [
-      "現在の仮説：",
-      [
-        "active_hypotheses"
-      ]
-    ],
-    [
-      "追跡中：",
-      [
-        "self.following"
-      ]
-    ],
-    [
-      "self.project_review が現れる",
-      [
-        "self.project_review"
-      ]
-    ],
-    [
-      "`fading` を伴う意図",
-      [
-        "self.intentions[].fading"
-      ]
-    ],
-    [
-      "途中：",
-      [
-        "self.en_route"
-      ]
-    ],
-    [
-      "走行中：",
-      [
-        "perception.sprint_reach"
-      ]
-    ],
-    [
-      "出口は`onward_exits_visible`を伴うことがある",
-      [
-        "perception.spatial_frame{}.onward_exits_visible"
-      ]
-    ],
-    [
-      "`visibly_no_way_through`（同義で",
-      [
-        "perception.spatial_frame{}.visibly_no_way_through",
-        "perception.corridor_sight"
-      ]
-    ],
-    [
-      "あなた自身のルートも示されている。",
-      [
-        "perception.spatial_frame{}.been_there",
-        "perception.spatial_frame{}.times_entered",
-        "perception.spatial_frame{}.entered_recently",
-        "perception.spatial_frame{}.circling_here",
-        "perception.spatial_frame{}.no_new_ground_that_way",
-        "perception.spatial_frame{}.worked_before"
-      ]
-    ],
-    [
-      "フレーム自体の上の`ground_fully_known`",
-      [
-        "perception.spatial_frame.ground_fully_known"
-      ]
-    ],
-    [
-      "WHAT THEY COULD NOT KNOW:",
-      [
-        "perception.impossible_knowledge"
-      ]
-    ],
-    [
-      "前回の判断：",
-      [
-        "self.decision_continuity"
-      ]
-    ],
-    [
-      "このビートの先ほど：",
-      [
-        "self.earlier_this_beat"
-      ]
     ]
   ],
   "prose_author_output_shape": {

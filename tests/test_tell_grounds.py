@@ -14,6 +14,7 @@ Mechanism under test:
   ledger back as self.tell_grounds with a TELL PAYOFF prompt block.
 """
 
+from llm.prompts import character_bare_module
 import json
 import time
 
@@ -144,12 +145,11 @@ def _run_character_step(temp_db, monkeypatch, cstate, agent_out):
 
 def test_character_step_grounds_ungrounded_tell(temp_db, monkeypatch):
     ctx, out, _ = _run_character_step(temp_db, monkeypatch, {}, {
+        "want": "steer talk away from the household staff",
+        "held_back": "keep the right hand unremarkable",
         "sequence": [],
-        "active_state": _STATE,
-        "manifest": {"surface_demeanor": "genial",
-                     "tells": [{"cue": "hand lingers on the glass",
-                                "channel": "hands", "subtlety": 0.7,
-                                "betrays": "suppressed_want"}]},
+        "demeanor": "genial",
+        "tells": ["hand lingers on the glass"],
     })
     tell = out["manifest"]["tells"][0]
     assert tell["because"] == "keep the right hand unremarkable"
@@ -159,7 +159,7 @@ def test_character_step_grounds_ungrounded_tell(temp_db, monkeypatch):
 def test_character_step_warns_on_underivable_ground(temp_db, monkeypatch):
     ctx, out, _ = _run_character_step(temp_db, monkeypatch, {}, {
         "sequence": [],
-        "manifest": {"tells": [{"cue": "jaw tightens", "channel": "face"}]},
+        "tells": ["jaw tightens"],
     })
     assert any("ungrounded tell" in w for w in ctx.warnings)
 
@@ -172,12 +172,12 @@ def test_tell_grounds_ledger_fed_back_with_payoff_rule(temp_db, monkeypatch):
     assert captured["payload"]["self"]["tell_grounds"] == [
         {"cue": "hand lingers on the glass",
          "because": "the right hand is the trained one"}]
-    assert "TELL PAYOFF" in captured["system"]
+    assert character_bare_module("tell_payoff", "en") in captured["system"]
     # empty ledger: no payload key, no prompt bloat
     _, _, captured = _run_character_step(temp_db, monkeypatch, {},
                                          {"sequence": []})
     assert "tell_grounds" not in captured["payload"]["self"]
-    assert "TELL PAYOFF" not in captured["system"]
+    assert character_bare_module("tell_payoff", "en") not in captured["system"]
 
 
 # ---- commit persists the grounds ----

@@ -32,6 +32,8 @@ change, validated in play, not asserted in a unit test.
 
 from __future__ import annotations
 
+from llm.prompts import character_bare_module
+
 import pytest
 
 from llm.prompts import DEFAULT_PROMPTS
@@ -81,7 +83,9 @@ class TestTheFloorSurvives:
 
 
 class TestThePromptReadsTheBudget:
-    SYSTEM = DEFAULT_PROMPTS["character"]
+    """The budget reaches the bare card as its own gated section
+    (`character_bare/speech_budget`), shipped when the payload carries one."""
+    SYSTEM = character_bare_module("speech_budget", "en")
 
     @pytest.mark.parametrize("field", [
         "min_lines", "suggested_lines", "hard_max", "may_stay_silent",
@@ -90,51 +94,38 @@ class TestThePromptReadsTheBudget:
         # The whole budget used to be one sentence naming none of them.
         assert field in self.SYSTEM
 
-    def test_the_floor_is_stated_as_a_floor(self):
-        assert "FLOOR" in self.SYSTEM
-
-    def test_a_line_is_defined_as_a_speech_entry(self):
+    def test_a_line_is_defined_as_a_say_step(self):
         # Without this, "2 lines" is satisfiable by one longer paragraph.
-        assert "one {type:'speech'} entry" in self.SYSTEM
-
-    def test_silence_is_no_longer_blessed_unconditionally(self):
-        assert "speech_budget is pacing guidance. Silence is valid." not in self.SYSTEM
+        assert "counts separate `say` steps" in self.SYSTEM
 
     def test_may_stay_silent_false_is_a_different_instruction(self):
-        assert "may_stay_silent:false" in self.SYSTEM
-        assert "may_stay_silent:true" in self.SYSTEM
+        assert "`may_stay_silent: false` means you speak" in self.SYSTEM
+
+    def test_it_ships_only_with_a_budget(self):
+        from agents.character_bare import modules_for
+        assert "speech_budget" not in modules_for({})
+        assert "speech_budget" in modules_for(
+            {"decision": {"speech_budget": {"min_lines": 1}}})
 
 
 class TestTheTurnBoundDoesNotMinimizeVoice:
-    SYSTEM = DEFAULT_PROMPTS["character"]
+    SYSTEM = DEFAULT_PROMPTS["character_bare"]
 
     def test_the_directive_itself_is_intact(self):
-        # Was "Predict this character's next behavior" until the agent was
-        # reframed into first person (2026-08-29). The directive still has to
-        # SAY what this stage is for; only its person changed.
-        assert "you are {name}, and what you fill in is what you do next" \
-            in self.SYSTEM
+        # The directive still has to SAY what this stage is for, in the
+        # first person.
+        assert "what you fill in is what {name} does next" in self.SYSTEM
 
-    def test_it_is_scoped_where_it_is_stated(self):
-        # The qualification sits beside the scope directive, before any
-        # epistemic rules can make it read as a personality preference.
-        # Renamed from MICRO-BEAT SCOPE 2026-08-31: the name said "small"
-        # and the rule is not about size, so it had to be disclaimed in four
-        # places. What is asserted is the property, not the old wording --
-        # the bound is stated here, and it states that it prefers no
-        # magnitude.
-        head = self.SYSTEM[:self.SYSTEM.index("WHAT YOU KNOW is")]
-        assert "WHERE YOUR TURN ENDS: it ends where someone else's begins" in head
-        assert "Nothing here prefers a small move to a large one" in head
-        assert "commit as hard as your own psychology" in head
-
-    def test_the_voice_scoping_still_stands(self):
-        # The distant voice anchor independently states the same boundary.
-        assert "is about elapsed action and causal ownership, NOT " in self.SYSTEM
-        assert "word count" in self.SYSTEM
+    def test_the_bound_prefers_no_size(self):
+        # The turn ends where someone else must answer or the world must
+        # decide; the card says in the same breath that it prefers no size.
+        head = self.SYSTEM[:self.SYSTEM.index("HOW YOU ACT:")]
+        assert "YOUR TURN: act through one stretch" in head
+        assert "nothing here prefers a small move to a large one" in head
+        assert "Commit as hard as you would" in head
 
 
 def test_the_character_payload_carries_the_budget():
-    """`agents/character.py` puts it at decision.speech_budget; the prompt now
+    """`agents/character.py` puts it at decision.speech_budget; the section
     refers to it by that path."""
-    assert "decision.speech_budget" in DEFAULT_PROMPTS["character"]
+    assert "decision.speech_budget" in character_bare_module("speech_budget", "en")

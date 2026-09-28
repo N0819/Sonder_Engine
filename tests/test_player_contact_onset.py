@@ -100,7 +100,14 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
             {"op": "remove", "contact_ref": "contact:0"}]})
     assert not warnings
     assert character["contact_ops"][0]["contact_ref"] == "contact:0"
-    assert "self.standing_contacts" in DEFAULT_PROMPTS["character"]
+    # The bare card (2026-09-27) does not explain `self.standing_contacts`:
+    # the decision model asks, of each standing contact this mind holds,
+    # whether what it did ended it (`character_jev` `contact_end`).
+    from mind import character_jev as jev
+    held = jev.Holding(name="Wren", language="en",
+                       contacts=[{"ref": "contact:0", "text": "your hand on Mara's sleeve"}])
+    acted = {"sequence": [{"do": "lets go of her sleeve", "why": "enough"}]}
+    assert "contact:0" in jev.after_questions(held, acted)
     assert "character_contact_endings" in DEFAULT_PROMPTS["director_contact"]
 
 

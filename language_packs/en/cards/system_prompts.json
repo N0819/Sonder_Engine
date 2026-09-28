@@ -40,7 +40,6 @@
   },
   "nsfw_prompt_ids": [
     "background_react",
-    "character",
     "character_bare",
     "director_body",
     "director_contact",
@@ -60,9 +59,6 @@
     },
     "director_establish": {
       "$text": "prompts/director_establish.txt"
-    },
-    "character": {
-      "$text": "prompts/character.txt"
     },
     "character_bare": {
       "$text": "prompts/character_bare.txt"
@@ -371,155 +367,6 @@
       {
         "$text": "prose_author_sheet/00.txt"
       }
-    ]
-  ],
-  "character_block_keys": [
-    [
-      "WHEN THEY SAY NOTHING:",
-      [
-        "decision.they_said_nothing"
-      ]
-    ],
-    [
-      "SOMEONE IS WAITING ON YOU:",
-      [
-        "decision.awaiting_your_answer"
-      ]
-    ],
-    [
-      "WHAT COMES TO YOU:",
-      [
-        "decision.comes_to_you"
-      ]
-    ],
-    [
-      "SUMMARY WINDOWS ARE PAST TOO:",
-      [
-        "memory.summary_citations",
-        "memory.earlier_in_my_life",
-        "memory.where_i_came_from"
-      ]
-    ],
-    [
-      "EARLIER IN YOUR LIFE:",
-      [
-        "memory.earlier_in_my_life"
-      ]
-    ],
-    [
-      "UNBIDDEN MEMORY:",
-      [
-        "memory.surfaces_unbidden"
-      ]
-    ],
-    [
-      "PLACES AND WHAT THEY ARE FOR:",
-      [
-        "perception.here_affords",
-        "memory.recalled_places"
-      ]
-    ],
-    [
-      "ENDING CONTACT:",
-      [
-        "self.standing_contacts"
-      ]
-    ],
-    [
-      "MATERIAL EFFECTS YOU COMPLETE:",
-      [
-        "self.embodiment_capabilities"
-      ]
-    ],
-    [
-      "WHAT YOU ARE WEARING:",
-      [
-        "self.attire"
-      ]
-    ],
-    [
-      "ACTIVE HYPOTHESES:",
-      [
-        "active_hypotheses"
-      ]
-    ],
-    [
-      "FOLLOWING:",
-      [
-        "self.following"
-      ]
-    ],
-    [
-      "self.project_review appears",
-      [
-        "self.project_review"
-      ]
-    ],
-    [
-      "An intention carrying `fading`",
-      [
-        "self.intentions[].fading"
-      ]
-    ],
-    [
-      "EN ROUTE:",
-      [
-        "self.en_route"
-      ]
-    ],
-    [
-      "RUNNING:",
-      [
-        "perception.sprint_reach"
-      ]
-    ],
-    [
-      "An exit may carry `onward_exits_visible`",
-      [
-        "perception.spatial_frame{}.onward_exits_visible"
-      ]
-    ],
-    [
-      "`visibly_no_way_through` (equivalently",
-      [
-        "perception.spatial_frame{}.visibly_no_way_through",
-        "perception.corridor_sight"
-      ]
-    ],
-    [
-      "Your own route is marked too.",
-      [
-        "perception.spatial_frame{}.been_there",
-        "perception.spatial_frame{}.times_entered",
-        "perception.spatial_frame{}.entered_recently",
-        "perception.spatial_frame{}.circling_here",
-        "perception.spatial_frame{}.no_new_ground_that_way",
-        "perception.spatial_frame{}.worked_before"
-      ]
-    ],
-    [
-      "`ground_fully_known`, on the frame itself",
-      [
-        "perception.spatial_frame.ground_fully_known"
-      ]
-    ],
-    [
-      "WHAT THEY COULD NOT KNOW:",
-      [
-        "perception.impossible_knowledge"
-      ]
-    ],
-    [
-      "YOUR PREVIOUS DECISION:",
-      [
-        "self.decision_continuity"
-      ]
-    ],
-    [
-      "EARLIER THIS BEAT:",
-      [
-        "self.earlier_this_beat"
-      ]
     ]
   ],
   "prose_author_output_shape": {

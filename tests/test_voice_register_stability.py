@@ -140,10 +140,10 @@ def test_voice_anchor_and_instruction_survive_poisoned_memory(temp_db, monkeypat
 
     # The prompt now instructs the model to honor that anchor and return to
     # baseline rather than let recent terse lines redefine its voice.
-    system = cap["system"]
-    assert "VOICE AND REGISTER" in system
-    assert "never redefines your voice" in system
-    assert "NOT" in system and "word count" in system
+    # The bare card keeps the voice in one line of its core; the full
+    # card's "recent lines never redefine your voice" is not on it (open in
+    # docs/UNBUILT_CHARACTERS.md §6.17).
+    assert "Keep your own voice" in cap["system"]
 
 
 def test_low_verbosity_symmetry_guard(temp_db, monkeypatch):
@@ -153,11 +153,10 @@ def test_low_verbosity_symmetry_guard(temp_db, monkeypatch):
     cap = _run_character_step(temp_db, monkeypatch, chat_id, char_id, current_turn_idx=3)
 
     assert cap["payload"]["self"]["voice"]["verbosity"] == "low"
-    rule = next(line for line in cap["system"].splitlines()
-                if line.startswith("VOICE AND REGISTER"))
-    assert "must not be inflated within each line" in rule
-    assert "decision.speech_budget.min_lines" in rule
-    assert "required number of separate lines when speaking" in rule
+    # The bare card (2026-09-27) keeps the voice in one line of its core,
+    # and counts lines only where a budget ships (its gated section).
+    assert "Keep your own voice" in cap["system"]
+    assert "inflate" not in cap["system"].casefold()
 
 
 def test_consolidator_is_forbidden_from_describing_manner(temp_db, monkeypatch):

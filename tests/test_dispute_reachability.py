@@ -293,16 +293,21 @@ def test_the_prompt_states_an_occasion_and_not_only_prohibitions():
     one abstract permission, next to `memory_effects` -- which fires 89% and
     names concrete occasions. A model that has never seen an example of when
     to do a thing does not do it.
-    """
-    from llm import prompts
 
-    block = prompts.DEFAULT_PROMPTS["character"]
-    line = next(l for l in block.splitlines()
-                if "READING A MEMORY DIFFERENTLY" in l)
-    # "lie" rather than "lied": the occasion is what must be named, not one
-    # inflection of it -- the contract says "lies" (2026-09-13).
-    for occasion in ("disguise", "lie", "staged"):
-        assert occasion in line.casefold(), occasion
+    Under the bare card (2026-09-27) the occasion is FOUND rather than
+    described: before the call the decision model asks of each recalled
+    memory whether what just happened changes what it meant
+    (`character_jev.before_questions`), and the section ships only on a yes
+    -- then it says what to do, and prohibits nothing.
+    """
+    from agents.character_bare import modules_for
+    from llm.prompts import character_bare_module
+
+    assert "dispute" not in modules_for({})
+    assert "dispute" in modules_for({}, disputed=[{"text": "she lent me her coat"}])
+    section = character_bare_module("dispute", "en")
+    assert "`memory.may_mean_otherwise`" in section and "`changes`" in section
+    assert "never" not in section.casefold() and "do not" not in section.casefold()
 
 
 class TestALaterMemoryMayOverturnAnEarlierOne:
@@ -341,7 +346,7 @@ class TestALaterMemoryMayOverturnAnEarlierOne:
 
 class TestEveryDeliveredLaneGrounds:
     """A memory the payload handed this mind is citable wherever it was
-    handed. Minting (`character_kernel.compact_character_evidence`) gives any
+    handed. Minting (`character_evidence.compact_character_evidence`) gives any
     row carrying a `memory_ref` a handle, wherever it sits; the grounding
     registry named its lanes, and `resurfaced_without_asking.episodes` was
     not among them. Measured on 187 captured replies (2026-09-13 to

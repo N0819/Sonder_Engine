@@ -353,18 +353,6 @@ class TestSelfKnowledge:
         assert '"speaking_now"' in src
         assert "speech_articulation_impediment" in src
 
-    def test_the_character_contract_names_the_occasion(self):
-        character = DEFAULT_PROMPTS["character"]
-        rule = next(line for line in character.splitlines()
-                    if line.startswith("WHAT YOUR MOUTH IS DOING:"))
-        assert "self.speaking_now" in rule
-        assert "do not pause for dialogue" in rule
-        for allowed in ("Continue silently", "vocalize as an action",
-                        "speak with the actual impairment",
-                        "free your mouth in the sequence before clear speech"):
-            assert allowed in rule
-        assert "SPEAKING WITH YOUR MOUTH ENGAGED" not in character
-
 
 class TestTheRendering:
 

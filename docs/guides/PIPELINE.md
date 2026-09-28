@@ -686,51 +686,45 @@ strain from a beat aimed at them, and no memory of having chosen to stay quiet.
 A single character decision using that character’s scrubbed view and structured
 observations, memory context, private character data, relationships, learned
 beliefs/associations, and its own interoception/body state. The authored
-character card is passed intact. It appraises goal impact, novelty, control,
-coping, norm/self compatibility, stress, and current-event pain/pleasure, then
-declares one behavior. Present and remembered evidence occupy separate
-grounded lanes; a memory may produce a capped, labelled body/threat echo but
-cannot become current somatic fact. An exceptional private
-`{type: "ponder", query, why}` item is removed from the public declaration,
-stored for that mind, and adds a labelled four-item deliberate-recall lane on
-its next character turn without replacing normal recall. Pain and pleasure are
-independent and do not require survival mode. Multiple independent character
-steps may run in parallel.
+character card is passed intact. Present and remembered evidence occupy
+separate grounded lanes; a memory may produce a capped, labelled body/threat
+echo but cannot become current somatic fact. Pain and pleasure are independent
+and do not require survival mode. Multiple independent character steps may run
+in parallel.
 
-The provider-facing decision is `CharacterKernelOutput`, seven fields:
-`state`, `sequence`, `manifest`, independently typed cognitive `updates`,
-completed self-owned `effects`, `interaction`, and `salience`. `updates` keeps
-aims, beliefs, associations, readings of people, relationships, and memory's
-keep/reinterpret/effect functions as separate named apertures; combining them
-in one heterogeneous list made its order an accidental priority. A compact
-`state.decision` joins temporary want ids and carries the enacted pull,
-suppressed counterpull, one-clause hinge, and remaining uncertainty without a
-prose thought transcript. `agents/character_kernel.py` is the pure boundary:
-it compiles those lanes into the stable `CharacterOutput` lanes
-that affect, memory, theory-of-mind, following, contact and substance already
-consume. Legacy answers pass through the compiler unchanged. This shrinks the
-operating prompt and provider grammar without shrinking the character card or
-removing a cognitive product.
+The character is asked only for what a character can write: the bare contract
+(`agents/character_bare.py`), the only contract since 2026-09-27 -- the full
+card, its seven-field `CharacterKernelOutput` and its kernel compiler are gone.
+The reply is lines to `say`, `do` or `ponder`, each with its why; the `want`,
+what it `held_back`, the `hinge` and what it is `unsure` of; its `demeanor` and
+`tells`; `changes` in its own words; a running `note`; and its `notebook`
+(`mind/notebook.py`), whose entries carry stable ids the mind adds, changes and
+strikes by. Everything else is read back after the call by the decision model
+(`mind/character_jev.py`), one request per mind whose options are only rows
+this mind was given or items it holds: whom each line is said to and how loud,
+what a watcher could tell of an act, which aim a want serves and how urgent it
+is, what kind of change each `changes` line is, the appraisal, and which held
+beliefs, cues, aims, concerns, promises and relationships the moment moved.
+`compile_bare` then writes the stable `CharacterOutput` lanes that affect,
+memory, theory-of-mind, following, contact and substance already consume. One
+model call a beat: when the reply cannot be read back, the beat stands on code
+alone -- each line goes to whoever its `to` names among the people here --
+never a second call.
 
-Current kernel want text, decision hinge and uncertainty are bounded to 240
-characters apiece. Emitted belief rows must include operation, target,
-confidence and cited evidence; `revise` needs the exact held target, while
-other operations leave the target empty. Missing learning inputs are invalid
-output and use the existing repair path. The stable `CharacterOutput` decoder
-retains legacy belief semantics. These constraints close measured cases where
-a want ran to the completion limit and where an apparently valid correction
-said nothing persistence could apply.
+A `ponder` line becomes a private `{type: "ponder", query, why}` item, removed
+from the public declaration, stored for that mind, and adds a labelled
+four-item deliberate-recall lane on its next character turn without replacing
+normal recall.
 
-Observation and memory identifiers are call-local handles (`oN`, `mN`, `sN`)
-on the provider wire. The adapter restores their canonical ids before the
-existing grounding guard runs. At memory commit, current observation citations
+Observation and memory identifiers are shortened to call-local handles (`oN`,
+`mN`, `sN`) on the provider wire (`agents/character_evidence.py`). The reply
+cites nothing -- the decision model maps its lines to the rows afterwards -- so
+the handles are not read back. At memory commit, current observation citations
 on the commit-local character result are rebound to the stable episode key
 minted from that character's witnessed beat; if no episode is minted, no
 nonexistent memory is cited and the transient id remains.
 
-The name-bearing identity line is placed immediately before the output shape
-so the authored contract before it remains a reusable cache prefix. Immutable
-per-turn reads (scene, transformations, simulation clock,
+Immutable per-turn reads (scene, transformations, simulation clock,
 all-cast name map and unanswered-question history) are reused through
 `ctx._extra.character_turn_snapshot`. Memory-context construction runs under a
 parent-copied context while the main thread assembles independent lore,
@@ -738,13 +732,13 @@ relationship and frame projections, and is joined before anything
 memory-dependent is built.
 
 The historical `CharacterOutput` schema and its aliases remain the archive and
-downstream compatibility contract. The compiler resolves the temporary want
-handles into a private `decision_continuity` record with `chosen`,
-`suppressed`, `why` (the hinge), and `uncertainty`, each at most 240 characters.
-Commit stores one latest record in the character's state with its `turn`; the
-next character payload supplies it as `self.decision_continuity`. An explicit
-empty record clears the prior note, while a legacy answer that omits it leaves
-the note alone. This concise choice record carries the character's reason and
+downstream compatibility contract. `compile_bare` writes the reply's want, what
+it held back, its hinge and its uncertainty into a private `decision_continuity`
+record with `chosen`, `suppressed`, `why` (the hinge), and `uncertainty`, each
+at most 240 characters. Commit stores one latest record in the character's
+state with its `turn`; the next character payload supplies it as
+`self.decision_continuity`. An explicit empty record clears the prior note,
+while a result that omits it leaves the note alone. This concise choice record carries the character's reason and
 open question across turns; it does not establish that the chosen action
 succeeded, and no thought transcript is required.
 
@@ -759,7 +753,7 @@ Each loop clears its own result map before re-execution, including no-call
 exits; interaction results are assembled from that run's fresh declarations.
 Hydrated results from a discarded reroll cannot become private continuity or
 committed conduct. Reaction and interaction maps remain separately owned.
-Within a run, a later legacy omission preserves earlier explicit concerns and
+Within a run, a later omission preserves earlier explicit concerns and
 choice; explicit empty concerns or choice retain their clearing meaning
 through the merge.
 
@@ -797,11 +791,11 @@ into the enacted desire is not replaced with another suppressed desire.
 Invalid or absent indexes retain the
 legacy urgency fallback. This preserves a deliberate lower-urgency choice,
 such as restraint, instead of silently turning the strongest urge into the
-chosen act. `active_concerns: []` clears carried concerns, while omission in a
-legacy answer preserves them. `resolve_affect` folds the given affect into
+chosen act. `active_concerns: []` clears carried concerns, while omission in an
+answer preserves them. `resolve_affect` folds the given affect into
 stored state as it once folded the self-report: the stored surface blends from
 the decayed prior toward the given point, still nudged by the character's own
-`appraisal` object, which stays model-authored until the second increment
+`appraisal` object, which the decision model's read-back supplies
 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md`). The given `undercurrent: null`
 clears prior residue and prevents synthesis, so the layer beneath is named by
 the pass alone; an omitted key -- a result that carries no given affect --
@@ -810,10 +804,11 @@ keeps the existing decay, relief and synthesis behavior. `mood_coords`,
 branching and export carry them unchanged (`tests/test_affect_pass.py`).
 
 `self.embodiment_capabilities` contains conditional facts hidden from ordinary
-observers but necessarily known by their owner. When a chosen completed process
-has an established non-discrete output, `material_effects` carries that
-actor-owned physical consequence beside the public sequence instead of leaving
-it trapped in private appraisal/hedonic state.
+observers but necessarily known by their owner. The bare reply files no
+`material_effects`: an actor-owned physical consequence -- an established
+non-discrete output of a completed process -- is the Director's to write from
+the act, which it did for 61 of 62 such emissions when characters still
+declared them (`docs/UNBUILT_CHARACTERS.md` §6.17).
 
 Recent memory reaches this step in epistemically separate lanes. The
 chronological `recent_episodes` stream contains first-hand experience only,
@@ -858,16 +853,21 @@ previous rationale intact. The record survives subsequent normalization and
 continues to explain a closed or redirected goal without accumulating a
 history of private reasoning.
 
-Belief revision uses `updates.beliefs` with `operation: revise` and
-`target_belief` naming one held claim exactly after trimming and casefolding.
-The replacement `belief` and `confidence` describe the desired resulting
-conviction. Evidence remains required; an unknown or ambiguous target, a target
-used with another operation, or a replacement colliding with another held
-belief is rejected. A revised card belief retains its original wording in
+Belief revision follows the notebook's rule: the mind changes a held belief
+in its own words -- a `changes` line the decision model reads as aimed at that
+belief and, by the pair check (`character_jev.belief_pair_questions`), as that
+belief changed rather than a different thought -- resting on something this
+mind was given. `compile_bare` files it as `operation: revise` with
+`target_belief` naming the held claim; a line that is a different thought is a
+belief of its own and overwrites nothing, and the decision model's check of the
+moment only confirms, doubts or overturns the beliefs the reply left alone.
+Commit matches the target exactly after trimming and casefolding; an unknown or
+ambiguous target, or a replacement colliding with another held belief, is
+rejected. A revised card belief retains its original wording in
 `authored_belief`: commit uses that origin to prevent reseeding, and the
 character payload removes the superseded card copy while supplying the live
-belief. The active sheet of selected hypotheses is the top-level
-`active_hypotheses` payload field, as named by the prompt.
+belief. The hypothesis sheet commit still selects (`active_hypotheses`) is not
+in the payload: the notebook's notes about people and things replace it.
 
 The authored card is resolved per story: `chat_chars.sheet` wins when present,
 otherwise the reusable library `characters.sheet` is used. This override never

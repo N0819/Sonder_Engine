@@ -25,7 +25,7 @@ from language_runtime import (
     raw_card, require_language_pack, story_language,
 )
 from llm.prompts import (
-    DEFAULT_PROMPTS, character_prompt, default_prompts_for, get_prompt,
+    DEFAULT_PROMPTS, character_bare_module, default_prompts_for, get_prompt,
 )
 
 
@@ -125,15 +125,19 @@ def test_japanese_prompt_translation_preserves_protocol_literals():
     assert "through_clothing" in generator
 
 
-def test_japanese_character_prompt_uses_localized_gating_anchors(temp_db):
+def test_japanese_character_card_ships_its_own_gated_sections(temp_db):
+    """A gated section is chosen from the payload (`modules_for`), whatever
+    the language, and the Japanese card ships the Japanese text of it."""
+    from agents import character_bare
     temp_db.set_setting("active_preset", "Default")
-    marker = language_pack("ja").card(
-        "system_prompts")["character_block_keys"][0][0]
-    assert marker not in character_prompt({}, language="ja")
-    # The PROJECTED key: `character_prompt` gates on the FINISHED payload, and
+    assert "their_silence" not in character_bare.modules_for({})
+    # The PROJECTED key: the section gates on the FINISHED payload, and
     # `agents.character.PAYLOAD_NAMES` renames this one at the assembly line.
-    assert marker in character_prompt(
-        {"decision": {"they_said_nothing": True}}, language="ja")
+    modules = character_bare.modules_for({"decision": {"they_said_nothing": True}})
+    assert "their_silence" in modules
+    card = character_bare.prompt("Mara", modules, language="ja")
+    assert character_bare_module("their_silence", "ja") in card
+    assert character_bare_module("their_silence", "en") not in card
 
 
 def test_japanese_deterministic_guards_use_japanese_cues():

@@ -18,8 +18,8 @@ rule over all of them would be dishonest:
   * THE CAUSAL-DIRECTOR BAR. Both invocation points publish the same single
     live field, `ledgers`. Their other schema fields are checkpoint
     compatibility readers and must stay out of the model contract.
-  * THE TEMPLATE BAR, for the character. Its sheet ends in one
-    self-contained `Output STRICT JSON {...}` field list.
+  * THE TEMPLATE BAR, for the character. Its bare card ends in one
+    self-contained `Answer with JSON only: {...}` field list.
   * THE SHEET BAR, for the five specialists. Their sheets have no single
     template: each granted chunk states its own channel and `Shape:` line, so
     the assembled sheet as a whole IS the publication, and a field named
@@ -54,7 +54,7 @@ from llm.prompts import DEFAULT_PROMPTS
 #: step key -> the prompt id whose body the stage is actually sent. The prose
 #: author's sheet is ASSEMBLED (`director_resolve_lean`), not stored, which is
 #: why the id and the step key differ for exactly one entry.
-TEMPLATE_STAGES = {"character_kernel": "character"}
+TEMPLATE_STAGES = {"character_bare": "character_bare"}
 
 CAUSAL_DIRECTOR_STAGES = {
     "director_interpret": "director_interpret",
@@ -64,7 +64,8 @@ CAUSAL_DIRECTOR_STAGES = {
 SHEET_STAGES = ("director_body", "director_contact", "director_objects",
                 "director_social", "director_spatial")
 
-_SHAPE_MARKER = "Output STRICT JSON"
+#: The line that opens a stage's JSON field list, one spelling per card.
+_SHAPE_MARKERS = ("Output STRICT JSON", "Answer with JSON only")
 
 
 #: "<step>.<dotted field path>" -> why the hand that writes the stage is never
@@ -72,6 +73,10 @@ _SHAPE_MARKER = "Output STRICT JSON"
 #: entry that has gone stale (the field is published now, or no longer exists),
 #: so this cannot decay into a mute allowlist.
 UNPUBLISHED = {
+    # --- the character ----------------------------------------------------
+    "character_bare.people": (
+        "the lines the notebook replaced (2026-09-27): no longer on the card, "
+        "still read as new notes from a reply that writes them"),
     # --- specialists ------------------------------------------------------
     # `director_objects.entities.ubiquitous` stood here as an OPEN residual
     # until 2026-09-01 and is now published in both packs
@@ -130,9 +135,9 @@ def _template(step, pid):
     catch.
     """
     body = DEFAULT_PROMPTS[pid]
-    index = body.rfind(_SHAPE_MARKER)
+    index = max(body.rfind(marker) for marker in _SHAPE_MARKERS)
     assert index >= 0, (
-        f"{step}: no {_SHAPE_MARKER!r} in its assembled prompt. Either the "
+        f"{step}: none of {_SHAPE_MARKERS!r} in its assembled prompt. Either the "
         "stage stopped publishing an output template -- which is the defect "
         "this file guards -- or the marker was reworded and this test needs "
         "to learn the new one.")

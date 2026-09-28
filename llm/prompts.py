@@ -109,10 +109,6 @@ PROSE_AUTHOR_SHEET = _ENGLISH_PROSE_AUTHOR_RAW + (
 PROSE_DUTY_CHUNKS = tuple(dict.fromkeys(
     name for name, _text in PROSE_AUTHOR_SHEET if name
 ))
-CHARACTER_BLOCK_KEYS = tuple(
-    (marker, tuple(paths))
-    for marker, paths in _ENGLISH["character_block_keys"]
-)
 _PROSE_AUTHOR_OUTPUT_SHAPE = str(_ENGLISH["prose_author_output_shape"])
 
 
@@ -476,7 +472,8 @@ def character_bare_module(name, language=None):
 
 def bare_character_prompt(language=None):
     """The bare character card, its identity line placed just before the
-    output shape as the full card's is (`_relocate_character_identity`)."""
+    output shape (`_relocate_character_identity`), so the card before it is
+    the same for every mind and caches as a prefix."""
     return _relocate_character_identity(
         get_prompt("character_bare", language=language),
         anchors=('"want"', '"sequence"'))
@@ -591,35 +588,6 @@ def payload_legacy(part):
     return "all" in _PAYLOAD_LEGACY_ARMS or part in _PAYLOAD_LEGACY_ARMS
 
 
-def _payload_has(payload, path):
-    for sep in ("[].", "{}."):
-        head, found, tail = path.partition(sep)
-        if not found:
-            continue
-        node = _payload_node(payload, head)
-        rows = ((node or {}).values() if sep == "{}." else [node or []])
-        for row in rows:
-            group = row if isinstance(row, list) else [row]
-            if any(isinstance(item, dict) and tail in item
-                   and _is_stamped(item[tail]) for item in group):
-                return True
-        return False
-    return _is_stamped(_payload_node(payload, path))
-
-
-def _is_stamped(value):
-    return value is not None and value not in ("", [], {})
-
-
-def _payload_node(payload, path):
-    node = payload
-    for part in path.split("."):
-        if not isinstance(node, dict):
-            return None
-        node = node.get(part)
-    return node
-
-
 def _relocate_character_identity(text, anchors=('"state"', '"sequence"')):
     """Move the name-bearing line behind the stable character contract.
 
@@ -648,53 +616,6 @@ def _relocate_character_identity(text, anchors=('"state"', '"sequence"')):
     )
     lines.insert(output_index, identity)
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip("\n")
-
-
-def _compact_character_wire_prompt(text):
-    """Remove the deliberation scratch from the output example.
-
-    Both fields are deliberation the reasoning block now does. Nothing read
-    `considered_responses` at all; `response_candidates` was read only for its
-    selected entry, whose two used parts are derived from conduct and wants
-    instead (see agents.character._selected_move_text).
-    """
-    for fragment in (
-            '"considered_responses":[],',
-            '"response_candidates":[{"response":"","serves":[],'
-            '"expected_outcome":"","risk":0.0,"inhibition":0.0,'
-            '"norm_conflict":"","selected":false}],'):
-        text = text.replace(fragment, "", 1)
-    return text
-
-
-def character_prompt(payload, base=None, language=None, wire_variant=None):
-    """Subtract inapplicable paragraphs from the localized character sheet."""
-    text = get_prompt("character", language=language) if base is None else base
-    if not isinstance(payload, dict) or payload_legacy("prompt"):
-        return text
-    block_keys = tuple(
-        (marker, tuple(paths))
-        for marker, paths in _prompt_card(language)["character_block_keys"]
-    ) if base is None else CHARACTER_BLOCK_KEYS
-    lines = text.split("\n")
-    keep = []
-    for line in lines:
-        stripped = line.strip()
-        entry = next((item for item in block_keys
-                      if stripped.startswith(item[0])), None)
-        if entry and not any(_payload_has(payload, key) for key in entry[1]):
-            continue
-        keep.append(line)
-    if keep:
-        text = re.sub(r"\n{3,}", "\n\n", "\n".join(keep))
-    # Custom ``base`` callers use this function to test structural subtraction
-    # against a byte-exact fixture.  The cache layout is a production prompt
-    # concern, so it applies only to a real language-pack/preset prompt.
-    if base is None:
-        text = _relocate_character_identity(text)
-    if wire_variant == "compact":
-        text = _compact_character_wire_prompt(text)
-    return text
 
 
 def get_prompt_body(pid, language=None):

@@ -1339,9 +1339,10 @@ instruments `tools/jev_*.py`.
 
 ### 6.17 The bare character contract — [`DESIGN_JEV_CHARACTER_PASS.md`](design/DESIGN_JEV_CHARACTER_PASS.md)
 
-Built behind a setting 2026-09-27 (`character_contract: bare`;
-`agents/character_bare.py`, `mind/character_jev.py`,
-`tests/test_character_bare.py`). Replayed 2026-09-27 against the full card
+Built 2026-09-27 (`agents/character_bare.py`, `mind/character_jev.py`,
+`tests/test_character_bare.py`), and the only character contract since the
+same day: the full card, its kernel compiler, its prompt paragraphs and the
+`character_contract` setting are deleted. Replayed 2026-09-27 against the full card
 on 20 beats of the four test stories, six rounds
 (`docs/experiments/BARE_CARD_REPLAY_2026_09_27.md`): it does the same thing
 at a fifth of the call time, and reads as well or better. Open, in order:
@@ -1424,8 +1425,6 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   dropped: Jev reads turning away from someone as an act at them (its
   target or its look named the speaker in both walk-aways), so it would
   have kept both misreads.
-- Then the default switched, and the full card, its kernel compiler and its
-  prompt paragraphs deleted so two contracts do not linger.
 
 Not carried yet: material effects. (Adopting a project is carried by the
 notebook's `until` since 2026-09-27.) Restored 2026-09-27 from what the full
@@ -1438,9 +1437,47 @@ replayed yet. Unmeasured: every question's wording (none has a battery yet,
 and the Japanese wordings are untested translations), every knob in
 `mind/character_jev.py` (the owner's), and the drive's new place among the
 aims every impact is asked about -- 0 of 227 measured impacts ever served
-it, so drive strain and its rupture window have effectively not run. The
-payload still carries one engine key name the full card explained and no
-section does (a busy mouth). From the review of the old contract, the
+it, so drive strain and its rupture window have effectively not run.
+
+**What the full card said that the bare card does not** -- found 2026-09-27
+by the tests that pinned each sentence, which went with the full card. Each
+is the owner's call; none is replayed. First, because it is likely a live
+regression rather than a gap:
+
+- **A voice is declared on every line again (review D2).** The fix for "In a
+  flat, hushed monotone voice, she said" on 63-98 of 79 lines had two halves:
+  the composer renders a later line's manner only where its `tone` is set,
+  and the full card told the character to leave `tone` empty in its ordinary
+  voice ("YOUR VOICE IS ALREADY KNOWN"). The bare card asks for `how` on a
+  `say`, and `compile_bare` files `how` as the line's `tone`, so every line
+  that fills it reads as a departure. By reading, not run.
+
+The rest are payload keys or rules the bare card leaves to their names -- and
+a marker read from its key name once sent a maze runner into a wall four
+beats running:
+
+- `self.attire`: the bare card says only that `self` is "your body"; the
+  full card's clause was added because chat 57's NPCs acted unaware of their
+  own clothing while the field carried six garments.
+- `self.speaking_now` (a busy mouth), `self.attention` (the want and
+  intention ceilings -- the reply's one want and one held-back pull cannot
+  meet the first), `barren_attempts`, and `self.voice` beside "Keep your own
+  voice" (the full card's "a recent line never redefines your voice" is not
+  on it).
+- The navigation markers under each exit's plain `verdict` (`been_there`,
+  `times_entered`, `no_route_onward` and the rest): the full card named all
+  of them; the way-on section explains the verdict and "your own history
+  with it" as one class.
+- Memory's `surfaces_unbidden` / `it_comes_back_to_me` / `what_i_concluded`,
+  named for their status under the card's "all of it is past"; the full
+  card's CLAIM ORIGIN rule (a received line is not a memory of one's own)
+  and its bound on `ponder` ("at most one per beat", and when to reach for
+  it) are not on it.
+- "Drives and traits are pressure, not premises": the bare card names a want
+  as what the mind is going for and never derives one, but no longer frames
+  the drive as salience.
+
+From the review of the old contract, the
 owner chose (2026-09-27): association breaking, the self-repetition clause
 (gated on the refrain detector), beliefs under the notebook's rule and the
 navigation section (`ways_on`) are built, none replayed in play yet.
@@ -1460,32 +1497,32 @@ barely travel and no captured chat of the owner's has a journey under way.
 
 <a id="unbuilt-6-18"></a>
 
-### 6.18 What the character-reply survey found in the full card's path
+### 6.18 What the character-reply survey found that the switch did not fix
 
-Found 2026-09-26 by the read-only surveys behind §6.17, not fixed (the bare
-contract does not have them, which is its own argument for the switch):
+Found 2026-09-26 by the read-only surveys behind §6.17 in the full card's
+path. Four went with the full card on 2026-09-27: the unenforced +-0.05
+relationship rule (the read-back's steps are code, `REL_STEP`), the promise
+no character could give up (the bare `stop_waiting` change files
+`waiting_ops`), the unscaled tell `subtlety` (graded now) and the wire
+grammar's `state.active.affect`. Re-checked against the bare path the same
+day, these remain:
 
 - **Respect and suspicion move without evidence.** A relationship update
   whose trigger ids cite nothing delivered has trust, warmth and fear
-  zeroed (`_ground_observation_citations`) and keeps the other two.
-- **The card's +-0.05 relationship rule has no code enforcement**; commit
-  clamps at +-0.2.
-- **No character can give up on a promise.** `waiting_ops` is taught
-  (STILL WAITING) and read at commit, but it is not a field of
-  `CharacterKernelOutput` and `compile_character_kernel` never copies it.
-- **The citation registry is wider than the view.** It is built from every
-  observation, while `perception_packet` can leave out a row whose text is
-  not in the admitted view; such a row has no handle, so only a
-  canonical-id citation could reach it.
+  zeroed (`_ground_observation_citations`) and keeps the other two; the
+  bare compile grades all five axes and files the update whether or not
+  the read-back cited a trigger.
+- **The read-back is offered rows the view left out.** `perception_packet`
+  drops an observation whose wording the admitted view no longer carries
+  ("they may not restore wording that the admitted view removed"), but
+  `affect_pass.events_from` -- the decision model's events for the
+  read-back and for the mood pass -- reads the raw `observations` list. Live
+  play re-derives observations from the rendered view, so their wording is
+  the view's; an archived turn replayed with observations older than its
+  final view repair is the case, by reading, not run.
 - **A reaction-loop character's demeanour and tells are recorded as shown
   and never delivered**: `_delivered_manifest` reads only
   `ctx.character_results`, while commit files the tells as shown.
-- **A non-numeric tell `subtlety` becomes 0.5**, which passes for an
-  ordinary observer; the card's example writes `"subtlety":""` with no
-  scale.
-- **The wire grammar still advertises `state.active.affect`**
-  (`llm_quality._step_json_schema`), which the card no longer asks for and
-  the engine overwrites.
 - By reading, not run: the commit rebind of current-beat ids
   (`commit_memory.py`) may change `ctx.character_results` in place, because
   merging into nothing returns the same object.

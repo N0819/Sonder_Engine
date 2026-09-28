@@ -102,32 +102,13 @@ def test_the_prompt_states_the_past_rule_and_names_the_row_marker():
     `appraisal.goal_impacts[].evidence` -- grounded namespace="present" --
     started collecting memory_refs that grounding then dropped. The rule is
     stated in the contract AND the marker names itself on the row; the two are
-    not alternatives."""
-    from llm.prompts import DEFAULT_PROMPTS
-    source = DEFAULT_PROMPTS["character"]
-    assert "MEMORY IS PAST" in source
-    assert "is REMEMBERED PAST -- without exception" in source
-    assert "temporal_status" in source
-    # The consequence, not just the label: the failure this guards against is
-    # a remembered event narrated as though it were happening now.
-    assert "not something occurring " in source
-
-
-def test_the_prompt_says_which_one_to_cite():
-    """The payload change alone is not enough -- the model reached for real
-    ids because they looked authoritative, so the rule is stated too."""
-    from llm.prompts import DEFAULT_PROMPTS
-    source = DEFAULT_PROMPTS["character"]
-    # Renamed and reduced 2026-08-30 when the top-level citation arrays were
-    # retired. The property under test is the same: the prompt states WHICH id
-    # to cite, and states why the two kinds must not be confused.
-    assert "EVIDENCE IS THE ID OF THE THING ITSELF" in source
-    # Long database/current ids are now compacted for the call and restored by
-    # the host.  Their source row, not a memorable prefix, carries temporality.
-    assert "short `oN` handles, memories `mN`, and summaries `sN`" in source
-    assert "cite only an exact supplied handle" in source
-    assert "row of origin" in source
-    assert "restores canonical IDs after the call" in source
+    not alternatives. The bare card (2026-09-27) states the rule in one
+    sentence; the rows still carry the marker (`mind/memory_context.py`)."""
+    from llm.prompts import bare_character_prompt
+    from mind import memory_context
+    assert "`memory` is what you remember, and all of it is past" in bare_character_prompt("en")
+    assert '"temporal_status": "remembered_past"' in open(
+        memory_context.__file__, encoding="utf-8").read()
 
 
 def test_legacy_present_citations_normalize_without_touching_real_ids():
@@ -242,7 +223,7 @@ def test_every_evidence_ref_is_grounded_against_the_delivered_registry():
     assert any("not-delivered" in warning for warning in warnings)
 
 
-def test_guard_warns_but_does_not_fabricate_a_present_citation():
+def test_guard_does_not_fabricate_a_present_citation():
     out = {"observations_used": [
         {"event_id": "event:old-bell", "fact": "old bell"}]}
     context = {"recent_episodes": [{
@@ -253,7 +234,7 @@ def test_guard_warns_but_does_not_fabricate_a_present_citation():
                "observed": {"text": "quiet now"}}], context)
     assert out["observations_used"] == [
         {"event_id": "event:old-bell", "fact": "old bell"}]
-    assert any("no delivered present" in warning for warning in warnings)
+    assert not any("no delivered present" in warning for warning in warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +247,11 @@ def test_guard_warns_but_does_not_fabricate_a_present_citation():
 # `current:2:3` and `current:2:0` on almost every one. The guard read two wire
 # lanes that were retired from the ask and that `CharacterOutput` supplies as
 # empty lists regardless, so it was measuring the schema, not the answer.
+#
+# The floor itself went with the full card (2026-09-27): the bare reply cites
+# nothing by design, and the decision model files the citations after the
+# call, where "none of these" is a valid answer. Grounding what WAS filed
+# stays, and so do the tests that it keeps a cited present quiet.
 # ---------------------------------------------------------------------------
 
 _LANTERN = [{"observation_id": "current:2:3",
@@ -301,32 +287,9 @@ def test_a_citation_in_any_lane_the_answer_used_counts():
         step, _LANTERN, {"recent_episodes": []}) == []
 
 
-def test_a_step_that_cites_nothing_still_warns_exactly_once():
-    step = _lighthouse_step(appraisal={"emotion": "wary"})
-    warnings = _ground_observation_citations(
-        step, _LANTERN, {"recent_episodes": []})
-    assert [w for w in warnings if "no delivered present" in w] == [
-        "no delivered present observation was cited"]
-
-
-def test_a_contract_that_asks_for_no_present_lane_never_warns(monkeypatch):
-    """Gone from the ask is not the same as omitted by the model. A build
-    advertising no present-citation lane has nothing to be missing."""
-    from llm import llm_quality
-
-    monkeypatch.setattr(
-        llm_quality, "_step_json_schema",
-        lambda step_key, wire_variant=None: {"properties": {"sequence": {}}})
+def test_a_step_that_cites_nothing_is_not_warned_about():
+    """Nothing asked the model to cite: the bare reply writes a why, and the
+    decision model's "none of these" is an answer, not an omission."""
     step = _lighthouse_step(appraisal={"emotion": "wary"})
     assert _ground_observation_citations(
         step, _LANTERN, {"recent_episodes": []}) == []
-
-
-def test_the_lanes_are_read_off_the_advertised_contract():
-    """The two `*_used` lanes are retired from the ask while the model keeps
-    them as empty-list defaults; the appraisal lanes are what this build
-    actually requests."""
-    from agents import character
-
-    assert character._requested_present_lanes() == (
-        "appraisal.present_evidence", "appraisal.somatic_impact.evidence")

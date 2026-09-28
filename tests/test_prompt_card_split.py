@@ -49,7 +49,9 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 303   # +2 (2026-09-27): the memory picker's two graded
+PART_COUNT = 302   # -1 (2026-09-27): `prompts.character`, the full character
+                   # card, deleted -- the bare card is the only contract.
+                   # +2 (2026-09-27): the memory picker's two graded
                    # questions (`character_jev.memory_situation`,
                    # `memory_useful`): the decision model picks recall.
                    # +2 (2026-09-27): the room designer's two completeness
@@ -270,8 +272,9 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
 
     pack = installed_language_packs()[language]
     card = pack.card(CARD)
-    # 38 since 2026-09-27: `character_bare`, the bare character card.
-    assert len(card["prompts"]) == 38
+    # 38 since 2026-09-27: `character_bare`, the bare character card; 37
+    # the same day, `character`, the full card, deleted with its contract.
+    assert len(card["prompts"]) == 37
     assert len(card["specialists"]) == 5
     assert len(card["prose_author_sheet"]) == 1
     # Fragments resolve AFTER assembly, so the loaded card must carry none.

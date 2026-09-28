@@ -17,24 +17,26 @@ def _want(text, urgency, serves="drive", **extra):
     return {"want": text, "urgency": urgency, "serves": serves, **extra}
 
 
-def test_lower_urgency_restraint_survives_kernel_compilation_and_normalization():
-    from agents.character_kernel import compile_character_kernel
+def test_lower_urgency_restraint_survives_compilation_and_normalization():
+    """The want the mind enacted is the less urgent one: `compile_bare`
+    marks it chosen, and normalization keeps the choice over the stronger
+    pull it held back."""
+    from agents.character_bare import compile_bare
+    from mind.character_jev import Holding
 
-    raw = {
-        "state": {
-            "active": {"wants": [
-                {"id": "w1", **_want("Protect my friend from the storm", 0.4)},
-                {"id": "w2", **_want("Run alone toward the safe tower", 0.9,
-                                     conflicts_with="w1")},
-            ]},
-            "decision": {"enact": "w1", "suppress": "w2",
-                         "hinge": "I promised not to abandon her"},
-        },
-        "sequence": [{"type": "action", "attempt": "stay beside my friend",
-                      "observable": "stays beside her"}],
-    }
-    compiled, _ = compile_character_kernel(raw)
+    reply = {"want": "Protect my friend from the storm",
+             "held_back": "Run alone toward the safe tower",
+             "hinge": "I promised not to abandon her",
+             "sequence": [{"do": "stay beside my friend", "why": "I promised"}]}
+    # Both pulls serve the drive, as the read-back answers here.
+    answers = {key: {"type": "choice", "probabilities": {choice: 1.0}} for key, choice in (
+        ("want:urgency", "slight"), ("held_back:urgency", "strong"),
+        ("want:serves", "a0"), ("held_back:serves", "a0"))}
+    holding = Holding(name="Ines", aims=[{"kind": "drive", "id": "drive",
+                                          "text": "no one I love is left behind"}])
+    compiled, _ = compile_bare(reply, answers, holding)
     state = compiled["active_state"]
+    assert state["wants"][0]["urgency"] < state["wants"][1]["urgency"]
     wants, enacted, suppressed = normalize_wants(
         state["wants"], set(), enacted_want=state["enacted_want"],
         suppressed_want=state["suppressed_want"])

@@ -1413,15 +1413,18 @@ class TestAnUnboundedListIsWhereASamplerLocks:
                                    "entities": entities})
         assert len(out["entities"]) == 120
 
-    def test_the_prompt_now_states_the_vocabulary(self):
-        """The reason it ran: `want.serves` and `goal_impacts.serves` both name
-        their domain, and this one named nothing."""
-        from llm.prompts import get_prompt
+    def test_what_a_want_serves_is_a_closed_choice(self):
+        """The reason it ran: `serves` named no domain. Under the bare card
+        (2026-09-27) the model never writes it: the decision model picks
+        among this mind's own aims, or `situational`."""
+        from llm.schemas import CharacterBareOutput, _fields
+        from mind import character_jev as jev
 
-        text = get_prompt("character")
-        assert "Each want names what it serves" in text
-        assert "`serves` is `drive`, a steering intention id, a project id" in text
-        assert "Drives and traits are pressure, not premises" in text
+        assert "serves" not in _fields(CharacterBareOutput)
+        h = jev.Holding(name="Wren", language="en", aims=[
+            {"kind": "drive", "id": "drive", "text": "keep the family safe"}])
+        options = jev.after_questions(h, {"want": "get the key back"})["want:serves"]["criteria"]
+        assert set(options) == {"a0", "situational"}
 
 
 class TestAModelThatAnswersThenKeepsTalking:
@@ -1574,155 +1577,3 @@ def test_a_record_serialised_into_its_own_slot_is_the_record():
     # A plain string is still the short spelling of the subject.
     clean, _ = validated_state_diff_channels({"poses": {"Bram Toll": "sitting"}})
     assert clean["poses"]["Bram Toll"]["posture"] == "sitting"
-
-
-# ---------------------------------------------------------------------------
-# A character has to remember, and know why it did the things it did
-# ---------------------------------------------------------------------------
-
-class TestAnIncompleteKernelKeepsTheBeat:
-    """The owner's bar, 2026-09-16: "all the character fundamentally needs to
-    do is remember and know why it did the things it did", and "the psychology
-    is really good for immersion but mild breaks are mostly acceptable".
-
-    Measured on chat 135. Three attempts at one beat died on `state.active`,
-    `state.decision`, `state.active.wants.0.want` and `updates.intentions.0.op`,
-    each throwing away an appraisal, a sequence and a speech that were sound,
-    plus a revised belief, a progressed intention, a relationship delta, three
-    mind models, a learned association and three memory operations. The repair
-    pass, which said in its own reasoning that it knew which sections to add,
-    failed the same way.
-
-    THE CONTRACT IS NOT TOUCHED. The schema still declares all fourteen
-    fields required and the card still teaches them; what changed is what
-    happens to an answer that does not carry them all.
-    """
-
-    def _kernel(self, raw):
-        from llm.schemas import validate_llm_output
-        return validate_llm_output("character_kernel", raw)
-
-    def _whole(self):
-        from copy import deepcopy
-        from llm.schemas import output_example
-        return deepcopy(output_example("character_kernel"))
-
-    def _fatal(self, raw):
-        return [w for w in self._kernel(raw)[1] if "Schema validation" in w]
-
-    def test_a_clean_answer_is_untouched_and_silent(self):
-        raw = self._whole()
-        out, warnings = self._kernel(self._whole())
-        assert warnings == []
-        assert out["sequence"] == raw["sequence"]
-
-    @pytest.mark.parametrize("field", ["manifest", "salience", "interaction",
-                                       "effects"])
-    def test_a_lane_that_carries_neither_capacity_is_simply_allowed(self, field):
-        """Demeanour, a weighting and floor control are real losses that touch
-        neither remembering nor knowing why, so no retry is spent on them and
-        no warning is raised on a beat that left one out."""
-        raw = self._whole()
-        raw.pop(field, None)
-        raw.get("updates", {}).pop(field, None)
-        out, warnings = self._kernel(raw)
-        assert not [w for w in warnings if "Schema validation" in w]
-        assert warnings == [], warnings
-
-    @pytest.mark.parametrize("lane", ["beliefs", "intentions", "projects",
-                                      "relationships", "people",
-                                      "associations", "memory", "drive"])
-    def test_an_event_lane_is_empty_on_an_ordinary_beat(self, lane):
-        """A character does not revise a belief or move a relationship every
-        time it speaks. An absent lane says the event did not happen, which is
-        what an empty one says."""
-        raw = self._whole()
-        raw["updates"].pop(lane, None)
-        out, warnings = self._kernel(raw)
-        assert warnings == [], warnings
-        # `drive` is nullable, so its empty value is None and the dump drops
-        # it again -- absent and empty really are the same thing there.
-        assert lane in out["updates"] or lane == "drive"
-
-    @pytest.mark.parametrize("field", ["appraisal", "active", "decision"])
-    def test_what_carries_the_bar_still_fails_first(self, field):
-        """These four are what the character did and why it did it, so an
-        absence is worth a retry: it must fail here, where the repair path can
-        still see it, and be filled only when the beat would be lost."""
-        raw = self._whole()
-        raw["state"].pop(field, None)
-        assert self._fatal(raw), f"state.{field} must not be quietly filled"
-
-    def test_the_sequence_still_fails_first(self):
-        raw = self._whole()
-        raw.pop("sequence", None)
-        assert self._fatal(raw)
-
-    def test_an_intention_named_by_its_words_costs_no_repair(self, monkeypatch):
-        """The owner's chats 137 idx 46 and 120 idx 8 (rounds 5-7,
-        2026-09-23): a `progress` naming its goal by text rather than id
-        bought a 41 s and a 94 s repair, and once the whole turn. Commit reads
-        the row by its text (`affect.apply_intent_ops`), so the first answer
-        stands: one call, the row kept for commit, a note instead of a fail."""
-        import json
-        from llm import llm_quality
-        raw = self._whole()
-        raw["updates"]["intentions"] = [
-            {"op": "progress", "intent": "keep her talking",
-             "why": "she finally answered"}]
-        calls = []
-
-        def answer(*args, **kwargs):
-            calls.append(1)
-            return json.dumps(raw)
-
-        monkeypatch.setattr(llm_quality, "chat_complete", answer)
-        monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
-        out = llm_quality.complete_validated_json(
-            role="character_major", step_key="character_kernel", system="sys",
-            payload={"x": 1})
-        assert len(calls) == 1
-        assert out["updates"]["intentions"][0]["intent"] == "keep her talking"
-
-    def test_a_note_past_its_length_is_cut_and_the_beat_kept(self, monkeypatch):
-        """The owner's chat 122 idx 8 (round 4, 2026-09-23): one want ran
-        past its 240 characters and the whole beat was lost. The limit still
-        fails it first; the exhausted ladder cuts it at a word."""
-        import json
-        from llm import llm_quality
-        from llm.schemas import validate_llm_output_strict
-        raw = self._whole()
-        long_want = "keep the ship steady while " + "the vortex settles " * 20
-        raw["state"]["active"]["wants"] = [
-            {"id": "w1", "want": long_want, "urgency": 0.6}]
-        raw["state"]["decision"]["hinge"] = "short and fine"
-        assert not validate_llm_output_strict("character_kernel", raw).valid
-        monkeypatch.setattr(llm_quality, "chat_complete",
-                            lambda *a, **k: json.dumps(raw))
-        monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
-        noted = []
-        monkeypatch.setattr(llm_quality, "note_step_warning", noted.append)
-        out = llm_quality.complete_validated_json(
-            role="character_major", step_key="character_kernel", system="sys",
-            payload={"x": 1}, repair_attempts=0)
-        want = out["state"]["active"]["wants"][0]["want"]
-        assert len(want) <= 240 and long_want.startswith(want)
-        assert not want.endswith(" ") and want.split()[-1] in long_want.split()
-        assert out["state"]["decision"]["hinge"] == "short and fine"
-        assert noted and "state.active.wants.0.want ran to" in noted[0]
-
-    def test_the_lift_runs_before_the_fill(self):
-        """This model routinely writes `effects`, `interaction` and `salience`
-        one brace too deep, inside `updates`, and the canonicaliser lifts them
-        back. Filling first wrote an empty `salience` over a real one and
-        blanked an addressee list; the lift runs first now."""
-        raw = self._whole()
-        for field in ("salience", "interaction"):
-            raw.pop(field, None)
-        raw["updates"]["salience"] = 0.6
-        raw["updates"]["interaction"] = {"addresses": ["the young woman"],
-                                         "expects_response": True}
-        out, warnings = self._kernel(raw)
-        assert out["salience"] == 0.6
-        assert out["interaction"]["addresses"] == ["the young woman"]
-        assert warnings == []

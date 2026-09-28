@@ -235,11 +235,9 @@ def test_the_character_is_told_its_own_ceiling():
     assert '"wants": _want_cap' in src
     assert '"intentions": _intent_cap' in src
 
-    from llm import prompts
-    block = prompts.DEFAULT_PROMPTS["character"]
-    assert "self.attention" in block
-    assert "`self.attention.wants` and `self.attention.intentions`" in block
-    assert "ceilings on beat-wants and active intentions, not targets" in block
+    # The bare card (2026-09-27) asks for one want and one held-back pull,
+    # so the wants ceiling cannot be met by the reply; it does not explain
+    # `self.attention` (docs/UNBUILT_CHARACTERS.md §6.17).
 
 
 def test_commit_reads_the_same_pair_the_payload_showed():

@@ -29,7 +29,8 @@ from agents.impossible_knowledge import (
     naming_tokens,
 )
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from llm.prompts import CHARACTER_BLOCK_KEYS, DEFAULT_PROMPTS, character_prompt
+from agents.character_bare import modules_for
+from llm.prompts import character_bare_module
 from story.character_schema import default_character_data, default_persona_data
 
 
@@ -333,25 +334,21 @@ def test_aired_in_story_matches_whole_words_only(temp_db):
 
 # --- the prompt states the class -----------------------------------------
 
-def test_the_character_prompt_states_the_class():
-    text = DEFAULT_PROMPTS["character"]
+def test_the_character_card_states_the_class():
+    text = character_bare_module("impossible_knowledge", "en")
     assert "WHAT THEY COULD NOT KNOW:" in text
     assert "`perception.impossible_knowledge`" in text
-    # The class, not an instance: knowledge with no channel behind it is an
-    # event, and the sentence names no story's name.
-    assert "no channel" in text
-    assert "event to appraise" in text
+    # The class, not an instance: knowledge with no channel behind it is
+    # something to wonder about, and the sentence names no story's name.
+    assert "no channel" in text.casefold()
     assert "Wen" not in text
 
 
-def test_the_paragraph_is_gated_on_the_cue_being_present():
-    assert ("WHAT THEY COULD NOT KNOW:", ("perception.impossible_knowledge",)) \
-        in CHARACTER_BLOCK_KEYS
-    base = DEFAULT_PROMPTS["character"]
+def test_the_section_is_gated_on_the_cue_being_present():
     empty = {"self": {}, "memory": {}, "perception": {}, "decision": {}}
-    assert "WHAT THEY COULD NOT KNOW:" not in character_prompt(empty, base=base)
+    assert "impossible_knowledge" not in modules_for(empty)
     present = {"self": {}, "memory": {}, "decision": {}, "perception": {
         "impossible_knowledge": [{"speaker": "the gaunt woman",
                                   "line_ref": "current:7:1",
                                   "private_matter": BRAM_PRIVATE}]}}
-    assert "WHAT THEY COULD NOT KNOW:" in character_prompt(present, base=base)
+    assert "impossible_knowledge" in modules_for(present)

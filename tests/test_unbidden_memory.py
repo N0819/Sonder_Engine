@@ -265,16 +265,6 @@ def test_a_spare_slot_is_not_paid_for_twice():
     assert len(ctx["recalled_old_memories"]) == half
 
 
-def test_the_payload_key_is_documented_in_the_character_prompt():
-    """The payload has no natural back-pressure against undocumented keys; a
-    marker whose meaning is guessed from its name is worse than no marker."""
-    from llm.prompts import DEFAULT_PROMPTS
-    prompt = DEFAULT_PROMPTS["character"]
-    for key in ("surfaces_unbidden", "it_comes_back_to_me",
-                "what_i_concluded"):
-        assert key in prompt, key
-
-
 # ---- commit ledger --------------------------------------------------------
 
 _UID_COUNTER = iter(range(1, 10_000))

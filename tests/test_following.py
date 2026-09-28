@@ -213,6 +213,7 @@ def test_prompts_define_following_as_voluntary_and_speed_bounded():
     spatial_prompt = DEFAULT_PROMPTS["director_spatial"]
     assert "voluntary persistent travel relation" in spatial_prompt
     assert "grants no speed" in spatial_prompt
-    character_prompt = DEFAULT_PROMPTS["character"]
-    assert "self.following" in character_prompt
-    assert "grants no speed" in character_prompt
+    # The character card no longer explains following (2026-09-27): the
+    # payload's `self.following` names the target and whether it is in the
+    # same room, the decision model reads a start or stop from what the mind
+    # did (`character_jev` `follow`), and speed is the Director's to bound.

@@ -84,9 +84,9 @@ class TestSchemaAndPromptContract:
         assert "MATERIAL TRANSFER — MATTER HAS ITS OWN LEDGER" in resolve
         assert "A material is NOT a body part" in resolve
         assert "exactly one standing relation:'interior' contact" in resolve
-        character = DEFAULT_PROMPTS["character"]
-        assert "MATERIAL EFFECTS YOU COMPLETE" in character
-        assert "state.active.hedonic.released" in character
+        # The character's half went with the full card (2026-09-27): the
+        # bare reply files no material effects, which are the Director's to
+        # write from the act (docs/UNBUILT_CHARACTERS.md §6.17).
         assert "character_material_effects" in resolve
 
     def test_embodiment_capabilities_are_available_to_their_owner(self):

@@ -445,61 +445,6 @@ def _constraint_only_schema(value):
     return value
 
 
-_CHARACTER_COMPACT_WIRE_FIELDS = frozenset({
-    # Compatibility projections: sequence and the two evidence lanes are the
-    # canonical model output.  The engine can still ACCEPT these from an old
-    # provider response; this list changes only what the experimental grammar
-    # advertises.
-    "observations_used", "speech", "action", "actions",
-    # Aliases end here.
-})
-
-#: Deliberation the REASONING BLOCK now does, retired from the ask on
-#: 2026-08-30. `considered_responses` never had a reader at all; the three
-#: readers of `response_candidates` took only its selected entry, whose
-#: `response` is now derived from `sequence[].attempt` (the same intent grain,
-#: present on 100.0% of results carrying a sequence) and whose `serves` comes
-#: from `active_state.wants[].serves`, which the same function already read
-#: first. Both stay on the model with empty defaults so stored variants parse.
-_CHARACTER_RETIRED_WIRE_FIELDS = frozenset({
-    "considered_responses", "response_candidates",
-    # Compiled from the kernel's decision, never a second model-authored note.
-    "decision_continuity",
-    # The evidence-citation trail. A character cannot receive information it
-    # should not have -- perception composes its payload -- so these could
-    # never catch a breach, only a mis-cited id, and nothing read them.
-    # `_ground_observation_citations` keeps its OTHER job: per-item `evidence`
-    # on belief/association/mind-model updates is still grounded, and an
-    # update resting on nothing delivered is still dropped.
-    "observations_used", "present_evidence_used", "memory_evidence_used",
-})
-
-
-def _character_wire_schema(schema, wire_variant=None):
-    """Return the optional experimental character wire contract.
-
-    ``compact`` is used only by the comparison harness.  Runtime callers pass
-    no variant and therefore retain the complete character surface.
-    """
-    if not isinstance(schema, dict):
-        return schema
-    # The retired deliberation fields are dropped for EVERY caller; the
-    # compact variant additionally drops the legacy aliases.
-    drop = set(_CHARACTER_RETIRED_WIRE_FIELDS)
-    if wire_variant == "compact":
-        drop |= set(_CHARACTER_COMPACT_WIRE_FIELDS)
-    out = dict(schema)
-    properties = dict(out.get("properties") or {})
-    for field in drop:
-        properties.pop(field, None)
-    out["properties"] = properties
-    if isinstance(out.get("required"), list):
-        out["required"] = [
-            field for field in out["required"] if field not in drop
-        ]
-    return out
-
-
 def _causal_director_wire_schema(schema):
     """Require a usable span on the wire; keep archive readers lenient.
 
@@ -555,16 +500,15 @@ def _causal_specialist_wire_schema(schema, channels):
     return out
 
 
-def _step_json_schema(step_key: str, wire_variant=None):
+def _step_json_schema(step_key: str):
     """The JSON Schema for a step, or None if it has no model or will not build.
 
     Cached because `model_json_schema()` walks the whole Pydantic graph and
     these are the hottest calls in the process. None is a first-class answer:
     every caller treats a missing schema as "send the advisory flag instead".
     """
-    cache_key = (step_key, wire_variant)
-    if cache_key in _SCHEMA_CACHE:
-        return _SCHEMA_CACHE[cache_key]
+    if step_key in _SCHEMA_CACHE:
+        return _SCHEMA_CACHE[step_key]
     schema = None
     try:
         from llm import schemas
@@ -587,22 +531,14 @@ def _step_json_schema(step_key: str, wire_variant=None):
             schema = (schema_builder() if schema_builder is not None
                       else model_cls.schema())
             schema = _constraint_only_schema(schema)
-            if step_key == "character":
-                schema = _character_wire_schema(schema, wire_variant)
-            elif step_key == "character_kernel":
-                # The surface affect label already carries mood. Keep the
-                # old alias readable locally without asking for it twice.
-                definitions = schema.get("$defs", schema.get("definitions", {}))
-                active = definitions.get("CharacterKernelActiveState", {})
-                (active.get("properties") or {}).pop("mood", None)
-            elif step_key in {"director_interpret", "director_resolve"}:
+            if step_key in {"director_interpret", "director_resolve"}:
                 schema = _causal_director_wire_schema(schema)
             elif step_key in (schemas.SPECIALIST_CHANNELS or {}):
                 schema = _causal_specialist_wire_schema(
                     schema, schemas.SPECIALIST_CHANNELS[step_key])
     except Exception:
         schema = None
-    _SCHEMA_CACHE[cache_key] = schema
+    _SCHEMA_CACHE[step_key] = schema
     return schema
 
 
@@ -1322,44 +1258,6 @@ def complete_validated_json(
             " | RESPONSE TRUNCATED: the model ran out of output budget"
             + _why + _sent
         )
-    # LAST RESORT, AND ONLY FOR A BEAT THAT WOULD OTHERWISE BE THROWN AWAY.
-    # Everything above has already been tried: the first answer, the targeted
-    # field patch, the full repair. What is left is to keep the beat minus
-    # what was left out, rather than keep nothing -- "the psychology is really
-    # good for immersion but mild breaks are mostly acceptable" (owner,
-    # 2026-09-16). The fields that carry the bar are filled EMPTY here and
-    # nowhere earlier, so no retry is skipped on their account and every
-    # cheaper remedy has had its turn first. Loud, because unlike the quiet
-    # lanes these are a real loss: the character keeps what it did and what
-    # it learned, and loses some of why.
-    if previous_parsed and not provider_errored:
-        try:
-            import copy as _copy
-            from llm import schemas as _schemas
-            from llm.schemas import (KERNEL_CARRIES_THE_BAR,
-                                     clip_to_declared_length,
-                                     fill_absent_required)
-            if step_key == "character_kernel":
-                salvage = _copy.deepcopy(previous_parsed)
-                filled = []
-                fill_absent_required(_schemas.SCHEMA_MAP[step_key], salvage,
-                                     notes=filled, only=KERNEL_CARRIES_THE_BAR)
-                clip_to_declared_length(_schemas.SCHEMA_MAP[step_key], salvage,
-                                        notes=filled)
-                if filled:
-                    salvaged = validate_llm_output_strict(
-                        step_key, salvage, source_payload=payload)
-                    if salvaged.valid:
-                        note_step_warning(
-                            "llm repair exhausted (%d errors; first: %r); the "
-                            "beat is kept and %s"
-                            % (len(report.errors or []),
-                               str((report.errors or [""])[0])[:120],
-                               "; ".join(filled[:4])))
-                        return _accepted(salvaged)
-        except Exception:
-            pass    # a salvage that cannot run is not a new failure mode
-
     if last_provider_error is not None:
         raise RuntimeError(
             f"{step_key}: all providers failed "

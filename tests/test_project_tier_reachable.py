@@ -165,17 +165,17 @@ class TestTheAnswerCouldNotBeHeardEither:
 
     def test_the_field_the_prompt_names_is_the_field_the_model_has(self):
         """Prompt and schema disagreeing about a field name is the alpha 7.2
-        lore-generator bug. This one cost a whole tier of psychology."""
-        import typing
-
+        lore-generator bug. This one cost a whole tier of psychology. Under
+        the bare card (2026-09-27) a project is adopted through the notebook:
+        an entry's `until` names what would finish it, and `compile_bare`
+        files it as `project_ops`."""
         from llm import prompts, schemas
-        from llm.schemas import CharacterKernelOutput, CharacterOutput
+        from llm.schemas import CharacterBareNote, CharacterBareOutput, CharacterOutput
 
-        assert "`updates.projects`" in prompts.DEFAULT_PROMPTS["character"]
-        kernel_fields = schemas._fields(CharacterKernelOutput)
-        update_model = typing.get_type_hints(CharacterKernelOutput)["updates"]
-        assert "updates" in kernel_fields
-        assert "projects" in schemas._fields(update_model)
+        card = prompts.bare_character_prompt("en")
+        assert "`notebook`" in card and "`until`" in card
+        assert "notebook" in schemas._fields(CharacterBareOutput)
+        assert "until" in schemas._fields(CharacterBareNote)
         assert "project_ops" in CharacterOutput().dict()
 
     def test_what_commit_reads_is_what_validation_keeps(self):

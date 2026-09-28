@@ -204,9 +204,8 @@ _AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 _STAGE_STEP_KEYS = {
     "director.py": ["director_establish", "director_interpret",
                     "director_resolve"],
-    # One call site for both contracts (a beat makes one model call):
-    # `"character_bare" if _bare else "character_kernel"`.
-    "character.py": ["character_kernel", "character_bare"],
+    # The bare contract is the only one (2026-09-27): one call a beat.
+    "character.py": ["character_bare"],
     "background.py": ["background_react"],
     "narration.py": ["narrator"],
 }

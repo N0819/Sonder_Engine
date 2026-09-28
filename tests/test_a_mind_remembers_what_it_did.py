@@ -6,8 +6,9 @@ memory row in `persist/commit_memory.py` is the ONLY durable record that a
 character did anything. It was gated on the character's own `salience`
 self-report reaching 0.7, and that gate never opened: `salience` reaches the
 character prompt only as the literal `0.5` inside the required JSON shape,
-nothing says what it means, and `KERNEL_FILL_QUIETLY` fills an absent one with
-0.5 and reports nowhere.
+nothing says what it means, and the full card's `KERNEL_FILL_QUIETLY`
+(deleted with it 2026-09-27) filled an absent one with 0.5 and reported
+nowhere.
 
 Measured, two_lives v5 (2026-09-19): 60 beats, two autonomous characters, no
 player. ONE self row -- on the single beat anybody spoke. Emory Vane spent

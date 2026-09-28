@@ -1154,7 +1154,7 @@ def prepare_memory_commit(ctx, *, scene=None):
         # composer found no event worth remembering, no row exists and the
         # transient ids correctly remain transient.
         if own_result and _episode_key:
-            from agents.character_kernel import bind_current_evidence_to_memory
+            from agents.character_evidence import bind_current_evidence_to_memory
             bind_current_evidence_to_memory(own_result, _episode_key)
 
         # Place claims are re-keyed onto their place ONCE, after evidence has
@@ -1208,8 +1208,9 @@ def prepare_memory_commit(ctx, *, scene=None):
             # and the threshold was an OFF SWITCH. `salience` reaches the
             # character prompt only as the literal 0.5 inside the required
             # JSON shape, with nothing anywhere saying what it means or when
-            # to raise it, and it sits in `KERNEL_FILL_QUIETLY` so an absent
-            # one is filled with the same 0.5 and reported nowhere. Measured,
+            # to raise it, and the full card's kernel (`KERNEL_FILL_QUIETLY`,
+            # deleted with it 2026-09-27) filled an absent one with the same
+            # 0.5 and reported nowhere. Measured,
             # two_lives v5 (2026-09-19), 60 beats of two characters with no
             # player in the story: ONE self row, on the one beat somebody
             # spoke. Emory Vane spent twenty beats diagnosing a rotten

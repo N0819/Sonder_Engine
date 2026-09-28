@@ -255,21 +255,21 @@ def main(argv=None):
     ap.add_argument("--max-tokens", type=int, default=6000)
     ap.add_argument("--show", action="store_true",
                     help="print each declared solution")
-    # ARM SUPPORT, mirroring tools/narrator_sheet_bench.py. `character_prompt`
-    # already accepts a `base`, applies the same paragraph subtraction to it,
-    # and skips only the cache relocation -- so a variant sheet is measured
-    # under production's own composition rather than as a raw document.
+    # ARM SUPPORT, mirroring tools/narrator_sheet_bench.py: a variant of the
+    # bare character card, sent whole (with `{name}` filled) in place of the
+    # live card and its gated sections.
     ap.add_argument("--sheet", default=None,
-                    help="path to a character-sheet variant to measure "
-                         "instead of the live prompt")
+                    help="path to a bare-card variant to measure "
+                         "instead of the live card")
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
     from core import db
     db.configure(args.db)
+    from agents import character_bare
     from llm import llm_quality
-    from llm import prompts
     from llm import schemas
+    from mind.character_jev import Holding
 
     _sheet = None
     if args.sheet:
@@ -279,11 +279,11 @@ def main(argv=None):
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))
-    # Production sends the contract with the paragraphs whose subject this
-    # beat does not carry removed (prompts.character_prompt). Sending the
-    # whole document here measured a configuration that does not ship --
-    # and these payloads are deliberately sparse, so the gap is widest
-    # exactly where this harness is pointed.
+    # Production sends the bare card with only the gated sections this beat's
+    # payload calls for (`character_bare.modules_for`); the harness does the
+    # same, per scenario, from that scenario's own payload. The reply is read
+    # back by code alone (`compile_bare` with no decision-model answers), so
+    # what is scored is what the character wrote.
     system = None  # built per scenario, from that scenario's own payload
 
     print(f"{len(SCENARIOS)} problems x {args.trials} trials — "
@@ -295,7 +295,9 @@ def main(argv=None):
         times = []
         for sc in SCENARIOS:
             payload_obj = _payload(sc)
-            system = prompts.character_prompt(payload_obj, base=_sheet)
+            name = str((payload_obj.get("self") or {}).get("name") or "the character")
+            system = (_sheet.replace("{name}", name) if _sheet else character_bare.prompt(
+                name, character_bare.modules_for(payload_obj)))
             payload = json.dumps(payload_obj, ensure_ascii=False)
             marks = []
             for _ in range(args.trials):
@@ -310,11 +312,13 @@ def main(argv=None):
                 except Exception:
                     bad += 1
                     continue
-                report = schemas.validate_llm_output_strict("character", parsed)
+                report = schemas.validate_llm_output_strict("character_bare", parsed)
                 if not report.valid:
                     bad += 1
                     continue
-                did = _conduct(report.output or parsed)
+                compiled, _ = character_bare.compile_bare(
+                    report.output or parsed, {}, Holding(name=name))
+                did = _conduct(compiled)
                 attempts += 1
                 hit_valid = bool(sc["valid"].search(did))
                 hit_block = bool(sc["blocked"].search(did))

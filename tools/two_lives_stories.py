@@ -38,7 +38,55 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.bubble_drive import MODEL, _require_scratch  # noqa: E402
-from tools.character_wire_ab import _post  # noqa: E402
+
+
+def _usage(data):
+    usage = data.get("usage") or {}
+    details = usage.get("prompt_tokens_details") or {}
+    return {
+        "input": int(usage.get("prompt_tokens") or
+                     usage.get("input_tokens") or 0),
+        "output": int(usage.get("completion_tokens") or
+                      usage.get("output_tokens") or 0),
+        "cached": int(usage.get("cached_tokens") or
+                      details.get("cached_tokens") or
+                      usage.get("prompt_cache_hit_tokens") or 0),
+    }
+
+
+def _post(prov, model, role, system, payload, schema, timeout, max_tokens):
+    """One chat completion, through the engine's own provider plumbing.
+    (It lived in `tools/character_wire_ab.py`, deleted with the full
+    character card on 2026-09-27.)"""
+    from llm import providers
+
+    body = {
+        "model": model,
+        "messages": [providers._openai_system_message(system, prov, model),
+                     {"role": "user", "content": json.dumps(
+                         payload, ensure_ascii=False)}],
+        "temperature": 0.7,
+        "max_tokens": max_tokens,
+    }
+    providers._apply_provider_routing(body, prov)
+    providers._apply_cache_affinity(body, prov, role)
+    providers._apply_reasoning_effort(body, prov, role)
+    providers._apply_json_mode(body, prov, model, True, schema)
+    started = time.perf_counter()
+    try:
+        response = providers._session().post(
+            prov["base_url"].rstrip("/") + "/chat/completions",
+            headers=providers._headers(prov), json=body, timeout=timeout)
+    except Exception as exc:
+        return None, time.perf_counter() - started, {}, (
+            f"{type(exc).__name__}: {exc}")
+    elapsed = time.perf_counter() - started
+    if response.status_code >= 400:
+        return None, elapsed, {}, f"HTTP {response.status_code}: {response.text[:160]}"
+    data = response.json()
+    text = (((data.get("choices") or [{}])[0].get("message") or {})
+            .get("content") or "")
+    return text, elapsed, _usage(data), None
 
 SYSTEM = """You are given one person's own record of a stretch of their life:
 what they remember, what they were trying to do, how they felt, and the places

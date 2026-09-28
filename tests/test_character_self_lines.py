@@ -486,47 +486,14 @@ def test_character_step_combines_move_and_spent_intention_rewrite(
         "observations": {str(char_id): []},
     }
     calls = []
-
     def fake_agent_json(role, step_key, system, payload, **kwargs):
         calls.append(payload)
-        if len(calls) == 1:
-            return {
-                "response_candidates": [{
-                    "response": (
-                        "Affirm interest in meeting her mother and propose "
-                        "entirely new post-shrine destination to break repetition"
-                    ),
-                    "serves": ["i1"], "selected": True,
-                }],
-                "active_state": {
-                    "mood": "bright", "goal": "offer another destination",
-                    "wants": [{
-                        "want": "offer another destination", "urgency": 0.8,
-                        "serves": "i1",
-                    }],
-                },
-                "sequence": [{
-                    "type": "speech",
-                    "text": "After the shrine, the archives of Calufrax?",
-                }],
-            }
         return {
-            "response_candidates": [{
-                "response": "ask about the unfamiliar bell now visible at the shrine",
-                "serves": ["situational"], "selected": True,
-            }],
-            "active_state": {
-                "mood": "curious", "goal": "understand the unfamiliar bell",
-                "wants": [{
-                    "want": "ask about the unfamiliar bell", "urgency": 0.7,
-                    "serves": "situational",
-                }],
-            },
-            "sequence": [{
-                "type": "speech", "text": "What's that bell for?",
-            }],
+            "want": ("affirm interest in meeting her mother and propose an "
+                     "entirely new post-shrine destination"),
+            "sequence": [{"say": "After the shrine, the archives of Calufrax?",
+                          "to": "Hinami", "why": "a new destination"}],
         }
-
     monkeypatch.setattr(character, "_agent_json", fake_agent_json)
 
     result = character.character_step(ctx, char_id, nonce=0)
@@ -539,9 +506,11 @@ def test_character_step_combines_move_and_spent_intention_rewrite(
     assert len(calls) == 1, "weak output must not buy a second model call"
     assert calls[0]["self"]["recent_self_moves"][0]["move"] == repeated_move
     assert calls[0]["self"]["steering_intention_ids"] == []
-    assert any("move_correction" in w and "the beat stands" in w
-               for w in ctx.warnings)
-    assert any("intention_correction" in w for w in ctx.warnings)
+    # A spent intention cannot be served under the bare contract: the
+    # decision model offers a want only this mind's STEERING aims
+    # (`character_bare.holding_from`), so the rewrite this test once caught
+    # has no way in (2026-09-27).
+    assert not any("intention_correction" in w for w in ctx.warnings)
     assert result["speech"] == (
         "After the shrine, the archives of Calufrax?")
 
@@ -582,7 +551,9 @@ def test_no_pack_asks_the_character_about_its_own_corrections():
 
     keys = _correction_keys()
     for language, pack in sorted(installed_language_packs().items()):
-        sheet = str(pack.card("system_prompts")["prompts"]["character"])
+        card = pack.card("system_prompts")
+        sheet = str(card["prompts"]["character_bare"]) + "\n".join(
+            str(v) for v in (card.get("character_bare") or {}).values())
         named = [k for k in keys if k in sheet]
         assert not named, (
             f"{language}: the character sheet names {named}, which the "
