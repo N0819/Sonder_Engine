@@ -10,10 +10,10 @@ which function assembled it.
 Since the causal Director went (2026-09-27) the sheets assembled from a card
 are the encoder's (overlaid by the owners whose channels ship, named
 `director_<owner>` in the roster), the room author's (`director_spatial`) and
-a stored prompt body. These tests hand them a card whose roster the test
-chooses, and require the roster to win everywhere. Whether the prose
-Director's own sheets should take the overlay is an open question
-(`docs/UNBUILT_PIPELINE.md` § 1.1): today they do not.
+a stored prompt body, and the prose Director's own two sheets (named
+`prose_director_<stage>`, the owner's ruling of 2026-09-28). These tests hand
+them a card whose roster the test chooses, and require the roster to win
+everywhere.
 """
 
 from __future__ import annotations
@@ -62,6 +62,16 @@ def test_an_encoder_sheet_takes_the_overlay_only_when_the_roster_names_it(
             f"the encoder over {name!r}'s channels disagrees with the roster")
 
 
+def test_the_directors_account_answers_to_its_own_ids(card_with_roster):
+    """Each stage's sheet by its own id: a roster naming one stage overlays
+    that stage and not the other."""
+    card = card_with_roster(["prose_director_resolve"])
+    assert _overlay(card) in prompts.prose_director_prompt("resolve", "en")
+    assert _overlay(card) not in prompts.prose_director_prompt("interpret", "en")
+    card = card_with_roster(["narrator"])
+    assert _overlay(card) not in prompts.prose_director_prompt("resolve", "en")
+
+
 def test_the_room_author_answers_to_the_spatial_owner(card_with_roster):
     card = card_with_roster(["director_spatial"])
     assert _overlay(card) in prompts.room_author_prompt("en")
@@ -101,6 +111,13 @@ def test_no_pack_carries_a_second_spelling_of_the_roster():
             assert not second, (
                 f"{pack.id} specialist {name!r} carries {second} beside "
                 "nsfw_prompt_ids")
+
+
+def test_the_shipped_packs_overlay_the_directors_account():
+    for pack in installed_language_packs(refresh=True).values():
+        roster = set(pack.card("system_prompts")["nsfw_prompt_ids"])
+        assert {f"prose_director_{stage}"
+                for stage in prompts.PROSE_DIRECTOR_STAGES} <= roster, pack.id
 
 
 def test_the_shipped_packs_overlay_only_state_writing_hands():

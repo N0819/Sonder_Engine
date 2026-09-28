@@ -45,6 +45,8 @@
     "generator_greeting",
     "generator_persona",
     "narrator",
+    "prose_director_interpret",
+    "prose_director_resolve",
     "scene_life"
   ],
   "prompts": {

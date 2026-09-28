@@ -335,14 +335,18 @@ def prose_director_prompt(stage, language=None):
 
     The sheet `agents/director_prose.py` runs at every stage after the
     opening -- the only Director contract since 2026-09-27: the Director
-    writes the beat as an objective account and nothing else. No adult
-    overlay, for the same reason the causal sheet carried none -- the encoder
-    is the one that writes anatomy into records."""
+    writes the beat as an objective account and nothing else. It takes the
+    adult overlay when the roster names it, as every other sheet does (owner,
+    2026-09-28). The causal sheet carried none because it wrote no account;
+    this one does, and the encoder can record only what the account says
+    happened."""
     pid = f"prose_director_{stage}"
+    card = _prompt_card(language)
     override = _preset_override(pid, language)
     sheet = override if override is not None else str(
-        _prompt_card(language)["prose_contract"][f"director_{stage}"])
-    return apply_prompt_policy(sheet, _language(language), pid)
+        card["prose_contract"][f"director_{stage}"])
+    return apply_prompt_policy(sheet + nsfw_overlay(pid, card),
+                               _language(language), pid)
 
 
 def encoder_parts(channel, language=None):

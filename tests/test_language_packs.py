@@ -25,7 +25,8 @@ from language_runtime import (
     raw_card, require_language_pack, story_language,
 )
 from llm.prompts import (
-    DEFAULT_PROMPTS, character_bare_module, default_prompts_for, get_prompt,
+    DEFAULT_PROMPTS, PROSE_DIRECTOR_STAGES, character_bare_module,
+    default_prompts_for, get_prompt,
 )
 
 
@@ -537,11 +538,13 @@ def test_every_nsfw_prompt_id_names_a_prompt_that_exists():
     Since 2026-09-27 a `director_<hand>` id names no prompt: it is the key
     the encoder's sheet reads for a hand whose channel ships
     (`unified_specialist_prompt`), and `director_spatial` the room author's
-    (`room_author_prompt`)."""
+    (`room_author_prompt`). The Director's own sheets are named by the ids
+    the prompt editor publishes them under (`prose_director_<stage>`)."""
     for pack in installed_language_packs(refresh=True).values():
         card = pack.card("system_prompts")
         known = set(card["prompts"]) | {
-            f"director_{hand}" for hand in card["specialists"]}
+            f"director_{hand}" for hand in card["specialists"]} | {
+            f"prose_director_{stage}" for stage in PROSE_DIRECTOR_STAGES}
         unmatched = sorted(set(card["nsfw_prompt_ids"]) - known)
         assert not unmatched, (
             f"language pack {pack.id!r} marks {unmatched} NSFW-overlaid, and "
