@@ -138,11 +138,9 @@ of these things; nothing on the prose path does yet.
     `target_matches`, which no payload carries; `entities__examined` ships
     only with its channel, and the `entities` question answers no for a
     thing "only described as it already is", so a pure read may never reach
-    the part; `jev_questions/entities.txt` enumerates verbs; the prose
+    the part; `jev_questions/entities.txt` enumerates verbs; and the prose
     Director's sheets never take the adult overlay (the encoder's and the
-    room author's do, by their owners); and the prompt editor shows no
-    turn-pipeline Director sheet, because `prose_contract.*` is not in
-    `DEFAULT_PROMPTS`.
+    room author's do, by their owners).
 12. **Dead code the deletion left.** `_note_for`, `_SPECIALIST_DICT_CHANNELS`
     / `_SPECIALIST_LIST_CHANNELS`, the `required_channels` and verdict
     branches, `pressure_ticks`, `MINTED_THING_NAME_WORDS`, and

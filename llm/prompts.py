@@ -35,13 +35,62 @@ def _prompt_card(language=None):
 
 _ENGLISH = _prompt_card("en")
 
+#: `<channel>__<part>`: a part of a big channel's encoder chunk, shipped only
+#: when the decision model says the beat needs it (`encoder_parts`).
+ENCODER_PART_SEP = "__"
+
+#: The prompt editor's ids for the encoder's card: `encoder.core`, one
+#: `encoder.<channel>` per chunk and one `encoder.<channel>__<part>` per part.
+#: PIECES, never the sheet: the sheet is assembled per beat from the channels
+#: the decision model grants, so a preset of the assembly would replace every
+#: beat's scoping with one fixed list -- the "one sheet, two spellings" defect
+#: the causal hands' assembled sheets had in the editor.
+ENCODER_PIECE_PREFIX = "encoder."
+
+#: The Director's two stages, whose prose sheets the editor shows whole.
+PROSE_DIRECTOR_STAGES = ("interpret", "resolve")
+
 
 def _prompt_bodies(card):
-    """Every prompt body one pack publishes. None is assembled any more: the
-    only assembled ids were the causal Director's -- its five specialists'
-    sheets and its prose author's -- deleted 2026-09-27; the encoder's sheet
-    is built per beat from its own card (`unified_specialist_prompt`)."""
+    """Every prompt body one pack STORES under `prompts`. The turn Director's
+    sheets live in their own families and are added for the editor by
+    `_director_sheets`."""
     return {pid: str(text) for pid, text in card["prompts"].items()}
+
+
+def encoder_pieces(card):
+    """The encoder card's keys in the order its sheet is assembled: the core,
+    then each channel in canonical owner order, each followed by its parts.
+    A piece no order reaches comes last rather than going unpublished."""
+    encoder = card["encoder"]
+    keys = ["core"]
+    for spec in card["specialists"].values():
+        for channel in spec["order"]:
+            if channel in encoder and channel not in keys:
+                keys.append(channel)
+                prefix = f"{channel}{ENCODER_PART_SEP}"
+                keys.extend(part for part in encoder if part.startswith(prefix))
+    keys.extend(key for key in encoder if key not in keys)
+    return keys
+
+
+def _director_sheets(card, language):
+    """The turn Director's sheets as the prompt editor shows them (owner,
+    2026-09-28: "prompt editor should show director and encoder").
+
+    The two prose sheets whole, with the schema policy applied as every stored
+    prompt's is, under the ids `prose_director_prompt` already reads a preset
+    by. The encoder card piece by piece and BARE: a piece is spliced into the
+    middle of an assembled sheet, and the policy belongs once, at its end."""
+    out = {}
+    for stage in PROSE_DIRECTOR_STAGES:
+        pid = f"prose_director_{stage}"
+        out[pid] = apply_prompt_policy(
+            str(card["prose_contract"][f"director_{stage}"]), language, pid)
+    encoder = card["encoder"]
+    for key in encoder_pieces(card):
+        out[ENCODER_PIECE_PREFIX + key] = str(encoder[key])
+    return out
 
 
 # Compatibility exports used by the prompt editor, project checks, benches,
@@ -50,6 +99,7 @@ DEFAULT_PROMPTS = {
     pid: apply_prompt_policy(text, "en", pid)
     for pid, text in _prompt_bodies(_ENGLISH).items()
 }
+DEFAULT_PROMPTS.update(_director_sheets(_ENGLISH, "en"))
 # The one surviving eager English fragment, and it is read (story/importers.py).
 # `extra_parts_note(language)` below is the localized accessor that should
 # replace it: this constant resolves the ENGLISH card at import, so an import
@@ -192,8 +242,11 @@ def default_prompts_for(language=None):
     preset at all.
     """
     selected = _language(language)
-    return {pid: apply_prompt_policy(text, selected, pid)
-            for pid, text in _prompt_bodies(_prompt_card(selected)).items()}
+    card = _prompt_card(selected)
+    out = {pid: apply_prompt_policy(text, selected, pid)
+           for pid, text in _prompt_bodies(card).items()}
+    out.update(_director_sheets(card, selected))
+    return out
 
 
 def preset_export_document(name):
@@ -290,11 +343,6 @@ def prose_director_prompt(stage, language=None):
     sheet = override if override is not None else str(
         _prompt_card(language)["prose_contract"][f"director_{stage}"])
     return apply_prompt_policy(sheet, _language(language), pid)
-
-
-#: `<channel>__<part>`: a part of a big channel's encoder chunk, shipped only
-#: when the decision model says the beat needs it (`encoder_parts`).
-ENCODER_PART_SEP = "__"
 
 
 def encoder_parts(channel, language=None):
@@ -396,17 +444,24 @@ def unified_specialist_prompt(channels, language=None, parts=None):
     encoder = card["encoder"]
     granted = set(channels or ())
     picked = None if parts is None else set(parts)
-    sections = [str(encoder["core"])]
+
+    def piece(key):
+        # A host preset edits the card piece by piece (`encoder.<key>` in the
+        # prompt editor); the assembly and its scoping stay the engine's.
+        override = _preset_override(ENCODER_PIECE_PREFIX + key, language)
+        return str(override if override is not None else encoder[key])
+
+    sections = [piece("core")]
     hands = []
     for name, spec in card["specialists"].items():
         shipped = [channel for channel in spec["order"] if channel in granted]
         if shipped:
             hands.append(name)
         for channel in shipped:
-            sections.append(str(encoder[channel]))
+            sections.append(piece(channel))
             prefix = f"{channel}{ENCODER_PART_SEP}"
             sections.extend(
-                str(text) for part, text in encoder.items()
+                piece(part) for part in encoder
                 if part.startswith(prefix) and (picked is None or part in picked))
     sheet = "\n\n".join(section.strip("\n") for section in sections) + "\n"
     overlay = next((nsfw_overlay(f"director_{name}", card) for name in hands

@@ -67,7 +67,9 @@ def test_english_is_an_installed_complete_default_pack():
     # Counted over what the pack PUBLISHES. Until 2026-09-27 that was the
     # stored prompts plus the seven causal Director sheets assembled from
     # `specialists`/`prose_author_sheet`; those went with the causal
-    # Director, and what is published is now exactly what is stored.
+    # Director. Since 2026-09-28 it is the stored prompts plus the turn
+    # Director's own: its two prose sheets and the encoder's card, piece by
+    # piece (`prompts._director_sheets`).
     assert len(default_prompts_for("en")) >= 37
     # Perception composes every view deterministically and has no model role,
     # so it must carry no prompt: one in the pack is 28k characters shipped to
@@ -211,7 +213,13 @@ def test_japanese_deterministic_fallback_prose_is_natural_japanese():
 def test_every_english_system_prompt_carries_the_schema_language_contract(temp_db):
     temp_db.set_setting("active_preset", "Default")
     assert get_prompt("narrator", language="en") == DEFAULT_PROMPTS["narrator"]
-    for prompt in DEFAULT_PROMPTS.values():
+    from llm.prompts import ENCODER_PIECE_PREFIX, unified_specialist_prompt
+    # The encoder's card is published piece by piece and bare; the contract
+    # belongs once, at the end of the sheet those pieces assemble into.
+    sheets = [prompt for pid, prompt in DEFAULT_PROMPTS.items()
+              if not pid.startswith(ENCODER_PIECE_PREFIX)]
+    sheets.append(unified_specialist_prompt(["attire"], "en", None))
+    for prompt in sheets:
         assert "LANGUAGE AND SCHEMA CONTRACT" in prompt
         assert "schema field" in prompt
         assert "free-text human-language values" in prompt

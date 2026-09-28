@@ -3592,7 +3592,19 @@ function openPromptsModal() {
       const preset = presetOf(sel.value);
       // A preset's bodies only belong on top of its own language's sheets.
       const src = (preset && preset.language === langSel.value) ? preset.prompts : {};
+      // The turn Director's sheets follow the stored prompts, and each group
+      // is headed: the encoder is shown PIECE BY PIECE, because its sheet is
+      // assembled per beat from the channels the decision model grants.
+      const heading = k => (k.startsWith("prose_director_")
+        ? "The Director — its account of the beat, one sheet per stage"
+        : k.startsWith("encoder.")
+          ? "The encoder — its core, one chunk per channel and each channel's parts. A beat's sheet is assembled from the channels the decision model grants, so edit a piece here, never the whole."
+          : "");
+      let group = "";
       for (const [k, v] of Object.entries(defaults)) {
+        const h = heading(k);
+        if (h && h !== group) b.append(el("h4", { class: "pta" }, h));
+        group = h;
         const ta = el("textarea", { class: "pta", style: "width:100%", rows: "6" }, src[k] || v);
         tas[k] = ta; b.append(el("div", { class: "card pta" }, el("b", {}, k), ta));
       }

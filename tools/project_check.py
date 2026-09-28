@@ -1007,15 +1007,25 @@ def check_language_pack_surfaces(errors: list[str]) -> None:
     if english is None:
         errors.append("built-in English language pack is missing")
         return
-    # Every prompt the runtime registry publishes is a body the card stores:
-    # the assembled sheets -- the causal Director's five specialists' and its
-    # author's -- went with it on 2026-09-27.
-    prompt_ids = set(english.card("system_prompts")["prompts"])
+    # Every prompt the runtime registry publishes is a body the card stores --
+    # its `prompts`, plus the turn Director's own the editor shows since
+    # 2026-09-28 (its two prose sheets and the encoder's card, piece by piece;
+    # `prompts._director_sheets`). The causal Director's assembled sheets
+    # went with it on 2026-09-27.
+    card = english.card("system_prompts")
+    prompt_ids = set(card["prompts"]) | set(prompts._director_sheets(card, "en"))
     if prompt_ids != set(prompts.DEFAULT_PROMPTS):
         errors.append("English system-prompt card and runtime registry disagree")
     for pid, text in prompts.DEFAULT_PROMPTS.items():
+        # An encoder PIECE is bare by design: it is spliced into the middle of
+        # an assembled sheet, whose end carries the contract once.
+        if pid.startswith(prompts.ENCODER_PIECE_PREFIX):
+            continue
         if "LANGUAGE AND SCHEMA CONTRACT" not in text:
             errors.append(f"system prompt {pid!r} lacks the language/schema contract")
+    if "LANGUAGE AND SCHEMA CONTRACT" not in prompts.unified_specialist_prompt(
+            [], "en", []):
+        errors.append("the encoder's assembled sheet lacks the language/schema contract")
     expected_ui = english_ui_catalog()
     try:
         actual_ui = json.loads(UI_PATH.read_text(encoding="utf-8"))

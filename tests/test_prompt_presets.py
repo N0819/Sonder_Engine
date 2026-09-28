@@ -56,16 +56,70 @@ def test_a_japanese_preset_does_not_reach_an_english_prompt(saved):
 
 
 def test_the_directors_sheet_honours_the_tag(saved):
-    """Every preset-aware assembly path, not just get_prompt_body. Since the
-    causal Director went (2026-09-27) the Director's sheet is the one
-    preset-aware assembly left; the encoder's and the room author's read no
-    preset."""
+    """Every preset-aware assembly path, not just get_prompt_body: the
+    Director's sheet here, the encoder's pieces below. (The room author reads
+    no preset.)"""
     saved("Grittier", DEFAULT_LANGUAGE, {
         "prose_director_resolve": "PROSE OVERRIDE",
     })
     assert "PROSE OVERRIDE" in prompts.prose_director_prompt(
         "resolve", DEFAULT_LANGUAGE)
     assert "PROSE OVERRIDE" not in prompts.prose_director_prompt("resolve", JA)
+
+
+# --- the turn Director in the editor (owner, 2026-09-28) --------------------
+
+@pytest.mark.parametrize("language", [DEFAULT_LANGUAGE, JA])
+def test_the_director_and_the_encoder_are_in_the_editor(language):
+    """"prompt editor should show director and encoder". The Director's two
+    prose sheets are shown whole; the encoder's card piece by piece -- its
+    core, every channel chunk and every part -- because the encoder's sheet
+    is assembled per beat from the channels the decision model grants, and a
+    preset of the assembly would replace every beat's scoping with one list."""
+    published = prompts.default_prompts_for(language)
+    card = prompts._prompt_card(language)
+    for stage in ("interpret", "resolve"):
+        assert str(card["prose_contract"][f"director_{stage}"]) in \
+            published[f"prose_director_{stage}"]
+    pieces = [key for key in published if key.startswith("encoder.")]
+    assert pieces[0] == "encoder.core"
+    assert {key[len("encoder."):] for key in pieces} == set(card["encoder"])
+    for key in pieces:
+        # BARE: a piece is spliced into the middle of an assembled sheet, and
+        # the schema policy belongs once, at the end of the assembly.
+        assert published[key] == str(card["encoder"][key[len("encoder."):]])
+
+
+def test_an_encoder_piece_is_edited_and_the_scoping_stays_the_engines(saved):
+    saved("Grittier", DEFAULT_LANGUAGE, {
+        "encoder.core": "CORE OVERRIDE", "encoder.attire": "ATTIRE OVERRIDE"})
+    granted = prompts.unified_specialist_prompt(["attire"], DEFAULT_LANGUAGE, [])
+    assert "CORE OVERRIDE" in granted and "ATTIRE OVERRIDE" in granted
+    ungranted = prompts.unified_specialist_prompt(["positions"], DEFAULT_LANGUAGE, [])
+    assert "CORE OVERRIDE" in ungranted
+    assert "ATTIRE OVERRIDE" not in ungranted
+    # a preset stays in its own language
+    assert "ATTIRE OVERRIDE" not in prompts.unified_specialist_prompt(["attire"], JA, [])
+    # and a part reaches the sheet only when the decision model picks it
+    saved("Parts", DEFAULT_LANGUAGE, {
+        "encoder.conditions__restraint": "RESTRAINT OVERRIDE"})
+    assert "RESTRAINT OVERRIDE" in prompts.unified_specialist_prompt(
+        ["conditions"], DEFAULT_LANGUAGE, ["conditions__restraint"])
+    assert "RESTRAINT OVERRIDE" not in prompts.unified_specialist_prompt(
+        ["conditions"], DEFAULT_LANGUAGE, [])
+
+
+def test_a_preset_of_encoder_pieces_travels(temp_db):
+    """A preset file naming the Director's and the encoder's ids imports:
+    the import refuses only ids the engine does not publish."""
+    name, preset = prompts.preset_import_document({
+        "kind": prompts.PRESET_FILE_KIND,
+        "version": prompts.PRESET_FILE_VERSION,
+        "name": "Encoder notes", "language": DEFAULT_LANGUAGE,
+        "prompts": {"encoder.attire": "x", "prose_director_interpret": "y"},
+    })
+    assert name == "Encoder notes"
+    assert set(preset["prompts"]) == {"encoder.attire", "prose_director_interpret"}
 
 
 def test_default_preset_overrides_nothing(saved):
