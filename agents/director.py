@@ -6519,7 +6519,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     # N merges of the scene -- bounded and pure, beats measured at 1-5 spans --
     # and a beat that placed everything has nothing to buy with it.
     _span_rooms = {}
-    if unplaced_mints_needing_a_room(sc, sd, ctx=ctx):
+    _needing_rooms = unplaced_mints_needing_a_room(sc, sd, ctx=ctx)
+    if _needing_rooms:
         _rspans = _span_items(out)
         if _rspans:
             _rsd = dict(sd)
@@ -6531,13 +6532,23 @@ def director_resolve(ctx, nonce, _corrections=None):
                 beat_worlds(sc, _rsd, merge_scene_with_diff),
                 merge_scene_with_diff(sc, _rsd),
                 lambda span: str(span.get("actor") or p_name))
+        # THE PROSE CONTRACT'S EVENTS ARE ITS SPANS, and the replay above
+        # reads spans that contract does not write: without this a thing a
+        # figure on the beach produced stood in the room the player arrived
+        # in (`director_prose.mint_source_rooms`).
+        _span_rooms = {**director_prose.mint_source_rooms(
+            ((out.get("orchestration") or {}).get("prose_contract") or {}).get("events"),
+            _identity_index, (sc or {}).get("positions"), _needing_rooms,
+            {str(_rid) for _table in ((sc or {}).get("rooms"), (sd or {}).get("rooms"))
+             if isinstance(_table, dict) for _rid in _table}),
+            **_span_rooms}
     _placed = place_unplaced_mints(sc, sd, _mint_room, ctx=ctx,
                                    rooms=_span_rooms)
     for _eid in _placed:
         _where = _span_rooms.get(str(_eid))
         _note = (
-            ("%r was minted with no room, so the beat stood it where its own "
-             "span left the actor (%s). A thing in no room can be seen, "
+            ("%r was minted with no room, so the beat stood it where the act "
+             "that minted it left its actor (%s). A thing in no room can be seen, "
              "reached and acted on by nobody; write `state_diff.positions` "
              "for anything you mint." % (_eid, _where))
             if _where else

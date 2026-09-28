@@ -23,6 +23,7 @@ from agents import director_prose
 from llm import decisions
 
 from tests.director_fakes import (
+    BASE_SCENE,
     _action_interp,
     _fake_agent,
     _make_ctx,
@@ -290,6 +291,132 @@ def test_a_thing_minted_and_placed_nowhere_buys_positions():
         "75bd": {"state": {"hatch": "closed"}},
         "The TARDIS": {"state": {"hatch": "closed"}}}}}]}]
     assert director_prose.implied_tools(held, scene) == []
+
+
+def test_a_portable_thing_minted_and_placed_nowhere_buys_inventory_ops():
+    """Chat 154 replay idx 24 (2026-09-28): the Doctor drew his sonic
+    screwdriver from his coat. Granted `positions`, the widening wrote
+    nothing for it 15 times in 15 -- positions moves bodies -- and the floor
+    stood a lit tool on the floor; granted `inventory_ops`, it wrote him
+    holding it 15 times in 15. A person stays `positions`' to stand."""
+    scene = {"rooms": {"console_room": {}}}
+    drawn = [{"transforms": [{"item": "sonic_screwdriver", "patch": {"entities": {
+        "sonic_screwdriver": {"name": "sonic screwdriver", "kind": "tool",
+                              "portable": True}}}}]}]
+    assert director_prose.implied_tools(drawn, scene) == ["inventory_ops"]
+    both = drawn + [{"transforms": [{"item": "child", "patch": {"entities": {
+        "beach_child": {"name": "the child", "kind": "person"}}}}]}]
+    assert director_prose.implied_tools(both, scene) == ["inventory_ops", "positions"]
+
+
+INVENTORY_CHUNK = "A TRANSFER IS THE WHOLE POSSESSION CHANGE"
+
+
+def _minting_answer(source, key, *, held_by=None):
+    patch = {"entities": {key: {"name": key.replace("_", " "), "kind": "tool",
+                                "portable": True}}}
+    if held_by:
+        patch["inventory_ops"] = [{"op": "transfer", "object_id": key,
+                                   "to_id": held_by, "relation": "held"}]
+    return {"events": [{
+        "source_entity_id": source, "source_event_id": "x",
+        "event": f"Mara draws a {key.replace('_', ' ')}.", "observable": "draws it",
+        "speech": False, "targets": [key], "seconds": 2, "movement": None,
+        "commitment": "asserted", "item_names": [key],
+        "transforms": [{"item": key, "patch": patch}]}],
+        "missing_tools": [], "missing_referents": [], "notes": []}
+
+
+def _grant_things(monkeypatch):
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: {
+        key: {"type": "noul", "noul": 0.95 if key in ("entities", "entities__new") else 0.02}
+        for key in questions})
+
+
+def test_a_thing_drawn_into_a_hand_is_held_not_stood(temp_db, monkeypatch):
+    """The screwdriver beat, end to end: the first answer mints a portable
+    thing and places it nowhere, the widening is granted the inventory card,
+    and its answer's hold is what the beat keeps -- no room for the floor to
+    stand it in."""
+    _grant_things(monkeypatch)
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    answers = iter([_minting_answer("Mara", "clasp_knife"),
+                    _minting_answer("Mara", "clasp_knife", held_by="Mara")])
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara draws a clasp knife from her coat."},
+        "director_specialist": lambda payload: next(answers),
+    }))
+    out = director.director_resolve(ctx, nonce=0)
+    encoder = out["orchestration"]["prose_contract"]["encoder"]
+    assert encoder["missing_tools"] == ["inventory_ops"]
+    assert INVENTORY_CHUNK in calls[2]["system"]
+    assert [op["to_id"] for op in out["state_diff"]["inventory_ops"]] == ["Mara"]
+    assert "clasp_knife" not in (out["state_diff"].get("positions") or {})
+
+
+def test_a_thing_left_unplaced_stands_where_its_maker_is(temp_db, monkeypatch):
+    """Mara in the lamp room produces a lantern, and neither answer places it:
+    the floor stands it where she is, not in the room the player is in. She
+    declared nothing this beat, so the encoder names her as the world index
+    lists her -- by name."""
+    _grant_things(monkeypatch)
+    scene = dict(BASE_SCENE, positions={"The Stranger": "keeper_room",
+                                        "Mara": "lamp_room"})
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Up in the lamp room, Mara sets out a storm lantern."},
+        "director_specialist": lambda payload: _minting_answer("Mara", "storm_lantern"),
+    }))
+    out = director.director_resolve(ctx, nonce=0)
+    assert out["state_diff"]["positions"]["storm_lantern"] == "lamp_room"
+
+
+def test_a_thing_stationed_or_contained_is_placed():
+    """The entities card names the placing tools: a position, a transfer, a
+    station, a containment. A mint any of them placed -- under its key or
+    its name -- buys no widening."""
+    scene = {"rooms": {"hall": {}}}
+    for patch in ({"stations": {"a brass lamp": {"at": "hall_table"}}},
+                  {"containment": {"brass_lamp": {"in": "Mara", "mode": "carried"}}}):
+        minted = [{"transforms": [{"item": "lamp", "patch": dict(patch, entities={
+            "brass_lamp": {"name": "a brass lamp", "portable": True}})}]}]
+        assert director_prose.implied_tools(minted, scene) == [], patch
+    released = [{"transforms": [{"item": "lamp", "patch": {
+        "entities": {"brass_lamp": {"name": "a brass lamp", "portable": True}},
+        "containment": {"brass_lamp": None}}}]}]
+    assert director_prose.implied_tools(released, scene) == ["inventory_ops"]
+
+
+def test_a_thing_minted_nowhere_stands_where_its_maker_stood():
+    """A thing the beat places nowhere stood in the room the PLAYER arrived
+    in, whoever brought it. The event that minted it names the body whose act
+    it was; the thing stands where that body stood once the event was over,
+    the prose contract's reading of the causal replay's rule."""
+    def minting(source, key, **patch):
+        return {"source_entity_id": source, "transforms": [{"item": key, "patch": dict(
+            patch, entities={key: {"name": key.replace("_", " "), "portable": True}})}]}
+
+    events = [
+        # A cast member, by the identity index, who walked earlier this beat.
+        {"source_entity_id": "character:3", "transforms": [
+            {"item": "Gushiga Toriki", "patch": {"positions": {"Gushiga Toriki": "dune_edge"}}}]},
+        minting("character:3", "fishing_net"),
+        # A figure is its own handle; it stands where it stood.
+        minting("The Harbourmaster", "lantern"),
+        # The scene's own event has no body, and a room the world does not
+        # hold is no answer: both leave the beat's own fallback.
+        minting("scene", "gull_feather"),
+        minting("Mara", "chalk"),
+    ]
+    rooms = director_prose.mint_source_rooms(
+        events, {"character:3": "Gushiga Toriki", "persona:1": "Hinami"},
+        {"Gushiga Toriki": "beach", "the harbourmaster": "quay",
+         "Hinami": "console_room", "Mara": "nowhere_held"},
+        ["fishing_net", "lantern", "gull_feather", "chalk"],
+        {"beach", "dune_edge", "quay", "console_room"})
+    assert rooms == {"fishing_net": "dune_edge", "lantern": "quay"}
 
 
 def test_a_room_is_never_a_positions_key():

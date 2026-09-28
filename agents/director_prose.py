@@ -500,20 +500,31 @@ def implied_tools(events, scene=None):
       and it had no tool to make one (the rooms chunk says how: an interior
       is a room with `parent_entity`);
     - a thing minted this beat -- an `entities` key the scene holds by
-      neither key nor name -- that the answer neither positions nor
-      transfers anywhere needs `positions` to be anywhere at all. Measured
-      on chat 154 turn 4398, rerolled with the encoder's reasoning off
-      (2026-09-25): 2 of 3 rolls minted the figure on the beach with no
-      `positions` granted, and a body is stood by nothing else, so it was
-      in no room and nobody could see it."""
+      neither key nor name -- that the answer places nowhere needs a
+      placing tool to be anywhere at all. A body is stood by `positions`:
+      measured on chat 154 turn 4398, rerolled with the encoder's reasoning
+      off (2026-09-25), 2 of 3 rolls minted the figure on the beach with no
+      `positions` granted, and a body is stood by nothing else, so it was in
+      no room and nobody could see it. A PORTABLE THING IS PLACED BY
+      `inventory_ops` -- held by a body, or set down -- because `positions`
+      moves bodies: on the chat 154 replay idx 24 (2026-09-28) the Doctor
+      drew his sonic screwdriver from his coat, the widening was granted
+      `positions` and wrote nothing for it 15 times in 15, and the floor
+      stood a lit tool on the floor he would walk away from; granted
+      `inventory_ops`, it wrote him holding it 15 times in 15. Placed is
+      any of the placing tools the entities card names -- a position, a
+      transfer, a station or a containment."""
     tools = []
     known = set(((scene or {}).get("rooms") or {}).keys()) if isinstance(scene, dict) else set()
     entities = ((scene or {}).get("entities") or {}) if isinstance(scene, dict) else {}
     held = {str(key) for key in entities} | {
         str(value.get("name") or "").strip().casefold()
         for value in entities.values() if isinstance(value, dict)}
-    minted, placed = set(), set()
+    minted, portable, placed = {}, set(), set()
     destinations, created = [], set()
+
+    def _fold(text):
+        return " ".join(str(text or "").split()).casefold()
     for event in events or []:
         if not isinstance(event, dict):
             continue
@@ -531,15 +542,26 @@ def implied_tools(events, scene=None):
             if isinstance(patch.get("positions"), dict):
                 destinations.extend(str(value) for value in patch["positions"].values()
                                     if isinstance(value, str) and value.strip())
-                placed.update(str(key) for key in patch["positions"])
+                placed.update(_fold(key) for key in patch["positions"])
             if isinstance(patch.get("entities"), dict):
-                minted.update(str(key) for key in patch["entities"]
-                              if str(key) not in held
-                              and str(key).strip().casefold() not in held)
+                for key, record in patch["entities"].items():
+                    if str(key) in held or str(key).strip().casefold() in held:
+                        continue
+                    record = record if isinstance(record, dict) else {}
+                    minted.setdefault(str(key), set()).update(
+                        label for label in (_fold(key), _fold(record.get("name"))) if label)
+                    if record.get("portable") is True:
+                        portable.add(str(key))
             for op in patch.get("inventory_ops") or []:
                 if isinstance(op, dict) and str(op.get("to_id") or "").strip():
-                    placed.add(str(op.get("object_id") or ""))
-    if minted - placed and "positions" not in tools:
+                    placed.add(_fold(op.get("object_id")))
+            for channel in ("stations", "containment"):
+                if isinstance(patch.get(channel), dict):
+                    placed.update(_fold(key) for key, value in patch[channel].items() if value)
+    unplaced = [key for key, labels in minted.items() if not labels & placed]
+    if any(key in portable for key in unplaced) and "inventory_ops" not in tools:
+        tools.append("inventory_ops")
+    if any(key not in portable for key in unplaced) and "positions" not in tools:
         tools.append("positions")
     if known and any(dest not in known and dest not in created
                      and not dest.startswith(NEW_PLACE_PREFIX)
@@ -1097,6 +1119,58 @@ def declared_moves(*records):
                     if isinstance(room, str) and room.strip() and str(body).strip():
                         moves[str(body).strip().casefold()] = room.strip()
     return moves
+
+
+def mint_source_rooms(events, identity_index, positions_before, minted, rooms):
+    """`{entity_id: room}` for each of `minted`: the room the body whose event
+    minted it stands in once that event is over.
+
+    A thing the beat brings in and places nowhere is stood where the beat is
+    -- the room the player arrived in (`director._mint_fallback_room`),
+    whoever brought it. The causal contract answered better, from where the
+    minting span's actor stood (`director_evidence.span_mint_rooms`), and it
+    read spans this contract does not write. Here the event is the span and
+    its `source_entity_id` the actor, so a thing a figure on the beach
+    produces stands on the beach while the player is in the house. The
+    body's room is its room before the beat, moved by every `positions` the
+    beat's events write up to and including the minting one -- the world
+    that event leaves, as the causal replay read it.
+
+    Answers only where the source is a body with a room in `rooms`: the
+    scene's own events, and a body the beat cannot place, leave the beat's
+    fallback standing."""
+    wanted = {str(key).strip().casefold(): str(key) for key in minted or () if str(key).strip()}
+    if not wanted:
+        return {}
+    index = {str(key): str(value) for key, value in (identity_index or {}).items() if value}
+
+    def _fold(text):
+        return " ".join(str(text or "").split()).casefold()
+
+    where = {_fold(body): room.strip() for body, room in (positions_before or {}).items()
+             if isinstance(room, str) and room.strip()}
+    found = {}
+    for event in events or []:
+        if not isinstance(event, dict):
+            continue
+        new = []
+        for transform in event.get("transforms") or []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if not isinstance(patch, dict):
+                continue
+            if isinstance(patch.get("positions"), dict):
+                where.update({_fold(body): room.strip()
+                              for body, room in patch["positions"].items()
+                              if isinstance(room, str) and room.strip()})
+            if isinstance(patch.get("entities"), dict):
+                new += [wanted[str(key).strip().casefold()] for key in patch["entities"]
+                        if str(key).strip().casefold() in wanted]
+        source = str(event.get("source_entity_id") or "").strip()
+        room = where.get(_fold(index.get(source, source)))
+        if room and room in rooms:
+            for key in new:
+                found.setdefault(key, room)
+    return found
 
 
 def _new_objects(events):
