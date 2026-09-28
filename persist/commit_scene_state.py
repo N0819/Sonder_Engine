@@ -1872,16 +1872,24 @@ def compose_beat_scene(ctx):
     # and the registry mirrors the room under a lease; outside it the room
     # is returned to the charter and the scene's rows are released.
     try:
-        from world.charter_place import (heal_unbound_twins, lease_holder,
-                                         lease_scene_bodies)
+        from world.charter_place import (PLACEMENT_ROWS, heal_unbound_twins,
+                                         lease_holder, lease_scene_bodies)
         from world.charter_runtime import live_lease_holders, registry_for
         _frame = getattr(getattr(ctx, "turn", None), "frame_id", None)
         _registry = registry_for(cid, _frame)
         # One entity per charter body: a body the scene holds under a second,
-        # unbound record is bound to it first, so the lease below governs it.
-        for _heal in heal_unbound_twins(_registry, sc):
-            ctx.add_warning("charter body %r was a second scene record (%s); "
-                            "bound to its body" % (_heal["name"], _heal["entity_id"]))
+        # unbound record is bound to it first, so the lease below governs it
+        # -- and a twin standing since before this beat gives up the place it
+        # was stood in, which was never its body's (`heal_unbound_twins`).
+        for _heal in heal_unbound_twins(_registry, sc, standing=prev_scene):
+            if _heal.get("released_from"):
+                ctx.add_warning(
+                    "charter body %r was a second scene record (%s) standing in "
+                    "%s; bound to its body, which stays where the charter has it"
+                    % (_heal["name"], _heal["entity_id"], _heal["released_from"]))
+            else:
+                ctx.add_warning("charter body %r was a second scene record (%s); "
+                                "bound to its body" % (_heal["name"], _heal["entity_id"]))
         _aperture = (ctx.get("compile_world_context") or {}).get("rooms_in_view")
         if _aperture:
             _lease = lease_scene_bodies(_registry, sc, _aperture,
@@ -1895,8 +1903,7 @@ def compose_beat_scene(ctx):
                 _charter_placements.setdefault("moves", []).extend(
                     _lease["moves"])
             for _eid in _lease["released"]:
-                for _channel in ("positions", "stations", "orientation",
-                                 "poses"):
+                for _channel in PLACEMENT_ROWS:
                     table = sc.get(_channel)
                     if isinstance(table, dict):
                         table.pop(_eid, None)

@@ -378,10 +378,15 @@ def _spelling_table(registry, rooms):
     return table
 
 
-def heal_unbound_twins(registry, scene):
+#: A body's placement rows in a scene: what the lease releases for a body it
+#: hands back to the charter, and what a stale twin loses when it is bound.
+PLACEMENT_ROWS = ("positions", "stations", "orientation", "poses")
+
+
+def heal_unbound_twins(registry, scene, standing=None):
     """ONE ENTITY PER CHARTER BODY: bind a scene entity that is a charter
-    body under another record. Mutates `scene["entities"]`; returns
-    ``[{entity_id, charter, body, name}]``.
+    body under another record. Mutates `scene`; returns
+    ``[{entity_id, charter, body, name, released_from}]``.
 
     A scene entity with no `charter_ref` whose name or an alias is exactly
     one unbound, undeparted body's spelling (`_spelling_table` over every
@@ -391,7 +396,25 @@ def heal_unbound_twins(registry, scene):
     Measured on chat 153: the storekeeper stood as a scene `fixture` for
     eighteen turns while his charter body kept simulating in the store's
     back room -- every move for his name landed on the fixture. A body some
-    other scene entity already carries is left alone."""
+    other scene entity already carries is left alone.
+
+    A TWIN'S PLACE IS NOT ITS BODY'S -- unless this beat put it there.
+    ``standing`` is the scene as it stood BEFORE this beat, the stored scene
+    the merge began from. A twin already in it was minted by a defect, not
+    moved by the beat: that storekeeper was stood on the beach outside the
+    TARDIS by a retired mint backstop (2026-09-21) and then carried along by
+    every Director move for his name -- beach, harbour pier, fish market
+    hall, on chats 152-154 -- while his body kept to the store. Binding kept
+    the twin's rows, and the lease leases a body wherever its entity stands:
+    bound while the beach was in view, the storekeeper would have been
+    pinned there and the charter told so (on chat 154 the twin was bound out
+    of view and released; that was the timing, not the rule). So a
+    pre-existing twin's placement rows (`PLACEMENT_ROWS`, under its id and
+    its exact name) are released, and the registry's ``place`` governs:
+    perception lays the body from there when it is in view. A twin THIS beat
+    created keeps its rows -- that is a movement written as a new record,
+    and the lease routes it as it always has. ``released_from`` is the room
+    a released twin had stood in, or ""."""
     entities = (scene or {}).get("entities")
     if not isinstance(entities, dict) or not entities:
         return []
@@ -421,8 +444,17 @@ def heal_unbound_twins(registry, scene):
         ent["charter_ref"] = {"charter": ref[0], "body": ref[1]}
         ent["kind"] = "person"
         carried.add(ref)
+        released_from = ""
+        if standing is not None and eid in ((standing or {}).get("entities") or {}):
+            released_from = str(((scene.get("positions") or {}).get(eid)) or "")
+            for channel in PLACEMENT_ROWS:
+                table = scene.get(channel)
+                if isinstance(table, dict):
+                    table.pop(eid, None)
+                    table.pop(str(ent.get("name") or ""), None)
         healed.append({"entity_id": str(eid), "charter": ref[0], "body": ref[1],
-                       "name": str(ent.get("name") or "")})
+                       "name": str(ent.get("name") or ""),
+                       "released_from": released_from})
     return healed
 
 

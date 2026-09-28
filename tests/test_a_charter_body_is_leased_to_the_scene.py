@@ -113,7 +113,7 @@ class TestOneEntityPerCharterBody:
         sc = self._twin_scene()
         healed = heal_unbound_twins(_registry(), sc)
         assert healed == [{"entity_id": "tam_fixture", "charter": "inn",
-                           "body": "tam", "name": "Tam"}]
+                           "body": "tam", "name": "Tam", "released_from": ""}]
         ent = sc["entities"]["tam_fixture"]
         assert ent["charter_ref"] == {"charter": "inn", "body": "tam"}
         assert ent["kind"] == "person"
@@ -128,6 +128,47 @@ class TestOneEntityPerCharterBody:
         assert heal_unbound_twins(_registry(), sc) == []
         assert "charter_ref" not in sc["entities"]["lamp"]
         assert "charter_ref" not in sc["entities"]["tam_fixture"]
+
+
+class TestAStaleTwinGivesUpItsPlace:
+    """Chats 152-154: the storekeeper's phantom -- furniture wearing his name,
+    minted on the beach outside the TARDIS by a retired backstop -- was
+    carried from room to room while his body kept to the store. A twin that
+    stood before this beat was placed by a defect; binding it must not hand
+    its place to the body, or the lease pins the body wherever the phantom
+    happened to be stood."""
+
+    def _stale(self):
+        sc = _scene("yard")
+        sc["entities"].pop("inn_keeper")
+        sc["entities"]["tam_fixture"] = {"name": "Tam", "kind": "fixture"}
+        sc["positions"] = {"tam_fixture": "yard", "lamp": "taproom"}
+        sc["stations"] = {"tam_fixture": {"at": "bar"}}
+        sc["orientation"] = {"tam_fixture": {"focus": None}}
+        standing = {"entities": {"tam_fixture": dict(sc["entities"]["tam_fixture"])}}
+        return sc, standing
+
+    def test_a_twin_in_view_is_bound_released_and_never_leased(self):
+        from world.charter_place import heal_unbound_twins
+        sc, standing = self._stale()
+        healed = heal_unbound_twins(_registry(), sc, standing=standing)
+        assert healed[0]["released_from"] == "yard"
+        for channel in ("positions", "stations", "orientation"):
+            assert "tam_fixture" not in sc[channel], channel
+        assert sc["entities"]["tam_fixture"]["charter_ref"] == {"charter": "inn", "body": "tam"}
+        # The yard is in view, and still nothing is leased: an entity placed
+        # in no room is left alone, so the registry keeps the body's place.
+        assert lease_scene_bodies(_registry(), sc, {"taproom", "yard"}) == {
+            "moves": [], "released": [], "yielded": []}
+
+    def test_a_twin_this_beat_created_keeps_its_place_and_is_leased(self):
+        from world.charter_place import heal_unbound_twins
+        sc, _standing = self._stale()
+        healed = heal_unbound_twins(_registry(), sc, standing={"entities": {}})
+        assert healed[0]["released_from"] == ""
+        assert sc["positions"]["tam_fixture"] == "yard"
+        out = lease_scene_bodies(_registry(), sc, {"taproom", "yard"})
+        assert out["moves"][0]["room"] == "yard" and out["moves"][0]["leased"]
 
 
 def test_a_charter_person_minted_as_a_fixture_binds_to_the_body():
