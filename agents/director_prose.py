@@ -1114,7 +1114,7 @@ def room_event(rooms_answer, events):
 
 def _call_encoder(ctx, channels, payload, parts):
     return _agent_json(
-        "director_specialist",
+        "encoder",
         "director_specialist",
         unified_specialist_prompt(channels, ctx.language, parts),
         dict(payload, granted_tools=list(channels) + list(parts)),

@@ -29,6 +29,7 @@ from core.db import (q, qi, qtx, transaction, wget, wset, get_setting, set_setti
                 parse_scoped_world_key, data_version)
 from core.db import _FRAME_KEY_SEP, forget_frame_eras
 from llm import providers
+from llm import decisions
 from llm.providers import (
     list_models, list_image_models, image_model, provider,
     openrouter_routing, normalize_openrouter_routing, list_openrouter_endpoints,
@@ -1805,7 +1806,9 @@ def bootstrap() -> dict:
         # `normalize_light`, so the menu the author picks from has to be the
         # ladder that normalisation will accept.
         "interior_lights": list(_interior_light_levels()),
-        "agent_models": json.loads(get_setting("agent_models") or "{}"),
+        # Through the providers reader, so a role renamed since the host
+        # saved (`providers.RENAMED_ROLES`) shows on its new row.
+        "agent_models": providers.agent_models(),
         # The narrator's voice anchor. Read by agents/narration.py and named in
         # the narrator prompt's STYLE EXEMPLARS clause since that prompt was
         # written -- and until now there was no way to put anything in it, so
@@ -1868,6 +1871,9 @@ def bootstrap() -> dict:
         # room costs a real image generation, so this is opt-in per install
         # rather than something a first run starts spending money on.
         "image_model": image_model(),
+        # The decision model (`llm/decisions.py`): its own setting pair, shown
+        # on the models panel directly beneath embeddings.
+        "decision_model": decisions.setting(),
         "backdrops_enabled": get_setting("backdrops_enabled") == "1",
         # Debug capture (persist/llm_capture.py). Off unless switched on, and
         # the reason is stricter than backdrops': with it off the per-call
@@ -1934,6 +1940,9 @@ def put_agent_models(body: dict = Body(...)):
     # work, so it rides through the save; a LIVE lane omitted from the body
     # was genuinely cleared and stays dropped.
     body = extension_runtime.keep_orphan_lane_rows(_stored, body)
+    # The same for a role the panel no longer offers: its stored entry is
+    # the host's, and an unrelated save must not delete it.
+    body = providers.keep_retired_roles(_stored, body)
     set_setting("agent_models", json.dumps(body))
     _after = (body or {}).get("embeddings") or {}
     changed = ((_before.get("provider"), _before.get("model"))
@@ -1999,6 +2008,29 @@ def put_image_model(body: dict = Body(...)):
         cfg["size"] = size
     set_setting("image_model", json.dumps(cfg))
     return {"ok": True, "image_model": cfg}
+
+@app.put("/api/decision_model")
+def put_decision_model(body: dict = Body(...)):
+    """The decision model (`llm/decisions.py`): which provider row and model
+    answer the engine's typed questions.
+
+    Its own setting pair (`jev_provider`, `jev_model`) rather than an
+    `agent_models` role, because it is a different API surface and a model of
+    a different kind -- it takes no reasoning effort and no response format,
+    so the panel offers neither. Sending neither a provider nor a model
+    clears both, which returns the seam to its defaults: the first OpenRouter
+    row and `decisions.DEFAULT_MODEL`.
+    """
+    pid, model = body.get("provider"), str(body.get("model") or "").strip()
+    if not pid and not model:
+        set_setting("jev_provider", "")
+        set_setting("jev_model", "")
+        return {"ok": True, "decision_model": decisions.setting()}
+    if pid and not provider(int(pid)):
+        raise HTTPException(404, "Provider not found")
+    set_setting("jev_provider", str(int(pid)) if pid else "")
+    set_setting("jev_model", model)
+    return {"ok": True, "decision_model": decisions.setting()}
 
 @app.put("/api/exemplars")
 def put_exemplars(body: dict = Body(...)):
@@ -2195,6 +2227,7 @@ def put_reasoning_effort(body: dict = Body(...)):
         # among them -- its stored effort is the host's choice and survives.
         cleaned = extension_runtime.keep_orphan_lane_rows(
             reasoning_efforts(), cleaned)
+        cleaned = providers.keep_retired_roles(reasoning_efforts(), cleaned)
     set_setting("reasoning_effort", json.dumps(cleaned))
     return {"ok": True, "reasoning_effort": cleaned}
 
@@ -2219,6 +2252,7 @@ def put_response_format(body: dict = Body(...)):
             if fmt:
                 cleaned[str(role)] = fmt
         cleaned = extension_runtime.keep_orphan_lane_rows(response_formats(), cleaned)
+        cleaned = providers.keep_retired_roles(response_formats(), cleaned)
     set_setting("response_format", json.dumps(cleaned))
     return {"ok": True, "response_format": cleaned}
 

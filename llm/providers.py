@@ -1306,16 +1306,16 @@ def reasoning_efforts():
         lvl = _coerce_reasoning_effort(level)
         if lvl:
             out[str(role)] = lvl
-    return out
+    return with_renamed_roles(out)
 
 
 #: A role's effort when the host has not set one, consulted before the
-#: `default` row. One entry: the prose contract's encoder transcribes an
-#: account the Director already decided, and at the host's `high` default it
-#: spent 12-20k tokens of trace on a 1.5k-token answer (102-198s a resolve;
-#: `off`: 3-11s, the same channels written -- chat 153, 2026-09-22). An
-#: explicit setting for the role still wins.
-ROLE_DEFAULT_EFFORTS = {"director_specialist": "off"}
+#: `default` row. One entry: the Director's encoder transcribes an account
+#: the Director already decided, and at the host's `high` default it spent
+#: 12-20k tokens of trace on a 1.5k-token answer (102-198s a resolve; `off`:
+#: 3-11s, the same channels written -- chat 153, 2026-09-22). An explicit
+#: setting for the role still wins.
+ROLE_DEFAULT_EFFORTS = {"encoder": "off"}
 
 
 def reasoning_effort_for(role):
@@ -1517,11 +1517,14 @@ ROLES = [
     "director_contact",
     "director_objects",
     "director_spatial",
-    # The prose contract's single encoder (`agents/director_prose.py`): one
-    # call doing every hand's job, its sheet assembled from the channels the
-    # decision model selected. Only called when `director_contract` is
-    # `prose`; unset, it follows `default`.
-    "director_specialist",
+    # The Director's encoder (`agents/director_prose.py`): one call doing
+    # every hand's job, its sheet assembled from the channels the decision
+    # model selected. It TRANSCRIBES a beat the Director already decided, so
+    # it wants a model that does not reason -- the panel says so on its row,
+    # and its reasoning is off unless the host sets it (ROLE_DEFAULT_EFFORTS).
+    # Named `director_specialist` until 2026-09-27 (RENAMED_ROLES). Unset, it
+    # follows `default`.
+    "encoder",
     # Its parallel room author: the places a beat establishes, at full
     # fidelity, while the encoder writes everything else. Unset, follows
     # `default`.
@@ -1870,8 +1873,43 @@ def _should_retry(error: Exception, attempt: int, config: RetryConfig) -> bool:
 def provider(pid):
     return q("SELECT * FROM providers WHERE id=?", (pid,), one=True)
 
+#: Roles renamed, {old: new}. A configuration the host stored under the old
+#: name -- in the models, reasoning-effort and response-format maps -- is
+#: read as the new role's wherever the new name has none of its own, so a
+#: rename costs nobody their settings; the stored entry itself is never
+#: deleted (a settings row is the host's: docs/guides/DATABASE.md).
+RENAMED_ROLES = {"director_specialist": "encoder"}
+
+#: Roles the panel no longer offers. Its save sends only the rows it
+#: rendered, so without this a retired role's stored entry would be deleted
+#: by the host's next unrelated save; it rides through instead.
+RETIRED_ROLES = ("director_specialist",)
+
+
+def with_renamed_roles(mapping):
+    """`mapping` with each renamed role's stored entry also read under its
+    new name, where the new name has none of its own."""
+    if not isinstance(mapping, dict):
+        return mapping
+    out = dict(mapping)
+    for old, new in RENAMED_ROLES.items():
+        if new not in out and old in out:
+            out[new] = out[old]
+    return out
+
+
+def keep_retired_roles(stored, saved):
+    """`saved` -- a full map the panel sent -- with every retired role's
+    stored entry carried through."""
+    out = dict(saved or {})
+    for role in RETIRED_ROLES:
+        if role in (stored or {}) and role not in out:
+            out[role] = stored[role]
+    return out
+
+
 def agent_models():
-    return json.loads(get_setting("agent_models") or "{}")
+    return with_renamed_roles(json.loads(get_setting("agent_models") or "{}"))
 
 # Intermediate inheritance, keyed role -> parent role, consulted before
 # "default". IT IS DELIBERATELY EMPTY: every unset row follows `default`,
@@ -2621,7 +2659,7 @@ def response_formats():
         fmt = _coerce_response_format(value)
         if fmt:
             out[str(role)] = fmt
-    return out
+    return with_renamed_roles(out)
 
 
 #: A role's format when the host has not chosen one, consulted before the
@@ -2636,7 +2674,7 @@ def response_formats():
 #: flag, the engine's fallback for a model that refuses the grammar, was
 #: worse than either (14 of 39). The cost: a median 1.5 s more a call, and
 #: now and then a malformed answer the validator re-asks for.
-ROLE_DEFAULT_FORMATS = {"director_specialist": "none"}
+ROLE_DEFAULT_FORMATS = {"encoder": "none"}
 
 
 def response_format_for(role):

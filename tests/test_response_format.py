@@ -10,8 +10,8 @@ grammar 18 answers stopped under half of what the beat's best answer covered
 and 11 left a declared act with no event; with no format, 2 and 0.
 
 So a role can name its format -- `json_schema`, `json_object` or `none` --
-and `director_specialist` defaults to `none`. The host's choice still wins,
-and the panel shows the inherited one.
+and the `encoder` role (`director_specialist` until 2026-09-27) defaults to
+`none`. The host's choice still wins, and the panel shows the inherited one.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def _call(role):
 def test_the_encoder_sends_no_format_and_other_roles_keep_the_grammar(_settings, monkeypatch):
     bodies = []
     _install(monkeypatch, bodies, lambda b: _ok())
-    _call("director_specialist")
+    _call("encoder")
     _call("narrator")
     assert "response_format" not in bodies[0]
     assert bodies[1]["response_format"]["type"] == "json_schema"
@@ -57,13 +57,13 @@ def test_the_encoder_sends_no_format_and_other_roles_keep_the_grammar(_settings,
 
 def test_the_hosts_choice_wins_and_default_reaches_every_unset_role(_settings, monkeypatch):
     _settings.set_setting("response_format", json.dumps(
-        {"director_specialist": "json_schema", "default": "json_object", "narrator": "bogus"}))
-    assert providers.response_format_for("director_specialist") == "json_schema"
+        {"encoder": "json_schema", "default": "json_object", "narrator": "bogus"}))
+    assert providers.response_format_for("encoder") == "json_schema"
     # A value the engine does not know is unset, and unset follows default.
     assert providers.response_format_for("narrator") == "json_object"
     bodies = []
     _install(monkeypatch, bodies, lambda b: _ok())
-    _call("director_specialist")
+    _call("encoder")
     _call("narrator")
     assert bodies[0]["response_format"]["type"] == "json_schema"
     assert bodies[1]["response_format"] == {"type": "json_object"}
@@ -71,16 +71,27 @@ def test_the_hosts_choice_wins_and_default_reaches_every_unset_role(_settings, m
 
 def test_unset_everywhere_is_the_engines_choice(_settings):
     assert providers.response_format_for("narrator") == ""
-    assert providers.response_format_for("director_specialist") == "none"
+    assert providers.response_format_for("encoder") == "none"
     assert providers._role_json_mode("narrator", True, SCHEMA) == (True, SCHEMA)
-    assert providers._role_json_mode("director_specialist", True, SCHEMA) == (False, None)
+    assert providers._role_json_mode("encoder", True, SCHEMA) == (False, None)
+
+
+def test_a_format_stored_under_the_old_name_is_the_encoders(_settings):
+    """The role was `director_specialist` until 2026-09-27: what the host
+    stored under that name is read as the encoder's until they save one of
+    its own, and the stored entry is never deleted."""
+    _settings.set_setting("response_format", json.dumps({"director_specialist": "json_object"}))
+    assert providers.response_format_for("encoder") == "json_object"
+    _settings.set_setting("response_format", json.dumps(
+        {"director_specialist": "json_object", "encoder": "json_schema"}))
+    assert providers.response_format_for("encoder") == "json_schema"
 
 
 def test_a_calls_own_format_wins_over_the_roles(_settings):
     """The repair keeps the grammar its role's draft call goes without: its
     answers bind to jobs by id, and sent free GLM 5.2 re-encoded the whole
     beat in the draft's shape instead."""
-    assert providers._role_json_mode("director_specialist", True, SCHEMA,
+    assert providers._role_json_mode("encoder", True, SCHEMA,
                                      "json_schema") == (True, SCHEMA)
     _settings.set_setting("response_format", json.dumps({"narrator": "json_schema"}))
     assert providers._role_json_mode("narrator", True, SCHEMA, "none") == (False, None)
@@ -103,7 +114,7 @@ def test_a_broken_answer_is_rebuilt_under_the_grammar(_settings, monkeypatch):
     monkeypatch.setattr(llm_quality, "chat_complete", llm)
     monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
     llm_quality.complete_validated_json(
-        role="director_specialist", step_key="director_specialist", system="s",
+        role="encoder", step_key="director_specialist", system="s",
         payload={"prose": "p"})
     assert calls[0] is None
     assert calls[-1] == llm_quality.REBUILD_FORMAT == "json_schema"
@@ -131,4 +142,21 @@ def test_the_panel_saves_and_shows_the_format(client):
     boot = client.get("/api/bootstrap").json()
     assert boot["response_format"] == {}
     assert boot["response_format_levels"] == ["json_schema", "json_object", "none"]
-    assert boot["response_format_defaults"] == {"director_specialist": "none"}
+    assert boot["response_format_defaults"] == {"encoder": "none"}
+
+
+def test_a_save_keeps_the_old_names_entry_and_shows_it_on_the_new_row(client):
+    """A save sends only the rows the panel renders; the renamed role's stored
+    entry rides through it, and the bootstrap shows it on the encoder's row."""
+    from core import db
+    db.set_setting("agent_models", json.dumps(
+        {"director_specialist": {"provider": 1, "model": "some-encoder"}}))
+    db.set_setting("reasoning_effort", json.dumps({"director_specialist": "low"}))
+    boot = client.get("/api/bootstrap").json()
+    assert boot["agent_models"]["encoder"] == {"provider": 1, "model": "some-encoder"}
+    assert boot["reasoning_effort"]["encoder"] == "low"
+    client.put("/api/agent_models", json={"narrator": {"provider": 1, "model": "m"}})
+    client.put("/api/reasoning_effort", json={"efforts": {"narrator": "off"}})
+    stored = json.loads(db.get_setting("agent_models"))
+    assert stored["director_specialist"] == {"provider": 1, "model": "some-encoder"}
+    assert json.loads(db.get_setting("reasoning_effort"))["director_specialist"] == "low"

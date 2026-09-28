@@ -1737,7 +1737,8 @@ function specialistSlice(content, id) {
 // The prose contract (agents/director_prose.py) makes a Director stage a
 // different set of calls: the writer (the `director` role) tells the beat as
 // prose, the channel picker (`jev`) chooses which kinds of change the prose
-// holds, ONE encoder (`director_specialist`) records them, and the room
+// holds, ONE encoder (the `encoder` role; `director_specialist` in records
+// written before 2026-09-27) records them, and the room
 // designer (`director_rooms`) builds a place the beat needs. The hands keep
 // their records, because the encoder's answer is filed through each channel
 // owner's binding, but that is engine code and makes no call. Tabbed as
@@ -1747,6 +1748,7 @@ function specialistSlice(content, id) {
 const PROSE_CONTRACT_CALLS = {
   director: "writer",
   jev: "channel picker",
+  encoder: "encoder",
   director_specialist: "encoder",
   director_rooms: "room designer"
 };
@@ -1994,8 +1996,8 @@ function renderEngineNotes(box, content) {
   // one line per provider call, so a slow stage explains itself from the
   // stored variant instead of from a stderr line that died with the process.
   // Under the prose contract each role also says which call it was: the
-  // encoder keeps the Models name `director_specialist`, which read as a
-  // specialist having run.
+  // encoder's Models name was `director_specialist` until 2026-09-27, which
+  // read as a specialist having run, and old records still carry it.
   const calls = proseContractRecord(content) ? PROSE_CONTRACT_CALLS : {};
   for (const c of notes.llm_calls || []) {
     const served = c.served && c.served !== c.requested

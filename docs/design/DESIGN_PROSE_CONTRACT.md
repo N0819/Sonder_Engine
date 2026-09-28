@@ -37,7 +37,9 @@ For both `director_interpret` and `director_resolve`:
    granted when its yes-probability reaches `prose_contract_threshold`
    (default 0.3). Jev writes nothing, so it cannot start authoring. It
    **fails open**: if Jev is unreachable, every candidate is granted.
-3. **One encoder does every hand's job** (role `director_specialist`, step key
+3. **One encoder does every hand's job** (role `encoder` -- named
+   `director_specialist` until 2026-09-27, and a setting stored under that name
+   is read as the encoder's, `providers.RENAMED_ROLES` -- step key
    `director_specialist`). Its sheet is a small core plus the granted
    channels' **existing, unmodified** chunks. The core tells it how to read
    those chunks' several-hands vocabulary. Its payload is the prose, the
@@ -141,9 +143,10 @@ the whole 38-question battery. The encoder is the rest.
 default `high` effort it wrote 12–20k output tokens per beat, one run hitting
 the 50k ceiling, against a real answer of about 1.5k tokens. Resolve took
 102–198 s. `low` barely moved GLM (46–60 s). With `off` it writes 1–2.4k
-tokens in 3–11 s. **Set `director_specialist` to `off` under this
-contract**, in Settings → reasoning effort. The encoder transcribes a decided
-account; the thinking happened in the Director.
+tokens in 3–11 s. **The encoder's reasoning is `off` unless the host sets
+it** (`providers.ROLE_DEFAULT_EFFORTS`), and since 2026-09-27 its row on the
+models panel says to use a model that does not reason. The encoder
+transcribes a decided account; the thinking happened in the Director.
 
 **Jev routing.** With the first question wording and threshold 0.3, it granted
 13–18 channels per resolve beat. The questions matched words, not record
@@ -648,7 +651,8 @@ The owner switched Settings to the prose contract (`054893d9`) and played
 one beat, turn 4398: the player shut the TARDIS doors as the rotor started.
 
 **"It still seems to be running specialists."** It was not: each stage made
-three calls -- `director`, `jev`, `director_specialist`. But the encoder's
+three calls -- `director`, `jev`, `director_specialist` (the encoder's
+role, `encoder` since 2026-09-27). But the encoder's
 answer is filed through each hand's binding, which records `run`/`ran: true`
 per hand, and the step window built its "Written by" bar from that, so the
 beat read "prose author, social, objects, spatial". The window now tabs a

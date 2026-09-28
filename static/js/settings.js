@@ -2797,15 +2797,16 @@ function renderFullApiSettings(b) {
           el("div", {}, el("b", {}, "Setting only Default is enough to start playing"), " — every other role falls back to it automatically, with one exception: embeddings, which needs a model of a different KIND and so is never inherited. The rest let you assign a faster or cheaper model to a specific stage of each turn without touching quality where it matters most."),
           el("div", { style: "margin-top:8px" }, el("b", {}, "director"), " — reads what you typed and decides what actually happens: whether an action succeeds, what an NPC's action resolves to. Gets this wrong and the story stops making sense, so keep it on a strong model."),
           el("div", {}, el("b", {}, "director_body / _social / _contact / _objects / _spatial"), " — scoped specialists that encode bodies (clothing, wounds, vitals, overlays), the scene roster, physical contact and matter, the object world, the room graph and positions, and the world's traffic (crowds, couriers, hearsay) from the beat the Director authored. Left unset each follows ", el("b", {}, "Default"), " like every other role — so where Default is a cheap model, set these rows too rather than leaving the engine's most failure-prone stage on it."),
-          el("div", {}, el("b", {}, "director_specialist"), " — only used by the experimental prose contract, where the Director writes the beat as prose and this ONE model turns it into world changes in place of the five specialists above. Idle otherwise."),
-          el("div", {}, el("b", {}, "director_rooms"), " — the prose contract's room author: writes the places a beat establishes, in full detail, at the same time as director_specialist. Idle otherwise."),
+          el("div", {}, el("b", {}, "encoder"), " — writes each beat into the world's records: the Director tells the beat as prose, and this ONE model turns it into the changes the engine keeps — bodies, clothing, contact, objects, positions. ", el("b", {}, "Use a model that does not reason."), " It copies down a beat that is already decided, and a reasoning model spends its time on a trace nobody reads (measured: 102–198 s a beat with reasoning on, 3–11 s with it off, the same changes written). Its reasoning is off unless you set it on its row."),
+          el("div", {}, el("b", {}, "director_rooms"), " — the room designer: writes the places a beat establishes, in full detail, at the same time as the encoder."),
           el("div", { class: "small dim" }, "There is no ", el("b", {}, "perception"), " role any more, and that is not an omission: what each character can see, hear and know is now worked out in code rather than asked of a model, so it costs nothing, cannot be got wrong by a cheap model, and has no setting to tune."),
           el("div", {}, el("b", {}, "character_bg / character_mid / character_major"), " — generate what a character does and says, tiered by how central that character is to the scene. Quality shows up directly in dialogue, so keep major characters on a strong model even if you lighten background ones."),
           el("div", {}, el("b", {}, "narrator"), " — turns everything into the prose you actually read. This is the model whose writing style you'll notice most."),
           el("div", {}, el("b", {}, "repair"), " — shape, never content. When a stage's output fails validation, this model is asked about the failed fields ALONE and its answer is spliced back at exactly those paths; everything else is byte-identical, so it cannot touch the beat. Its whole job is \u201cthis fragment is the wrong shape, fix the shape, keep every fact\u201d, which a fast cheap model does well \u2014 and every success here saves a full re-author of the response on the stage's own model (measured: 4.2s on the Director for one malformed field, 36.3s on a character decision review). Left unset it follows ", el("b", {}, "Default"), " like every other role, so a host who wants the cheap patcher has to say so on this row.") ,
           el("div", {}, el("b", {}, "utility"), " — background helper tasks: the autobiographical memory summaries written between turns, notice wording, off-screen activity sketches, importer fills. Never player-facing prose, so speed matters more than polish — not worth spending a premium model on. Left unset it follows ", el("b", {}, "Default"), " like every other role, so setting a cheap model on this row is what keeps the between-turn work off your most expensive one."),
           el("div", { style: "margin-top:8px" }, el("b", {}, "embeddings"), " — turns each memory into a vector so a character can recall something relevant that was worded differently 300 turns ago. Cheap per call and it is what makes memory work by MEANING rather than by keyword; leave it unset and the engine falls back to a local hash that only matches shared words."),
-          el("div", { class: "warn-note", style: "margin-top:4px" }, el("b", {}, "Changing this one has a consequence the others do not."), " A memory can only be compared against a vector from the same model, so everything already stored has to be re-read through the new one. Nothing is lost and nothing breaks — until it is rebuilt, older memories are found by keyword only. The engine offers to rebuild when you next open a story, or use the button below."))),
+          el("div", { class: "warn-note", style: "margin-top:4px" }, el("b", {}, "Changing this one has a consequence the others do not."), " A memory can only be compared against a vector from the same model, so everything already stored has to be re-read through the new one. Nothing is lost and nothing breaks — until it is rebuilt, older memories are found by keyword only. The engine offers to rebuild when you next open a story, or use the button below."),
+          el("div", { style: "margin-top:8px" }, el("b", {}, "decision model"), " — answers the engine's typed questions: which memories bear on the moment, what a character's reply meant and who it was said to, which kinds of change a beat holds. It writes no prose, so there is no reasoning or response format to set, and like embeddings it is a model of a different kind and never follows Default."))),
       el("details", { style: "margin-top:6px" },
         el("summary", {}, "Which model should I pick?"),
         modelRecommendationsBlock()),
@@ -2851,13 +2852,48 @@ function renderFullApiSettings(b) {
     const ROLE_ORDER = {
       embeddings: -2, default: -1, director: 0,
       director_body: 1, director_social: 2, director_contact: 3,
-      director_objects: 4, director_spatial: 5, director_specialist: 6,
+      director_objects: 4, director_spatial: 5, encoder: 6,
       director_rooms: 6.5,
       repair: 7,
     };
     const orderedRoles = [...S.boot.roles].sort(
       (a, b) => (ROLE_ORDER[a] ?? 50) - (ROLE_ORDER[b] ?? 50)
     );
+
+    // The decision model (llm/decisions.py): typed answers to the engine's
+    // questions, no prose. Its own setting pair rather than a role, placed
+    // directly beneath embeddings because it is the other model of a
+    // different KIND: nothing on it follows Default, and it has no reasoning
+    // effort or response format because its requests carry neither. Shown
+    // with what the engine will actually use, and saved only when edited --
+    // an untouched row must not pin today's default model id.
+    const dm = S.boot.decision_model || {};
+    let decisionCombo = null;
+    let decisionEdited = false;
+    const decisionModelRow = () => {
+      const holder = el("span", { class: "row", style: "flex:1;align-items:center" });
+      decisionCombo = modelCombobox(
+        S.boot.providers,
+        dm.provider ?? dm.effective_provider ?? null,
+        dm.model || dm.default_model || "",
+        () => { decisionEdited = true; },
+        {
+          suggest: x => /jev|typesafe/i.test(x.id),
+          extra: dm.default_model ? [{ id: dm.default_model, note: "the decision model the engine is measured against" }] : [],
+          suggestNote: "This row needs a decision model, one that answers typed questions — not a chat model.",
+        }
+      );
+      holder.append(decisionCombo.psel, decisionCombo.mwrap);
+      return el("div", { class: "card" },
+        el("div", { class: "row" },
+          el("b", { style: "width:130px" }, "decision model"),
+          holder),
+        dm.model
+          ? null
+          : el("div", { class: "small dim" },
+               "Unset: the engine asks this model on your first OpenRouter connection — ",
+               el("code", {}, dm.default_model || "")));
+    };
 
     // Extension-declared model lanes (`api.add_model_lane`), rendered LAST,
     // after every host role: they are guests in this panel, and their roles
@@ -3077,7 +3113,9 @@ function renderFullApiSettings(b) {
           .concat(effLevels.map(l => el("option",
             { value: l, ...(effMap[role] === l ? { selected: "" } : {}) }, "reasoning: " + l))));
       roleInputs[role] = roleInputs[role] || {};
-      roleInputs[role].effort = effortSel;
+      // An embeddings request carries the model and the text, nothing else
+      // (providers._embed_request), so reasoning and format are not offered.
+      if (!isEmbeddings) roleInputs[role].effort = effortSel;
 
       // Response format for this role: what its requests ask the provider
       // for. Empty follows the engine -- the role's measured default when it
@@ -3102,7 +3140,7 @@ function renderFullApiSettings(b) {
           || (isDefault ? "format: auto" : "format: follow default"))]
           .concat((S.boot.response_format_levels || Object.keys(FORMAT_LABELS)).map(l => el("option",
             { value: l, ...(fmtMap[role] === l ? { selected: "" } : {}) }, FORMAT_LABELS[l] || l))));
-      roleInputs[role].format = formatSel;
+      if (!isEmbeddings) roleInputs[role].format = formatSel;
 
       const rebuildPrimary = (provider, model) => {
         primaryContainer.innerHTML = "";
@@ -3189,12 +3227,18 @@ function renderFullApiSettings(b) {
               )
             : null,
           primaryContainer,
-          effortSel,
-          formatSel
+          isEmbeddings ? null : effortSel,
+          isEmbeddings ? null : formatSel
         ),
+        role === "encoder"
+          ? el("div", { class: "warn-note small", style: "margin-top:4px" },
+               el("b", {}, "Use a model that does not reason."),
+               " The encoder copies down a beat the Director has already decided; reasoning spends minutes on a trace nobody reads and changes nothing it writes. Keep its reasoning off.")
+          : null,
         advanced,
         fallbackControls
       ));
+      if (isEmbeddings) b.append(decisionModelRow());
     }
 
     b.append(el("div", { class: "row", style: "margin-top:8px" },
@@ -3282,6 +3326,9 @@ function renderFullApiSettings(b) {
         await api("PUT", "/api/agent_models", out);
         await api("PUT", "/api/reasoning_effort", { efforts });
         await api("PUT", "/api/response_format", { formats });
+        if (decisionEdited && decisionCombo) {
+          await api("PUT", "/api/decision_model", decisionCombo.read());
+        }
         await boot();
         closeModal();
         toast("Agent models saved.", "ok");

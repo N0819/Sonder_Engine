@@ -18,8 +18,9 @@ tokens, 0.29s, $0.000016, all three right. The bare id `typesafe/jev` is
 refused by OpenRouter ("does not exist"); the versioned id is what answers.
 
 Settings: `jev_model` (default `DEFAULT_MODEL`) and `jev_provider` (a
-providers row id; default: the first `openrouter`-kind row). A module-level
-`OVERRIDE` callable lets a test answer without the network.
+providers row id; default: the first `openrouter`-kind row), chosen on the
+models panel's "decision model" row (`PUT /api/decision_model`, `setting`).
+A module-level `OVERRIDE` callable lets a test answer without the network.
 """
 
 from __future__ import annotations
@@ -59,6 +60,26 @@ def _provider():
         "SELECT * FROM providers WHERE kind='openrouter' ORDER BY id LIMIT 1",
         one=True,
     )
+
+
+def setting() -> dict:
+    """The decision model as the models panel shows it: what the host chose
+    (`provider` None and `model` "" when unchosen) beside what the seam will
+    actually use -- `effective_provider`, the row `_provider` resolves to,
+    and `default_model` -- and whether it can be asked at all."""
+    raw = str(get_setting("jev_provider") or "").strip()
+    try:
+        pid = int(raw) if raw else None
+    except ValueError:
+        pid = None
+    prov = _provider()
+    return {
+        "provider": pid,
+        "model": str(get_setting("jev_model") or "").strip(),
+        "effective_provider": prov["id"] if prov else None,
+        "default_model": DEFAULT_MODEL,
+        "configured": configured(),
+    }
 
 
 def configured() -> bool:

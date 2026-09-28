@@ -901,7 +901,7 @@ def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view,
     # sixteen-sentence job by re-encoding the whole beat in the draft's own
     # `events` shape, with a brace dropped seven levels deep (chat 154 turn
     # 4398's first roll, 2 of 3 runs, 2026-09-25).
-    out = _agent_json("director_specialist", "director_repair", sheet, payload,
+    out = _agent_json("encoder", "director_repair", sheet, payload,
                       temperature=0.2, max_tokens=None,
                       response_format="json_schema") or {}
     return merge_answers(out.get("answers"), jobs), list(out.get("notes") or [])

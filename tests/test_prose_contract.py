@@ -84,7 +84,7 @@ def test_resolve_runs_author_then_one_encoder(temp_db, monkeypatch,
     # Two model calls: the author, then ONE encoder. No hand is called.
     assert _steps(calls) == ["director_prose", "director_specialist"]
     assert calls[0]["role"] == "director"
-    assert calls[1]["role"] == "director_specialist"
+    assert calls[1]["role"] == "encoder"
     # The author's sheet is the prose sheet, not the causal one.
     assert "Convert event_inputs into ordered event ledgers" not in calls[0]["system"]
     assert '{"prose":' in calls[0]["system"]
@@ -736,11 +736,15 @@ def test_the_encoder_defaults_to_reasoning_off_and_a_setting_wins(temp_db):
     import json
     from llm import providers
     temp_db.set_setting("reasoning_effort", json.dumps({"default": "high"}))
-    assert providers.reasoning_effort_for("director_specialist") == "off"
+    assert providers.reasoning_effort_for("encoder") == "off"
     assert providers.reasoning_effort_for("director_rooms") == "high"
     temp_db.set_setting("reasoning_effort", json.dumps(
-        {"default": "high", "director_specialist": "low"}))
-    assert providers.reasoning_effort_for("director_specialist") == "low"
+        {"default": "high", "encoder": "low"}))
+    assert providers.reasoning_effort_for("encoder") == "low"
+    # Stored under the role's name before 2026-09-27, it is the encoder's.
+    temp_db.set_setting("reasoning_effort", json.dumps(
+        {"default": "high", "director_specialist": "medium"}))
+    assert providers.reasoning_effort_for("encoder") == "medium"
 
 
 def test_the_director_is_handed_each_persons_pronouns(temp_db, monkeypatch,
