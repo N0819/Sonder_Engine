@@ -1144,6 +1144,13 @@ def _openai_system_message(system, prov, model):
 # kind="openrouter" so nothing else has to tolerate it).
 _ROUTING_LIST_KEYS = ("order", "only", "ignore")
 _ROUTING_SORTS = ("price", "throughput", "latency")
+#: OpenRouter's quantization levels, the values its `provider.quantizations`
+#: allow-list takes. Only these are ever sent: the block rides every request,
+#: and a value OpenRouter does not know could make one invalid. An upstream
+#: reported under another label -- `mxfp4`, `nvfp4` -- is in no allow-list
+#: built from these, so excluding `fp4` keeps those out too.
+OPENROUTER_QUANTIZATIONS = ("int4", "int8", "fp4", "fp6", "fp8", "fp16", "bf16",
+                            "fp32", "unknown")
 
 
 def _clean_slugs(value):
@@ -1190,6 +1197,23 @@ def normalize_openrouter_routing(raw):
         # Pinning without this still silently falls back to another provider,
         # which defeats the point of pinning one.
         out["allow_fallbacks"] = False
+    # QUANTIZATIONS, kept as OpenRouter's own allow-list. `exclude_quantizations`
+    # is the blacklist the settings panel sends (the owner, 2026-09-28: "Can we
+    # blacklist fp4 quants?" -- 9 of GLM 5.2's 31 upstreams were FP4-family
+    # that day, the kind a throughput sort favours); it is stored as the
+    # levels left over, so the stored block and the one sent are the same.
+    # `unknown` is never excluded: Google's upstreams report nothing else,
+    # and an allow-list without it leaves Gemini unroutable.
+    allowed = [q for q in _clean_slugs(raw.get("quantizations"))
+               if q in OPENROUTER_QUANTIZATIONS]
+    excluded = {q for q in _clean_slugs(raw.get("exclude_quantizations"))
+                if q in OPENROUTER_QUANTIZATIONS and q != "unknown"}
+    if excluded:
+        allowed = [q for q in (allowed or OPENROUTER_QUANTIZATIONS) if q not in excluded]
+    if allowed and set(allowed) != set(OPENROUTER_QUANTIZATIONS):
+        if "unknown" not in allowed:
+            allowed.append("unknown")
+        out["quantizations"] = allowed
     return out
 
 

@@ -2287,6 +2287,15 @@ function renderFullApiSettings(b) {
       const pinBox = el("input", { type: "checkbox", ...(routing.allow_fallbacks === false ? { checked: "" } : {}) });
       const sortSel = el("select", {}, ["", "price", "throughput", "latency"].map(v =>
         el("option", { value: v, ...(routing.sort === v ? { selected: "" } : {}) }, v || "(OpenRouter default)")));
+      // Precision levels to keep out -- fp4 above all. Stored as OpenRouter's
+      // allow-list (`quantizations`), shown here as what that list leaves out.
+      // `unknown` is not offered: Google's upstreams report nothing else, so
+      // excluding it would leave Gemini unroutable.
+      const quantLevels = ["int4", "fp4", "fp6", "int8", "fp8", "fp16", "bf16", "fp32"];
+      const quantBoxes = quantLevels.map(q => [q, el("input", {
+        type: "checkbox",
+        ...(routing.quantizations && !routing.quantizations.includes(q) ? { checked: "" } : {}),
+      })]);
 
       const epBox = el("div", { class: "small dim", style: "margin-top:4px" });
       const modelIn = el("input", { style: "flex:1", placeholder: "model id, e.g. anthropic/claude-opus-4-6" });
@@ -2337,6 +2346,11 @@ function renderFullApiSettings(b) {
           el("span", { class: "small", style: "width:90px" }, "Allow only"), onlyIn),
         el("div", { class: "row", style: "margin:6px 0" },
           el("span", { class: "small", style: "width:90px" }, "Blacklist"), ignoreIn),
+        el("div", { class: "row", style: "margin:6px 0;flex-wrap:wrap;gap:8px" },
+          el("span", { class: "small", style: "width:90px" }, "Never use"),
+          ...quantBoxes.map(([q, box]) => el("label", { class: "small" }, box, el("code", {}, q)))),
+        el("div", { class: "small dim" },
+          "Upstreams serving a model at these precisions are skipped. An upstream that reports no precision is always allowed."),
         el("div", { class: "row", style: "margin:6px 0" },
           el("label", { class: "small" }, denyBox, " Only providers that don't retain or train on prompts"),
           el("label", { class: "small" }, pinBox, " Never fall back to another upstream")),
@@ -2351,6 +2365,7 @@ function renderFullApiSettings(b) {
                 data_collection: denyBox.checked ? "deny" : "allow",
                 allow_fallbacks: !pinBox.checked,
                 sort: sortSel.value || null,
+                exclude_quantizations: quantBoxes.filter(([, box]) => box.checked).map(([q]) => q),
               });
               await boot();
               toast(Object.keys(r.routing).length

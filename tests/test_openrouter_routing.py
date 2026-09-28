@@ -62,6 +62,37 @@ def test_sort_is_whitelisted():
     assert "sort" not in providers.normalize_openrouter_routing({"sort": "vibes"})
 
 
+def test_a_blacklisted_quantization_is_sent_as_openrouters_allow_list():
+    """The owner, 2026-09-28: "Can we blacklist fp4 quants?" OpenRouter takes
+    an allow-list; the blacklist is stored as what is left, so the block the
+    panel saved is the block every request carries."""
+    routing = providers.normalize_openrouter_routing(
+        {"exclude_quantizations": ["fp4"], "sort": "throughput"})
+    assert routing["quantizations"] == [
+        q for q in providers.OPENROUTER_QUANTIZATIONS if q != "fp4"]
+    assert "exclude_quantizations" not in routing
+    assert providers.normalize_openrouter_routing(json.dumps(routing)) == routing
+
+
+def test_unknown_is_never_excluded_and_only_known_levels_are_sent():
+    """Google's upstreams report no quantization: an allow-list without
+    `unknown` would leave Gemini unroutable. A level OpenRouter does not know
+    could make every request invalid."""
+    routing = providers.normalize_openrouter_routing(
+        {"exclude_quantizations": ["fp4", "unknown", "mxfp4", "vibes"]})
+    assert "unknown" in routing["quantizations"] and "fp4" not in routing["quantizations"]
+    assert set(routing["quantizations"]) <= set(providers.OPENROUTER_QUANTIZATIONS)
+    allow = providers.normalize_openrouter_routing({"quantizations": ["fp8", "bf16", "fp3"]})
+    assert allow["quantizations"] == ["fp8", "bf16", "unknown"]
+
+
+def test_no_quantization_choice_sends_no_quantization_field():
+    assert "quantizations" not in providers.normalize_openrouter_routing({"sort": "price"})
+    everything = providers.normalize_openrouter_routing(
+        {"quantizations": list(providers.OPENROUTER_QUANTIZATIONS)})
+    assert "quantizations" not in everything
+
+
 def test_comma_or_space_separated_input_is_accepted():
     """What a text field yields, rather than requiring the user to type JSON."""
     routing = providers.normalize_openrouter_routing(
