@@ -159,6 +159,20 @@ def test_every_worked_example_validates_against_the_schema_it_illustrates():
         + "; ".join(f"{step}: {errors}" for step, errors in broken.items()))
 
 
+def test_the_encoders_repair_example_is_its_cards_own():
+    """One example, two homes: the encoder's sheet shows a worked answer, and
+    the rebuild is handed `OUTPUT_EXAMPLES["director_specialist"]`. A second
+    spelling would be free to teach something the sheet does not."""
+    import json as _json
+
+    from llm.prompts import _prompt_card
+    from llm.schemas import OUTPUT_EXAMPLES
+
+    core = str(_prompt_card("en")["encoder"]["core"])
+    line = next(line for line in core.splitlines() if line.startswith('{"events":'))
+    assert _json.loads(line) == OUTPUT_EXAMPLES["director_specialist"]
+
+
 def test_specialist_channel_shapes_match_what_the_models_declare():
     """The empty-value coercion is chosen from a hand-kept list, and a hand-
     kept list drifts. `comms_ops` was declared `list[CommsOp]` and classified

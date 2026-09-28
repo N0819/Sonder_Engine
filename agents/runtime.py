@@ -450,30 +450,52 @@ def _with_engine_notes(content, ctx, key, parallel_with=()):
     # large, it is deduplicated across turns by hash, and the Director's five
     # specialists have no step of their own to hang it on. No-op when debug
     # capture is off, which is the default.
-    exchanges = (ctx.exchanges_for_step(key)
-                 if hasattr(ctx, "exchanges_for_step") else [])
-    if exchanges:
-        try:
-            from persist.llm_capture import record_exchange
-            # Insert in START order, because `seq` is assigned at insert and
-            # is what the artifact prints on each row. The Director's five
-            # specialists run concurrently and finish out of order, so the
-            # order they land in `ctx.exchanges` is completion order: the
-            # export sorted by wall clock and read correctly while the seq
-            # NUMBERS on the rows disagreed with it. A label that quietly
-            # disagrees with the ordering beside it is worse than no label.
-            for entry in sorted(exchanges,
-                                key=lambda e: float(e.get("started") or 0.0)):
-                record_exchange(turn_id=getattr(ctx, "turn_id", None), **{
-                    k: v for k, v in entry.items() if k != "step_key"},
-                    step_key=key)
-        except Exception:
-            pass
+    _flush_exchanges(ctx, key)
     if not notes:
         # Absent rather than empty: a step with nothing to report should not
         # grow a key, so an unchanged pipeline produces byte-identical content.
         return content
     return {**content, ENGINE_NOTES_KEY: notes}
+
+def _flush_exchanges(ctx, key):
+    """Write one step's provider exchanges to the capture table, in the order
+    they STARTED.
+
+    Start order because `seq` is assigned at insert and is what the artifact
+    prints on each row. Calls that run concurrently finish out of order, so
+    the order they land in `ctx.exchanges` is completion order: the export
+    sorted by wall clock and read correctly while the seq NUMBERS on the rows
+    disagreed with it. A label that quietly disagrees with the ordering beside
+    it is worse than no label. A diagnostic never fails what it describes, so
+    anything here is swallowed.
+    """
+    exchanges = (ctx.exchanges_for_step(key)
+                 if hasattr(ctx, "exchanges_for_step") else [])
+    if not exchanges:
+        return
+    try:
+        from persist.llm_capture import record_exchange
+        for entry in sorted(exchanges,
+                            key=lambda e: float(e.get("started") or 0.0)):
+            record_exchange(turn_id=getattr(ctx, "turn_id", None), **{
+                k: v for k, v in entry.items() if k != "step_key"},
+                step_key=key)
+    except Exception:
+        pass
+
+
+def _failed_step(ctx, key):
+    """What a step that died still owes the record: its provider calls.
+
+    They were written only by `_with_engine_notes`, when a step SAVED -- so a
+    step whose model answer broke every rung of the repair ladder left no row
+    at all, and the one outcome the ladder exists to prevent was the one
+    nothing could count. Measured 2026-09-28: 195 capture databases, and not
+    one failed step among them. Each failed attempt's row already carries its
+    own error; the step's is the last of them.
+    """
+    _flush_exchanges(ctx, key)
+
 
 class Bus:
     def __init__(self):
@@ -650,6 +672,7 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
     for k, lbl in group:
         h = holders[k]
         if "e" in h:
+            _failed_step(ctx, k)
             if failure is None:
                 failure = h["e"]
             continue
@@ -669,6 +692,7 @@ def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     holder = {}
     yield from _stream_one(bus, key, lambda: compute_step(key, ctx, nonce), holder)
     if "e" in holder:
+        _failed_step(ctx, key)
         raise holder["e"]
     ctx[key] = holder["v"]
     # ctx keeps the stage's own output; only what is PERSISTED carries the

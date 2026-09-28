@@ -534,6 +534,23 @@ def note_provider_exchange(*, role, system, payload, response, ok,
         pass
 
 
+def _mended(step_key, raw, payload):
+    """`(parsed, report, edits)` for the first local mend of `raw` that
+    validates against the step's schema, else the first that merely parses
+    (its report invalid, so the rungs below repair real content instead of
+    `{}`), else None. See `llm/json_mend.py` for what a mend may touch."""
+    from llm.json_mend import mend_candidates
+
+    first = None
+    for value, edits in mend_candidates(raw):
+        report = validate_llm_output_strict(step_key, value, source_payload=payload)
+        if report.valid:
+            return value, report, edits
+        if first is None:
+            first = (value, report, edits)
+    return first
+
+
 def _bare_prose_answer(step_key, raw):
     """`{"prose": raw}` when a step whose answer IS its prose sent the prose
     alone, without the JSON around it; else None.
@@ -568,6 +585,96 @@ def _bare_prose_answer(step_key, raw):
 #: or the call chose (see `providers._role_json_mode`). The grammar where
 #: the provider supports it; the advisory flag where it does not.
 REBUILD_FORMAT = "json_schema"
+
+#: The steps whose same-provider rebuild is sent their OWN sheet ahead of
+#: `repair_json`, as every fallback candidate already is: the two calls that
+#: write the encoder's transforms. Their payload names the work but not the
+#: channel protocols, and a rebuild without them repairs by guessing --
+#: an inventory hand once rebuilt a transfer as entity definitions because the
+#: generic example showed an entities patch. Measured on the owner's capture
+#: (2026-09-28): the sheet-less rebuild was valid 58 of 58 times outside the
+#: transform contract, and 52 of 70 inside it, where 12 of the 47 that
+#: rebuilt a parseable answer came back with fewer writes.
+REBUILD_KEEPS_SHEET = frozenset({"director_specialist", "director_repair"})
+
+
+def _content_size(step_key, obj):
+    """`(events or answers, writes)` a transform-writing step's answer
+    carries, or None for any other step."""
+    if not isinstance(obj, dict):
+        return None
+    if step_key == "director_specialist":
+        events = [e for e in obj.get("events") or [] if isinstance(e, dict)]
+        return len(events), sum(len(e.get("transforms") or []) for e in events)
+    if step_key == "director_repair":
+        answers = [a for a in obj.get("answers") or [] if isinstance(a, dict)]
+        return len(answers), sum(len(a.get("events") or []) + len(a.get("transforms") or [])
+                                 for a in answers)
+    return None
+
+
+def _without_paths(obj, paths):
+    """A copy of `obj` with the value at each dotted path removed -- a list
+    item taken out, a key dropped -- latest index first, so one removal
+    cannot shift the next."""
+    import copy
+
+    out = copy.deepcopy(obj)
+
+    def order(path):
+        return [(0, int(part)) if part.isdigit() else (1, part)
+                for part in path.split(".")]
+
+    for path in sorted(paths, key=order, reverse=True):
+        parts = path.split(".")
+        node = out
+        for part in parts[:-1]:
+            if isinstance(node, list) and part.isdigit() and int(part) < len(node):
+                node = node[int(part)]
+            elif isinstance(node, dict) and part in node:
+                node = node[part]
+            else:
+                node = None
+                break
+        last = parts[-1]
+        if isinstance(node, list) and last.isdigit() and int(last) < len(node):
+            node.pop(int(last))
+        elif isinstance(node, dict):
+            node.pop(last, None)
+    return out
+
+
+def _unshrunk(step_key, original, original_errors, rebuilt, payload, rung):
+    """The report to accept for a rebuilt answer: `rebuilt`, unless it
+    carries fewer events or writes than the answer it was asked to repair.
+
+    FIXING BY DELETION is the rebuild's quiet failure: an answer made valid
+    by dropping what it could not fix. Measured on the retired hands, the
+    encoder's same transform contract: 12 of 47 rebuilds of a parseable
+    answer came back with fewer writes -- one kept 1 of 3 contact ops,
+    another flipped its status and dropped its write. When the original
+    answer, with only the fields its validation named taken out, still
+    validates and carries at least as much, that is what the beat keeps.
+    Otherwise the rebuild stands, said out loud."""
+    before = _content_size(step_key, original)
+    after = _content_size(step_key, rebuilt.output)
+    if before is None or after is None or all(a >= b for a, b in zip(after, before)):
+        return rebuilt
+    kept = _without_paths(original, _error_paths(original_errors))
+    kept_report = validate_llm_output_strict(step_key, kept, source_payload=payload)
+    kept_size = _content_size(step_key, kept_report.output) if kept_report.valid else None
+    if kept_size is not None and all(k >= a for k, a in zip(kept_size, after)):
+        note_step_warning(
+            f"{step_key}: the {rung} answered with less than the answer it "
+            f"repaired ({before[0]} -> {after[0]} entries, {before[1]} -> "
+            f"{after[1]} writes); kept that answer with only its failing "
+            "fields taken out")
+        return kept_report
+    note_step_warning(
+        f"{step_key}: the {rung} answered with less than the answer it "
+        f"repaired ({before[0]} -> {after[0]} entries, {before[1]} -> "
+        f"{after[1]} writes); accepted, as nothing else validates")
+    return rebuilt
 
 
 def complete_validated_json(
@@ -681,6 +788,28 @@ def complete_validated_json(
             role=role, system=system, payload=payload, response=raw,
             ok=bool(report.valid), started=_capture_t0,
             error="" if report.valid else "; ".join(report.errors[:3]))
+
+    # A BROKEN ANSWER IS MENDED HERE, BEFORE A MODEL IS ASKED
+    # (`llm/json_mend.py`): its brackets and a key's quotes, never a value and
+    # never an answer that ran out of room, which is the re-ask's below. The
+    # capture row above keeps the answer as it came. Measured 2026-09-28:
+    # 8 of the 8 unparseable answers in the owner's capture that today's
+    # parser cannot read mend, the encoder's one failure in 470 calls
+    # byte-for-byte into what the model rebuild had spent a round trip on.
+    if parse_error and not provider_errored and not output_ran_out_of_room(raw):
+        mended = _mended(step_key, raw, payload)
+        if mended is not None:
+            parsed, report, edits = mended
+            parse_error = None
+            if report.valid:
+                note_step_warning(
+                    f"{step_key}: the answer's JSON was mended locally "
+                    f"({'; '.join(edits)}); no model call")
+                return _accepted(report)
+            note_step_warning(
+                f"{step_key}: the answer's JSON was mended locally "
+                f"({'; '.join(edits)}) and still fails validation; the "
+                "repair rungs below work on the mended answer")
 
     # A BARE `{}` THAT VALIDATES IS STILL NO ANSWER. Every narrator field
     # defaults, so the stall reply `{}` passed validation and COMMITTED an
@@ -952,6 +1081,10 @@ def complete_validated_json(
                 return _accepted(_patched_report)
             previous_parsed = _patched
 
+    # What the rebuild and the fallbacks are repairing, kept for the check
+    # that they did not repair it by deleting it (`_unshrunk`).
+    _original, _original_errors = previous_parsed, list(report.errors or [])
+
     # Skip same-provider repair when the primary provider itself errored --
     # repairing against a down provider just wastes attempts; go to fallbacks.
     for _ in range(0 if provider_errored else max(0, repair_attempts)):
@@ -974,6 +1107,8 @@ def complete_validated_json(
         # its own payload (A84): the repair sheet, and a payload wrapping the
         # failed attempt and the errors it failed on.
         _repair_system = get_prompt("repair_json")
+        if step_key in REBUILD_KEEPS_SHEET:
+            _repair_system = system + "\n\n" + _repair_system
         try:
             previous_raw = chat_complete(
                 role,
@@ -1032,7 +1167,20 @@ def complete_validated_json(
             error="" if report.valid else "; ".join(report.errors[:3]))
 
         if report.valid:
-            return _accepted(report)
+            return _accepted(_unshrunk(step_key, _original, _original_errors,
+                                       report, payload, "rebuild"))
+
+        # The rebuild's own punctuation, mended before another candidate is
+        # asked (one retired hand's rebuild in the capture was itself a
+        # stray closer).
+        if parse_error and not ran_out_of_room:
+            mended = _mended(step_key, previous_raw, payload)
+            if mended is not None and mended[1].valid:
+                note_step_warning(
+                    f"{step_key}: the rebuild's JSON was mended locally "
+                    f"({'; '.join(mended[2])}); no further call")
+                return _accepted(_unshrunk(step_key, _original, _original_errors,
+                                           mended[1], payload, "rebuild"))
 
     candidate_count = role_candidate_count(role)
 
@@ -1109,7 +1257,9 @@ def complete_validated_json(
                    else "; ".join(fallback_report.errors[:3])))
 
         if fallback_report.valid:
-            return _accepted(fallback_report)
+            return _accepted(_unshrunk(step_key, _original, _original_errors,
+                                       fallback_report, payload,
+                                       f"fallback candidate {candidate_offset}"))
 
         report = fallback_report
 

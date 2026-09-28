@@ -110,14 +110,7 @@ def test_a_failed_attempt_and_the_repair_that_followed_are_two_rows(
     assert repaired["payload"]["original_request"] == {"x": 1}
 
 
-@pytest.mark.parametrize("fallback", [
-    pytest.param(False, marks=pytest.mark.xfail(
-        strict=True,
-        reason="the same-provider repair kept the step's sheet only for the "
-               "retired causal steps; the encoder's is sent `repair_json` "
-               "alone, with an empty example (UNBUILT_PIPELINE §1.1)")),
-    True,
-])
+@pytest.mark.parametrize("fallback", [False, True])
 def test_the_encoder_rebuild_keeps_the_scoped_inventory_protocol(
         monkeypatch, captured, fallback):
     """The live repair knew which key moved but had lost the instructions
@@ -125,8 +118,9 @@ def test_the_encoder_rebuild_keeps_the_scoped_inventory_protocol(
     Both full-repair routes must retain the step's channel sheet.
 
     Measured on a causal hand; the step that writes `inventory_ops` is the
-    encoder since 2026-09-27. Its fallback route keeps the sheet, and its
-    same-provider rebuild does not -- held as a strict xfail.
+    encoder since 2026-09-27. Its same-provider rebuild lost the sheet with
+    the causal steps and kept it again on 2026-09-28
+    (`llm_quality.REBUILD_KEEPS_SHEET`).
     """
     original_sheet = (
         "SCOPED OBJECTS SHEET. Transfer an existing object using inventory_ops: "

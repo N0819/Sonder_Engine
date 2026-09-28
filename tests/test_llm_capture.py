@@ -344,3 +344,52 @@ def test_seq_agrees_with_the_order_the_calls_started(temp_db):
     assert [c["seq"] for c in calls] == [1, 2, 3]
     # the stored counter is still there to join back on
     assert sorted(c["capture_id"] for c in calls) == [1, 2, 3]
+
+
+# --- a step that dies still leaves its calls (2026-09-28) -------------------
+
+class _DyingCtx:
+    """Just what the runtime's failure path reads off a context."""
+
+    def __init__(self, turn_id):
+        self.turn_id = turn_id
+        self.exchanges = []
+
+    def exchanges_for_step(self, key):
+        return [dict(e) for e in self.exchanges if e.get("step_key") == key]
+
+
+def _dies(key, ctx, nonce):
+    ctx.exchanges.append({
+        "step_key": key, "role": "encoder", "system": "THE ENCODER SHEET",
+        "payload": {"prose": "Mara lifts the key."},
+        "response": '{"events": [{"event": "Mara lifts the key"}}',
+        "ok": False, "error": "LLM returned invalid JSON", "started": 1.0})
+    raise RuntimeError("every rung of the repair ladder failed")
+
+
+@pytest.mark.parametrize("path", ["single", "parallel"])
+def test_a_step_that_dies_still_leaves_its_calls(temp_db, monkeypatch, path):
+    """A step's calls were written only when it SAVED, so a step whose model
+    answer broke every rung of the repair ladder left no row -- and the one
+    outcome the ladder exists to prevent was the one nothing could count
+    (195 capture databases held no failed step, measured 2026-09-28)."""
+    from agents import runtime
+
+    _enable(temp_db)
+    _chat_id, turn_id = _turn(temp_db)
+    ctx = _DyingCtx(turn_id)
+    monkeypatch.setattr(runtime, "compute_step", _dies)
+    if path == "single":
+        stream = runtime._step_stream(runtime.Bus(), turn_id, "director_resolve",
+                                      "Resolve", 3, ctx, 0)
+    else:
+        stream = runtime._run_parallel_group(
+            runtime.Bus(), turn_id, [("director_resolve", "Resolve")],
+            ["director_resolve"], ctx)
+    with pytest.raises(RuntimeError):
+        for _event in stream:
+            pass
+    rows = llm_capture.exchanges_for_turn(turn_id)
+    assert len(rows) == 1, rows
+    assert not rows[0]["ok"] and "invalid JSON" in rows[0]["error"]

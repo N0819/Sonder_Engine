@@ -33,7 +33,7 @@
 | `agents/narration.py` | 2739 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
 | `agents/perception.py` | 7399 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
-| `agents/runtime.py` | 1770 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
+| `agents/runtime.py` | 1794 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1747 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -50,12 +50,13 @@
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 179 |  | `core.db` |
-| `llm/llm_quality.py` | 1181 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/json_mend.py` | 272 |  | — |
+| `llm/llm_quality.py` | 1331 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 635 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4997 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 6700 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 6751 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2551 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 282 |  | `llm`, `llm.prompts` |
@@ -567,14 +568,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 1278 | 385 lines |
-| `build_plan()` | 815 | 180 lines |
+| `_run_pipeline()` | 1302 | 385 lines |
+| `build_plan()` | 839 | 180 lines |
 | `_load_extra_players()` | 53 | 101 lines |
-| `resume_key_for_turn()` | 719 | 95 lines |
-| `_stream_one()` | 482 | 68 lines |
-| `_stream_parallel()` | 551 | 60 lines |
-| `run_pipeline()` | 1714 | 57 lines |
-| `_with_engine_notes()` | 422 | 55 lines |
+| `resume_key_for_turn()` | 743 | 95 lines |
+| `_stream_one()` | 504 | 68 lines |
+| `_stream_parallel()` | 573 | 60 lines |
+| `run_pipeline()` | 1738 | 57 lines |
+| `_rehydrate_side_channels()` | 1227 | 53 lines |
 
 ### `agents/storage.py`
 
@@ -716,18 +717,31 @@
 | `probability()` | 172 | 8 lines |
 | `configured()` | 85 | 5 lines |
 
+### `llm/json_mend.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_decoder_edits()` | 131 | 49 lines |
+| `mend_candidates()` | 235 | 38 lines |
+| `_bracket_edits()` | 182 | 25 lines |
+| `_bracket_fault()` | 77 | 22 lines |
+| `_string_start()` | 115 | 14 lines |
+| `_repeated()` | 213 | 14 lines |
+| `_loads()` | 57 | 8 lines |
+| `_error()` | 67 | 8 lines |
+
 ### `llm/llm_quality.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 573 | 609 lines |
+| `complete_validated_json()` | 680 | 652 lines |
 | `_targeted_field_patch()` | 300 | 98 lines |
 | `note_provider_exchange()` | 476 | 59 lines |
 | `output_ran_out_of_room()` | 146 | 47 lines |
 | `json_failure_diagnosis()` | 195 | 39 lines |
 | `_extract_balanced_object()` | 59 | 37 lines |
 | `_without_trailing_commas()` | 23 | 34 lines |
-| `_restarted_object()` | 98 | 28 lines |
+| `_unshrunk()` | 647 | 31 lines |
 
 ### `llm/prompt_cache.py`
 
@@ -781,8 +795,8 @@
 |---|---:|---:|
 | `preprocess_llm_output()` | 5439 | 290 lines |
 | `_lenient_coerce()` | 864 | 159 lines |
-| `validate_llm_output_strict()` | 6562 | 139 lines |
-| `semantic_output_errors()` | 6191 | 128 lines |
+| `validate_llm_output_strict()` | 6613 | 139 lines |
+| `semantic_output_errors()` | 6242 | 128 lines |
 | `canonicalize_prose_markup()` | 5205 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
 | `_uncross_concealed_speech()` | 5329 | 69 lines |

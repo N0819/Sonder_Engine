@@ -292,7 +292,10 @@ remain scoped to interpret/resolve. No additional model call or stage exists.
 
 An empty `{}` response to nonempty input is a provider stall, not a draft
 worth repairing: `complete_validated_json` re-asks the original request once
-before entering field/full repair and configured fallbacks.
+before entering field/full repair and configured fallbacks. An answer that
+does not parse and did not run out of room is first mended locally
+(`llm/json_mend.py`: brackets, commas and a key's quotes, never a value, and
+never closing a cut-off answer), and a mend is used only if it validates.
 
 The Director's world index is the acting bodies' immediate sight aperture, not
 the scene registry. It receives room exits and, for entities in that aperture,

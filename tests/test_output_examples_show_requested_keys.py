@@ -9,8 +9,8 @@ The prose Director has the same two output keys at both invocation points,
 `prose` and `places` (one step, `director_prose`, with a sheet per stage).
 Compatibility fields remain on the schemas for old checkpoints, but must not
 leak back into the prompt or example. The encoder's channel shapes are
-supplied by its selected chunks; its repair example is `{}`
-(UNBUILT_PIPELINE §1.1).
+supplied by its selected chunks; its repair example is its card's own
+worked example (2026-09-28; `{}` before).
 
 The check reads the PROMPT rather than a list kept here: a key is required in
 the example when the step's own sheet names it at the top level of its output

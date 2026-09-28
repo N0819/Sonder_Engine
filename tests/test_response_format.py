@@ -100,14 +100,16 @@ def test_a_calls_own_format_wins_over_the_roles(_settings):
 def test_a_broken_answer_is_rebuilt_under_the_grammar(_settings, monkeypatch):
     """The request goes as its role chose; the rung that rebuilds a broken
     answer asks for a valid one (a brace dropped seven levels into a transit
-    patch, twice, on one long beat)."""
+    patch, twice, on one long beat). A dropped brace is mended locally since
+    2026-09-28 (`llm/json_mend.py`), so the rebuild is exercised here with an
+    answer no mend can read: no JSON at all."""
     from llm import llm_quality
     calls = []
 
     def llm(role, system, user, **kw):
         calls.append(kw.get("response_format"))
         if len(calls) == 1:
-            return '{"events": [{"event": "x", "transforms": [{"patch": {"a": {}}]}]}'
+            return "The events are a door opening and a lamp going out."
         return json.dumps({"events": [], "missing_tools": [], "missing_referents": [],
                            "notes": []})
 

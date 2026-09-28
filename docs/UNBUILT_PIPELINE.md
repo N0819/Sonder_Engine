@@ -16,7 +16,7 @@ Director (`tests/director_fakes.py`), and each item below is a test that
 passed on the causal path's fixtures and fails on the prose path's -- pinned
 as a STRICT xfail, so the day one closes the suite says so -- or a rule the
 deleted sheets taught that no prose card carries, or a defect the port
-surfaced on the path that remains (items 6-12). The causal Director did most
+surfaced on the path that remains (items 6-11). The causal Director did most
 of these things; nothing on the prose path does yet.
 
 1. **Hard player authority refuses nothing.** `apply_player_authority`
@@ -124,21 +124,17 @@ of these things; nothing on the prose path does yet.
    `dialogue_log` but lands in `state_diff.speech`, the resolve's sequence
    and its rows -- measured: in no view and in no self-memory, but in the
    record later beats read.
-9. **The encoder's same-provider repair loses its sheet.** The rebuild is
-    sent `repair_json` alone with an empty example, where the causal hands
-    kept their own sheet on it (the fallback candidate keeps it)
-    (`tests/test_capture_records_every_provider_call.py`, strict xfail).
-10. **Every interpret builds all five world views** (crowds, artifacts,
+9. **Every interpret builds all five world views** (crowds, artifacts,
     couriers, carried reports, unratified claims): the decision model's
     candidates are read from the same facts before it answers, so the C8
     saving (48 ms of 205 ms on a 307-body town) is gone.
-11. **Card findings, each a prompt edit and so the owner's:** the encoder's
+10. **Card findings, each a prompt edit and so the owner's:** the encoder's
     `contact_ops` chunk (en and ja) names `item_matches` and
     `target_matches`, which no payload carries; `entities__examined` ships
     only with its channel, and the `entities` question answers no for a
     thing "only described as it already is", so a pure read may never reach
     the part; and `jev_questions/entities.txt` enumerates verbs.
-12. **Dead code the deletion left.** `_note_for`, `_SPECIALIST_DICT_CHANNELS`
+11. **Dead code the deletion left.** `_note_for`, `_SPECIALIST_DICT_CHANNELS`
     / `_SPECIALIST_LIST_CHANNELS`, the `required_channels` and verdict
     branches, `pressure_ticks`, `MINTED_THING_NAME_WORDS`, and
     `semantic_output_errors`' `director_interpret` / `director_resolve`

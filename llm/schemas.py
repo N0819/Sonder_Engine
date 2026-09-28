@@ -5902,6 +5902,57 @@ OUTPUT_EXAMPLES = {
                  "\"The lamp is cold.\"",
         "places": [],
     },
+    # THE ENCODER'S OWN CARD EXAMPLE, the same object its sheet shows
+    # (`encoder/core`, pinned equal by tests/test_schemas.py). It was `{}`
+    # until 2026-09-28, so a rebuild was shown an empty answer to imitate.
+    "director_specialist": {
+        "events": [
+            {"source_entity_id": "character:11", "source_event_id": "scene:1",
+             "event": "Mara lifts the red tin from the bench.",
+             "observable": "lifts the red tin", "speech": False,
+             "targets": ["red tin"], "seconds": 2, "movement": None,
+             "commitment": "asserted", "item_names": ["red tin"],
+             "transforms": [{"item": "red tin", "patch": {"inventory_ops": [
+                 {"op": "transfer", "object_id": "red_tin", "from_id": "bench",
+                  "to_id": "Mara", "relation": "held"}]}}]},
+            {"source_entity_id": "character:11", "source_event_id": "scene:1",
+             "event": "Keep it shut,", "observable": "", "speech": True,
+             "targets": ["Ivo"], "volume": "normal", "seconds": 2,
+             "movement": None, "commitment": "asserted", "item_names": ["Mara"],
+             "transforms": []},
+            {"source_entity_id": "character:11", "source_event_id": "scene:1",
+             "event": "Mara hands the red tin to Ivo.",
+             "observable": "hands the red tin to Ivo", "speech": False,
+             "targets": ["red tin", "Ivo"], "seconds": 2, "movement": None,
+             "commitment": "asserted", "item_names": ["red tin"],
+             "transforms": [{"item": "red tin", "patch": {"inventory_ops": [
+                 {"op": "transfer", "object_id": "red_tin", "from_id": "Mara",
+                  "to_id": "Ivo", "relation": "held"}]}}]},
+        ],
+        "missing_tools": [], "missing_referents": [], "notes": [],
+    },
+    # The check-and-repair pass's call (`agents/director_repair.py`): one
+    # answer per job, bound by id -- an event job recovered, a ledger job
+    # written, a job the draft already answers. `{}` until 2026-09-28.
+    "director_repair": {
+        "answers": [
+            {"id": "j1", "after": "e1", "events": [
+                {"source_entity_id": "character:11", "source_event_id": "scene:1",
+                 "event": "Mara hands the red tin to Ivo.",
+                 "observable": "hands the red tin to Ivo", "speech": False,
+                 "targets": ["red tin", "Ivo"], "seconds": 2, "movement": None,
+                 "commitment": "asserted", "item_names": ["red tin"],
+                 "sources": ["s3"],
+                 "transforms": [{"item": "red tin", "patch": {"inventory_ops": [
+                     {"op": "transfer", "object_id": "red_tin", "from_id": "Mara",
+                      "to_id": "Ivo", "relation": "held"}]}}]}]},
+            {"id": "j2", "transforms": [{"item": "red tin", "patch": {"inventory_ops": [
+                {"op": "transfer", "object_id": "red_tin", "from_id": "bench",
+                 "to_id": "Mara", "relation": "held"}]}}]},
+            {"id": "j3", "none": "The draft already records the line at e2."},
+        ],
+        "notes": [],
+    },
     # Without an example, output_example() returned {} and the repair prompt
     # steered a compliant model to return {} -- which validates (all defaults),
     # silently swallowing the reaction. This shows the real shape.
