@@ -1347,6 +1347,7 @@
   "lived location did not place featured character ${char_id}": "lived location did not place featured character ${char_id}",
   "Lives here": "Lives here",
   "LLM output must be one JSON object": "LLM output must be one JSON object",
+  "LLM returned a cut-off answer; what parsed out of it is a fragment, not the answer": "LLM returned a cut-off answer; what parsed out of it is a fragment, not the answer",
   "LLM returned invalid JSON: ${exc.msg} at position ${exc.pos}": "LLM returned invalid JSON: ${exc.msg} at position ${exc.pos}",
   "LLM returned unparseable JSON (first 200 chars): ${(text or '')[:200]}": "LLM returned unparseable JSON (first 200 chars): ${(text or '')[:200]}",
   "Load error:": "Load error:",

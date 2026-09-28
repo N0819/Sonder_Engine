@@ -255,6 +255,33 @@ def strict_json_parse(text: str) -> dict:
 
     return value
 
+
+def _parse_whole(raw: str) -> dict:
+    """`strict_json_parse`, refusing what salvage reads out of a CUT-OFF
+    answer. Every parse of the repair ladder goes through here.
+
+    Salvage exists for an answer that is whole but wrapped -- in prose, or
+    after a restarted fragment -- and reads the object that runs to the end
+    of the text. A cut-off answer can END exactly where an inner object
+    closes, and salvage then returns that inner object as the answer.
+    Measured 2026-09-28 on a designed failure (chat 154's departure, the
+    encoder's interpret answer cut at 60%): one sensory event's own fields
+    were read as the whole encoder answer, validated with zero events, and
+    the beat's encoding was lost without a word -- the check-and-repair pass
+    rebuilt it from the prose. So when the text as a whole does not parse
+    and the truncation witness says it ran out of room, nothing salvaged
+    from it is taken: the re-ask with room is the remedy.
+    """
+    value = strict_json_parse(raw)
+    if output_ran_out_of_room(raw):
+        try:
+            json.loads(_strip_fences(raw))
+        except ValueError:
+            raise RuntimeError(
+                "LLM returned a cut-off answer; what parsed out of it is a "
+                "fragment, not the answer") from None
+    return value
+
 # --- The cheap rung: patch the fields that failed, not the whole beat -------
 
 def _error_paths(errors):
@@ -538,11 +565,17 @@ def _mended(step_key, raw, payload):
     """`(parsed, report, edits)` for the first local mend of `raw` that
     validates against the step's schema, else the first that merely parses
     (its report invalid, so the rungs below repair real content instead of
-    `{}`), else None. See `llm/json_mend.py` for what a mend may touch."""
+    `{}`), else None. See `llm/json_mend.py` for what a mend may touch.
+
+    It mends the text the PARSER reads, fence taken off (`_strip_fences`):
+    the live encoder answers inside a ```json fence, and on the first live
+    designed-failure run (2026-09-28, chat 154's departure) the fence made
+    every candidate unparseable, so two swapped closers went to a 6-7 s
+    model rebuild each."""
     from llm.json_mend import mend_candidates
 
     first = None
-    for value, edits in mend_candidates(raw):
+    for value, edits in mend_candidates(_strip_fences(raw)):
         report = validate_llm_output_strict(step_key, value, source_payload=payload)
         if report.valid:
             return value, report, edits
@@ -762,7 +795,7 @@ def complete_validated_json(
     parse_error = None
 
     try:
-        parsed = strict_json_parse(raw)
+        parsed = _parse_whole(raw)
     except Exception as exc:
         parsed = {}
         parse_error = str(exc)
@@ -842,7 +875,7 @@ def complete_validated_json(
             "llm second call: empty-object reply treated as a stall; "
             f"re-asked the original request ({time.monotonic() - _t0:.1f}s)")
         try:
-            again_parsed = strict_json_parse(again)
+            again_parsed = _parse_whole(again)
         except Exception:
             again_parsed = None
         if isinstance(again_parsed, dict) and again_parsed:
@@ -946,7 +979,7 @@ def complete_validated_json(
                     f"({time.monotonic() - _t0:.1f}s)")
                 max_tokens = token_ceiling
                 try:
-                    parsed = strict_json_parse(raw)
+                    parsed = _parse_whole(raw)
                     parse_error = None
                 except Exception as exc:
                     parsed = {}
@@ -1027,7 +1060,7 @@ def complete_validated_json(
                 "llm second call: empty-object reply treated as a stall; "
                 f"re-asked the original request ({time.monotonic() - _t0:.1f}s)")
             try:
-                previous_parsed = strict_json_parse(previous_raw)
+                previous_parsed = _parse_whole(previous_raw)
                 parse_error = None
             except Exception as exc:
                 previous_parsed = {}
@@ -1143,7 +1176,7 @@ def complete_validated_json(
         ran_out_of_room = output_ran_out_of_room(previous_raw)
 
         try:
-            previous_parsed = strict_json_parse(
+            previous_parsed = _parse_whole(
                 previous_raw
             )
             parse_error = None
@@ -1232,7 +1265,7 @@ def complete_validated_json(
         ran_out_of_room = output_ran_out_of_room(fallback_raw)
 
         try:
-            fallback_parsed = strict_json_parse(
+            fallback_parsed = _parse_whole(
                 fallback_raw
             )
         except Exception as exc:

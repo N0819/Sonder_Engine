@@ -1324,6 +1324,7 @@
   "lived location did not place featured character ${char_id}": "生活史のある場所に対象人物 ${char_id} を配置できませんでした",
   "Lives here": "ここで暮らしている",
   "LLM output must be one JSON object": "LLMの出力は1つのJSONオブジェクトである必要があります",
+  "LLM returned a cut-off answer; what parsed out of it is a fragment, not the answer": "LLMが途中で切れた回答を返しました。そこから読み取れたのは回答の断片であり、回答そのものではありません",
   "LLM returned invalid JSON: ${exc.msg} at position ${exc.pos}": "LLMが無効なJSONを返しました：${exc.msg} (位置${exc.pos})",
   "LLM returned unparseable JSON (first 200 chars): ${(text or '')[:200]}": "LLMが解析不能なJSONを返しました（最初の200文字）：${(text or '')[:200]}",
   "Load error:": "読み込みエラー:",

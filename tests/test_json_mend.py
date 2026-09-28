@@ -221,6 +221,46 @@ def test_the_rebuild_is_sent_the_encoders_own_sheet(monkeypatch, warnings):
     assert json.loads(llm.calls[1]["user"])["required_json_example"]["events"]
 
 
+def test_a_fenced_answer_is_mended_too(monkeypatch, warnings):
+    """The live encoder answers inside a ```json fence; the first live
+    designed-failure run sent both of its swapped-closer answers to a model
+    rebuild, because the mend read the fence as part of the JSON."""
+    broken = "```json\n" + _encoder_answer(GOOD_EVENTS.replace("}]}]", "}}]]", 1)) + "\n```"
+    llm = _Scripted([broken])
+    monkeypatch.setattr(llm_quality, "chat_complete", llm)
+    monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
+
+    out = llm_quality.complete_validated_json(
+        role="encoder", step_key="director_specialist", system="THE ENCODER SHEET",
+        payload={"prose": "Mara lifts the key."})
+
+    assert len(llm.calls) == 1 and out["events"]
+    assert any("mended locally" in w for w in warnings), warnings
+
+
+def test_a_cut_answer_ending_on_an_inner_object_is_not_the_answer(monkeypatch, warnings):
+    """Found live (chat 154's departure, the encoder's interpret answer cut
+    at 60%): the cut fell right after one inner object closed, salvage read
+    that object as the whole answer, and it validated with ZERO events. The
+    cut is the re-ask's, not salvage's."""
+    whole = _encoder_answer(GOOD_EVENTS)
+    close = whole.index('"relation": "held"}') + len('"relation": "held"}')
+    cut = whole[:close]
+    fragment = llm_quality.strict_json_parse(cut)
+    assert "events" not in fragment      # what salvage alone makes of it
+    llm = _Scripted([cut, whole])
+    monkeypatch.setattr(llm_quality, "chat_complete", llm)
+    monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
+
+    out = llm_quality.complete_validated_json(
+        role="encoder", step_key="director_specialist", system="THE ENCODER SHEET",
+        payload={"prose": "Mara lifts the key."})
+
+    assert len(llm.calls) == 2
+    assert out["events"][0]["event"] == "Mara lifts the key"
+    assert any("re-asked once" in w for w in warnings), warnings
+
+
 def test_a_cut_off_encoder_answer_goes_to_the_re_ask_not_the_mend(monkeypatch, warnings):
     cut = _encoder_answer(GOOD_EVENTS)[:-40]
     llm = _Scripted([cut, _encoder_answer(GOOD_EVENTS)])
