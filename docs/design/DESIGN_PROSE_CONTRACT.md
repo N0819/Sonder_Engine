@@ -785,9 +785,10 @@ still says "The doors behind stand open to the night beach": minted before
 `7959ac5f`, and rerolling does not reach it.
 
 **Open:**
-- **An encoder that stops early loses the end of the beat** -- now answered,
-  opt-in, by the check and repair pass (`agents/director_repair.py`,
-  `prose_contract_repair`; the owner's design: Jev finds the missing events
+- **An encoder that stops early loses the end of the beat** -- now answered
+  by the check and repair pass (`agents/director_repair.py`,
+  `prose_contract_repair`: opt-in when built on 2026-09-24, ON by default
+  since 2026-09-28; the owner's design: Jev finds the missing events
   and the missing or wrong ledgers, builds a targeted encoder for them with
   the completed ledgers in its context, and orders what comes back).
   Three of the owner's resolve calls encoded 0-2 events of 2,852-5,104

@@ -523,6 +523,18 @@ def _repair_answers(payload):
          "commitment": "asserted", "transforms": []}], "after": "e1"}], "notes": []}
 
 
+@pytest.mark.parametrize("stored, on", [
+    (None, True), ("1", True), ("on", True), ("0", False), ("false", False),
+    ("off", False),
+])
+def test_the_pass_is_on_unless_the_host_turns_it_off(temp_db, stored, on):
+    """Owner, 2026-09-28: "director repair should be on by default". It was
+    built opt-in (2026-09-24), so an unset setting read as off."""
+    if stored is not None:
+        temp_db.set_setting(repair.REPAIR_SETTING, stored)
+    assert repair.enabled() is on
+
+
 def test_a_line_the_draft_dropped_is_recovered(temp_db, monkeypatch):
     temp_db.set_setting(repair.REPAIR_SETTING, "1")
 
@@ -567,16 +579,27 @@ def test_a_line_the_draft_dropped_is_recovered(temp_db, monkeypatch):
     assert record["jobs"][0]["kind"] == "event" and record["applied"]["applied"] == ["j1"]
 
 
-def test_off_by_default_nothing_changes(temp_db, monkeypatch):
+def _resolve_skipping_a_line(temp_db, monkeypatch, calls):
     monkeypatch.setattr(decisions, "OVERRIDE", lambda state, q: {
         key: {"type": "noul", "noul": 0.95 if key == "positions" else 0.02} for key in q})
-    calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
         "director_prose": {"prose": PROSE},
         "director_specialist": _encoder_skips_the_line,
     }))
     ctx = _make_ctx(temp_db, interp=_action_interp())
-    out = director.director_resolve(ctx, nonce=0)
+    return director.director_resolve(ctx, nonce=0)
+
+
+def test_turned_off_nothing_changes(temp_db, monkeypatch):
+    temp_db.set_setting(repair.REPAIR_SETTING, "0")
+    calls = []
+    out = _resolve_skipping_a_line(temp_db, monkeypatch, calls)
     assert _steps(calls) == ["director_prose", "director_specialist"]
     assert calls[1]["payload"]["prose"] == PROSE
     assert "repair" not in out["orchestration"]["prose_contract"]
+
+
+def test_on_by_default_the_draft_is_checked(temp_db, monkeypatch):
+    calls = []
+    out = _resolve_skipping_a_line(temp_db, monkeypatch, calls)
+    assert "repair" in out["orchestration"]["prose_contract"]

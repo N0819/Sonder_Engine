@@ -352,14 +352,17 @@ it in a way nothing in this repository will catch.
 This is the first invocation of the Director (`agents/director_prose.py`;
 the causal Director that preceded it was deleted 2026-09-27). Its model input
 is an `event_inputs` array grouped by `{entity_id, authority_mode, events}`
-plus small identity, object-name, position, and contact indexes. It runs four
+plus small identity, object-name, position, and contact indexes. It runs five
 steps: the Director writes PROSE (`prompts.prose_director_prompt`) and nothing
 else; the decision model (`llm/decisions.py`) asks one yes/no question per
 channel this stage can carry, per encoder part and per planned room in reach,
 and grants every channel when it cannot answer; ONE encoder (role `encoder`,
 step key `director_specialist`) writes the beat as ordered events carrying
-typed transforms; and code converts the events into ledger rows. Neither model
-call writes narration.
+typed transforms; the check-and-repair pass (`agents/director_repair.py`, on
+by default since 2026-09-28) has the decision model judge that draft against
+the prose, sentence by sentence, and sends what it confidently finds missing
+or wrong back to the encoder as targeted jobs; and code converts the events
+into ledger rows. No model call writes narration.
 
 Its world index is the union of the acting bodies' immediate sight apertures:
 their rooms and physically visible adjacent rooms. Room rows expose exits;
@@ -1031,9 +1034,15 @@ in the transient composition and never become durable scene state.
 
 Stored outputs of the deleted causal Director -- its ledger author's rows and
 manifest, and its specialists' direct fields -- remain readable for replay.
-There is no additional fixed pipeline stage; the encoder's one widening pass
-and the room author are the only further model calls, both bounded. The engine
-commits once after composing the complete beat.
+There is no additional fixed pipeline stage; the encoder's one widening pass,
+the room author and the check-and-repair pass are the only further model
+calls, all bounded. The repair pass asks the decision model once per beat,
+and only when that finds something: one more request to say where a flagged
+write belongs, at most two encoder calls in parallel (recovering events,
+mending writes; at most `MAX_JOBS` jobs, a skipped job asked once more), one
+request to place what was recovered and one to check the repaired writes
+again. Nothing it does aborts the turn. The engine commits once after
+composing the complete beat.
 
 ### `background_react`
 

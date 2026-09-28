@@ -22,7 +22,7 @@
 | `agents/director_movement.py` | 1859 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 1937 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
-| `agents/director_repair.py` | 1546 |  | `core.db`, `llm`, `llm.prompts` |
+| `agents/director_repair.py` | 1550 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 1099 |  | — |
 | `agents/director_scopes.py` | 600 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
@@ -427,14 +427,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_check_and_repair()` | 1359 | 177 lines |
-| `apply_answers()` | 1227 | 83 lines |
-| `battery()` | 602 | 79 lines |
-| `plan_jobs()` | 719 | 75 lines |
-| `native_failures()` | 328 | 64 lines |
-| `_repair_group()` | 985 | 61 lines |
-| `sentences()` | 115 | 45 lines |
-| `place()` | 1180 | 45 lines |
+| `_check_and_repair()` | 1363 | 177 lines |
+| `apply_answers()` | 1231 | 83 lines |
+| `battery()` | 606 | 79 lines |
+| `plan_jobs()` | 723 | 75 lines |
+| `native_failures()` | 332 | 64 lines |
+| `_repair_group()` | 989 | 61 lines |
+| `sentences()` | 119 | 45 lines |
+| `place()` | 1184 | 45 lines |
 
 ### `agents/director_rooms.py`
 

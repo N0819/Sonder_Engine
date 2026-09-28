@@ -146,10 +146,16 @@ def prose_director(temp_db, monkeypatch):
     any other channel instead of being left for a designer the test does not
     answer. Returns the list of batteries the decision model was asked.
     Pair with the fakes in `tests/director_fakes.py`.
+
+    The check-and-repair pass is off too, though it is on in play
+    (2026-09-28): a decision model that answers yes to everything would flag
+    every sentence missing and every write wrong, and the pass has its own
+    tests with their own fakes (`tests/test_encoder_repair.py`).
     """
     from llm import decisions
 
     temp_db.set_setting("prose_contract_room_agent", "0")
+    temp_db.set_setting("prose_contract_repair", "0")
     asked = []
 
     def answer(state, questions):

@@ -47,7 +47,9 @@ failure: its final runs ended with 220 of 225 ledger findings uncertain, and
    whatever stays unresolved is committed with a warning. A user's Stop
    (`Aborted`) is the one thing that propagates.
 
-Settings: `prose_contract_repair` (`0` default: off).
+Settings: `prose_contract_repair` -- ON by default since 2026-09-28 (owner:
+"director repair should be on by default"); `0`, `false` or `off` turns it
+off. It was built opt-in on 2026-09-24.
 """
 
 from __future__ import annotations
@@ -92,7 +94,9 @@ _MARKER = re.compile(r"\[s\d+\]\s?")
 
 
 def enabled() -> bool:
-    return str(get_setting(REPAIR_SETTING) or "").strip().casefold() in ("1", "true", "on")
+    """On unless the host turns it off. An unset setting is ON."""
+    return str(get_setting(REPAIR_SETTING) or "1").strip().casefold() not in (
+        "0", "false", "off")
 
 
 # ---- 1. numbered sentences ------------------------------------------------
