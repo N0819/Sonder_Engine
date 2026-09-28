@@ -1,0 +1,3 @@
+How much does this memory hold information that would help with what you are trying to do right now?
+
+{memory}

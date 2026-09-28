@@ -1322,12 +1322,16 @@ four anchorings of the mood question to the moment did not reduce;
 vigilance and wariness, which both
 blind readers still name as uncovered, not yet retried in narrower words;
 a memory-sourced feeling named by its scene text ("resolve (You are in the
-harbourmaster's shed...)"); naming the combinations the coverage table lists; the
-memory packet (a fitted weighted-RRF net of 100 over new lanes, then Jev) with
-the moment tag written at commit -- which the memory-born moods wait on, since
-today's packet stirs the scene's own moods; the fun sections; a ponder
-answered by Jev over the whole bank; same-beat recall. The note's nine owner
-decisions are the list. Measured in
+harbourmaster's shed...)"); naming the combinations the coverage table lists.
+The memory packet LANDED 2026-09-27 (`mind/memory_jev.py`: a net of 100 by
+equal-weight RRF over the thirteen lanes the engine can compute, then Jev's
+two graded questions, best 24; replayed live on three research beats at the
+research packet's quality, `docs/guides/MEMORY.md` §5). Still open from it:
+the moment tag written at commit (a schema change, the owner's) -- which the
+memory-born moods wait on, and whose lanes the net lacks; the 48-row packet
+(measured affordable on relevance, the conduct replay not run); the fun
+sections; a ponder answered by Jev over the whole bank; same-beat recall. The
+note's remaining owner decisions are the list. Measured in
 [`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md);
 instruments `tools/jev_*.py`.
 

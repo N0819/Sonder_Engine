@@ -234,7 +234,12 @@ unresolved_from_past:      the ONE list of what is still open -- live
 recent_episodes:           first-hand chronological episodes, last 4 turns
 recent_received_information: durable heard/told/read side records, if any
 recent_conclusions:        inferred side records, if any
-recalled_old_memories:     search_memories, k=16, minus anything already recent
+recalled_old_memories:     the decision model's pick (mind/memory_jev.py): a
+                           net of 100 by equal-weight RRF over thirteen lanes,
+                           each row graded by Jev for the moment and for what
+                           the mind is trying to do, best 24 (absorption
+                           narrows it), a reworded belief kept once, minus
+                           anything already recent; listed oldest first
 autobiographical_summary:  first-hand only — the LATEST window (§8)
 summary_key_phrases
 summary_citations:         typed past ids/when/epistemic origin for summaries
@@ -478,6 +483,36 @@ recall stopped improving.
 ---
 
 ## 5. Ranking
+
+**Ordinary recall no longer ends here (2026-09-27).** A character's
+`recalled_old_memories` is the decision model's pick, `mind/memory_jev.py`:
+
+1. **The net.** Every row the mind may see (the same seam, the recent buffer
+   excluded) ranked by RRF at equal weights, k=30, over thirteen lanes: the
+   beat's content vector, cue vector and keywords (uncapped), recency,
+   importance, the three aspects, **primed** (the rows the mind's latest recall
+   reached, read off `last_accessed_turn`), their nearest neighbours, the rows
+   made where it stands, and encoded feeling nearest to and farthest from how
+   it feels now. The first `NET_SIZE` (100) rows.
+2. **The grade.** Each row asked, as a four-step choice read as its expected
+   grade, "how much does this memory bear on the situation you are in right
+   now?" and "how much does this memory hold information that would help with
+   what you are trying to do right now?" (`character_jev.memory_situation`,
+   `memory_useful`), against one state: who the mind is, what it perceives, how
+   it feels, what it is trying to do, what is unsettled, its drive and values.
+3. **The packet.** Rows by the larger grade, a row within cosine 0.90 of one
+   kept dropped, `recall_limit` of them.
+
+Blind-graded before landing (`docs/experiments/JEV_MEMORY_PROBE_2026_09_26.md`,
+21 beats of one story, 0-3 by GLM 5.2 and seven Claude graders): 1.84 / 1.74
+against 1.14 / 1.16 for the RRF packet below. Replayed live on three of those
+beats after landing: the production pick grades 0.935-0.941 against the
+research packet's 0.935-0.944, in 0.65-1.25 s for 200 questions. Equal weights
+rather than the one-story fitted weights: Jev's pick from this net is 0.992 of
+its pick from the whole bank, against 0.994 fitted and 0.983 from today's fused
+order. Fails toward the net's own order when the decision model is unconfigured
+or silent, and the author's preview (which names no mind) never pays for a
+call. The ponder and the unbidden subject below still use `search_memories`.
 
 `search_memories` fuses **four rankings plus one per aspect** with Reciprocal
 Rank Fusion, then applies scalar bonuses, then diversifies.

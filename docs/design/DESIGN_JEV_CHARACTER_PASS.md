@@ -4,7 +4,10 @@
 The affect pass is wired (increment 1, "Wiring the affect pass" below); the
 bare contract is built behind a setting ("The bare contract" below), which
 carries increment 2 and everything the full card's bookkeeping asked for; the
-memory packet is a proposal. The survey numbers come
+memory packet LANDED 2026-09-27 as `mind/memory_jev.py` -- the measured shape
+at equal lane weights, without the moment tag (a schema change still the
+owner's) and at 24 rows (48 still the owner's, after the conduct replay);
+`docs/guides/MEMORY.md` §5. The survey numbers come
 from four read-only surveys of the code and of `engine.db`
 (`llm_capture`/`llm_blobs`, `variants._engine_notes`) over the ten days to
 2026-09-26, spot-checked by hand.

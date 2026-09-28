@@ -14,6 +14,7 @@ from mind.memory_common import (
 )
 from mind.memory_read import memory_bank_cache
 from mind.memory_write import _clamp
+from mind.memory_jev import jev_memory_packet
 from mind.memory_retrieval import (
     _RECALL_LIMIT, _SUMMARY_RECALL_LIMIT, provenance_context_label,
     recent_memory_buffer, search_memories,
@@ -257,7 +258,12 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                    recent_turns=4, recall_limit=_RECALL_LIMIT, here=None,
                                    in_sight=None, absorption=0.0,
                                    ponder_query="", ponder_why="",
-                                   resurfaced_subject="", bank=None):
+                                   resurfaced_subject="", bank=None,
+                                   person=None, language=None):
+    """What this mind brings to the beat from its past. `person`
+    (`{name, drive, values}`) is the mind the decision model picks recalled
+    memories for (`mind/memory_jev.py`); a caller naming none -- the author's
+    preview -- gets the picker's net order and pays for no model call."""
     active_state = active_state or {}
     # ONE READ OF THIS MIND'S BANK, HOWEVER MANY LANES ASK FOR IT. Ordinary
     # recall, a ponder and an unbidden resurfacing are three retrievals over
@@ -393,12 +399,24 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # ids this beat actually reached ride out on `_internal.memory_access_ids`,
     # the character step proposes them on its output, and `commit_memory`
     # makes the one write -- the same shape as the unbidden ledger.
-    recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
-                               include_archived=True, current_turn_idx=current_turn_idx,
-                               chronological=True, here=here, in_sight=in_sight,
-                               aspects=aspects, embedded=embedded,
-                               record_access=False, bank=bank)
+    #
+    # RECALL IS THE DECISION MODEL'S PICK (`mind/memory_jev.py`, 2026-09-27):
+    # a net of the rows this mind may see, graded by Jev for how they bear on
+    # this moment and on what the mind is trying to do, best first. The
+    # recent buffer is excluded before the net is cut, so no slot goes to a
+    # row the payload already carries.
+    picker = {}
+    recalled = jev_memory_packet(
+        chat_id, char_id, query_text, current_turn_idx=current_turn_idx,
+        embedded=embedded, aspects=_aspects, here=here, exclude_ids=recent_ids,
+        limit=recall_limit, person=person, view=current_view,
+        active_state=active_state, unsettled=unresolved_items, language=language,
+        bank=bank, record=picker)
     access_ids = [m.get("id") for m in recalled if m.get("id") is not None]
+    # Best first, for the readers that take a head of the list (the affect
+    # pass); the payload itself is chronological, below.
+    recalled_by_grade = [str(m.get("event_key") or "") for m in recalled
+                         if str(m.get("event_key") or "")]
     # NO ABSTENTION SIGNAL IS COMPUTED HERE ANY MORE, and the reason is worth
     # the paragraph because the thing that was here looked like it worked.
     #
@@ -423,14 +441,12 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # number it must not trust. Removing the call also removes a second full
     # bank scan per character per beat, which is most of what the review
     # costs back.
-    recalled = [m for m in recalled if m["id"] not in recent_ids]
-    if len(recalled) > recall_limit:
-        recalled = sorted(
-            sorted(recalled, key=lambda m: float(m.get("score") or 0.0),
-                   reverse=True)[:recall_limit],
-            key=lambda m: (m.get("turn_idx") is None,
-                           m.get("turn_idx") if m.get("turn_idx") is not None
-                           else 10**12, m.get("id") or 0))
+    # Chronological, oldest first: a life reads in order, and the pick has
+    # already chosen WHICH rows.
+    recalled = sorted(recalled, key=lambda m: (
+        m.get("turn_idx") is None,
+        m.get("turn_idx") if m.get("turn_idx") is not None else 10**12,
+        m.get("id") or 0))
     # A character may deliberately set ONE query on the previous character
     # turn. This is an additive, explicitly-labelled retrieval lane: normal
     # cue/mood/goal recall above remains untouched. It costs an embedding call
@@ -680,6 +696,9 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             # that has never moved the counter.
             "memory_access_ids": list(access_ids),
             "scores": score_rows,
+            # The recalled rows by grade, best first, and what the picker did.
+            "recalled_by_grade": recalled_by_grade,
+            "picker": picker,
         },
         # The one place this payload says what is still open. See
         # `unresolved_items` above.

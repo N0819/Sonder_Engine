@@ -119,12 +119,25 @@ class TestTheReadOnlyStage:
                  if isinstance(node, ast.Call)
                  and isinstance(node.func, ast.Name)
                  and node.func.id == "search_memories"]
+        # Ordinary recall is the decision model's pick (`mind/memory_jev.py`,
+        # 2026-09-27); the ponder and the unbidden subject still search.
+        picks = [node for node in ast.walk(builder)
+                 if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name)
+                 and node.func.id == "jev_memory_packet"]
 
-        assert len(lanes) == 3, "a retrieval lane was added or removed"
+        assert len(lanes) == 2, "a retrieval lane was added or removed"
+        assert len(picks) == 1, "ordinary recall is the picker, once"
         for call in lanes:
             asked = {kw.arg: kw.value for kw in call.keywords}
             assert isinstance(asked.get("record_access"), ast.Constant)
             assert asked["record_access"].value is False
+        # The picker has no write of its own to ask about: it never calls one.
+        from mind import memory_jev
+        picker = ast.parse(Path(memory_jev.__file__).read_text(encoding="utf-8"))
+        assert not [node for node in ast.walk(picker)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "record_memory_access"]
 
     def test_a_plain_search_still_records_nothing(self, bank, temp_db):
         before = _counts(temp_db, bank["chat"])

@@ -146,9 +146,19 @@ def events_from(observations):
 
 
 def memories_from(memory_context):
-    """The memories recall delivered to this call."""
+    """The memories recall delivered to this call, the decision model's best
+    first. The payload lists them oldest first, and reading its head took
+    the eight OLDEST of a 24-row pick; `_internal.recalled_by_grade` is the
+    pick's own order (`mind/memory_jev.py`)."""
+    rows = [m for m in (memory_context or {}).get("recalled_old_memories") or []
+            if isinstance(m, dict)]
+    order = ((memory_context or {}).get("_internal") or {}).get("recalled_by_grade") or []
+    if order:
+        rank = {str(key): i for i, key in enumerate(order)}
+        rows = sorted(rows, key=lambda m: rank.get(
+            str(m.get("event_key") or m.get("memory_ref") or ""), len(rank)))
     out = []
-    for i, m in enumerate((memory_context or {}).get("recalled_old_memories") or []):
+    for i, m in enumerate(rows):
         if not isinstance(m, dict):
             continue
         text = m.get("details") or m.get("gist") or m.get("text")

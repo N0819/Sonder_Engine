@@ -10,6 +10,12 @@ questions; then seven rounds on the affect pass. Instruments:
 `tools/jev_event_feelings.py`; all run against copies of `engine.db` in the
 worktree. Design context:
 [`DESIGN_JEV_CHARACTER_PASS.md`](../design/DESIGN_JEV_CHARACTER_PASS.md).
+LANDED 2026-09-27 as `mind/memory_jev.py` (the net of 100 at equal weights
+over the thirteen lanes the engine can compute, the two graded questions,
+best 24): replayed live on beats 86, 90 and 94, its pick grades 0.935, 0.941
+and 0.940 by these labels against the blind-graded packet's 0.935, 0.944 and
+0.941, sharing 18-21 of 24 rows with it, in 0.65-1.25 s
+(`docs/guides/MEMORY.md` §5).
 
 ## What was asked
 

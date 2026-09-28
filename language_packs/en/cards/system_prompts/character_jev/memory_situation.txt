@@ -1,0 +1,3 @@
+How much does this memory bear on the situation you are in right now?
+
+{memory}

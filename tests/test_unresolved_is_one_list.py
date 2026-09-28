@@ -70,17 +70,18 @@ def test_payload_names_what_is_open_exactly_once(mind_with_threads):
 
 def test_the_retrieval_aspect_asks_the_same_list(mind_with_threads,
                                                  monkeypatch):
-    """`memory_context` binds `search_memories` at import, so the caller's own
-    name is the only place the call can be observed."""
+    """`memory_context` binds the recall picker (`jev_memory_packet`) at
+    import, so the caller's own name is the only place the call can be
+    observed."""
     seen = {}
-    real = memory_context.search_memories
+    real = memory_context.jev_memory_packet
 
     def spy(*a, **kw):
         if kw.get("aspects") is not None:
             seen["aspects"] = list(kw["aspects"])
         return real(*a, **kw)
 
-    monkeypatch.setattr(memory_context, "search_memories", spy)
+    monkeypatch.setattr(memory_context, "jev_memory_packet", spy)
     ctx = _context(mind_with_threads)
     unsettled = dict(seen["aspects"])["what is still unsettled"]
     assert unsettled == " ".join(ctx["unresolved_from_past"]["items"])

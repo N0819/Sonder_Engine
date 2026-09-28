@@ -1259,6 +1259,12 @@
     "which_memory": {
       "$text": "character_jev/which_memory.txt"
     },
+    "memory_situation": {
+      "$text": "character_jev/memory_situation.txt"
+    },
+    "memory_useful": {
+      "$text": "character_jev/memory_useful.txt"
+    },
     "which_aim": {
       "$text": "character_jev/which_aim.txt"
     },

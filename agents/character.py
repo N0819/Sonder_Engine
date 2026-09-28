@@ -1555,6 +1555,19 @@ def _unbidden_entry(mem, clock):
     return entry
 
 
+def _memory_person(sheet):
+    """`{name, drive, values}` for the memory picker's state, from the card:
+    the name, the drive's essence and the values list -- the fields the
+    picker was measured with (`tools/jev_net_recall.beat`)."""
+    sheet = sheet if isinstance(sheet, dict) else {}
+    psychology = sheet.get("psychology") if isinstance(sheet.get("psychology"), dict) else {}
+    drive = psychology.get("drive")
+    drive = str(drive.get("essence") or "") if isinstance(drive, dict) else str(drive or "")
+    values = psychology.get("values")
+    return {"name": character_name(sheet), "drive": drive,
+            "values": values if isinstance(values, (list, tuple)) else ([values] if values else [])}
+
+
 def _attach_unbidden(memory_context, entry, recall_limit=_RECALL_LIMIT):
     """Substitute, never add: the unbidden entry pays for itself out of the
     ordinary recall budget, so total recalled material per payload is
@@ -3744,6 +3757,11 @@ def character_step(ctx, cid, nonce):
         ponder_why=_ponder_why,
         resurfaced_subject=_resurfaced,
         bank=_memory_bank,
+        # The mind the decision model picks recalled memories FOR: who it
+        # is, what drives it and what it values, from the story's card
+        # (`mind/memory_jev.py`).
+        person=_memory_person(sh),
+        language=getattr(ctx, "language", None),
     )
     known_tags, excl_titles, circles = _char_known_tags(sh)
     # The sheet says where this mind began; the story says where it has gone

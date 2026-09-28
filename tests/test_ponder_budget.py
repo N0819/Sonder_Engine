@@ -150,6 +150,7 @@ class TestPonderStillDelivers:
         memory.build_character_memory_context(
             chat_id=_bank[0], char_id=_bank[1], current_turn_idx=50,
             current_view="the harbour", active_state={})
-        # Exactly one retrieval -- passive recall -- and no second call.
-        assert len(calls) == 1, (
-            "no ponder query must mean no second retrieval, got %r" % (calls,))
+        # No search at all: passive recall is the decision model's pick
+        # (`mind/memory_jev.py`), and with no pending query nothing else runs.
+        assert calls == [], (
+            "no ponder query must mean no ponder retrieval, got %r" % (calls,))

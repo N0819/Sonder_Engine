@@ -128,11 +128,18 @@ def test_dispute_uses_stable_memory_ref_not_approximate_gist(temp_db):
 
 def test_absorption_narrows_deliberative_recall_without_erasing_it(temp_db):
     chat_id, char_id = _chat_and_char(temp_db)
+    import random
+    words = ("anchor bramble cinder dovetail ember falcon garnet harbour ivory juniper "
+             "kettle lantern meadow nettle orchard pebble quarry rafter saffron thistle "
+             "umber velvet willow yarrow").split()
     for turn in range(1, 25):
+        # Distinct rows: one sentence with its numbers changed is one memory
+        # reworded to recall's near-duplicate cut, which keeps one of them.
+        detail = " ".join(random.Random(turn).sample(words, 6))
         memory.add_memory(
             chat_id, char_id, None, "episode", "witnessed", .7,
-            f"At bell {turn}, the brass door showed mark {turn}.",
-            turn_idx=turn, gist=f"bell {turn} brass door")
+            f"The brass door rang; {detail}.",
+            turn_idx=turn, gist=f"brass door {detail}")
     low = memory.build_character_memory_context(
         chat_id, char_id, 30, "The brass door rings.", {}, absorption=0.0)
     high = memory.build_character_memory_context(
