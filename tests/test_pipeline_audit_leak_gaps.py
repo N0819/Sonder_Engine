@@ -141,7 +141,7 @@ class TestRerollMemoryCutoff:
         ctx = memory.build_character_memory_context(
             chat_id=chat_id, char_id=char_id, current_turn_idx=7,
             current_view="The lantern is guttering.", active_state={})
-        episodes = ctx["recent_episodes"] + ctx["recalled_old_memories"]
+        episodes = ctx["recent_memories"] + ctx["recalled_old_memories"]
         assert episodes, "bank must be non-empty or this test is vacuous"
         assert all(e.get("turn_idx") is None or e["turn_idx"] < 7 for e in episodes)
         assert "shatter" not in " ".join(str(e.get("content") or "") for e in episodes)

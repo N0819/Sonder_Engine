@@ -1593,8 +1593,10 @@ def _attach_unbidden(memory_context, entry, recall_limit=_RECALL_LIMIT):
 #: The lanes whose rows may name their memory by `event_key` alone -- author
 #: projections and older callers. Every other row is named by `memory_ref`.
 _LEGACY_EVENT_KEY_LANES = frozenset({
-    "recent_episodes", "recent_received_information", "recent_conclusions",
-    "recalled_old_memories"})
+    "recent_memories", "recalled_old_memories",
+    # The three lanes `recent_memories` replaced on 2026-09-28, for a stored
+    # or replayed context that still carries them.
+    "recent_episodes", "recent_received_information", "recent_conclusions"})
 
 
 def _delivered_memory_rows(memory_context):
@@ -4491,6 +4493,7 @@ def character_step(ctx, cid, nonce):
     # model maps its lines to the rows afterwards -- so the handles are not
     # read back.
     _wire_payload, _handles = compact_character_evidence(payload)
+    _wire_payload = character_bare.perception_last(_wire_payload)
 
     out = _agent_json(
         role,

@@ -146,9 +146,9 @@ def test_absorption_narrows_deliberative_recall_without_erasing_it(temp_db):
         chat_id, char_id, 30, "The brass door rings.", {}, absorption=.9)
     assert len(low["recalled_old_memories"]) > len(
         high["recalled_old_memories"])
-    assert len(high["recent_episodes"]) <= 4
+    assert len(high["recent_memories"]) <= 4
     assert len(high["recalled_old_memories"]) <= 4
-    assert high["recent_episodes"] or high["recalled_old_memories"]
+    assert high["recent_memories"] or high["recalled_old_memories"]
 
 
 def test_ponder_adds_labelled_recall_without_replacing_normal_recall(temp_db):
@@ -176,35 +176,41 @@ def test_ponder_adds_labelled_recall_without_replacing_normal_recall(temp_db):
     assert "event:violet" in deliberate["result_refs"]
     delivered = {
         m["memory_ref"]: m
-        for m in (pondered["recent_episodes"]
+        for m in (pondered["recent_memories"]
                   + pondered["recalled_old_memories"]
                   + deliberate["additional_episodes"])}
     assert "deliberate_ponder" in delivered["event:violet"]["retrieval_origin"]
 
 
-def test_recent_memory_keeps_episode_dialogue_and_conclusion_in_separate_lanes(
+def test_recent_memory_is_one_chronological_stream_each_row_saying_its_kind(
         temp_db):
+    """The owner, 2026-09-28: "better ordered in chronological order rather
+    than by type, type obviously still needs to be attached to each entry".
+    Written across three turns so the old grouping (episodes, then what was
+    told, then conclusions) would have put them in a different order."""
     chat_id, char_id = _chat_and_char(temp_db)
     memory.add_memory(
+        chat_id, char_id, None, "inference", "inferred", .6,
+        "Mara expected pursuit.", turn_idx=6, event_key="event:inference")
+    memory.add_memory(
         chat_id, char_id, None, "episode", "witnessed", .8,
-        "You step away and the contact ends.", turn_idx=8,
+        "You step away and the contact ends.", turn_idx=7,
         event_key="event:episode")
     memory.add_memory(
         chat_id, char_id, None, "dialogue", "heard", .8,
         "Mara said 'wait'", turn_idx=8, event_key="event:line")
-    memory.add_memory(
-        chat_id, char_id, None, "inference", "inferred", .6,
-        "Mara expected pursuit.", turn_idx=8, event_key="event:inference")
 
     context = memory.build_character_memory_context(
         chat_id, char_id, 9, "The room is still.", {})
 
-    assert [m["memory_ref"] for m in context["recent_episodes"]] == [
-        "event:episode"]
-    assert [m["memory_ref"] for m in
-            context["recent_received_information"]] == ["event:line"]
-    assert [m["memory_ref"] for m in context["recent_conclusions"]] == [
-        "event:inference"]
+    assert [(m["memory_ref"], m["epistemic_origin"])
+            for m in context["recent_memories"]] == [
+        ("event:inference", "what_i_concluded"),
+        ("event:episode", "what_i_experienced"),
+        ("event:line", "what_i_was_told")]
+    for lane in ("recent_episodes", "recent_received_information",
+                 "recent_conclusions"):
+        assert lane not in context
 
 
 def test_encoding_affect_round_trips_through_snapshot_restore(temp_db):

@@ -137,7 +137,7 @@ def test_the_recent_buffer_is_never_spent_on_recall(_bank, monkeypatch):
     chat_id, char_id = _bank
     monkeypatch.setattr(decisions, "OVERRIDE", _grade_by_key([]))
     ctx = _context(chat_id, char_id, turn=40, person=PERSON)
-    recent = {m["memory_ref"] for m in ctx["recent_episodes"]}
+    recent = {m["memory_ref"] for m in ctx["recent_memories"]}
     recalled = {m["memory_ref"] for m in ctx["recalled_old_memories"]}
     assert recent and not (recent & recalled)
 

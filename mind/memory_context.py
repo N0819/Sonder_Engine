@@ -578,20 +578,19 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     ponder_refs = [str(m.get("event_key") or "") for m in pondered
                    if str(m.get("event_key") or "")]
     recent_projected = [_with_reading(m, clock) for m in recent]
-    # A recent-life stream must be one chronological row per experienced beat,
-    # not a turn-sized blob of episode + durable quote + self duplicate +
-    # conclusion.  Keep the epistemic side records available, but in their own
-    # lanes so neither chronology nor provenance has to be reconstructed by the
-    # character model.
-    recent_experienced = [
-        m for m in recent_projected
-        if m.get("epistemic_origin") == "what_i_experienced"]
-    recent_received = [
-        m for m in recent_projected
-        if m.get("epistemic_origin") == "what_i_was_told"]
-    recent_conclusions = [
-        m for m in recent_projected
-        if m.get("epistemic_origin") == "what_i_concluded"]
+    # ONE CHRONOLOGICAL STREAM, EACH ROW SAYING WHAT KIND IT IS. What this
+    # mind lived through, was told and worked out is one recent life, read in
+    # the order it happened; the kind rides on every row (`epistemic_origin`:
+    # what_i_experienced, what_i_was_told, what_i_concluded), so provenance is
+    # never reconstructed and nothing about the order has to be. They were
+    # three lanes, told and concluded kept out of the chronology as
+    # annotations, until the owner's ruling of 2026-09-28: "better ordered in
+    # chronological order rather than by type, type obviously still needs to
+    # be attached to each entry". The buffer is already oldest first
+    # (`recent_memory_buffer`), and every row carries one of the three kinds
+    # (`provenance_context_label` knows no other), so the three lanes held
+    # exactly these rows between them and the stream loses none.
+    recent_memories = recent_projected
     recalled_projected = [_with_reading(m, clock) for m in recalled]
     for item in (*recent_projected, *recalled_projected):
         if str(item.get("memory_ref") or "") in ponder_refs:
@@ -706,11 +705,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             "temporal_status": "remembered_past",
             "items": list(unresolved_items),
         },
-        "recent_episodes": recent_experienced,
-        **({"recent_received_information": recent_received}
-           if recent_received else {}),
-        **({"recent_conclusions": recent_conclusions}
-           if recent_conclusions else {}),
+        "recent_memories": recent_memories,
         "recalled_old_memories": recalled_projected,
         # First-hand only. What reached this character through someone else's
         # account, and what they worked out for themselves, are carried

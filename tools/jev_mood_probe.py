@@ -227,7 +227,7 @@ def collect(args):
             mood_block = "HOW YOU HAVE BEEN FEELING:\n" + "\n".join(f"- {m}" for m in moods) if moods else ""
             memory = probe._blob(q, hashes.get("memory")) if hashes.get("memory") else {}
             mems = []
-            for lane in ("recent_episodes", "recent_received_information", "recent_conclusions"):
+            for lane in ("recent_memories", "recent_episodes", "recent_received_information", "recent_conclusions"):
                 for m in ((memory or {}).get(lane) or [])[:6]:
                     if isinstance(m, dict):
                         mems.append(_clip(m.get("details") or m.get("gist") or m.get("text"), 260))

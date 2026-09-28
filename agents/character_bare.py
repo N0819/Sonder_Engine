@@ -78,6 +78,24 @@ def _heard_lines(observations, own):
     return out[:jev.MAX_HEARD_LINES]
 
 
+def perception_last(payload):
+    """The payload with `perception` moved to the very end.
+
+    WHAT REACHED THE MIND JUST NOW IS READ LAST, nearest the reply, because it
+    is the most immediate thing the character has to answer (owner,
+    2026-09-28: "Perception should be the very last as it is the most
+    imediate concern"). Who they are and what they remember come first, as in
+    the order the blind judges preferred in round six of the bare-card replay
+    (`docs/experiments/BARE_CARD_REPLAY_2026_09_27.md`). Applied to the wire
+    payload, after every key is in -- the late ones included -- so nothing
+    lands after it. Order only: no key is added, dropped or changed."""
+    if not isinstance(payload, dict) or "perception" not in payload:
+        return payload
+    out = {key: value for key, value in payload.items() if key != "perception"}
+    out["perception"] = payload["perception"]
+    return out
+
+
 def _delivered_memories(memory_context):
     from agents.character import _delivered_memory_rows
     out, seen = [], set()

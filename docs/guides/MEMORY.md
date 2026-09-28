@@ -231,9 +231,11 @@ unresolved_from_past:      the ONE list of what is still open -- live
                            concerns and dangling summary threads, interleaved
                            so neither source's length crowds out the other,
                            deduped (≤6)
-recent_episodes:           first-hand chronological episodes, last 4 turns
-recent_received_information: durable heard/told/read side records, if any
-recent_conclusions:        inferred side records, if any
+recent_memories:           the last 4 turns as ONE chronological stream, oldest
+                           first, each row carrying its kind in
+                           `epistemic_origin` (what_i_experienced /
+                           what_i_was_told / what_i_concluded) -- three
+                           lanes by kind until the owner's 2026-09-28 ruling
 recalled_old_memories:     the decision model's pick (mind/memory_jev.py): a
                            net of 100 by equal-weight RRF over thirteen lanes,
                            each row graded by Jev for the moment and for what
@@ -638,7 +640,7 @@ one.
 **Temporal cues** only fire on explicit query language: `_OLD_CUES` (`"years
 ago"`, `"back then"`, `"first time"`) or `_RECENT_CUES` (`"just now"`, `"a
 moment ago"`). There is no unconditional recency term — recency reaches recall
-through `recent_episodes`, which is a separate field.
+through `recent_memories`, which is a separate field.
 
 **Location** was stored on every row and read by nothing until alpha 6.3.
 "What happened in *this* room", and the navigational form of it — "which way

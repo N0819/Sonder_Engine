@@ -369,6 +369,29 @@ def test_the_bare_contract_runs_the_step_and_its_note_reaches_the_next_call(stor
     assert captured["self"]["my_notes"] == [{"turn": 2, "note": "hearing the visitor out"}]
 
 
+def test_perception_is_the_last_thing_the_character_reads(story, monkeypatch):
+    """The owner, 2026-09-28: "Perception should be the very last as it is
+    the most imediate concern." Checked on what the model is actually sent,
+    after every late key is in; the order is the only change."""
+    import agents.character as character
+    from agents.character_bare import perception_last
+    char_id, context, _commit = story
+    sent = []
+
+    def model(role, step_key, system, payload, **kwargs):
+        sent.append(list(payload))
+        return deepcopy(_bare_reply())
+
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: _answer([])(questions))
+    monkeypatch.setattr(character, "_agent_json", model)
+    character.character_step(context(), char_id, 1)
+    assert sent and sent[0][-1] == "perception", sent
+    assert sent[0][0] == "self"
+    reordered = perception_last({"self": 1, "perception": 2, "memory": 3, "decision": 4})
+    assert list(reordered) == ["self", "memory", "decision", "perception"]
+    assert perception_last({"self": 1}) == {"self": 1}
+
+
 def test_a_kept_note_is_committed_and_shown_in_the_next_calls_notebook(story, monkeypatch):
     """The reminder a character keeps survives commit and comes back to it --
     in the notebook, the one place the next payload carries what it keeps."""

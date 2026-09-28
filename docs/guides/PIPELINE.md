@@ -818,12 +818,15 @@ non-discrete output of a completed process -- is the Director's to write from
 the act, which it did for 61 of 62 such emissions when characters still
 declared them (`docs/UNBUILT_CHARACTERS.md` §6.17).
 
-Recent memory reaches this step in epistemically separate lanes. The
-chronological `recent_episodes` stream contains first-hand experience only,
-with at most one episode formed per beat; durable received lines travel in
-`recent_received_information`, and fallible conclusions in
-`recent_conclusions`. The latter two annotate a beat without becoming extra
-events in the character's remembered chronology.
+Recent memory reaches this step as one chronological stream,
+`recent_memories`, oldest first: what the character lived through, was told
+and worked out, in the order it happened, each row saying which it is in
+`epistemic_origin` (`what_i_experienced` / `what_i_was_told` /
+`what_i_concluded`). It was three lanes by kind, told and concluded kept out
+of the chronology as annotations, until the owner's ruling of 2026-09-28:
+chronological order, the kind on every entry. The payload the model reads
+ends with `perception` (`character_bare.perception_last`), what reached the
+mind just now being the most immediate thing it answers.
 
 Dialogue continuity is tracked at two levels. `recent_self_lines` retains a
 short verbatim window for exact reissues and repeated sentence shapes;

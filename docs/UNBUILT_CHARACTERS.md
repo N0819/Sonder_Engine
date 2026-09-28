@@ -1364,10 +1364,14 @@ at a fifth of the call time, and reads as well or better. Open, in order:
 - **The layout.** The owner's order -- the sheet, then what the character
   remembers and holds, then the moment with its feelings -- beat today's
   layout under two pairs of blind judges; with the card left as the system
-  message ("sectioned") it kept the fewest faults of three layouts. To
-  build: the first request and its same-request re-asks take the rendered
-  sections as the user message; the repair and fallback rungs keep the
-  payload dict.
+  message ("sectioned") it kept the fewest faults of three layouts. Built
+  2026-09-28, the owner's ruling that day: `perception` is the very last key
+  of the payload the model reads (`character_bare.perception_last`), and the
+  recent memories are one chronological stream with each row's kind
+  (`recent_memories`). Still to build: the feelings ride in `self.feelings`
+  at the front, not with the moment; and the sectioned rendering -- the
+  first request and its same-request re-asks take the rendered sections as
+  the user message, the repair and fallback rungs keep the payload dict.
 - **A turn that loses its conduct** (2 of 70 why-last replies): an empty
   sequence beside a note claiming a line never said (the note is kept and
   shown next beat), or a step holding only a `why`. A card clause or a

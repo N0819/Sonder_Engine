@@ -83,7 +83,7 @@ def _present(chat_id, char_id, turn_idx):
 
 def _compact(context):
     out = {}
-    for field in ("recent_episodes", "recalled_old_memories"):
+    for field in ("recent_memories", "recent_episodes", "recalled_old_memories"):
         out[field] = [{
             key: row.get(key) for key in (
                 "memory_ref", "temporal_status", "memory_form", "when",
@@ -103,7 +103,7 @@ def _compact(context):
 def _refs(payload, observations):
     refs = {str(o.get("observation_id")) for o in observations
             if isinstance(o, dict) and o.get("observation_id")}
-    for field in ("recent_episodes", "recalled_old_memories"):
+    for field in ("recent_memories", "recent_episodes", "recalled_old_memories"):
         refs.update(str(m["memory_ref"]) for m in payload.get(field) or []
                     if m.get("memory_ref"))
     for meta in (payload.get("summary_citations") or {}).values():

@@ -81,7 +81,7 @@ def test_every_real_event_id_is_older_than_this_turn(temp_db):
         chat_id=chat_id, char_id=char_id, current_turn_idx=5,
         current_view="A door opens.", active_state={})
 
-    episodes = ctx["recent_episodes"] + ctx["recalled_old_memories"]
+    episodes = ctx["recent_memories"] + ctx["recalled_old_memories"]
     assert episodes, "bank must be non-empty or this test is vacuous"
     # Pastness is carried per row TWICE, and both are load-bearing. `when` is
     # the relative age, the field that VARIES and so the one a row can be
@@ -131,7 +131,7 @@ def test_memory_rows_and_present_observations_use_disjoint_namespaces(temp_db):
     ctx = memory.build_character_memory_context(
         chat_id, char_id, current_turn_idx=5,
         current_view="The brass door is shut now.", active_state={})
-    rows = ctx["recent_episodes"] + ctx["recalled_old_memories"]
+    rows = ctx["recent_memories"] + ctx["recalled_old_memories"]
     # Found by details, not by gist: a gist that merely repeats the opening of
     # its own details is no longer projected (see memory._with_reading), and
     # this fixture's is exactly that.
