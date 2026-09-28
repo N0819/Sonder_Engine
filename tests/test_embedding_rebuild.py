@@ -476,6 +476,30 @@ class TestStartupHandsTheBankBackToo:
         assert "try:" in src[max(0, i - 400):i]
         assert "except Exception" in src[i:i + 400]
 
+    def test_the_app_that_started_the_reconciler_waits_for_it(self, monkeypatch):
+        """A thread the app started is joined when the app stops. Measured
+        2026-09-28: the reconciler outlived a test's app, opened the next
+        test's brand-new database in the same instant its setup did, and the
+        setup died `database is locked` -- two test files stubbed the thread
+        out one at a time before the shutdown learned to wait for it."""
+        import threading
+
+        from web import app as app_module
+        release = threading.Event()
+        slow = threading.Thread(target=lambda: release.wait(0.3), daemon=True)
+        slow.start()
+        monkeypatch.setattr(app_module, "_RECONCILE_THREAD", slow)
+        app_module._shutdown_engine()
+        assert not slow.is_alive()
+
+    def test_startup_keeps_the_thread_it_starts(self, temp_db):
+        from web import app as app_module
+        app_module._reconcile_embedding_bank()
+        thread = app_module._RECONCILE_THREAD
+        assert thread is not None and thread.name == "startup-embedding-reconcile"
+        app_module._shutdown_engine()
+        assert not thread.is_alive()
+
 
 class TestTheMaintenanceRepairsHaveAWayIn:
     """MIND-F7. `rebuild_checkpoint_embeddings` was built, documented in

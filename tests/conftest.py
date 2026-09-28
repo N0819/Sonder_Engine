@@ -119,9 +119,15 @@ def temp_db():
 
     old_path = db.DB
     db.configure(db_path)
-    db.init()
 
+    # `init()` INSIDE the try: a setup that fails must still hand the worker
+    # its database back. Measured 2026-09-28: one `database is locked` here
+    # (a thread left by the previous test's app startup opened the fresh file
+    # in the same instant) left `db.DB` on an empty file, and the next 38
+    # tests on that xdist worker failed `no such table: settings` -- one
+    # setup error reported as 38 regressions.
     try:
+        db.init()
         yield db
     finally:
         db.close_connection()

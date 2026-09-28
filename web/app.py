@@ -175,6 +175,11 @@ from web.auth_routes import (
 # drive-by. Add a specific allow_origins list back only if a real
 # cross-origin caller (a separate dev server on another port, say) is
 # ever actually needed.
+#: The reconciler `_reconcile_embedding_bank` last started, so the shutdown
+#: can wait for it. None until a startup runs.
+_RECONCILE_THREAD = None
+
+
 def _reconcile_embedding_bank():
     """Hand the memory bank back to the reconciler, off the startup path.
 
@@ -196,7 +201,12 @@ def _reconcile_embedding_bank():
     wait on the network to serve its first request. Failures are logged and
     swallowed on the same rule the checkpoint path follows: a maintenance task
     must never be able to break the thing it was maintaining.
+
+    Kept in `_RECONCILE_THREAD`, so `_shutdown_engine` joins what startup
+    started.
     """
+    global _RECONCILE_THREAD
+
     def _go():
         try:
             from mind.memory import start_rebuild_if_needed
@@ -208,8 +218,9 @@ def _reconcile_embedding_bank():
         except Exception as exc:                     # never fail startup
             print("Sonder Engine: embedding reconcile skipped (%s)." % exc,
                   flush=True)
-    threading.Thread(target=_go, name="startup-embedding-reconcile",
-                     daemon=True).start()
+    _RECONCILE_THREAD = threading.Thread(
+        target=_go, name="startup-embedding-reconcile", daemon=True)
+    _RECONCILE_THREAD.start()
 
 
 def _bind_address():
@@ -338,10 +349,23 @@ def _shutdown_engine():
     the shutdown continues. `outofband` is reached through its own module-level
     entry point rather than by importing the two modules that own the queues:
     web/app.py must not grow an eager import edge to `dressing`.
+
+    The startup reconciler is joined too. It is not a scheduler, but it is a
+    thread this app started, reading whatever database `core.db` names when it
+    gets to run -- which, once the app has stopped, need not be this app's.
+    Measured 2026-09-28: in a test worker the thread outlived its app, opened
+    the next test's brand-new database in the same instant that test's setup
+    did, and the setup died `database is locked`.
     """
     from core import jobs, outofband
 
-    left = list(jobs.drain(timeout=SHUTDOWN_DRAIN_SECONDS))
+    left = []
+    reconcile = _RECONCILE_THREAD
+    if reconcile is not None and reconcile.is_alive():
+        reconcile.join(timeout=SHUTDOWN_DRAIN_SECONDS)
+        if reconcile.is_alive():
+            left.append(reconcile.name)
+    left += list(jobs.drain(timeout=SHUTDOWN_DRAIN_SECONDS))
     left += list(outofband.drain_all(timeout=SHUTDOWN_DRAIN_SECONDS))
     if left:
         print(
