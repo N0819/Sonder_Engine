@@ -228,7 +228,24 @@ def _demand_unheard_by(ctx, who, row):
     views = (ctx.get("perception_outcome") or {}).get("views") or {}
     folded_who = " ".join(str(who or "").split()).casefold()
     pid = None
-    for row_c in ctx.cast or []:
+    # THE PLAYERS HAVE VIEWS TOO, and the debtor was looked up among the cast
+    # alone: a background figure's question that reached no view opened a debt
+    # for the player's own character, re-deferred past its window beat after
+    # beat (chat 122 replay, 2026-09-28: "Hinami still owes 'answer whether
+    # Matsuzumijima should go look'" for a line perception said reached no
+    # one). The player's view is keyed `player`, an extra player's
+    # `extra:<persona_id>`.
+    try:
+        from story.scene import is_player_speaker
+        if who and is_player_speaker(str(who), ctx.chat):
+            pid = "player"
+    except Exception:
+        pid = None
+    for extra in (getattr(ctx, "extra_players", None) or []) if pid is None else ():
+        if " ".join(str((extra or {}).get("name") or "").split()).casefold() == folded_who:
+            pid = f"extra:{extra.get('persona_id')}"
+            break
+    for row_c in (ctx.cast or []) if pid is None else ():
         try:
             from story.character_schema import character_name_from_text
             if character_name_from_text(row_c["sheet"]).casefold() == folded_who:

@@ -46,6 +46,45 @@ def test_the_beats_own_row_carries_its_line_as_a_note():
     assert _demand_unheard_by(_Ctx(view), "Sal Weatherby", row)
 
 
+class _PlayersCtx(dict):
+    """The player's view is keyed `player`, an extra player's
+    `extra:<persona_id>`; the cast holds neither. The chat is dict-shaped and
+    names its persona by id, as `ChatData` does in a live commit."""
+
+    def __init__(self, db, player_view, extra_view=""):
+        from story.character_schema import default_persona_data
+        super().__init__(perception_outcome={"views": {
+            "player": player_view, "extra:12": extra_view}})
+        persona_id = db.qi("INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+                           ("Hinami", json.dumps(default_persona_data("Hinami")), "{}"))
+        self.cast = [{"id": 7, "sheet": json.dumps(default_character_data("Sal Weatherby"))}]
+        self.chat = {"id": 1, "persona_id": persona_id}
+        self.extra_players = [{"persona_id": 12, "name": "Ivo Marsh"}]
+
+
+BACKGROUND_LINE = {"categories": ["speech"],
+                   "event": "Someone hollering out there -- want me to go look?"}
+
+
+def test_the_player_owes_nothing_on_a_line_that_never_reached_her(temp_db):
+    """Chat 122 replay (2026-09-28): a background figure's question reached no
+    view, and the ledger held Hinami owing its answer for beats after -- the
+    debtor was looked up among the cast alone, so the player had no view."""
+    ctx = _PlayersCtx(temp_db, "The surf rolls in. The box stands upright on the sand.")
+    assert _demand_unheard_by(ctx, "Hinami", BACKGROUND_LINE)
+
+
+def test_the_player_owes_a_line_she_heard(temp_db):
+    ctx = _PlayersCtx(temp_db, 'A voice calls: "Someone hollering out there -- '
+                               'want me to go look?"')
+    assert not _demand_unheard_by(ctx, "Hinami", BACKGROUND_LINE)
+
+
+def test_an_extra_player_is_found_by_their_own_view(temp_db):
+    ctx = _PlayersCtx(temp_db, "anything", extra_view="Only the surf.")
+    assert _demand_unheard_by(ctx, "Ivo Marsh", BACKGROUND_LINE)
+
+
 def test_rows_pair_with_current_ops_only():
     ops = [({"op": "open"}, False), ({"op": "open"}, True)]
     assert _zip_rows(ops, [{"event": "x"}]) == [
