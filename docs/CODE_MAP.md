@@ -49,7 +49,7 @@
 | `dressing/ambience.py` | 2103 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
-| `llm/decisions.py` | 179 |  | `core.db` |
+| `llm/decisions.py` | 221 |  | `core.db` |
 | `llm/json_mend.py` | 272 |  | — |
 | `llm/llm_quality.py` | 1394 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
@@ -709,13 +709,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `decide()` | 135 | 35 lines |
-| `_post()` | 103 | 30 lines |
-| `setting()` | 65 | 18 lines |
-| `_provider()` | 53 | 10 lines |
-| `_url()` | 92 | 9 lines |
-| `probability()` | 172 | 8 lines |
-| `configured()` | 85 | 5 lines |
+| `decide()` | 174 | 38 lines |
+| `_post()` | 118 | 30 lines |
+| `_foregone()` | 150 | 22 lines |
+| `setting()` | 77 | 19 lines |
+| `_provider()` | 61 | 14 lines |
+| `_url()` | 107 | 9 lines |
+| `probability()` | 214 | 8 lines |
+| `configured()` | 98 | 7 lines |
 
 ### `llm/json_mend.py`
 

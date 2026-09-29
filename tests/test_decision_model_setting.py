@@ -76,6 +76,87 @@ def test_an_unknown_provider_is_refused(client):
                       json={"provider": 999, "model": "m"}).status_code == 404
 
 
+SELF_HOSTED = "http://127.0.0.1:8192/v1/systemone"
+
+
+class _Answer:
+    status_code = 200
+    text = ""
+
+    def json(self):
+        return {"model": "Winnow-12B", "usage": {"input_tokens": 9},
+                "answers": {"q": {"type": "noul", "noul": 0.9}}}
+
+
+def _capture_posts(monkeypatch):
+    import requests
+    sent = []
+
+    def post(url, headers=None, json=None, timeout=None):
+        sent.append({"url": url, "headers": dict(headers or {})})
+        return _Answer()
+    monkeypatch.setattr(requests, "post", post)
+    return sent
+
+
+def test_a_self_hosted_url_is_asked_with_no_key_at_all(temp_db, monkeypatch):
+    """The owner's own Jev-compatible server (2026-09-28): it needs no key, and
+    the OpenRouter row's key must not ride along to a host that is not
+    OpenRouter just because no provider was chosen."""
+    _provider_row(temp_db, key="openrouter-secret")
+    temp_db.set_setting("jev_url", SELF_HOSTED)
+    sent = _capture_posts(monkeypatch)
+    assert decisions.configured() is True
+    assert decisions.decide("state", {"q": {"type": "noul", "instructions": "?"}}) == {
+        "q": {"type": "noul", "noul": 0.9}}
+    assert sent[0]["url"] == SELF_HOSTED
+    assert "Authorization" not in sent[0]["headers"]
+    shown = decisions.setting()
+    assert shown["url"] == SELF_HOSTED and shown["effective_provider"] is None
+
+
+def test_a_chosen_provider_still_sends_its_own_key_to_the_url(temp_db, monkeypatch):
+    chosen = _provider_row(temp_db, name="Hosted Jev", kind="generic", key="its-own")
+    temp_db.set_setting("jev_provider", str(chosen))
+    temp_db.set_setting("jev_url", SELF_HOSTED)
+    sent = _capture_posts(monkeypatch)
+    decisions.decide("state", {"q": {"type": "noul", "instructions": "?"}})
+    assert sent[0]["headers"]["Authorization"] == "Bearer its-own"
+
+
+def test_a_one_alternative_choice_is_answered_here_and_never_sent(temp_db, monkeypatch):
+    """Winnow-12B refuses a choice with one alternative (400, "Questions
+    require 2–64 alternatives") and the refusal sank a whole read-back; Jev
+    1.13 answers it with certainty. Answered locally in Jev's own shape."""
+    temp_db.set_setting("jev_url", SELF_HOSTED)
+    sent = []
+    import requests
+
+    def post(url, headers=None, json=None, timeout=None):
+        sent.append(json["questions"])
+        return _Answer()
+    monkeypatch.setattr(requests, "post", post)
+    only = {"type": "choice", "instructions": "?", "criteria": {"situational": "none of them"}}
+    got = decisions.decide("state", {"serves": only, "q": {"type": "noul", "instructions": "?"}})
+    assert set(sent[0]) == {"q"}
+    assert got["serves"] == {"type": "choice", "choice": "situational",
+                             "probabilities": {"situational": 1.0}, "confidence": 1.0}
+    assert got["q"]["noul"] == 0.9
+    sent.clear()
+    assert decisions.decide("state", {"serves": only})["serves"]["choice"] == "situational"
+    assert sent == []
+
+
+def test_without_a_url_a_keyless_provider_is_still_refused(temp_db, monkeypatch):
+    chosen = _provider_row(temp_db, name="Local", kind="generic", key="")
+    temp_db.set_setting("jev_provider", str(chosen))
+    sent = _capture_posts(monkeypatch)
+    assert decisions.configured() is False
+    with pytest.raises(decisions.DecisionError):
+        decisions.decide("state", {"q": {"type": "noul", "instructions": "?"}})
+    assert sent == []
+
+
 def _function_body(source, opening):
     start = source.index(opening)
     depth, i = 0, source.index("{", start)

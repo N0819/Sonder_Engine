@@ -19,8 +19,12 @@ refused by OpenRouter ("does not exist"); the versioned id is what answers.
 
 Settings: `jev_model` (default `DEFAULT_MODEL`) and `jev_provider` (a
 providers row id; default: the first `openrouter`-kind row), chosen on the
-models panel's "decision model" row (`PUT /api/decision_model`, `setting`).
-A module-level `OVERRIDE` callable lets a test answer without the network.
+models panel's "decision model" row (`PUT /api/decision_model`, `setting`),
+and `jev_url` (a full decisions URL on another host of the same API, e.g. a
+self-hosted Jev's `/v1/systemone`). A self-hosted URL needs no key, and
+without an explicit `jev_provider` the seam sends it none: the OpenRouter key
+never leaves for a host that is not OpenRouter. A module-level `OVERRIDE`
+callable lets a test answer without the network.
 """
 
 from __future__ import annotations
@@ -50,12 +54,20 @@ class DecisionError(Exception):
     """Jev could not answer: unconfigured, refused or unreachable."""
 
 
+def _explicit_url() -> str:
+    return str(get_setting("jev_url") or "").strip()
+
+
 def _provider():
     pid = get_setting("jev_provider")
     if pid:
         row = q("SELECT * FROM providers WHERE id=?", (pid,), one=True)
         if row:
             return row
+    if _explicit_url():
+        # A self-hosted Jev: falling back to the OpenRouter row would hand its
+        # key to whatever host `jev_url` names.
+        return None
     return q(
         "SELECT * FROM providers WHERE kind='openrouter' ORDER BY id LIMIT 1",
         one=True,
@@ -78,12 +90,15 @@ def setting() -> dict:
         "model": str(get_setting("jev_model") or "").strip(),
         "effective_provider": prov["id"] if prov else None,
         "default_model": DEFAULT_MODEL,
+        "url": _explicit_url(),
         "configured": configured(),
     }
 
 
 def configured() -> bool:
     if OVERRIDE is not None:
+        return True
+    if _explicit_url():
         return True
     prov = _provider()
     return bool(prov and prov["api_key"])
@@ -92,7 +107,7 @@ def configured() -> bool:
 def _url(prov) -> str:
     # A full decisions URL (`jev_url`) points the seam at another host of the
     # same API -- a self-hosted open-source Jev -- without code changes.
-    explicit = str(get_setting("jev_url") or "").strip()
+    explicit = _explicit_url()
     if explicit:
         return explicit
     base = str(prov["base_url"] or "https://openrouter.ai/api/v1").rstrip("/")
@@ -107,7 +122,7 @@ def _post(prov, model, state, questions):
     t0 = time.time()
     resp = requests.post(
         _url(prov),
-        headers=_headers(prov),
+        headers=_headers(prov) if prov else {"Content-Type": "application/json"},
         json={"model": model, "state": state, "questions": questions},
         timeout=TIMEOUT,
     )
@@ -132,6 +147,30 @@ def _post(prov, model, state, questions):
     return body["answers"]
 
 
+def _foregone(questions: dict) -> dict:
+    """The answers no model is needed for: a `choice` with ONE alternative.
+
+    Jev 1.13 answers one with certainty (`{"choice": "a0", "probabilities":
+    {"a0": 1}, "confidence": 1}`, measured 2026-09-28), but a self-hosted
+    Jev-compatible server may refuse it -- Winnow-12B answers "Questions
+    require 2–64 alternatives" with a 400 -- and the refusal sinks every other
+    question in the same request (a character's whole read-back was lost on
+    chat 27 turn 89; which question tripped it was not recorded). A
+    `want_serves` for a mind with no aims is one such choice: `situational`
+    alone. Answered here, the same way, and never sent. Past 64 is the
+    server's to accept, as Jev does."""
+    out = {}
+    for key, question in questions.items():
+        if not isinstance(question, dict) or question.get("type") != "choice":
+            continue
+        criteria = question.get("criteria")
+        if isinstance(criteria, dict) and len(criteria) == 1:
+            only = next(iter(criteria))
+            out[key] = {"type": "choice", "choice": only, "probabilities": {only: 1.0},
+                        "confidence": 1.0}
+    return out
+
+
 def decide(state, questions: dict) -> dict:
     """Ask every question in `questions` of `state`; return `{key: answer}`.
 
@@ -146,17 +185,20 @@ def decide(state, questions: dict) -> dict:
     if OVERRIDE is not None:
         return dict(OVERRIDE(state, questions) or {})
     prov = _provider()
-    if not prov or not prov["api_key"]:
+    if not _explicit_url() and (not prov or not prov["api_key"]):
         raise DecisionError("no OpenRouter provider configured for jev")
     model = get_setting("jev_model") or DEFAULT_MODEL
-    items = list(questions.items())
+    answered = _foregone(questions)
+    items = [(k, v) for k, v in questions.items() if k not in answered]
+    if not items:
+        return answered
     batches = [
         dict(items[i:i + MAX_QUESTIONS_PER_REQUEST])
         for i in range(0, len(items), MAX_QUESTIONS_PER_REQUEST)
     ]
     if len(batches) == 1:
-        return _post(prov, model, state, batches[0])
-    out = {}
+        return {**answered, **_post(prov, model, state, batches[0])}
+    out = dict(answered)
     with ThreadPoolExecutor(max_workers=len(batches)) as pool:
         # Each shard runs in a copy of THIS thread's context, taken here: the
         # call ledger is a ContextVar a worker does not inherit, and every
