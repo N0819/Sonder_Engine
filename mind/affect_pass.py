@@ -16,6 +16,16 @@ have it update the moods again post character actions."
 - **After the call** (`after_call`): the character's own speech, actions and
   held-back want are appraised; pride, shame, frustration, and whether the act
   eased or stoked the feeling, move the mood.
+- **What the beat made it feel is kept with its memories** (the owner,
+  2026-09-29: a memory's mood "should be a stored value made at memory
+  formation not one derived every turn"). The two passes' feelings ride to
+  commit by `FACETS` (`persisted`'s `formed`), and every memory minted this
+  beat keeps its layer's; a recalled memory brings back what it keeps, faded
+  by its age (`affect_mix.recalled`), where each one used to be asked three
+  questions on every beat it came back. The decision model reads a recalled
+  memory only when nothing is kept for it -- a row minted before memories
+  kept their feeling -- or its meaning changed since, and that reading is
+  kept too (`looks`).
 - `given_affect` renders the mood in the engine's `active_state.affect` shape
   -- the field commit's `affect.resolve_affect` reads -- so every reader of
   the character's affect now reads the engine's mood where it read the
@@ -53,6 +63,22 @@ BENEATH_FEELINGS = 2
 NOW_SHARE = 0.5
 #: How long an object may run in a feeling's label before it is cut.
 ABOUT_CHARS = 60
+#: Which of a beat's feelings each of its memories keeps (the owner,
+#: 2026-09-29: "the moods of the beat based on character perception and the
+#: pass based on how their actions make them feel"): a row of what the mind
+#: perceived -- the beat as it saw it, a line it heard, a conclusion it drew
+#: -- keeps what perception stirred, the row of its own acts what the
+#: after-call pass found those acts made it feel. The layer beneath -- what
+#: a recalled memory or a standing concern stirred -- is kept by neither:
+#: stored into every new memory, a recalled feeling would copy itself
+#: forward into the next and the next.
+FACETS = {"perceived": ("event",), "acted": ("act",)}
+
+
+def facet_of(row):
+    """Which of `FACETS` a memory row minted this beat keeps: its own acts
+    for a row about itself (`category` "self"), else what it perceived."""
+    return "acted" if str((row or {}).get("category") or "") == "self" else "perceived"
 
 
 @dataclass
@@ -69,6 +95,13 @@ class Felt:
     language: str | None = None
     asked: bool = False
     note: str = ""
+    #: What this beat made the mind feel, by `FACETS` layer, for the memories
+    #: commit mints: `{facet: {"felt", "strength", "at"}}`. A layer absent is
+    #: one no pass reached this beat, and its rows are read when recalled.
+    formed: dict = field(default_factory=dict)
+    #: Recalled memories read afresh this beat, by memory ref: `{"felt",
+    #: "strength", "at", "why"}` -- commit keeps each on its row.
+    looks: dict = field(default_factory=dict)
 
     def parts(self):
         """The surface and the undercurrent of what was felt."""
@@ -106,9 +139,18 @@ def carried(active, baseline, units, earlier=None):
 
 
 def persisted(felt):
-    """What the character's state keeps between calls."""
-    return {"mood_coords": {k: round(float(v), 4) for k, v in felt.mood.coords.items() if abs(float(v)) > 1e-4},
-            "mood_habits": felt.habits, "mood_clock": round(felt.clock, 4)}
+    """What the character's state keeps between calls -- the mood, each
+    memory's habituation, the psych clock -- and, for commit and for a later
+    round of this beat alone, what the beat made the mind feel (`formed`)
+    and which recalled memories were read afresh (`looks`). Commit copies
+    only the first three into the character's state."""
+    out = {"mood_coords": {k: round(float(v), 4) for k, v in felt.mood.coords.items() if abs(float(v)) > 1e-4},
+           "mood_habits": felt.habits, "mood_clock": round(felt.clock, 4)}
+    if felt.formed:
+        out["formed"] = felt.formed
+    if felt.looks:
+        out["looks"] = felt.looks
+    return out
 
 
 # --- what the decision model reads: this character's own payload only ----------
@@ -157,8 +199,15 @@ def memories_from(memory_context):
     the memories nearest to what the mind is feeling -- were never appraised
     and 16 of a 24-row pick were never felt. The payload lists the recalled
     rows oldest first; `_internal.recalled_by_grade` is the pick's own order
-    (`mind/memory_jev.py`). A row delivered in both lanes is felt once."""
+    (`mind/memory_jev.py`). A row delivered in both lanes is felt once.
+
+    Each carries what its row keeps of what its moment made the mind feel
+    (`feelings`, None when nothing is kept) and the turn the mind last
+    re-read it on (`disputed_turn`), from the packet's host-only registry
+    (`_internal.feelings`, `mind/memory_context.py`) -- never from the
+    projection the character reads."""
     context = memory_context or {}
+    kept = (context.get("_internal") or {}).get("feelings") or {}
     rows = [m for m in context.get("recalled_old_memories") or [] if isinstance(m, dict)]
     order = (context.get("_internal") or {}).get("recalled_by_grade") or []
     if order:
@@ -179,8 +228,49 @@ def memories_from(memory_context):
             # `keyed` gates habituation: a row with no stable key is named by
             # its place in this packet, and a place is not a memory -- keying
             # habits by it would tire whichever row lands there next.
-            out.append({"ref": key or f"m{i}", "keyed": bool(key), "text": _text(text)})
+            entry = (kept.get(key) or {}) if key else {}
+            out.append({"ref": key or f"m{i}", "keyed": bool(key), "text": _text(text),
+                        "feelings": entry.get("record"), "disputed_turn": entry.get("disputed_turn")})
     return out
+
+
+def _latest(kept):
+    """What a memory keeps of its feeling now: its latest reading, else what
+    its moment made the mind feel, else None."""
+    kept = kept or {}
+    looks = [x for x in kept.get("looks") or [] if isinstance(x, dict)]
+    if looks:
+        return looks[-1]
+    return kept.get("moment") if isinstance(kept.get("moment"), dict) else None
+
+
+def why_read(memory, looks=None):
+    """Why a recalled memory must be read by the decision model now, or None
+    when what it keeps stands: "unfelt" when nothing is kept (a row minted
+    before memories kept their feeling, or on a beat whose passes did not
+    reach this mind, or with no stable key to keep it by), "reread" when the
+    mind re-read the memory after what it keeps was found -- a changed
+    meaning is a changed feeling. A row already read this beat, in an earlier
+    round (`looks`), is not read twice."""
+    if memory["ref"] in (looks or {}):
+        return None
+    latest = _latest(memory.get("feelings"))
+    if latest is None:
+        return "unfelt"
+    disputed = memory.get("disputed_turn")
+    try:
+        # AT OR AFTER, not after: on one beat the memory is read before the
+        # call and a re-reading is recorded at its commit, so a dispute
+        # stamped with the turn of the latest reading came after it. (A row
+        # cannot be re-read on the beat that minted it -- recall never
+        # reaches its own turn -- so a moment is never caught by the tie.)
+        if disputed is not None and int(disputed) >= int(latest.get("turn")):
+            return "reread"
+    except (TypeError, ValueError):
+        # A kept feeling with no turn of its own (carried in from another
+        # story) predates every re-reading in this one.
+        return "reread" if disputed is not None else None
+    return None
 
 
 def concerns_from(active):
@@ -267,14 +357,22 @@ def before_call(name, sheet, active, baseline, units, observations=(), memory_co
     memories = memories_from(memory_context)
     concerns = concerns_from(active)
     people = people_from(relationships)
-    felt = Felt(mood=mood, home=home, habits=habits, clock=clock, people=people, language=language)
+    # An earlier round of this beat hands on what the beat has made the mind
+    # feel so far and the memories it already read: one beat, one moment.
+    prior = earlier if isinstance(earlier, dict) else {}
+    felt = Felt(mood=mood, home=home, habits=habits, clock=clock, people=people, language=language,
+                formed={k: v for k, v in (prior.get("formed") or {}).items() if isinstance(v, dict)},
+                looks={k: v for k, v in (prior.get("looks") or {}).items() if isinstance(v, dict)})
     felt.state_text = state_text(name, sheet, events, people, memories, concerns, mood_words(felt, language))
     if not (events or memories or concerns):
         felt.note = "nothing new to appraise"
         return felt
+    # Only the memories whose kept feeling does not stand are asked about:
+    # every other one brings back what it keeps (`_recall`).
+    reasons = {m["ref"]: why_read(m, felt.looks) for m in memories}
     try:
-        out = appraisal.appraise(felt.state_text, events, memories=memories, mood=True, language=language,
-                                 concerns=concerns)
+        out = appraisal.appraise(felt.state_text, events, memories=[m for m in memories if reasons[m["ref"]]],
+                                 mood=True, language=language, concerns=concerns)
     except Exception as exc:  # noqa: BLE001 -- the pass fails open; the turn never does
         felt.note = f"the decision model could not be asked ({type(exc).__name__}: {str(exc)[:120]})"
         return felt
@@ -282,21 +380,91 @@ def before_call(name, sheet, active, baseline, units, observations=(), memory_co
     for e in events:
         emotions += mix.emotions_from_appraisal(out["events"].get(e["ref"]) or {}, ref=e["ref"],
                                                 about=_text(e["text"], ABOUT_CHARS))
+    felt.formed["perceived"] = mix.merge_formed(
+        felt.formed.get("perceived"), {**mix.formed(emotions, FACETS["perceived"]), "at": round(felt.clock, 4)})
     for c in concerns:
         a = out["concerns"].get(c["ref"]) or {}
         emotions += mix.concern_emotions(a, a.get("weight"), ref=c["ref"], about=_text(c["text"], ABOUT_CHARS))
-    for m in memories:
-        a = out["memories"].get(m["ref"]) or {}
-        multiplier = 1.0
-        if m.get("keyed", True):
-            multiplier, felt.habits = mix.recall_lands(felt.habits, m["ref"], felt.clock)
-        emotions += mix.memory_emotions(a.get("strength"), a.get("tone"), a.get("kinds"), ref=m["ref"],
-                                        about=_text(m["text"], ABOUT_CHARS), multiplier=multiplier)
+    emotions += _recall(felt, memories, reasons, out)
     felt.mood, _targets = mix.mix(felt.mood, home, emotions, 0.0)
     felt.mood = mix.settle(felt.mood, {**(out.get("spectrums") or {}), **(out.get("moods") or {})})
     felt.emotions = emotions
     felt.asked = True
     return felt
+
+
+def _recall(felt, memories, reasons, out):
+    """What each recalled memory brings back this call: what it keeps
+    (`affect_mix.recalled`), faded by its age on this mind's psych clock and
+    dulled by its habituation -- or, for one `why_read` sent to the decision
+    model, the answer, kept in `felt.looks` for commit to store on the row.
+
+    ONE MOMENT, FELT ONCE. The rows one beat minted -- the beat as the mind
+    saw it, a line it heard there, a conclusion it drew -- keep one feeling
+    between them (`FACETS`); two of them recalled together bring that
+    feeling back once, not twice. Each row still lands for habituation: each
+    was recalled."""
+    emotions, moments = [], set()
+    for m in memories:
+        multiplier = 1.0
+        if m.get("keyed", True):
+            multiplier, felt.habits = mix.recall_lands(felt.habits, m["ref"], felt.clock)
+        why = reasons.get(m["ref"])
+        if why:
+            a = out["memories"].get(m["ref"]) or {}
+            if a.get("strength") is None:  # unanswered: nothing felt, nothing kept
+                continue
+            record = {**mix.looked(a.get("strength"), a.get("tone"), a.get("kinds")),
+                      "at": round(felt.clock, 4), "why": why}
+            if m.get("keyed", True):
+                felt.looks[m["ref"]] = record
+        else:
+            record = felt.looks.get(m["ref"]) or _latest(m.get("feelings")) or {}
+            moment = str(record.get("key") or "") or m["ref"]
+            if moment in moments:
+                continue
+            moments.add(moment)
+        at = record.get("at")
+        age = felt.clock - float(at) if isinstance(at, (int, float)) and not isinstance(at, bool) else None
+        emotions += mix.recalled(record, age, ref=m["ref"], about=_text(m["text"], ABOUT_CHARS),
+                                 multiplier=multiplier)
+    return emotions
+
+
+def _delivered_rows(memory_context):
+    """Every memory row a packet hands the mind: the recalled and recent
+    lanes, a deliberate recall's additional episodes, and what resurfaced
+    unbidden (`mind/memory_context.py`)."""
+    context = memory_context or {}
+    rows = list(context.get("recalled_old_memories") or []) + list(context.get("recent_memories") or [])
+    rows += list((context.get("deliberate_recall") or {}).get("additional_episodes") or [])
+    rows += list((context.get("resurfaced_without_asking") or {}).get("episodes") or [])
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def name_memories(memory_context, felt=None):
+    """Hand each delivered memory the NAME of what it keeps, and nothing else
+    of it: its strongest kept feeling in the pack's words, under
+    `how_it_feels` (the owner, 2026-09-29: "We should keep the spectrum
+    values so we can do math with them but only the code derived memory name
+    should be exposed to the character"). The numbers -- intensities,
+    strength, coordinates -- stay the engine's. A row read afresh this call
+    is named by that reading (`felt.looks`); one that keeps nothing and was
+    not read is named nothing. Run after `before_call`, while the packet
+    still carries its host-only registry."""
+    registry = ((memory_context or {}).get("_internal") or {}).get("feelings") or {}
+    looks = felt.looks if felt is not None else {}
+    language = felt.language if felt is not None else None
+    for row in _delivered_rows(memory_context):
+        # the key `memories_from` reads a row by, so a row is named by the
+        # reading it was felt by
+        ref = str(row.get("event_key") or row.get("memory_ref") or "")
+        if not ref:
+            continue
+        record = looks.get(ref) or _latest((registry.get(ref) or {}).get("record"))
+        name = mix.named(record)
+        if name:
+            row["how_it_feels"] = _word(name, language)
 
 
 def acts_from(reply):
@@ -336,6 +504,8 @@ def after_call(felt, reply):
         own += mix.emotions_from_act(got, ref=a["ref"], about=_text(a["text"], ABOUT_CHARS))
         if got.get("eased_or_stoked") is not None:
             eases.append(got["eased_or_stoked"])
+    felt.formed["acted"] = mix.merge_formed(
+        felt.formed.get("acted"), {**mix.formed(own, FACETS["acted"]), "at": round(felt.clock, 4)})
     felt.mood, _targets = mix.mix(felt.mood, felt.home, own, 0.0)
     if eases:
         felt.mood = mix.ease(felt.mood, felt.home, sum(eases) / len(eases))

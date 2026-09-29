@@ -88,7 +88,7 @@ def _compact(context):
             key: row.get(key) for key in (
                 "memory_ref", "temporal_status", "memory_form", "when",
                 "epistemic_origin", "gist", "details", "confidence",
-                "felt_importance", "affect_before", "affect_after_encoding")
+                "felt_importance", "how_it_feels")
             if row.get(key) not in (None, "", [])
         } for row in (context.get(field) or [])[:16]]
     for field in ("autobiographical_summary", "earlier_in_my_life",

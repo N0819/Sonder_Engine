@@ -401,6 +401,117 @@ def test_habituation_is_per_memory():
     assert other == [1.0]
 
 
+# --- a memory keeps what its moment made the character feel ------------------------
+#
+# The owner, 2026-09-29: a memory's mood "should be a stored value made at
+# memory formation not one derived every turn"; "the decay should be slowish
+# and it should never go to zero", "because humans can reminisce a memory
+# years ago with fondness".
+
+def test_a_kept_feeling_fades_slowly_and_never_to_nothing():
+    half, floor = mix.MEMORY_FADE_HALF_LIFE, mix.MEMORY_FADE_FLOOR
+    ages = [0.0, half / 10, half, 4 * half, 50 * half, 1e12]
+    fades = [mix.memory_fade(a) for a in ages]
+    assert fades[0] == pytest.approx(1.0)
+    assert fades == sorted(fades, reverse=True) and fades[1] > fades[2]
+    assert fades[2] == pytest.approx(floor + (1.0 - floor) / 2)
+    assert fades[-1] == pytest.approx(floor) and floor > 0.0
+    # slowish: the mood's own half-life passes with next to nothing lost
+    assert mix.memory_fade(mix.SPECTRUM_HALF_LIFE) > 0.99
+
+
+def test_an_age_that_cannot_be_read_is_as_far_back_as_a_memory_goes():
+    assert mix.memory_fade(None) == pytest.approx(mix.MEMORY_FADE_FLOOR)
+    assert mix.memory_fade("soon") == pytest.approx(mix.MEMORY_FADE_FLOOR)
+    assert mix.memory_fade(-5.0) == pytest.approx(1.0)
+
+
+def test_a_moment_keeps_its_feelings_by_name_and_its_strongest_item():
+    emotions = [Emotion("dread", 0.4, source="event", ref="e1"),
+                Emotion("sadness", 0.3, source="event", ref="e1"),
+                Emotion("dread", 0.5, source="event", ref="e2"),
+                Emotion("pride", 0.6, source="act", ref="s0"),
+                Emotion("nostalgia", 0.9, source="memory", ref="m1"),
+                Emotion("anger", 0.8, source="concern", ref="c0")]
+    perceived = mix.formed(emotions, ("event",))
+    assert set(perceived["felt"]) == {"dread", "sadness"}
+    assert perceived["felt"]["dread"] == pytest.approx(1 - 0.6 * 0.5)
+    # the item that stirred most as a whole: e1's 0.4 + 0.3
+    assert perceived["strength"] == pytest.approx(0.7)
+    acted = mix.formed(emotions, ("act",))
+    assert acted["felt"] == {"pride": 0.6} and acted["strength"] == 0.6
+    # appraised and stirred nothing is an answer, kept as one
+    assert mix.formed([], ("event",)) == {"felt": {}, "strength": 0.0, "coords": {}}
+
+
+def test_a_kept_feeling_keeps_its_place_in_the_moods_coordinates():
+    """The owner, 2026-09-29: "We should keep the spectrum values so we can do
+    math with them but only the code derived memory name should be exposed to
+    the character." A kept feeling carries where it sits on the spectrums and
+    standalone moods -- each coordinate its feelings move, how far and which
+    way -- exactly where `targets` would push the mood toward."""
+    kept = mix.formed([Emotion("dread", 0.6, source="event", ref="e1")], ("event",))
+    coords = kept["coords"]
+    effects = mix.EMOTION_EFFECTS["dread"]
+    assert set(coords) == {c for c, v in effects.items() if abs(0.6 * v) >= mix.FORMED_MIN}
+    for coordinate, value in coords.items():
+        assert value == pytest.approx(0.6 * effects[coordinate], abs=1e-4)
+    assert coords["dread"] > 0 and coords["pleasure"] < 0
+    # a reading kept later carries them too
+    assert mix.looked(0.8, -0.5, {"grief": 1.0})["coords"]["grief"] == pytest.approx(0.8)
+
+
+def test_a_kept_feeling_is_named_by_its_strongest_feeling_and_nothing_else():
+    assert mix.named({"felt": {"dread": 0.3, "tenderness": 0.5}}) == "tenderness"
+    assert mix.named({"felt": {}}) is None and mix.named(None) is None
+    assert mix.named({"felt": {"not a feeling": 0.9, "grief": 0.2}}) == "grief"
+
+
+def test_a_moment_keeps_only_its_strongest_feelings():
+    many = [Emotion(n, 0.05 + i / 100, source="event", ref=f"e{i}")
+            for i, n in enumerate(mix.STANDALONE[:12])] + [Emotion("joy", 0.01, source="event", ref="x")]
+    kept = mix.formed(many, ("event",))["felt"]
+    assert len(kept) == mix.FORMED_FEELINGS and "joy" not in kept
+    assert min(kept.values()) >= mix.FORMED_MIN
+
+
+def test_two_rounds_of_one_beat_are_one_moment():
+    first = {"felt": {"dread": 0.4}, "strength": 0.4, "at": 3.0}
+    then = {"felt": {"dread": 0.5, "relief": 0.2}, "strength": 0.6, "at": 3.0}
+    merged = mix.merge_formed(first, then)
+    assert merged["felt"]["dread"] == pytest.approx(1 - 0.6 * 0.5)
+    assert merged["felt"]["relief"] == pytest.approx(0.2) and merged["strength"] == pytest.approx(0.6)
+    assert merged["coords"] == mix.formed([Emotion(n, v) for n, v in merged["felt"].items()],
+                                          ("event",))["coords"]
+    assert mix.merge_formed(None, then) == then and mix.merge_formed(first, None) == first
+
+
+def test_a_kept_reading_brought_back_at_once_is_what_asking_gave():
+    """A row read by the decision model keeps the answer (`looked`); brought
+    back with no time passed it delivers exactly what the three questions
+    delivered -- the same feelings, intensities and pull on the mood."""
+    kinds = {"nostalgia": 0.6, "grief": 0.1, "none": 0.3}
+    asked = mix.memory_emotions(0.8, 0.5, kinds, ref="m1", about="the lake", multiplier=0.7)
+    kept = mix.recalled(mix.looked(0.8, 0.5, kinds), 0.0, ref="m1", about="the lake", multiplier=0.7)
+
+    def by_name(emotions):
+        return {e.name: (e.intensity, e.mood_weight, e.source, e.ref, e.about) for e in emotions}
+
+    assert by_name(kept) == by_name(asked) and len(kept) == len(asked) == 3
+
+
+def test_an_old_memory_is_still_felt_faintly_and_barely_moves_the_mood():
+    record = {"felt": {"tenderness": 0.8}, "strength": 0.8}
+    fresh = mix.recalled(record, 0.0)[0]
+    old = mix.recalled(record, 1e12)[0]
+    assert old.intensity == pytest.approx(0.8 * mix.MEMORY_FADE_FLOOR) and old.intensity > 0
+    assert old.source == "memory" and old.intensity < fresh.intensity
+    # the pull is curved by the FADED strength: an old memory's feeling is
+    # named, and barely moves the mood
+    assert old.mood_weight == pytest.approx((0.8 * mix.MEMORY_FADE_FLOOR) ** (mix.MEMORY_MOOD_CURVE - 1))
+    assert old.mood_weight < fresh.mood_weight
+
+
 # --- names ---------------------------------------------------------------------------
 
 def test_the_profile_names_the_most_salient_parts_first():

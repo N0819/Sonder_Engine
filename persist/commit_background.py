@@ -4754,7 +4754,7 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
                        "content", "gist", "key_phrases", "entities",
                        "location", "emotional_context", "valence",
                        "arousal", "encoding_valence", "encoding_arousal",
-                       "confidence", "importance", "disputed"}
+                       "confidence", "importance", "disputed", "feelings"}
         }
         memory_rows.append({
             "chat_id": cid, "char_id": char_id, "turn_id": None,

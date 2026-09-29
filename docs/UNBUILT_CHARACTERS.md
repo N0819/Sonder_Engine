@@ -1345,9 +1345,14 @@ harbourmaster's shed...)"); naming the combinations the coverage table lists.
 The memory packet LANDED 2026-09-27 (`mind/memory_jev.py`: a net of 100 by
 equal-weight RRF over the thirteen lanes the engine can compute, then Jev's
 two graded questions, best 24; replayed live on three research beats at the
-research packet's quality, `docs/guides/MEMORY.md` §5). Still open from it:
-the moment tag written at commit (a schema change, the owner's) -- which the
-memory-born moods wait on, and whose lanes the net lacks; the 48-row packet
+research packet's quality, `docs/guides/MEMORY.md` §5). The moment tag
+LANDED 2026-09-29 as what the beat's own passes found, kept on each memory
+(`memories.feelings`; `DESIGN_JEV_CHARACTER_PASS.md`, "A memory keeps what
+its moment made the mind feel"). Still open from it: the net's lanes that
+would read that tag (they read `encoding_valence`, the whole mood); how
+nostalgia -- which can grow from a moment that felt bad -- arises from a kept
+feeling (proposed: a one-time looking back as a memory ages, the owner's
+call); the 48-row packet
 (measured affordable on relevance, the conduct replay not run); the fun
 sections; a ponder answered by Jev over the whole bank; same-beat recall. The
 note's remaining owner decisions are the list. Measured in

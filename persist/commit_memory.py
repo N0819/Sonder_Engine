@@ -12,6 +12,7 @@ import json, re
 from core.db import wget, get_setting
 from mind.memory import prepare_memories_batch, _is_empty_view
 from mind import affect
+from mind import affect_pass
 from mind import psychology_runtime
 from story.character_schema import (character_name, character_name_from_text,
                               character_psychology, character_interoception,
@@ -705,6 +706,7 @@ def prepare_memory_commit(ctx, *, scene=None):
     witnessed_signals = []
     belief_reconciles = []
     memory_disputes = []
+    memory_looks = []
     importance_bumps = []
     recall_accesses = []
     _clock = wget(
@@ -2125,10 +2127,34 @@ def prepare_memory_commit(ctx, *, scene=None):
         # affect carried into the event (valence/arousal) and the resolved
         # affect after appraisal (encoding_*).  Assign here, after every
         # possible append including inference memories.
+        #
+        # AND WHAT THE BEAT MADE IT FEEL (the owner, 2026-09-29: a memory's
+        # mood "should be a stored value made at memory formation not one
+        # derived every turn"). The affect pass hands its two layers on
+        # `_affect_pass.formed` (`mind/affect_pass.py`, FACETS): a row of what
+        # this mind perceived keeps what perception stirred, the row of its
+        # own acts what those acts made it feel. A layer no pass reached this
+        # beat leaves its rows empty, and the pass reads each once, the first
+        # time it is recalled. `key` names the moment, so the rows of one
+        # beat's layer bring its feeling back once between them.
+        _felt_pass = own_result.get("_affect_pass") or {}
+        _formed = _felt_pass.get("formed") if isinstance(_felt_pass.get("formed"), dict) else {}
         for _memory in pending_memories:
             if _memory.get("char_id") == ccid:
                 _memory["encoding_valence"] = _encoding_valence
                 _memory["encoding_arousal"] = _encoding_arousal
+                _facet = affect_pass.facet_of(_memory)
+                _layer = _formed.get(_facet)
+                if isinstance(_layer, dict) and not _memory.get("feelings"):
+                    _memory["feelings"] = {"moment": {**_layer, "turn": turn.idx,
+                                                      "key": f"{turn.idx}:{_facet}"}}
+        # Recalled memories this mind read afresh this beat -- they kept
+        # nothing, or it re-read them since -- keep that reading from now on
+        # (`record_memory_look`, in the write phase with the disputes).
+        _looks = _felt_pass.get("looks") if isinstance(_felt_pass.get("looks"), dict) else {}
+        for _ref, _look in _looks.items():
+            if isinstance(_look, dict) and str(_ref or "").strip():
+                memory_looks.append((cid, ccid, str(_ref), {**_look, "turn": turn.idx}))
         state_updates.append((cid, ccid, json.dumps(st)))
 
     event_content = json.dumps({
@@ -2172,6 +2198,7 @@ def prepare_memory_commit(ctx, *, scene=None):
         "witnessed_signals": witnessed_signals,
         "belief_reconciles": belief_reconciles,
         "memory_disputes": memory_disputes,
+        "memory_looks": memory_looks,
         "importance_bumps": importance_bumps,
         "recall_accesses": recall_accesses,
         "event_content": event_content,

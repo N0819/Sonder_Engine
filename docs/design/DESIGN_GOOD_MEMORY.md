@@ -125,7 +125,8 @@ mood repair (Josephson, Singer and Salovey, 1996) -- less so when depressed.
 character's state: under stress a vulnerable mind's packet leans congruent, a
 steady one's reaches for repair. Derived from stress and the sheet already
 filled, not a new card field -- an empty card field fails silently. Needs the
-moment tag (the Jev note's decision 5).
+moment tag (the Jev note's decision 5) -- kept on every memory since
+2026-09-29 (`memories.feelings`), not yet read by any lane.
 
 ### 7. What surprised them stays sharp
 
@@ -210,6 +211,7 @@ does not reopen it; a ponder is better served by Jev reading the whole bank.
    points, and the conduct replay decides the size.
 2. **Activation (3)** -- arithmetic on stored columns; may retire three lanes.
 3. **The moment tag**, which feeds mood-aware recall (6) and unbidden cues (5).
+   Stored since 2026-09-29 (`memories.feelings`); the lanes are what is left.
 4. **Dossiers (9)**, once identity is resolved at ingest.
 
 Retrieval-side features are scored as lanes in `tools/jev_net_labels.py fit`

@@ -7,8 +7,10 @@ bare contract is built and, since 2026-09-27, the only character contract
 card's bookkeeping asked for -- the full card and its kernel compiler are
 deleted; the
 memory packet LANDED 2026-09-27 as `mind/memory_jev.py` -- the measured shape
-at equal lane weights, without the moment tag (a schema change still the
-owner's) and at 24 rows (48 still the owner's, after the conduct replay);
+at equal lane weights, without the moment tag (decided 2026-09-29 as the
+beat's own feelings, stored on each memory and read by the affect pass --
+"A memory keeps what its moment made the mind feel" below -- but no lane of
+the net reads it yet) and at 24 rows (48 still the owner's, after the conduct replay);
 `docs/guides/MEMORY.md` §5. The survey numbers come
 from four read-only surveys of the code and of `engine.db`
 (`llm_capture`/`llm_blobs`, `variants._engine_notes`) over the ten days to
@@ -267,10 +269,13 @@ Jev job" on.
    Against two blind readers the rules named an event's feeling at chance,
    and the direct question named it nearly as well as the readers named it
    for each other (the evidence doc, "Round seven"); the rules are retired.
-4. Memory-evoked feeling: for the packet's charged rows, does recalling this
-   stir something now? The moment tag gives the direction; Jev whether it
-   lands. Recalling a feeling brings part of it back (autobiographical
-   recall is a standard mood induction), weaker than it was lived.
+4. Memory-evoked feeling: a recalled memory brings back what its moment made
+   the character feel, kept with it when it formed and faded by its age --
+   slowly, never to nothing (recalling a feeling brings part of it back:
+   autobiographical recall is a standard mood induction). Built that way
+   2026-09-29 ("A memory keeps what its moment made the mind feel", below);
+   until then each recalled row was asked three questions on every beat it
+   came back.
 5. Code moves the mood: event emotions at full weight, memory-evoked ones at
    a fraction; decay toward temperament in psych units (story minutes where
    the clock runs, turns where it does not), the unit every affect decay
@@ -358,10 +363,13 @@ call by `mind/affect_pass.py`.
 - **The layer beneath.** The present -- a perceived event, the character's
   own act -- is the surface; the past and the unsettled -- a recalled memory,
   a standing concern -- are beneath (the owner: some moods "may be purely
-  memory related ... or their undercurrents at least"). A memory stirs the
-  standalone moods named for it ("which of these does recalling it stir
-  most"), the share none of them covers a plain pleasant or unpleasant
-  feeling by its tone, all of it dulled by habituation. A concern is named
+  memory related ... or their undercurrents at least"). A memory brings back
+  the feelings its moment stirred, kept when it formed, faded by its age
+  toward a floor and dulled by habituation; one that keeps nothing -- minted
+  before memories kept their feeling -- or that the mind re-read since is
+  read once instead: the standalone moods named for it ("which of these
+  does recalling it stir most"), the share none of them covers a plain
+  pleasant or unpleasant feeling by its tone, and that reading is kept. A concern is named
   like an event, scaled by "in this moment, how much does this crowd out
   everything else?", and does not push the surface (`CONCERN_WEIGHT = 0`).
 - **Names.** Mehrabian's eight octants (exuberant, relaxed, dependent,
@@ -373,7 +381,8 @@ call by `mind/affect_pass.py`.
 
 Knobs, all the owner's, none tuned: reactivity, half-life, negativity weight,
 negative decay factor, memory weight, concern weight, the undercurrent's
-floor, and habituation's step, grace, ceiling and half-life. The card's
+floor, habituation's step, grace, ceiling and half-life, and a kept memory
+feeling's fade half-life and floor. The card's
 `stress_profile` can set reactivity and half-life per character once the
 defaults are chosen. Every value in `EMOTION_EFFECTS` is the owner's too.
 
@@ -874,6 +883,93 @@ traced calls, the block names the most stirring event first on 27 of 27
 (8 before); the `now` list still adds what else pulls at once by single
 feeling, one per kind.
 
+**A memory keeps what its moment made the mind feel -- 2026-09-29.** The
+owner: "i'm thinking of memory mood completely wrong, it should be a stored
+value made at memory formation not one derived every turn"; "instead of
+computing the mood each memory invokes, we use the moods of the beat based
+on character perception and the pass based on how their actions make them
+feel and store those. the decay should be slowish and it should never go to
+zero", "because humans can reminisce a memory years ago with fondness".
+
+What it replaced: every memory the payload carried -- the 30 recalled and
+the recent turns, about 69 in the owner's chats -- was asked three questions
+on every beat it came back (how strongly recalling it stirs you now, pleasant
+or not, which of forty moods), from a one-line summary of it. On the two
+played beats in the self-hosted decision model's request log (the r2 run of
+2026-09-28) they were 162 of s27 beat 89's 218 before-call questions (54
+memories) and 48 of s113 beat 104's 118; replayed on the tuned Winnow-12B the
+pass took 75.6 s and 27.2 s of decision-model time with them and 10.5 s and
+13.6 s without -- each quotes a whole memory over a long state, the costliest
+question the pass asked. On the synthetic decision test set built the same
+day they were also its least reliable, matching their labels 50-54% of the
+time against 73% overall.
+
+Built (`mind/affect_pass.py`, `mind/affect_mix.py`; the `memories.feelings`
+column, schema v42):
+
+- **Formed from the beat.** The before-call pass's event feelings -- what
+  perception stirred -- and the after-call pass's act feelings -- what the
+  mind's own acts made it feel -- by name, with the moment's strength: the
+  item that stirred most as a whole. A row of what the mind perceived (the
+  episode, a line heard, a conclusion drawn) keeps the first, the row of its
+  own acts the second (`FACETS`). The layer beneath -- what a recalled
+  memory or a concern stirred -- is kept by neither: stored into every new
+  memory, a recalled feeling would copy itself forward without end. The
+  rounds of one beat are one moment.
+- **Brought back, fading slowly, never to nothing.** A recalled memory's
+  kept feelings fade by its age on the mind's psych clock: a floor
+  (`MEMORY_FADE_FLOOR`, 0.3) is never lost and the rest halves every
+  `MEMORY_FADE_HALF_LIFE` (a week of story time; a unit a turn where no clock
+  runs) -- 0.93 after a day, 0.65 after a week, 0.35 after a month, the floor
+  after a year. Habituation dulls it as before, and its pull on the mood is
+  curved by the faded strength (`MEMORY_MOOD_CURVE`), so an old memory is
+  still felt, faintly, and barely moves the mood unless it was intense. Rows
+  of one moment recalled together bring its feeling back once.
+- **Read once, then kept.** A row that keeps nothing -- minted before v42, or
+  on a beat no pass reached (the opening, a mind not called) -- and one the
+  mind re-read (`disputed`) since what it keeps was found are asked the old
+  three questions once; the answer is kept beside the moment, never over it
+  (`record_memory_look`), and brought back at once it is exactly what asking
+  gave (`tests/test_affect_mix.py`). An existing bank thins its questions out
+  row by row as it is recalled.
+- **The numbers are the code's; the mind gets a name.** The owner: "We should
+  keep the spectrum values so we can do math with them but only the code
+  derived memory name should be exposed to the character." A kept feeling
+  carries its place in the mood's coordinates (`coords`: each spectrum and
+  standalone mood its feelings move, how far and which way -- where
+  `targets` would push the mood) beside the named feelings and strength. A
+  delivered memory row no longer carries the mood it was formed in as
+  numbers (`affect_before`: a label, valence and arousal; `affect_after_encoding`);
+  it carries one word, `how_it_feels` -- its strongest kept feeling in the
+  pack's words, named by the affect pass after it runs, so a row read afresh
+  that call is named by that reading (`affect_pass.name_memories`). The
+  columns stay written for the engine's recall lanes.
+- **Carried like `disputed`.** Checkpoints, branches and archives carry the
+  column verbatim; a bank imported into another story keeps what was felt
+  but not its readings of the old story's clocks, and such a feeling reads
+  as long ago (`tests/test_memory_feelings.py`).
+
+Still open:
+
+- **Nostalgia.** The three questions were where the moods whose object is the
+  past came from -- nostalgia, grief, regret, longing. A kept feeling is what
+  the moment felt like, so those now come only from a row being read (never
+  kept, or re-read) or from a moment that itself stirred them. And the owner:
+  "even negative memories in the moment can become nostalgic" -- so nostalgia
+  cannot be a rule on a kept feeling's sign. Proposed: a one-time looking back
+  when a memory first returns after it has aged past a stage (a day, a week, a
+  month, a year of story time), asked with what the moment felt like, the
+  answer kept as a reading. The owner's call.
+- **The net's lanes.** `mind/memory_jev.py`'s feeling lanes still read
+  `encoding_valence`, the whole mood at encoding; the kept feeling is the
+  lane the research wanted.
+- **Fading affect bias.** Unpleasant memories fade faster than pleasant ones
+  (Walker, Skowronski and Thompson, 2003); the fade is symmetric, as the
+  owner set the mood's negativity knobs neutral.
+- **A clock that barely moves.** A played scene's clock tops out around three
+  minutes (`mind/memory_time.py`), so within a scene nothing fades; a memory
+  ages with story time -- a skip, a night -- not with the turn count.
+
 **Increment 2 -- asked of the owner first:** the appraisal object
 (`goal_impacts`, `somatic_impact`, `memory_modulation`), stress `coping_mode`
 and `hedonic.released` feed stress, drive strain and pain and pleasure; each
@@ -1222,6 +1318,13 @@ and registered: what `do` says is what observers get (UNBUILT §6.17).
    post-pass.
 5. **The moment tag.** A new stored field on every memory, written by Jev at
    commit (one question a row), with backfill for existing banks.
+   **Decided 2026-09-29, and not as proposed** (the owner: "instead of
+   computing the mood each memory invokes, we use the moods of the beat
+   based on character perception and the pass based on how their actions
+   make them feel and store those"): the field is written from the affect
+   pass's own answers, so no question is added at commit, and an existing
+   bank is read one row at a time, the first time each is recalled, instead
+   of backfilled ("A memory keeps what its moment made the mind feel").
 6. **Which fun sections ship.** `callback` and `sore` are ready; `irony` and
    `tease` are not. A section title is an affordance -- "good teasing material"
    invites teasing -- so each would be capped at two or three rows and judged

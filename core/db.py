@@ -253,7 +253,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 41
+SCHEMA_VERSION = 42
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -820,7 +820,20 @@ CREATE TABLE IF NOT EXISTS memories(
     -- (prestory seeds, imported banks, a character's history carried in from
     -- another story) have no clock to have been read, and every reader falls
     -- back to qualitative phrasing for them.
-    encoded_at_seconds REAL
+    encoded_at_seconds REAL,
+    -- What this moment made the character FEEL, kept with the memory
+    -- (`mind/affect_mix.py`, "memory feelings"). The owner, 2026-09-29: a
+    -- memory's mood "should be a stored value made at memory formation not
+    -- one derived every turn". JSON: {"moment": {"felt": {feeling: 0-1},
+    -- "strength", "at", "turn", "key"}, "looks": [{...}]} -- `moment` is
+    -- what the beat's own passes found when the row was minted, `looks` any
+    -- later one-time reading (a row minted before this column, or one whose
+    -- meaning changed since). '' when nothing has been kept yet.
+    --
+    -- A column rather than a side table for the reason `disputed` is one:
+    -- checkpoint restore is delete-and-reinsert, and a value on the row rides
+    -- the dump/restore round trip verbatim.
+    feelings TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_memories_chat_char ON memories(chat_id, char_id);
 
@@ -2075,6 +2088,21 @@ END""",
         # the story's record of what it did, and stays.
         "UPDATE scheduled_events SET status='history' WHERE status='pending' "
         "AND kind='consequence' AND seed LIKE 'charter:%:presim'",
+    ],
+    # v41 -> v42
+    [
+        # A memory keeps what its moment made the character feel (see the
+        # column in SCHEMA). Until now a recalled memory's feeling was asked
+        # of the decision model on every beat it came back -- three questions
+        # a row, about 69 rows a beat in the owner's chats -- from a one-line
+        # summary, never from the moment itself. EXISTING ROWS ARE LEFT '':
+        # nothing recorded what they felt like, and the affect pass reads
+        # such a row once, the first time it is recalled, and keeps that
+        # reading (`affect_pass.before_call`). A guessed backfill from the
+        # stored mood would be the wrong fact: `emotional_context` and
+        # `encoding_*` are the character's whole mood that beat, not what
+        # this moment stirred.
+        "ALTER TABLE memories ADD COLUMN feelings TEXT NOT NULL DEFAULT ''",
     ],
 ]
 

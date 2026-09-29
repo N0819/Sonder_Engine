@@ -17,7 +17,7 @@ from mind.memory_common import (
     _summary_retrieval_text, _vec, surviving_character_ids,
 )
 from mind.memory_write import (
-    _delete_memory_fts, _json_list, _upsert_memory, add_memories_batch,
+    _delete_memory_fts, _feelings_of, _json_list, _upsert_memory, add_memories_batch,
     prepare_memories_batch, prepare_memory,
 )
 from mind.memory_summaries import save_memory_summary
@@ -232,7 +232,7 @@ _DUMP_COLUMNS = (
     "salience, content, gist, key_phrases, entities, location, "
     "emotional_context, valence, arousal, confidence, encoding_valence, "
     "encoding_arousal, archived, event_key, importance, disputed, "
-    "encoded_at_seconds, access_count, last_accessed, last_accessed_turn, "
+    "encoded_at_seconds, feelings, access_count, last_accessed, last_accessed_turn, "
     "vkey, embedding_model, embedding_dim"
 )
 
@@ -332,6 +332,10 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
          # current clock divided by the current turn count happens to say,
          # which is the moving denominator this column exists to escape.
          "encoded_at_seconds": r["encoded_at_seconds"],
+         # What the moment made the character feel, and any later reading
+         # of it. Not re-derivable: the passes that found it ran on the
+         # beat's own perception and acts, which a rollback does not replay.
+         "feelings": r["feelings"] or "",
          # How often this memory came back to the character, and when it last
          # did. The engine never reads either column; `tools/remember_lines.py`
          # and `tools/salience_replay.py` read them as their whole answer, so a
@@ -419,6 +423,9 @@ def prepare_chat_memory_restore(chat_id, mems):
             # it was, and re-stamping these rows with whatever the clock reads
             # during the restore would date every memory to the rollback.
             "encoded_at_seconds": m.get("encoded_at_seconds"),
+            # Verbatim too: what the moment made the character feel was
+            # found by passes a restore does not re-run.
+            "feelings": m.get("feelings") or "",
         }
         # Restored after the insert, beside `archived`: `prepare_memory`
         # describes a memory as it was FORMED, and neither of these is part of
@@ -523,9 +530,33 @@ def dump_character_memories(chat_id, char_id):
          "encoding_valence": r["encoding_valence"],
          "encoding_arousal": r["encoding_arousal"],
          "archived": bool(r["archived"]), "event_key": r["event_key"],
-         "importance": r["importance"], "disputed": r["disputed"] or ""}
+         "importance": r["importance"], "disputed": r["disputed"] or "",
+         "feelings": r["feelings"] or ""}
         for r in rows
     ]
+
+
+def _unclocked_feelings(raw):
+    """A memory's kept feelings with every reading of THIS story's clocks
+    taken out -- the psych clock (`at`), the turn and the moment's key, which
+    is built from a turn index. For a bank carried into another story, whose
+    clocks and turns these would be read against as if they were its own.
+    What the moment made the character feel travels; when it was does not,
+    and a feeling with no reading on this story's clock is as far back as a
+    memory goes (`affect_mix.memory_fade`)."""
+    kept = _feelings_of(raw)
+    if not kept:
+        return ""
+
+    def strip(record):
+        return {k: v for k, v in record.items() if k not in ("at", "turn", "key")}
+
+    out = {}
+    if kept.get("moment"):
+        out["moment"] = strip(kept["moment"])
+    if kept.get("looks"):
+        out["looks"] = [strip(look) for look in kept["looks"]]
+    return _storage_json(out)
 
 
 def _foreign_persona_names(chat_id):
@@ -618,6 +649,11 @@ def import_character_memories(chat_id, char_id, memories,
             # against a clock they were never read from. Stated rather than
             # omitted so the drop is a decision.
             "encoded_at_seconds": None,
+            # What the moment made the character feel travels with the bank
+            # like `disputed` -- the character's own history with the memory
+            # -- but its readings of the old story's clocks do not, for the
+            # reason `encoded_at_seconds` is dropped one line up.
+            "feelings": _unclocked_feelings(m.get("feelings")),
         })
     if not prepared:
         return 0

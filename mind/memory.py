@@ -54,7 +54,7 @@ from mind.memory_write import (  # noqa: F401
     _MAX_DISPUTE_HISTORY, _MAX_DISPUTE_READING, _REPAIR_DELAY, _REPAIR_LOCK, _REPAIR_MAX_DELAY,
     _REPAIR_MAX_PENDING, _REPAIR_MAX_ROUNDS, _REPAIR_PENDING, _REPAIR_THREAD,
     _clamp, _clamp_signed, _default_category, _delete_memory_fts, _dispute_of,
-    _CHARS_PER_TOKEN, _EMBED_REQUEST_TOKENS, _embed_in_request_sized_chunks,
+    _feelings_of, _CHARS_PER_TOKEN, _EMBED_REQUEST_TOKENS, _embed_in_request_sized_chunks,
     _embed_memory, _ensure_repair_thread, _extract_entities,
     _extract_key_phrases, _gist, _json_list, _memory_cues, _memory_document,
     _repair_loop, _replace_memory_fts, _row_memory, _turn_idx_for,
@@ -66,7 +66,7 @@ from mind.memory_write import (  # noqa: F401
 from mind.memory_read import (  # noqa: F401
     HOST_SCOPE_READERS, delete_memory, dramatic_irony_feed, list_memories,
     memory_bank_cache, promise_ledger, raise_importance, record_dispute,
-    update_memory, visible_memory_rows,
+    record_memory_look, update_memory, visible_memory_rows,
 )
 from mind.memory_retrieval import (  # noqa: F401
     _ASPECT_WEIGHT, _CONTRAST_EXCLUDED_CATEGORIES, _CONTRAST_MIN_BANK,

@@ -56,6 +56,7 @@ One row in `memories` (`core/db.py`). The fields that do work:
 | `location` | Room name. A retrieval cue (§5). |
 | `valence`, `arousal` | The affect the character carried *into* the event. |
 | `encoding_valence`, `encoding_arousal` | Resolved affect *after* appraisal — how the event left the character. |
+| `feelings` | What the moment made the character FEEL, kept with the memory (v42): JSON `{moment: {felt, strength, coords, at, turn, key}, looks: [...]}` — `moment` from the beat's own affect passes when the row was minted (what perception stirred, or, on the row of its own acts, what those acts made it feel), `looks` any one-time later reading (a row that kept nothing, or one re-read since); `coords` is its place on the mood's spectrums and standalone moods, for the engine's arithmetic. Brought back on recall, faded by age toward a floor (`affect_mix.recalled`). A mind is handed only its name — `how_it_feels` on the delivered row, the strongest kept feeling in the pack's words — never the numbers. `''` = nothing kept yet. |
 | `embedding`, `cue_embedding` | Two float32 blobs (§4). |
 | `embedding_model`, `embedding_dim` | Which model made them. A mismatch scores 0.0 forever (§9). |
 | `archived` | Folded into a summary and retired from RECENT-buffer and consolidation reads. Still retrievable: `search_memories` passes `include_archived=True`, so archiving removes a row from the rolling window, never from recall. |

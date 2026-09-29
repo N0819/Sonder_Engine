@@ -342,6 +342,42 @@ def test_the_mood_is_given_in_the_packet_and_the_engine_writes_it_back(story, mo
     assert state["active_state"]["mood_coords"] == result["_affect_pass"]["mood_coords"]
 
 
+def test_the_memories_a_beat_mints_keep_what_it_made_the_mind_feel(story):
+    """The owner, 2026-09-29: a memory's mood "should be a stored value made
+    at memory formation not one derived every turn" -- the beat's feelings
+    from perception and from what the mind did, stored. The episode keeps
+    what perception stirred, the row of its own acts what those acts made it
+    feel, and a recalled memory read afresh this beat is handed to the write
+    phase to keep that reading."""
+    char_id, _context, commit = story
+    result = _validated(_decision())
+    result["_affect_pass"] = {
+        "mood_coords": {"tension": 0.3}, "mood_habits": {}, "mood_clock": 12.5,
+        "formed": {"perceived": {"felt": {"dread": 0.6}, "strength": 0.7, "at": 12.5},
+                   "acted": {"felt": {"shame": 0.4}, "strength": 0.4, "at": 12.5}},
+        "looks": {"t1:7:episode": {"felt": {"nostalgia": 0.5}, "strength": 0.5, "at": 12.5, "why": "unfelt"}}}
+    state, prepared = commit(result, index=3)
+    kept = {row["category"]: json.loads(row["feelings"])
+            for row in prepared["memory_batch"]["prepared"] if row["feelings"]}
+    assert kept["episode"]["moment"] == {"felt": {"dread": 0.6}, "strength": 0.7, "at": 12.5,
+                                         "turn": 3, "key": "3:perceived"}
+    assert kept["self"]["moment"]["felt"] == {"shame": 0.4} and kept["self"]["moment"]["key"] == "3:acted"
+    assert [(c, ref, look["turn"], look["why"]) for _chat, c, ref, look in prepared["memory_looks"]] == [
+        (char_id, "t1:7:episode", 3, "unfelt")]
+    # the beat's layers ride to commit only; the state keeps the mood alone
+    assert state["active_state"]["mood_coords"] == {"tension": 0.3}
+    assert "formed" not in state["active_state"] and "looks" not in state["active_state"]
+
+
+def test_a_beat_no_pass_reached_mints_rows_that_keep_nothing(story):
+    """No affect pass, no guessed feeling: the rows are read the first time
+    they are recalled (`affect_pass.why_read`)."""
+    _char_id, _context, commit = story
+    _state, prepared = commit(_validated(_decision()), index=4)
+    assert all(not row["feelings"] for row in prepared["memory_batch"]["prepared"])
+    assert prepared["memory_looks"] == []
+
+
 def test_private_projection_has_no_stale_result_or_extra_internal_fields():
     assert _private_continuity({"character_results": {7: _validated(_decision())}}, 7, {}) == {}
     result = _validated(_decision())

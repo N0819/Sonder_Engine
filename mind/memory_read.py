@@ -14,8 +14,8 @@ from mind.memory_common import (
 )
 from mind.memory_write import (
     _IMPORTANCE_CEILING, _IMPORTANCE_DISPUTE_STEP, _IMPORTANCE_STEP,
-    _MAX_DISPUTE_HISTORY, _MAX_DISPUTE_READING, _delete_memory_fts,
-    _dispute_of, _embed_memory,
+    _MAX_DISPUTE_HISTORY, _MAX_DISPUTE_READING, _MAX_FEELING_LOOKS, _delete_memory_fts,
+    _dispute_of, _embed_memory, _feelings_of,
     _replace_memory_fts, _row_memory, effective_importance, prepare_memory,
 )
 
@@ -384,6 +384,37 @@ def record_dispute(chat_id, char_id, gist, reading, turn_idx, *,
         raised = min(_IMPORTANCE_CEILING, base + _IMPORTANCE_DISPUTE_STEP)
         qi("UPDATE memories SET disputed=?, importance=? WHERE id=?",
            (blob, raised, row["id"]))
+        updated.append(row["id"])
+    return updated
+
+
+def record_memory_look(chat_id, char_id, memory_ref, look):
+    """Keep what a recalled memory was read to make the character feel.
+
+    The affect pass reads a recalled memory only when the row keeps nothing
+    of its moment's feeling, or the mind re-read it since what it keeps was
+    found (`affect_pass.why_read`); this stores that reading on the row
+    (`memories.feelings.looks`) so the memory brings it back from then on
+    instead of being asked again. What the moment itself made the character
+    feel (`moment`) is never touched: a later reading is kept BESIDE it, as a
+    re-reading is kept beside the event in `record_dispute`.
+
+    Addressed by the stable `memory_ref` (the row's event key) within this
+    mind's own bank, never by row id -- checkpoint restore is
+    delete-and-reinsert. A second look from the same turn replaces the first
+    rather than stacking, so a re-committed beat keeps one reading. Returns
+    the ids updated."""
+    memory_ref = str(memory_ref or "").strip()
+    if not memory_ref or not isinstance(look, dict):
+        return []
+    rows = q("SELECT id, feelings FROM memories WHERE chat_id=? AND char_id=? AND event_key=?",
+             (chat_id, char_id, memory_ref))
+    updated = []
+    for row in rows:
+        kept = _feelings_of(row["feelings"]) or {}
+        looks = [x for x in kept.get("looks") or [] if x.get("turn") != look.get("turn")]
+        kept["looks"] = (looks + [look])[-_MAX_FEELING_LOOKS:]
+        qi("UPDATE memories SET feelings=? WHERE id=?", (_storage_json(kept), row["id"]))
         updated.append(row["id"])
     return updated
 

@@ -9,7 +9,7 @@ import contextvars
 from concurrent.futures import ThreadPoolExecutor
 from core.db import qi, transaction, wget, wset, wset_if_changed
 from mind.memory import (add_memories_batch, delete_turn_memories,
-                    record_dispute, raise_importance, record_memory_access,
+                    record_dispute, record_memory_look, raise_importance, record_memory_access,
                     apply_relationship_updates,
                     apply_witnessed_signals,
                     update_relationships_from_inference,
@@ -317,6 +317,15 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
                                memory_ref=_ref, sources=_sources)
             except Exception as exc:
                 ctx.add_warning(f"memory dispute not recorded: {exc}")
+        # What a recalled memory was read to make the mind feel, where it
+        # kept nothing or its meaning changed since (`affect_pass.why_read`):
+        # kept on the row so it is not asked again. After the disputes, so a
+        # memory re-read and read afresh on one beat keeps both.
+        for chat_id, char_id, _ref, _look in prepared.get("memory_looks") or []:
+            try:
+                record_memory_look(chat_id, char_id, _ref, _look)
+            except Exception as exc:
+                ctx.add_warning(f"memory feeling not kept: {exc}")
         # Memories that turned out to be load-bearing for a belief. Once each,
         # ever (`only_unrevised`), which is what keeps this a consequence
         # rather than a popularity loop -- see _cited_memory_ids.

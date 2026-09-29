@@ -89,15 +89,14 @@ def _with_reading(mem, clock):
         "confidence": float(mem.get("confidence") or 0.0),
         "felt_importance": float(mem.get("importance") or
                                  mem.get("salience") or 0.0),
-        "affect_before": {
-            "label": mem.get("emotional_context") or "",
-            "valence": float(mem.get("valence") or 0.0),
-            "arousal": float(mem.get("arousal") or 0.0),
-        },
-        "affect_after_encoding": {
-            "valence": float(mem.get("encoding_valence") or 0.0),
-            "arousal": float(mem.get("encoding_arousal") or 0.0),
-        },
+        # NO AFFECT NUMBERS (the owner, 2026-09-29: "only the code derived
+        # memory name should be exposed to the character"). The row carried
+        # the mood it was formed in -- a label and valence/arousal before
+        # the event, and valence/arousal after -- as numbers a mind was left
+        # to read as feelings. What the memory keeps of its moment is named
+        # once, by the affect pass, in the pack's words (`how_it_feels`,
+        # `affect_pass.name_memories`); the columns stay written for the
+        # engine's own recall lanes.
     }
     if payload_legacy("fields"):
         out["memory_form"] = "episode"
@@ -666,6 +665,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # decided something it did not.
     resurfaced_subject = " ".join(str(resurfaced_subject or "").split())[:240]
     resurfaced_payload = {}
+    resurfaced_rows = []
     if resurfaced_subject:
         already = normal_refs | set(ponder_refs)
         _resurfaced = search_memories(
@@ -680,6 +680,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         back = [m for m in _resurfaced
                 if str(m.get("event_key") or "") not in already]
         if back:
+            resurfaced_rows = back[:max(4, int(recall_limit))]
             resurfaced_payload = {"resurfaced_without_asking": {
                 "subject": resurfaced_subject,
                 "temporal_status": "remembered_past",
@@ -712,6 +713,20 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             # The recalled rows by grade, best first, and what the picker did.
             "recalled_by_grade": recalled_by_grade,
             "picker": picker,
+            # What each delivered row keeps of what its moment made this
+            # mind feel, and the turn the mind last re-read it on -- for the
+            # affect pass (`affect_pass.memories_from`, `name_memories`),
+            # never for the character: a mind is handed a feeling's name,
+            # not a ledger of it.
+            "feelings": {
+                str(m.get("event_key")): {
+                    "record": m.get("feelings"),
+                    "disputed_turn": (m.get("disputed") or {}).get("turn_idx")
+                    if isinstance(m.get("disputed"), dict) else None,
+                }
+                for m in (*recent, *recalled, *pondered, *resurfaced_rows)
+                if str(m.get("event_key") or "")
+            },
         },
         # The one place this payload says what is still open. See
         # `unresolved_items` above.

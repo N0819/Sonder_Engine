@@ -3929,6 +3929,10 @@ def character_step(ctx, cid, nonce):
         language=ctx.language, earlier=_earlier_felt)
     if _felt.note and not _felt.asked and _felt.note != "nothing new to appraise":
         ctx.add_warning(f"character {character_name(sh)}: mood carried, not moved -- {_felt.note}")
+    # Each delivered memory is handed the NAME of what it keeps, never its
+    # numbers (the owner, 2026-09-29), read after the pass so a memory read
+    # afresh this call is named by that reading.
+    affect_pass.name_memories(memory_context, _felt)
     # _node_names, _governed_ids, _self_lines and the annotated goal currency
     # were all resolved above, before the memory context -- the unbidden
     # trigger and this payload must judge the SAME annotated goal.

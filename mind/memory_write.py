@@ -275,6 +275,11 @@ _MAX_DISPUTE_READING = 300
 # does not add to. The LATEST reading is never in here -- it sits at the top
 # level -- so this is purely the trail behind it.
 _MAX_DISPUTE_HISTORY = 8
+# How many later readings of a memory's feeling it keeps (`memories.feelings`,
+# `record_memory_look`), latest last. A row is read afresh only when it keeps
+# nothing or its meaning changed since, so a handful covers a long life; the
+# moment's own feeling is kept apart and never counts against it.
+_MAX_FEELING_LOOKS = 4
 
 
 def _dispute_of(raw):
@@ -287,6 +292,29 @@ def _dispute_of(raw):
     except (TypeError, ValueError):
         return None
     return out if isinstance(out, dict) and out.get("reading") else None
+
+
+def _feelings_of(raw):
+    """What this memory's moment made the character feel, as stored
+    (`memories.feelings`), or None when nothing has been kept yet. Never
+    raises on a malformed blob -- a corrupt record must not make a memory
+    unreadable; it reads as nothing kept, and the affect pass reads the row
+    afresh."""
+    if not raw:
+        return None
+    try:
+        out = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(out, dict):
+        return None
+    kept = {}
+    if isinstance(out.get("moment"), dict):
+        kept["moment"] = out["moment"]
+    looks = [x for x in out.get("looks") or [] if isinstance(x, dict)]
+    if looks:
+        kept["looks"] = looks
+    return kept or None
 
 
 def effective_importance(mem) -> float:
@@ -339,6 +367,9 @@ def _row_memory(row) -> dict:
         # (mind/memory_time.py); NULL on rows that predate the column or
         # belong to no beat, and those keep qualitative phrasing.
         "encoded_at_seconds": row["encoded_at_seconds"],
+        # What this moment made the character feel, kept with the row
+        # (`_feelings_of`); None when nothing has been kept yet.
+        "feelings": _feelings_of(row["feelings"]),
         "archived": bool(row["archived"]),
         "event_key": row["event_key"] or "",
         "embedding_model": row["embedding_model"] or "",
@@ -351,7 +382,7 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
                    valence=0.0, arousal=0.0, confidence=1.0, event_key="",
                    encoding_valence=0.0, encoding_arousal=0.0,
                    frame_id=_UNSET, importance=None, disputed="",
-                   encoded_at_seconds=None) -> dict:
+                   encoded_at_seconds=None, feelings="") -> dict:
     content = re.sub(r"\s+", " ", str(content or "")).strip()
     entities = list(dict.fromkeys(entities if entities is not None else _extract_entities(content)))
     key_phrases = list(dict.fromkeys(key_phrases if key_phrases is not None else _extract_key_phrases(content, entities)))
@@ -417,6 +448,11 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
         # row with no reading falls back to qualitative phrasing downstream.
         "encoded_at_seconds": (None if encoded_at_seconds is None
                                else float(encoded_at_seconds)),
+        # What the moment made this mind feel (`memories.feelings`); '' when
+        # the beat's passes did not reach it, and the row is read once, the
+        # first time it is recalled.
+        "feelings": _storage_json(feelings) if isinstance(feelings, dict)
+                    else str(feelings or ""),
     }
 
 def _embed_memory(data: dict):
@@ -684,7 +720,7 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
         _blob(full_vec), _blob(cue_vec),
         embedded.model_key, embedded.dimensions, data.get("frame_id"),
         data.get("importance"), data.get("disputed") or "",
-        data.get("encoded_at_seconds"),
+        data.get("encoded_at_seconds"), data.get("feelings") or "",
     )
     if existing:
         mid = existing["id"]
@@ -693,7 +729,7 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
             emotional_context=?,valence=?,arousal=?,encoding_valence=?,
             encoding_arousal=?,confidence=?,embedding=?,cue_embedding=?,
             embedding_model=?,embedding_dim=?,frame_id=?,
-            importance=?,disputed=?,encoded_at_seconds=?,archived=0 WHERE id=?""",
+            importance=?,disputed=?,encoded_at_seconds=?,feelings=?,archived=0 WHERE id=?""",
            values + (mid,))
     else:
         mid = qi("""INSERT INTO memories(chat_id,char_id,turn_id,turn_idx,kind,category,
@@ -701,8 +737,8 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
             emotional_context,valence,arousal,encoding_valence,encoding_arousal,
             confidence,embedding,cue_embedding,
             embedding_model,embedding_dim,frame_id,importance,disputed,
-            encoded_at_seconds,event_key)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            encoded_at_seconds,feelings,event_key)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
            (data["chat_id"], data["char_id"]) + values + (data["event_key"],))
     _replace_memory_fts(mid, data)
     # Filed at mint (see `memory_snapshot.file_memory_vector`): the

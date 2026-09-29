@@ -24,10 +24,16 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
 - **The layer beneath**: what a recalled memory or a standing concern stirs
   is the undercurrent, what the present stirs the surface (the owner: some
   moods "may be purely memory related ... or their undercurrents at least").
-  A memory stirs the standalone moods the model names for it -- nostalgia,
-  grief, regret and the rest -- and a plain pleasant or unpleasant feeling
-  for what none of them covers; a concern stirs what it is named to stir, in
-  proportion to how much it weighs on the character now.
+  A memory brings back what its moment made the character feel, kept with
+  it when it formed (`formed`: what perception stirred, or what the mind's
+  own acts did) and faded by its age toward a floor it never passes
+  (`memory_fade`, `recalled`). A memory with nothing kept -- minted before
+  memories kept their feeling, or re-read by the character since -- is read
+  once by the model, the standalone moods it names for it (nostalgia, grief,
+  regret and the rest) and a plain pleasant or unpleasant feeling for what
+  none of them covers, and that reading is kept (`looked`). A concern stirs
+  what it is named to stir, in proportion to how much it weighs on the
+  character now.
 - **Habituation** of a memory's evoked feeling, the owner's model: full for a
   few recalls, less after, full again after a rest.
 
@@ -247,6 +253,26 @@ HABITUATION_STEP = 0.2
 HABITUATION_GRACE = 0.6
 HABITUATION_CEILING = 0.8
 HABITUATION_HALF_LIFE = 5.0
+#: A MEMORY KEEPS WHAT ITS MOMENT MADE THE CHARACTER FEEL (the owner,
+#: 2026-09-29: a memory's mood "should be a stored value made at memory
+#: formation not one derived every turn" -- "instead of computing the mood
+#: each memory invokes, we use the moods of the beat based on character
+#: perception and the pass based on how their actions make them feel and
+#: store those"). `formed` keeps it when the row is minted, `recalled`
+#: brings it back when the memory is, faded by its age: MEMORY_FADE_FLOOR of
+#: it is never lost ("it should never go to zero", "because humans can
+#: reminisce a memory years ago with fondness") and the rest halves every
+#: MEMORY_FADE_HALF_LIFE psych units ("the decay should be slowish") -- a
+#: week of story time where the clock runs, a turn a unit where it does not,
+#: the unit every affect decay here uses. At a week and 0.3, a memory keeps
+#: 0.93 of its feeling after a day, 0.65 after a week, 0.35 after a month and
+#: the floor after a year.
+MEMORY_FADE_HALF_LIFE = 10080.0
+MEMORY_FADE_FLOOR = 0.3
+#: A kept feeling weaker than this is not kept, and a memory keeps at most
+#: FORMED_FEELINGS of them, strongest first.
+FORMED_MIN = 0.02
+FORMED_FEELINGS = 8
 #: A feeling beneath -- a memory's or a concern's -- must reach this to be
 #: named the undercurrent.
 UNDERCURRENT_FLOOR = 0.15
@@ -421,8 +447,9 @@ def emotions_from_act(appraisal, *, ref="", about=""):
 
 
 def memory_emotions(strength, tone, kinds=None, *, ref="", about="", multiplier=1.0):
-    """What a recalled memory stirs, all of it scaled by `strength` in [0, 1]
-    (does it stir something now) and the memory's habituation `multiplier`:
+    """What a recalled memory read by the decision model stirs (`looked`
+    keeps it), all of it scaled by `strength` in [0, 1] (does it stir
+    something now) and the memory's habituation `multiplier`:
     each standalone mood the model named in `kinds` -- its distribution over
     which mood recalling it stirs most -- by its share, and the share that
     none of them covers (all of it when `kinds` was not asked) as a plain
@@ -439,6 +466,121 @@ def memory_emotions(strength, tone, kinds=None, *, ref="", about="", multiplier=
     pull = round(_clamp(strength, 0.0, 1.0) ** max(0.0, MEMORY_MOOD_CURVE - 1.0), 6)
     for emotion in out:
         emotion.mood_weight = pull
+    return out
+
+
+# --- a memory's kept feeling -----------------------------------------------------
+
+def memory_fade(age, *, half_life=MEMORY_FADE_HALF_LIFE, floor=MEMORY_FADE_FLOOR):
+    """How much of its kept feeling a memory still carries at `age` psych
+    units: all of it when it formed, halving toward `floor` and never below
+    it. An age that cannot be read -- a feeling carried in from another
+    story, with no reading on this one's clock -- is as far back as a memory
+    goes: the floor."""
+    floor = _clamp(floor, 0.0, 1.0)
+    try:
+        age = float(age)
+    except (TypeError, ValueError):
+        return floor
+    if math.isnan(age):
+        return floor
+    return floor + (1.0 - floor) * 0.5 ** (max(0.0, age) / max(1e-6, half_life))
+
+
+def _kept(felt):
+    top = sorted(((n, v) for n, v in felt.items() if v >= FORMED_MIN), key=lambda kv: -kv[1])
+    return {n: round(v, 4) for n, v in top[:FORMED_FEELINGS]}
+
+
+def _coords(felt):
+    """Where a kept feeling sits in the mood's own coordinates -- the
+    fourteen spectrums and the standalone moods its feelings move: per
+    coordinate, how far and which way, the push strength times the target
+    `targets` reads from them. THE NUMBERS ARE THE CODE'S (the owner,
+    2026-09-29: "We should keep the spectrum values so we can do math with
+    them but only the code derived memory name should be exposed to the
+    character"): a mind is handed the feeling's name (`named`), never these."""
+    goals = targets([Emotion(n, _clamp(i, 0.0, 1.0)) for n, i in (felt or {}).items() if n in EMOTION_EFFECTS])
+    return {c: round(t * s, 4) for c, (t, s) in goals.items() if abs(t * s) >= FORMED_MIN}
+
+
+def named(record):
+    """The one name a kept feeling is handed to a mind by: its strongest
+    feeling, a key the language pack words (`emotion_words`, `mood_words`),
+    or None when nothing is kept. Fading scales every feeling alike, so the
+    name a memory is known by does not drift as it ages; only its strength
+    -- the code's -- does."""
+    felt = [(n, v) for n, v in ((record or {}).get("felt") or {}).items()
+            if n in EMOTION_EFFECTS and _clamp(v, 0.0, 1.0) > 0]
+    return max(felt, key=lambda kv: kv[1])[0] if felt else None
+
+
+def formed(emotions, sources):
+    """What one moment made the character feel, as its memory keeps it: each
+    feeling stirred by `sources` (`event` for what the mind perceived, `act`
+    for what it did), by name -- two of one name combining as the push does,
+    1 - prod(1 - i), never past 1 -- and `strength`, how strongly the moment
+    stirred as a whole: the item that stirred most, all its feelings
+    together, the rule `surface_and_undercurrent` reads a moment by. A moment
+    appraised that stirred nothing keeps an empty record, which is itself an
+    answer and is never asked again."""
+    felt, items = {}, {}
+    for e in emotions or ():
+        if e.source not in sources or e.intensity <= 0:
+            continue
+        i = _clamp(e.intensity, 0.0, 1.0)
+        felt[e.name] = 1.0 - (1.0 - felt.get(e.name, 0.0)) * (1.0 - i)
+        items[(e.source, e.ref)] = items.get((e.source, e.ref), 0.0) + i
+    kept = _kept(felt)
+    return {"felt": kept, "strength": round(min(1.0, max(items.values(), default=0.0)), 4),
+            "coords": _coords(kept)}
+
+
+def merge_formed(first, then):
+    """Two rounds of one beat as one moment: each feeling combined as
+    `formed` combines them, the stronger strength, the later reading of the
+    clock. Either may be None -- a round whose pass did not reach this layer
+    adds nothing to it."""
+    if not first:
+        return then
+    if not then:
+        return first
+    felt = {n: float(v) for n, v in (first.get("felt") or {}).items()}
+    for name, value in (then.get("felt") or {}).items():
+        felt[name] = 1.0 - (1.0 - felt.get(name, 0.0)) * (1.0 - _clamp(value, 0.0, 1.0))
+    kept = _kept(felt)
+    return {**first, **then, "felt": kept, "coords": _coords(kept),
+            "strength": round(max(_clamp(first.get("strength"), 0.0, 1.0),
+                                  _clamp(then.get("strength"), 0.0, 1.0)), 4)}
+
+
+def looked(strength, tone, kinds=None):
+    """A recalled memory read afresh by the decision model -- does recalling
+    it stir something now (`strength`), pleasant or not (`tone`), which of the
+    standalone moods (`kinds`) -- as its memory keeps the answer: exactly
+    what `memory_emotions` makes of it at full strength and no habituation,
+    so a kept reading brought back at once delivers what asking did."""
+    emotions = memory_emotions(strength, tone, kinds)
+    kept = _kept({e.name: e.intensity for e in emotions})
+    return {"felt": kept, "strength": round(_clamp(strength, 0.0, 1.0), 4), "coords": _coords(kept)}
+
+
+def recalled(record, age, *, ref="", about="", multiplier=1.0):
+    """What a recalled memory brings back of what it keeps (`formed` or
+    `looked`): each kept feeling faded by the memory's age in psych units
+    (`memory_fade`) and dulled by its habituation `multiplier`, and its pull
+    on the mood curved by the faded strength as a whole, as `memory_emotions`
+    curves an asked one -- so an old memory is still felt, faintly, and barely
+    moves the mood unless it was intense."""
+    record = record or {}
+    fade = memory_fade(age)
+    multiplier = _clamp(multiplier, 0.0, 1.0)
+    pull = round((_clamp(record.get("strength"), 0.0, 1.0) * fade) ** max(0.0, MEMORY_MOOD_CURVE - 1.0), 6)
+    out = []
+    for name, value in (record.get("felt") or {}).items():
+        i = round(_clamp(value, 0.0, 1.0) * fade * multiplier, 4)
+        if name in EMOTION_EFFECTS and i > 1e-4:
+            out.append(Emotion(name, i, about, "memory", ref, mood_weight=pull))
     return out
 
 

@@ -238,6 +238,128 @@ def test_a_memory_without_a_stable_key_never_habituates(jev):
     assert ap.persisted(felt)["mood_habits"] == {}
 
 
+# --- a memory keeps what its moment made the mind feel ----------------------------
+#
+# The owner, 2026-09-29: a memory's mood "should be a stored value made at
+# memory formation not one derived every turn" -- "we use the moods of the
+# beat based on character perception and the pass based on how their actions
+# make them feel and store those".
+
+MOMENT = {"moment": {"felt": {"tenderness": 0.6}, "strength": 0.6, "at": 0.0, "turn": 3,
+                     "key": "3:perceived"}}
+
+
+def _kept(record=None, disputed_turn=None, key="m1"):
+    """A packet whose one recalled row keeps `record`, the way
+    `mind/memory_context.py` hands it over: in the host-only registry."""
+    return {"recalled_old_memories": [{"event_key": key, "details": "The summer at the lake, swimming every day."}],
+            "_internal": {"feelings": {key: {"record": record, "disputed_turn": disputed_turn}}}}
+
+
+def _memory_questions(questions):
+    return {k for k in questions if k.startswith("mem:")}
+
+
+def test_a_memory_that_keeps_its_feeling_brings_it_back_unasked(jev):
+    felt = _before(memory_context=_kept(MOMENT))
+    assert _memory_questions(jev[0][1]) == set()
+    recalled = [e for e in felt.emotions if e.source == "memory"]
+    assert [e.name for e in recalled] == ["tenderness"]
+    assert recalled[0].intensity == pytest.approx(0.6 * mix.memory_fade(felt.clock), abs=1e-4)
+    assert felt.looks == {}
+
+
+def test_a_memory_with_nothing_kept_is_read_once_and_the_reading_kept(jev):
+    felt = _before()  # MEMORY's row keeps nothing: a row minted before memories kept their feeling
+    assert _memory_questions(jev[0][1]) == {"mem:m1:strength", "mem:m1:tone", "mem:m1:kinds"}
+    look = felt.looks["m1"]
+    assert look["why"] == "unfelt" and look["felt"]["nostalgia"] > 0 and look["at"] == pytest.approx(felt.clock)
+    assert "nostalgia" in {e.name for e in felt.emotions if e.source == "memory"}
+    # kept on the row as commit keeps it, the reading stands from then on
+    jev.clear()
+    again = _before(memory_context=_kept({"looks": [{**look, "turn": 4}]}), active={**ACTIVE, **ap.persisted(felt)})
+    assert _memory_questions(jev[0][1]) == set() and again.looks == {}
+    assert "nostalgia" in {e.name for e in again.emotions if e.source == "memory"}
+
+
+def test_a_memory_re_read_since_its_feeling_was_kept_is_read_again(jev):
+    _before(memory_context=_kept(MOMENT, disputed_turn=2))
+    assert _memory_questions(jev[-1][1]) == set()
+    felt = _before(memory_context=_kept(MOMENT, disputed_turn=7))
+    assert _memory_questions(jev[-1][1]) and felt.looks["m1"]["why"] == "reread"
+    # a re-reading recorded on the turn of the latest reading came after it:
+    # the row is read before the call, the re-reading kept at its commit
+    reread_then = {"looks": [{"felt": {"grief": 0.4}, "strength": 0.4, "at": 1.0, "turn": 7}]}
+    felt = _before(memory_context=_kept(reread_then, disputed_turn=7))
+    assert felt.looks["m1"]["why"] == "reread"
+
+
+def test_what_the_beat_made_the_mind_feel_is_formed_by_layer(jev):
+    felt = _before()
+    reply = {"sequence": [{"type": "speech", "text": "I never had the key."}],
+             "active_state": {"wants": [{"want": "tell her the truth"}], "suppressed_want": 0}}
+    formed = ap.persisted(ap.after_call(felt, reply))["formed"]
+    assert set(formed) == {"perceived", "acted"}
+    assert "anger" in formed["perceived"]["felt"] and formed["perceived"]["strength"] > 0
+    assert {"shame", "frustration"} <= set(formed["acted"]["felt"])
+    # the layer beneath is kept by neither: the recalled memory's nostalgia
+    # stored into a new memory would copy itself forward without end
+    assert "nostalgia" not in set(formed["perceived"]["felt"]) | set(formed["acted"]["felt"])
+    assert formed["perceived"]["at"] == pytest.approx(felt.clock)
+
+
+def test_a_rows_layer_is_what_it_is_about():
+    assert ap.facet_of({"category": "self"}) == "acted"
+    assert {ap.facet_of({"category": c}) for c in ("episode", "dialogue", "promise", "inference")} == {"perceived"}
+
+
+def test_the_rows_of_one_moment_bring_its_feeling_back_once(jev):
+    context = {"recalled_old_memories": [{"event_key": "t3:c1:episode", "details": "The harbour at dusk."},
+                                          {"event_key": "t3:c1:dialogue", "details": "I heard her say goodbye."}],
+               "_internal": {"feelings": {"t3:c1:episode": {"record": MOMENT},
+                                          "t3:c1:dialogue": {"record": MOMENT}}}}
+    felt = _before(memory_context=context)
+    assert [e.name for e in felt.emotions if e.source == "memory"] == ["tenderness"]
+    # both rows were recalled, so both land for habituation
+    assert set(felt.habits) == {"t3:c1:episode", "t3:c1:dialogue"}
+
+
+def test_a_delivered_memory_is_handed_its_feelings_name_never_its_numbers(jev):
+    """The owner, 2026-09-29: "We should keep the spectrum values so we can do
+    math with them but only the code derived memory name should be exposed to
+    the character"."""
+    kept = _kept(MOMENT)
+    ap.name_memories(kept, _before(memory_context=kept))
+    row = kept["recalled_old_memories"][0]
+    assert row["how_it_feels"] == ap._word("tenderness", "en")
+    assert not any(isinstance(v, (int, float)) and not isinstance(v, bool) for v in row.values())
+    # a row read afresh this call is named by that reading
+    legacy = {"recalled_old_memories": [dict(MEMORY["recalled_old_memories"][0])]}
+    ap.name_memories(legacy, _before(memory_context=legacy))
+    assert legacy["recalled_old_memories"][0]["how_it_feels"] == ap._word("nostalgia", "en")
+    # one that keeps nothing and was not read is named nothing
+    unread = {"recalled_old_memories": [dict(MEMORY["recalled_old_memories"][0])]}
+    ap.name_memories(unread, None)
+    assert "how_it_feels" not in unread["recalled_old_memories"][0]
+
+
+def test_a_memorys_feeling_is_named_in_the_storys_language(jev):
+    en, ja = _kept(MOMENT), _kept(MOMENT)
+    ap.name_memories(en, _before(memory_context=en))
+    ap.name_memories(ja, _before(memory_context=ja, language="ja"))
+    assert ja["recalled_old_memories"][0]["how_it_feels"] == ap._word("tenderness", "ja")
+    assert ja["recalled_old_memories"][0]["how_it_feels"] != en["recalled_old_memories"][0]["how_it_feels"]
+
+
+def test_a_later_round_reads_no_memory_twice_and_keeps_the_whole_beat(jev):
+    first = _before()
+    second = _before(earlier=ap.persisted(first),
+                     observations=[{"observation_id": "o3", "observed": {"text": "laughs at the joke."},
+                                    "actor": "Hinami", "order": 0}])
+    assert _memory_questions(jev[1][1]) == set() and "m1" in second.looks
+    assert set(second.formed["perceived"]["felt"]) >= set(first.formed["perceived"]["felt"])
+
+
 def test_the_given_affect_passes_through_commits_resolver_with_its_label(jev):
     given = ap.given_affect(_before())
     resolved = affect.resolve_affect(None, {}, {"valence": 0.0, "arousal": 0.5}, 1, proposed=given)
