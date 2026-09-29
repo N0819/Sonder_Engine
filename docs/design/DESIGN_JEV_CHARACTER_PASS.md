@@ -951,6 +951,18 @@ column, schema v42):
 
 Still open:
 
+- **The beat's outcome.** A beat's episode row is the mind's view of the
+  OUTCOME -- what the others did in parallel and what came of it
+  (`perception_outcome`) -- and no pass appraises it: the before-call pass
+  sees only what reached the mind before it acted, and the next beat hands
+  the outcome back as memory, never as events. The per-beat memory questions
+  used to carry its feeling into the next beat, weakly; the kept feeling is
+  the lead-up's, so what the others did in response moves no mood. Options:
+  appraise the outcome as events (at the next call, or in a pass after
+  `perception_outcome`) and complete the episode's kept feeling with it --
+  minding the interaction loop's rounds, which already appraise some of the
+  same conduct -- or read the newest episode once at its first recall. The
+  owner's call.
 - **Nostalgia.** The three questions were where the moods whose object is the
   past came from -- nostalgia, grief, regret, longing. A kept feeling is what
   the moment felt like, so those now come only from a row being read (never

@@ -1348,7 +1348,9 @@ two graded questions, best 24; replayed live on three research beats at the
 research packet's quality, `docs/guides/MEMORY.md` §5). The moment tag
 LANDED 2026-09-29 as what the beat's own passes found, kept on each memory
 (`memories.feelings`; `DESIGN_JEV_CHARACTER_PASS.md`, "A memory keeps what
-its moment made the mind feel"). Still open from it: the net's lanes that
+its moment made the mind feel"). Still open from it: the beat's outcome,
+which the episode row records and no pass appraises, so its feeling is the
+lead-up's; the net's lanes that
 would read that tag (they read `encoding_valence`, the whole mood); how
 nostalgia -- which can grow from a moment that felt bad -- arises from a kept
 feeling (proposed: a one-time looking back as a memory ages, the owner's
