@@ -556,6 +556,14 @@ def _lines_delivered_to(char_id, rows):
     return {idx: "\n".join(parts) for idx, parts in heard.items()}
 
 
+def _player_persona_name(chat_id):
+    """The name the player's persona goes by in this chat -- `persona_of`'s
+    default stranger when the chat has none -- for a field that names the
+    player to a mind, which the observer's label then gates like any name."""
+    chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+    return persona_name(persona_of(dict(chat))) if chat else ""
+
+
 def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
                               frame_id, n_turns=3, cache=None, label=None,
                               rows_cache=None):
@@ -721,7 +729,16 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
                     reached.append(content_text)
             if not reached:
                 continue
-            asked = {"from": "the player", "asked": str(reached[-1])[:240],
+            # By the persona's own name, never the engine's word for the
+            # protagonist (the owner, 2026-09-29: "player is a term that
+            # should never reach the llm or character stage atleast"): the
+            # player is a body in the room like any other, and
+            # `_labelled_debt` hands the asker to this mind through the same
+            # identity floor as every other -- its name where the mind knows
+            # it, its description where it does not. The literal went through
+            # that floor exempt, so a mind was told "the player" asked it
+            # something.
+            asked = {"from": _player_persona_name(chat_id), "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
             continue
         if str(row["step_key"]).startswith("character:"):
@@ -804,7 +821,7 @@ def _labelled_debt(result, label):
     if not isinstance(debt, dict):
         return {}
     debt = dict(debt)
-    if label and debt.get("from") not in (None, "", "the player"):
+    if label and debt.get("from") not in (None, ""):
         debt["from"] = label(debt["from"])
     return {"awaiting_your_answer": debt}
     return result

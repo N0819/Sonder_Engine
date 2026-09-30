@@ -212,7 +212,9 @@ class TestTheAskersRegisterStillNamesYou:
                    (json.dumps(content), row["vid"]))
         owed = _unanswered_question_note(
             chat_id, "Hinami", ids["Hinami"], 146, None)["awaiting_your_answer"]
-        assert owed["from"] == "the player"
+        # the persona by its own name (the chat has none: the engine's default
+        # stranger), never the engine's word for the protagonist
+        assert owed["from"] == "The Stranger"
 
 
 class TestThePlayerAskingCountsToo:
@@ -252,8 +254,29 @@ class TestThePlayerAskingCountsToo:
             temp_db, "So what is that box of yours, really?", lambda cid: cid)
         owed = _unanswered_question_note(
             chat_id, "The Doctor", char_id, 146, None)["awaiting_your_answer"]
-        assert owed["from"] == "the player"
+        # the persona by its own name (the chat has none: the engine's default
+        # stranger), never the engine's word for the protagonist
+        assert owed["from"] == "The Stranger"
         assert "box of yours" in owed["asked"]
+
+    def test_a_mind_is_never_told_the_player_asked(self, temp_db):
+        """The owner, 2026-09-29: "player is a term that should never reach
+        the llm or character stage atleast". The asker reaches the mind
+        through its identity floor like any other body: its description to a
+        mind that does not know the persona's name, the name to one that
+        does -- the engine's word for the protagonist never."""
+        from agents.character import _labelled_debt
+        from agents.common import observer_label_fn
+        chat_id, char_id = self._seed_player_ask(
+            temp_db, "So what is that box of yours, really?", lambda cid: cid)
+        raw = _unanswered_question_note(chat_id, "The Doctor", char_id, 146, None)
+        chat = dict(temp_db.q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True))
+        stranger = _labelled_debt(raw, observer_label_fn(chat, "The Doctor", []))
+        told = stranger["awaiting_your_answer"]["from"]
+        assert told and "player" not in told.casefold() and told != "The Stranger"
+        temp_db.wset(chat_id, "known", {"The Doctor": ["The Stranger"]})
+        known = _labelled_debt(raw, observer_label_fn(chat, "The Doctor", []))
+        assert known["awaiting_your_answer"]["from"] == "The Stranger"
 
     def test_addressed_to_resolves_by_name_as_well_as_id(self, temp_db):
         chat_id, char_id = self._seed_player_ask(

@@ -8,7 +8,7 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4718 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character.py` | 4735 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_bare.py` | 853 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/common.py` | 11840 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
@@ -258,14 +258,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 3407 | 1312 lines |
-| `_annotate_known_exits()` | 2632 | 469 lines |
-| `_ground_observation_citations()` | 1636 | 293 lines |
-| `_unanswered_question_note()` | 559 | 237 lines |
-| `_destination_from_goals()` | 2198 | 109 lines |
+| `character_step()` | 3424 | 1312 lines |
+| `_annotate_known_exits()` | 2649 | 469 lines |
+| `_ground_observation_citations()` | 1653 | 293 lines |
+| `_unanswered_question_note()` | 567 | 246 lines |
+| `_destination_from_goals()` | 2215 | 109 lines |
 | `_recent_self_moves()` | 277 | 98 lines |
-| `sprint_offers()` | 3136 | 97 lines |
-| `_impossible_knowledge()` | 898 | 89 lines |
+| `sprint_offers()` | 3153 | 97 lines |
+| `_impossible_knowledge()` | 915 | 89 lines |
 
 ### `agents/character_bare.py`
 
