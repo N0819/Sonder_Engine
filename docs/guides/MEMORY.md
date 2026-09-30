@@ -57,6 +57,7 @@ One row in `memories` (`core/db.py`). The fields that do work:
 | `valence`, `arousal` | The affect the character carried *into* the event. |
 | `encoding_valence`, `encoding_arousal` | Resolved affect *after* appraisal — how the event left the character. |
 | `feelings` | What the moment made the character FEEL, kept with the memory (v42): JSON `{moment: {felt, strength, coords, at, turn, key}, looks: [...]}` — `moment` from the beat's own affect passes when the row was minted (what perception stirred, or, on the row of its own acts, what those acts made it feel), `looks` any one-time later reading (a row that kept nothing, or one re-read since); `coords` is its place on the mood's spectrums and standalone moods, for the engine's arithmetic. Brought back on recall, faded by age toward a floor (`affect_mix.recalled`). A mind is handed only its name — `how_it_feels` on the delivered row, the strongest kept feeling in the pack's words — never the numbers. `''` = nothing kept yet. |
+| `about` | Who the moment had in it, by the engine's names (v43): JSON list -- every body in the mind's room when the row was minted, and a heard line's speaker and addressee; never the mind itself, and never a body whose disguise kept this mind from recognising it (`commit_memory._memory_about`, the rule perception names a body by; a transformation hides nothing). Host-only: a name counts for a mind only once it is in the mind's `known` list, and then a row whose text never says it goes over as `with_whom` -- "the woman in the grey coat" of beat 3 is the moment with Ilse from the beat the mind learns her name, and a ponder asking by the name reaches it (§3). A list: several people resolve each on their own. It says who was THERE, not what the row is about -- rendered "with", because a grader told "about" believes it (§3). `''` = minted before v43, or nobody else there. |
 | `embedding`, `cue_embedding` | Two float32 blobs (§4). |
 | `embedding_model`, `embedding_dim` | Which model made them. A mismatch scores 0.0 forever (§9). |
 | `archived` | Folded into a summary and retired from RECENT-buffer and consolidation reads. Still retrievable: `search_memories` passes `include_archived=True`, so archiving removes a row from the rolling window, never from recall. |
@@ -388,6 +389,33 @@ answer...") let 3 of the 7 through at any floor. The affect pass then LOOKS
 BACK on those five (`affect_pass.PONDER_LOOKS`): each is read afresh with how
 long ago it was, and the reading is what the memory carries from then on --
 where nostalgia, grief and regret come from (`memories.feelings`, §1).
+
+**A question naming somebody the mind knows also reaches the rows with them
+that never say the name** (`memories.about`, §1; the owner, 2026-09-29: "the
+tag could change to indicate the memory is about hinami when the character
+actually learns there name, done in pure code"). The net gains an ABOUT lane
+-- the rows whose tag carries a name the question names (`memory_jev.
+named_in`, any word of a known name) and whose text does not say it, ranked by
+meaning against the question with the names said as "them" -- and the lane's
+best `PONDER_ABOUT_RESERVE` (20) are graded whether or not fusion put them in
+the fifty. Each row a grader sees carries who was in it that its text leaves
+unnamed (`; with Hinami`). Measured on the same 30 questions: the answer was
+handed on for 20 of 23, nothing came back for the 7 unanswerable, about 6.5
+seconds a ponder, against 17 of 23 with no tags. The three it gained each
+asked by her name for rows that never say it ("Where was I when I first met
+Hinami?" -- the rows call her "the beautiful young woman", and the row of the
+meeting sat 48th of 267 in the lane against the question as asked, 15th
+against "...first met them?", and outside every net of 50 until the reserve).
+The first rendering, `; about Hinami`, cost one it had: on chat 64 Hinami is
+in all 657 rows, and a row about where the TARDIS landed, labelled as a row
+about her, graded 0.05 where it had graded 0.72. On a synthetic bank the tag
+turned "Where did I first meet Ilse?" from a miss into the ferry-landing row,
+and still missed a row that calls her "the stranger with the salt-stained
+boots": a grader told a known name was there reads "stranger" as somebody
+else, under every wording tried. The recall pick carries the same annotation
+and no ABOUT lane: a beat's view names everybody present, so there the lane
+would only be a second similarity ranking over the rows that do not say their
+names.
 
 Until then the lane was `search_memories(query)` at the SAME budget passive
 recall used -- `recall_limit` after absorption had narrowed it, so 16 for a

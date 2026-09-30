@@ -5,7 +5,7 @@ assembly seam, and the only place that decides what a mind is handed."""
 
 from itertools import zip_longest
 
-from core.db import q
+from core.db import q, wget
 from llm.providers import embed_texts_meta
 from llm.prompts import payload_legacy
 
@@ -14,7 +14,8 @@ from mind.memory_common import (
 )
 from mind.memory_read import memory_bank_cache
 from mind.memory_write import _clamp
-from mind.memory_jev import PONDER_LIMIT, jev_memory_packet, jev_ponder_packet
+from mind.memory_jev import (PONDER_LIMIT, jev_memory_packet, jev_ponder_packet, named_in,
+                             unnamed_about)
 from mind.memory_retrieval import (
     _RECALL_LIMIT, _SUMMARY_RECALL_LIMIT, provenance_context_label,
     recent_memory_buffer, search_memories,
@@ -25,7 +26,7 @@ from mind.memory_summaries import (
 )
 from mind.memory_time import MemoryClock
 
-def _with_reading(mem, clock):
+def _with_reading(mem, clock, known=()):
     """Project one stored row as an explicitly PAST character memory.
 
     ``clock`` is this mind's `mind.memory_time.MemoryClock` -- the one place
@@ -118,6 +119,15 @@ def _with_reading(mem, clock):
                "memory_ref", "temporal_status", "memory_form",
                "epistemic_origin", "confidence", "felt_importance"}}
     out["when"] = clock.of_memory(mem)
+    # WHO WAS IN IT, where the mind knows a name its text never says: the
+    # row minted before it learned the name, or written as a description,
+    # read now as the moment with that person it always was. "With", not
+    # "about" -- the tag is who the moment had in it, and a row about a room
+    # Hinami stood in is not a row about Hinami (`memory_jev.memory_line`).
+    # The tag itself stays host-only; only a name this mind knows goes over.
+    about = unnamed_about(mem, known)
+    if about:
+        out["with_whom"] = about
     dispute = mem.get("disputed")
     # Shape-checked before it is read, the same guard `memory_summaries.
     # _consolidator_row` carries (A86). `memory_write._dispute_of` hands
@@ -288,6 +298,15 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # from a few lines down -- and the pool this whole call runs on copies the
     # parent context precisely so that read is the deciding turn's frame.
     clock = MemoryClock(chat_id, char_id, current_turn_idx)
+    # WHO THIS MIND KNOWS BY NAME: the `known` map, the one record of names
+    # learned (commit adds a name the beat it is heard). A memory's `about`
+    # tags count for this mind only through it -- the tag "changes" when the
+    # name is learned, and rolls back with the map.
+    mind_name = str((person or {}).get("name") or "").strip() or str(
+        (q("SELECT name FROM characters WHERE id=?", (char_id,), one=True) or {"name": ""})["name"] or "")
+    known_names = [str(n) for n in ((wget(chat_id, "known", {}) or {}).get(mind_name) or [])
+                   if str(n or "").strip()]
+    known = {n.casefold() for n in known_names}
     # Legacy banks predate event_key. Repair only the active mind's missing
     # handles before any row is projected, so every delivered citation is
     # stable across checkpoint restore and portable archive import.
@@ -418,13 +437,20 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # this moment and on what the mind is trying to do, best first. The
     # recent buffer is excluded before the net is cut, so no slot goes to a
     # row the payload already carries.
+    #
+    # Each row goes over with who was in it (`known`, "; with Hinami"), but
+    # the pick keeps NO ABOUT LANE. That lane reaches the rows with somebody a
+    # QUESTION names (a ponder's, below); a beat's view names everybody
+    # present, so here it would be a second similarity lane over every row
+    # that does not say their names -- in a two-hander, 267 of 657 rows --
+    # a bias toward exactly those rows that nothing measured.
     picker = {}
     recalled = jev_memory_packet(
         chat_id, char_id, query_text, current_turn_idx=current_turn_idx,
         embedded=embedded, aspects=_aspects, here=here, exclude_ids=recent_ids,
         limit=recall_limit, person=person, view=current_view,
         active_state=active_state, unsettled=unresolved_items, language=language,
-        bank=bank, record=picker)
+        bank=bank, record=picker, known=known)
     access_ids = [m.get("id") for m in recalled if m.get("id") is not None]
     # Best first, for the readers that take a head of the list (the affect
     # pass); the payload itself is chronological, below.
@@ -473,7 +499,10 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         # pulls up 50 candidates using rrf for jev to sort on how well it
         # answers the ponder"): a net of `memory_jev.PONDER_NET` over the
         # question alone, each candidate graded by the decision model on how
-        # much it helps answer it, the best kept (`jev_ponder_packet`). It was
+        # directly it answers it, the best kept that reach `PONDER_FLOOR`; a
+        # question naming somebody this mind knows also reaches the rows with
+        # them that never say the name (the ABOUT lane, and its reserve in
+        # the net, `memory_jev.PONDER_ABOUT_RESERVE`) (`jev_ponder_packet`). It was
         # `search_memories(query)`, which handed a mind about one of the five
         # answers the decision model would pick at k=8 and two at k=24
         # (`docs/experiments/JEV_MEMORY_PROBE_2026_09_26.md`).
@@ -492,7 +521,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             embedded=embed_texts_meta([ponder_query]), here=here, limit=ponder_k,
             person=person, view=current_view, active_state=active_state,
             unsettled=unresolved_items, language=language, bank=bank,
-            record=ponder_record)
+            record=ponder_record, about=named_in(ponder_query, known_names), known=known)
         # What came back to the mind: the rows the ponder kept, as recall's
         # own reach is the rows it kept.
         access_ids.extend(m.get("id") for m in pondered
@@ -585,7 +614,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                    for m in (*recent, *recalled)}
     ponder_refs = [str(m.get("event_key") or "") for m in pondered
                    if str(m.get("event_key") or "")]
-    recent_projected = [_with_reading(m, clock) for m in recent]
+    recent_projected = [_with_reading(m, clock, known) for m in recent]
     # ONE CHRONOLOGICAL STREAM, EACH ROW SAYING WHAT KIND IT IS. What this
     # mind lived through, was told and worked out is one recent life, read in
     # the order it happened; the kind rides on every row (`epistemic_origin`:
@@ -599,7 +628,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # (`provenance_context_label` knows no other), so the three lanes held
     # exactly these rows between them and the stream loses none.
     recent_memories = recent_projected
-    recalled_projected = [_with_reading(m, clock) for m in recalled]
+    recalled_projected = [_with_reading(m, clock, known) for m in recalled]
     for item in (*recent_projected, *recalled_projected):
         if str(item.get("memory_ref") or "") in ponder_refs:
             item["retrieval_origin"] = [
@@ -626,7 +655,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         ref = str(mem.get("event_key") or "")
         if ref in normal_refs:
             continue
-        item = _with_reading(mem, clock)
+        item = _with_reading(mem, clock, known)
         item["retrieval_origin"] = ["deliberate_ponder"]
         ponder_additional.append(item)
     ponder_payload = ({"deliberate_recall": {
@@ -680,7 +709,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                 "subject": resurfaced_subject,
                 "temporal_status": "remembered_past",
                 "retrieval_origin": "unbidden_subject",
-                "episodes": [_with_reading(m, clock)
+                "episodes": [_with_reading(m, clock, known)
                              for m in back[:max(4, int(recall_limit))]],
             }}
     score_rows = {}

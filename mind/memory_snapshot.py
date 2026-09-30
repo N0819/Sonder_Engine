@@ -232,7 +232,7 @@ _DUMP_COLUMNS = (
     "salience, content, gist, key_phrases, entities, location, "
     "emotional_context, valence, arousal, confidence, encoding_valence, "
     "encoding_arousal, archived, event_key, importance, disputed, "
-    "encoded_at_seconds, feelings, access_count, last_accessed, last_accessed_turn, "
+    "encoded_at_seconds, feelings, about, access_count, last_accessed, last_accessed_turn, "
     "vkey, embedding_model, embedding_dim"
 )
 
@@ -336,6 +336,8 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
          # of it. Not re-derivable: the passes that found it ran on the
          # beat's own perception and acts, which a rollback does not replay.
          "feelings": r["feelings"] or "",
+         # Who it had in it, by this story's names: carried like the rest.
+         "about": r["about"] or "",
          # How often this memory came back to the character, and when it last
          # did. The engine never reads either column; `tools/remember_lines.py`
          # and `tools/salience_replay.py` read them as their whole answer, so a
@@ -426,6 +428,7 @@ def prepare_chat_memory_restore(chat_id, mems):
             # Verbatim too: what the moment made the character feel was
             # found by passes a restore does not re-run.
             "feelings": m.get("feelings") or "",
+            "about": m.get("about") or "",
         }
         # Restored after the insert, beside `archived`: `prepare_memory`
         # describes a memory as it was FORMED, and neither of these is part of
@@ -654,6 +657,10 @@ def import_character_memories(chat_id, char_id, memories,
             # -- but its readings of the old story's clocks do not, for the
             # reason `encoded_at_seconds` is dropped one line up.
             "feelings": _unclocked_feelings(m.get("feelings")),
+            # Dropped: a name in the story a bank was minted in is not a
+            # person in this one, and a tag would link its rows to whoever
+            # here happens to share it.
+            "about": "",
         })
     if not prepared:
         return 0

@@ -1357,7 +1357,16 @@ brings up are where nostalgia now comes from (1 beat in 332 was measured on
 the old contract); the 48-row packet
 (measured affordable on relevance, the conduct replay not run); the fun
 sections; a ponder over the whole bank (a ponder is graded since 2026-09-29, but over
-the owner's net of 50, not the bank); same-beat recall. The
+the owner's net of 50, not the bank); same-beat recall. Who a memory had in
+it LANDED the same day (`memories.about`, v43; `docs/guides/MEMORY.md` §1 and
+§3): a ponder by a known name reaches the rows with that person that never say
+it. Still open from it: rows minted before v43 carry no tag and nothing
+backfills them; a row that calls the person "the stranger" is still missed
+(a grader told a known name was there reads it as somebody else, under
+every wording tried); a broad "what do I know about X?" keeps one or two
+rows, the "directly answers" grade sitting near the floor; the recall pick
+carries the annotation and keeps no ABOUT lane, a choice nothing has
+measured either way. The
 note's remaining owner decisions are the list. Measured in
 [`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md);
 instruments `tools/jev_*.py`.

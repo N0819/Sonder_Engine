@@ -186,7 +186,7 @@ from persist.commit_memory import (_names_spoken_by, RECENT_TELLS_CAP, _durable_
     _cited_memory_ids, _marked_for_memory, _quote_body, _is_player,
     _salience_of, _own_sequence_memory, _inference_memory_text,
     _intent_names_term, _interior_relations_of,
-    _evidence_spans, _witnessed_signals,
+    _evidence_spans, _witnessed_signals, _memory_about,
     prepare_memory_commit)
 from persist.commit_memory_write import (_consolidate_committed_memories,
     MEMORY_CONSOLIDATION_JOB_KEY, schedule_memory_consolidation,

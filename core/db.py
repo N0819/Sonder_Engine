@@ -253,7 +253,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 42
+SCHEMA_VERSION = 43
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -833,7 +833,16 @@ CREATE TABLE IF NOT EXISTS memories(
     -- A column rather than a side table for the reason `disputed` is one:
     -- checkpoint restore is delete-and-reinsert, and a value on the row rides
     -- the dump/restore round trip verbatim.
-    feelings TEXT NOT NULL DEFAULT ''
+    feelings TEXT NOT NULL DEFAULT '',
+    -- WHO the moment had in it, by the ENGINE's names for them: every body
+    -- in the mind's room that beat whose identity it could perceive, and a
+    -- line's speaker and addressee (`persist/commit_memory.py`) -- who was
+    -- THERE, not what the row is about. JSON list, '' when untagged.
+    -- HOST-ONLY: a mind is never handed a tag, and a tag counts for a mind
+    -- only once the name is in its `known` list -- so the rows with "the
+    -- young woman" in them become moments with Hinami when the mind learns
+    -- her name, in code, with no rewrite (`mind/memory_context.py`).
+    about TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_memories_chat_char ON memories(chat_id, char_id);
 
@@ -2103,6 +2112,17 @@ END""",
         # `encoding_*` are the character's whole mood that beat, not what
         # this moment stirred.
         "ALTER TABLE memories ADD COLUMN feelings TEXT NOT NULL DEFAULT ''",
+    ],
+    # v42 -> v43
+    [
+        # Who a memory had in it, by the engine's own names (see the column
+        # in SCHEMA). A memory minted before a mind learned a name reads "the
+        # young woman" forever, so a question naming her never reached it:
+        # "where did I first meet Hinami?" missed every row of the meeting in
+        # a 657-row bank (2026-09-29). EXISTING ROWS ARE LEFT '': which bodies
+        # stood in a mind's room on a beat long past is not recorded anywhere
+        # a migration could read it back from.
+        "ALTER TABLE memories ADD COLUMN about TEXT NOT NULL DEFAULT ''",
     ],
 ]
 

@@ -599,6 +599,36 @@ def _names_spoken_by(dlog, scene, roster, known_before, learned, *,
     return learned
 
 
+def _memory_about(scene, observer, room, known_map, disguises, transformations, extra=()):
+    """Who a memory `observer` mints this beat had in it, by the ENGINE's
+    names (`memories.about`) -- who was there, not what the row is about:
+    every body standing in its room, and `extra` -- a line's speaker and
+    addressee -- less the mind itself, and less any body
+    whose disguise keeps this mind from recognising it: the same rule
+    perception names a body by (`scene.disguise_breaks_recognition`), with a
+    transformation, which conceals nothing, winning over a disguise as it
+    does there. A tag is host-only and counts for a mind only once it knows
+    the name, so a stranger seen and later named is linked in code -- and a
+    masked stranger is never linked to the face under the mask."""
+    from story.scene import disguise_breaks_recognition, disguise_known_to
+
+    positions = (scene or {}).get("positions") or {}
+    present = [name for name in positions if room and _room_of(scene, name) == room]
+    out = []
+    for name in [*present, *extra]:
+        name = str(name or "").strip()
+        if not name or name == observer or name in out:
+            continue
+        key = name.casefold()
+        disguise = None if (transformations or {}).get(key) else (disguises or {}).get(key)
+        if disguise and disguise_breaks_recognition(
+                disguise_known_to(disguise, name, known_map), observer,
+                disguise.get("conceals_identity")):
+            continue
+        out.append(name)
+    return out
+
+
 def prepare_memory_commit(ctx, *, scene=None):
     """Build and embed all per-character memory mutations without writes."""
     chat = ctx.chat
@@ -744,6 +774,11 @@ def prepare_memory_commit(ctx, *, scene=None):
                         for _r in ctx.cast]
     _rekey_protected.append(persona_name(_persona_of(chat)))
 
+    # Who each memory had in it (`_memory_about`), read once for every mind.
+    from story.scene import active_disguises, active_transformations
+    _about_known = wget(cid, "known", {}) or {}
+    _about_disguises = active_disguises(cid)
+    _about_transformations = active_transformations(cid)
     for char_row in ctx.cast:
         ccid = char_row["id"]
         sh = json.loads(char_row["sheet"])
@@ -1029,6 +1064,9 @@ def prepare_memory_commit(ctx, *, scene=None):
                             "content": f"I heard {spk_label} say {quote}" + (f" to {tgt}" if tgt else ""),
                             "gist": f"{spk_label}: {qbody}", "key_phrases": [qbody, spk_label],
                             "entities": [spk_label], "location": room_name,
+                            # the speaker and addressee by their own names,
+                            # host-only; filtered with the room below
+                            "about": [n for n in (spk, _tgt_raw) if n],
                             "emotional_context": " — ".join(
                                 p for p in (
                                     mood,
@@ -2148,6 +2186,12 @@ def prepare_memory_commit(ctx, *, scene=None):
                 if isinstance(_layer, dict) and not _memory.get("feelings"):
                     _memory["feelings"] = {"moment": {**_layer, "turn": turn.idx,
                                                       "key": f"{turn.idx}:{_facet}"}}
+                # WHO IT HAD IN IT: the bodies in this mind's room this beat,
+                # and a heard line's speaker and addressee, by the engine's
+                # names -- host-only, live for the mind once it knows a name.
+                _memory["about"] = _memory_about(
+                    sc, cname, char_room, _about_known, _about_disguises,
+                    _about_transformations, extra=_memory.get("about") or ())
         # Recalled memories this mind read afresh this beat -- they kept
         # nothing, or it re-read them since -- keep that reading from now on
         # (`record_memory_look`, in the write phase with the disputes).

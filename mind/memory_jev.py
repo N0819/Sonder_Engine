@@ -45,6 +45,7 @@ replaced.
 
 from __future__ import annotations
 
+import re
 import time
 
 from mind.memory_common import _UNSET, _cos, _vec
@@ -90,6 +91,57 @@ PONDER_QUESTIONS = ("memory_ponder",)
 #: 0.7 -- a description of amber eyes read 0.87 for "what is her favourite
 #: colour?". Old `search_memories` had the answer in its top five on 57%.
 PONDER_FLOOR = 0.6
+#: How many of the ABOUT lane's best rows a ponder's net always holds (see
+#: `memory_net`): rows with someone the question names whose text never
+#: says the name are reached by no other lane, so fusion alone left them
+#: out -- measured 2026-09-29, the row of the Doctor meeting Hinami ranked
+#: 15th of 267 in the lane and never made a net of 50. Graded like any
+#: candidate; up to this many more questions a ponder, only when the
+#: question names somebody the mind knows.
+PONDER_ABOUT_RESERVE = 20
+
+
+def named_in(text, names):
+    """Which of `names` the text names: a name is named when one of its words
+    of three letters or more, other than "the", stands in the text as a word
+    -- "Picard" names "Jean-Luc Picard", and a question need not spell out a
+    whole name to ask about someone."""
+    words = set(re.findall(r"\w+", str(text or "").casefold()))
+    out = []
+    for name in names or ():
+        tokens = [t for t in re.findall(r"\w+", str(name or "").casefold()) if len(t) >= 3 and t != "the"]
+        if tokens and any(t in words for t in tokens):
+            out.append(name)
+    return out
+
+
+def without_names(text, names):
+    """The text with every one of `names` said as "them" ("their" where it
+    owns something): the whole name, then any word of it `named_in` would
+    have matched, each only where it stands as a word -- "What did Picard
+    say?" -> "What did them say?", "Hinami's mother" -> "their mother"."""
+    out = str(text or "")
+    for name in sorted({str(n) for n in names or () if str(n).strip()}, key=len, reverse=True):
+        words = [name] + [t for t in re.findall(r"\w+", name) if len(t) >= 3 and t.casefold() != "the"]
+        for word in words:
+            said = rf"(?<!\w){re.escape(word)}(?!\w)"
+            out = re.sub(said + r"['\u2019]s\b", "their", out, flags=re.IGNORECASE)
+            out = re.sub(said, "them", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bthem(?:[\s-]+them)+\b", "them", out)
+    return re.sub(r"\bthem(?:[\s-]+their)\b", "their", out)
+
+
+def unnamed_about(mem, known):
+    """The people a memory had in it (`about`, the engine's names) whom this
+    mind knows by name (`known`, casefolded) and whose name its text never
+    says -- who a row minted before the mind learned a name, or reading "the
+    young woman", was with, now that it has."""
+    tags = [t for t in (mem.get("about") or []) if str(t).casefold() in (known or ())]
+    if not tags:
+        return []
+    text = " ".join(str(mem.get(k) or "") for k in ("content", "gist"))
+    named = set(named_in(text, tags))
+    return [t for t in tags if t not in named]
 
 
 def _ranked(scores):
@@ -106,7 +158,7 @@ def _newest_first(memories):
 
 def memory_net(chat_id, char_id, query_text, *, current_turn_idx, embedded, aspects=(),
                here=None, exclude_ids=(), feeling_valence=None, bank=None,
-               viewer_frame_id=_UNSET, size=NET_SIZE):
+               viewer_frame_id=_UNSET, size=NET_SIZE, about=(), known=(), about_reserve=0):
     """`(memories, net, lanes, vectors)`: every row this mind may see except
     `exclude_ids`, as memory dicts by id; the first `size` ids (`NET_SIZE`;
     a ponder's `PONDER_NET`) by equal-weight RRF; the rankings that went into
@@ -183,23 +235,75 @@ def memory_net(chat_id, char_id, query_text, *, current_turn_idx, embedded, aspe
                    for mid, m in memories.items()}
             lanes["valence_match"] = sorted(gap, key=lambda mid: (gap[mid], mid))
             lanes["valence_contrast"] = sorted(gap, key=lambda mid: (-gap[mid], mid))
+    # ABOUT: rows with somebody the query names in them, whose own text
+    # never says the name -- minted before this mind learned it, or written as a
+    # description ("the young woman"). The words cannot reach them; the tag
+    # can (`memories.about`, live for a name only once the mind knows it).
+    # Ranked by meaning against the query WITH THE NAMES SAID AS "them": the
+    # rows share the person and not the name, and the name only pulls the
+    # query toward whatever else sounds like it. Measured 2026-09-29 on a
+    # 657-row bank: for "Where was I when I first met Hinami?" the row of the
+    # meeting sat 48th of 267 in this lane against the question as asked,
+    # under her "Kaa Sama!" lines, and 15th against "...first met them?".
+    # Newest first where no comparable vectors exist.
+    if about:
+        wanted = {str(n).casefold() for n in about}
+        tagged = [mid for mid, m in memories.items()
+                  if {t.casefold() for t in unnamed_about(m, known)} & wanted]
+        if tagged:
+            aimed = embedded.vectors[0] if rank_by_vector else None
+            if rank_by_vector:
+                from llm.providers import embed_texts_meta
+                stripped = without_names(query_text, about)
+                try:
+                    other = embed_texts_meta([stripped]) if stripped != query_text else None
+                except Exception:  # the lane falls back to the query as asked
+                    other = None
+                if (other is not None and not getattr(other, "fallback", False)
+                        and other.model_key == embedded.model_key and other.dimensions == embedded.dimensions):
+                    aimed = other.vectors[0]
+            if aimed is not None:
+                score = {mid: max(_cos(aimed, fv) if fv is not None else 0.0,
+                                  _cos(aimed, cv) if cv is not None else 0.0)
+                         for mid in tagged for fv, cv in [vectors.get(mid) or (None, None)]}
+                lanes["about"] = sorted(tagged, key=lambda mid: (-score[mid], mid))
+            else:
+                lanes["about"] = sorted(tagged, key=newest)
     fused = {}
     for ranking in lanes.values():
         for rank, mid in enumerate(ranking, 1):
             fused[mid] = fused.get(mid, 0.0) + 1.0 / (NET_K + rank)
     net = sorted(fused, key=lambda mid: (-fused[mid], mid))[:max(0, int(size))]
+    # A ponder's net always holds the ABOUT lane's best (`PONDER_ABOUT_RESERVE`).
+    held = set(net)
+    net += [mid for mid in (lanes.get("about") or [])[:max(0, int(about_reserve))] if mid not in held]
     for mid in net:
         memories[mid]["net_score"] = round(fused[mid], 6)
     return memories, net, lanes, vectors
 
 
-def memory_line(mem, current_turn_idx):
-    """One remembered row as a question carries it."""
+def memory_line(mem, current_turn_idx, known=()):
+    """One remembered row as a question carries it -- with who was in it
+    where the mind knows a name its text never says (`unnamed_about`), so a
+    row reading "the young woman" is graded as the moment with Hinami it is.
+
+    "WITH", NEVER "ABOUT". The tag is who the moment had in it -- everybody
+    in the room, and a line's speaker and addressee -- not what the row is
+    about, and the grader believes the word it is given. Measured 2026-09-29
+    on chat 64's Doctor, where Hinami is in all 657 rows and 267 never say her
+    name: "; about Hinami" took the answer to "Where exactly did the TARDIS
+    land when we arrived on the Enterprise?" from 0.72 to 0.05, the same on
+    each of three runs (a row about the closet, labelled as a row about her),
+    and 33 of that net's 50 rows carried it. "; with Hinami" graded it
+    0.77, and over all 30 questions handed on an answer for 20 of 23, against
+    19 for "about" and 17 with no tags, none of the 7 unanswerable ones
+    leaking."""
     body = " ".join(str(mem.get("content") or mem.get("gist") or "").split())[:MEMORY_CHARS]
     when = mem.get("turn_idx")
     ago = (f"{current_turn_idx - when} beats ago"
            if isinstance(when, int) and isinstance(current_turn_idx, int) else "some time ago")
-    return f"MEMORY ({ago}): {body}"
+    about = unnamed_about(mem, known)
+    return f"MEMORY ({ago}{'; with ' + ', '.join(about) if about else ''}): {body}"
 
 
 def memory_state(person, view, active_state, unsettled):
@@ -225,7 +329,7 @@ def memory_state(person, view, active_state, unsettled):
     ) if part)
 
 
-def grade_net(net, memories, state, current_turn_idx, language=None, questions=QUESTIONS):
+def grade_net(net, memories, state, current_turn_idx, language=None, questions=QUESTIONS, known=()):
     """`{id: grade or None}`: the larger of the graded `questions` per row
     (the picker's two; a ponder's one), None where none came back. Raises
     `decisions.DecisionError` when nothing could be asked."""
@@ -237,7 +341,7 @@ def grade_net(net, memories, state, current_turn_idx, language=None, questions=Q
     texts = {name: character_jev_text(name, language) for name in names}
     asked = {}
     for mid in net:
-        line = memory_line(memories[mid], current_turn_idx)
+        line = memory_line(memories[mid], current_turn_idx, known)
         for name in names:
             asked[f"{name}__{mid}"] = {"type": "choice",
                                        "instructions": texts[name].replace("{memory}", line),
@@ -245,9 +349,9 @@ def grade_net(net, memories, state, current_turn_idx, language=None, questions=Q
     answers = jev.ask(state, asked)
     out = {}
     for mid in net:
-        known = [g for g in (jev.graded(answers, f"{name}__{mid}", jev.GRADE) for name in names)
-                 if g is not None]
-        out[mid] = max(known) if known else None
+        got = [g for g in (jev.graded(answers, f"{name}__{mid}", jev.GRADE) for name in names)
+               if g is not None]
+        out[mid] = max(got) if got else None
     return out
 
 
@@ -267,7 +371,7 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
                       aspects=(), here=None, exclude_ids=(), limit=24, person=None,
                       view="", active_state=None, unsettled=(), language=None,
                       bank=None, record=None, net_size=NET_SIZE, questions=QUESTIONS,
-                      state=None):
+                      state=None, about=(), known=(), about_reserve=0):
     """The rows this mind recalls this beat, best first, each carrying its
     `score` (its grade, or its net score when no grade came back). `person`
     (`{name, drive, values}`) names the mind the decision model grades for;
@@ -284,7 +388,7 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
         chat_id, char_id, query_text, current_turn_idx=current_turn_idx, embedded=embedded,
         aspects=aspects, here=here, exclude_ids=exclude_ids,
         feeling_valence=surface.get("valence") if isinstance(surface, dict) else None,
-        bank=bank, size=net_size)
+        bank=bank, size=net_size, about=about, known=known, about_reserve=about_reserve)
     record.update(bank=len(memories), net=len(net),
                   lanes=sorted(name for name, ranking in lanes.items() if ranking))
     grades = {}
@@ -294,7 +398,7 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
             if decisions.configured():
                 if state is None:
                     state = memory_state(person, view, active_state, unsettled)
-                grades = grade_net(net, memories, state, current_turn_idx, language, questions)
+                grades = grade_net(net, memories, state, current_turn_idx, language, questions, known)
                 record["asked"] = len(tuple(questions)) * len(net)
                 record["answered"] = sum(1 for g in grades.values() if g is not None)
             else:
@@ -335,7 +439,7 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
 def jev_ponder_packet(chat_id, char_id, query, *, why="", current_turn_idx, embedded,
                       here=None, limit=PONDER_LIMIT, person=None, view="",
                       active_state=None, unsettled=(), language=None, bank=None,
-                      record=None):
+                      record=None, about=(), known=()):
     """What a ponder brings up (the owner, 2026-09-29: "Ponder pulls up 50
     candidates using rrf for jev to sort on how well it answers the ponder"):
     a net of `PONDER_NET` by the picker's equal-weight RRF over the question
@@ -355,7 +459,8 @@ def jev_ponder_packet(chat_id, char_id, query, *, why="", current_turn_idx, embe
         chat_id, char_id, query, current_turn_idx=current_turn_idx, embedded=embedded,
         here=here, limit=limit, person=person, view=view, active_state=active_state,
         unsettled=unsettled, language=language, bank=bank, record=record,
-        net_size=PONDER_NET, questions=PONDER_QUESTIONS,
+        net_size=PONDER_NET, questions=PONDER_QUESTIONS, about=about, known=known,
+        about_reserve=PONDER_ABOUT_RESERVE,
         state=(ponder_state(person, view, active_state, unsettled, query, why)
                if person is not None else None))
     if not any(m.get("picked_by") == "decision model" for m in picks):
