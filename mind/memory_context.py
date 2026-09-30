@@ -14,7 +14,7 @@ from mind.memory_common import (
 )
 from mind.memory_read import memory_bank_cache
 from mind.memory_write import _clamp
-from mind.memory_jev import jev_memory_packet
+from mind.memory_jev import PONDER_LIMIT, jev_memory_packet, jev_ponder_packet
 from mind.memory_retrieval import (
     _RECALL_LIMIT, _SUMMARY_RECALL_LIMIT, provenance_context_label,
     recent_memory_buffer, search_memories,
@@ -467,49 +467,44 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     ponder_query = " ".join(str(ponder_query or "").split())[:240]
     ponder_why = " ".join(str(ponder_why or "").split())[:240]
     pondered = []
+    ponder_record = {}
     if ponder_query:
-        # The SAME budget passive recall just used, which is `recall_limit`
-        # after absorption has narrowed it -- not a fixed 4.
+        # THE PONDER IS ANSWERED AS RECALL IS (the owner, 2026-09-29: "Ponder
+        # pulls up 50 candidates using rrf for jev to sort on how well it
+        # answers the ponder"): a net of `memory_jev.PONDER_NET` over the
+        # question alone, each candidate graded by the decision model on how
+        # much it helps answer it, the best kept (`jev_ponder_packet`). It was
+        # `search_memories(query)`, which handed a mind about one of the five
+        # answers the decision model would pick at k=8 and two at k=24
+        # (`docs/experiments/JEV_MEMORY_PROBE_2026_09_26.md`).
         #
-        # A fixed 4 meant a deliberate act of remembering was always served as
-        # though the mind were maximally absorbed, which is the one state it
-        # is not in: absorption narrows passive recall precisely because
-        # attention is elsewhere, and a ponder is attention deliberately
-        # placed. Scaling with absorption keeps that meaning in both
-        # directions -- an absorbed mind's ponder is still small.
-        #
-        # Measured on 470 independent questions (LongMemEval, ranks from the
-        # k=16 payload): k=4 answers 287, k=16 answers 396. The cap was
-        # costing 28% of answerable questions, and the loss falls hardest on
-        # exactly the classes a ponder tends to be -- preferences 47% of
-        # answerable, multi-session 34%, temporal 32% -- while questions whose
-        # evidence sits in a single row barely notice it. The curve has no
-        # knee at 4; it is simply the bottom of it.
-        #
-        # The payload argument the old comment made is real and does not bite
-        # here: measured on the live corpus, a ponder fires on roughly 1 turn
-        # in 332, so this spends about a thousand extra tokens on 0.3% of
-        # beats, on the lane where a character has decided it needs to
-        # remember something.
-        ponder_k = max(4, int(recall_limit))
-        pondered = search_memories(
-            chat_id, char_id, ponder_query, k=ponder_k, include_archived=True,
-            current_turn_idx=current_turn_idx, chronological=True,
-            here=here, in_sight=in_sight, record_access=False, bank=bank)
-        # Every row this lane REACHED, before the budget trim below: what the
-        # counter records is what came back to the mind, and search_memories
-        # recorded the untrimmed result when it still made the write itself.
+        # HOW MANY: the owner's five (`PONDER_LIMIT`), never more than the
+        # attention the mind has and never below the old floor of four. A
+        # ponder is attention deliberately placed, so it was sized with
+        # `recall_limit` rather than capped at 4 (LongMemEval: k=4 answered
+        # 287 of 470 questions, k=16 396 -- under similarity alone); with the
+        # decision model sorting fifty candidates, the few it keeps are the
+        # answers, and an absorbed mind's ponder is still small.
+        ponder_k = min(PONDER_LIMIT, max(4, int(recall_limit)))
+        pondered = jev_ponder_packet(
+            chat_id, char_id, ponder_query, why=ponder_why,
+            current_turn_idx=current_turn_idx,
+            embedded=embed_texts_meta([ponder_query]), here=here, limit=ponder_k,
+            person=person, view=current_view, active_state=active_state,
+            unsettled=unresolved_items, language=language, bank=bank,
+            record=ponder_record)
+        # What came back to the mind: the rows the ponder kept, as recall's
+        # own reach is the rows it kept.
         access_ids.extend(m.get("id") for m in pondered
                           if m.get("id") is not None)
-        # Chronological-neighbour expansion may return k+2; trim to the budget.
-        if len(pondered) > ponder_k:
-            pondered = sorted(
-                sorted(pondered, key=lambda m: float(m.get("score") or 0.0),
-                       reverse=True)[:ponder_k],
-                key=lambda m: (m.get("turn_idx") is None,
-                               m.get("turn_idx")
-                               if m.get("turn_idx") is not None else 10**12,
-                               m.get("id") or 0))
+        # Best first by the grade until here (the affect pass reads that
+        # order, `_internal.ponder_by_score`); the lane itself reads in time.
+        pondered = sorted(
+            pondered,
+            key=lambda m: (m.get("turn_idx") is None,
+                           m.get("turn_idx")
+                           if m.get("turn_idx") is not None else 10**12,
+                           m.get("id") or 0))
     # The layer between the summary and the raw rows: which EARLIER stretch of
     # this life the present beat is about.
     #
@@ -713,6 +708,15 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             # The recalled rows by grade, best first, and what the picker did.
             "recalled_by_grade": recalled_by_grade,
             "picker": picker,
+            # What the ponder did, as `picker` says what recall did.
+            "ponder": ponder_record,
+            # What a ponder brought up, by its own ranking, best first -- the
+            # memories the mind went looking for, which the affect pass looks
+            # back on (`affect_pass.ponder_from`).
+            "ponder_by_score": [
+                str(m.get("event_key")) for m in sorted(
+                    pondered, key=lambda m: float(m.get("score") or 0.0), reverse=True)
+                if str(m.get("event_key") or "")],
             # What each delivered row keeps of what its moment made this
             # mind feel, and the turn the mind last re-read it on -- for the
             # affect pass (`affect_pass.memories_from`, `name_memories`),

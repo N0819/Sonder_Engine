@@ -961,6 +961,9 @@
     "memory_useful": {
       "$text": "character_jev/memory_useful.txt"
     },
+    "memory_ponder": {
+      "$text": "character_jev/memory_ponder.txt"
+    },
     "which_aim": {
       "$text": "character_jev/which_aim.txt"
     },

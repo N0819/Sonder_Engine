@@ -1352,11 +1352,12 @@ its moment made the mind feel"). Still open from it: the beat's outcome,
 which the episode row records and no pass appraises, so its feeling is the
 lead-up's; the net's lanes that
 would read that tag (they read `encoding_valence`, the whole mood); how
-nostalgia -- which can grow from a moment that felt bad -- arises from a kept
-feeling (proposed: a one-time looking back as a memory ages, the owner's
-call); the 48-row packet
+often a character ponders under the bare contract -- the memories a ponder
+brings up are where nostalgia now comes from (1 beat in 332 was measured on
+the old contract); the 48-row packet
 (measured affordable on relevance, the conduct replay not run); the fun
-sections; a ponder answered by Jev over the whole bank; same-beat recall. The
+sections; a ponder over the whole bank (a ponder is graded since 2026-09-29, but over
+the owner's net of 50, not the bank); same-beat recall. The
 note's remaining owner decisions are the list. Measured in
 [`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md);
 instruments `tools/jev_*.py`.

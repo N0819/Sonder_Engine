@@ -351,6 +351,49 @@ def test_a_memorys_feeling_is_named_in_the_storys_language(jev):
     assert ja["recalled_old_memories"][0]["how_it_feels"] != en["recalled_old_memories"][0]["how_it_feels"]
 
 
+def _pondering(refs, kept_refs=None, query="the summers at the lake"):
+    """A packet in which the mind went looking for `refs` (best first): the
+    first recalled, the rest brought up by the ponder alone, every one keeping
+    MOMENT unless `kept_refs` says otherwise."""
+    kept_refs = refs if kept_refs is None else kept_refs
+    rows = [{"memory_ref": r, "details": f"Swimming at the lake, summer {i}.", "when": "about a year ago"}
+            for i, r in enumerate(refs)]
+    return {"recalled_old_memories": rows[:1],
+            "deliberate_recall": {"query_i_chose_last_turn": query, "additional_episodes": rows[1:]},
+            "_internal": {"ponder_by_score": list(refs),
+                          "feelings": {r: {"record": MOMENT if r in kept_refs else None} for r in refs}}}
+
+
+def test_the_memories_a_ponder_brings_up_are_looked_back_on(jev):
+    """The owner, 2026-09-29: "Perhaps we can tie it to the 5 memories a
+    ponder brings up?" -- read afresh even when they keep a feeling, with how
+    long ago each was and what it felt like at the time, the reading kept."""
+    packet = _pondering(["p1", "p2"])
+    felt = _before(memory_context=packet)
+    state, questions = jev[0]
+    assert {"mem:p1:kinds", "mem:p2:kinds"} <= _memory_questions(questions)
+    assert "WHAT YOU WENT LOOKING FOR IN YOUR MEMORY (you asked yourself: the summers at the lake)" in state
+    assert "Swimming at the lake, summer 0. (about a year ago)" in state
+    # the distance, never the feeling then: named beside it, the feeling
+    # anchored the reading (a hard winter with friends read sadness 0.93
+    # with it, nostalgia 0.70 without it, on Winnow)
+    assert "at the time" not in state
+    assert {felt.looks[r]["why"] for r in ("p1", "p2")} == {"pondered"}
+    # the ponder alone brought p2 up; it is felt like any memory held this beat
+    assert {"p1", "p2"} <= {e.ref for e in felt.emotions if e.source == "memory"}
+    # and it is named by what looking back found
+    ap.name_memories(packet, felt)
+    assert packet["deliberate_recall"]["additional_episodes"][0]["how_it_feels"] == ap._word("nostalgia", "en")
+
+
+def test_only_the_ponders_best_five_are_looked_back_on(jev):
+    refs = [f"p{i}" for i in range(7)]
+    felt = _before(memory_context=_pondering(refs))
+    read = {k.split(":")[1] for k in _memory_questions(jev[0][1])}
+    assert read == set(refs[:ap.PONDER_LOOKS]) and ap.PONDER_LOOKS == 5
+    assert set(felt.looks) == set(refs[:ap.PONDER_LOOKS])
+
+
 def test_a_later_round_reads_no_memory_twice_and_keeps_the_whole_beat(jev):
     first = _before()
     second = _before(earlier=ap.persisted(first),

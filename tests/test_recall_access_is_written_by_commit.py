@@ -120,14 +120,17 @@ class TestTheReadOnlyStage:
                  and isinstance(node.func, ast.Name)
                  and node.func.id == "search_memories"]
         # Ordinary recall is the decision model's pick (`mind/memory_jev.py`,
-        # 2026-09-27); the ponder and the unbidden subject still search.
+        # 2026-09-27), and so is a ponder since 2026-09-29 (the owner: "Ponder
+        # pulls up 50 candidates using rrf for jev to sort on how well it
+        # answers the ponder"); the unbidden subject still searches.
         picks = [node for node in ast.walk(builder)
                  if isinstance(node, ast.Call)
                  and isinstance(node.func, ast.Name)
-                 and node.func.id == "jev_memory_packet"]
+                 and node.func.id in ("jev_memory_packet", "jev_ponder_packet")]
 
-        assert len(lanes) == 2, "a retrieval lane was added or removed"
-        assert len(picks) == 1, "ordinary recall is the picker, once"
+        assert len(lanes) == 1, "a retrieval lane was added or removed"
+        assert sorted(call.func.id for call in picks) == ["jev_memory_packet", "jev_ponder_packet"], (
+            "ordinary recall and a ponder are the picker's, once each")
         for call in lanes:
             asked = {kw.arg: kw.value for kw in call.keywords}
             assert isinstance(asked.get("record_access"), ast.Constant)

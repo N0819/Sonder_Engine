@@ -27,6 +27,15 @@ thousand extra tokens on 0.3% of beats.
 What these tests pin is the RELATIONSHIP, not the number. If `_RECALL_LIMIT`
 moves, ponder should move with it; if absorption narrows recall, ponder narrows
 too.
+
+SINCE 2026-09-29 THE PONDER IS GRADED, and its size is the owner's five (the
+owner: "Ponder pulls up 50 candidates using rrf for jev to sort on how well it
+answers the ponder"; `memory_jev.jev_ponder_packet`). The LongMemEval numbers
+above were retrieval by similarity alone, where more rows was the only way to
+hold the answers; a decision model sorting fifty candidates keeps the answers
+in its first few. What survives of the relationship: a ponder never keeps more
+than the attention the mind has, and never fewer than the old floor of four --
+`min(PONDER_LIMIT, max(4, recall_limit))`.
 """
 
 from __future__ import annotations
@@ -57,41 +66,37 @@ def _bank(temp_db):
 PONDER = "what do I know about the lantern"
 
 
-def _ponder_k(monkeypatch, chat_id, char_id, absorption):
-    """The k the ponder lane actually asks for, captured at the seam."""
+def _ponder_k(monkeypatch, chat_id, char_id, absorption=0.0, recall_limit=None, query=PONDER):
+    """How many rows the ponder lane asks to keep, captured at the seam."""
     seen = {}
-    real = memory.search_memories
+    real = memory.jev_ponder_packet
 
-    def spy(cid, chid, query, **kw):
-        # By the QUERY, not by include_archived: passive recall passes that
-        # flag too, so a flag-based spy reads whichever call ran last and
-        # only happens to be right because ponder runs second.
-        if query == PONDER:
-            seen["k"] = kw.get("k")
-        return real(cid, chid, query, **kw)
+    def spy(cid, chid, q, **kw):
+        if q == query:
+            seen["k"] = kw.get("limit")
+        return real(cid, chid, q, **kw)
 
-    patch_seam(monkeypatch, "mind.memory_context", "search_memories", spy)
+    patch_seam(monkeypatch, "mind.memory_context", "jev_ponder_packet", spy)
+    kwargs = {} if recall_limit is None else {"recall_limit": recall_limit}
     memory.build_character_memory_context(
         chat_id, char_id, current_turn_idx=50, current_view="the harbour",
-        active_state={}, absorption=absorption,
-        ponder_query=PONDER)
+        active_state={}, absorption=absorption, ponder_query=query, **kwargs)
     return seen.get("k")
 
 
 class TestPonderTracksAttention:
-    def test_a_relaxed_mind_ponders_at_the_full_recall_budget(
-            self, _bank, monkeypatch):
+    def test_a_relaxed_mind_ponders_the_owners_five(self, _bank, monkeypatch):
         chat_id, char_id = _bank
-        assert _ponder_k(monkeypatch, chat_id, char_id, 0.0) == memory._RECALL_LIMIT
+        assert _ponder_k(monkeypatch, chat_id, char_id, 0.0) == memory.PONDER_LIMIT == 5
 
-    def test_a_partly_absorbed_mind_ponders_narrower(self, _bank, monkeypatch):
+    def test_a_partly_absorbed_mind_still_has_room_for_five(self, _bank, monkeypatch):
         chat_id, char_id = _bank
-        k = _ponder_k(monkeypatch, chat_id, char_id, 0.5)
-        assert k == 8, "absorption 0.35-0.7 narrows recall to 8"
+        assert _ponder_k(monkeypatch, chat_id, char_id, 0.5) == min(memory.PONDER_LIMIT, 8), (
+            "absorption 0.35-0.7 narrows recall to 8, which five fits inside")
 
     def test_a_fully_absorbed_mind_keeps_the_old_floor(self, _bank, monkeypatch):
-        """The change must not make an absorbed mind ponder MORE. Four was
-        always right for this case; it was only ever wrong as a ceiling."""
+        """An absorbed mind's ponder is still small: recall narrows to 4,
+        and the ponder with it."""
         chat_id, char_id = _bank
         assert _ponder_k(monkeypatch, chat_id, char_id, 0.9) == 4
 
@@ -100,19 +105,7 @@ class TestPonderTracksAttention:
         entirely -- a ponder that returns nothing is worse than a small one,
         because the character asked."""
         chat_id, char_id = _bank
-        seen = {}
-        real = memory.search_memories
-
-        def spy(cid, chid, query, **kw):
-            if query == "the lantern":
-                seen["k"] = kw.get("k")
-            return real(cid, chid, query, **kw)
-
-        patch_seam(monkeypatch, "mind.memory_context", "search_memories", spy)
-        memory.build_character_memory_context(
-            chat_id, char_id, current_turn_idx=50, current_view="the harbour",
-            active_state={}, recall_limit=1, ponder_query="the lantern")
-        assert seen.get("k") == 4
+        assert _ponder_k(monkeypatch, chat_id, char_id, recall_limit=1, query="the lantern") == 4
 
 
 class TestPonderStillDelivers:
@@ -147,9 +140,13 @@ class TestPonderStillDelivers:
             return real(cid, chid, query, **kw)
 
         patch_seam(monkeypatch, "mind.memory_context", "search_memories", spy)
+        pondered = []
+        patch_seam(monkeypatch, "mind.memory_context", "jev_ponder_packet",
+                   lambda *a, **kw: pondered.append(a) or [])
         memory.build_character_memory_context(
             chat_id=_bank[0], char_id=_bank[1], current_turn_idx=50,
             current_view="the harbour", active_state={})
+        assert pondered == [], "no ponder query must mean no ponder net"
         # No search at all: passive recall is the decision model's pick
         # (`mind/memory_jev.py`), and with no pending query nothing else runs.
         assert calls == [], (

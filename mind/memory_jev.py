@@ -66,6 +66,18 @@ MEMORY_CHARS = 500
 #: The two graded questions, by pack name (`character_jev.<name>`); a row's
 #: grade is the larger.
 QUESTIONS = ("memory_situation", "memory_useful")
+#: A PONDER IS ANSWERED THE SAME WAY (the owner, 2026-09-29: "Ponder pulls up
+#: 50 candidates using rrf for jev to sort on how well it answers the ponder"
+#: -- the ponder lane had been `search_memories(query)` alone, which handed a
+#: mind about one of the five answers the decision model would pick at k=8
+#: and two at k=24; a net of 50 holds 54-60% of those five,
+#: `docs/experiments/JEV_MEMORY_PROBE_2026_09_26.md`). The net is cut at
+#: PONDER_NET, each candidate graded on the question the probe's answer key
+#: used, and the best PONDER_LIMIT kept -- "the 5 memories a ponder brings
+#: up", which the affect pass also looks back on (`affect_pass.PONDER_LOOKS`).
+PONDER_NET = 50
+PONDER_LIMIT = 5
+PONDER_QUESTIONS = ("memory_ponder",)
 
 
 def _ranked(scores):
@@ -82,11 +94,12 @@ def _newest_first(memories):
 
 def memory_net(chat_id, char_id, query_text, *, current_turn_idx, embedded, aspects=(),
                here=None, exclude_ids=(), feeling_valence=None, bank=None,
-               viewer_frame_id=_UNSET):
+               viewer_frame_id=_UNSET, size=NET_SIZE):
     """`(memories, net, lanes, vectors)`: every row this mind may see except
-    `exclude_ids`, as memory dicts by id; the first `NET_SIZE` ids by
-    equal-weight RRF; the rankings that went into it by lane; and each row's
-    (content, cue) vectors where they are comparable with `embedded`.
+    `exclude_ids`, as memory dicts by id; the first `size` ids (`NET_SIZE`;
+    a ponder's `PONDER_NET`) by equal-weight RRF; the rankings that went into
+    it by lane; and each row's (content, cue) vectors where they are
+    comparable with `embedded`.
 
     `aspects` is `[(label, text)]` for exactly the texts `embedded` carries
     after the query, in order -- the batch `build_character_memory_context`
@@ -162,7 +175,7 @@ def memory_net(chat_id, char_id, query_text, *, current_turn_idx, embedded, aspe
     for ranking in lanes.values():
         for rank, mid in enumerate(ranking, 1):
             fused[mid] = fused.get(mid, 0.0) + 1.0 / (NET_K + rank)
-    net = sorted(fused, key=lambda mid: (-fused[mid], mid))[:NET_SIZE]
+    net = sorted(fused, key=lambda mid: (-fused[mid], mid))[:max(0, int(size))]
     for mid in net:
         memories[mid]["net_score"] = round(fused[mid], 6)
     return memories, net, lanes, vectors
@@ -200,40 +213,56 @@ def memory_state(person, view, active_state, unsettled):
     ) if part)
 
 
-def grade_net(net, memories, state, current_turn_idx, language=None):
-    """`{id: grade or None}`: the larger of the two graded questions per row,
-    None where neither came back. Raises `decisions.DecisionError` when
-    nothing could be asked."""
+def grade_net(net, memories, state, current_turn_idx, language=None, questions=QUESTIONS):
+    """`{id: grade or None}`: the larger of the graded `questions` per row
+    (the picker's two; a ponder's one), None where none came back. Raises
+    `decisions.DecisionError` when nothing could be asked."""
     from llm.prompts import character_jev_options, character_jev_text
     from mind import character_jev as jev
 
+    names = tuple(questions)
     scale = character_jev_options("grade", language)
-    texts = {name: character_jev_text(name, language) for name in QUESTIONS}
-    questions = {}
+    texts = {name: character_jev_text(name, language) for name in names}
+    asked = {}
     for mid in net:
         line = memory_line(memories[mid], current_turn_idx)
-        for name in QUESTIONS:
-            questions[f"{name}__{mid}"] = {"type": "choice",
-                                           "instructions": texts[name].replace("{memory}", line),
-                                           "criteria": dict(scale)}
-    answers = jev.ask(state, questions)
+        for name in names:
+            asked[f"{name}__{mid}"] = {"type": "choice",
+                                       "instructions": texts[name].replace("{memory}", line),
+                                       "criteria": dict(scale)}
+    answers = jev.ask(state, asked)
     out = {}
     for mid in net:
-        known = [g for g in (jev.graded(answers, f"{name}__{mid}", jev.GRADE) for name in QUESTIONS)
+        known = [g for g in (jev.graded(answers, f"{name}__{mid}", jev.GRADE) for name in names)
                  if g is not None]
         out[mid] = max(known) if known else None
     return out
 
 
+def ponder_state(person, view, active_state, unsettled, query, why=""):
+    """The picker's state, and what the mind went looking for: the question
+    it is asking its own memory and why, which every candidate is graded
+    against."""
+    parts = [memory_state(person, view, active_state, unsettled),
+             "THE QUESTION YOU ARE ASKING YOUR OWN MEMORY: " + " ".join(str(query or "").split())]
+    why = " ".join(str(why or "").split())
+    if why:
+        parts.append("WHY YOU ARE ASKING: " + why)
+    return "\n\n".join(parts)
+
+
 def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedded,
                       aspects=(), here=None, exclude_ids=(), limit=24, person=None,
                       view="", active_state=None, unsettled=(), language=None,
-                      bank=None, record=None):
+                      bank=None, record=None, net_size=NET_SIZE, questions=QUESTIONS,
+                      state=None):
     """The rows this mind recalls this beat, best first, each carrying its
     `score` (its grade, or its net score when no grade came back). `person`
     (`{name, drive, values}`) names the mind the decision model grades for;
     without one -- the author's preview, which must not pay for a model call
-    -- the packet is the net's own order. `record` receives what happened."""
+    -- the packet is the net's own order. `record` receives what happened.
+    `net_size`, `questions` and a ready `state` are a ponder's
+    (`jev_ponder_packet`); the defaults are recall's."""
     record = record if record is not None else {}
     t0 = time.time()
     active_state = active_state or {}
@@ -243,7 +272,7 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
         chat_id, char_id, query_text, current_turn_idx=current_turn_idx, embedded=embedded,
         aspects=aspects, here=here, exclude_ids=exclude_ids,
         feeling_valence=surface.get("valence") if isinstance(surface, dict) else None,
-        bank=bank)
+        bank=bank, size=net_size)
     record.update(bank=len(memories), net=len(net),
                   lanes=sorted(name for name, ranking in lanes.items() if ranking))
     grades = {}
@@ -251,9 +280,10 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
         try:
             from llm import decisions
             if decisions.configured():
-                state = memory_state(person, view, active_state, unsettled)
-                grades = grade_net(net, memories, state, current_turn_idx, language)
-                record["asked"] = len(QUESTIONS) * len(net)
+                if state is None:
+                    state = memory_state(person, view, active_state, unsettled)
+                grades = grade_net(net, memories, state, current_turn_idx, language, questions)
+                record["asked"] = len(tuple(questions)) * len(net)
                 record["answered"] = sum(1 for g in grades.values() if g is not None)
             else:
                 record["unasked"] = "no decision model is configured"
@@ -288,3 +318,27 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
     record.update(picked=len(out), near_duplicates_dropped=dropped,
                   seconds=round(time.time() - t0, 3))
     return out
+
+
+def jev_ponder_packet(chat_id, char_id, query, *, why="", current_turn_idx, embedded,
+                      here=None, limit=PONDER_LIMIT, person=None, view="",
+                      active_state=None, unsettled=(), language=None, bank=None,
+                      record=None):
+    """What a ponder brings up (the owner, 2026-09-29: "Ponder pulls up 50
+    candidates using rrf for jev to sort on how well it answers the ponder"):
+    a net of `PONDER_NET` by the picker's equal-weight RRF over the question
+    the mind asked its own memory (`embedded` carries that question alone),
+    each candidate graded on how much it helps answer it
+    (`character_jev.memory_ponder`, with the question and why in the state),
+    the best `limit` kept -- near-duplicates dropped, as recall drops them.
+    Rows already in this beat's packet are candidates too: a ponder may bring
+    back what recall also did, and the payload says so. Without a named mind,
+    or a decision model to ask, it is the net's own order."""
+    active_state = active_state or {}
+    return jev_memory_packet(
+        chat_id, char_id, query, current_turn_idx=current_turn_idx, embedded=embedded,
+        here=here, limit=limit, person=person, view=view, active_state=active_state,
+        unsettled=unsettled, language=language, bank=bank, record=record,
+        net_size=PONDER_NET, questions=PONDER_QUESTIONS,
+        state=(ponder_state(person, view, active_state, unsettled, query, why)
+               if person is not None else None))

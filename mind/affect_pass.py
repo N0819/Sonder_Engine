@@ -26,6 +26,11 @@ have it update the moods again post character actions."
   memory only when nothing is kept for it -- a row minted before memories
   kept their feeling -- or its meaning changed since, and that reading is
   kept too (`looks`).
+- **The memories a ponder brings up are looked back on** (the owner,
+  2026-09-29: "Perhaps we can tie it to the 5 memories a ponder brings
+  up?"): read afresh with how long ago each was and what it felt like at the
+  time, the reading kept -- where nostalgia, grief and regret come from, and
+  where a hard time can turn fond.
 - `given_affect` renders the mood in the engine's `active_state.affect` shape
   -- the field commit's `affect.resolve_affect` reads -- so every reader of
   the character's affect now reads the engine's mood where it read the
@@ -73,6 +78,15 @@ ABOUT_CHARS = 60
 #: stored into every new memory, a recalled feeling would copy itself
 #: forward into the next and the next.
 FACETS = {"perceived": ("event",), "acted": ("act",)}
+#: How many of the memories a ponder brings up the mind LOOKS BACK ON: read
+#: afresh with how long ago each was and what it felt like at the time, the
+#: reading kept (the owner, 2026-09-29, on how nostalgia should arise:
+#: "Perhaps we can tie it to the 5 memories a ponder brings up?"). A kept
+#: feeling is what the moment felt like; what a memory becomes with distance
+#: -- nostalgia, grief, regret, and a hard time turned fond ("even negative
+#: memories in the moment can become nostalgic") -- is a judgement about the
+#: past as it stands now, made when the mind deliberately turns to it.
+PONDER_LOOKS = 5
 
 
 def facet_of(row):
@@ -208,6 +222,7 @@ def memories_from(memory_context):
     projection the character reads."""
     context = memory_context or {}
     kept = (context.get("_internal") or {}).get("feelings") or {}
+    looked_back = set(ponder_from(context)["refs"])
     rows = [m for m in context.get("recalled_old_memories") or [] if isinstance(m, dict)]
     order = (context.get("_internal") or {}).get("recalled_by_grade") or []
     if order:
@@ -215,6 +230,10 @@ def memories_from(memory_context):
         rows = sorted(rows, key=lambda m: rank.get(
             str(m.get("event_key") or m.get("memory_ref") or ""), len(rank)))
     rows += [m for m in context.get("recent_memories") or [] if isinstance(m, dict)]
+    # What a ponder brought up that recall did not: memories the mind went
+    # looking for, felt like any other it holds this beat.
+    rows += [m for m in (context.get("deliberate_recall") or {}).get("additional_episodes") or []
+             if isinstance(m, dict)]
     out, seen = [], set()
     for i, m in enumerate(rows):
         if not isinstance(m, dict):
@@ -230,8 +249,22 @@ def memories_from(memory_context):
             # habits by it would tire whichever row lands there next.
             entry = (kept.get(key) or {}) if key else {}
             out.append({"ref": key or f"m{i}", "keyed": bool(key), "text": _text(text),
-                        "feelings": entry.get("record"), "disputed_turn": entry.get("disputed_turn")})
+                        "feelings": entry.get("record"), "disputed_turn": entry.get("disputed_turn"),
+                        "when": str(m.get("when") or ""), "pondered": bool(key) and key in looked_back})
     return out
+
+
+def ponder_from(memory_context):
+    """What the mind went looking for in its memory this beat, from the
+    packet (`deliberate_recall`): the question it asked itself, why, and the
+    refs of the memories it will look back on -- the ponder's best
+    `PONDER_LOOKS`, by the ponder's own ranking (`_internal.ponder_by_score`)."""
+    context = memory_context or {}
+    recall = context.get("deliberate_recall") or {}
+    ranked = (context.get("_internal") or {}).get("ponder_by_score") or []
+    refs = [str(r) for r in ranked if str(r or "").strip()][:PONDER_LOOKS]
+    return {"query": str(recall.get("query_i_chose_last_turn") or ""),
+            "why": str(recall.get("why_i_chose_it") or ""), "refs": refs}
 
 
 def _latest(kept):
@@ -246,14 +279,17 @@ def _latest(kept):
 
 def why_read(memory, looks=None):
     """Why a recalled memory must be read by the decision model now, or None
-    when what it keeps stands: "unfelt" when nothing is kept (a row minted
-    before memories kept their feeling, or on a beat whose passes did not
-    reach this mind, or with no stable key to keep it by), "reread" when the
-    mind re-read the memory after what it keeps was found -- a changed
-    meaning is a changed feeling. A row already read this beat, in an earlier
-    round (`looks`), is not read twice."""
+    when what it keeps stands: "pondered" when the mind went looking for it
+    -- it looks back on it, whatever it keeps (`PONDER_LOOKS`); "unfelt" when
+    nothing is kept (a row minted before memories kept their feeling, or on a
+    beat whose passes did not reach this mind, or with no stable key to keep
+    it by); "reread" when the mind re-read the memory after what it keeps was
+    found -- a changed meaning is a changed feeling. A row already read this
+    beat, in an earlier round (`looks`), is not read twice."""
     if memory["ref"] in (looks or {}):
         return None
+    if memory.get("pondered"):
+        return "pondered"
     latest = _latest(memory.get("feelings"))
     if latest is None:
         return "unfelt"
@@ -327,8 +363,30 @@ def psychology_text(sheet):
     return "\n".join(lines)
 
 
-def state_text(name, sheet, events, people, memories, concerns, mood_words=()):
-    """The one state every question of this character's request reads."""
+def _looking_back(memory, language=None):
+    """How far back a memory the mind went looking for lies -- the distance a
+    looking back judges across -- and NOT what it felt like at the time.
+
+    MEASURED, 2026-09-29, on the local Winnow-12B drop-in: six memories
+    looked back on with "at the time it made you feel <the kept feeling>"
+    beside the distance anchored the reading to that feeling -- a hard winter
+    four friends spent broke in one kitchen (distress then, twelve years ago)
+    read sadness 0.93, basic training (distress, ten years) haunted. Given the
+    distance alone, the winter read nostalgia 0.70 and tenderness, training
+    resolve, an exam fled in tears regret, a dead grandmother's kitchen
+    nostalgia, while a massacre stayed haunted (0.96) and yesterday's joke
+    amusement: a moment that felt bad can turn fond, as the owner said, and
+    what should not, does not. Framing the lines as looked back on, or asking
+    the three questions "looking back on it now", added nothing to that."""
+    return f" ({memory['when']})" if memory.get("when") else ""
+
+
+def state_text(name, sheet, events, people, memories, concerns, mood_words=(), ponder=None,
+               language=None):
+    """The one state every question of this character's request reads. The
+    memories a ponder brought up stand apart, under the question the mind
+    asked itself, each with how long ago it was and what it felt like at the
+    time -- what a looking back is asked across (`PONDER_LOOKS`)."""
     parts = [f"YOU ARE {name}.", psychology_text(sheet)]
     if mood_words:
         parts.append("HOW YOU FELT COMING INTO THIS: " + ", ".join(mood_words))
@@ -341,8 +399,15 @@ def state_text(name, sheet, events, people, memories, concerns, mood_words=()):
             f"- {e['ref']}: {appraisal.event_line(e)}" for e in events))
     if concerns:
         parts.append("WHAT IS STILL UNSETTLED FOR YOU:\n" + "\n".join(f"- {c['text']}" for c in concerns))
-    if memories:
-        parts.append("WHAT YOU REMEMBER RIGHT NOW:\n" + "\n".join(f"- {m['text']}" for m in memories))
+    back = [m for m in memories or () if m.get("pondered")]
+    rest = [m for m in memories or () if not m.get("pondered")]
+    if rest:
+        parts.append("WHAT YOU REMEMBER RIGHT NOW:\n" + "\n".join(f"- {m['text']}" for m in rest))
+    if back:
+        asked = " ".join(str((ponder or {}).get("query") or "").split())
+        head = "WHAT YOU WENT LOOKING FOR IN YOUR MEMORY" + (f" (you asked yourself: {asked})" if asked else "")
+        parts.append(head + ", AND FOUND:\n" + "\n".join(
+            f"- {m['text']}{_looking_back(m, language)}" for m in back))
     return "\n\n".join(p for p in parts if p)
 
 
@@ -363,7 +428,8 @@ def before_call(name, sheet, active, baseline, units, observations=(), memory_co
     felt = Felt(mood=mood, home=home, habits=habits, clock=clock, people=people, language=language,
                 formed={k: v for k, v in (prior.get("formed") or {}).items() if isinstance(v, dict)},
                 looks={k: v for k, v in (prior.get("looks") or {}).items() if isinstance(v, dict)})
-    felt.state_text = state_text(name, sheet, events, people, memories, concerns, mood_words(felt, language))
+    felt.state_text = state_text(name, sheet, events, people, memories, concerns, mood_words(felt, language),
+                                 ponder=ponder_from(memory_context), language=language)
     if not (events or memories or concerns):
         felt.note = "nothing new to appraise"
         return felt

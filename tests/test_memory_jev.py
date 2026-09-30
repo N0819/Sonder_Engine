@@ -185,3 +185,51 @@ def test_the_affect_pass_reads_the_pick_best_first():
         {"memory_ref": "best", "details": "the row that bears most"}],
         "_internal": {"recalled_by_grade": ["best", "mid", "old"]}}
     assert [m["ref"] for m in affect_pass.memories_from(context)] == ["best", "mid", "old"]
+
+
+# --- a ponder is answered the same way ----------------------------------------------
+#
+# The owner, 2026-09-29: "Ponder pulls up 50 candidates using rrf for jev to
+# sort on how well it answers the ponder" -- and the memories it brings up are
+# the ones the mind looks back on ("Perhaps we can tie it to the 5 memories a
+# ponder brings up?").
+
+PONDER = "where did I hide the brass key"
+
+
+def _ponder_asks(asked):
+    return [(state, qs) for state, qs in asked if any(k.startswith("memory_ponder__") for k in qs)]
+
+
+def test_a_ponder_is_the_decision_models_pick_from_a_net_of_fifty(_bank, monkeypatch):
+    chat_id, char_id = _bank
+    asked = []
+    monkeypatch.setattr(decisions, "OVERRIDE", _grade_by_key(asked))
+    ctx = _context(chat_id, char_id, person=PERSON, ponder_query=PONDER, ponder_why="it is gone")
+    (state, questions), = _ponder_asks(asked)
+    # One question per candidate, on the question the mind asked itself.
+    assert {k.split("__")[0] for k in questions} == {"memory_ponder"}
+    assert len(questions) == ctx["_internal"]["ponder"]["net"] == min(40, memory.PONDER_NET)
+    assert "THE QUESTION YOU ARE ASKING YOUR OWN MEMORY: " + PONDER in state
+    assert "WHY YOU ARE ASKING: it is gone" in state and state.startswith("YOU ARE Mara.")
+    # The owner's five, the answers first: every key row the bank holds.
+    refs = ctx["_internal"]["ponder_by_score"]
+    assert len(refs) == memory.PONDER_LIMIT == 5
+    lanes = {m["memory_ref"]: m for lane in ("recalled_old_memories", "recent_memories")
+             for m in ctx.get(lane) or []}
+    lanes.update({m["memory_ref"]: m for m in ctx["deliberate_recall"]["additional_episodes"]})
+    key_refs = [r for r in refs if KEY in (lanes[r].get("details") or lanes[r].get("gist") or "")]
+    assert refs[:len(key_refs)] == key_refs and len(key_refs) == 4
+    assert set(ctx["deliberate_recall"]["result_refs"]) == set(refs)
+
+
+def test_a_ponder_in_the_authors_preview_pays_for_no_call(_bank, monkeypatch):
+    chat_id, char_id = _bank
+
+    def refuse(state, questions):
+        raise AssertionError("the preview must not call the decision model")
+
+    monkeypatch.setattr(decisions, "OVERRIDE", refuse)
+    ctx = _context(chat_id, char_id, ponder_query=PONDER)
+    assert len(ctx["_internal"]["ponder_by_score"]) == memory.PONDER_LIMIT
+    assert ctx["_internal"]["ponder"]["unasked"] == "no mind named (preview)"

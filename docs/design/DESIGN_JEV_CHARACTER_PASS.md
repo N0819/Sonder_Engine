@@ -647,7 +647,10 @@ the first three bullets above.
 - **A ponder reads the whole bank.** Retrieval hands a ponder about one of its
   five best answers at k=8 and two at k=24; the best fitted pool of 50 holds
   60%. A ponder fires about one beat in 332, and 650 rows cost $0.005, so the
-  judge reads everything and picks the five.
+  judge reads everything and picks the five. **Built 2026-09-29 over a net of
+  50, not the bank** (the owner: "Ponder pulls up 50 candidates using rrf for
+  jev to sort on how well it answers the ponder"; "Nostalgia comes from
+  looking back on what a ponder brings up", above).
 - **The fun sections** (the owner's "ironic to bring up", "good teasing
   material"): `callback` and the tact channel `sore` pick the right rows and
   are reachable; `irony` is mixed and unreachable by any lane (22%); `tease`
@@ -963,15 +966,43 @@ Still open:
   minding the interaction loop's rounds, which already appraise some of the
   same conduct -- or read the newest episode once at its first recall. The
   owner's call.
-- **Nostalgia.** The three questions were where the moods whose object is the
-  past came from -- nostalgia, grief, regret, longing. A kept feeling is what
-  the moment felt like, so those now come only from a row being read (never
-  kept, or re-read) or from a moment that itself stirred them. And the owner:
-  "even negative memories in the moment can become nostalgic" -- so nostalgia
-  cannot be a rule on a kept feeling's sign. Proposed: a one-time looking back
-  when a memory first returns after it has aged past a stage (a day, a week, a
-  month, a year of story time), asked with what the moment felt like, the
-  answer kept as a reading. The owner's call.
+- **How often a mind ponders.** Nostalgia now comes from pondering (below);
+  a ponder fired on about 1 beat in 332 under the full contract, and nothing
+  has counted it under the bare one.
+
+**Nostalgia comes from looking back on what a ponder brings up -- the same
+day.** The three questions were where the moods whose object is the past
+came from -- nostalgia, grief, regret, longing -- and a kept feeling is what
+the moment felt like. The owner: "i'm just not sure how to do nostalgia
+properly because even negative memories in the moment can become nostalgic"
+-- so it cannot be a rule on a kept feeling's sign -- then "Perhaps we can tie
+it to the 5 memories a ponder brings up?", and of the ponder itself: "Ponder
+pulls up 50 candidates using rrf for jev to sort on how well it answers the
+ponder".
+
+- **The ponder** (`memory_jev.jev_ponder_packet`): a net of 50 by the
+  picker's equal-weight RRF over the question alone, each candidate graded on
+  "How much does this memory help answer the question you are asking your own
+  memory?" (the probe's answer-key question, `character_jev.memory_ponder`),
+  the best five kept. It was `search_memories(query)`, which handed a mind
+  about one of the five answers the decision model would pick at k=8 and two
+  at k=24; a net of 50 holds 54-60% of them (the evidence doc, "can
+  retrieval answer a ponder?").
+- **Looking back** (`affect_pass.PONDER_LOOKS`): those five are read afresh
+  whatever they keep, each with how long ago it was, and the reading is what
+  the memory carries from then on -- recalling a memory and re-weighing it
+  rewrites how it feels, which is reconsolidation's claim.
+- **Measured** on the local Winnow-12B drop-in, six memories looked back on
+  through the real pass: a hard winter four friends spent broke in one
+  kitchen (distress then, twelve years ago) read nostalgia 0.70 and
+  tenderness, a dead grandmother's kitchen nostalgia 0.81, basic training
+  resolve, an exam fled in tears regret, while a massacre stayed haunted
+  (0.96) and yesterday's joke amusement. Read plainly, without the distance,
+  the winter read protectiveness and resolve. Told what the moment felt like
+  at the time as well, the reading anchored on it -- the winter read sadness
+  0.93, training haunted -- so the question carries the distance and never
+  the feeling then; framing the lines as looked back on, or asking "looking
+  back on it now", added nothing.
 - **The net's lanes.** `mind/memory_jev.py`'s feeling lanes still read
   `encoding_valence`, the whole mood at encoding; the kept feeling is the
   lane the research wanted.

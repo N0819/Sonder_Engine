@@ -364,10 +364,29 @@ deliberate_recall:
 ```
 
 Any ponder result already present in normal recall is marked with both
-`normal_recall` and `deliberate_ponder` rather than duplicated. The lane asks
-for the SAME budget passive recall just used -- `recall_limit` after absorption
-has narrowed it, so 16 for a relaxed mind, 8 part-absorbed, and a floor of 4 --
-rather than a fixed four. A fixed four served a deliberate act of remembering
+`normal_recall` and `deliberate_ponder` rather than duplicated.
+
+**Since 2026-09-29 a ponder is answered as recall is** (the owner: "Ponder
+pulls up 50 candidates using rrf for jev to sort on how well it answers the
+ponder"; `memory_jev.jev_ponder_packet`): a net of `PONDER_NET` (50) by the
+picker's equal-weight RRF over the question alone, each candidate graded by
+the decision model on "How much does this memory help answer the question you
+are asking your own memory?" (`character_jev.memory_ponder`, the probe's
+answer-key question, with the question and its `why` in the state), and the
+best `PONDER_LIMIT` (5) kept -- never more than the attention recall has,
+never fewer than four: `min(5, max(4, recall_limit))`. Without a named mind
+or a decision model it is the net's own order. The affect pass then LOOKS
+BACK on those five (`affect_pass.PONDER_LOOKS`): each is read afresh with how
+long ago it was, and the reading is what the memory carries from then on --
+where nostalgia, grief and regret come from (`memories.feelings`, §1).
+
+Until then the lane was `search_memories(query)` at the SAME budget passive
+recall used -- `recall_limit` after absorption had narrowed it, so 16 for a
+relaxed mind, 8 part-absorbed, and a floor of 4 -- rather than a fixed four.
+The reasoning below is that version's, measured under similarity alone; a
+ponder sorted by the decision model keeps the answers in its first few
+(`docs/experiments/JEV_MEMORY_PROBE_2026_09_26.md`, "can retrieval answer a
+ponder?"). A fixed four served a deliberate act of remembering
 as though the mind were maximally absorbed, which is the one state it is not
 in; absorption narrows recall because attention is elsewhere, and a ponder is
 attention deliberately placed. Measured on 470 independent questions
@@ -532,7 +551,8 @@ rather than the one-story fitted weights: Jev's pick from this net is 0.992 of
 its pick from the whole bank, against 0.994 fitted and 0.983 from today's fused
 order. Fails toward the net's own order when the decision model is unconfigured
 or silent, and the author's preview (which names no mind) never pays for a
-call. The ponder and the unbidden subject below still use `search_memories`.
+call. A ponder uses the same net, cut at 50 and graded on its own question
+(above); the unbidden subject below still uses `search_memories`.
 
 `search_memories` fuses **four rankings plus one per aspect** with Reciprocal
 Rank Fusion, then applies scalar bonuses, then diversifies.
