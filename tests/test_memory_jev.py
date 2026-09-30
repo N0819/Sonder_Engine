@@ -212,15 +212,37 @@ def test_a_ponder_is_the_decision_models_pick_from_a_net_of_fifty(_bank, monkeyp
     assert len(questions) == ctx["_internal"]["ponder"]["net"] == min(40, memory.PONDER_NET)
     assert "THE QUESTION YOU ARE ASKING YOUR OWN MEMORY: " + PONDER in state
     assert "WHY YOU ARE ASKING: it is gone" in state and state.startswith("YOU ARE Mara.")
-    # The owner's five, the answers first: every key row the bank holds.
+    # Up to the owner's five, and only rows that answer: the four key rows the
+    # bank holds reach the floor, the fifth pick does not and is not handed on.
     refs = ctx["_internal"]["ponder_by_score"]
-    assert len(refs) == memory.PONDER_LIMIT == 5
     lanes = {m["memory_ref"]: m for lane in ("recalled_old_memories", "recent_memories")
              for m in ctx.get(lane) or []}
     lanes.update({m["memory_ref"]: m for m in ctx["deliberate_recall"]["additional_episodes"]})
-    key_refs = [r for r in refs if KEY in (lanes[r].get("details") or lanes[r].get("gist") or "")]
-    assert refs[:len(key_refs)] == key_refs and len(key_refs) == 4
+    assert len(refs) == 4 < memory.PONDER_LIMIT == 5
+    assert all(KEY in (lanes[r].get("details") or lanes[r].get("gist") or "") for r in refs)
+    assert ctx["_internal"]["ponder"]["below_floor"] == 1
+    assert ctx["_internal"]["ponder"]["nothing_came_back"] is False
     assert set(ctx["deliberate_recall"]["result_refs"]) == set(refs)
+
+
+def test_a_ponder_nothing_answers_brings_back_nothing(_bank, monkeypatch):
+    """Graded and none reach `PONDER_FLOOR`: the lane carries the question and
+    no rows -- a mind that went looking and did not find it, never five
+    unrelated rows (on Winnow, 0 of 7 unanswerable questions kept a row at
+    the floor; the first wording let 3 through)."""
+    chat_id, char_id = _bank
+
+    def nothing(state, questions):
+        return {k: {"type": "choice", "choice": "none", "probabilities": {"none": 0.9, "slight": 0.1}}
+                for k in questions}
+
+    monkeypatch.setattr(decisions, "OVERRIDE", nothing)
+    ctx = _context(chat_id, char_id, person=PERSON, ponder_query="who painted the lighthouse door")
+    recall = ctx["deliberate_recall"]
+    assert recall["query_i_chose_last_turn"] == "who painted the lighthouse door"
+    assert recall["result_refs"] == [] and recall["additional_episodes"] == []
+    assert ctx["_internal"]["ponder_by_score"] == []
+    assert ctx["_internal"]["ponder"]["nothing_came_back"] is True
 
 
 def test_a_ponder_in_the_authors_preview_pays_for_no_call(_bank, monkeypatch):

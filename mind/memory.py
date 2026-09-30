@@ -97,7 +97,7 @@ from mind.memory_context import (  # noqa: F401
     build_character_memory_context,
 )
 from mind.memory_jev import (  # noqa: F401
-    NET_SIZE, PONDER_LIMIT, PONDER_NET, jev_memory_packet, jev_ponder_packet,
+    NET_SIZE, PONDER_FLOOR, PONDER_LIMIT, PONDER_NET, jev_memory_packet, jev_ponder_packet,
     memory_line, memory_net, memory_state, ponder_state,
 )
 from mind.memory_time import (  # noqa: F401

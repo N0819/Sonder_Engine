@@ -370,12 +370,21 @@ Any ponder result already present in normal recall is marked with both
 pulls up 50 candidates using rrf for jev to sort on how well it answers the
 ponder"; `memory_jev.jev_ponder_packet`): a net of `PONDER_NET` (50) by the
 picker's equal-weight RRF over the question alone, each candidate graded by
-the decision model on "How much does this memory help answer the question you
-are asking your own memory?" (`character_jev.memory_ponder`, the probe's
-answer-key question, with the question and its `why` in the state), and the
-best `PONDER_LIMIT` (5) kept -- never more than the attention recall has,
-never fewer than four: `min(5, max(4, recall_limit))`. Without a named mind
-or a decision model it is the net's own order. The affect pass then LOOKS
+the decision model on "How directly does this memory answer the question you
+are asking your own memory?" (`character_jev.memory_ponder`, with the
+question and its `why` in the state), and the best kept that reach
+`PONDER_FLOOR` (0.6), up to `PONDER_LIMIT` (5) -- never more than the
+attention recall has, never fewer than four: `min(5, max(4, recall_limit))`.
+None reach the floor, and the lane carries the question with no rows: a mind
+that went looking and did not find it. Without a named mind or a decision
+model it is the net's own order, ungraded and uncut. Measured 2026-09-29 on
+the local Winnow-12B drop-in over two banks of the test copy (chat 64's
+Doctor, 657 rows; chat 76's, 230), 23 questions whose answers were found by
+reading the bank and 7 it cannot answer: the answer was handed on for 17 of
+23 (about three rows a ponder), nothing came back for all 7 unanswerable
+ones, about six seconds a ponder; `search_memories` had the answer in its
+top five on 13 of 23. The first wording ("How much does this memory help
+answer...") let 3 of the 7 through at any floor. The affect pass then LOOKS
 BACK on those five (`affect_pass.PONDER_LOOKS`): each is read afresh with how
 long ago it was, and the reading is what the memory carries from then on --
 where nostalgia, grief and regret come from (`memories.feelings`, §1).

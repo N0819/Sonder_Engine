@@ -69,7 +69,7 @@
 | `mind/memory_common.py` | 293 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_context.py` | 771 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_jev`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_write` |
 | `mind/memory_inference.py` | 159 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
-| `mind/memory_jev.py` | 344 |  | `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
+| `mind/memory_jev.py` | 366 |  | `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_judge.py` | 430 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers` |
 | `mind/memory_lore_entries.py` | 867 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
 | `mind/memory_lorebooks.py` | 583 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
@@ -927,14 +927,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `memory_net()` | 95 | 87 lines |
-| `jev_memory_packet()` | 254 | 67 lines |
-| `grade_net()` | 216 | 24 lines |
-| `jev_ponder_packet()` | 323 | 22 lines |
-| `memory_state()` | 193 | 21 lines |
-| `ponder_state()` | 242 | 10 lines |
-| `memory_line()` | 184 | 7 lines |
-| `_newest_first()` | 88 | 5 lines |
+| `memory_net()` | 107 | 87 lines |
+| `jev_memory_packet()` | 266 | 67 lines |
+| `jev_ponder_packet()` | 335 | 32 lines |
+| `grade_net()` | 228 | 24 lines |
+| `memory_state()` | 205 | 21 lines |
+| `ponder_state()` | 254 | 10 lines |
+| `memory_line()` | 196 | 7 lines |
+| `_newest_first()` | 100 | 5 lines |
 
 ### `mind/memory_judge.py`
 

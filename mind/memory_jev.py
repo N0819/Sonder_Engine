@@ -72,12 +72,24 @@ QUESTIONS = ("memory_situation", "memory_useful")
 #: mind about one of the five answers the decision model would pick at k=8
 #: and two at k=24; a net of 50 holds 54-60% of those five,
 #: `docs/experiments/JEV_MEMORY_PROBE_2026_09_26.md`). The net is cut at
-#: PONDER_NET, each candidate graded on the question the probe's answer key
-#: used, and the best PONDER_LIMIT kept -- "the 5 memories a ponder brings
+#: PONDER_NET, each candidate graded on how directly it answers the
+#: question, and the best PONDER_LIMIT kept -- "the 5 memories a ponder brings
 #: up", which the affect pass also looks back on (`affect_pass.PONDER_LOOKS`).
 PONDER_NET = 50
 PONDER_LIMIT = 5
 PONDER_QUESTIONS = ("memory_ponder",)
+#: A graded ponder keeps only rows that ANSWER: at or above this grade, up to
+#: PONDER_LIMIT; none of them, and nothing came back. Measured 2026-09-29 on
+#: the local Winnow-12B drop-in, 30 questions over two banks of the test copy
+#: (chat 64's Doctor, 657 rows; chat 76's, 230), 23 whose answer rows were
+#: found by reading the bank and 7 it cannot answer: asked "How directly does
+#: this memory answer...", the answer was among the five on 87%, and at 0.6 an
+#: answer row stayed on 17 of 23 while none of the 7 unanswerable questions
+#: kept anything. The first wording, "How much does this memory help
+#: answer...", found 78% and let 3 of the 7 through at every floor from 0.4 to
+#: 0.7 -- a description of amber eyes read 0.87 for "what is her favourite
+#: colour?". Old `search_memories` had the answer in its top five on 57%.
+PONDER_FLOOR = 0.6
 
 
 def _ranked(scores):
@@ -328,17 +340,27 @@ def jev_ponder_packet(chat_id, char_id, query, *, why="", current_turn_idx, embe
     candidates using rrf for jev to sort on how well it answers the ponder"):
     a net of `PONDER_NET` by the picker's equal-weight RRF over the question
     the mind asked its own memory (`embedded` carries that question alone),
-    each candidate graded on how much it helps answer it
+    each candidate graded on how directly it answers it
     (`character_jev.memory_ponder`, with the question and why in the state),
-    the best `limit` kept -- near-duplicates dropped, as recall drops them.
-    Rows already in this beat's packet are candidates too: a ponder may bring
-    back what recall also did, and the payload says so. Without a named mind,
-    or a decision model to ask, it is the net's own order."""
+    the best `limit` kept that reach `PONDER_FLOOR` -- near-duplicates
+    dropped, as recall drops them. None reach it, and the ponder brings back
+    nothing: a mind that went looking and did not find it is told so by an
+    empty lane, not handed five unrelated rows. Rows already in this beat's
+    packet are candidates too: a ponder may bring back what recall also did,
+    and the payload says so. Without a named mind, or a decision model to
+    ask, it is the net's own order, ungraded and uncut."""
     active_state = active_state or {}
-    return jev_memory_packet(
+    record = record if record is not None else {}
+    picks = jev_memory_packet(
         chat_id, char_id, query, current_turn_idx=current_turn_idx, embedded=embedded,
         here=here, limit=limit, person=person, view=view, active_state=active_state,
         unsettled=unsettled, language=language, bank=bank, record=record,
         net_size=PONDER_NET, questions=PONDER_QUESTIONS,
         state=(ponder_state(person, view, active_state, unsettled, query, why)
                if person is not None else None))
+    if not any(m.get("picked_by") == "decision model" for m in picks):
+        return picks
+    kept = [m for m in picks
+            if m.get("picked_by") == "decision model" and float(m.get("score") or 0.0) >= PONDER_FLOOR]
+    record.update(below_floor=len(picks) - len(kept), nothing_came_back=not kept)
+    return kept

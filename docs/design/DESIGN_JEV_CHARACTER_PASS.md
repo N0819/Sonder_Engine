@@ -982,12 +982,24 @@ ponder".
 
 - **The ponder** (`memory_jev.jev_ponder_packet`): a net of 50 by the
   picker's equal-weight RRF over the question alone, each candidate graded on
-  "How much does this memory help answer the question you are asking your own
-  memory?" (the probe's answer-key question, `character_jev.memory_ponder`),
-  the best five kept. It was `search_memories(query)`, which handed a mind
-  about one of the five answers the decision model would pick at k=8 and two
-  at k=24; a net of 50 holds 54-60% of them (the evidence doc, "can
-  retrieval answer a ponder?").
+  "How directly does this memory answer the question you are asking your own
+  memory?" (`character_jev.memory_ponder`), the best five that reach 0.6
+  kept, and none when none do. It was `search_memories(query)`, which handed
+  a mind about one of the five answers the decision model would pick at k=8
+  and two at k=24; a net of 50 holds 54-60% of them (the evidence doc, "can
+  retrieval answer a ponder?"). Tested on real banks the same day (the
+  owner: "test it yourself asking the banks questions with the ponder
+  function"): 30 questions over two of the test copy's Doctor banks, 23
+  whose answers were found by reading the bank and 7 it cannot answer. The
+  answer was handed on for 17 of 23, about three rows a ponder, and nothing
+  came back for all 7 unanswerable ones; `search_memories` had the answer in
+  its top five on 13 of 23. The first wording ("How much does this memory
+  help answer...") found 18 but let 3 of the 7 through at every floor -- a
+  description of amber eyes read 0.87 for "what is her favourite colour?".
+  Missed: rows that never name what the question names (the opening's rows
+  call Hinami "the young woman", so "where did I first meet Hinami?" never
+  reaches them), and answers that need a step of inference (Guinan is never
+  called the bartender).
 - **Looking back** (`affect_pass.PONDER_LOOKS`): those five are read afresh
   whatever they keep, each with how long ago it was, and the reading is what
   the memory carries from then on -- recalling a memory and re-weighing it
