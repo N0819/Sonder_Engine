@@ -169,8 +169,8 @@ class TestImportRefusesAHashedBank:
         rows = temp_db.q("SELECT turn_idx FROM memories WHERE chat_id=? AND char_id=?",
                          (chat_id, char_id))
         assert len(rows) == 2
-        # The turn-less tier this path already writes into -- see UNBUILT 2.20.
-        assert all(r["turn_idx"] is None for r in rows)
+        # Before this story, never recent (`memory_time.PRESTORY_TURN_IDX`).
+        assert all(r["turn_idx"] == -1 for r in rows)
 
     def test_the_turn_path_deliberately_keeps_a_fallback(self, temp_db,
                                                          monkeypatch):

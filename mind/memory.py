@@ -101,7 +101,7 @@ from mind.memory_jev import (  # noqa: F401
     memory_line, memory_net, memory_state, ponder_state,
 )
 from mind.memory_time import (  # noqa: F401
-    JUST_NOW, MemoryClock, UNIT_LADDER, WHEN_BEFORE_RECORD, WHEN_UNPLACEABLE,
+    JUST_NOW, MemoryClock, PRESTORY_TURN_IDX, UNIT_LADDER, WHEN_BEFORE_RECORD, WHEN_UNPLACEABLE,
     current_clock_reading, elapsed_phrase, time_ago_phrase, time_ago_span,
     window_clock_readings,
 )

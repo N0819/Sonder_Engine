@@ -312,7 +312,8 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
     """Generate/compile, persist its ledger, and seed ordered memories."""
     from core.db import wget_for_frame, wset_for_frame
     from language_runtime import story_language_scope
-    from mind.memory import add_memories_batch
+    from mind.affect_pass import feel_seeded_quietly
+    from mind.memory import PRESTORY_TURN_IDX, add_memories_batch
     from story.character_schema import character_name
     from world.charter_history import PERSONAL_LESSONS, PERSONAL_TONES
 
@@ -370,7 +371,9 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
             # none of which she could narrate or be reminded of, and with the
             # embedding provider down they were unreachable outright. Same
             # defect and same fix as `charter_history`'s three write sites.
-            "turn_idx": 0, "frame_id": frame_id,
+            # BEFORE turn 0, not at it (`memory_time.PRESTORY_TURN_IDX`): at 0
+            # the recent window counted the whole journey as recent.
+            "turn_idx": PRESTORY_TURN_IDX, "frame_id": frame_id,
             "kind": "semantic", "provenance": "remembered",
             "salience": .45, "content": grounded["summary"],
             "event_key": summary_key,
@@ -392,7 +395,9 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
             # none of which she could narrate or be reminded of, and with the
             # embedding provider down they were unreachable outright. Same
             # defect and same fix as `charter_history`'s three write sites.
-            "turn_idx": 0, "frame_id": frame_id,
+            # BEFORE turn 0, not at it (`memory_time.PRESTORY_TURN_IDX`): at 0
+            # the recent window counted the whole journey as recent.
+            "turn_idx": PRESTORY_TURN_IDX, "frame_id": frame_id,
             "kind": "episodic", "provenance": "remembered",
             "salience": event["salience"], "content": event["memory"],
             "location": event["place"], "entities": event["people"],
@@ -403,6 +408,7 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
         })
     if rows:
         add_memories_batch(rows)
+        feel_seeded_quietly(cid, char_id)
 
     # AND THEY DO NOT MEET AS STRANGERS. Without this the character walked in
     # holding a road's worth of shared memory and no edge to the person they

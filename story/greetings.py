@@ -33,9 +33,10 @@ from llm.llm_quality import complete_validated_json
 from llm.prompts import get_prompt
 from mind.memory import (
     ensure_chat_canon_book,
-    add_memories_batch, duplicate_lorebook_for_chat, get_relationships,
+    PRESTORY_TURN_IDX, add_memories_batch, duplicate_lorebook_for_chat, get_relationships,
     record_relationship_event, save_relationships,
 )
+from mind.affect_pass import feel_seeded_quietly
 from mind.theory_of_mind import apply_mind_model_updates
 from agents.runtime import _run_pipeline
 from persist.steps import active_mapping
@@ -333,7 +334,7 @@ def _route_mind_memories(chat_id, char_id, seeds, handle):
                 "chat_id": chat_id, "char_id": char_id, "turn_id": None,
                 "kind": "episodic", "provenance": "remembered",
                 "salience": _seed_salience(seed.get("salience")),
-                "content": content, "turn_idx": 0,
+                "content": content, "turn_idx": PRESTORY_TURN_IDX,  # before the opening, never recent
                 "event_key": "greeting_seed:%s" % digest[:16],
             })
         except Exception:
@@ -349,6 +350,7 @@ def _route_mind_memories(chat_id, char_id, seeds, handle):
         # and that one is retried inside `embed_texts_meta`.
         try:
             add_memories_batch(seed_specs)
+            feel_seeded_quietly(chat_id, char_id)
         except Exception:
             return 0  # a failed seed batch must not abort the launch
     return len(seed_specs)

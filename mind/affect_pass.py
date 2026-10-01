@@ -686,3 +686,72 @@ def feelings_block(felt):
         undercurrent = affect.get("undercurrent") or {}
         beneath = [undercurrent["label"]] if undercurrent.get("label") else []
     return {"now": now, "beneath": beneath, "mood": mood_words(felt, felt.language)}
+
+
+# --- a seeded past, felt once when it is planted ----------------------------------
+
+def feel_seeded(chat_id, char_id, language=None):
+    """What each SEEDED memory of this mind -- a journey, a greeting's
+    knowledge, an inherited life, an imported bank: `turn_idx` below zero --
+    makes it feel, asked once when the past is planted and kept on the row as
+    its moment, exactly as a lived memory keeps its own (`FACETS`).
+
+    The owner, 2026-09-30, on the concept lab's planted bank: a seeded row kept
+    no feeling, so every one recall later reached was asked the three evoke
+    questions with its whole text, beat after beat as recall turned up new
+    ones -- most of a story run's Jev cost above the estimate. Asked here, with
+    the mind's own psychology as the state and no scene (no beat made these
+    feelings: they are read from the memory, as a recalled memory's are).
+    `at` is the row's clock reading in psych units (minutes), so a feeling from
+    nine days back fades like one lived nine days back; undated rows keep no
+    `at` and come back at the fade floor, "as far back as a memory goes".
+
+    Only rows that keep nothing are asked. Fails open: a decision model that
+    cannot be asked leaves them to be read when first recalled, as before.
+    Returns how many rows now keep a feeling."""
+    import json
+
+    from core.db import q, qi
+    from llm import decisions
+    from mind.memory import PRESTORY_TURN_IDX
+
+    rows = q("SELECT id, event_key, content, encoded_at_seconds FROM memories "
+             "WHERE chat_id=? AND char_id=? AND turn_idx < 0 AND archived=0 "
+             "AND (feelings IS NULL OR feelings='')", (chat_id, char_id))
+    if not rows:
+        return 0
+    card = q("SELECT c.name, COALESCE(NULLIF(cc.sheet, ''), c.sheet) AS sheet FROM characters c "
+             "LEFT JOIN chat_chars cc ON cc.char_id = c.id AND cc.chat_id = ? WHERE c.id = ?",
+             (chat_id, char_id), one=True)
+    try:
+        sheet = json.loads((card or {})["sheet"] or "{}") if card else {}
+    except (TypeError, ValueError):
+        sheet = {}
+    name = str((card or {})["name"] or "") if card else ""
+    state = "\n\n".join(part for part in (f"YOU ARE {name}." if name else "", psychology_text(sheet)) if part)
+    memories = [{"ref": str(r["id"]), "text": _text(r["content"])} for r in rows]
+    try:
+        out = appraisal.appraise(state, memories=memories, language=language)
+    except decisions.DecisionError:
+        return 0
+    kept = 0
+    for r in rows:
+        a = out["memories"].get(str(r["id"])) or {}
+        if a.get("strength") is None:
+            continue
+        record = {**mix.looked(a.get("strength"), a.get("tone"), a.get("kinds")),
+                  "turn": PRESTORY_TURN_IDX, "key": f"seed:{r['event_key'] or r['id']}"}
+        if r["encoded_at_seconds"] is not None:
+            record["at"] = round(float(r["encoded_at_seconds"]) / 60.0, 4)
+        qi("UPDATE memories SET feelings=? WHERE id=?", (json.dumps({"moment": record}), r["id"]))
+        kept += 1
+    return kept
+
+
+def feel_seeded_quietly(chat_id, char_id):
+    """`feel_seeded` for the writers that plant a past: a failure of any kind
+    leaves the rows to be read on first recall, and never fails the planting."""
+    try:
+        return feel_seeded(chat_id, char_id)
+    except Exception:  # noqa: BLE001 -- planting a past must never fail on a feeling
+        return 0

@@ -746,7 +746,8 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
                                 author_guidance="", model_call=None):
     """Give an existing full character their simulated past, then bind them."""
     from core.db import q, qi, wget_for_frame, wset_for_frame
-    from mind.memory import add_memories_batch
+    from mind.affect_pass import feel_seeded_quietly
+    from mind.memory import PRESTORY_TURN_IDX, add_memories_batch
     from world.charter_runtime import bind_promoted_character
 
     packet = resident_history_packet(cid, binding, frame_id=frame_id)
@@ -761,6 +762,7 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
         model_call=model_call)
 
     rows = []
+    window_hours = float((packet.get("recent_context") or {}).get("recent_window_hours") or 720.0)
     selected = list(fleshed.get("memories") or ())
     for memory in selected:
         source_id = str(memory.get("source_id") or "")
@@ -778,11 +780,18 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
             # buffer that grounds a beat -- so a null here made an inherited
             # life reachable by embedding search alone. The character had a
             # past it could not narrate and could not be reminded of, which
-            # reads in play as a person born this turn. Turn 0 is the opening,
-            # so a pre-story row sits at the earliest point the story has and
-            # survives every rollback into it.
-            "turn_idx": 0, "frame_id": frame_id,
+            # reads in play as a person born this turn. Turn 0 is the opening;
+            # a pre-story row sits BEFORE it (`memory_time.PRESTORY_TURN_IDX`)
+            # -- at 0 the recent window counted the whole life as recent --
+            # and survives every rollback into it.
+            "turn_idx": PRESTORY_TURN_IDX, "frame_id": frame_id,
             **stored_memory,
+            # WHEN it was, on this story's clock: the episodes are spread over
+            # the recent window that ends where the story begins
+            # (`flesh_resident_history`'s `at_hours`), so an episode lies
+            # (window - at_hours) hours before the clock's zero. Without it
+            # the row read "at a time you cannot place against now".
+            "encoded_at_seconds": -max(0.0, window_hours - float(memory.get("at_hours") or window_hours)) * 3600.0,
             "event_key": "prestory:charter:%s:%s:%s" % (
                 binding["charter"], binding["body"], source_id),
         })
@@ -798,10 +807,11 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
             # buffer that grounds a beat -- so a null here made an inherited
             # life reachable by embedding search alone. The character had a
             # past it could not narrate and could not be reminded of, which
-            # reads in play as a person born this turn. Turn 0 is the opening,
-            # so a pre-story row sits at the earliest point the story has and
-            # survives every rollback into it.
-            "turn_idx": 0, "frame_id": frame_id,
+            # reads in play as a person born this turn. Turn 0 is the opening;
+            # a pre-story row sits BEFORE it (`memory_time.PRESTORY_TURN_IDX`)
+            # -- at 0 the recent window counted the whole life as recent --
+            # and survives every rollback into it.
+            "turn_idx": PRESTORY_TURN_IDX, "frame_id": frame_id,
             "kind": "semantic", "provenance": "remembered",
             "salience": 0.5, "content": overview,
             "location": str(binding.get("place") or ""),
@@ -819,10 +829,11 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
             # buffer that grounds a beat -- so a null here made an inherited
             # life reachable by embedding search alone. The character had a
             # past it could not narrate and could not be reminded of, which
-            # reads in play as a person born this turn. Turn 0 is the opening,
-            # so a pre-story row sits at the earliest point the story has and
-            # survives every rollback into it.
-            "turn_idx": 0, "frame_id": frame_id,
+            # reads in play as a person born this turn. Turn 0 is the opening;
+            # a pre-story row sits BEFORE it (`memory_time.PRESTORY_TURN_IDX`)
+            # -- at 0 the recent window counted the whole life as recent --
+            # and survives every rollback into it.
+            "turn_idx": PRESTORY_TURN_IDX, "frame_id": frame_id,
             "kind": "semantic", "provenance": "remembered",
             "salience": 0.45, "content": career_summary,
             "location": str(binding.get("place") or ""),
@@ -833,6 +844,7 @@ def integrate_featured_resident(cid, char_id, binding, sheet, *, frame_id=None,
         })
     if rows:
         add_memories_batch(rows)
+        feel_seeded_quietly(cid, char_id)
 
     row = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
             (cid, char_id), one=True)

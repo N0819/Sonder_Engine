@@ -80,7 +80,8 @@ def test_import_strips_turn_references(temp_db):
         (chat_id, alice), one=True,
     )
     assert row["turn_id"] is None
-    assert row["turn_idx"] is None
+    # Not the old story's turn: BEFORE this one (`memory_time.PRESTORY_TURN_IDX`).
+    assert row["turn_idx"] == memory.PRESTORY_TURN_IDX
 
 
 def test_import_skips_blank_content(temp_db):

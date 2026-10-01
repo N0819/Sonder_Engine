@@ -815,6 +815,26 @@ story's player, and stamps `frame_id`). The hand-built-from-scratch path still n
 can offer per-character routes. A traveler must continue to arrive with
 itinerary and authored continuity, never an inferred local career.
 
+**Turn placement and seeded feelings landed (2026-09-30), narrowing this
+again.** Every seeded past -- a journey history, a greeting's knowledge seeds,
+a Charter resident's inherited life, an imported bank -- is now written at
+`memory_time.PRESTORY_TURN_IDX` (-1): visible from the opening, never in the
+recent window, and still passing every reader that requires a turn. At turn 0
+the recent window counted it as recent, so for a character's first eight turns
+its whole seeded past was delivered as "recent" and recall never ran on it
+(measured on a planted 240-memory bank: over 262k characters of "recent" per
+character call, the recalled lane empty). A Charter episode is dated on the
+story's clock, before it began (`encoded_at_seconds` negative, from its
+`at_hours`), and reads "about three weeks ago"; an undated seed reads "before
+this story's recorded turns" rather than "at a time you cannot place against
+now", and the decision model's grading line says "before this story", never a
+count of beats. `affect_pass.feel_seeded` asks once, at planting, what each
+seeded row makes the mind feel and keeps it as the row's moment (240 rows: one
+batch, ~0.8 s). Still open from this entry: the old-memory temporal cue and
+consolidation for seeded rows, the floors calibrated on lived banks, and the
+haunting risk above -- a thick seeded past is now recall-reachable from the
+opening, so watch what it crowds out. Tests: `tests/test_prestory_placement.py`.
+
 <a id="unbuilt-2-22"></a>
 
 ### 2.22 Exact-cue matching scans the whole bank, and an index is what it wants

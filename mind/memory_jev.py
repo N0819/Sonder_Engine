@@ -306,8 +306,11 @@ def memory_line(mem, current_turn_idx, known=()):
     leaking."""
     body = " ".join(str(mem.get("content") or mem.get("gist") or "").split())[:MEMORY_CHARS]
     when = mem.get("turn_idx")
-    ago = (f"{current_turn_idx - when} beats ago"
-           if isinstance(when, int) and isinstance(current_turn_idx, int) else "some time ago")
+    if isinstance(when, int) and when < 0:
+        ago = "before this story"  # a seeded past (`memory_time.PRESTORY_TURN_IDX`)
+    else:
+        ago = (f"{current_turn_idx - when} beats ago"
+               if isinstance(when, int) and isinstance(current_turn_idx, int) else "some time ago")
     about = unnamed_about(mem, known)
     return f"MEMORY ({ago}{'; with ' + ', '.join(about) if about else ''}): {body}"
 

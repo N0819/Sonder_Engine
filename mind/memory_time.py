@@ -65,6 +65,18 @@ JUST_NOW = "just now"
 #: clock reading it could ever have had. The existing phrasing, kept verbatim.
 WHEN_BEFORE_RECORD = "before this story's recorded turns"
 
+#: Where a SEEDED past sits in play order: before the opening, never in it.
+#: A journey history, a greeting's knowledge, an inherited charter life or an
+#: imported bank used to be written at turn 0 (or with no turn at all), and the
+#: recent window counts turn 0 as recent -- so for its first eight turns a
+#: character was handed its whole seeded past as "recent" and recall never ran
+#: on it (the concept lab's planted 240-memory bank, 2026-09-30: >262k chars of
+#: "recent" per character call, the recalled lane empty). At -1 the row is
+#: visible from the opening on, never recent, and still passes every reader
+#: that requires a turn. Its clock reading, when the writer knows one, is
+#: negative: seconds before the story's clock began (`encoded_at_seconds`).
+PRESTORY_TURN_IDX = -1
+
 #: Everything else this refuses to number: another frame's reading, a row that
 #: predates the column, a window whose memories are all archived away. It
 #: claims only that the thing is not happening now, which is the most any of
@@ -246,6 +258,12 @@ class MemoryClock:
         memory = memory if isinstance(memory, dict) else {}
         turn_idx = memory.get("turn_idx")
         if turn_idx is None:
+            return WHEN_BEFORE_RECORD
+        try:
+            seeded = int(turn_idx) < 0
+        except (TypeError, ValueError):
+            seeded = False
+        if seeded and memory.get("encoded_at_seconds") is None:
             return WHEN_BEFORE_RECORD
         if (self.current_turn_idx is not None
                 and not self._is_readable_turn(turn_idx)):

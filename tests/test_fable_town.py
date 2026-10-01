@@ -303,7 +303,13 @@ def test_featured_resident_history_seeds_turn_zero_then_retires_charter_mind(
     # character with a past it could neither narrate nor be reminded of.
     # Nothing was protecting the null; rollback deletes by `turn_id`, which
     # these rows carry as None, so they survive a branch either way.
-    assert written and written[0]["turn_idx"] == 0
+    # BEFORE turn 0 since 2026-09-30 (`memory_time.PRESTORY_TURN_IDX`): at 0
+    # the recent window counted the whole inherited life as recent.
+    assert written and written[0]["turn_idx"] == -1
+    # Each episode is placed on the story's clock, before it began.
+    episodes = [w for w in written if "encoded_at_seconds" in w]
+    assert len(episodes) == 12 and all(float(w["encoded_at_seconds"]) <= 0 for w in episodes)
+    assert len({w["encoded_at_seconds"] for w in episodes}) > 1  # spread, not one instant
     assert written[0]["content"] == "I worked as miller in mill."
     assert len(written) == 14  # career + recent overview + 12 episodes
     assert written[1]["kind"] == "semantic"

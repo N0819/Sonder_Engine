@@ -12,6 +12,7 @@ from core.logging_utils import logger
 from llm.providers import embed_texts, embed_texts_meta, embedding_model_key
 from dataclasses import dataclass
 
+from mind.memory_time import PRESTORY_TURN_IDX
 from mind.memory_common import (
     _b64_to_blob, _blob, _blob_to_b64, _lore_document, _storage_json,
     _summary_retrieval_text, _vec, surviving_character_ids,
@@ -624,7 +625,11 @@ def import_character_memories(chat_id, char_id, memories,
         if not content:
             continue
         prepared.append({
-            "chat_id": chat_id, "char_id": char_id, "turn_id": None, "turn_idx": None,
+            # BEFORE THIS STORY, not outside it: with no turn the rows were
+            # reachable by search alone (the readers that build a self need a
+            # turn); at PRESTORY_TURN_IDX they are part of the mind's past and
+            # never "recent".
+            "chat_id": chat_id, "char_id": char_id, "turn_id": None, "turn_idx": PRESTORY_TURN_IDX,
             "kind": m.get("kind", "episodic"), "category": m.get("category"),
             "provenance": m.get("provenance", "told"),
             "salience": m.get("salience", 0.5), "content": content,
@@ -724,6 +729,9 @@ def import_character_memories(chat_id, char_id, memories,
             "%s is configured. Provider error: %s"
             % (embedding_model_key(), embedded.error or "unknown"))
     ids = add_memories_batch(prepared_batch=batch)
+    # What an imported past makes this mind feel, where the bank kept nothing.
+    from mind.affect_pass import feel_seeded_quietly
+    feel_seeded_quietly(chat_id, char_id)
     for mid, was_archived in zip(ids, archived_flags):
         if was_archived:
             qi("UPDATE memories SET archived=1 WHERE id=?", (mid,))
