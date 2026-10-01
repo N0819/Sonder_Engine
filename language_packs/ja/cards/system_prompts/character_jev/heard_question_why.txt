@@ -1,0 +1,1 @@
+{speaker}に尋ねられた: {line}

@@ -225,6 +225,30 @@ def test_a_ponder_is_the_decision_models_pick_from_a_net_of_fifty(_bank, monkeyp
     assert set(ctx["deliberate_recall"]["result_refs"]) == set(refs)
 
 
+def test_a_question_the_mind_was_asked_is_pondered_beside_its_own_ponder(_bank, monkeypatch):
+    """The owner, 2026-09-30: a heard question goes to the ponder lane, its
+    reason "<speaker> asked: <line>". It runs BESIDE the mind's own ponder, in
+    its own lane (`asked_recall`): a mind ruminating on something else still
+    recalls what it is asked."""
+    chat_id, char_id = _bank
+    asked = []
+    monkeypatch.setattr(decisions, "OVERRIDE", _grade_by_key(asked))
+    ctx = _context(chat_id, char_id, person=PERSON, ponder_query="whether I was right to leave",
+                   ponder_why="it sits with me", asked_query=PONDER,
+                   asked_why="Tomas asked: where did I hide the brass key")
+    states = [state for state, _qs in _ponder_asks(asked)]
+    assert len(states) == 2  # its own ponder and the question, each graded
+    assert any("THE QUESTION YOU ARE ASKING YOUR OWN MEMORY: " + PONDER in st
+               and "WHY YOU ARE ASKING: Tomas asked: where did I hide the brass key" in st for st in states)
+    lane = ctx["asked_recall"]
+    assert lane["question_i_was_asked"] == PONDER and lane["retrieval_origin"] == "asked_question"
+    assert lane["why_it_came_to_mind"] == "Tomas asked: where did I hide the brass key"
+    assert lane["result_refs"] and ctx["deliberate_recall"]["query_i_chose_last_turn"] == "whether I was right to leave"
+    assert ctx["_internal"]["asked_ponder"]["net"] > 0
+    # No question asked, no lane.
+    assert "asked_recall" not in _context(chat_id, char_id, person=PERSON)
+
+
 def test_a_ponder_nothing_answers_brings_back_nothing(_bank, monkeypatch):
     """Graded and none reach `PONDER_FLOOR`: the lane carries the question and
     no rows -- a mind that went looking and did not find it, never five

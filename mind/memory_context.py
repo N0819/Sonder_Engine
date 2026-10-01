@@ -273,7 +273,7 @@ RECENT_TURNS = 8
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
                                    recent_turns=RECENT_TURNS, recall_limit=_RECALL_LIMIT, here=None,
                                    in_sight=None, absorption=0.0,
-                                   ponder_query="", ponder_why="",
+                                   ponder_query="", ponder_why="", asked_query="", asked_why="",
                                    resurfaced_subject="", bank=None,
                                    person=None, language=None):
     """What this mind brings to the beat from its past. `person`
@@ -534,6 +534,30 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                            m.get("turn_idx")
                            if m.get("turn_idx") is not None else 10**12,
                            m.get("id") or 0))
+    # A QUESTION THIS MIND WAS JUST ASKED, pondered beside its own ponder (the
+    # owner, 2026-09-30): the same lane -- a net over the question, each row
+    # graded on how directly it answers it -- with the reason the asker
+    # ("<speaker> asked: <line>", `character_jev.heard_question`). Its own
+    # lane, never folded into the mind's deliberate ponder: a question put to
+    # it is not one it chose. Measured on the concept lab's second story: the
+    # mind's own ponder (whether naming a man had been right) held the lane,
+    # and the clerk's date question went unanswered from recall -- wrong.
+    asked_query = " ".join(str(asked_query or "").split())[:240]
+    asked_why = " ".join(str(asked_why or "").split())[:240]
+    asked_rows, asked_record = [], {}
+    if asked_query and asked_query != ponder_query:
+        asked_rows = jev_ponder_packet(
+            chat_id, char_id, asked_query, why=asked_why,
+            current_turn_idx=current_turn_idx,
+            embedded=embed_texts_meta([asked_query]), here=here,
+            limit=min(PONDER_LIMIT, max(4, int(recall_limit))),
+            person=person, view=current_view, active_state=active_state,
+            unsettled=unresolved_items, language=language, bank=bank,
+            record=asked_record, about=named_in(asked_query, known_names), known=known)
+        access_ids.extend(m.get("id") for m in asked_rows if m.get("id") is not None)
+        asked_rows = sorted(asked_rows, key=lambda m: (m.get("turn_idx") is None,
+                                                       m.get("turn_idx") if m.get("turn_idx") is not None else 10**12,
+                                                       m.get("id") or 0))
     # The layer between the summary and the raw rows: which EARLIER stretch of
     # this life the present beat is about.
     #
@@ -672,6 +696,24 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         "may_set_another_ponder_this_turn": True,
     }} if ponder_query else {})
 
+    asked_refs = [str(m.get("event_key") or "") for m in asked_rows if str(m.get("event_key") or "")]
+    asked_additional = []
+    for mem in asked_rows:
+        ref = str(mem.get("event_key") or "")
+        if ref in normal_refs or ref in ponder_refs:
+            continue
+        item = _with_reading(mem, clock, known)
+        item["retrieval_origin"] = ["asked_question"]
+        asked_additional.append(item)
+    asked_payload = ({"asked_recall": {
+        "question_i_was_asked": asked_query,
+        **({"why_it_came_to_mind": asked_why} if asked_why else {}),
+        "temporal_status": "remembered_past",
+        "retrieval_origin": "asked_question",
+        "result_refs": asked_refs,
+        "additional_episodes": asked_additional,
+    }} if asked_query and asked_query != ponder_query else {})
+
     # A subject that came back on its own.
     #
     # Seeded by the out-of-band pass that reads what this mind just recorded
@@ -739,6 +781,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             "picker": picker,
             # What the ponder did, as `picker` says what recall did.
             "ponder": ponder_record,
+            "asked_ponder": asked_record,
             # What a ponder brought up, by its own ranking, best first -- the
             # memories the mind went looking for, which the affect pass looks
             # back on (`affect_pass.ponder_from`).
@@ -777,6 +820,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         **earlier_payload,
         **origin_payload,
         **ponder_payload,
+        **asked_payload,
         **resurfaced_payload,
         **provenance_summaries,
         # OLDER, THEN RECENT, LAST (owner, 2026-09-28: the 30 recalled older

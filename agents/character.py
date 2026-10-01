@@ -3585,6 +3585,22 @@ def character_step(ctx, cid, nonce):
     # the same failure shape the `why`-less ponder warning exists to catch.
     _ponder_why = (str(_ponder_state.get("why") or "")
                    if _ponder_ready else "")
+    # A QUESTION THIS MIND WAS JUST ASKED is pondered before it answers (the
+    # owner, 2026-09-30), with "<speaker> asked: <line>" as the reason --
+    # recall is cued by the scene, not by what the mind is asked, and missed
+    # the answering memory on two of three wrong dates in the concept lab's
+    # story run. Jev reads only the lines this mind heard
+    # (`character_jev.heard_question`). It runs BESIDE the mind's own ponder,
+    # in its own lane (`asked_recall`): a mind ruminating on something else
+    # still recalls what it is asked. No answer leaves the beat as it was.
+    _asked = None
+    try:
+        _asked = character_jev.heard_question(
+            character_bare._heard_lines(observations, character_name(sh)),
+            getattr(ctx, "language", None))
+    except Exception as exc:  # noqa: BLE001 -- the beat never waits on this
+        ctx.add_warning(f"heard-question check skipped for {character_name(sh)}: "
+                        f"{type(exc).__name__}: {str(exc)[:120]}")
     # A subject the out-of-band pass found sitting oddly with itself. Read
     # BEFORE the context is built, because it seeds a retrieval rather than
     # annotating a finished payload -- which is the correction the
@@ -3678,6 +3694,8 @@ def character_step(ctx, cid, nonce):
         absorption=absorption,
         ponder_query=_ponder_query,
         ponder_why=_ponder_why,
+        asked_query=(_asked or {}).get("query", ""),
+        asked_why=(_asked or {}).get("why", ""),
         resurfaced_subject=_resurfaced,
         bank=_memory_bank,
         # The mind the decision model picks recalled memories FOR: who it
@@ -4718,6 +4736,9 @@ def character_step(ctx, cid, nonce):
     out["recalled_memory_ids"] = [
         i for i in (memory_internal.get("memory_access_ids") or [])
         if i is not None]
+    if _asked:
+        # What the heard-question check sent to the ponder lane this beat.
+        out["asked_ponder"] = dict(_asked)
     out["unbidden_probe"] = {
         "stuck": bool(_unbidden_reason),
         "trigger": _unbidden_reason or "",

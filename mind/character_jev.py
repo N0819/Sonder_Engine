@@ -812,6 +812,61 @@ def echo_questions(h, answers):
             f"echo:{k}:body": _choice("echo_body", lang, _set("echo_body", lang), memory=memory)}
 
 
+#: The yes-share at which a heard line is taken for a question (`heard_question`).
+HEARD_QUESTION_FLOOR = 0.5
+
+
+def heard_question(heard, language=None):
+    """A question this mind just heard, sent to its ponder lane before it acts.
+
+    The owner, 2026-09-30: "a jev question that receives only the dialogue a
+    character receives and asks... Is this a question? then send it to the
+    ponder lane, returning it before the character runs, with 'Character x
+    asked y' as the reason for the ponder." Recall is cued by the scene and
+    the mind's own concerns, not by what it is asked: on the concept lab's
+    second story run two of three wrong dates were questions whose answering
+    memory recall never delivered (the first fever case, the day the inspector
+    took the log); a ponder grades memories by how directly they answer.
+
+    `heard` is `character_bare._heard_lines` -- the spoken percepts that
+    reached this mind, never its own -- and the state is those lines alone.
+    Returns `{query, why, probability}` for the line most surely a question
+    (at least `HEARD_QUESTION_FLOOR`; the later on a tie), or None."""
+    heard = [x for x in heard or () if str(x.get("text") or "").strip()]
+    if not heard:
+        return None
+    yesno = _set("yesno", language)
+    qs = {f"heard:{i}": _choice("heard_question", language, yesno,
+                                speaker=_text(x.get("speaker"), 80) or "someone", line=_text(x["text"]))
+          for i, x in enumerate(heard)}
+    state = "WHAT YOU HEARD:\n" + "\n".join(
+        f"- {_text(x.get('speaker'), 80) or 'someone'}: {_text(x['text'])}" for x in heard)
+    answers = ask(state, qs)
+    best = None
+    for i, x in enumerate(heard):
+        p = _probabilities(answers.get(f"heard:{i}")).get("yes", 0.0)
+        if p >= HEARD_QUESTION_FLOOR and (best is None or p >= best[0]):
+            best = (p, x)
+    if best is None:
+        return None
+    p, x = best
+    speaker = _text(x.get("speaker"), 80) or "someone"
+    words = _spoken_words(x["text"])
+    return {"query": _text(words, 240),
+            "why": _fill(character_jev_text("heard_question_why", language),
+                         {"speaker": speaker, "line": _text(words, 200)}),
+            "probability": round(p, 3)}
+
+
+def _spoken_words(text):
+    """The words said, out of perception's rendering of a heard line
+    ('Klara says under her breath: "When ...?"' -> 'When ...?'); the line as
+    rendered when it quotes nothing."""
+    quoted = re.findall(r'"([^"]+)"|\u201c([^\u201d]+)\u201d|\u300c([^\u300d]+)\u300d', str(text or ""))
+    spans = [next(part for part in group if part) for group in quoted]
+    return " ".join(spans).strip() or str(text or "")
+
+
 def ask_after(h, reply):
     """Everything asked after the call, answers merged: the read-back against
     this mind's state with its reply, then the belief pair check its answers

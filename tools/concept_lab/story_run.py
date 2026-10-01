@@ -143,6 +143,7 @@ def _show(tid):
         print("[Ines note]", str(res.get("note") or "")[:300])
         print("[Ines continuity]", json.dumps(res.get("decision_continuity"), ensure_ascii=False)[:500])
         print("[Ines recalled ids]", len(res.get("recalled_memory_ids") or []), "| ponder:", res.get("ponder"))
+        print("[asked_ponder]", res.get("asked_ponder"))
     jev = [0, 0]
     import re
     for (content,) in q("SELECT v.content FROM variants v JOIN steps s ON s.id=v.step_id WHERE s.turn_id=? AND v.active=1", (tid,)):

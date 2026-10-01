@@ -1,0 +1,2 @@
+{speaker} SAID: {line}
+Is this a question?

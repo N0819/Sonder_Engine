@@ -925,6 +925,33 @@ def test_a_reply_that_says_nothing_of_its_choice_does_not_clear_the_thought_line
     assert out["decision_continuity"]["uncertainty"] == "whether she lied"
 
 
+def test_a_question_this_mind_heard_goes_to_its_ponder_lane(monkeypatch):
+    """Jev reads only the lines this mind heard and asks of each "Is this a
+    question?"; the line most surely one becomes the ponder, its reason
+    "<speaker> asked: <line>" (the owner, 2026-09-30). No question, no ponder."""
+    seen = []
+
+    def fake_ask(state, questions):
+        seen.append(state)
+        return {k: {"type": "choice", "probabilities": {
+            "yes": 0.9 if "When" in q["instructions"] else 0.1,
+            "no": 0.1 if "When" in q["instructions"] else 0.9}} for k, q in questions.items()}
+
+    monkeypatch.setattr(jev, "ask", fake_ask)
+    heard = [{"ref": "o1", "text": "Good morning.", "speaker": "Klara"},
+             {"ref": "o2", "text": "When was the first case?", "speaker": "Klara"}]
+    got = jev.heard_question(heard)
+    assert got["query"] == "When was the first case?"
+    assert got["why"] == "Klara asked: When was the first case?"
+    assert seen[0].startswith("WHAT YOU HEARD:") and "Good morning." in seen[0]
+    assert jev.heard_question(heard[:1]) is None
+    assert jev.heard_question([]) is None
+    rendered = [{"ref": "o3", "speaker": "Klara",
+                 "text": 'Klara says under her breath: "When was the first case?"'}]
+    got = jev.heard_question(rendered)
+    assert got["query"] == "When was the first case?" and got["why"] == "Klara asked: When was the first case?"
+
+
 def test_only_a_memory_that_holds_a_claim_is_asked_whether_the_moment_disputes_it():
     """What the mind concluded or was told can be overturned; a plain record
     of what happened holds nothing to dispute (the owner, 2026-09-30: dispute

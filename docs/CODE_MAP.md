@@ -8,7 +8,7 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4735 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character.py` | 4756 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_bare.py` | 861 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/common.py` | 11840 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
@@ -63,11 +63,11 @@
 | `mind/affect_mix.py` | 844 |  | — |
 | `mind/affect_pass.py` | 757 |  | `llm.prompts`, `mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
-| `mind/character_jev.py` | 829 |  | `llm`, `llm.prompts`, `mind.affect_appraisal` |
+| `mind/character_jev.py` | 884 |  | `llm`, `llm.prompts`, `mind.affect_appraisal` |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 146 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_jev`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 293 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
-| `mind/memory_context.py` | 800 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_jev`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_write` |
+| `mind/memory_context.py` | 844 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_jev`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_write` |
 | `mind/memory_inference.py` | 159 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_jev.py` | 480 |  | `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_judge.py` | 430 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers` |
@@ -258,7 +258,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 3424 | 1312 lines |
+| `character_step()` | 3424 | 1333 lines |
 | `_annotate_known_exits()` | 2649 | 469 lines |
 | `_ground_observation_citations()` | 1653 | 293 lines |
 | `_unanswered_question_note()` | 567 | 246 lines |
@@ -874,12 +874,12 @@
 |---|---:|---:|
 | `after_questions()` | 498 | 215 lines |
 | `state_text()` | 277 | 57 lines |
+| `heard_question()` | 819 | 40 lines |
 | `moment_questions()` | 417 | 34 lines |
 | `belief_pair_questions()` | 771 | 22 lines |
 | `notes_in_play()` | 247 | 21 lines |
 | `moment_text()` | 453 | 18 lines |
 | `echo_questions()` | 795 | 18 lines |
-| `notebook_entries()` | 198 | 15 lines |
 
 ### `mind/knowledge_circles.py`
 
@@ -910,7 +910,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 273 | 516 lines |
+| `build_character_memory_context()` | 273 | 560 lines |
 | `_with_reading()` | 29 | 115 lines |
 | `_origin_on_drift()` | 170 | 94 lines |
 | `_summary_id()` | 157 | 3 lines |

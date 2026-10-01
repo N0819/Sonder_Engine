@@ -49,7 +49,11 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 257   # +1 (2026-09-29): `character_jev.memory_ponder`, the
+PART_COUNT = 259   # +2 (2026-09-30): `character_jev.heard_question`
+                   # ("Is this a question?" of each heard line) and
+                   # `heard_question_why` (the ponder's reason, "<speaker>
+                   # asked: <line>").
+                   # +1 (2026-09-29): `character_jev.memory_ponder`, the
                    # question a ponder's 50 candidates are graded on.
                    # +1 (2026-09-28): `jev_questions.walk_stopped`, the
                    # decision model's question per walk under way.

@@ -964,6 +964,12 @@
     "memory_ponder": {
       "$text": "character_jev/memory_ponder.txt"
     },
+    "heard_question": {
+      "$text": "character_jev/heard_question.txt"
+    },
+    "heard_question_why": {
+      "$text": "character_jev/heard_question_why.txt"
+    },
     "which_aim": {
       "$text": "character_jev/which_aim.txt"
     },

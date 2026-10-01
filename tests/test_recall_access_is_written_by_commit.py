@@ -129,8 +129,12 @@ class TestTheReadOnlyStage:
                  and node.func.id in ("jev_memory_packet", "jev_ponder_packet")]
 
         assert len(lanes) == 1, "a retrieval lane was added or removed"
-        assert sorted(call.func.id for call in picks) == ["jev_memory_packet", "jev_ponder_packet"], (
-            "ordinary recall and a ponder are the picker's, once each")
+        # A question the mind was asked is pondered beside its own ponder, in
+        # its own lane (`asked_recall`, the owner 2026-09-30): the ponder
+        # picker twice, never a new kind of retrieval.
+        assert sorted(call.func.id for call in picks) == [
+            "jev_memory_packet", "jev_ponder_packet", "jev_ponder_packet"], (
+            "ordinary recall once; the mind's ponder and a question it was asked, the ponder picker's")
         for call in lanes:
             asked = {kw.arg: kw.value for kw in call.keywords}
             assert isinstance(asked.get("record_access"), ast.Constant)
