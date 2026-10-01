@@ -1,0 +1,25 @@
+{
+  "note": "Recall probes (MEMORY_CHARS test) and later-beat situations (concept list / ponder test). Each probe's answer lies in the 'What I did' half of its target memory.",
+  "recall": [
+    {"id": "r01", "now": "Petra's replacement from the Ministry wants the map cabinet opened, and the cabinet key is not on its hook.", "trying": "find the map cabinet key", "targets": ["t02"]},
+    {"id": "r02", "now": "The inquiry clerk asks whether the fire warden attended the archive fire last winter.", "trying": "answer the clerk exactly", "targets": ["t07"]},
+    {"id": "r03", "now": "The inquiry wants proof that Hesketh's account was his own and not written for him.", "trying": "show the testimony was his", "targets": ["t14"]},
+    {"id": "r04", "now": "A constable asks whether anything at the mayor's house struck me as out of place the night of the dinner.", "trying": "remember what I noticed at the mayor's house", "targets": ["t11"]},
+    {"id": "r05", "now": "A reader at the archive asks where the account of the 1909 flood can be read.", "trying": "tell her where it is filed", "targets": ["t25"]},
+    {"id": "r06", "now": "The inquiry asks how high the river stood on the morning Petra warned the council.", "trying": "give the gauge reading", "targets": ["t17"]},
+    {"id": "r07", "now": "Jory asks why old Hesketh is wearing Tomas's coat.", "trying": "explain the coat", "targets": ["t27"]},
+    {"id": "r08", "now": "The new lockkeeper cannot open the iron release box by the sluice wheel.", "trying": "remember what opens it", "targets": ["t22"]},
+    {"id": "r09", "now": "Petra writes asking whether I ever told anyone else about the night Tomas knocked.", "trying": "answer her honestly", "targets": ["t19"]},
+    {"id": "r10", "now": "The inquiry asks what became of the calendar page from the lock house.", "trying": "account for the calendar page", "targets": ["t12", "t15"]}
+  ],
+  "situations": [
+    {"id": "s1", "scene": "At the ferry landing a stranger, waiting for the boat, asks you: 'They say the upper sluice stayed shut in '09 when it should have been open. Did anyone ever find out why?'", "relevant": ["I_mayor_lie", "L_lock", "E_flood", "P_hesketh"]},
+    {"id": "s2", "scene": "A Ministry clerk you have never met comes into the archive and asks for 'the surveyor's figures she left with you -- the gauge readings'.", "relevant": ["P_petra", "E_survey", "I_levee_risk"]},
+    {"id": "s3", "scene": "The new lockkeeper, a young man, knocks at the archive: the key hook at the Upper Lock House has a brass key on it with a paper tag, and he wants to know whose it is and whether he may use it.", "relevant": ["O_key", "P_tomas", "L_lock"]},
+    {"id": "s4", "scene": "The acting mayor proposes, at the notice board, to rebuild shelf 14 in the archive 'as it was before the fire'. He asks whether you have any objection.", "relevant": ["E_fire", "I_mayor_lie", "L_archive"]},
+    {"id": "s5", "scene": "A child visiting the archive with her school asks you, out of nowhere, whether you had any brothers or sisters.", "relevant": ["P_tomas", "I_debt"]},
+    {"id": "s6", "scene": "A message from the infirmary: Hesketh is very ill and asks whether you still have 'the paper he signed', because he wants it read to him.", "relevant": ["P_hesketh", "E_flood"]},
+    {"id": "s7", "scene": "The baker, handing you a loaf, complains that flour has gone up again and asks whether you think it will come down by summer.", "relevant": []},
+    {"id": "s8", "scene": "A quiet wet afternoon in the archive. A student asks for help finding the 1880 parish maps for an essay on field names.", "relevant": []}
+  ]
+}

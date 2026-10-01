@@ -1,0 +1,680 @@
+{
+ "note": "Recall probes and later-beat situations for bank_large.json (Ines Calder, t001-t240, days 1-56). Recall probes are set on day 57+; 'answer_in' says which half of the target holds the answer; 'antitargets' look relevant but give the wrong answer. Situations: 'relevant' lists concept ids whose memories would help and which the scene does not name; four controls need no memory.",
+ "recall": [
+  {
+   "id": "r01",
+   "now": "Day 57. A navvy from the camp sits on the surgery couch with a healing cut on his crown and wants the stitches out. He was the one brought in drunk the night before the inquiry, and there is nothing about him in the casebook.",
+   "trying": "take the right number of stitches out and write him up under his name",
+   "targets": [
+    "t219"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "detail_did"
+  },
+  {
+   "id": "r02",
+   "now": "Day 58. A letter from Voss's defence lawyer says the doctor accepted a bottle of Kirschwasser from his client, 'a token of friendship between colleagues', and asks her to confirm it.",
+   "trying": "account for what became of the bottle",
+   "targets": [
+    "t168"
+   ],
+   "antitargets": [
+    "t167"
+   ],
+   "answer_in": "did",
+   "kind": "detail_did"
+  },
+  {
+   "id": "r03",
+   "now": "Day 57. A long envelope arrives from the county surveyor's office, answering a question Ines no longer remembers putting to them.",
+   "trying": "work out what she had written to ask them and why",
+   "targets": [
+    "t090"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "detail_did"
+  },
+  {
+   "id": "r04",
+   "now": "Day 59. The district registrar writes that Pavel Hruby's death certificate must be amended now the cause of the camp fever is established, and asks what she entered at the time.",
+   "trying": "recall the cause of death she wrote on the certificate that morning",
+   "targets": [
+    "t099"
+   ],
+   "antitargets": [
+    "t104"
+   ],
+   "answer_in": "did",
+   "kind": "detail_did"
+  },
+  {
+   "id": "r05",
+   "now": "Day 60. Frau Egger has carried her baby girl down from the farm for a first check, fretting that she looks small.",
+   "trying": "compare the baby with what she weighed at birth",
+   "targets": [
+    "t164"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "detail_did"
+  },
+  {
+   "id": "r06",
+   "now": "Day 58. The right boot has gone through at the sole now, and Ines stands outside Haas's shop on Kirchgasse counting what is in her purse.",
+   "trying": "know what Haas charged for the last half-sole",
+   "targets": [
+    "t136"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "detail_did"
+  },
+  {
+   "id": "r07",
+   "now": "Day 57. At the new engineer's office a clerk remarks that after the explosion the company bought up every burn dressing in town, 'the pharmacy's included'.",
+   "trying": "recall what Grete said she had told Voss's clerk",
+   "targets": [
+    "t208"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "detail_did"
+  },
+  {
+   "id": "r08",
+   "now": "Day 61. Mila Brandt has a head cold and is breathing fast; Otto asks whether it is anything like the night the doctor sat up with her.",
+   "trying": "compare Mila's breathing now against the counts from her worst night",
+   "targets": [
+    "t116"
+   ],
+   "antitargets": [
+    "t117",
+    "t122"
+   ],
+   "answer_in": "did",
+   "kind": "detail_did"
+  },
+  {
+   "id": "r09",
+   "now": "Day 58. The new engineer means to reopen the upper camp well once the pump house is running, and asks whether anyone ever drank from it before the tunnel broke into the old galleries.",
+   "trying": "recall whether she herself drank from it back then, and what the water was like",
+   "targets": [
+    "t025"
+   ],
+   "antitargets": [
+    "t139"
+   ],
+   "answer_in": "both",
+   "kind": "old"
+  },
+  {
+   "id": "r10",
+   "now": "Day 57. Mira, walking Herr Lind's dog past the clinic, asks why Aunt Ines always calls it a disgrace.",
+   "trying": "give her the real reason",
+   "targets": [
+    "t034"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "old"
+  },
+  {
+   "id": "r11",
+   "now": "Day 59. A letter comes from Luka Maric at the valley hospital: he is up on crutches and demands a rematch.",
+   "trying": "remember what they played while he lay in the back room, and who won",
+   "targets": [
+    "t056"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "old"
+  },
+  {
+   "id": "r12",
+   "now": "Day 58. A surveyor working for the new engineer asks how many entrances to the old silver workings can be seen from above the town.",
+   "trying": "recall how many old adits she counted from the path by the wayside shrine",
+   "targets": [
+    "t029"
+   ],
+   "antitargets": [],
+   "answer_in": "experienced",
+   "kind": "old"
+  },
+  {
+   "id": "r13",
+   "now": "Day 57. Old Herr Pichler's grandson comes to say the gout is back and the old man has lost the paper with his drops written on it.",
+   "trying": "recall the dose she first wrote out for him in October",
+   "targets": [
+    "t011"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "old"
+  },
+  {
+   "id": "r14",
+   "now": "Day 57. Mira is inconsolable: a toy she brought up from the city has gone missing somewhere in the move, and Lotte is out.",
+   "trying": "know what the toy looks like so she can hunt for it",
+   "targets": [
+    "t017"
+   ],
+   "antitargets": [],
+   "answer_in": "experienced",
+   "kind": "old"
+  },
+  {
+   "id": "r15",
+   "now": "Day 58. Herr Weber stops Ines in the square and offers, at last, to settle up for his wife's lying-in back in October.",
+   "trying": "recall what she charged for the birth",
+   "targets": [
+    "t005"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "old"
+  },
+  {
+   "id": "r16",
+   "now": "Day 58. Teodor is writing a piece for the parish paper about the town's children and asks what Ines's niece first said to her.",
+   "trying": "recall Mira's first words to her",
+   "targets": [
+    "t079"
+   ],
+   "antitargets": [
+    "t010",
+    "t115"
+   ],
+   "answer_in": "experienced",
+   "kind": "lookalike"
+  },
+  {
+   "id": "r17",
+   "now": "Day 57. Teodor is making a chart of the pupils' birthdays for the schoolroom wall and has left a blank beside Ines's niece.",
+   "trying": "tell him when Mira turns nine",
+   "targets": [
+    "t028"
+   ],
+   "antitargets": [
+    "t002",
+    "t035"
+   ],
+   "answer_in": "experienced",
+   "kind": "lookalike"
+  },
+  {
+   "id": "r18",
+   "now": "Day 59. A carpenter the town has hired to board up the old surgery on Mill Lane asks whether he will need a key from her to get in.",
+   "trying": "recall how the building was secured when she was last inside it",
+   "targets": [
+    "t209"
+   ],
+   "antitargets": [
+    "t030",
+    "t194"
+   ],
+   "answer_in": "both",
+   "kind": "lookalike"
+  },
+  {
+   "id": "r19",
+   "now": "Day 58. Mira is writing a composition called 'A Brave Thing Someone Did' and asks how the fire in Aunt Ines's own house was put out.",
+   "trying": "recall who put out the dispensary fire and how",
+   "targets": [
+    "t049"
+   ],
+   "antitargets": [
+    "t130",
+    "t132"
+   ],
+   "answer_in": "did",
+   "kind": "lookalike"
+  },
+  {
+   "id": "r20",
+   "now": "Day 60. The new engineer is rebuilding bunkhouse three and asks the doctor, who was there, what started the fire that burned the old one.",
+   "trying": "recall the cause of that fire",
+   "targets": [
+    "t132"
+   ],
+   "antitargets": [
+    "t049",
+    "t051"
+   ],
+   "answer_in": "both",
+   "kind": "lookalike"
+  },
+  {
+   "id": "r21",
+   "now": "Day 59. The new engineer is compiling an accident register for the tunnel and asks for the names of the men hurt when the roof came down at the face in October.",
+   "trying": "list the injured men and what each suffered",
+   "targets": [
+    "t041",
+    "t046"
+   ],
+   "antitargets": [
+    "t072",
+    "t196"
+   ],
+   "answer_in": "did",
+   "kind": "lookalike"
+  },
+  {
+   "id": "r22",
+   "now": "Day 60. Voss's defence lawyer writes that the 'second book' could have been any green-covered account book lying about in town.",
+   "trying": "recall exactly where the hidden gas log was found and how it had been kept",
+   "targets": [
+    "t161",
+    "t204"
+   ],
+   "antitargets": [
+    "t003",
+    "t036"
+   ],
+   "answer_in": "both",
+   "kind": "lookalike"
+  },
+  {
+   "id": "r23",
+   "now": "Day 57. Grete catches Ines outside the church after Mass and asks, kindly, when she might expect the next payment.",
+   "trying": "know how much she still owes Grete",
+   "targets": [
+    "t230"
+   ],
+   "antitargets": [
+    "t003",
+    "t007",
+    "t093",
+    "t157",
+    "t189",
+    "t208"
+   ],
+   "answer_in": "did",
+   "kind": "superseded"
+  },
+  {
+   "id": "r24",
+   "now": "Day 58. Lotte, tidying the desk, asks to read the city hospital's offer once more, to be sure Ines has done the right thing.",
+   "trying": "find the letter",
+   "targets": [
+    "t228",
+    "t240"
+   ],
+   "antitargets": [
+    "t095",
+    "t178",
+    "t206"
+   ],
+   "answer_in": "did",
+   "kind": "superseded"
+  },
+  {
+   "id": "r25",
+   "now": "Day 57. Emil Ott holds up a letter for Ines's sister addressed care of the Hart inn and asks where it ought to go.",
+   "trying": "tell him where Lotte and Mira are living now",
+   "targets": [
+    "t232",
+    "t233"
+   ],
+   "antitargets": [
+    "t014",
+    "t016"
+   ],
+   "answer_in": "both",
+   "kind": "superseded"
+  },
+  {
+   "id": "r26",
+   "now": "Day 59. The new engineer asks to see the 1884 survey of the silver mine, having heard the doctor had it.",
+   "trying": "tell him where the map is now",
+   "targets": [
+    "t165"
+   ],
+   "antitargets": [
+    "t100",
+    "t127"
+   ],
+   "answer_in": "experienced",
+   "kind": "superseded"
+  },
+  {
+   "id": "r27",
+   "now": "Day 58. The company's new doctor arrives and, having read the file, says his predecessor diagnosed mountain ague at the camp.",
+   "trying": "set him straight on what Brenner finally concluded",
+   "targets": [
+    "t171",
+    "t221"
+   ],
+   "antitargets": [
+    "t104",
+    "t141"
+   ],
+   "answer_in": "both",
+   "kind": "superseded"
+  },
+  {
+   "id": "r28",
+   "now": "Day 57. Mira asks where Grandmother's red brooch lives now, and whether it still will not fasten.",
+   "trying": "tell her where it is kept and what state it is in",
+   "targets": [
+    "t235"
+   ],
+   "antitargets": [
+    "t018",
+    "t060",
+    "t176",
+    "t177"
+   ],
+   "answer_in": "both",
+   "kind": "superseded"
+  },
+  {
+   "id": "r29",
+   "now": "Day 60. Two children in the lower town have high fevers and Sanna asks whether the clinic has any quinine of its own to spare.",
+   "trying": "know how much quinine was brought back to the clinic from the camp",
+   "targets": [
+    "t169"
+   ],
+   "antitargets": [
+    "t020",
+    "t077",
+    "t091",
+    "t160"
+   ],
+   "answer_in": "did",
+   "kind": "superseded"
+  },
+  {
+   "id": "r30",
+   "now": "Day 57. Anton, his forearms healing, laughs that he lied to her the very first night they met.",
+   "trying": "recall what he claimed had burned his hand",
+   "targets": [
+    "t008"
+   ],
+   "antitargets": [],
+   "answer_in": "both",
+   "kind": "person_unnamed"
+  },
+  {
+   "id": "r31",
+   "now": "Day 59. The inspector who replaced Hale, reviewing her notes on Anton Reis, asks whether he kept the follow-up appointment after his first night visit.",
+   "trying": "recall when he was told to come back and whether he did",
+   "targets": [
+    "t009",
+    "t030"
+   ],
+   "antitargets": [],
+   "answer_in": "both",
+   "kind": "person_unnamed"
+  },
+  {
+   "id": "r32",
+   "now": "Day 58. The prosecutor preparing Voss's trial asks when Inspector Hale first arrived in Kessel Pass and how she first heard of him.",
+   "trying": "recall when and how she first learned of him",
+   "targets": [
+    "t061",
+    "t062"
+   ],
+   "antitargets": [],
+   "answer_in": "experienced",
+   "kind": "person_unnamed"
+  },
+  {
+   "id": "r33",
+   "now": "Day 60. Hale writes from the city: for his report he needs the number of workmen's coffins sent down the line before he came, and he suspects the stationmaster's figure is short.",
+   "trying": "give him the right count",
+   "targets": [
+    "t062"
+   ],
+   "antitargets": [],
+   "answer_in": "did",
+   "kind": "person_unnamed"
+  },
+  {
+   "id": "r34",
+   "now": "Day 59. The prosecutor asks whether she ever saw Inspector Hale questioning Stoll before the explosion.",
+   "trying": "recall when and where she saw them together and what she noted",
+   "targets": [
+    "t065"
+   ],
+   "antitargets": [],
+   "answer_in": "both",
+   "kind": "person_unnamed"
+  },
+  {
+   "id": "r35",
+   "now": "Day 58. A solicitor Lotte has written to in Graz asks for the particulars of her husband's letter, since it no longer exists.",
+   "trying": "give when it came and what it demanded",
+   "targets": [
+    "t142",
+    "t143"
+   ],
+   "antitargets": [],
+   "answer_in": "both",
+   "kind": "multi"
+  },
+  {
+   "id": "r36",
+   "now": "Day 59. The prosecutor asks what the foreman's two gas books showed, side by side, for the days before the blast.",
+   "trying": "state what each book recorded",
+   "targets": [
+    "t204",
+    "t222"
+   ],
+   "antitargets": [],
+   "answer_in": "both",
+   "kind": "multi"
+  },
+  {
+   "id": "r37",
+   "now": "Day 58. Father Kurz asks, gently, whether it is true what people are saying: that the Anko boy had a weak heart from birth.",
+   "trying": "tell him what she knows and how she came to know it",
+   "targets": [
+    "t216",
+    "t226"
+   ],
+   "antitargets": [],
+   "answer_in": "both",
+   "kind": "multi"
+  },
+  {
+   "id": "r38",
+   "now": "Day 60. Voss's lawyer claims the doctor bore the company a grudge because it never paid her bills for the October roof fall.",
+   "trying": "account for what was billed and what was paid, and when",
+   "targets": [
+    "t058",
+    "t167"
+   ],
+   "antitargets": [
+    "t006"
+   ],
+   "answer_in": "both",
+   "kind": "multi"
+  },
+  {
+   "id": "r39",
+   "now": "Day 58. The new engineer wants to reopen the upper camp well and asks why it was shut and which bunkhouses depended on it.",
+   "trying": "explain how the water was fouled and whom it served",
+   "targets": [
+    "t135",
+    "t140"
+   ],
+   "antitargets": [],
+   "answer_in": "both",
+   "kind": "multi"
+  },
+  {
+   "id": "r40",
+   "now": "Day 59. The prosecutor asks what warnings she gave Voss about gas before the explosion, and whether any of them was in writing.",
+   "trying": "list each warning, when, and in what form",
+   "targets": [
+    "t185",
+    "t192"
+   ],
+   "antitargets": [],
+   "answer_in": "both",
+   "kind": "multi"
+  }
+ ],
+ "situations": [
+  {
+   "id": "s01",
+   "scene": "A heavy man in a good city overcoat steps off the noon train and asks Emil Ott for 'the doctor's sister', giving a married name. Ott glances along the platform at Ines before he answers.",
+   "relevant": [
+    "P_lotte_husband",
+    "I_lotte_secret",
+    "O_letter"
+   ]
+  },
+  {
+   "id": "s02",
+   "scene": "The new engineer spreads a plan on the clinic counter: a cross-passage from the heading toward the old galleries, to drain them faster. 'You know the ground up there, Doctor, I'm told. Any objection?'",
+   "relevant": [
+    "O_map",
+    "E_mine_collapse",
+    "I_fever_source",
+    "E_fever"
+   ]
+  },
+  {
+   "id": "s03",
+   "scene": "A woman Ines does not know brings in her eleven-year-old son with a grumbling pain low on the right. She mentions, in passing, that he tires on the stairs and goes a little blue about the lips when he runs.",
+   "relevant": [
+    "P_petr",
+    "E_petr_death",
+    "I_petr_guilt",
+    "O_casebook"
+   ]
+  },
+  {
+   "id": "s04",
+   "scene": "At the bakery counter Otto Brandt says his wife's back is bad again and asks whether his daughter, now she is well, might go back to helping with the morning sifting.",
+   "relevant": [
+    "P_mila"
+   ]
+  },
+  {
+   "id": "s05",
+   "scene": "A shot-firer from the new gang stops Ines on the portal road and shows her the brass lamp he has been issued. 'The flame never changes, Doctor, whatever the air's like. Is that good?'",
+   "relevant": [
+    "O_lamp",
+    "I_gas_coverup",
+    "E_explosion",
+    "P_anton"
+   ]
+  },
+  {
+   "id": "s06",
+   "scene": "Sanna, rushing before evening surgery, has the dispensary lamp lit on the high shelf and is topping it up from the oil jug without turning it down.",
+   "relevant": [
+    "E_lamp_fire",
+    "P_lotte"
+   ]
+  },
+  {
+   "id": "s07",
+   "scene": "In the rebuilt bunkhouse the men have strung a line of wet socks and trousers a foot from the new stove's flue to dry them overnight. The flue collar is already scorched brown.",
+   "relevant": [
+    "E_bunkhouse_fire"
+   ]
+  },
+  {
+   "id": "s08",
+   "scene": "A girl from Tanner's Row brings word that the widow in the end house with the green door would like the doctor to look at a lump on her neck, if the doctor will come.",
+   "relevant": [
+    "P_marta",
+    "P_petr",
+    "I_petr_guilt"
+   ]
+  },
+  {
+   "id": "s09",
+   "scene": "A letter from a solicitor in Graz: a small sum from the Calder estate lies unclaimed, and before he releases it he asks whether both daughters are content with how their mother's possessions were divided.",
+   "relevant": [
+    "E_mother_will",
+    "O_brooch"
+   ]
+  },
+  {
+   "id": "s10",
+   "scene": "A navvy comes in on crutches, his left foot still bound. He says he was crushed at the face in October, and now the company's new clerk says he was off shift when it happened and will get nothing.",
+   "relevant": [
+    "E_collapse",
+    "P_voss"
+   ]
+  },
+  {
+   "id": "s11",
+   "scene": "Frau Pichler at the post office hands over a letter with the city hospital's crest: the professor writes that the post is unexpectedly still open, and asks whether the doctor would reconsider.",
+   "relevant": [
+    "I_teodor",
+    "P_lotte",
+    "P_mira"
+   ]
+  },
+  {
+   "id": "s12",
+   "scene": "The carter says nobody has paid him for the camp water carts in three weeks and he will stop on Monday. Up at the camp the men are grumbling that they could just pull the planks off the well by the spoil heap.",
+   "relevant": [
+    "I_fever_source",
+    "E_fever",
+    "P_mayor"
+   ]
+  },
+  {
+   "id": "s13",
+   "scene": "A constable from Grauberg calls: Voss's lawyer says the doctor bore the company a grudge over unpaid bills, and the constable wants to know whether that is so.",
+   "relevant": [
+    "E_collapse",
+    "O_casebook"
+   ]
+  },
+  {
+   "id": "s14",
+   "scene": "A clerk from the railway board writes that the tunnel will reopen to the heading next month, and asks whether the doctor would care to walk it with the district's new inspector beforehand.",
+   "relevant": [
+    "P_hale",
+    "E_explosion",
+    "I_gas_coverup"
+   ]
+  },
+  {
+   "id": "s15",
+   "scene": "Mira finds 'the ninth of March' marked on the kitchen calendar and asks, delighted, whether it is for her birthday party, and who is coming.",
+   "relevant": [
+    "P_petr",
+    "P_marta"
+   ]
+  },
+  {
+   "id": "s16",
+   "scene": "A letter from Dr. Brenner in the city: he proposes to write up 'the Kessel Pass outbreak' for a medical journal and asks whether Ines would put her name to it with his.",
+   "relevant": [
+    "I_fever_source",
+    "O_casebook",
+    "O_map"
+   ]
+  },
+  {
+   "id": "s17",
+   "scene": "Sanna, pouring the morning coffee, asks whether the doctor wants her eggs boiled or fried today.",
+   "relevant": []
+  },
+  {
+   "id": "s18",
+   "scene": "A small boy in the waiting room, swinging his legs while his mother is seen, asks Ines very seriously why snow is white when water isn't.",
+   "relevant": []
+  },
+  {
+   "id": "s19",
+   "scene": "Wirth the postman, delivering a parcel of catalogues, complains that the wind has gone round to the north and asks whether she thinks it will snow before Sunday.",
+   "relevant": []
+  },
+  {
+   "id": "s20",
+   "scene": "On the platform a traveller with a carpet bag asks Ines the time; the clock over the booking office has stopped at twenty past four.",
+   "relevant": []
+  }
+ ]
+}
