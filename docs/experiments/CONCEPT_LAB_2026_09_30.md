@@ -828,9 +828,18 @@ scratch run), each change verified live before it was committed.
 - **An unmarked line is spoken at a normal voice.** Every plain player line had
   been pitched, and pitched across a desk solves to a mutter, so it rendered as
   "says under their breath".
-- **One memory per turn** (`commit_memory._turn_memory_text`), in this format:
-  "What I experienced: … What I did: … How I came into it: <the start mood in
-  words>".
+- **One memory per turn** (`commit_memory._turn_memory_text`), in the order it
+  was lived: "What I witnessed: … What I did: … What happened: … How I came
+  into it: <the start mood in words>".
+  - The first version took everything from the end-of-turn view, so it read
+    witnessed → result → did.
+  - "What I witnessed" is now the act stage's own episode
+    (`perception_act.witnessed`). "What happened" is the outcome's episode
+    minus every percept the act stage held: matched by key, and by what it
+    says (`composer.episode_signature`, counted), because the two stages mint
+    one act under different event ids.
+  - Verified live: Klara's call, then Ines turning back for the glove, then
+    what followed, with nothing said twice.
   - The end mood is the row's feeling: both formed layers as one moment
     (`affect_pass.formed_for`), plus `encoding_valence`.
   - A heard line is a row of its own only when it is a promise. Speakers and

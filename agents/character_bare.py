@@ -116,7 +116,7 @@ def reading_order(payload):
 
 def _unlabelled(text):
     """A memory's words without the turn memory's leading label ("What I
-    experienced:", `persist.commit_memory._TURN_MEMORY_LABELS` in the story's
+    witnessed:", `persist.commit_memory._TURN_MEMORY_LABELS` in the story's
     pack): the decision model's options quote a memory's first
     `character_jev.MEMORY_OPTION_CHARS`, and a label every row begins with
     would spend them saying nothing that tells two memories apart."""
@@ -125,7 +125,7 @@ def _unlabelled(text):
         labels = linguistic("persist.commit_memory", "_TURN_MEMORY_LABELS")
     except Exception:  # noqa: BLE001 -- a pack without the table labels nothing
         return text
-    for key in ("experienced", "did"):
+    for key in ("witnessed", "did", "happened"):
         label = str((labels or {}).get(key) or "")
         if label and text.startswith(label):
             return text[len(label):].lstrip()

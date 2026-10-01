@@ -85,7 +85,7 @@ def _self_rows(captured):
 
 def _conduct_rows(captured):
     """Rows holding what the mind said and did: since 2026-09-30 the turn's
-    one memory ("What I experienced: ... What I did: ..."), or a self row
+    one memory ("What I witnessed: ... What I did: ... What happened: ..."), or a self row
     alone when the beat perceived nothing."""
     return [m for m in captured["memories"] if "What I did:" in str(m.get("content") or "")]
 
@@ -112,8 +112,8 @@ def test_a_speaker_remembers_having_spoken_even_with_a_view(
     # ONE memory of the turn (the owner, 2026-09-30): what it perceived and
     # what it said, in one row, never a second row beside the episode.
     assert own[0]["content"] == (
-        "What I experienced: The young woman shivers and pulls the sheet closer.\n"
-        "What I did: I said 'You are cold. I will have a blanket brought.'")
+        "What I did: I said 'You are cold. I will have a blanket brought.'\n"
+        "What happened: The young woman shivers and pulls the sheet closer.")
     assert own[0]["category"] == "episode" and own[0]["provenance"] == "witnessed"
     assert not _self_rows(captured) and len(captured["memories"]) == 1
 
@@ -157,8 +157,8 @@ def test_the_pair_reads_as_one_beat_not_two_events(temp_db, monkeypatch):
     # outcome perceived, and the attempt decision-framed beside it -- never
     # the old fragment that read as a second event.
     (row,) = captured["memories"]
-    assert row["content"] == ("What I experienced: The gate shudders but does not move.\n"
-                              "What I did: I tried to wrench the lever down.")
+    assert row["content"] == ("What I did: I tried to wrench the lever down.\n"
+                              "What happened: The gate shudders but does not move.")
     assert "chose to" not in row["content"] and "attempted" not in row["content"]
 
     # Through the retrieval projection it lands in the first-hand lane with
@@ -312,7 +312,7 @@ def test_a_free_form_self_reported_affect_cannot_kill_the_commit(
 
 
 class TestOneMemoryPerTurn:
-    """The owner, 2026-09-30: one memory per turn, "What I experienced / What
+    """The owner, 2026-09-30: one memory per turn, "What I witnessed / What
     I did", the mood it came in with as words for the mind to read, the mood
     it left with in the arithmetic. A heard line is not a second row of the
     moment it was heard in, unless it is a promise."""
@@ -356,7 +356,7 @@ class TestOneMemoryPerTurn:
     def test_the_decision_models_option_never_spends_its_chars_on_the_label(self):
         from agents.character_bare import _delivered_memories
         got = _delivered_memories({"recent_memories": [
-            {"memory_ref": "r1", "details": "What I experienced: Wren left by the north gate.\nWhat I did: I said 'Go.'"},
+            {"memory_ref": "r1", "details": "What I witnessed: Wren left by the north gate.\nWhat I did: I said 'Go.'"},
             {"memory_ref": "r2", "details": "What I did: I barred the door."}]})
         assert [m["text"][:20] for m in got] == ["Wren left by the nor", "I barred the door."]
 
@@ -384,3 +384,45 @@ def test_the_subjectless_mark_survives_the_sequence_normalizer():
                         {"type": "action", "attempt": "bar the door"}]}
     norm_sequence(out)
     assert [e.get("subjectless") for e in out["sequence"]] == [True, None]
+
+
+def test_the_turns_memory_is_in_the_order_it_was_lived_and_says_nothing_twice(temp_db, monkeypatch):
+    """The owner, 2026-09-30: witnessed, then did, then what happened as a
+    result, in order and without duplicates. What the act stage showed the
+    mind before it acted is the first part; the outcome's episode, with the
+    act stage's percepts left out by key, the last."""
+    chat_id, char_id, cast = _story(temp_db)
+    captured = _capture_batch(monkeypatch)
+    ctx = _ctx(chat_id, char_id, cast, {
+        "salience": 0.5,
+        "sequence": [{"type": "action", "attempt": "picks up the card", "subjectless": True}],
+        "active_state": {"mood": "steady"}},
+        view="Klara Hess nods. The door closes behind Klara Hess.")
+    ctx.perception_act = {"witnessed": {str(char_id): {
+        "episode": "I saw Klara Hess nod.", "gist": "I saw Klara Hess nod.", "entities": ["Klara Hess"],
+        "keys": ["act:aaa"]}}}
+    ctx.perception_outcome["episodes"] = {str(char_id): "I saw the door close behind Klara Hess."}
+    ctx.perception_outcome["episode_meta"] = {str(char_id): {"gist": "The door closed.", "entities": []}}
+    prepare_memory_commit(ctx)
+    (row,) = captured["memories"]
+    assert row["content"] == ("What I witnessed: I saw Klara Hess nod.\n"
+                              "What I did: Sarel picks up the card.\n"
+                              "What happened: I saw the door close behind Klara Hess.")
+    assert row["gist"] == "I saw Klara Hess nod."
+
+
+def test_one_act_minted_by_both_stages_has_one_signature():
+    """The act stage and the outcome mint one act under different event ids,
+    so its `dedupe_key` differs between them (live, 2026-09-30: "I saw Klara
+    Hess stop at the bottom of the step" said under both "What I witnessed"
+    and "What happened"). What it says does not, and that is what the
+    outcome's episode leaves out."""
+    import agents.composer as composer
+    before = composer.Percept(kind="act", channel="sight", source_label="Klara Hess",
+                              data={"surface": "nods"}, order_key=1, dedupe_key="act:one")
+    again = composer.Percept(kind="act", channel="sight", source_label="Klara Hess",
+                             data={"surface": "nods"}, order_key=1, dedupe_key="act:two")
+    other = composer.Percept(kind="act", channel="sight", source_label="Klara Hess",
+                             data={"surface": "closes the door"}, order_key=2, dedupe_key="act:three")
+    assert composer.episode_signature(before) == composer.episode_signature(again) != ""
+    assert composer.episode_signature(other) != composer.episode_signature(before)

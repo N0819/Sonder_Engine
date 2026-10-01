@@ -454,19 +454,20 @@ def _own_sequence_memory(seq, name=""):
     return content, gist
 
 
-def _turn_memory_text(experienced, did, came_in=()):
-    """THE ONE MEMORY OF A TURN (the owner, 2026-09-30): "What I experienced:
-    ... What I did: ...", and the mood the mind came into it with, as words
-    for it to read -- the mood it left with is the row's feeling and its
-    `encoding_valence`, which is what recall's arithmetic reads. Labels from
-    the story's pack (`_TURN_MEMORY_LABELS`); a part with nothing in it is
-    left out."""
+def _turn_memory_text(witnessed, did, happened="", came_in=()):
+    """THE ONE MEMORY OF A TURN (the owner, 2026-09-30), IN THE ORDER IT WAS
+    LIVED: what the mind witnessed before it acted, what it did, what happened
+    after -- each said once (the act stage's percepts are left out of the
+    outcome's episode by key, `perception.perception_outcome`) -- and the mood
+    it came into it with, as words for it to read. The mood it left with is
+    the row's feeling and its `encoding_valence`, which is what recall's
+    arithmetic reads. Labels from the story's pack (`_TURN_MEMORY_LABELS`);
+    a part with nothing in it is left out."""
     labels = _ling("_TURN_MEMORY_LABELS")
     parts = []
-    if str(experienced or "").strip():
-        parts.append(f"{labels['experienced']} {str(experienced).strip()}")
-    if str(did or "").strip():
-        parts.append(f"{labels['did']} {str(did).strip()}")
+    for key, text in (("witnessed", witnessed), ("did", did), ("happened", happened)):
+        if str(text or "").strip():
+            parts.append(f"{labels[key]} {str(text).strip()}")
     words = [str(w).strip() for w in came_in or () if str(w or "").strip()]
     if parts and words:
         parts.append(f"{labels['came_in']} {labels.get('joiner', ', ').join(words)}{labels.get('end', '.')}")
@@ -1199,7 +1200,18 @@ def prepare_memory_commit(ctx, *, scene=None):
                 episode_content = ""
         _episode_key = ""
         _episode_row = None
-        if episode_content:
+        # What this mind witnessed BEFORE it acted, minted by the act stage;
+        # `episode_content` is then what happened after, the act stage's
+        # percepts left out of it (`perception.perception_outcome`).
+        _w = ((getattr(ctx, "perception_act", None) or {}).get("witnessed") or {}).get(str(ccid)) or {}
+        _witnessed_content = str(_w.get("episode") or "").strip()
+        if _witnessed_content and _is_empty_view(_witnessed_content):
+            _witnessed_content = ""
+        if _witnessed_content:
+            _episode_gist = str(_w.get("gist") or "").strip() or _episode_gist
+            _episode_entities = list(dict.fromkeys(
+                [*(str(e) for e in _w.get("entities") or [] if str(e or "").strip()), *_episode_entities]))
+        if episode_content or _witnessed_content:
             # WHY `turn.id` AND NOT A COPY-STABLE IDENTITY. The property this
             # mint is relied on for is stability across a RE-RUN, not across a
             # copy: `commit_memories` deletes the turn's rows and mints them
@@ -1227,12 +1239,15 @@ def prepare_memory_commit(ctx, *, scene=None):
             _episode_row = {
                 "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                 "turn_idx": turn.idx, "kind": "episodic", "category": "episode",
-                "provenance": "witnessed", "salience": _salience_of(episode_content),
-                "content": episode_content, "location": room_name,
+                "provenance": "witnessed",
+                "salience": _salience_of(" ".join(t for t in (_witnessed_content, episode_content) if t)),
+                "content": " ".join(t for t in (_witnessed_content, episode_content) if t),
+                "location": room_name,
                 "emotional_context": mood,
                 "valence": _mem_valence, "arousal": _mem_arousal,
                 "event_key": _episode_key,
-                "_turn_experienced": episode_content,
+                "_turn_witnessed": _witnessed_content,
+                "_turn_happened": episode_content,
             }
             if _heard_about:
                 _episode_row["about"] = list(dict.fromkeys(_heard_about))
@@ -2264,9 +2279,10 @@ def prepare_memory_commit(ctx, *, scene=None):
                     _memory["feelings"] = {"moment": {**_layer, "turn": turn.idx,
                                                       "key": f"{turn.idx}:{_facet}"}}
                 # The turn's one memory, worded once its two halves are known.
-                if "_turn_experienced" in _memory or "_turn_did" in _memory:
+                if any(k in _memory for k in ("_turn_witnessed", "_turn_happened", "_turn_did")):
                     _memory["content"] = _turn_memory_text(
-                        _memory.pop("_turn_experienced", ""), _memory.pop("_turn_did", ""), _came_in)
+                        _memory.pop("_turn_witnessed", ""), _memory.pop("_turn_did", ""),
+                        _memory.pop("_turn_happened", ""), _came_in)
                 # WHO IT HAD IN IT: the bodies in this mind's room this beat,
                 # and a heard line's speaker and addressee, by the engine's
                 # names -- host-only, live for the mind once it knows a name.

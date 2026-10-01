@@ -4275,8 +4275,9 @@
       ]
     },
     "_TURN_MEMORY_LABELS": {
-      "experienced": "体験したこと：",
+      "witnessed": "目にしたこと：",
       "did": "したこと：",
+      "happened": "その後起きたこと：",
       "came_in": "そのときの気分："
     },
     "_DURABLE_QUOTE_MARKERS": {

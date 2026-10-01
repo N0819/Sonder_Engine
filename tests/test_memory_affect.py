@@ -147,8 +147,8 @@ def test_self_row_is_minted_beside_the_witnessed_episode(temp_db, monkeypatch):
     # Both halves, ONE memory of the turn since 2026-09-30 (the owner: "What I
     # experienced / What I did").
     assert [m["category"] for m in mems] == ["episode"]
-    assert mems[0]["content"] == ("What I experienced: The stranger steps back, startled.\n"
-                                  "What I did: I tried to pull away from the kiss.")
+    assert mems[0]["content"] == ("What I did: I tried to pull away from the kiss.\n"
+                                  "What happened: The stranger steps back, startled.")
 
 
 def test_inference_memory_omits_empty_evidence_and_duplicate_subject(

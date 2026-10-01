@@ -4993,6 +4993,18 @@ def _safe_renderer(language):
         return None
 
 
+def episode_signature(p):
+    """What a percept says in an episode, as a signature two stages can compare
+    (the English sentence, whatever the story's language: it is never shown).
+    The act stage and the outcome mint one act under different event ids, so
+    its `dedupe_key` differs between them while what it says does not
+    (`perception.perception_outcome`, 2026-09-30)."""
+    try:
+        return " ".join(str(_episode_sentence(p) or "").split()).casefold()
+    except Exception:  # noqa: BLE001 -- a percept no sentence covers has no signature
+        return ""
+
+
 def render_episode(percepts, *, prev_standing=frozenset(),
                    prev_described=frozenset(), language=None, renderer=None):
     """Mint a memory episode through the selected deterministic adapter."""

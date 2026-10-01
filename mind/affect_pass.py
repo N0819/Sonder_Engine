@@ -95,7 +95,8 @@ def formed_for(row, formed):
     perceived AND what it did (`turn_memory`) -- both layers as one moment
     (`affect_mix.merge_formed`), the beat's whole feeling."""
     formed = formed if isinstance(formed, dict) else {}
-    if (row or {}).get("_turn_did") and (row or {}).get("_turn_experienced"):
+    row = row or {}
+    if row.get("_turn_did") and (row.get("_turn_witnessed") or row.get("_turn_happened")):
         layers = [formed.get(f) for f in ("perceived", "acted") if isinstance(formed.get(f), dict)]
         if not layers:
             return None

@@ -3241,8 +3241,9 @@
       ]
     },
     "_TURN_MEMORY_LABELS": {
-      "experienced": "What I experienced:",
+      "witnessed": "What I witnessed:",
       "did": "What I did:",
+      "happened": "What happened:",
       "came_in": "How I came into it:"
     },
     "_DURABLE_QUOTE_MARKERS": {

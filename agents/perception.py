@@ -5945,6 +5945,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
     arrival_rels = {}
     origin_rels = {}
     clean_views, observations, ledger, company = {}, {}, {}, {}
+    witnessed = {}
     for p in perceivers:
         pid = str(p["id"])
         name = p["name"]
@@ -6244,6 +6245,25 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
             ctx, "perception_act", pid, name, rendered, known, roster,
             clean_views, observations, ledger, spoken_lines=spoken,
             seen=seen_bodies, labels=display_map)
+        # WHAT THIS MIND WITNESSED BEFORE IT ACTED (the owner, 2026-09-30:
+        # a turn's memory in order -- witnessed, did, what happened as a
+        # result -- "and doesn't have duplicates"). Minted from the same
+        # percepts its view was, as the outcome's episode is; the keys of
+        # every percept in it are what the outcome's episode leaves out, so
+        # the two halves never say one thing twice.
+        if not _is_player_view(pid):
+            w_content, w_gist, w_entities = composer.render_episode(
+                percepts, prev_standing=prev_standing,
+                prev_described=prev_described, language=ctx.language)
+            w_content, w_gist = _scrub_episode_identities(
+                ctx, "perception_act", name, w_content, w_gist, known, roster)
+            witnessed[pid] = {
+                "episode": w_content, "gist": w_gist, "entities": w_entities,
+                "keys": sorted({p.dedupe_key for p in percepts if p.dedupe_key}),
+                # what each percept says, one entry per percept: an act
+                # re-minted at the outcome under a new event id keeps its
+                # words, not its key
+                "said": [s for s in (composer.episode_signature(p) for p in percepts) if s]}
     merged = dict(prev_ledger)
     merged.update(ledger)
     ctx["_composer_turn_ledger"] = merged
@@ -6254,6 +6274,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
         "observations": observations,
         "composer_ledger": merged,
         "company": company,
+        "witnessed": witnessed,
     }
 
 
@@ -7351,8 +7372,31 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             prev_meta=_composer_prev_meta(_composer_prev_ledger(ctx), pid),
             track_standing_meta=is_player_view)
         if not is_player_view:
+            # WHAT HAPPENED, after what this mind witnessed before it acted:
+            # every percept the act stage already put in its witnessed
+            # episode is left out, by its key (content-hashed, so the same
+            # line or act keys alike in both stages; observation ids are
+            # positional and do not).
+            _w = (((getattr(ctx, "perception_act", None) or {}).get("witnessed") or {})
+                  .get(pid) or {})
+            _before = set(_w.get("keys") or ())
+            # Counted, so an act done twice -- once before this mind acted,
+            # once after -- is said once in each half.
+            _said = {}
+            for _s in _w.get("said") or ():
+                _said[_s] = _said.get(_s, 0) + 1
+            _after = []
+            for q in percepts:
+                if q.dedupe_key and q.dedupe_key in _before:
+                    continue
+                _s = composer.episode_signature(q)
+                if _s and _said.get(_s, 0) > 0:
+                    _said[_s] -= 1
+                    continue
+                _after.append(q)
             content, gist, entities = composer.render_episode(
-                percepts, prev_standing=prev_standing,
+                _after,
+                prev_standing=prev_standing,
                 prev_described=prev_described, language=ctx.language)
             content, gist = _scrub_episode_identities(
                 ctx, "perception_outcome", name, content, gist, known,
