@@ -540,6 +540,7 @@ def _read_back(h, reply, script):
     check the first answers call for (`jev.ask_after`)."""
     answers = _answer(script)(_both_batteries(h, reply))
     answers.update(_answer(script)(jev.belief_pair_questions(h, reply, answers)))
+    answers.update(_answer(script)(jev.echo_questions(h, answers)))
     return answers
 
 
@@ -644,6 +645,8 @@ def test_a_remembered_moment_comes_back_in_the_body_with_its_sign():
     warmth -- and was written as 0.0 on every bare beat."""
     h = _holding()
     questions = jev.after_questions(h, _reply())
+    picked = _answer([("echo", "m1")])(questions)
+    questions = {**questions, **jev.echo_questions(h, picked)}
     assert set(questions["echo:1:body"]["criteria"]) == set(jev.BODY_ECHO)
     for answer, expected in (("bad", -0.5), ("hard_good", 1.0), ("none", 0.0)):
         script = [("echo", "m1"), ("echo:1:body", answer)]
@@ -905,6 +908,43 @@ def test_the_pair_check_is_a_second_request_after_the_read_back(monkeypatch):
     monkeypatch.setattr(jev, "ask", fake_ask)
     answers = jev.ask_after(h, reply)
     assert len(asked) == 2 and asked[1] == {"change:0:replaces"} and "change:0:replaces" in answers
+
+
+def test_only_a_memory_that_holds_a_claim_is_asked_whether_the_moment_disputes_it():
+    """What the mind concluded or was told can be overturned; a plain record
+    of what happened holds nothing to dispute (the owner, 2026-09-30: dispute
+    belongs to conclusions). A row with no origin is asked as before."""
+    h = _holding()
+    h.memories = [{"ref": "a", "text": "I saw the door open.", "origin": "what_i_experienced"},
+                  {"ref": "b", "text": "I concluded Mara lied.", "origin": "what_i_concluded"},
+                  {"ref": "c", "text": "Tomas told me the key was lost.", "origin": "what_i_was_told"},
+                  {"ref": "d", "text": "An old row with no origin."}]
+    assert set(jev.before_questions(h)) == {"dispute:1", "dispute:2", "dispute:3"}
+
+
+def test_how_a_memory_comes_back_is_asked_of_the_picked_memory_alone(monkeypatch):
+    """The four echo questions were asked of every delivered memory and read
+    for the one `echo` picked: 284 of ~400 read-back questions on chat 159
+    turn 23 (2026-09-30), thrown away. Now the read-back asks only which
+    memory, and `ask_after` asks the four of that memory, against the same
+    state; none when no memory is picked."""
+    h = _holding()
+    assert not any(k.startswith("echo:") for k in jev.after_questions(h, _reply()))
+    asked = []
+
+    def fake_ask(state, questions):
+        asked.append((state, set(questions)))
+        return {k: {"type": "choice", "probabilities": {("m1" if k == "echo" else "none"): 1.0}}
+                for k in questions}
+
+    monkeypatch.setattr(jev, "ask", fake_ask)
+    answers = jev.ask_after(h, _reply())
+    echo_asks = [(state, keys) for state, keys in asked if any(k.startswith("echo:") for k in keys)]
+    assert len(echo_asks) == 1
+    state, keys = echo_asks[0]
+    assert keys == {"echo:1:familiar", "echo:1:threat", "echo:1:coping", "echo:1:body"}
+    assert state == asked[0][0] and "echo:1:body" in answers
+    assert jev.echo_questions(h, {"echo": {"type": "choice", "probabilities": {"no_memory": 1.0}}}) == {}
 
 
 def test_an_act_splits_at_its_own_punctuation_and_never_inside_a_number():

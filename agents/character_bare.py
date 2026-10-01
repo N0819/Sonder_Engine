@@ -124,7 +124,7 @@ def _delivered_memories(memory_context):
         if ref in seen or not str(text or "").strip():
             continue
         seen.add(ref)
-        out.append({"ref": ref, "text": _text(text)})
+        out.append({"ref": ref, "text": _text(text), "origin": str(row.get("epistemic_origin") or "")})
     # EVERY DELIVERED MEMORY, not the first twelve. The walk meets the lanes in
     # the payload's order, and with the recent turns ahead of recall the
     # twelve were the recent rows alone: the recalled memories never reached

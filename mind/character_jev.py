@@ -65,6 +65,16 @@ MAX_TELLS = 2
 REASONING_CHARS = 6000
 #: How long an item may run in a question or an option before it is cut.
 ITEM_CHARS = 300
+#: How much of a memory an OPTION quotes (which memory shaped the act, which
+#: one this moment echoes, which one a line rests on or re-reads). The state
+#: carries every delivered memory in full (`state_text`); a menu of all of
+#: them at 160 chars was repeated in each such question -- 73% of the
+#: read-back's question text on chat 159 turn 23 (71 memories, 2026-09-30).
+#: At 50 chars, on 10 real beats: the other questions agree with the full
+#: menu 97.4% (the same battery asked twice: 97.1%), and every memory pick
+#: stays in the full pick's top three (24 of 24) -- the picks are near-ties
+#: (median margin 0.11), which any change to the prompt reorders.
+MEMORY_OPTION_CHARS = 50
 #: The carried charge below which a release is not asked about.
 RELEASE_ASK_FLOOR = 0.3
 #: The yes-share at which a recalled memory is shown as one the moment may
@@ -361,9 +371,9 @@ def _set(name, language):
     return character_jev_options(name, language)
 
 
-def _options(items, none_key, language, prefix):
+def _options(items, none_key, language, prefix, n=160):
     """`{prefix<i>: label}` for items, plus the pack's `none_key` choice."""
-    out = {f"{prefix}{i}": _text(label, 160) for i, label in enumerate(items)}
+    out = {f"{prefix}{i}": _text(label, n) for i, label in enumerate(items)}
     if none_key:
         out[none_key] = _set("choices", language)[none_key]
     return out
@@ -379,15 +389,29 @@ def _look_options(people, language):
     return out
 
 
+#: The memories a moment can dispute: the ones that hold a CLAIM -- what this
+#: mind concluded, or what it was told -- by the delivered row's
+#: `epistemic_origin`. A plain record of what happened holds nothing for the
+#: moment to overturn (the owner, 2026-09-30: "dispute should be relegated to
+#: conclusions"; a disguise revealed is the exception, and it needs its own
+#: hook -- memories.about leaves a disguised body out). The check was asked of
+#: every delivered memory: 70 questions on chat 159 turn 23, 32 of them claims,
+#: and it fired once in the 15 character results that record it. A row with no
+#: origin (older payloads, tests) is asked, as before.
+DISPUTABLE_ORIGINS = frozenset({"what_i_concluded", "what_i_was_told"})
+
+
 def before_questions(h):
     """Asked before the call, and only when something reached this mind:
     does it change what a recalled memory meant? A yes gates the dispute
-    module and its payload section into this call."""
+    module and its payload section into this call. Only memories that hold a
+    claim are asked (`DISPUTABLE_ORIGINS`)."""
     if not (h.events and h.memories):
         return {}
     yesno = _set("yesno", h.language)
     return {f"dispute:{i}": _choice("dispute", h.language, yesno, memory=_text(m["text"]))
-            for i, m in enumerate(h.memories)}
+            for i, m in enumerate(h.memories)
+            if not m.get("origin") or m["origin"] in DISPUTABLE_ORIGINS}
 
 
 def moment_questions(h):
@@ -610,7 +634,7 @@ def after_questions(h, reply):
             qs[f"change:{j}:reading"] = _choice("reading_kind", lang, _set("reading_kind", lang), text=line)
         if memories:
             qs[f"change:{j}:memory"] = _choice(
-                "which_memory", lang, _options(memories, "no_memory", lang, "m"), text=line)
+                "which_memory", lang, _options(memories, "no_memory", lang, "m", MEMORY_OPTION_CHARS), text=line)
         if steering:
             qs[f"change:{j}:aim"] = _choice(
                 "which_aim", lang, _options([a["text"] for a in steering], "no_aim", lang, "a"), text=line)
@@ -654,8 +678,8 @@ def after_questions(h, reply):
         labels = _set("shaped_labels", lang)
         criteria = {}
         for k, memory in enumerate(memories):
-            criteria[f"a{k}"] = _fill(labels["acted"], {"memory": _text(memory, 160)})
-            criteria[f"r{k}"] = _fill(labels["resisted"], {"memory": _text(memory, 160)})
+            criteria[f"a{k}"] = _fill(labels["acted"], {"memory": _text(memory, MEMORY_OPTION_CHARS)})
+            criteria[f"r{k}"] = _fill(labels["resisted"], {"memory": _text(memory, MEMORY_OPTION_CHARS)})
         criteria["no_memory"] = _set("choices", lang)["no_memory"]
         qs["mem:shaped"] = _choice("memory_shaped", lang, criteria)
     if h.charge >= RELEASE_ASK_FLOOR and (any_do or any_say):
@@ -680,12 +704,9 @@ def after_questions(h, reply):
             qs[f"impact:{a}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"),
                                             text=label)
         if memories:
-            qs["echo"] = _choice("echo", lang, _options(memories, "no_memory", lang, "m"))
-            for k, memory in enumerate(memories):
-                qs[f"echo:{k}:familiar"] = _choice("echo_familiar", lang, grade, memory=_text(memory))
-                qs[f"echo:{k}:threat"] = _choice("echo_threat", lang, grade, memory=_text(memory))
-                qs[f"echo:{k}:coping"] = _choice("echo_coping", lang, _set("ability", lang), memory=_text(memory))
-                qs[f"echo:{k}:body"] = _choice("echo_body", lang, _set("echo_body", lang), memory=_text(memory))
+            # Only which memory this moment brings back most; how it comes
+            # back is asked of that one memory alone (`echo_questions`).
+            qs["echo"] = _choice("echo", lang, _options(memories, "no_memory", lang, "m", MEMORY_OPTION_CHARS))
         if h.strategies:
             qs["coping_mode"] = _choice("coping_mode", lang, _options(h.strategies, "no_strategy", lang, "s"))
     return qs
@@ -698,7 +719,8 @@ def _evidence_questions(qs, prefix, text, events, memories, lang):
         qs[f"{prefix}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"), text=text)
     if memories:
         qs[f"{prefix}:remembered"] = _choice(
-            "based_memory", lang, _options(memories, "nothing_remembered", lang, "m"), text=text)
+            "based_memory", lang, _options(memories, "nothing_remembered", lang, "m", MEMORY_OPTION_CHARS),
+            text=text)
 
 
 # --- reading the answers ------------------------------------------------------------
@@ -770,13 +792,38 @@ def belief_pair_questions(h, reply, answers):
     return qs
 
 
+def echo_questions(h, answers):
+    """How the memory the read-back picked (`echo`) comes back: familiar,
+    threatening, enabling, felt in the body -- asked of that one memory.
+
+    The read-back asked these four of EVERY delivered memory and the compiler
+    read them for the picked one only (`character_bare.compile_bare`,
+    `memory_modulation`): on chat 159 turn 23 (2026-09-30, 71 memories
+    delivered) that was 284 of the read-back's ~400 questions, answered and
+    thrown away."""
+    chosen = pick(answers, "echo") or ""
+    if not (chosen.startswith("m") and chosen[1:].isdigit() and int(chosen[1:]) < len(h.memories)):
+        return {}
+    k, lang = int(chosen[1:]), h.language
+    memory = _text(h.memories[k]["text"])
+    return {f"echo:{k}:familiar": _choice("echo_familiar", lang, _set("grade", lang), memory=memory),
+            f"echo:{k}:threat": _choice("echo_threat", lang, _set("grade", lang), memory=memory),
+            f"echo:{k}:coping": _choice("echo_coping", lang, _set("ability", lang), memory=memory),
+            f"echo:{k}:body": _choice("echo_body", lang, _set("echo_body", lang), memory=memory)}
+
+
 def ask_after(h, reply):
     """Everything asked after the call, answers merged: the read-back against
     this mind's state with its reply, then the belief pair check its answers
-    call for, against the pair alone. The engine's bare path and the replay
-    tool both ask through here."""
-    answers = dict(ask(state_text(h, reply), after_questions(h, reply)) or {})
+    call for, against the pair alone, and how the picked memory comes back,
+    against the same state as the read-back. The engine's bare path and the
+    replay tool both ask through here."""
+    state = state_text(h, reply)
+    answers = dict(ask(state, after_questions(h, reply)) or {})
     pairs = belief_pair_questions(h, reply, answers)
     if pairs:
         answers.update(ask(f"YOU ARE {h.name}.", pairs) or {})
+    echo = echo_questions(h, answers)
+    if echo:
+        answers.update(ask(state, echo) or {})
     return answers

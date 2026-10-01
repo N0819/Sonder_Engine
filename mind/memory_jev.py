@@ -64,9 +64,15 @@ NEAR_DUPLICATE = 0.90
 #: How much of the view and of each memory a question carries (the probe's).
 VIEW_CHARS = 3000
 MEMORY_CHARS = 500
-#: The two graded questions, by pack name (`character_jev.<name>`); a row's
-#: grade is the larger.
-QUESTIONS = ("memory_situation", "memory_useful")
+#: The graded question, by pack name (`character_jev.<name>`). There were
+#: two -- this and `memory_useful` ("information that would help with what
+#: you are trying to do"), a row's grade the larger -- and every row of the
+#: net was asked both, its text sent twice. Measured 2026-09-30: on the
+#: concept lab's 240-row bank (40 probes, answers hand-labelled) situation
+#: alone put the answer first 30 times against the pair's 28, top-24 40 of 40
+#: either way; on 5 real beats its top half matched the pair's 96.2%, the
+#: same as the pair asked twice (96.2%). `memory_useful` stays in the pack.
+QUESTIONS = ("memory_situation",)
 #: A PONDER IS ANSWERED THE SAME WAY (the owner, 2026-09-29: "Ponder pulls up
 #: 50 candidates using rrf for jev to sort on how well it answers the ponder"
 #: -- the ponder lane had been `search_memories(query)` alone, which handed a

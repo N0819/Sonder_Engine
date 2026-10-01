@@ -44,7 +44,15 @@ TIMEOUT = (10, 30)
 #: Questions per request. TypeSafe publishes no ceiling; this is ours, so a
 #: very large battery is split and asked concurrently rather than risking one
 #: refused request. Named here per the owner's ask-before-limiting rule.
-MAX_QUESTIONS_PER_REQUEST = 64
+#: Raised 64 -> 128 (owner, 2026-09-30): every request repeats its state, and
+#: Jev bills input only, so a split costs a whole state copy. Jev took 200 in
+#: one request at the same latency (~0.25-0.5 s).
+MAX_QUESTIONS_PER_REQUEST = 128
+#: Answer options per request, the other ceiling: a request's OUTPUT grows
+#: with its options, and 60 questions of 55 long options each (3,300) hit
+#: Jev's output limit on 2026-09-30, where 2,560 short ones answered. A batch
+#: closes at whichever limit it reaches first.
+MAX_OPTIONS_PER_REQUEST = 2400
 
 #: Installed by a test: `OVERRIDE(state, questions) -> {key: answer}`.
 OVERRIDE = None
@@ -171,6 +179,28 @@ def _foregone(questions: dict) -> dict:
     return out
 
 
+def _options_in(question) -> int:
+    criteria = (question or {}).get("criteria") if isinstance(question, dict) else None
+    return len(criteria) if isinstance(criteria, dict) else 2
+
+
+def _batches(items):
+    """Split `[(key, question)]` into requests, each closed at whichever of
+    `MAX_QUESTIONS_PER_REQUEST` and `MAX_OPTIONS_PER_REQUEST` it reaches
+    first; a single question over the options limit still goes, alone."""
+    out, cur, options = [], {}, 0
+    for key, question in items:
+        n = _options_in(question)
+        if cur and (len(cur) >= MAX_QUESTIONS_PER_REQUEST or options + n > MAX_OPTIONS_PER_REQUEST):
+            out.append(cur)
+            cur, options = {}, 0
+        cur[key] = question
+        options += n
+    if cur:
+        out.append(cur)
+    return out
+
+
 def decide(state, questions: dict) -> dict:
     """Ask every question in `questions` of `state`; return `{key: answer}`.
 
@@ -192,10 +222,7 @@ def decide(state, questions: dict) -> dict:
     items = [(k, v) for k, v in questions.items() if k not in answered]
     if not items:
         return answered
-    batches = [
-        dict(items[i:i + MAX_QUESTIONS_PER_REQUEST])
-        for i in range(0, len(items), MAX_QUESTIONS_PER_REQUEST)
-    ]
+    batches = _batches(items)
     if len(batches) == 1:
         return {**answered, **_post(prov, model, state, batches[0])}
     out = dict(answered)

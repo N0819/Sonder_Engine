@@ -83,14 +83,14 @@ def test_recall_is_the_decision_models_pick(_bank, monkeypatch):
     key_refs = {m["memory_ref"] for m in picked if KEY in (m.get("details") or m.get("gist") or "")}
     assert len(key_refs) == 4
     assert set(internal["recalled_by_grade"][:4]) == key_refs
-    assert internal["picker"]["asked"] == 2 * internal["picker"]["net"]
+    assert internal["picker"]["asked"] == internal["picker"]["net"]
     assert internal["picker"]["answered"] == internal["picker"]["net"]
     # The payload stays chronological.
     turns = [m.get("when") for m in picked]
     assert len(turns) == len(picked)
-    # Both questions were asked of every row of the net.
+    # The graded question was asked of every row of the net.
     names = {k.split("__")[0] for k in asked[0][1]}
-    assert names == {"memory_situation", "memory_useful"}
+    assert names == {"memory_situation"}
 
 
 def test_the_state_is_the_minds_own(_bank, monkeypatch):
