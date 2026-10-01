@@ -538,9 +538,11 @@ def compile_bare(reply, answers, h):
             expects = expects or jev.yes(answers, f"say:{index}:expects")
             sequence.append({
                 "type": "speech", "text": str(row["say"]).strip(),
-                # Unread, a voice is pitched for the one it is said to: loud
-                # enough for them and no louder (the engine's own `pitched`).
-                "volume": jev.pick(answers, f"say:{index}:volume") or ("pitched" if target else "normal"),
+                # Unread, a voice is an ordinary one (the owner, 2026-09-30:
+                # "normal volume should be the default unless specified
+                # otherwise"). `pitched` solved at arm's length came out a
+                # mutter, so every unmarked line read "under their breath".
+                "volume": jev.pick(answers, f"say:{index}:volume") or "normal",
                 "tone": str(row.get("how") or "").strip(),
                 "visibility": "concealed" if hidden else "overt",
                 "conceal_from": hidden,

@@ -1361,7 +1361,10 @@ def test_volume_is_how_far_the_words_are_meant_to_carry():
     encoder = prompts.unified_specialist_prompt(["poses"])
     writer = str(card_en["prose_contract"]["director_interpret"])
     assert "how far the speaker means the words to carry, never how they sound" in encoder
-    assert "pitched for whoever it is aimed at" in encoder
+    # Unmarked is normal (the owner, 2026-09-30): pitched at arm's length
+    # solved to a mutter, so every plain player line read "under their breath".
+    assert "at normal unless something says how far it was meant to go" in encoder
+    assert "and is normal when it gave none" in encoder and "is pitched when it gave none" not in encoder
     assert "The player's line keeps the reach their input gave it -- read in event_inputs" in encoder
     assert "or a sound with no words in it -- carries as any voice does" in encoder
     assert "how far a line carries is conduct" in writer

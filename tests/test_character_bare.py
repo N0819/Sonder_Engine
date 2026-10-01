@@ -439,7 +439,7 @@ def test_a_kept_note_is_committed_and_shown_in_the_next_calls_notebook(story, mo
 def test_an_unread_reply_stands_on_code_alone_and_buys_no_second_call(story, monkeypatch):
     """No fallback to the call the bare card replaced: when the decision
     model cannot be asked, the beat the character wrote stands, a line goes
-    to whoever its `to` names at a voice pitched for them, and nothing is
+    to whoever its `to` names in an ordinary voice, and nothing is
     filed."""
     import agents.character as character
     char_id, context, _commit = story
@@ -469,7 +469,7 @@ def test_unread_the_addressee_is_the_one_the_line_names_here():
     h, reply = _holding(), _reply()
     out, _ = character_bare.compile_bare(reply, {}, h)
     speech = out["sequence"][0]
-    assert (speech["targets"], speech["volume"], speech["conceal_from"]) == (["Mara"], "pitched", [])
+    assert (speech["targets"], speech["volume"], speech["conceal_from"]) == (["Mara"], "normal", [])
     assert out["interaction"]["addresses"] == ["Mara"]
     reply["sequence"][0]["to"] = "the room"
     out, _ = character_bare.compile_bare(reply, {}, h)
