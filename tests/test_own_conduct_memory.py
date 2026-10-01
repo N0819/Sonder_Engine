@@ -83,6 +83,13 @@ def _self_rows(captured):
     return [m for m in captured["memories"] if m.get("category") == "self"]
 
 
+def _conduct_rows(captured):
+    """Rows holding what the mind said and did: since 2026-09-30 the turn's
+    one memory ("What I experienced: ... What I did: ..."), or a self row
+    alone when the beat perceived nothing."""
+    return [m for m in captured["memories"] if "What I did:" in str(m.get("content") or "")]
+
+
 def test_a_speaker_remembers_having_spoken_even_with_a_view(
         temp_db, monkeypatch):
     """THE regression. A view is what a mind perceived, and deterministic
@@ -99,16 +106,16 @@ def test_a_speaker_remembers_having_spoken_even_with_a_view(
 
     prepare_memory_commit(ctx)
 
-    own = _self_rows(captured)
+    own = _conduct_rows(captured)
     assert own, ("a character who spoke this beat has no durable memory of "
                  "having spoken -- the d290ca4/3a82657 regression")
+    # ONE memory of the turn (the owner, 2026-09-30): what it perceived and
+    # what it said, in one row, never a second row beside the episode.
     assert own[0]["content"] == (
-        "I said 'You are cold. I will have a blanket brought.'")
-    assert own[0]["provenance"] == "remembered"
-    # And the episode still minted beside it, untouched.
-    episodes = [m for m in captured["memories"]
-                if m.get("category") == "episode"]
-    assert len(episodes) == 1
+        "What I experienced: The young woman shivers and pulls the sheet closer.\n"
+        "What I did: I said 'You are cold. I will have a blanket brought.'")
+    assert own[0]["category"] == "episode" and own[0]["provenance"] == "witnessed"
+    assert not _self_rows(captured) and len(captured["memories"]) == 1
 
 
 def test_the_no_view_case_still_mints_the_self_row(temp_db, monkeypatch):
@@ -123,9 +130,10 @@ def test_the_no_view_case_still_mints_the_self_row(temp_db, monkeypatch):
 
     prepare_memory_commit(ctx)
 
+    # Nothing perceived: what it did is its own row.
     own = _self_rows(captured)
     assert len(own) == 1
-    assert own[0]["content"] == "I said 'Hold the line.' Then I tried to brace the door."
+    assert own[0]["content"] == "What I did: I said 'Hold the line.' Then I tried to brace the door."
 
 
 def test_the_pair_reads_as_one_beat_not_two_events(temp_db, monkeypatch):
@@ -145,20 +153,17 @@ def test_the_pair_reads_as_one_beat_not_two_events(temp_db, monkeypatch):
 
     prepare_memory_commit(ctx)
 
-    by_cat = {m["category"]: m for m in captured["memories"]}
-    episode, own = by_cat["episode"], by_cat["self"]
-    # Decision framing, never the old fragment that read as a second event.
-    assert own["content"] == "I tried to wrench the lever down."
-    assert "chose to" not in own["content"]
-    assert "attempted" not in own["content"]
-    # Complementary, not competing: neither row restates the other.
-    assert own["content"] not in episode["content"]
-    assert episode["content"] not in own["content"]
+    # ONE row now (the owner, 2026-09-30), the two halves labelled: the
+    # outcome perceived, and the attempt decision-framed beside it -- never
+    # the old fragment that read as a second event.
+    (row,) = captured["memories"]
+    assert row["content"] == ("What I experienced: The gate shudders but does not move.\n"
+                              "What I did: I tried to wrench the lever down.")
+    assert "chose to" not in row["content"] and "attempted" not in row["content"]
 
-    # Through the retrieval projection both land in the first-hand lane with
-    # the identical beat-age label -- one beat, two aspects, and the reader
-    # never has to reconstruct which came from where.
-    for row in (episode, own):
+    # Through the retrieval projection it lands in the first-hand lane with
+    # the beat's age label.
+    for row in (row,):
         temp_db.qi(
             "INSERT INTO memories(chat_id,char_id,turn_idx,kind,category,"
             "provenance,salience,content,gist,key_phrases,entities,location,"
@@ -174,10 +179,8 @@ def test_the_pair_reads_as_one_beat_not_two_events(temp_db, monkeypatch):
     clock = memory.MemoryClock(chat_id, char_id, 8, now_seconds=300.0,
                                viewer_frame_id=None)
     projected = [memory._with_reading(m, clock) for m in buffered]
-    assert len(projected) == 2
+    assert len(projected) == 1
     assert {p["epistemic_origin"] for p in projected} == {"what_i_experienced"}
-    # One beat, one moment: both halves of the pair were formed at the same
-    # reading of the story clock and must be stamped with it identically.
     assert {p["when"] for p in projected} == {"about 3 minutes ago"}
 
 
@@ -207,7 +210,7 @@ def test_the_bound_holds(temp_db, monkeypatch):
         "active_state": {"mood": "idle"},
     }, view="Dust drifts in the light.", idx=3)
     prepare_memory_commit(ctx)
-    assert not _self_rows(captured)
+    assert not _conduct_rows(captured)
 
     # A silent act, rated low by the mind that took it: durable.
     ctx = _ctx(chat_id, char_id, cast, {
@@ -216,7 +219,7 @@ def test_the_bound_holds(temp_db, monkeypatch):
         "active_state": {"mood": "idle"},
     }, view="Dust drifts in the light.", idx=4)
     prepare_memory_commit(ctx)
-    assert len(_self_rows(captured)) == 1
+    assert len(_conduct_rows(captured)) == 1
 
     # Speech at any salience: durable.
     ctx = _ctx(chat_id, char_id, cast, {
@@ -225,7 +228,7 @@ def test_the_bound_holds(temp_db, monkeypatch):
         "active_state": {"mood": "idle"},
     }, view="Dust drifts in the light.", idx=5)
     prepare_memory_commit(ctx)
-    assert len(_self_rows(captured)) == 1
+    assert len(_conduct_rows(captured)) == 1
 
 
 class TestDurableDialogueMarkersBeginAtWords:
@@ -306,3 +309,78 @@ def test_a_free_form_self_reported_affect_cannot_kill_the_commit(
     prepare_memory_commit(ctx)
     row = _self_rows(captured)[0]
     assert float(row.get("valence")) == -0.3, row
+
+
+class TestOneMemoryPerTurn:
+    """The owner, 2026-09-30: one memory per turn, "What I experienced / What
+    I did", the mood it came in with as words for the mind to read, the mood
+    it left with in the arithmetic. A heard line is not a second row of the
+    moment it was heard in, unless it is a promise."""
+
+    def _heard(self, temp_db, monkeypatch, quote, *, mood_coords=None):
+        chat_id, char_id, cast = _story(temp_db)
+        if mood_coords:
+            temp_db.q("UPDATE chat_chars SET state=? WHERE char_id=?",
+                      (json.dumps({"active_state": {"mood_coords": mood_coords}}), char_id))
+            cast = temp_db.q(
+                "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+                "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (chat_id,))
+        captured = _capture_batch(monkeypatch)
+        ctx = _ctx(chat_id, char_id, cast, {
+            "salience": 0.5, "sequence": [{"type": "speech", "text": "Then go."}],
+            "active_state": {"mood": "steady"}},
+            view=f'Wren says: "{quote}" Wren looks at you.')
+        ctx.director_resolve["dialogue_log"] = [
+            {"speaker": "Wren", "exact_quote": f'"{quote}"', "intended_target": "Ostra", "volume": "normal"}]
+        prepare_memory_commit(ctx)
+        return captured["memories"]
+
+    def test_a_kept_line_is_already_in_the_turns_memory(self, temp_db, monkeypatch):
+        rows = self._heard(temp_db, monkeypatch, "Remember this: the well is fouled.")
+        assert [m["category"] for m in rows] == ["episode"]
+        assert "the well is fouled" in rows[0]["content"] and "What I did: I said 'Then go.'" in rows[0]["content"]
+        # the speaker and the one spoken to stay on the row, as the dialogue
+        # row it replaces kept them (the mind itself never is: `_memory_about`)
+        assert {"Wren", "Ostra"} <= set(rows[0]["about"])
+
+    def test_a_promise_keeps_its_own_row(self, temp_db, monkeypatch):
+        rows = self._heard(temp_db, monkeypatch, "I promise I will come back for you.")
+        assert sorted(m["category"] for m in rows) == ["episode", "promise"]
+
+    def test_the_mood_it_came_in_with_is_words_on_the_row(self, temp_db, monkeypatch):
+        rows = self._heard(temp_db, monkeypatch, "Go.", mood_coords={"fear": 0.8, "tension": 0.6})
+        last = rows[0]["content"].splitlines()[-1]
+        assert last.startswith("How I came into it: ") and last.endswith(".")
+        assert len(last) > len("How I came into it: .")
+
+    def test_the_decision_models_option_never_spends_its_chars_on_the_label(self):
+        from agents.character_bare import _delivered_memories
+        got = _delivered_memories({"recent_memories": [
+            {"memory_ref": "r1", "details": "What I experienced: Wren left by the north gate.\nWhat I did: I said 'Go.'"},
+            {"memory_ref": "r2", "details": "What I did: I barred the door."}]})
+        assert [m["text"][:20] for m in got] == ["Wren left by the nor", "I barred the door."]
+
+
+def test_the_bare_contracts_act_keeps_its_doer_and_a_line_is_quoted_once():
+    """The bare card writes an act "without a subject", as a watcher sees it,
+    and a line sometimes in its own quotation marks. Its memory read "I tried
+    to lifts the latch" and "I said '"What file."'" (story run 2026-09-30)."""
+    from persist.commit import _own_sequence_memory
+    content, _gist = _own_sequence_memory([
+        {"type": "speech", "text": '"What file."'},
+        {"type": "action", "attempt": "does not close the casebook, stays where she is",
+         "subjectless": True},
+        {"type": "action", "attempt": "bar the door"}], "Ines Calder")
+    assert content == ("I said 'What file.' Then Ines Calder does not close the casebook, "
+                       "stays where she is. Then I tried to bar the door.")
+
+
+def test_the_subjectless_mark_survives_the_sequence_normalizer():
+    """`agents.common.norm_sequence` rebuilds every act from named keys; the
+    mark was lost there on the first live turn, and the memory read "I tried
+    to picks up the card"."""
+    from agents.common import norm_sequence
+    out = {"sequence": [{"type": "action", "attempt": "picks up the card", "subjectless": True},
+                        {"type": "action", "attempt": "bar the door"}]}
+    norm_sequence(out)
+    assert [e.get("subjectless") for e in out["sequence"]] == [True, None]

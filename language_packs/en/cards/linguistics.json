@@ -3240,6 +3240,11 @@
         "promise"
       ]
     },
+    "_TURN_MEMORY_LABELS": {
+      "experienced": "What I experienced:",
+      "did": "What I did:",
+      "came_in": "How I came into it:"
+    },
     "_DURABLE_QUOTE_MARKERS": {
       "promise": {
         "$type": "tuple",

@@ -148,7 +148,9 @@ def test_a_mind_remembers_what_it_said_and_did_at_the_opening(temp_db, monkeypat
     captured = _capture_batch(monkeypatch)
     ctx.perception_establish = {"views": {str(i): "You are in the hall." for i in ids.values()}}
     prepare_memory_commit(ctx)
-    selves = [m for m in captured["memories"] if m.get("category") == "self"]
+    # In the turn's one memory, beside what the mind perceived (2026-09-30).
+    selves = [m for m in captured["memories"] if "What I did:" in m["content"]]
     assert [(m["char_id"], m["content"]) for m in selves] == [
-        (ids["Reya"], "I said 'The ferry left an hour ago.' Then I tried to bar the door.")]
-    assert selves[0]["turn_idx"] == 0 and selves[0]["provenance"] == "remembered"
+        (ids["Reya"], "What I experienced: You are in the hall.\n"
+                      "What I did: I said 'The ferry left an hour ago.' Then I tried to bar the door.")]
+    assert selves[0]["turn_idx"] == 0

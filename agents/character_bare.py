@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 
+from language_runtime import linguistic
 from llm.prompts import bare_character_prompt, character_bare_module, character_jev_options
 from mind import affect, affect_pass, notebook
 from mind import character_jev as jev
@@ -113,6 +114,24 @@ def reading_order(payload):
     return out
 
 
+def _unlabelled(text):
+    """A memory's words without the turn memory's leading label ("What I
+    experienced:", `persist.commit_memory._TURN_MEMORY_LABELS` in the story's
+    pack): the decision model's options quote a memory's first
+    `character_jev.MEMORY_OPTION_CHARS`, and a label every row begins with
+    would spend them saying nothing that tells two memories apart."""
+    text = str(text or "").lstrip()
+    try:
+        labels = linguistic("persist.commit_memory", "_TURN_MEMORY_LABELS")
+    except Exception:  # noqa: BLE001 -- a pack without the table labels nothing
+        return text
+    for key in ("experienced", "did"):
+        label = str((labels or {}).get(key) or "")
+        if label and text.startswith(label):
+            return text[len(label):].lstrip()
+    return text
+
+
 def _delivered_memories(memory_context):
     from agents.character import _delivered_memory_rows
     out, seen = [], set()
@@ -124,7 +143,7 @@ def _delivered_memories(memory_context):
         if ref in seen or not str(text or "").strip():
             continue
         seen.add(ref)
-        out.append({"ref": ref, "text": _text(text), "origin": str(row.get("epistemic_origin") or "")})
+        out.append({"ref": ref, "text": _text(_unlabelled(text)), "origin": str(row.get("epistemic_origin") or "")})
     # EVERY DELIVERED MEMORY, not the first twelve. The walk meets the lanes in
     # the payload's order, and with the recent turns ahead of recall the
     # twelve were the recent rows alone: the recalled memories never reached
@@ -558,6 +577,11 @@ def compile_bare(reply, answers, h):
             swept = jev.pick(answers, f"do:{index}:look") == "around"
             sequence.append({
                 "type": "action", "attempt": act,
+                # Written as the card asks, "without a subject" and as a
+                # watcher would see it ("lifts the latch and steps inside"):
+                # the mind's own memory of it takes its name as the subject
+                # (`commit_memory._own_sequence_memory`), never "I tried to".
+                "subjectless": True,
                 # An act that happens only inside the mind is imperceptible
                 # (`observable: ''`); the smoke replay's first draft asked
                 # "could someone watching see or hear it?" and a man entering

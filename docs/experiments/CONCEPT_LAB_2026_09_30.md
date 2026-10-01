@@ -806,3 +806,36 @@ replies again (the owner's "active thought line"); the town plan gave the
 schoolteacher no school ("he has to ask someone where his own school is");
 Jev stayed at ~$0.005-0.009 a beat -- the evoke questions were not what drove
 it.
+
+## 18. Landed after §17: questions, volume, and one memory per turn
+
+Measured on the same story (`tools/concept_lab/story_run.py`, the second
+scratch run), each change verified live before it was committed.
+
+- **Recall misses or misreadings?** Of the run's three wrong details, two were
+  recall misses on a direct question: the day-18 rows recording the first fever
+  cases were never delivered, so "the nineteenth" was inferred from the day-19
+  row, and the day-48 row recording when Hale took the log was not delivered
+  either. One was a misreading of a delivered row ("22 of 23" against the
+  delivered "16 of the first 19").
+- **A heard question is pondered** (`character_jev.heard_question`, owner's
+  design). Jev sees only the lines the mind heard and asks "Is this a
+  question?" of each. The surest one is pondered in its own lane
+  (`asked_recall`) beside the mind's own ponder. Asked the same two
+  questions, Ines answered both exactly: "The eighteenth, not the nineteenth …
+  Jonas Mraz, nineteen, and Bela Horvat"; "The seventeenth … a receipt for the
+  green log at twenty to two".
+- **An unmarked line is spoken at a normal voice.** Every plain player line had
+  been pitched, and pitched across a desk solves to a mutter, so it rendered as
+  "says under their breath".
+- **One memory per turn** (`commit_memory._turn_memory_text`), in this format:
+  "What I experienced: … What I did: … How I came into it: <the start mood in
+  words>".
+  - The end mood is the row's feeling: both formed layers as one moment
+    (`affect_pass.formed_for`), plus `encoding_valence`.
+  - A heard line is a row of its own only when it is a promise. Speakers and
+    addressees stay in `about`.
+  - Jev's 50-character options skip the leading label.
+  - The bare card's subjectless act is remembered with the mind's own name as
+    its subject. "I tried to" in front of it read "I tried to lifts the latch",
+    every bare beat since 2026-09-27.

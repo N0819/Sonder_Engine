@@ -79,7 +79,9 @@ def test_memory_carries_surface_valence_and_arousal(temp_db, monkeypatch):
     assert m["emotional_context"] == "afraid"
     assert abs(m["valence"] - (-0.6)) < 1e-9
     assert abs(m["arousal"] - 0.7) < 1e-9
-    assert m["content"] == "I said \"I won't do it.\""
+    # No view this beat: what it did is its own row, labelled as the turn's
+    # memory is (2026-09-30).
+    assert m["content"] == "What I did: I said \"I won't do it.\""
     assert "chose to" not in m["content"]
     assert "attempted" not in m["content"]
 
@@ -142,9 +144,11 @@ def test_self_row_is_minted_beside_the_witnessed_episode(temp_db, monkeypatch):
     prepare_memory_commit(ctx)
     mems = captured["memories"]
 
-    assert [m["category"] for m in mems] == ["episode", "self"]
-    assert mems[0]["content"] == "The stranger steps back, startled."
-    assert mems[1]["content"] == "I tried to pull away from the kiss."
+    # Both halves, ONE memory of the turn since 2026-09-30 (the owner: "What I
+    # experienced / What I did").
+    assert [m["category"] for m in mems] == ["episode"]
+    assert mems[0]["content"] == ("What I experienced: The stranger steps back, startled.\n"
+                                  "What I did: I tried to pull away from the kiss.")
 
 
 def test_inference_memory_omits_empty_evidence_and_duplicate_subject(

@@ -257,7 +257,7 @@ def test_low_salience_indirect_communication_has_own_durable_memory(story):
                            "content": "whether the bridge is passable"}]
     state, prepared = commit(result)
     memories = [row for row in prepared["memory_batch"]["prepared"]
-                if row.get("category") == "self"]
+                if "What I did:" in row["content"]]
     assert len(memories) == 1
     assert "whether the bridge is passable" in memories[0]["content"]
 
@@ -359,9 +359,12 @@ def test_the_memories_a_beat_mints_keep_what_it_made_the_mind_feel(story):
     state, prepared = commit(result, index=3)
     kept = {row["category"]: json.loads(row["feelings"])
             for row in prepared["memory_batch"]["prepared"] if row["feelings"]}
-    assert kept["episode"]["moment"] == {"felt": {"dread": 0.6}, "strength": 0.7, "at": 12.5,
-                                         "turn": 3, "key": "3:perceived"}
-    assert kept["self"]["moment"]["felt"] == {"shame": 0.4} and kept["self"]["moment"]["key"] == "3:acted"
+    # The turn's one memory (2026-09-30) keeps the beat's WHOLE feeling: what
+    # perception stirred and what its own acts made it feel, as one moment.
+    assert "self" not in kept
+    moment = kept["episode"]["moment"]
+    assert moment["felt"] == {"dread": 0.6, "shame": 0.4}
+    assert (moment["strength"], moment["at"], moment["turn"], moment["key"]) == (0.7, 12.5, 3, "3:perceived")
     assert [(c, ref, look["turn"], look["why"]) for _chat, c, ref, look in prepared["memory_looks"]] == [
         (char_id, "t1:7:episode", 3, "unfelt")]
     # the beat's layers ride to commit only; the state keeps the mood alone

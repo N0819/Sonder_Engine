@@ -380,7 +380,22 @@ def _opening_own_sequence(est, name):
     return out
 
 
-def _own_sequence_memory(seq):
+#: The pairs a spoken line may arrive wrapped in -- the character's own
+#: quotation of its words, which `_own_sequence_memory` quotes again.
+_WRAPPING_QUOTES = (('"', '"'), ("'", "'"), ("\u201c", "\u201d"), ("\u2018", "\u2019"), ("\u300c", "\u300d"))
+
+
+def _unwrapped(spoken):
+    """A line without the one pair of quotation marks around all of it."""
+    text = str(spoken or "").strip()
+    for left, right in _WRAPPING_QUOTES:
+        if len(text) > 2 and text.startswith(left) and text.endswith(right) \
+                and left not in text[1:-1] and right not in text[1:-1]:
+            return text[1:-1].strip()
+    return text
+
+
+def _own_sequence_memory(seq, name=""):
     """Render a character's own conduct as grammatical, chronological first
     person: ``I said 'X.' Then I tried to Y.``
 
@@ -400,7 +415,7 @@ def _own_sequence_memory(seq):
         if not isinstance(event, dict):
             continue
         if event.get("type") == "speech" and str(event.get("text") or "").strip():
-            spoken = str(event["text"]).strip()
+            spoken = _unwrapped(event["text"])
             clauses.append(
                 f"I said {spoken!r}" + ("" if spoken[-1] in ".!?" else "."))
         elif (event.get("type") == "communication"
@@ -414,6 +429,14 @@ def _own_sequence_memory(seq):
             past = _comm_verb(event, "past", fallback="communicated")
             clauses.append(
                 f"I {past} {str(event['content']).strip().rstrip('.')}.")
+        elif (event.get("type") == "action" and event.get("subjectless")
+              and str(name or "").strip() and str(event.get("attempt") or "").strip()):
+            # The bare contract's act, written without a subject as a watcher
+            # sees it -- its own pronouns included ("stays where she is") --
+            # so it is kept as written, its doer named. "I tried to" in front
+            # of it read "I tried to lifts the latch" (story run 2026-09-30).
+            act = str(event["attempt"]).strip().rstrip(".")
+            clauses.append(f"{str(name).strip()} {_continues_a_clause(act)}.")
         elif event.get("type") == "action" and str(event.get("attempt") or "").strip():
             clauses.append(
                 "I tried to %s." % _continues_a_clause(
@@ -429,6 +452,39 @@ def _own_sequence_memory(seq):
         gist_parts.append(clause)
     gist = " Then ".join(gist_parts) if gist_parts else clauses[0][:239].rstrip() + "…"
     return content, gist
+
+
+def _turn_memory_text(experienced, did, came_in=()):
+    """THE ONE MEMORY OF A TURN (the owner, 2026-09-30): "What I experienced:
+    ... What I did: ...", and the mood the mind came into it with, as words
+    for it to read -- the mood it left with is the row's feeling and its
+    `encoding_valence`, which is what recall's arithmetic reads. Labels from
+    the story's pack (`_TURN_MEMORY_LABELS`); a part with nothing in it is
+    left out."""
+    labels = _ling("_TURN_MEMORY_LABELS")
+    parts = []
+    if str(experienced or "").strip():
+        parts.append(f"{labels['experienced']} {str(experienced).strip()}")
+    if str(did or "").strip():
+        parts.append(f"{labels['did']} {str(did).strip()}")
+    words = [str(w).strip() for w in came_in or () if str(w or "").strip()]
+    if parts and words:
+        parts.append(f"{labels['came_in']} {labels.get('joiner', ', ').join(words)}{labels.get('end', '.')}")
+    return "\n".join(parts)
+
+
+def _file_own_acts(pending, episode_row, row):
+    """What a mind said and did this beat joins the turn's one memory -- the
+    episode, when it perceived anything -- and is its own row only when it
+    perceived nothing worth a row (`_turn_memory_text` labels it either way).
+    Before 2026-09-30 it was always a second row beside the episode, and the
+    two halves of one beat were recalled, graded and felt apart."""
+    if episode_row is not None:
+        episode_row["_turn_did"] = row["content"]
+        episode_row["salience"] = max(float(episode_row.get("salience") or 0.0),
+                                      float(row.get("salience") or 0.0))
+        return
+    pending.append({**row, "_turn_did": row["content"]})
 
 
 def _inference_memory_text(claim, about="", confidence=0.5, evidence=""):
@@ -892,6 +948,16 @@ def prepare_memory_commit(ctx, *, scene=None):
         # Fallback for legacy/no-psychology turns: after equals before.  The
         # resolved appraisal below replaces these when it exists.
         _encoding_valence, _encoding_arousal = _mem_valence, _mem_arousal
+        # HOW THIS MIND CAME INTO THE BEAT, in the pack's words: the mood its
+        # state carried out of the last one. Read by the mind on the turn's
+        # memory (`_turn_memory_text`), never by recall's arithmetic.
+        _came_in = affect_pass.mood_words_of(
+            (_stored_as or {}).get("mood_coords") if isinstance(_stored_as, dict) else None,
+            getattr(ctx, "language", None))
+        # Who spoke and who was spoken to, in every line that reached this
+        # mind -- the turn's memory keeps them in `about`, as the dialogue
+        # rows it replaces did.
+        _heard_about = []
         # --- Unbidden-recall ledger: the character stage proposed this beat's
         # probe on its step output (deterministic trigger state, and whether a
         # contrasting memory was surfaced); commit is the only writer of the
@@ -1028,6 +1094,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                 quote = d.get("exact_quote", "")
                 qbody = _quote_body(quote)
                 if qbody and (quote in v or qbody in v):
+                    _heard_about.extend(n for n in (spk, _tgt_raw) if n)
                     # This line reached THIS hearer's view -- the audibility
                     # question is already answered above, so a name inside it
                     # is a name they heard. See _names_heard_in.
@@ -1055,7 +1122,13 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # already heard.
                     if not category and memory_mark:
                         category = "dialogue"
-                    if category:
+                    # ONLY A PROMISE IS ITS OWN ROW (the owner, 2026-09-30):
+                    # every other kept line is already word for word in the
+                    # turn's memory -- the guard above proved this quote is in
+                    # this mind's view -- and a second row of it was recalled,
+                    # graded and felt as a second moment. A promise keeps one,
+                    # because `promise_memories` reads the category.
+                    if category == "promise":
                         side_memories.append({
                             "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                             "turn_idx": turn.idx, "kind": "dialogue", "category": category,
@@ -1125,6 +1198,7 @@ def prepare_memory_commit(ctx, *, scene=None):
             if _is_empty_view(episode_content):
                 episode_content = ""
         _episode_key = ""
+        _episode_row = None
         if episode_content:
             # WHY `turn.id` AND NOT A COPY-STABLE IDENTITY. The property this
             # mint is relied on for is stability across a RE-RUN, not across a
@@ -1158,7 +1232,10 @@ def prepare_memory_commit(ctx, *, scene=None):
                 "emotional_context": mood,
                 "valence": _mem_valence, "arousal": _mem_arousal,
                 "event_key": _episode_key,
+                "_turn_experienced": episode_content,
             }
+            if _heard_about:
+                _episode_row["about"] = list(dict.fromkeys(_heard_about))
             if _episode_entities:
                 _episode_row["entities"] = _episode_entities
             if _episode_gist:
@@ -1174,9 +1251,9 @@ def prepare_memory_commit(ctx, *, scene=None):
         # turn-0 row any mind had was its view of the room.
         if est and not ctx.director_resolve and not own_result.get("sequence"):
             _opening_own = _opening_own_sequence(est, cname)
-            _self_content, _self_gist = _own_sequence_memory(_opening_own)
+            _self_content, _self_gist = _own_sequence_memory(_opening_own, cname)
             if _self_content:
-                pending_memories.append({
+                _file_own_acts(pending_memories, _episode_row, {
                     "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                     "turn_idx": turn.idx, "kind": "episodic", "category": "self",
                     # The floor a beat's own row has (`max(0.5, own_salience)`).
@@ -1297,8 +1374,8 @@ def prepare_memory_commit(ctx, *, scene=None):
             # `_own_sequence_memory`'s decision framing is that fix, and it
             # stands whether or not a view exists.
             if should_store_own_acts:
-                self_content, self_gist = _own_sequence_memory(seq)
-                pending_memories.append({
+                self_content, self_gist = _own_sequence_memory(seq, cname)
+                _file_own_acts(pending_memories, _episode_row, {
                     "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                     "turn_idx": turn.idx, "kind": "episodic", "category": "self",
                     "provenance": "remembered", "salience": max(0.5, own_salience),
@@ -2182,10 +2259,14 @@ def prepare_memory_commit(ctx, *, scene=None):
                 _memory["encoding_valence"] = _encoding_valence
                 _memory["encoding_arousal"] = _encoding_arousal
                 _facet = affect_pass.facet_of(_memory)
-                _layer = _formed.get(_facet)
+                _layer = affect_pass.formed_for(_memory, _formed)
                 if isinstance(_layer, dict) and not _memory.get("feelings"):
                     _memory["feelings"] = {"moment": {**_layer, "turn": turn.idx,
                                                       "key": f"{turn.idx}:{_facet}"}}
+                # The turn's one memory, worded once its two halves are known.
+                if "_turn_experienced" in _memory or "_turn_did" in _memory:
+                    _memory["content"] = _turn_memory_text(
+                        _memory.pop("_turn_experienced", ""), _memory.pop("_turn_did", ""), _came_in)
                 # WHO IT HAD IN IT: the bodies in this mind's room this beat,
                 # and a heard line's speaker and addressee, by the engine's
                 # names -- host-only, live for the mind once it knows a name.

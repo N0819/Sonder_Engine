@@ -347,7 +347,8 @@ def test_commit_mints_composed_episode_with_typed_entities(temp_db):
     episodic = [m for m in prepared["memory_batch"]["prepared"]
                 if m["kind"] == "episodic"]
     assert len(episodic) == 1
-    assert episodic[0]["content"] == "I saw the grey-eyed figure wave a hand."
+    assert episodic[0]["content"] == "What I experienced: I saw the grey-eyed figure wave a hand."
+    assert episodic[0]["gist"] == "I saw the grey-eyed figure wave a hand."
     assert episodic[0]["entities"] == ["the grey-eyed figure"]
 
 

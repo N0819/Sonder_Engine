@@ -4274,6 +4274,11 @@
         "約束"
       ]
     },
+    "_TURN_MEMORY_LABELS": {
+      "experienced": "体験したこと：",
+      "did": "したこと：",
+      "came_in": "そのときの気分："
+    },
     "_DURABLE_QUOTE_MARKERS": {
       "promise": {
         "$type": "tuple",

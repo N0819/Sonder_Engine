@@ -4711,6 +4711,10 @@ def norm_sequence(out, warn=None):
                     # `look: around` was written by the model, kept by the
                     # ledger, and lost here (2026-09-15).
                     "look": str(e.get("look") or "").strip(),
+                    # The bare card's act, written without a subject: carried
+                    # so the mind's memory of it names its doer (2026-09-30;
+                    # lost here, "I tried to picks up the card").
+                    **({"subjectless": True} if e.get("subjectless") else {}),
                     "intended_effects": intended_effects,
                     "asserted_effects": asserted_effects,
                     "phase_id": str(e.get("phase_id") or ""),

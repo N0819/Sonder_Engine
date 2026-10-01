@@ -1178,6 +1178,10 @@ class ActionElement(LenientModel):
     # purely mental beat) and must not be surfaced to observers at all. See
     # agents/common.observable_action_text and norm_sequence.
     observable: str = ""
+    # `attempt` written as the bare card asks: without a subject, as a watcher
+    # sees it ("lifts the latch"). The mind's own memory of it names its doer
+    # (`commit_memory._own_sequence_memory`) rather than "I tried to" it.
+    subjectless: bool = False
     verb: str = ""
     commitment: ActionCommitment = ActionCommitment.contestable
     stage: ActionStage = ActionStage.immediate

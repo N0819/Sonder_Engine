@@ -89,6 +89,36 @@ FACETS = {"perceived": ("event",), "acted": ("act",)}
 PONDER_LOOKS = 5
 
 
+def formed_for(row, formed):
+    """The feeling a row minted this beat keeps of its moment: its facet's
+    layer, or -- for the one memory of a turn, which holds what the mind
+    perceived AND what it did (`turn_memory`) -- both layers as one moment
+    (`affect_mix.merge_formed`), the beat's whole feeling."""
+    formed = formed if isinstance(formed, dict) else {}
+    if (row or {}).get("_turn_did") and (row or {}).get("_turn_experienced"):
+        layers = [formed.get(f) for f in ("perceived", "acted") if isinstance(formed.get(f), dict)]
+        if not layers:
+            return None
+        out = layers[0]
+        for layer in layers[1:]:
+            out = mix.merge_formed(out, layer)
+        return out
+    layer = formed.get(facet_of(row))
+    return layer if isinstance(layer, dict) else None
+
+
+def mood_words_of(coords, language=None, top=3):
+    """A stored mood (`active_state.mood_coords`) in the pack's words, its most
+    salient parts first; [] for none."""
+    if not isinstance(coords, dict) or not coords:
+        return []
+    try:
+        mood = mix.Mood({k: float(v) for k, v in coords.items()})
+    except (TypeError, ValueError):
+        return []
+    return [part_word(name, value, language) for name, value in mix.mood_profile(mood, top=top)]
+
+
 def facet_of(row):
     """Which of `FACETS` a memory row minted this beat keeps: its own acts
     for a row about itself (`category` "self"), else what it perceived."""
