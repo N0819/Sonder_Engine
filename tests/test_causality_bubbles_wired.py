@@ -341,6 +341,25 @@ class TestTheBubbleRejoins:
         assert get_frame(bubble)["merged_turn_idx"] is None
 
 
+class TestTheBeatThatWalksThePlayerUp:
+    """The merge is asked again BEFORE the beat resolves, of the rooms the
+    beat carries the player through (`spatial_frames.bubbles_the_beat_
+    reaches`): the commit's check comes after the beat it belonged to, and a
+    knock at a bubbled doctor's door was answered by a stranger the encoder
+    filed under her id (concept lab story, 2026-09-30)."""
+
+    def test_a_beat_that_stays_put_reaches_no_bubble(self, temp_db):
+        chat_id, _ = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+        assert bubble
+        assert spatial_frames.bubbles_the_beat_reaches(chat_id, None, {"bridge"}) == []
+
+    def test_a_beat_that_walks_into_reach_finds_the_bubble(self, temp_db):
+        chat_id, _ = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+        assert spatial_frames.bubbles_the_beat_reaches(chat_id, None, {"bridge", "lane"}) == [bubble]
+
+
 class TestWalkingIntoTheRoomMidCall:
     """`uncouple_decision`'s whole reason for reporting a REASON.
 

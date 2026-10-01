@@ -1632,6 +1632,37 @@ def _bubble_rejoined(chat_id, parent_id, parent_scene, child_id, child_scene):
     return bool(cast_rooms & in_range)
 
 
+def bubbles_the_beat_reaches(chat_id, frame_id, beat_rooms, party_names=()):
+    """The bubble frames under `frame_id` whose cast this beat walks the
+    player into reach of: `_bubble_rejoined`'s question, asked of the rooms
+    the beat carries the player through (`perception.beat_player_rooms`)
+    rather than of where the beat found them.
+
+    The merge is otherwise asked only at commit, after the beat it belonged
+    to: measured, the concept lab's story (2026-09-30) -- the player walked
+    from the station to the clinic door and knocked, the doctor stood in a
+    bubble two rooms from where the beat began, nobody in the player's world
+    could hear the knock, and the Director's prose answered it with a
+    stranger the encoder filed under the doctor's id."""
+    from world.spatial import attended_rooms
+
+    centers = {str(r) for r in beat_rooms or () if r}
+    if not centers:
+        return []
+    parent_scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
+    reach = set(attended_rooms(parent_scene, centers, hops=1,
+                               names=[str(n) for n in party_names or () if n]))
+    out = []
+    for child in _spatial_children(chat_id, frame_id):
+        if not is_bubble_frame(chat_id, child["id"]):
+            continue
+        child_scene = wget_for_frame(chat_id, "scene", child["id"], {}) or {}
+        rooms, _zones = _bubble_cast_places(chat_id, child["id"], child_scene)
+        if rooms & reach:
+            out.append(child["id"])
+    return out
+
+
 def _parties_share_a_room(chat_id, parent_id, parent_scene, child_id, child_scene):
     """True iff at least one member of the parent side and one member of the
     child side are standing in the same room id. This is the only "no

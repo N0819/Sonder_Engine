@@ -7441,3 +7441,38 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         "composer_ledger": merged,
         "company": company,
     }
+
+
+def beat_player_rooms(ctx):
+    """Every room this beat carries the player through: where it found them,
+    where it leaves them, and the legs between -- the same reading
+    `perception_act` makes of the interpreted beat (`preview_player_state_
+    assertions`, `player_room_in`, `_multi_room_legs`), made early, with no
+    model call and the player-room cache left as it was.
+
+    For `runtime`'s bubble check before the plan is built: a beat that walks
+    the player up to a bubble's cast must find them in its world, not after
+    it (concept lab story, 2026-09-30: a knock at the clinic answered by a
+    stranger while the doctor stood in a bubble)."""
+    chat = ctx.chat
+    interp = ctx.director_interpret if isinstance(ctx.director_interpret, dict) else {}
+    sc = get_scene(chat["id"], chat)
+    pers = persona_of(chat)
+    p_name = pers.get("name") or persona_name(pers)
+    start = room_of(sc, p_name)
+    moved = preview_player_state_assertions(
+        sc, (interp.get("onset_state_assertions")
+             if interp.get("onset_state_assertions") is not None
+             else interp.get("state_assertions")), ctx, p_name, causal_worlds=[])
+    cached = ctx._extra.get("_player_room", None) if hasattr(ctx, "_extra") else None
+    had = hasattr(ctx, "_extra") and "_player_room" in ctx._extra
+    try:
+        end = player_room_in(moved, ctx, pers=pers, interp=interp, player_name=p_name, resolve=False)
+    finally:
+        if hasattr(ctx, "_extra"):
+            if had:
+                ctx._extra["_player_room"] = cached
+            else:
+                ctx._extra.pop("_player_room", None)
+    legs = _multi_room_legs(moved, [(p_name, start, end)]).get(p_name) or ()
+    return {str(r) for r in (start, end, *legs) if r}

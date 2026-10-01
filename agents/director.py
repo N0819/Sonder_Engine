@@ -207,6 +207,7 @@ from .director_movement import (
     route_scene_for,
 )
 from .director_floors import (
+    _refuse_minted_cast_doubles,
     resolve_concealment_refs,
     strip_addressee_concealment,
     _unplaced_minted_entities,
@@ -1953,6 +1954,7 @@ def director_interpret(ctx, nonce):
         _iextras = {"nonce": nonce, "clock": clock}
     _run_specialists(ctx, out, sc, _idispatch, _iview, _iextras, "interpret",
                      answer_for=_ianswers)
+    _refuse_cast_doubles(ctx, out, sc)
     director_prose.attach_record(ctx, out)
     _settle_minted_interior_movements(sc, out, p_name)
 
@@ -3159,6 +3161,31 @@ def _span_coherency_report(ctx, out, stage, dispatch, view):
                 finding.get("event_id"), finding.get("kind"),
                 " (%s)" % finding["hand"] if finding.get("hand") else ""))
 
+
+
+def _refuse_cast_doubles(ctx, out, sc):
+    """Run the cast-double floor (`director_floors._refuse_minted_cast_doubles`)
+    on a stage's merged diff, in place, against EVERY cast member of the
+    story -- a member another frame holds (a causality bubble) is in no
+    `ctx.cast` here, and is exactly the one a mint can double -- and say so."""
+    sd = out.get("state_diff") if isinstance(out.get("state_diff"), dict) else None
+    if not sd or not sd.get("entities"):
+        return []
+    try:
+        rows = q("SELECT ch.id, ch.sheet FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+                 "WHERE cc.chat_id=?", (ctx.chat.id,))
+    except Exception as exc:  # noqa: BLE001 -- fail open: the floor refuses, never blocks
+        ctx.add_warning(f"cast-double floor skipped: {type(exc).__name__}: {str(exc)[:120]}")
+        return []
+    here = [character_name(normalized_character_of_row(c) or {}) for c in ctx.cast or []]
+    refused = _refuse_minted_cast_doubles(sc, sd, [dict(r) for r in rows], here)
+    for r in refused:
+        ctx.add_warning(
+            "Minted %r (%s) claims %s's identity, and is not %s standing here; refused rather "
+            "than admitting a second body." % (r["name"], r["entity_id"], r["cast"], r["cast"]))
+    if refused:
+        out.setdefault("cast_doubles_refused", []).extend(refused)
+    return refused
 
 
 def _run_specialists(ctx, out, sc, dispatch, view, extras, stage, *,
@@ -5865,6 +5892,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # interpret stage's spatial hand authored a moment ago.
     _run_specialists(ctx, out, resolve_sc, _orch_dispatch, _orch_view,
                      _orch_extras, "resolve", answer_for=_orch_answers)
+    _refuse_cast_doubles(ctx, out, resolve_sc)
     director_prose.attach_record(ctx, out)
     _settle_minted_interior_movements(resolve_sc, out, p_name)
 

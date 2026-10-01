@@ -1299,6 +1299,52 @@ def _hydrate_steps_before(ctx, turn_id, ordn):
     return hydrated
 
 
+def _merge_bubbles_the_beat_reaches(ctx, chat_id, turn_row):
+    """Merge every causality bubble whose cast the interpreted beat carries
+    the player into reach of (`spatial_frames.bubbles_the_beat_reaches`,
+    against `perception.beat_player_rooms`), and return the reloaded cast --
+    or None when nothing merged.
+
+    The commit's own merge check runs after the beat, so the beat that walks
+    the player up to a bubble was resolved without its cast: measured, the
+    concept lab's story (2026-09-30), a knock at the doctor's door answered
+    in prose by a stranger the encoder filed under her id, who stayed in the
+    world beside her. The merge is durable, and a reroll restores the
+    pre-turn frames with the checkpoint (`persist.checkpoints`), so this runs
+    again on every run of the turn. Fails open: no merge, a warning."""
+    from core.pipeline_context import current_step_key
+    # Raised between steps, so filed under the first stage that reads the
+    # merged world -- otherwise no step's notes would show it.
+    _filed = current_step_key.set("perception_act")
+    try:
+        return _merge_bubbles_now(ctx, chat_id, turn_row)
+    finally:
+        current_step_key.reset(_filed)
+
+
+def _merge_bubbles_now(ctx, chat_id, turn_row):
+    try:
+        from agents.perception import beat_player_rooms
+        from world.spatial_frames import (_all_party_names, bubbles_the_beat_reaches,
+                                          perform_merge)
+        frame_id = turn_row["frame_id"]
+        children = bubbles_the_beat_reaches(
+            chat_id, frame_id, beat_player_rooms(ctx), _all_party_names(chat_id, frame_id))
+        if not children:
+            return None
+        for child_id in children:
+            for warning in perform_merge(chat_id, frame_id, child_id, turn_row["idx"]):
+                ctx.add_warning(warning)
+            ctx.add_warning(f"This beat brought the player within reach of a bubble "
+                            f"(frame {child_id}); it rejoined before the beat resolved.")
+    except Exception as exc:  # noqa: BLE001 -- the beat runs on; commit merges as before
+        ctx.add_warning(f"pre-beat bubble merge skipped: {type(exc).__name__}: {str(exc)[:160]}")
+        return None
+    ctx.cast = active_cast(chat_id, turn_row["frame_id"])
+    drop_body_condition_caches(ctx)
+    return ctx.cast
+
+
 def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     bus = Bus()
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True))
@@ -1591,6 +1637,12 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         yield from _step_stream(bus, turn_id, "director_interpret",
             step_label("director_interpret"), 0, ctx,
             variant_count(turn_id, "director_interpret"))
+
+    # A BUBBLE THIS BEAT WALKS THE PLAYER INTO REJOINS BEFORE THE BEAT
+    # RESOLVES, so its cast hear, see and answer it -- the plan, perception
+    # and the Director's resolve all read the merged world and cast.
+    if not is_offscreen_beat(chat_id, turn_row):
+        cast_rows = _merge_bubbles_the_beat_reaches(ctx, chat_id, turn_row) or cast_rows
 
     plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
                       frame_id=turn_row["frame_id"],

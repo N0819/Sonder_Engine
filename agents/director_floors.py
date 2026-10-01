@@ -2269,3 +2269,83 @@ def strip_addressee_concealment(sequence, by_id, by_name, warn=None,
         for note in notes:
             warn(note)
     return notes
+
+
+def _refuse_minted_cast_doubles(sc, sd, cast_rows, here_names=()):
+    """A NEW BODY NEVER TAKES A CAST MEMBER'S IDENTITY.
+
+    The cast is the engine's own closed set, so whether a mint claims one of
+    them is a lookup, never a reading: a person entity this beat mints whose
+    id, name or alias is a cast member's name, uid or alias -- as written or
+    as the id the engine would make of it ("ines_calder") -- is that
+    character, and a second record of a character is a second body. Allowed
+    only as the engine's own record of one: the character's own name, for a
+    member this frame stands (`here_names`). Refused otherwise -- a stranger
+    filed under her id, or a body for a member another frame holds.
+
+    Measured, the concept lab's story (2026-09-30): with the doctor in a
+    causality bubble, a knock at her clinic was answered in prose by "a woman
+    somewhere past fifty with steel-grey hair", filed as entity
+    `ines_calder` aliased "the doctor". The bubble merged at commit and the
+    world held both; 38 turns later the phantom answered a line in the
+    doctor's place.
+
+    Mutates `sd` (entities, and the refused id's positions, stations and
+    poses) and returns one record per refusal: {entity_id, name, cast}."""
+    from story.character_schema import normalize_character_data
+    from world.spatial import normalize_room_id
+    from .common import character_name, character_scene_keys
+
+    entities = (sd or {}).get("entities")
+    if not isinstance(entities, dict) or not entities:
+        return []
+    claims = {}
+    for row in cast_rows or []:
+        sheet = row.get("sheet") if isinstance(row, dict) else None
+        if isinstance(sheet, str):
+            try:
+                import json as _json
+                sheet = _json.loads(sheet)
+            except ValueError:
+                continue
+        if not isinstance(sheet, dict):
+            continue
+        sheet = normalize_character_data(sheet)
+        name = character_name(sheet)
+        if not name:
+            continue
+        for key in character_scene_keys(sheet):
+            for form in (str(key or "").strip().casefold(), normalize_room_id(str(key or ""))):
+                if form:
+                    claims.setdefault(form, name)
+    if not claims:
+        return []
+    here = {str(n or "").strip().casefold() for n in here_names or ()}
+    held = set(((sc or {}).get("entities") or {}).keys())
+    refused = []
+    for eid, entity in list(entities.items()):
+        if eid in held or not isinstance(entity, dict):
+            continue
+        if str(entity.get("kind") or "person").strip().casefold() != "person":
+            continue
+        cast = None
+        for spelling in (eid, entity.get("name"), *(entity.get("aliases") or [])):
+            text = str(spelling or "").strip()
+            cast = claims.get(text.casefold()) or claims.get(normalize_room_id(text))
+            if cast:
+                break
+        if not cast:
+            continue
+        own_record = (str(entity.get("name") or "").strip().casefold() == cast.casefold()
+                      and cast.casefold() in here)
+        if own_record:
+            continue
+        entities.pop(eid, None)
+        for channel in ("positions", "stations", "poses"):
+            table = sd.get(channel)
+            if isinstance(table, dict):
+                table.pop(eid, None)
+                if str(entity.get("name") or "").strip():
+                    table.pop(str(entity["name"]).strip(), None)
+        refused.append({"entity_id": eid, "name": str(entity.get("name") or ""), "cast": cast})
+    return refused

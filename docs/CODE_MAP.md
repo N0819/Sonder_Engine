@@ -13,11 +13,11 @@
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/common.py` | 11844 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5206 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 7258 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 7286 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3727 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1085 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
-| `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/director_floors.py` | 2351 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1886 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 2067 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.schemas` |
@@ -32,8 +32,8 @@
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2739 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
-| `agents/perception.py` | 7443 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
-| `agents/runtime.py` | 1794 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
+| `agents/perception.py` | 7478 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
+| `agents/runtime.py` | 1846 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1747 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -216,7 +216,7 @@
 | `world/spatial_contacts.py` | 1976 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3314 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 1801 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
-| `world/spatial_frames.py` | 2640 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
+| `world/spatial_frames.py` | 2671 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2209 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 887 |  | — |
 | `world/spatial_levels.py` | 244 |  | `world.spatial_orientation` |
@@ -318,14 +318,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4767 | 2458 lines |
-| `director_interpret()` | 1363 | 920 lines |
-| `_reconcile_resolution()` | 2611 | 521 lines |
-| `_run_specialists()` | 3164 | 425 lines |
-| `director_establish()` | 367 | 205 lines |
-| `_reconcile_interpretation()` | 2285 | 172 lines |
-| `_ground_public_evidence()` | 3728 | 116 lines |
-| `_require_complete_entity_interiors()` | 3591 | 95 lines |
+| `director_resolve()` | 4794 | 2459 lines |
+| `director_interpret()` | 1364 | 921 lines |
+| `_reconcile_resolution()` | 2613 | 521 lines |
+| `_run_specialists()` | 3191 | 425 lines |
+| `director_establish()` | 368 | 205 lines |
+| `_reconcile_interpretation()` | 2287 | 172 lines |
+| `_ground_public_evidence()` | 3755 | 116 lines |
+| `_require_complete_entity_interiors()` | 3618 | 95 lines |
 
 ### `agents/director_contact.py`
 
@@ -568,13 +568,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 1302 | 385 lines |
+| `_run_pipeline()` | 1348 | 391 lines |
 | `build_plan()` | 839 | 180 lines |
 | `_load_extra_players()` | 53 | 101 lines |
 | `resume_key_for_turn()` | 743 | 95 lines |
 | `_stream_one()` | 504 | 68 lines |
 | `_stream_parallel()` | 573 | 60 lines |
-| `run_pipeline()` | 1738 | 57 lines |
+| `run_pipeline()` | 1790 | 57 lines |
 | `_rehydrate_side_channels()` | 1227 | 53 lines |
 
 ### `agents/storage.py`
@@ -2663,11 +2663,11 @@
 |---|---:|---:|
 | `infer_focus()` | 553 | 245 lines |
 | `perform_split()` | 1313 | 192 lines |
-| `open_couple()` | 2095 | 180 lines |
+| `open_couple()` | 2126 | 180 lines |
 | `infer_facing()` | 900 | 132 lines |
-| `perform_sibling_merge()` | 1742 | 123 lines |
-| `detect_and_reconcile()` | 2520 | 121 lines |
-| `_partition_side()` | 2324 | 105 lines |
+| `perform_sibling_merge()` | 1773 | 123 lines |
+| `detect_and_reconcile()` | 2551 | 121 lines |
+| `_partition_side()` | 2355 | 105 lines |
 | `infer_threshold_crossings()` | 413 | 96 lines |
 
 ### `world/spatial_geometry.py`
