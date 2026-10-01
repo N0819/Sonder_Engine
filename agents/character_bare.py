@@ -777,6 +777,19 @@ def compile_bare(reply, answers, h):
             "because": ""})
     urgency = jev.graded(answers, "urgency", jev.GRADE)
     salience = jev.graded(answers, "salience", jev.GRADE)
+    # THE THOUGHT LINE IS NOT CLEARED BY SILENCE. A reply that says nothing of
+    # what it went for, held back, why, or what is unsettled makes no claim,
+    # so it emits NO record: commit then keeps the earlier one with its own
+    # turn stamp (`test_an_omitted_decision_keeps_its_original_turn_stamp`).
+    # It used to emit four empty strings -- the explicit clear the full card
+    # reserved for a mind that dropped its thought -- and wiped the line on
+    # several beats of each concept-lab story run (2026-09-30).
+    continuity = {
+        "chosen": " ".join(str(reply.get("want") or "").split())[:240],
+        "suppressed": " ".join(str(reply.get("held_back") or "").split())[:240],
+        "why": hinge,
+        "uncertainty": " ".join(str(reply.get("unsure") or "").split())[:240],
+    }
     compiled = {
         "appraisal": appraisal,
         "active_state": active_state,
@@ -786,12 +799,7 @@ def compile_bare(reply, answers, h):
                         "urgency": round(urgency or 0.0, 3),
                         "conversation_complete_for_me": jev.yes(answers, "done_talking")},
         "salience": round(0.5 if salience is None else salience, 3),
-        "decision_continuity": {
-            "chosen": " ".join(str(reply.get("want") or "").split())[:240],
-            "suppressed": " ".join(str(reply.get("held_back") or "").split())[:240],
-            "why": hinge,
-            "uncertainty": " ".join(str(reply.get("unsure") or "").split())[:240],
-        },
+        **({"decision_continuity": continuity} if any(continuity.values()) else {}),
         "note": " ".join(str(reply.get("note") or "").split())[:NOTE_CHARS],
         **out,
     }

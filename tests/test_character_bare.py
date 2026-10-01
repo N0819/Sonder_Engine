@@ -910,6 +910,21 @@ def test_the_pair_check_is_a_second_request_after_the_read_back(monkeypatch):
     assert len(asked) == 2 and asked[1] == {"change:0:replaces"} and "change:0:replaces" in answers
 
 
+def test_a_reply_that_says_nothing_of_its_choice_does_not_clear_the_thought_line():
+    """A reply silent on what it went for, held back, why and what is
+    unsettled emits no continuity record -- an omission, which commit answers
+    by keeping the earlier thought with its own turn -- never the explicit
+    empty record that clears it (wiped the line on several beats of each
+    concept-lab story run, 2026-09-30). A reply that says any of it records it."""
+    h = _holding()
+    silent = {k: v for k, v in _reply().items() if k not in ("want", "held_back", "hinge", "unsure")}
+    out, _ = character_bare.compile_bare(silent, _answer([])(jev.after_questions(h, silent)), h)
+    assert "decision_continuity" not in out
+    spoke = {**silent, "unsure": "whether she lied"}
+    out, _ = character_bare.compile_bare(spoke, _answer([])(jev.after_questions(h, spoke)), h)
+    assert out["decision_continuity"]["uncertainty"] == "whether she lied"
+
+
 def test_only_a_memory_that_holds_a_claim_is_asked_whether_the_moment_disputes_it():
     """What the mind concluded or was told can be overturned; a plain record
     of what happened holds nothing to dispute (the owner, 2026-09-30: dispute
