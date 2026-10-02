@@ -37,3 +37,21 @@ def test_a_standing_contact_that_never_landed_still_does():
                               "target": "anvil", "manner": "rest"}]}
     receipt = execution_receipt(_scene(), _scene(), {"patch": patch})
     assert receipt["action_status"] == "unresolved"
+
+
+def test_a_condition_on_a_body_here_does_not_unsee_the_act():
+    """A glamour woven and released (a `physical_disguise` condition on and
+    off) reached the woman an arm's length away as nothing: `conditions` had
+    no verifier, so both acts were held back (chat 160 turn 4545). Conditions
+    are the commit's to receipt; the act renders."""
+    patch = {"conditions": {"cond:glamour": [{"condition_id": "cond:glamour", "subject_id": "Kenend",
+                                              "kind": "physical_disguise", "active": True}]}}
+    receipt = execution_receipt(_scene(), _scene(), {"patch": patch})
+    assert receipt["action_status"] != "unresolved"
+    assert receipt["effects"][0]["code"] == "pending_commit_domain"
+
+
+def test_a_condition_on_nobody_here_still_does():
+    patch = {"conditions": {"cond:x": [{"subject_id": "Nobody At All", "kind": "physical_disguise"}]}}
+    receipt = execution_receipt(_scene(), _scene(), {"patch": patch})
+    assert receipt["action_status"] == "unresolved"

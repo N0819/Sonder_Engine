@@ -318,6 +318,36 @@ def _destruction_receipts(before, after, desired):
                         "Book retirement, room registry and destruction news require commit receipts.", scope="commit")]
 
 
+def _condition_receipts(before, changes):
+    """A condition lives in `world_conditions`, written at commit -- the
+    preview applies none of it to the scene -- so the scene can vouch only
+    that its subject is a body here. Everything else is the commit's to
+    receipt (`pending_commit_domain`, scope commit), never "no verifier":
+    an unverifiable channel held the act back from every observer, and a
+    glamour woven and released in front of a woman an arm's length away
+    reached her as nothing (chat 160 turn 4545, 2026-10-01)."""
+    from world.spatial import _unique_entity_keyed, room_of
+    rows = []
+    for key, value in (changes or {}).items() if isinstance(changes, dict) else ():
+        for row in (value if isinstance(value, list) else [value]):
+            if isinstance(row, dict):
+                rows.append((str(key), row))
+    if not rows:
+        return [_unresolved("conditions", "", "missing_desired_state",
+                            "A nonempty condition record is required.")]
+    out = []
+    for key, row in rows:
+        subject = str(row.get("subject_id") or row.get("subject") or "").strip()
+        if not subject or not (room_of(before, subject) or _unique_entity_keyed(before, subject)[0]):
+            out.append(_unresolved("conditions", subject or key, "invalid_or_missing_target",
+                                   "The scene holds no body this condition is on."))
+            continue
+        out.append(_unresolved("conditions", subject, "pending_commit_domain",
+                               "Conditions are written at commit; the scene cannot vouch for them.",
+                               scope="commit"))
+    return out
+
+
 def _scalar_receipts(before, after, channel, desired):
     """Read carried scene labels; a declared patch is never its own proof."""
     if not isinstance(desired, str) or not desired.strip():
@@ -717,6 +747,8 @@ def verify_patch(before, after, patch, *, item_id=None, chrono_id=None, speciali
             receipts.extend(_attire_receipts(before, after, changes))
         elif channel == "overlays":
             receipts.extend(_overlay_receipts(before, after, changes))
+        elif channel == "conditions":
+            receipts.extend(_condition_receipts(before, changes))
         elif channel in TRANSIENT_CHANNELS:
             receipts.append(_unresolved(channel, "", TRANSIENT_EVENT,
                                         "This channel records an event; it "

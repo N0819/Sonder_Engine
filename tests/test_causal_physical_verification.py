@@ -140,7 +140,9 @@ def test_same_span_other_owners_explicit_grip_is_context_not_credit():
         ("objects", "inventory_ops"), ("contact", "contact_ops")]
 
 
-@pytest.mark.parametrize("channel", ["substance_ops", "artifact_ops", "conditions", "unknown_physical_effect"])
+# `conditions` left 2026-10-01: it has a verifier now (a body here, receipted
+# at commit), `tests/test_a_transient_act_is_not_refused.py`.
+@pytest.mark.parametrize("channel", ["substance_ops", "artifact_ops", "unknown_physical_effect"])
 def test_unverified_physical_channel_blocks_action_without_claiming_execution(channel):
     receipt = execution_receipt(scene(), scene(), {"patch": {channel: [{"target": "tin"}]}})
     assert receipt["status"] == "pending"
