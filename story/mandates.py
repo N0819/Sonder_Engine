@@ -138,8 +138,14 @@ MANDATE_LIMITS = ("fills_per_hour", "calls_per_reply", "calls_per_hour",
 #: order of magnitude above these; a mandate's number is the real stop.
 CALLS_PER_REPLY = 60
 CALLS_PER_REPLY_CAP = 200
-CALLS_PER_STORY_HOUR = 240
-CALLS_PER_STORY_HOUR_CAP = 1200
+#: No hourly allowance unless a grant names one (the owner, 2026-10-01:
+#: "raise to infinity"). Measured on chat 160: setup spent 210 calls at turn
+#: 0, the story clock stood at 165 s, and the room was shut out for what at
+#: that pace was a hundred beats -- its grant (the elevator should fail) went
+#: unanswered and the car docked where the player had been sent. None is no
+#: limit; a grant's own number still stops it, uncapped.
+CALLS_PER_STORY_HOUR = None
+CALLS_PER_STORY_HOUR_CAP = None
 
 #: THE CREATIVITY DIAL (`surprise`): 0 holds to the target the player
 #: stated and proposes only what serves it; 4 is wildly inventive, a turn
@@ -344,8 +350,7 @@ def grant_mandate(cid, frame_id, *, text, capabilities, scope=DEFAULT_SCOPE,
         clean_limits["calls_per_reply"] = min(
             int(clean_limits["calls_per_reply"]), CALLS_PER_REPLY_CAP)
     if "calls_per_hour" in clean_limits:
-        clean_limits["calls_per_hour"] = min(
-            int(clean_limits["calls_per_hour"]), CALLS_PER_STORY_HOUR_CAP)
+        clean_limits["calls_per_hour"] = int(clean_limits["calls_per_hour"])
     if "surprise" in clean_limits:
         clean_limits["surprise"] = max(0, min(int(clean_limits["surprise"]),
                                               SURPRISE_MAX))
@@ -539,11 +544,17 @@ def spend_limits(cid, frame_id, turn_idx=None):
     answer a question), so this never returns None."""
     per_reply = _most_permissive(cid, frame_id, "calls_per_reply",
                                  CALLS_PER_REPLY, CALLS_PER_REPLY_CAP, turn_idx)
-    per_hour = _most_permissive(cid, frame_id, "calls_per_hour",
-                                CALLS_PER_STORY_HOUR, CALLS_PER_STORY_HOUR_CAP,
-                                turn_idx)
+    # Per hour: None is no limit, and it is the most permissive answer -- a
+    # standing grant naming no hourly number leaves the room unlimited; only
+    # when every grant names one does the largest stand.
+    per_hour, unlimited = None, True
+    rows = active_mandates(cid, frame_id, turn_idx)
+    if rows:
+        named = [row["limits"].get("calls_per_hour") for row in rows]
+        if all(n is not None for n in named):
+            per_hour, unlimited = max(int(n) for n in named), False
     return {"calls_per_reply": CALLS_PER_REPLY if per_reply is None else per_reply,
-            "calls_per_hour": CALLS_PER_STORY_HOUR if per_hour is None else per_hour}
+            "calls_per_hour": None if unlimited else per_hour}
 
 
 def spend_citation(cid, frame_id, key, turn_idx=None):

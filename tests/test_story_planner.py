@@ -161,11 +161,14 @@ def test_spend_is_the_real_stop_and_the_ceilings_are_safety(temp_db, scripted,
     assert out["stopped"] == "spend_reply" and out["calls"] == md.CALLS_PER_REPLY
     assert out["reply"] == sp.SPENT_LINE
     assert rf.spend_this_hour(cid, None, 2) == md.CALLS_PER_REPLY
-    # A grant may raise spend up to the engine's ceiling, never past it.
+    # A grant may raise per-reply spend up to the engine's ceiling, never
+    # past it; the hour has no ceiling (2026-10-01), so a grant's own hourly
+    # number stands as named, and one naming none leaves it unlimited.
+    assert md.spend_limits(cid, None)["calls_per_hour"] is None
     md.grant_mandate(cid, None, text="Spend freely", capabilities=["plan_rooms"],
                      limits={"calls_per_reply": 10_000, "calls_per_hour": 10_000})
     assert md.spend_limits(cid, None) == {"calls_per_reply": md.CALLS_PER_REPLY_CAP,
-                                          "calls_per_hour": md.CALLS_PER_STORY_HOUR_CAP}
+                                          "calls_per_hour": 10_000}
     # With spend out of the way the safety ceilings hold, lowered here so
     # the test does not script two hundred calls.
     monkeypatch.setattr(sp, "PLANNER_STEPS_PER_REPLY", 5)

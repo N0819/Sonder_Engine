@@ -35,7 +35,7 @@
 | `agents/perception.py` | 7478 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1846 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 1747 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 1751 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3056 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -119,7 +119,7 @@
 | `story/journey_history.py` | 487 |  | — |
 | `story/location_design.py` | 439 |  | `core.db` |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/mandates.py` | 600 |  | `core.db` |
+| `story/mandates.py` | 611 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/opening_plan.py` | 116 |  | `core.db` |
 | `story/plot_packages.py` | 3794 |  | `world.spatial` |
@@ -593,14 +593,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 731 | 306 lines |
-| `run_location_plan()` | 1289 | 117 lines |
-| `deliberate()` | 1503 | 91 lines |
+| `run_planner()` | 731 | 308 lines |
+| `run_location_plan()` | 1291 | 117 lines |
+| `deliberate()` | 1505 | 91 lines |
 | `_payload()` | 475 | 78 lines |
 | `_shown_transcript()` | 404 | 69 lines |
-| `run_opening_plan()` | 1115 | 64 lines |
-| `schedule_room_work()` | 1685 | 63 lines |
-| `planner_reply()` | 1429 | 51 lines |
+| `run_opening_plan()` | 1117 | 64 lines |
+| `schedule_room_work()` | 1688 | 64 lines |
+| `planner_reply()` | 1431 | 51 lines |
 
 ### `core/db.py`
 
@@ -1515,14 +1515,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grant_mandate()` | 303 | 82 lines |
-| `_request()` | 200 | 29 lines |
-| `expire_mandates()` | 387 | 28 lines |
-| `request_open()` | 242 | 27 lines |
-| `close_request()` | 417 | 26 lines |
-| `renew_mandate()` | 445 | 22 lines |
-| `coverage()` | 474 | 16 lines |
-| `_most_permissive()` | 518 | 15 lines |
+| `grant_mandate()` | 309 | 81 lines |
+| `_request()` | 206 | 29 lines |
+| `expire_mandates()` | 392 | 28 lines |
+| `request_open()` | 248 | 27 lines |
+| `close_request()` | 422 | 26 lines |
+| `renew_mandate()` | 450 | 22 lines |
+| `spend_limits()` | 540 | 18 lines |
+| `coverage()` | 479 | 16 lines |
 
 ### `story/naming.py`
 

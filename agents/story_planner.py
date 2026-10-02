@@ -780,8 +780,9 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     expire_mandates(cid, frame_id, turn_idx)
     spend = spend_limits(cid, frame_id, turn_idx)
     reply_cap = min(PLANNER_TOOL_CALLS_PER_REPLY, int(spend["calls_per_reply"]))
-    hour_left = max(0, int(spend["calls_per_hour"])
-                    - spend_this_hour(cid, frame_id, turn_idx))
+    # None: no hourly allowance (`mandates.CALLS_PER_STORY_HOUR`).
+    hour_left = (None if spend["calls_per_hour"] is None else
+                 max(0, int(spend["calls_per_hour"]) - spend_this_hour(cid, frame_id, turn_idx)))
     started = time.time()
     transcript, notes, published, verdicts, claims = [], [], [], [], []
     calls_made, delegations, steps = 0, 0, 0
@@ -806,7 +807,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     # counter that moves on ANOTHER connection's commit -- the turn index
     # moves when a beat starts, not when it commits (C21, second skeptic).
     memo = ReplyMemo()
-    if hour_left <= 0:
+    if hour_left is not None and hour_left <= 0:
         stopped = "spend_hour"
     for step in range(1, steps_cap + 1):
         if stopped:
@@ -819,7 +820,8 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             break
         steps = step
         memo.at_version(data_version())
-        calls_left = max(0, min(reply_cap - calls_made, hour_left - calls_made))
+        calls_left = max(0, (reply_cap - calls_made) if hour_left is None
+                         else min(reply_cap - calls_made, hour_left - calls_made))
         # ONE CUT PER STEP. The trim the model is shown and the `in_view`
         # set the echo policy holds it to are the same cut of the same
         # unchanged transcript; it was made twice, once inside `_payload`
@@ -920,7 +922,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             if calls_made >= reply_cap:
                 stopped = "spend_reply"
                 break
-            if calls_made >= hour_left:
+            if hour_left is not None and calls_made >= hour_left:
                 stopped = "spend_hour"
                 break
             # A call the loop cannot run is REPORTED, never dropped: measured
@@ -1611,7 +1613,8 @@ def run_dramaturge_pass(cid, frame_id, *, base_turn=None, brief=None, job=None):
     if dial is None:
         return {"skipped": "no dial"}
     spend = spend_limits(cid, frame_id, now)
-    if spend_this_hour(cid, frame_id, now) >= spend["calls_per_hour"]:
+    if spend["calls_per_hour"] is not None \
+            and spend_this_hour(cid, frame_id, now) >= spend["calls_per_hour"]:
         return {"skipped": "spend_hour"}
     out = dramaturge.propose(cid, frame_id, dial=dial, brief=brief, turn_idx=now)
     record_pass(cid, frame_id, now)
@@ -1706,7 +1709,8 @@ def schedule_room_work(ctx):
     record_measure(cid, frame_id, report, turn_idx=turn_idx)
     queued = []
     spend = spend_limits(cid, frame_id, turn_idx)
-    hour_open = spend_this_hour(cid, frame_id, turn_idx) < spend["calls_per_hour"]
+    hour_open = (spend["calls_per_hour"] is None
+                 or spend_this_hour(cid, frame_id, turn_idx) < spend["calls_per_hour"])
 
     wanting = bool(report.get("open_need_uids")) or report.get("rooms_short") \
         or report.get("identities_short")
