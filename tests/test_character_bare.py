@@ -1030,3 +1030,29 @@ def test_observers_get_only_what_a_watcher_could_tell():
     assert not any(k.startswith("do:0:part:") for k in _both_batteries(h, single))
     out, _ = character_bare.compile_bare(single, _answer([("do:0:seen", "outward")])(_both_batteries(h, single)), h)
     assert out["sequence"][0]["observable"] == "lifts the latch"
+
+
+def test_no_engine_number_reaches_the_mind():
+    """The owner, 2026-10-01: no engine numbers for the character, memory ids
+    aside. Rankings become order, judgements the pack's words, the rest goes;
+    integers (ids, turns) stay."""
+    from agents.character_bare import without_engine_numbers
+    payload = {"self": {
+        "psychology": {"values": [{"name": "b", "priority": 0.4}, {"name": "a", "priority": 0.9}],
+                       "traits": [{"name": "t", "strength": 0.75}],
+                       "stress_profile": {"overload_threshold": 0.85, "attentional_style": "focused"}},
+        "learned_beliefs": [{"belief": "x", "confidence": 0.3, "emotional_charge": 0.0}],
+        "intentions": [{"id": "i1", "intent": "go", "progress": 0.6, "priority": 0.5}],
+        "curiosity": 0.5},
+        "memory": {"recent_memories": [{"memory_ref": "m1", "felt_importance": 0.78, "turn": 3}]},
+        "perception": {"current_state": [{"observation_id": "o3", "intensity": 0.43}]}}
+    out = without_engine_numbers(payload)
+    s = out["self"]
+    assert [v["name"] for v in s["psychology"]["values"]] == ["a", "b"]
+    assert "priority" not in s["psychology"]["values"][0]
+    assert s["psychology"]["traits"][0]["strength"] == "strong"
+    assert s["psychology"]["stress_profile"] == {"attentional_style": "focused"}
+    assert s["learned_beliefs"][0] == {"belief": "x", "confidence": "unsure"}
+    assert s["intentions"][0]["progress"] == "well along" and "curiosity" not in s
+    assert out["memory"]["recent_memories"][0] == {"memory_ref": "m1", "turn": 3}
+    assert out["perception"]["current_state"][0] == {"observation_id": "o3"}

@@ -155,7 +155,9 @@ def test_character_payload_never_includes_another_bodys_vitals(temp_db, monkeypa
     monkeypatch.setattr(character_module, "_agent_json", fake_agent_json)
     character_module.character_step(ctx, char_id, nonce=0)
 
-    assert captured["payload"]["self"]["body_state"]["injury"] == 0.1
+    # Its own body, in the engine's words (2026-10-01: no engine numbers to
+    # characters); an unremarkable vital says nothing.
+    assert captured["payload"]["self"]["body_state"] == {"injury": "bruised"}
     blob = json.dumps(captured["payload"])
     for forbidden in ("0.123456", "0.234567", "0.345678", "0.987654"):
         assert forbidden not in blob

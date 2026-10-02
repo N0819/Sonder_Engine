@@ -4145,7 +4145,12 @@ def character_step(ctx, cid, nonce):
                 room_of(sc, _my_follow.get("target")) == char_room
                 if char_room else False),
         }
-    _body_state = vitals_of(sc, character_name(sh))
+    # The engine's word for each vital that is remarkable (`survival.
+    # vital_label`), never its number (the owner, 2026-10-01: no engine
+    # numbers to characters); an unremarkable vital says nothing.
+    from world.survival import vital_label as _vital_label
+    _body_state = {k: _vital_label(k, v) for k, v in (vitals_of(sc, character_name(sh)) or {}).items()}
+    _body_state = {k: w for k, w in _body_state.items() if w}
     if _body_state:
         # Own-body interoception only. Other characters' vitals never enter
         # this payload; their outward signs must cross perception normally.
@@ -4533,6 +4538,9 @@ def character_step(ctx, cid, nonce):
     # read back.
     _wire_payload, _handles = compact_character_evidence(payload)
     _wire_payload = character_bare.reading_order(_wire_payload)
+    # No engine number reaches the mind (the owner, 2026-10-01): rankings as
+    # order, judgements as words, the rest dropped.
+    _wire_payload = character_bare.without_engine_numbers(_wire_payload)
 
     out = _agent_json(
         role,

@@ -114,6 +114,63 @@ def reading_order(payload):
     return out
 
 
+#: Fields whose number RANKS the rows of its list: the list is put in that
+#: order, most first, and the number goes.
+_RANKING_KEYS = ("priority", "urgency")
+#: Fields whose number is a judgement a mind holds in words
+#: (`_PAYLOAD_WORDS` in the story's pack, `agents.character_bare`).
+_WORDED_KEYS = ("confidence", "strength", "progress")
+
+
+def without_engine_numbers(payload):
+    """The wire payload with no engine number in it (the owner, 2026-10-01:
+    "outside of maybe mem IDs ... we probably shouldn't expose engine numbers
+    to characters", as the feelings already are not, 2026-09-29).
+
+    A list whose rows carry a ranking (`_RANKING_KEYS`) is put in that order,
+    most first, and the number dropped; a graded judgement (`_WORDED_KEYS`)
+    becomes the pack's word for its band; every other decimal -- the card's
+    stress thresholds, sensitivities and coping effectiveness, a memory's
+    felt importance, a percept's intensity -- is dropped. Integers stay: ids,
+    turns and counts are not readings. Measured before: one call of chat 160
+    carried 60 such numbers across `self`, `memory` and `perception`. The
+    engine's own readers take the payload before this, never after."""
+    try:
+        bands = linguistic("agents.character_bare", "_PAYLOAD_WORDS")
+    except Exception:  # noqa: BLE001 -- a pack without the table words nothing
+        bands = {}
+
+    def word(key, value):
+        for floor, text in bands.get(key) or ():
+            if value >= float(floor):
+                return str(text)
+        return None
+
+    def walk(node):
+        if isinstance(node, list):
+            rows = [walk(item) for item in node]
+            return rows
+        if not isinstance(node, dict):
+            return node
+        out = {}
+        for key, value in node.items():
+            if isinstance(value, list) and value and all(isinstance(r, dict) for r in value):
+                rank = next((k for k in _RANKING_KEYS
+                             if any(isinstance(r.get(k), float) for r in value)), None)
+                if rank:
+                    value = sorted(value, key=lambda r: -(r.get(rank) if isinstance(r.get(rank), (int, float)) else 0.0))
+            if isinstance(value, float) and not isinstance(value, bool):
+                if key in _WORDED_KEYS:
+                    text = word(key, value)
+                    if text:
+                        out[key] = text
+                continue
+            out[key] = walk(value)
+        return out
+
+    return walk(payload)
+
+
 def _unlabelled(text):
     """A memory's words without the turn memory's leading label ("What I
     witnessed:", `persist.commit_memory._TURN_MEMORY_LABELS` in the story's

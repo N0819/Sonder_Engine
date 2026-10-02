@@ -3214,6 +3214,60 @@
       "pattern": "(?<=[\"“])[^\"”\\n]{3,100}(?=[”\"])"
     }
   },
+  "agents.character_bare": {
+    "_PAYLOAD_WORDS": {
+      "confidence": [
+        [
+          0.8,
+          "sure"
+        ],
+        [
+          0.5,
+          "fairly sure"
+        ],
+        [
+          0.25,
+          "unsure"
+        ],
+        [
+          0.0,
+          "doubtful"
+        ]
+      ],
+      "strength": [
+        [
+          0.7,
+          "strong"
+        ],
+        [
+          0.4,
+          "moderate"
+        ],
+        [
+          0.0,
+          "faint"
+        ]
+      ],
+      "progress": [
+        [
+          0.85,
+          "nearly done"
+        ],
+        [
+          0.5,
+          "well along"
+        ],
+        [
+          0.05,
+          "begun"
+        ],
+        [
+          0.0,
+          "not begun"
+        ]
+      ]
+    }
+  },
   "persist.commit_memory": {
     "_STATION_POSSESSED_BEFORE": {
       "$type": "regex",

@@ -8,8 +8,8 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4756 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/character_bare.py` | 887 |  | `llm.prompts`, `mind` |
+| `agents/character.py` | 4764 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character_bare.py` | 944 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/common.py` | 11844 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5206 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
@@ -148,7 +148,7 @@
 | `world/beat_ledger.py` | 184 |  | — |
 | `world/causal_completion.py` | 154 |  | `world.causal_verification` |
 | `world/causal_program.py` | 388 |  | — |
-| `world/causal_verification.py` | 751 |  | — |
+| `world/causal_verification.py` | 783 |  | — |
 | `world/causality.py` | 402 |  | `world.spatial` |
 | `world/charter.py` | 524 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_place`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
 | `world/charter_author.py` | 813 |  | `world.charter_commitment`, `world.charter_economy`, `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_politics`, `world.charter_practice` |
@@ -258,7 +258,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 3424 | 1333 lines |
+| `character_step()` | 3424 | 1341 lines |
 | `_annotate_known_exits()` | 2649 | 469 lines |
 | `_ground_observation_citations()` | 1653 | 293 lines |
 | `_unanswered_question_note()` | 567 | 246 lines |
@@ -271,14 +271,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compile_bare()` | 530 | 303 lines |
-| `_compile_notebook()` | 362 | 101 lines |
-| `_appraisal()` | 835 | 53 lines |
-| `holding_from()` | 156 | 49 lines |
-| `modules_for()` | 269 | 48 lines |
-| `notebook_for()` | 209 | 26 lines |
+| `compile_bare()` | 587 | 303 lines |
+| `_compile_notebook()` | 419 | 101 lines |
+| `_appraisal()` | 892 | 53 lines |
+| `holding_from()` | 213 | 49 lines |
+| `modules_for()` | 326 | 48 lines |
+| `without_engine_numbers()` | 125 | 47 lines |
+| `notebook_for()` | 266 | 26 lines |
 | `reading_order()` | 94 | 21 lines |
-| `_delivered_memories()` | 135 | 19 lines |
 
 ### `agents/character_evidence.py`
 
@@ -1840,13 +1840,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_map_receipts()` | 102 | 78 lines |
-| `_inventory_receipts()` | 390 | 78 lines |
-| `_contact_receipts()` | 486 | 60 lines |
-| `verify_patch()` | 680 | 58 lines |
-| `_overlay_receipts()` | 622 | 56 lines |
+| `_inventory_receipts()` | 420 | 78 lines |
+| `_contact_receipts()` | 516 | 60 lines |
+| `verify_patch()` | 710 | 60 lines |
+| `_overlay_receipts()` | 652 | 56 lines |
 | `_rooms_receipts()` | 207 | 51 lines |
-| `_attire_receipts()` | 583 | 37 lines |
-| `_time_receipts()` | 359 | 29 lines |
+| `_attire_receipts()` | 613 | 37 lines |
+| `_time_receipts()` | 389 | 29 lines |
 
 ### `world/causality.py`
 
