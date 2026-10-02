@@ -810,11 +810,20 @@ def settle_departures(before: dict, merged: dict) -> bool:
             destination = str(transit.get("destination_room") or "")
             lands = isinstance(rooms.get(destination), dict) \
                 and rooms[destination].get("parent_entity") != eid
+            # DOCKED IS NEVER IN THE ROUTE. A vehicle stands in its route room
+            # only while under way; docked there, with a destination the
+            # world holds, it has arrived. Chat 160 turn 4541 (2026-10-01):
+            # one beat took the freight elevator sealed -> in_transit (into
+            # the shaft) -> docked at the shelter landing, ETA 0; it stayed
+            # in the shaft, and its door opened onto it.
+            in_route = bool(here) and (_same_room(here, transit.get("route_room"))
+                                       or _same_room(here, prior.get("route_room")))
             if here or lands or not was_under_way:
                 if transit.pop("departed_from", None) is not None:
                     changed = True
-                if not here and lands:
-                    positions[eid] = destination
+                if lands and (not here or in_route) and not _same_room(here, destination):
+                    for key in _keys_filing(positions, eid, ent) or [eid]:
+                        positions[key] = destination
                     transit.pop("destination_room", None)
                     transit.pop("eta_seconds", None)
                     changed = True

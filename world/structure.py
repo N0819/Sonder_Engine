@@ -283,6 +283,25 @@ def skeleton_rooms(cid, structure_key, frame_id=None):
     return {"rooms": rooms}
 
 
+def crosses_an_interior(rooms, a, b):
+    """Does the doorway between rooms `a` and `b` cross an entity's interior
+    boundary -- one inside an entity (`parent_entity`), the other not, or in
+    another one?
+
+    THE PLAN NEVER SUPPLIES SUCH A DOORWAY. An interior's way out is where its
+    entity stands, written every merge from its position and transit
+    (`spatial_transit.apply_transit_dock_edges`); a planned edge across that
+    boundary pins it to wherever the entity stood when the plan was drawn.
+    Chat 160 turn 4541 (2026-10-01): the freight car docked four floors down,
+    and three planned passes -- the fringe, the exit restore, the composed
+    topology -- each put its door to the upper hallway back."""
+    rooms = rooms or {}
+    def parent(rid):
+        room = rooms.get(str(rid or ""))
+        return (room.get("parent_entity") or None) if isinstance(room, dict) else None
+    return parent(a) != parent(b)
+
+
 def composed_scene(skeleton, live_scene):
     """Merge planned travel topology under live authored room definitions."""
     live = copy.deepcopy(live_scene or {})
@@ -299,7 +318,8 @@ def composed_scene(skeleton, live_scene):
         # currently materialized scene has not had reason to spell yet.
         edges = {}
         for edge in (planned_rooms.get(str(uid)) or {}).get("adjacent") or ():
-            if isinstance(edge, dict) and edge.get("to"):
+            if isinstance(edge, dict) and edge.get("to") \
+                    and not crosses_an_interior({**planned_rooms, **live_rooms}, uid, edge["to"]):
                 edges[str(edge["to"])] = dict(edge)
         for edge in room.get("adjacent") or ():
             if isinstance(edge, dict) and edge.get("to"):
@@ -782,7 +802,7 @@ def materialize_planned_fringe(cid, scene):
                  if isinstance(e, dict) and e.get("to")}
         for edge in edges_in:
             to = str(edge.get("to") or "")
-            if to and to in rooms:
+            if to and to in rooms and not crosses_an_interior(rooms, uid, to):
                 edges.setdefault(to, dict(edge))
         room["adjacent"] = list(edges.values())
     _settle_stub_barriers(rooms)
@@ -1098,6 +1118,16 @@ def protect_planned_edges(cid, scene):
             # 114's terrace (lounge, dining, garden, 2026-09-04) while
             # changing nothing. The edge returns the beat the stub is minted.
             if to in present or to not in rooms:
+                continue
+            # AN INTERIOR'S WAY OUT IS WHERE ITS ENTITY STANDS, never the
+            # plan's: `spatial_transit.apply_transit_dock_edges` rewrites
+            # every edge across that boundary from the entity's position
+            # and transit each merge. Chat 160 turn 4541 (2026-10-01): the
+            # freight car's planned door to the upper hallway was restored
+            # here after it docked four floors down, so stepping out of it
+            # led back upstairs. Between two rooms of one interior, the plan
+            # still holds.
+            if crosses_an_interior(rooms, rid, to):
                 continue
             room.setdefault("adjacent", []).append(dict(edge))
             restored.append((rid, to))

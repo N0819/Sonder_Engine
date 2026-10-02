@@ -1078,6 +1078,46 @@ def carrier_lookup(carriers, label):
     return (longest[0], room)
 
 
+#: The containment modes that put a body IN its holder's interior space --
+#: its own rooms, when it has them -- rather than on or about its person.
+_INTERIOR_MODES = frozenset({"inside", "interior"})
+
+
+def _interior_room_for(scene: dict, subject: str):
+    """The interior room `subject` stands in when what encloses it has one.
+
+    INSIDE A THING WITH ROOMS IS IN THOSE ROOMS, wherever the thing's outside
+    is. Walking the chain from the innermost holder out, the first one this
+    link reaches `inside` (or a body's `interior`) that owns interior rooms
+    (`_interior_rooms_of`: the rooms naming it `parent_entity`) answers: the
+    room the subject already stands in when it is one of them (a body that
+    walked between two cabins stays in the one it walked to), else the
+    holder's entry room. None when no holder on the chain has rooms.
+
+    Measured, chat 160 (2026-10-01): Sarah Moon was positioned in the room
+    `elevator_car` and contained `inside` `freight_elevator`, whose interior
+    room `elevator_car` is. The car was called down, the Director stood it
+    under way in its route room `elevator_shaft` -- correct for the outside
+    of a moving vehicle -- and this derivation, reading only the outermost
+    holder's position, put her in the shaft while Hinami, positioned in the
+    car and contained in nothing, stayed in it."""
+    contained = (scene or {}).get("contained") or {}
+    link = subject
+    for holder in carrier_chain(scene, subject):
+        record = _ci_get(contained, link)
+        mode = str((record or {}).get("mode") or "").strip().casefold() if isinstance(record, dict) else ""
+        if mode in _INTERIOR_MODES:
+            eid, _entity = _unique_entity_keyed(scene, str(holder))
+            interiors = _interior_rooms_of(scene, eid or str(holder))
+            if interiors:
+                current = room_of(scene, subject)
+                if current in interiors:
+                    return current
+                return _interior_entry_room(scene, eid or str(holder)) or interiors[0]
+        link = holder
+    return None
+
+
 def derive_contained_positions(scene: dict, carriers=None) -> dict:
     """Put every contained body where its container is.
 
@@ -1100,7 +1140,10 @@ def derive_contained_positions(scene: dict, carriers=None) -> dict:
     rooms = scene.get("rooms") if isinstance(scene.get("rooms"), dict) else {}
 
     for subject in contained:
-        room = None
+        room = _interior_room_for(scene, subject)
+        if room is not None:
+            _positions_write(positions, subject, room)
+            continue
         # Resolve against the OUTERMOST carrier, not the nearest one. An
         # intermediate container's own position is derived too, and may not
         # have been updated yet this pass -- reading it would hand the innermost
