@@ -34,14 +34,17 @@ SYSTEM = """You lay out a building as RELATIONS. You never write a coordinate, a
 Answer with one JSON object:
 {"name": "<the building>",
  "floors": [{"level": <0 the ground floor, 1 the floor above, -1 below ground>, "rooms": [ROOM, ...]}, ...],
- "grounds": [ROOM, ...],
- "stairs": [{"id": "<id>", "from": "<room id>", "to": "<room id on the storey above or below>", "side": "n|e|s|w", "name": "<what the stair is>"}]}
+ "grounds": [OUTDOOR, ...],
+ "stairs": [{"id": "<id>", "from": "<room id>", "to": "<room id on the storey directly above or below>", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "straight|spiral|ladder (only when the description says, or the stair plainly must be: a tower's stair turns)", "name": "<what the stair is>"}]}
 
-ROOM = {"id": "<snake_case>", "name": "<its name>", "purpose": "<what it is for, one or two words: entryway, hallway, bedroom, guest room, kitchen, washroom, storage, closet, living, hall, study, shrine, meditation, attic, cellar, basement, workshop, common room, garden, courtyard, path, yard ...>",
+ROOM = {"id": "<snake_case>", "name": "<its name>", "purpose": "<what it is for, one or two words: entryway, hallway, bedroom, guest room, kitchen, washroom, storage, closet, living, hall, study, shrine, meditation, attic, cellar, basement, workshop, common room ...>",
         "size": "tiny|small|medium|large|huge (optional: only when the description says how big it feels)",
-        "smaller_than": "<room id below it>" (optional: a room under a roof, smaller than the floor beneath),
+        "block": "<the part of the building it is in, when the building has parts that rise separately: tower, cottage, wing, keep ...; leave out for a building that is one mass>",
+        "over": "<room id on the storey below>" (on an upper storey: the room it stands over, when the description says or the building's shape makes it plain),
         "joins": [{"to": "<room id>", "side": "n|e|s|w", "order": <1, 2, ... when several share one wall, counted from its north or west end>, "kind": "door|sliding|opening|gate"}],
         "fixtures": [FIXTURE, ...]}
+
+OUTDOOR = a ROOM whose purpose is one of: garden, yard, courtyard (open ground that wraps around the building), path (a way from a door out to the edge of the grounds), or a word for a small outdoor place (well, tree, shrine, pond, gate...); add "around": true to the ONE open area the building stands in.
 
 FIXTURE = {"id": "<snake_case>", "name": "<what it is called here>", "kind": "<one of: bed futon nest table low_table chabudai desk writing_desk chair cushion bench sofa shelf bookshelf cabinet chest trunk wardrobe stove hearth counter sink basin bath tub toilet altar alcove tokonoma screen lantern statue well tree gate workbench barrel crate rack window_seat fireplace bar piano pillar rug -- or another word, with size>",
            "size": "tiny|small|medium|large|huge (only for a kind not in that list)",
@@ -50,11 +53,11 @@ FIXTURE = {"id": "<snake_case>", "name": "<what it is called here>", "kind": "<o
 
 How to read the fields:
 - `side` on a join is where the OTHER room lies from THIS one: {"to": "kitchen", "side": "e"} means the kitchen is through this room's east wall. Write each join once, on either room.
-- Pick one compass orientation for the whole building and keep it: decide which way the entrance faces and derive left, right, front and back from it.
-- A storey is every room on that level of the building. Outdoors -- gardens, paths, yards, a gate, a well in the open -- goes in `grounds`, joined to the building room it opens from.
-- A stair joins a room on one storey to a room on the storey directly above or below; `side` is the wall of the building it runs up against. Every storey above or below the ground floor is reached by a stair.
+- Pick one compass orientation for the whole building and keep it on every storey: decide which way the entrance faces and derive front, back, left and right from it. North on the first floor is north on the attic.
+- A storey is every room on that level. An upper storey stands on the one below and may be smaller. A building whose parts rise separately -- a tower beside a cottage, a two-storey wing off a one-storey hall -- names each part as a `block`: a room stands on its own block's rooms below, never on another block's.
+- A stair is not a room (unless the description makes a room of it, a stair hall). It stands inside the room at each end: `from_at` is the wall of the FROM room it stands against, `to_at` the wall of the TO room where it arrives. Both rooms are the same building seen on two storeys, so the two walls must agree with each other: a stair against the back wall below arrives at the back of the room above.
 - A fixture is a THING in the room that a body could stand at, use or hide behind. A stretch of floor, a view, a smell or a quality of light is not a fixture. Doors and windows are not fixtures: a door is a join; leave windows out.
-- Say only what the description gives or a real building of this kind would plainly have. Keep every room the description names.
+- Say only what the description gives or a real building of this kind would plainly have. Keep every room the description names, on the storey the description puts it.
 """
 
 SCENARIOS = {

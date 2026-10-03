@@ -72,7 +72,7 @@ svg text { font-family: var(--display); }
 <div class="wrap">
   <header>
     <h1>Layout Lab</h1>
-    <p class="lede">Each building was described to the room designer's model, which wrote only relations: what joins what and on which side, what stands against which wall. The solver sized every room from what it holds, cut one footprint for every storey, and drove the stairs through the same cells on each floor they join. One square is a pace (0.75 m).</p>
+    <p class="lede">Each building was described to the room designer's model, which wrote only relations: what joins what and on which side, what stands against which wall. The solver sizes every room from what it holds and grows each storey room by room, standing on the storey below. Each stair stands against a wall of the room at both ends, at the same cells on both storeys. The building stands inside its grounds. One square is a pace (0.75 m).</p>
   </header>
 
   <div class="bar">
@@ -185,10 +185,11 @@ function drawPlan() {
 
   const floor = L.floors[String(lv)] || {};
   const grounds = lv === 0 ? L.grounds : {};
-  const beneathLv = lv > 0 ? lv - 1 : lv < 0 ? null : (levels.includes(-1) ? null : null);
+  const beneathLv = lv > 0 ? lv - 1 : null;
   const beneath = (state.below && beneathLv !== null) ? (L.floors[String(beneathLv)] || {}) : {};
   const all = [...Object.values(floor), ...Object.values(grounds), ...Object.values(beneath)];
   if (L.footprint) all.push([L.footprint]);
+  if (lv === 0 && L.site) all.push([L.site]);
   const bb = bbox(all);
   const W = bb.x1 - bb.x0 + 2, D = bb.y1 - bb.y0 + 2;
   const avail = Math.max(320, host.clientWidth || 760);
@@ -206,8 +207,10 @@ function drawPlan() {
   // the storey beneath, as a ghost
   for (const [rid, rs] of Object.entries(beneath)) for (const r of rs)
     el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "none", stroke: "var(--line)", "stroke-dasharray": "3 4", "stroke-width": 1, opacity: .7 }, svg);
-  if (L.footprint && lv !== 0 && !Object.keys(beneath).length) {
-    const f = L.footprint; el("rect", { x: X(f.x), y: Y(f.y), width: f.w * C, height: f.d * C, fill: "none", stroke: "var(--line)", "stroke-dasharray": "2 5", opacity: .6 }, svg);
+  // the plot the building stands in, and ground nobody was named for
+  if (lv === 0 && L.site) {
+    for (const r of L.open_ground || []) el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "var(--outdoor)", opacity: .35 }, svg);
+    const f = L.site; el("rect", { x: X(f.x), y: Y(f.y), width: f.w * C, height: f.d * C, fill: "none", stroke: "var(--ok)", "stroke-width": 1.5, "stroke-dasharray": "8 4" }, svg);
   }
   const doors = L.doors.filter(dr => dr.level === lv || (lv === 0 && (dr.a in L.grounds || dr.b in L.grounds)));
   const doorAt = new Map(); // "x,y,side" in room a -> door
@@ -257,6 +260,8 @@ function drawPlan() {
     const tx = el("text", { x: X(r.x + r.w / 2), y: Y(r.y + r.d / 2) + 4, "text-anchor": "middle", "font-size": Math.max(10, C * .36), "font-weight": 700, fill: "var(--cobalt)", "paint-order": "stroke", stroke: "var(--sheet)", "stroke-width": 3 }, g);
     tx.textContent = up ? "▲" : "▼";
     const tt = el("title", {}, g); tt.textContent = `${s.name || "stair"}: ${label}`;
+    const ld = (s.landings || {})[String(lv)];
+    if (ld) el("rect", { x: X(ld.x) + 2, y: Y(ld.y) + 2, width: ld.w * C - 4, height: ld.d * C - 4, fill: "none", stroke: "var(--cobalt)", "stroke-width": 1, "stroke-dasharray": "2 2" }, g);
   }
   // fixtures
   for (const [rid, fx] of Object.entries(L.fixtures)) {
@@ -273,14 +278,17 @@ function drawPlan() {
   }
   // room names
   for (const [rid, rs] of Object.entries(rooms)) {
-    const big = rs.reduce((a, b) => (a.w * a.d >= b.w * b.d ? a : b));
+    // label at the cell nearest the middle of the area (gardens wrap corners)
+    const cs = [...cellsOf(rs)].map(k => k.split(",").map(Number));
+    const mx = cs.reduce((a, c) => a + c[0], 0) / cs.length, my = cs.reduce((a, c) => a + c[1], 0) / cs.length;
+    const at = cs.reduce((a, c) => (Math.hypot(c[0] - mx, c[1] - my) < Math.hypot(a[0] - mx, a[1] - my) ? c : a));
     const name = (L.names[rid] || rid).replace(/\s*\(.*?\)\s*/, " ").trim();
     const fs = Math.max(10, Math.min(15, C * .42));
-    const tx = el("text", { x: X(big.x + big.w / 2), y: Y(big.y) + fs + 3, "text-anchor": "middle", "font-size": fs, "font-weight": 600, fill: "var(--ink)", "pointer-events": "none", "paint-order": "stroke", stroke: "var(--sheet)", "stroke-width": 3 }, svg);
+    const tx = el("text", { x: X(at[0] + .5), y: Y(at[1] + .5) + fs / 3, "text-anchor": "middle", "font-size": fs, "font-weight": 600, fill: "var(--ink)", "pointer-events": "none", "paint-order": "stroke", stroke: "var(--sheet)", "stroke-width": 3 }, svg);
     tx.textContent = name;
   }
   document.getElementById("drawingTitle").textContent = `${levelName(lv)} plan`;
-  document.getElementById("hint").textContent = "Click a room for what the model asked of it. Hatched blue is a stairwell: the same cells on both storeys it joins. Dashed outlines are the storey beneath.";
+  document.getElementById("hint").textContent = "Click a room for what the model asked of it. Hatched blue is a stairwell, the same cells on both storeys it joins; the dotted box in front of it is its landing. Dashed grey outlines are the storey beneath; the dashed green line on the ground floor is the edge of the plot.";
   legend(true);
   highlight();
 }
@@ -375,6 +383,7 @@ function renderRoom() {
   const dl = h("dl", { class: "kv" });
   const add = (k, v) => { dl.appendChild(h("dt", {}, k)); dl.appendChild(h("dd", {}, v)); };
   add("purpose", (found && found.r.purpose) || L.purposes[state.room]);
+  if (L.blocks && L.blocks[state.room] && L.blocks[state.room] !== "main") add("block", L.blocks[state.room]);
   add("floor", `${cells} sq paces · ${(cells * .5625).toFixed(1)} m²`);
   if (found && found.r.size) add("asked size", found.r.size);
   if (found && found.r.smaller_than) add("smaller than", L.names[found.r.smaller_than] || found.r.smaller_than);
