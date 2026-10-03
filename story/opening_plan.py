@@ -39,9 +39,12 @@ OPENING_MANDATE_TEXT = ("The opening is planned before the first beat: the "
                         "body stands.")
 OPENING_MANDATE_SCOPE = "the opening"
 
-#: The spend the step may make. Cited to the planner as its own budget; the
-#: loop's ceilings in `agents/story_planner` are safety above this.
-OPENING_CALLS_PER_REPLY = 40
+#: The spend the step may make: none named (the owner, 2026-10-03, on the
+#: Room's spend limits making setup "basically useless"). An opening laid out
+#: from a detailed lorebook is dozens of rooms; the loop's own ceilings in
+#: `agents/story_planner` bound a reply, and a grant naming no number leaves
+#: it unlimited (`mandates.spend_limits`).
+OPENING_CALLS_PER_REPLY = None
 
 
 def mint_opening_mandate(cid, frame_id=None):
@@ -55,7 +58,8 @@ def mint_opening_mandate(cid, frame_id=None):
         cid, frame_id, text=OPENING_MANDATE_TEXT,
         scope=OPENING_MANDATE_SCOPE,
         capabilities=list(OPENING_CAPABILITIES),
-        limits={"calls_per_reply": OPENING_CALLS_PER_REPLY},
+        limits=({} if OPENING_CALLS_PER_REPLY is None
+                else {"calls_per_reply": OPENING_CALLS_PER_REPLY}),
         expires_turn=0, turn_idx=-1)
 
 

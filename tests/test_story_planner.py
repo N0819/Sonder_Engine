@@ -156,19 +156,22 @@ def test_spend_is_the_real_stop_and_the_ceilings_are_safety(temp_db, scripted,
     names one), and the Planner says so."""
     cid, _ = _story(temp_db)
     assert sp.PLANNER_STEPS_PER_REPLY >= 40 and sp.PLANNER_TOOL_CALLS_PER_REPLY >= 200
+    # No spend named (2026-10-03, the owner: the spend limits made the Room
+    # "basically useless" in a story's setup): a reply runs to the loop's
+    # own safety ceiling, and says it was bounded, not that it overspent.
+    assert md.spend_limits(cid, None) == {"calls_per_reply": None, "calls_per_hour": None}
     scripted(*[{"calls": [{"tool": "inspect_clock", "args": {}}] * 8}] * 60)
     out = sp.run_planner(cid, None, text="loop")
-    assert out["stopped"] == "spend_reply" and out["calls"] == md.CALLS_PER_REPLY
+    assert out["stopped"] == "calls" and out["calls"] == sp.PLANNER_TOOL_CALLS_PER_REPLY
+    assert out["reply"] == sp.BOUNDED_LINE
+    # A grant's own numbers stand as named, uncapped, and stop a reply.
+    md.grant_mandate(cid, None, text="Spend carefully", capabilities=["plan_rooms"],
+                     limits={"calls_per_reply": 30, "calls_per_hour": 10_000})
+    assert md.spend_limits(cid, None) == {"calls_per_reply": 30, "calls_per_hour": 10_000}
+    scripted(*[{"calls": [{"tool": "inspect_clock", "args": {}}] * 8}] * 60)
+    out = sp.run_planner(cid, None, text="loop")
+    assert out["stopped"] == "spend_reply" and out["calls"] == 30
     assert out["reply"] == sp.SPENT_LINE
-    assert rf.spend_this_hour(cid, None, 2) == md.CALLS_PER_REPLY
-    # A grant may raise per-reply spend up to the engine's ceiling, never
-    # past it; the hour has no ceiling (2026-10-01), so a grant's own hourly
-    # number stands as named, and one naming none leaves it unlimited.
-    assert md.spend_limits(cid, None)["calls_per_hour"] is None
-    md.grant_mandate(cid, None, text="Spend freely", capabilities=["plan_rooms"],
-                     limits={"calls_per_reply": 10_000, "calls_per_hour": 10_000})
-    assert md.spend_limits(cid, None) == {"calls_per_reply": md.CALLS_PER_REPLY_CAP,
-                                          "calls_per_hour": 10_000}
     # With spend out of the way the safety ceilings hold, lowered here so
     # the test does not script two hundred calls.
     monkeypatch.setattr(sp, "PLANNER_STEPS_PER_REPLY", 5)

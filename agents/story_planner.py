@@ -779,7 +779,10 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     turn_idx = room.current_turn_idx(cid)
     expire_mandates(cid, frame_id, turn_idx)
     spend = spend_limits(cid, frame_id, turn_idx)
-    reply_cap = min(PLANNER_TOOL_CALLS_PER_REPLY, int(spend["calls_per_reply"]))
+    # None: no per-reply allowance (`mandates.CALLS_PER_REPLY`); the loop's
+    # own ceiling still bounds the reply.
+    reply_cap = (PLANNER_TOOL_CALLS_PER_REPLY if spend["calls_per_reply"] is None
+                 else min(PLANNER_TOOL_CALLS_PER_REPLY, int(spend["calls_per_reply"])))
     # None: no hourly allowance (`mandates.CALLS_PER_STORY_HOUR`).
     hour_left = (None if spend["calls_per_hour"] is None else
                  max(0, int(spend["calls_per_hour"]) - spend_this_hour(cid, frame_id, turn_idx)))

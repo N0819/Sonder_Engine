@@ -136,8 +136,16 @@ MANDATE_LIMITS = ("fills_per_hour", "calls_per_reply", "calls_per_hour",
 #: when a grant names no number, and the engine's ceilings a grant may not
 #: raise past. The loop's own step and call counts are safety ceilings an
 #: order of magnitude above these; a mandate's number is the real stop.
-CALLS_PER_REPLY = 60
-CALLS_PER_REPLY_CAP = 200
+#: No per-reply allowance unless a grant names one (the owner, 2026-10-03:
+#: "the writers room spend limits are making it basically useless"). Chat
+#: 162's setup -- a shrine of three floors, a basement and its grounds, laid
+#: out from the lorebook -- stopped at 60 calls on reply after reply, the
+#: player typing "continue" to get each next 60. None is no limit; a grant's
+#: own number still stops a reply, uncapped. What bounds a reply now is the
+#: loop's own safety ceilings (`story_planner.PLANNER_TOOL_CALLS_PER_REPLY`,
+#: `PLANNER_STEPS_PER_REPLY`, the wall clock), which stop runaways, not work.
+CALLS_PER_REPLY = None
+CALLS_PER_REPLY_CAP = None
 #: No hourly allowance unless a grant names one (the owner, 2026-10-01:
 #: "raise to infinity"). Measured on chat 160: setup spent 210 calls at turn
 #: 0, the story clock stood at 165 s, and the room was shut out for what at
@@ -347,8 +355,7 @@ def grant_mandate(cid, frame_id, *, text, capabilities, scope=DEFAULT_SCOPE,
         clean_limits["fills_per_hour"] = min(
             int(clean_limits["fills_per_hour"]), FILLS_PER_STORY_HOUR_CAP)
     if "calls_per_reply" in clean_limits:
-        clean_limits["calls_per_reply"] = min(
-            int(clean_limits["calls_per_reply"]), CALLS_PER_REPLY_CAP)
+        clean_limits["calls_per_reply"] = int(clean_limits["calls_per_reply"])
     if "calls_per_hour" in clean_limits:
         clean_limits["calls_per_hour"] = int(clean_limits["calls_per_hour"])
     if "surprise" in clean_limits:
@@ -542,18 +549,23 @@ def spend_limits(cid, frame_id, turn_idx=None):
     Every active mandate carries spend, because every grant is a licence to
     work; with no active mandate the defaults stand (the room can still
     answer a question), so this never returns None."""
-    per_reply = _most_permissive(cid, frame_id, "calls_per_reply",
-                                 CALLS_PER_REPLY, CALLS_PER_REPLY_CAP, turn_idx)
+    # Per reply, as per hour: None is no limit and the most permissive
+    # answer, so a grant naming no number leaves a reply unlimited.
+    per_reply, reply_unlimited = None, True
+    rows = active_mandates(cid, frame_id, turn_idx)
+    if rows:
+        named = [row["limits"].get("calls_per_reply") for row in rows]
+        if all(n is not None for n in named):
+            per_reply, reply_unlimited = max(int(n) for n in named), False
     # Per hour: None is no limit, and it is the most permissive answer -- a
     # standing grant naming no hourly number leaves the room unlimited; only
     # when every grant names one does the largest stand.
     per_hour, unlimited = None, True
-    rows = active_mandates(cid, frame_id, turn_idx)
     if rows:
         named = [row["limits"].get("calls_per_hour") for row in rows]
         if all(n is not None for n in named):
             per_hour, unlimited = max(int(n) for n in named), False
-    return {"calls_per_reply": CALLS_PER_REPLY if per_reply is None else per_reply,
+    return {"calls_per_reply": None if reply_unlimited else per_reply,
             "calls_per_hour": None if unlimited else per_hour}
 
 
