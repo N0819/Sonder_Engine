@@ -123,8 +123,26 @@ FLEXIBLE = frozenset({"living", "hall", "common_room", "dining", "storage", "wor
 CORRIDORS = ("hallway", "corridor")
 #: The share of a room's floor its furniture may cover.
 COVERAGE = 0.35
-#: A stairwell by kind of stair (run x width, paces).
-WELLS = {"straight": (3, 2), "spiral": (2, 2), "ladder": (1, 1)}
+#: A stair hall by the shape of its stair (width x length, paces, its
+#: landings inside it): a straight flight, a quarter turn (L), a half turn
+#: with a landing between two flights side by side (U, the compact stair of
+#: a house of several storeys), a spiral, a ladder through a hatch.
+STAIRS = {"straight": (2, 5), "l": (3, 3), "u": (4, 4), "spiral": (2, 2), "ladder": (1, 2)}
+#: A shape that does not fit gives way to the next, more compact one.
+STAIR_FALLBACK = ("straight", "l", "u", "spiral", "ladder")
+#: The words a spec may use for each shape -- the engine's own closed set.
+_STAIR_WORDS = {"straight": "straight", "l": "l", "l-shaped": "l", "l_shaped": "l", "quarter": "l",
+                "quarter-turn": "l", "u": "u", "u-shaped": "u", "u_shaped": "u", "dogleg": "u",
+                "switchback": "u", "half-turn": "u", "spiral": "spiral", "winding": "spiral",
+                "ladder": "ladder"}
+#: Each room's ceiling, from its purpose's range: a room grows past what it
+#: holds to fill its storey, but not past this; floor left over becomes a
+#: store or loft space.
+MAX_GROWTH = 1.4
+#: Divisions tried per storey while comparing stair placements, and for the
+#: placement kept.
+QUICK = 100
+TRIES = 600
 #: Width of a way across the grounds, how far the approach runs before the
 #: plot's edge, and the open ground left on the other sides of the building.
 WAY_WIDTH = 3
@@ -135,9 +153,6 @@ SIDE_MARGIN = 5
 #: part of the building.
 PART_SHARE = 0.7
 PART_SLACK = 1.25
-#: Search sizes: divisions tried per storey, and layouts kept across storeys.
-TREES = 1200
-KEEP = 6
 SEED = 7
 
 _SIDES = ("n", "e", "s", "w")
@@ -318,20 +333,19 @@ def _zone_size(z):
     return ZONE_SIZES.get(str(z.get("size") or "medium").casefold(), ZONE_SIZES["medium"])
 
 
-def room_target(room, stair_cells=0):
+def room_target(room):
     """Square paces a room needs: its furniture at COVERAGE of the floor, its
-    zones' floor, its stairwells, a step inside each door; never under its
-    purpose's floor."""
+    zones' floor, a step inside each door; never under its purpose's floor."""
     key = purpose_key(room)
     lo, _hi = PURPOSE_AREA[key]
     furniture = sum(w * d for w, d, _h in (fixture_footprint(f) for f in room.get("fixtures") or ()))
     zones = sum(a * b for a, b in (_zone_size(z) for z in room.get("zones") or ()))
     doors = len(room.get("joins") or ())
     if key in CORRIDORS:
-        return max(lo, 2 * max(4, 2.5 * doors) + stair_cells)
+        return max(lo, 2 * max(4, 2.5 * doors))
     hint = {"tiny": 0.7, "small": 0.85, "large": 1.25, "huge": 1.5}.get(
         str(room.get("size") or "").casefold(), 1.0)
-    return max(lo, hint * (furniture / COVERAGE + 0.6 * zones + 1.5 * doors) + stair_cells)
+    return max(lo, hint * (furniture / COVERAGE + 0.6 * zones + 1.5 * doors))
 
 
 # ------------------------------------------------------------ the spec
@@ -345,11 +359,26 @@ class _Stair:
     enclosed: bool
     door: str
     at: dict
-    shapes: tuple
+    kind: str | None
+
+
+@dataclass
+class _Shaft:
+    """One or more flights climbing the same way through consecutive
+    storeys: one stair hall, at the same cells on every storey it spans."""
+    id: str
+    name: str
+    flights: list
+    levels: list
+    block: str
+    enclosed: bool
+    door: str
+    kind: str
+    asked: bool = False   # the spec named the shape: no other is tried unless it cannot fit
 
 
 def _read(spec, layout):
-    """Rooms by id (each with its level and block), the stairs, the blocks."""
+    """Rooms by id (each with its level and block), and the stairs."""
     rooms = {}
     for r in spec.get("rooms") or ():
         if isinstance(r, dict) and r.get("id"):
@@ -381,12 +410,83 @@ def _read(spec, layout):
         for rid, key in ((a, "from_at"), (b, "to_at")):
             v = str(st.get(key) or "")[:1]
             at[rid] = v if v in _SIDES else None
-        kind = str(st.get("kind") or "").casefold()
-        shapes = (WELLS[kind],) if kind in WELLS else (WELLS["straight"], WELLS["spiral"])
+        kind = _STAIR_WORDS.get(str(st.get("kind") or "").casefold().strip())
         stairs.append(_Stair(str(st.get("id") or f"{a}-{b}"), str(st.get("name") or "stair"),
                              low, high, bool(st.get("enclosed")), str(st.get("door") or "door"),
-                             at, shapes))
+                             at, kind))
     return rooms, stairs
+
+
+def _shafts(rooms, stairs, layout):
+    """Group flights into shafts: a flight that climbs on from the room the
+    last one arrived in, of the same kind (open over open, enclosed over
+    enclosed) and in the same block, stacks over it. Each shaft takes the
+    shape its spec names, else the engine's rule: a tower (every storey one
+    room) turns in a spiral; flights stacked through three storeys or more
+    double back in a U; steps into a cellar run straight; anything else is a
+    straight flight."""
+    parent = {st.id: st.id for st in stairs}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for a in stairs:
+        for b in stairs:
+            if a is b or a.high != b.low or a.enclosed != b.enclosed:
+                continue
+            if rooms[a.low]["block"] != rooms[b.high]["block"]:
+                continue
+            if a.kind and b.kind and a.kind != b.kind:
+                continue
+            parent[find(b.id)] = find(a.id)
+    groups = {}
+    for st in stairs:
+        groups.setdefault(find(st.id), []).append(st)
+    shafts = []
+    for gid, flights in groups.items():
+        flights.sort(key=lambda st: rooms[st.low]["level"])
+        levels = sorted({rooms[st.low]["level"] for st in flights} | {rooms[st.high]["level"] for st in flights})
+        block = rooms[flights[0].low]["block"]
+        kind = next((st.kind for st in flights if st.kind), None)
+        if kind is None:
+            counts = [sum(1 for r in rooms.values() if r["block"] == block and r["level"] == lv) for lv in levels]
+            if max(counts) <= 1:
+                kind = "spiral"
+            elif len(levels) >= 3:
+                kind = "u"
+            else:
+                kind = "straight"
+        shafts.append(_Shaft(flights[0].id, flights[0].name, flights, levels, block,
+                             flights[0].enclosed, flights[0].door, kind,
+                             asked=any(st.kind for st in flights)))
+    for sh in shafts:
+        for lv in sh.levels:
+            hid = f"{sh.id}@{lv}"
+            layout.names[hid] = sh.name
+            layout.purposes[hid] = "stair"
+    return shafts
+
+
+def _hall_rooms(shafts, rooms):
+    """Each shaft's stair hall on each storey, as a room joined to the rooms
+    its flights serve there: through its door when enclosed, open when not."""
+    halls = {}
+    for sh in shafts:
+        for lv in sh.levels:
+            joins = []
+            for st in sh.flights:
+                for rid in (st.low, st.high):
+                    if rooms[rid]["level"] == lv and all(j["to"] != rid for j in joins):
+                        at = st.at.get(rid)
+                        joins.append({"to": rid, "side": _OPP[at] if at else None,
+                                      "kind": sh.door if sh.enclosed else "open"})
+            halls[f"{sh.id}@{lv}"] = {"id": f"{sh.id}@{lv}", "name": sh.name, "level": lv, "block": sh.block,
+                                      "purpose": "stair", "joins": joins, "fixtures": [], "zones": [],
+                                      "details": [], "contents": {}, "shaft": sh.id, "synthetic": True}
+    return halls
 
 
 def _joins(rid, rooms):
@@ -419,7 +519,22 @@ def _outline_dims(area, front, rooms_here):
     return (long_, short) if front in "ns" else (short, long_)
 
 
-def _place_blocks(spec, rooms, stairs, front, layout):
+def _level_need(b, rooms, shafts):
+    """Square paces each storey of block `b` needs: its rooms and the stair
+    halls through it."""
+    need = {}
+    for r in rooms.values():
+        if r["block"] == b:
+            need[r["level"]] = need.get(r["level"], 0) + room_target(r)
+    for sh in shafts:
+        if sh.block == b:
+            w, d = STAIRS[sh.kind]
+            for lv in sh.levels:
+                need[lv] = need.get(lv, 0) + w * d
+    return need
+
+
+def _place_blocks(spec, rooms, shafts, front, layout):
     """{block: {level: outline Rect}}: each block sized from its largest
     storey, placed beside (or apart from) the block it names."""
     blocks = {}
@@ -428,13 +543,9 @@ def _place_blocks(spec, rooms, stairs, front, layout):
     smaller = {int(s.get("level") or 0) for s in spec.get("storeys") or ()
                if isinstance(s, dict) and s.get("smaller")}
     declared = {str(b.get("id")): b for b in spec.get("blocks") or () if isinstance(b, dict) and b.get("id")}
-    stair_cells = _stair_cells(rooms, stairs)
     dims = {}
     for b, levels in blocks.items():
-        need = {}
-        for r in rooms.values():
-            if r["block"] == b:
-                need[r["level"]] = need.get(r["level"], 0) + room_target(r, stair_cells.get(r["id"], 0))
+        need = _level_need(b, rooms, shafts)
         full = [n * (1.25 if lv in smaller and lv > 0 else 1.0) for lv, n in need.items()]
         count = max(sum(1 for r in rooms.values() if r["block"] == b and r["level"] == lv) for lv in levels)
         dims[b] = _outline_dims(max(full) * 1.05, front, count)
@@ -449,6 +560,15 @@ def _place_blocks(spec, rooms, stairs, front, layout):
             beside = decl.get("beside") or {}
             anchor = beside.get("block") if beside.get("block") in placed else first
             side = str(beside.get("side") or "")[:1]
+            if not beside:
+                # a block placed already may say it stands beside this one:
+                # this one stands on the other side of it
+                for pb, pdecl in declared.items():
+                    pbes = pdecl.get("beside") or {}
+                    if pb in placed and pbes.get("block") == b and str(pbes.get("side") or "")[:1] in _SIDES:
+                        anchor, side = pb, _OPP[str(pbes["side"])[:1]]
+                        decl = dict(decl, apart=pdecl.get("apart"))
+                        break
             if anchor not in placed:
                 continue
             a = placed[anchor]
@@ -471,31 +591,48 @@ def _place_blocks(spec, rooms, stairs, front, layout):
     for b, levels in blocks.items():
         base = placed[b]
         out[b] = {}
-        need = {}
-        for r in rooms.values():
-            if r["block"] == b:
-                need[r["level"]] = need.get(r["level"], 0) + room_target(r, stair_cells.get(r["id"], 0))
+        need = _level_need(b, rooms, shafts)
         # a storey carries the storeys above it: it covers at least what they need
         carried = dict(need)
         for lv in sorted((lv for lv in levels if lv > 0), reverse=True):
             carried[lv] = max(need.get(lv, 0), carried.get(lv + 1, 0))
+        # a tower -- every storey one room -- keeps one cross-section
+        tower = all(sum(1 for r in rooms.values() if r["block"] == b and r["level"] == lv) <= 1
+                    for lv in levels)
         for lv in sorted(levels, key=lambda v: (v < 0, abs(v))):
             o = base
-            if lv != 0 and carried.get(lv, 0) * PART_SLACK < PART_SHARE * base.w * base.d:
+            if lv != 0 and not tower and carried.get(lv, 0) * PART_SLACK < PART_SHARE * base.w * base.d:
                 # A STOREY THAT HOLDS LESS COVERS PART OF THE BUILDING -- an
                 # upper floor over part of the house, the rest of it roof; a
-                # cellar under part of it. Full depth, centred along the front.
-                if front in "ns":
-                    w = max(3, min(base.w, math.ceil(carried[lv] * PART_SLACK / base.d)))
-                    o = Rect(base.x + (base.w - w) // 2, base.y, w, base.d)
-                else:
-                    d = max(3, min(base.d, math.ceil(carried[lv] * PART_SLACK / base.w)))
-                    o = Rect(base.x, base.y + (base.d - d) // 2, base.w, d)
+                # cellar under part of it. A compact part, as near square as
+                # the building allows, centred in it.
+                area = carried[lv] * PART_SLACK
+                side = math.sqrt(area)
+                w = max(3, min(base.w, math.ceil(side)))
+                d = max(3, min(base.d, math.ceil(area / w)))
+                w = max(3, min(base.w, math.ceil(area / d)))
+                o = Rect(base.x + (base.w - w) // 2, base.y + (base.d - d) // 2, w, d)
+                # it sits toward the wall its stairs are asked to climb from on
+                # the storey it opens from, so they can stand there
+                toward = [st.at.get(rid) for sh in shafts if sh.block == b for st in sh.flights
+                          for rid in (st.low, st.high)
+                          if rooms[rid]["level"] == (lv - 1 if lv > 0 else lv + 1)
+                          and lv in (rooms[st.low]["level"], rooms[st.high]["level"]) and st.at.get(rid)]
+                if toward:
+                    side_to = max(set(toward), key=toward.count)
+                    if side_to == "n":
+                        o = Rect(o.x, base.y, o.w, o.d)
+                    elif side_to == "s":
+                        o = Rect(o.x, base.y + base.d - o.d, o.w, o.d)
+                    elif side_to == "w":
+                        o = Rect(base.x, o.y, o.w, o.d)
+                    else:
+                        o = Rect(base.x + base.w - o.w, o.y, o.w, o.d)
                 base_lv = o
             else:
                 base_lv = base
             o = base_lv
-            if lv in smaller and lv > 0 and min(o.w, o.d) >= 6:
+            if lv in smaller and lv > 0 and not tower and min(o.w, o.d) >= 6:
                 # under the roof: the eaves along the front and back take a
                 # pace of floor each; the gable ends keep their height
                 o = (Rect(o.x, o.y + 1, o.w, o.d - 2) if front in "ns"
@@ -512,51 +649,27 @@ def _place_blocks(spec, rooms, stairs, front, layout):
     return out
 
 
-def _stair_cells(rooms, stairs):
-    """Floor each room gives its stairwells: the well and its landing."""
-    out = {}
-    for st in stairs:
-        run, wide = st.shapes[0]
-        for rid in (st.low, st.high):
-            out[rid] = out.get(rid, 0) + run * (wide + 1)
-    return out
-
-
 # ------------------------------------------------------------ dividing a storey
+#
+# After Marson & Musse (squarified treemaps) and Lopes et al. (zones before
+# rooms), with the stair halls placed first as Hahn et al. place everything
+# that spans storeys: a storey is the outline LESS its stair halls, cut into
+# pieces around them, the pieces shared among the rooms in zone order, and
+# each piece cut by squarified guillotine -- every cut chosen to keep its
+# pieces near square, so a room is never a strip.
 
-def _slice(rect, items, out, rng):
-    """Guillotine: split `rect` among `items` [(id, weight)] in order, the
-    list halved near its weight midpoint and the rectangle cut to match."""
-    if not items:
-        return
-    if len(items) == 1:
-        out[items[0][0]] = rect
-        return
-    total = sum(w for _i, w in items) or 1.0
-    shares, acc = [], 0.0
-    for k in range(1, len(items)):
-        acc += items[k - 1][1]
-        shares.append((k, acc / total))
-    near = [k for k, sh in shares if 0.3 <= sh <= 0.7] or [min(shares, key=lambda t: abs(t[1] - 0.5))[0]]
-    k = rng.choice(near)
-    share = dict(shares)[k]
-    # cut across the long side more often than not, but not always: a hall
-    # across the whole front with the service rooms behind it is a cut the
-    # other way
-    across = rng.random() < (0.7 if rect.w >= rect.d else 0.3)
-    # the cut wanders a pace either side of where the weights put it, so a
-    # small room against a long wall can be offered two paces deep, not one
-    jitter = rng.choice((-1, 0, 0, 1))
-    if across and rect.w >= 2:
-        cut = _cut(rect.w, share, jitter)
-        _slice(Rect(rect.x, rect.y, cut, rect.d), items[:k], out, rng)
-        _slice(Rect(rect.x + cut, rect.y, rect.w - cut, rect.d), items[k:], out, rng)
-    elif rect.d >= 2:
-        cut = _cut(rect.d, share, jitter)
-        _slice(Rect(rect.x, rect.y, rect.w, cut), items[:k], out, rng)
-        _slice(Rect(rect.x, rect.y + cut, rect.w, rect.d - cut), items[k:], out, rng)
-    else:
-        out[items[0][0]] = rect
+#: Zones a room belongs to by purpose: what is public lies toward the
+#: entrance, what is private away from it (the privacy gradient).
+_ZONE = {"living": 0, "hall": 0, "common_room": 0, "dining": 0, "entryway": 0, "shrine": 0,
+         "kitchen": 1, "washroom": 1, "bath": 1, "toilet": 1, "latrine": 1, "storage": 1,
+         "closet": 1, "cellar": 1, "basement": 1, "workshop": 1,
+         "bedroom": 2, "guest_room": 2, "study": 2, "meditation": 2, "office": 2, "attic": 2,
+         "cell": 2, "hallway": 1, "corridor": 1, "stair": 1, "other": 0}
+_PRIVATE = 2
+
+
+def _aspect(r):
+    return max(r.w, r.d) / max(1, min(r.w, r.d))
 
 
 def _cut(length, share, jitter):
@@ -569,108 +682,263 @@ def _cut(length, share, jitter):
     return max(1, min(length - 1, cut))
 
 
+def _slice(rect, items, out, rng):
+    """Squarified guillotine: split `rect` among `items` [(id, weight)] in
+    order. Of the split points and cut directions that keep the weights
+    near balanced, the one whose two pieces are nearest square is taken
+    (most of the time: the search wants variety too)."""
+    if not items:
+        return
+    if len(items) == 1:
+        out[items[0][0]] = rect
+        return
+    total = sum(w for _i, w in items) or 1.0
+    shares, acc = [], 0.0
+    for k in range(1, len(items)):
+        acc += items[k - 1][1]
+        shares.append((k, acc / total))
+    near = [k for k, sh in shares if 0.25 <= sh <= 0.75] or [min(shares, key=lambda t: abs(t[1] - 0.5))[0]]
+    share_of = dict(shares)
+    options = []
+    for k in near:
+        for across in (True, False):
+            length = rect.w if across else rect.d
+            if length < 2:
+                continue
+            cut = _cut(length, share_of[k], 0)
+            if across:
+                a, b = Rect(rect.x, rect.y, cut, rect.d), Rect(rect.x + cut, rect.y, rect.w - cut, rect.d)
+            else:
+                a, b = Rect(rect.x, rect.y, rect.w, cut), Rect(rect.x, rect.y + cut, rect.w, rect.d - cut)
+            # a piece holding n rooms is fine n times as long as it is wide
+            worst = max(_aspect(a) / max(1, k), _aspect(b) / max(1, len(items) - k))
+            options.append((worst, k, across))
+    if not options:
+        out[items[0][0]] = rect
+        return
+    options.sort()
+    _w, k, across = options[0] if rng.random() < 0.65 else rng.choice(options)
+    jitter = rng.choice((-1, 0, 0, 1))
+    length = rect.w if across else rect.d
+    cut = _cut(length, share_of[k], jitter)
+    if across:
+        _slice(Rect(rect.x, rect.y, cut, rect.d), items[:k], out, rng)
+        _slice(Rect(rect.x + cut, rect.y, rect.w - cut, rect.d), items[k:], out, rng)
+    else:
+        _slice(Rect(rect.x, rect.y, rect.w, cut), items[:k], out, rng)
+        _slice(Rect(rect.x, rect.y + cut, rect.w, rect.d - cut), items[k:], out, rng)
+
+
 def _mirror(rect, frame, fx, fy):
     x = frame.x + frame.w - (rect.x - frame.x) - rect.w if fx else rect.x
     y = frame.y + frame.d - (rect.y - frame.y) - rect.d if fy else rect.y
     return Rect(x, y, rect.w, rect.d)
 
 
-def _bfs_order(ids, rooms, start, rng):
-    seen, order, queue = set(), [], [start]
-    while queue or len(order) < len(ids):
-        if not queue:
-            queue = [next(i for i in ids if i not in seen)]
-        rid = queue.pop(0)
-        if rid in seen:
-            continue
-        seen.add(rid)
-        order.append(rid)
-        nxt = [o for o in _joins(rid, rooms) if o in ids and o not in seen]
-        rng.shuffle(nxt)
-        queue.extend(nxt)
-    return order
+def _order(ids, rooms, rng):
+    """Rooms in zone order -- public, service, private, the public zone
+    first most of the time -- each zone in breadth-first order of its joins,
+    so a cut tends to fall between zones and joined rooms stay together."""
+    zones = {}
+    for i in ids:
+        zones.setdefault(_ZONE.get(purpose_key(rooms[i]) if i in rooms else "other", 0), []).append(i)
+    keys = sorted(zones)
+    if rng.random() < 0.3:
+        rng.shuffle(keys)
+    out = []
+    for z in keys:
+        group = zones[z]
+        seen, queue = set(), [rng.choice(group)]
+        while len(seen) < len(group):
+            if not queue:
+                queue = [next(i for i in group if i not in seen)]
+            rid = queue.pop(0)
+            if rid in seen:
+                continue
+            seen.add(rid)
+            out.append(rid)
+            nxt = [o for o in (_joins(rid, rooms) if rid in rooms else {}) if o in group and o not in seen]
+            rng.shuffle(nxt)
+            queue.extend(nxt)
+    return out
 
 
-def _spine(outline, ids, rooms, weights, rng):
-    """A corridor down the outline's long axis, rooms in bands either side of
-    it and across its ends, each band divided along its length in the order
-    the corridor's joins give."""
+def _carve(rect, holes, rng):
+    """`rect` less the stair halls in it, as rectangles: the first hall cut
+    out by two cuts each way, the rest carved from the pieces."""
+    inside = [h for h in holes if h.overlaps(rect)]
+    if not inside:
+        return [rect]
+    h = inside[0]
+    hx0, hy0 = max(h.x, rect.x), max(h.y, rect.y)
+    hx1, hy1 = min(h.x + h.w, rect.x + rect.w), min(h.y + h.d, rect.y + rect.d)
+    if rng.random() < 0.5:
+        pieces = [Rect(rect.x, rect.y, hx0 - rect.x, rect.d), Rect(hx1, rect.y, rect.x + rect.w - hx1, rect.d),
+                  Rect(hx0, rect.y, hx1 - hx0, hy0 - rect.y), Rect(hx0, hy1, hx1 - hx0, rect.y + rect.d - hy1)]
+    else:
+        pieces = [Rect(rect.x, rect.y, rect.w, hy0 - rect.y), Rect(rect.x, hy1, rect.w, rect.y + rect.d - hy1),
+                  Rect(rect.x, hy0, hx0 - rect.x, hy1 - hy0), Rect(hx1, hy0, rect.x + rect.w - hx1, hy1 - hy0)]
+    out = []
+    for p in pieces:
+        if p.w > 0 and p.d > 0:
+            out += _carve(p, inside[1:], rng)
+    return out
+
+
+def _spare_name(level, area):
+    if area < 6:
+        return "Cupboard"
+    return "Store" if level == 0 else ("Loft space" if level > 0 else "Undercroft")
+
+
+def _fill(pieces, order, weights, out, rng, level):
+    """Share the pieces among the rooms like packing bins: the largest room
+    first, each into the piece with the most of its share left; then each
+    piece cut among its rooms in zone order. A piece no room takes is floor
+    left over -- absorbed by a neighbour afterwards where it can be."""
+    total_w = sum(weights[i] for i in order) or 1.0
+    total_a = sum(p.w * p.d for p in pieces) or 1
+    scale = total_w / total_a
+    left = {n: p.w * p.d * scale for n, p in enumerate(pieces)}
+    holds = {n: [] for n in left}
+    if rng.random() < 0.5:
+        # as bins: the largest room first, into the piece with most room left
+        for rid in sorted(order, key=lambda i: (-weights[i], rng.random())):
+            n = max(left, key=lambda k: (left[k], rng.random()))
+            holds[n].append(rid)
+            left[n] -= weights[rid]
+    else:
+        # in order: joined rooms stay together, the pieces taken in turn
+        ranked = sorted(left, key=lambda k: ((pieces[k].x, pieces[k].y) if rng.random() < 0.5
+                                             else (pieces[k].y, pieces[k].x)))
+        k = 0
+        for n in ranked:
+            acc = 0.0
+            while k < len(order) and (n == ranked[-1] or acc + weights[order[k]] / 2 <= left[n]):
+                holds[n].append(order[k])
+                acc += weights[order[k]]
+                k += 1
+    rank = {rid: k for k, rid in enumerate(order)}
+    for n, p in enumerate(pieces):
+        take = sorted(holds[n], key=lambda i: rank[i])
+        if take:
+            _slice(p, [(i, weights[i]) for i in take], out, rng)
+        else:
+            out[f"spare:{level}:{p.x}:{p.y}"] = p
+
+
+def _transpose(r):
+    return Rect(r.y, r.x, r.d, r.w)
+
+
+def _spine(outline, holes, ids, rooms, weights, rng):
+    """A corridor down the outline's long axis, rooms in bands either side
+    of it. A stair hall either ends the corridor (it spans the corridor's
+    width at one end) or stands in a band as a slot of the band's full
+    depth; positions where the halls fit neither way are not offered."""
     hubs = [i for i in ids if purpose_key(rooms[i]) in CORRIDORS]
     if not hubs:
         return None
-    hub = max(hubs, key=lambda i: len(_joins(i, rooms)))
     horiz = outline.w >= outline.d
     if rng.random() < 0.15:
         horiz = not horiz
-    band_sides = ("n", "s") if horiz else ("w", "e")
-    end_sides = ("w", "e") if horiz else ("n", "s")
+    if not horiz:
+        parts = _spine_h(_transpose(outline), [_transpose(h) for h in holes], ids, rooms, weights, rng,
+                         flip=True)
+        return None if parts is None else {i: _transpose(r) for i, r in parts.items()}
+    return _spine_h(outline, holes, ids, rooms, weights, rng)
+
+
+def _spine_h(o, holes, ids, rooms, weights, rng, flip=False):
+    hub = max((i for i in ids if purpose_key(rooms[i]) in CORRIDORS), key=lambda i: len(_joins(i, rooms)))
     js = _joins(hub, rooms)
-    bands = {s: [] for s in band_sides + end_sides}
-    unplaced = []
+    # in transposed space north/south became west/east
+    a_side, b_side = ("w", "e") if flip else ("n", "s")
+    bands = {"a": [], "b": []}
+    rest = []
     for rid in ids:
         if rid == hub:
             continue
-        if rid in js and js[rid][0] in bands:
-            bands[js[rid][0]].append(rid)
+        side = js.get(rid, (None,))[0]
+        if side == a_side:
+            bands["a"].append(rid)
+        elif side == b_side:
+            bands["b"].append(rid)
         else:
-            unplaced.append(rid)
-    for rid in unplaced:
-        # beside the band room it joins, else the lighter band
-        home = next((s for s in band_sides for o in bands[s] if o in _joins(rid, rooms)), None)
+            rest.append(rid)
+    for rid in rest:
+        home = next((k for k in bands for x in bands[k] if x in _joins(rid, rooms)), None)
         if home is None:
-            home = min(band_sides, key=lambda s: sum(weights[o] for o in bands[s]))
+            home = min(bands, key=lambda k: sum(weights[x] for x in bands[k]))
         bands[home].append(rid)
-    for s in bands:
-        bands[s].sort(key=lambda o: (js.get(o, (None, None, None))[1] or 99, rng.random()))
-    width = 2 if min(outline.w, outline.d) < 10 else rng.choice((2, 3))
-    out = {}
-    # ends first: full-depth slabs across the corridor's ends
-    inner = outline
-    for s in end_sides:
-        if not bands[s]:
-            continue
-        wsum = sum(weights[o] for o in bands[s])
-        depth = outline.d if horiz else outline.w
-        length = max(3, round(wsum / max(1, depth)))
-        if s == "w":
-            slab, inner = Rect(inner.x, inner.y, length, inner.d), Rect(inner.x + length, inner.y, inner.w - length, inner.d)
-        elif s == "e":
-            slab, inner = Rect(inner.x + inner.w - length, inner.y, length, inner.d), Rect(inner.x, inner.y, inner.w - length, inner.d)
-        elif s == "n":
-            slab, inner = Rect(inner.x, inner.y, inner.w, length), Rect(inner.x, inner.y + length, inner.w, inner.d - length)
-        else:
-            slab, inner = Rect(inner.x, inner.y + inner.d - length, inner.w, length), Rect(inner.x, inner.y, inner.w, inner.d - length)
-        _slice_band(slab, bands[s], weights, out, along_x=not horiz)
-    if inner.w < 2 or inner.d < 2:
+    for k in bands:
+        bands[k].sort(key=lambda x: (js.get(x, (None, None))[1] or 99, rng.random()))
+    W, D = o.w, o.d
+    valid = []
+    for width in ((2, 3) if D >= 10 else (2,)):
+        for off in range(0, D - width + 1):
+            da, db = off, D - width - off
+            if (bands["a"] and da < 3) or (bands["b"] and db < 3):
+                continue
+            if (not bands["a"] and da) or (not bands["b"] and db):
+                continue
+            strips = [(0, da), (da, da + width), (da + width, D)]
+            fixed = {0: [], 1: [], 2: []}
+            ok = True
+            for h in holes:
+                rx0, rx1, ry0, ry1 = h.x - o.x, h.x + h.w - o.x, h.y - o.y, h.y + h.d - o.y
+                touched = [n for n, (s0, s1) in enumerate(strips) if s1 > s0 and ry0 < s1 and ry1 > s0]
+                if not touched or ry0 != strips[touched[0]][0] or ry1 != strips[touched[-1]][1]:
+                    ok = False
+                    break
+                if 1 in touched and not (rx0 == 0 or rx1 == W):
+                    ok = False
+                    break
+                for n in touched:
+                    fixed[n].append((rx0, rx1))
+            if ok:
+                valid.append((width, off, fixed))
+    if not valid:
         return None
-    a, b = band_sides
-    wa = sum(weights[o] for o in bands[a])
-    wb = sum(weights[o] for o in bands[b])
-    across = inner.d if horiz else inner.w
-    if not bands[a] and not bands[b]:
-        out[hub] = inner
-        return out
-    room_depth = across - width
-    if not bands[a]:
-        da, db = 0, room_depth
-    elif not bands[b]:
-        da, db = room_depth, 0
-    else:
-        da = max(2, min(room_depth - 2, round(room_depth * wa / max(1e-9, wa + wb))))
-        db = room_depth - da
-    if horiz:
-        ra = Rect(inner.x, inner.y, inner.w, da)
-        hall = Rect(inner.x, inner.y + da, inner.w, width)
-        rb = Rect(inner.x, inner.y + da + width, inner.w, db)
-    else:
-        ra = Rect(inner.x, inner.y, da, inner.d)
-        hall = Rect(inner.x + da, inner.y, width, inner.d)
-        rb = Rect(inner.x + da + width, inner.y, db, inner.d)
-    out[hub] = hall
-    if bands[a]:
-        _slice_band(ra, bands[a], weights, out, along_x=horiz)
-    if bands[b]:
-        _slice_band(rb, bands[b], weights, out, along_x=horiz)
+    width, off, fixed = rng.choice(valid)
+    da = off
+    out = {}
+    # the corridor: its strip less the halls that end it
+    cx0, cx1 = 0, W
+    for x0, x1 in sorted(fixed[1]):
+        if x0 == 0:
+            cx0 = max(cx0, x1)
+        if x1 == W:
+            cx1 = min(cx1, x0)
+    if cx1 - cx0 < 2:
+        return None
+    out[hub] = Rect(o.x + cx0, o.y + da, cx1 - cx0, width)
+    for key, n, y0, depth in (("a", 0, 0, da), ("b", 2, da + width, D - da - width)):
+        if not bands[key]:
+            continue
+        free, x = [], 0
+        for x0, x1 in sorted(fixed[n]):
+            if x0 > x:
+                free.append((x, x0))
+            x = max(x, x1)
+        if x < W:
+            free.append((x, W))
+        total = sum(x1 - x0 for x0, x1 in free) or 1
+        rooms_left = list(bands[key])
+        wsum = sum(weights[r] for r in rooms_left) or 1
+        for m, (x0, x1) in enumerate(free):
+            seg = Rect(o.x + x0, o.y + y0, x1 - x0, depth)
+            share = (x1 - x0) / total
+            take, acc = [], 0.0
+            while rooms_left and (m == len(free) - 1 or not take or acc + weights[rooms_left[0]] / 2 <= share * wsum):
+                take.append(rooms_left.pop(0))
+                acc += weights[take[-1]]
+                if m < len(free) - 1 and acc >= share * wsum:
+                    break
+            if take:
+                _slice_band(seg, take, weights, out, along_x=True)
+            else:
+                out[f"spare:0:{seg.x}:{seg.y}"] = seg
     return out
 
 
@@ -691,194 +959,156 @@ def _slice_band(band, ids, weights, out, along_x):
         pos += n
 
 
-def _divisions(outline, ids, rooms, weights, rng):
-    """Candidate divisions of one storey's outline among its rooms."""
-    seen = set()
-    for t in range(TREES):
-        if t % 4 == 0:
-            parts = _spine(outline, ids, rooms, weights, rng)
-            if parts is None:
-                parts = {}
-        else:
-            parts = {}
-        if not parts:
-            order = _bfs_order(ids, rooms, rng.choice(ids), rng)
-            _slice(outline, [(i, weights[i]) for i in order], parts, rng)
-            fx, fy = rng.random() < 0.5, rng.random() < 0.5
-            parts = {i: _mirror(r, outline, fx, fy) for i, r in parts.items()}
-        key = tuple(sorted((i, r.x, r.y, r.w, r.d) for i, r in parts.items()))
-        if key in seen:
-            continue
-        seen.add(key)
-        yield parts
-
-
-# ------------------------------------------------------------ stairs in rooms
-
-def _landing(well, side):
-    """The row of floor in front of a well standing against `side`."""
-    if side == "n":
-        return Rect(well.x, well.y + well.d, well.w, 1)
-    if side == "s":
-        return Rect(well.x, well.y - 1, well.w, 1)
-    if side == "w":
-        return Rect(well.x + well.w, well.y, 1, well.d)
-    return Rect(well.x - 1, well.y, 1, well.d)
-
-
-def _stair_spots(room, at, taken, shapes):
-    """(well, landing, side) places in `room` against `at` (else any wall),
-    the landing in front of the well, touching nothing in `taken`; the wall
-    asked first, then nearest the middle of the wall."""
-    out = []
-    for side in list(_SIDES):
-        along = room.w if side in "ns" else room.d
-        across = room.d if side in "ns" else room.w
-        for si, shape in enumerate(shapes):
-            for run, wide in (shape, shape[::-1]):
-                if run > along or wide + 1 > across:
+def _absorb(out, rooms):
+    """A leftover piece joins the room beside it when the two together are
+    still a rectangle -- the room takes the floor; only a piece no room can
+    take whole stays a store. Stair halls and corridors take none."""
+    changed = True
+    while changed:
+        changed = False
+        for sid in [k for k in out if k.startswith("spare:") and ":x" not in k[6:]]:
+            p = out[sid]
+            # a room takes it first; failing that a stair hall, as landing
+            cands = sorted(out.items(), key=lambda t: purpose_key(rooms.get(t[0], {})) == "stair")
+            for rid, r in cands:
+                if rid.startswith("spare:") or purpose_key(rooms.get(rid, {})) in CORRIDORS:
                     continue
-                w, d = (run, wide) if side in "ns" else (wide, run)
-                for k in range(along - run + 1):
-                    if side == "n":
-                        well = Rect(room.x + k, room.y, w, d)
-                    elif side == "s":
-                        well = Rect(room.x + k, room.y + room.d - d, w, d)
-                    elif side == "w":
-                        well = Rect(room.x, room.y + k, w, d)
-                    else:
-                        well = Rect(room.x + room.w - w, room.y + k, w, d)
-                    land = _landing(well, side)
-                    if any(well.overlaps(t) or land.overlaps(t) for t in taken):
-                        continue
-                    out.append(((0 if side == at or at is None else 1), si,
-                                abs(k - (along - run) / 2), well, land, side))
-    out.sort(key=lambda t: t[:3])
-    return [(w, l, s) for _a, _s, _k, w, l, s in out]
+                # a landing is about the size of its stair, never a hall of its own
+                if purpose_key(rooms.get(rid, {})) == "stair" and p.w * p.d > max(6, 2 * r.w * r.d):
+                    continue
+                merged = None
+                if r.y == p.y and r.d == p.d and (r.x + r.w == p.x or p.x + p.w == r.x):
+                    merged = Rect(min(r.x, p.x), r.y, r.w + p.w, r.d)
+                elif r.x == p.x and r.w == p.w and (r.y + r.d == p.y or p.y + p.d == r.y):
+                    merged = Rect(r.x, min(r.y, p.y), r.w, r.d + p.d)
+                if merged is not None:
+                    out[rid] = merged
+                    del out[sid]
+                    changed = True
+                    break
+            if changed:
+                break
+    return out
 
 
-def _pinned_fit(room, well, at):
-    """How a well cut through another storey sits in `room` here: (penalty,
-    landing, side). It must lie inside the room with floor before it;
-    against the wall asked is best, against another wall next, and standing
-    free in the room -- a stair rising in the middle of a hall -- last."""
-    if not room.contains(well):
-        return 200, None, None
-    best = (100, None, None)
-    for side in _SIDES:
-        land = _landing(well, side)
-        if not room.contains(land):
-            continue
-        if room.flush(well, side):
-            pen = 0 if (at is None or side == at) else 6
-        else:
-            pen = 10
-        if pen < best[0]:
-            best = (pen, land, side)
-    return best
+def _divide(outline, halls, ids, rooms, weights, rng, level):
+    """One division of a storey's outline among its rooms around its stair
+    halls ({hall id: Rect}). A hall may grow by a landing in _absorb; the
+    stair itself stays where it was put, the same on every storey."""
+    holes = list(halls.values())
+    if any(purpose_key(rooms[i]) in CORRIDORS for i in ids) and rng.random() < 0.6:
+        parts = _spine(outline, holes, ids, rooms, weights, rng)
+        if parts is not None:
+            parts.update(halls)
+            return _absorb(parts, rooms)
+    out = {}
+    pieces = _carve(outline, holes, rng)
+    _fill(pieces, _order(ids, rooms, rng), weights, out, rng, level)
+    out.update(halls)
+    _absorb(out, rooms)
+    if not holes:
+        fx, fy = rng.random() < 0.5, rng.random() < 0.5
+        out = {i: _mirror(r, outline, fx, fy) for i, r in out.items()}
+    return out
+
+
+# ------------------------------------------------------------ stair halls first
+
+def _shaft_spots(shaft, outlines, rng):
+    """Where a shaft's hall may stand: inside every storey it spans, against
+    a wall of the space they share (stairs climb beside a wall), or on the
+    middle line of that space (a stair hall at the core)."""
+    region = None
+    for lv in shaft.levels:
+        o = outlines[shaft.block][lv]
+        region = o if region is None else Rect(
+            max(region.x, o.x), max(region.y, o.y),
+            min(region.x + region.w, o.x + o.w) - max(region.x, o.x),
+            min(region.y + region.d, o.y + o.d) - max(region.y, o.y))
+    out = set()
+    # the shape asked or ruled first; when the rule chose it, the next more
+    # compact shape is offered too (a turning stair where a straight run
+    # crowds the storey), at a small cost in the scoring
+    tried = 0
+    for kind in STAIR_FALLBACK[STAIR_FALLBACK.index(shaft.kind):]:
+        w0, d0 = STAIRS[kind]
+        for w, d in {(w0, d0), (d0, w0)}:
+            if w > region.w or d > region.d:
+                continue
+            # along each wall: its two ends and its middle
+            xs = sorted({region.x, region.x + (region.w - w) // 2, region.x + region.w - w})
+            ys = sorted({region.y, region.y + (region.d - d) // 2, region.y + region.d - d})
+            for x in xs:
+                out.add((kind, Rect(x, region.y, w, d)))
+                out.add((kind, Rect(x, region.y + region.d - d, w, d)))
+            for y in ys:
+                out.add((kind, Rect(region.x, y, w, d)))
+                out.add((kind, Rect(region.x + region.w - w, y, w, d)))
+            out.add((kind, Rect(region.x + (region.w - w) // 2, region.y + (region.d - d) // 2, w, d)))
+        if out:
+            tried += 1
+            if shaft.asked or tried >= 2:
+                break
+    return sorted(out, key=lambda t: (t[1].x, t[1].y, t[1].w))
 
 
 # ------------------------------------------------------------ scoring
 
-def _score(parts, ids, rooms, weights, outline, fixed, ctx, rank=0):
-    """Lower is better. Returns (score, {stair id: (well, landing, side)}).
-    `rank` picks which of a free stair's places along its wall to take, so
-    the storeys solved after this one get a choice."""
+def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, level):
+    """Lower is better: a room missing, a join with no wall to open in, a
+    join on the wrong side, a room too thin or too long, a room far from its
+    size, a room that opens outdoors with no outside wall, a private room on
+    the front, a store with no room beside it to open from."""
     s = 0.0
     for rid in ids:
         if rid not in parts:
             s += 300
-    stairs_here = {}
-    taken = []
-    # stairs pinned from a storey already built
-    for st, rid, well in ctx["pinned"]:
-        r = parts.get(rid)
-        if r is None:
-            continue
-        same = next((v for v in stairs_here.values() if v[0] == well), None)
-        if same is not None:          # two flights of one shaft, cut on two other storeys
-            stairs_here[st.id] = same
-            continue
-        pen, land, side = _pinned_fit(r, well, st.at.get(rid))
-        s += pen
-        if land is not None:
-            stairs_here[st.id] = (well, land, side)
-            taken += [well, land]
-    # stairs first cut on this storey
-    for st, rid, within in ctx["free"]:
-        r = parts.get(rid)
-        if r is None:
-            continue
-        # A STAIR THAT CLIMBS ON takes the shaft it arrived by -- a tower's
-        # spiral, flights stacked in a stair hall -- where the shapes agree
-        # and no other wall was asked
-        # -- a flight of the same kind (open over open, enclosed over
-        # enclosed) that leaves this room the other way vertically
-        by_id = {x.id: x for x in ctx["stairs"]}
-        shaft = next(((w, l, sd) for sid, (w, l, sd) in stairs_here.items()
-                      if r.contains(w) and (w.w, w.d) in [o for sh in st.shapes for o in (sh, sh[::-1])]
-                      and (st.at.get(rid) in (None, sd))
-                      and by_id[sid].enclosed == st.enclosed
-                      and (by_id[sid].high == rid) == (st.low == rid)
-                      and sum(1 for v in stairs_here.values() if v[0] == w) == 1), None)
-        if shaft is not None and within.contains(shaft[0]):
-            stairs_here[st.id] = shaft
-            continue
-        # the well must stand inside the other storey's outline too
-        spots = [sp for sp in _stair_spots(r, st.at.get(rid), taken, st.shapes) if within.contains(sp[0])]
-        if not spots:
-            s += 80
-            continue
-        best_wall = [sp for sp in spots if sp[2] == spots[0][2]]
-        well, land, side = best_wall[min(rank * max(1, len(best_wall) // 3), len(best_wall) - 1)]
-        if st.at.get(rid) and side != st.at[rid]:
-            s += 6
-        stairs_here[st.id] = (well, land, side)
-        taken += [well, land]
-    avoid = set()
-    for well, _land, _side in stairs_here.values():
-        avoid |= well.cells()
-    for st in ctx["enclosed"]:
-        if st.id in stairs_here:
-            well, land, _side = stairs_here[st.id]
-            avoid |= land.cells()
     every = dict(fixed)
     every.update(parts)
-    for rid in ids:
-        r = parts.get(rid)
-        if r is None:
+    for rid, r in parts.items():
+        if rid.startswith("spare:"):
+            lo_side = min(r.w, r.d)
+            # a store is floor no room asked for: tolerated, never sought --
+            # and a sliver nobody can stand in is waste
+            s += (25 if lo_side < 2 else (8 if lo_side < 3 else 4)) + 0.25 * r.w * r.d
+            if not any(_shared_wall(r, o)[0] for oid, o in parts.items()
+                       if oid != rid and not oid.startswith("spare:") and purpose_key(rooms[oid]) != "stair"):
+                s += 25
             continue
         key = purpose_key(rooms[rid])
         lo_side, hi_side = sorted((r.w, r.d))
-        if lo_side < 2:
-            s += 80
-        elif lo_side < 3 and key not in CORRIDORS and key not in ("closet", "toilet", "latrine"):
-            s += 12
-        longest = max((max(w, d) for w, d, _h in (fixture_footprint(f) for f in rooms[rid].get("fixtures") or ())),
-                      default=1)
-        if hi_side < longest:
-            s += 20
-        if key not in CORRIDORS and hi_side / lo_side > 2.5:
-            s += (hi_side / lo_side - 2.5) * 8
-        if key in CORRIDORS and lo_side > 3:
-            # a corridor is a way through, not a room
-            s += (lo_side - 3) * 10
-        s += 3 * abs(math.log((r.w * r.d) / max(1.0, weights[rid])))
+        if key != "stair":
+            if lo_side < 2:
+                s += 80
+            elif lo_side < 3 and key not in CORRIDORS and key not in ("closet", "toilet", "latrine"):
+                s += 12
+            longest = max((max(w, d) for w, d, _h in (fixture_footprint(f) for f in rooms[rid].get("fixtures") or ())),
+                          default=1)
+            if hi_side < longest:
+                s += 20
+            if key not in CORRIDORS and hi_side / lo_side > 2.0:
+                s += (hi_side / lo_side - 2.0) * 18
+            if key in CORRIDORS and lo_side > 3:
+                s += (lo_side - 3) * 10
+            s += 3 * abs(math.log((r.w * r.d) / max(1.0, weights.get(rid, r.w * r.d))))
+            if level == 0 and _ZONE.get(key) == _PRIVATE and _on_edge(r, outline, outward.get("_front", "s")):
+                s += 5
         for other, (side, _o, _k) in _joins(rid, rooms).items():
             if other not in every or (other in parts and other < rid):
                 continue
-            got, cells = _door_cells(r, every[other], avoid)
+            got, cells = _door_cells(r, every[other])
             if not cells:
                 s += 60
             elif side and side != got:
-                s += 20
-        # a room that opens outdoors must have that wall on the outside
-        want = ctx["outward"].get(rid)
+                # a stair on the wrong wall is the fault a reader sees first
+                stair = "stair" in (key, purpose_key(rooms[other]) if other in rooms else "")
+                s += 45 if stair else 20
+        want = outward.get(rid)
         if want is not None:
             sides = [want] if want in _SIDES else list(_SIDES)
             if not any(_on_edge(r, outline, sd) for sd in sides):
-                s += ctx["outward_weight"].get(rid, 15)
-    return s, stairs_here
+                s += outward_weight.get(rid, 15)
+    return s
 
 
 def _on_edge(r, outline, side):
@@ -954,14 +1184,18 @@ def solve(spec, seed=SEED) -> Layout:
         entrance = {}
         layout.warnings.append("the spec names no entrance room")
     layout.entrance = entrance
-    outlines = _place_blocks(spec, rooms, stairs, front, layout)
+    shafts = _shafts(rooms, stairs, layout)
+    outlines = _place_blocks(spec, rooms, shafts, front, layout)
     layout.outlines = outlines
+    halls = _hall_rooms(shafts, rooms)
+    every = dict(rooms)
+    every.update(halls)
     grounds = spec.get("grounds") or {}
     outdoor_ids = {str(x.get("id")) for key in ("areas", "ways") for x in grounds.get(key) or ()
                    if isinstance(x, dict)}
 
     # rooms that open outdoors, and on which side: the entrance on the front
-    outward, outward_weight = {}, {}
+    outward, outward_weight = {"_front": front}, {}
     for rid, r in rooms.items():
         for j in r.get("joins") or ():
             if j.get("to") in outdoor_ids:
@@ -970,155 +1204,200 @@ def solve(spec, seed=SEED) -> Layout:
     if entrance:
         outward[entrance["room"]] = front
         outward_weight[entrance["room"]] = 40
-    stair_cells = _stair_cells(rooms, stairs)
+    # a room joined to a room of another block stands on the wall facing it
+    facing = {}
+    for rid, r in rooms.items():
+        for other, _j in _joins(rid, rooms).items():
+            ob = rooms[other]["block"]
+            if ob == r["block"]:
+                continue
+            a = outlines[r["block"]].get(r["level"])
+            c = outlines[ob].get(rooms[other]["level"])
+            if a is None or c is None:
+                continue
+            side = ("e" if a.x + a.w <= c.x else "w" if c.x + c.w <= a.x else
+                    "s" if a.y + a.d <= c.y else "n" if c.y + c.d <= a.y else None)
+            if side:
+                facing.setdefault(r["level"], {})[rid] = side
 
-    # THE ORDER STOREYS ARE SOLVED IN: the one whose stair rooms are
-    # tightest first -- a corridor decides where its stairs can stand, and
-    # the roomy hall at the other end takes them wherever they land. A storey
-    # of one room can take a stair anywhere, so it never decides: it goes
-    # last. Ties go ground first, then up, then down.
-    order = []
-    for b in outlines:
-        for lv in outlines[b]:
-            here = [rid for rid, r in rooms.items() if r["block"] == b and r["level"] == lv]
-            tight = min((room_target(rooms[rid], stair_cells.get(rid, 0)) for st in stairs
-                         for rid in (st.low, st.high) if rid in here), default=1e9)
-            order.append((len(here) <= 1, tight, abs(lv) + (0.5 if lv < 0 else 0), b, lv))
-    order = [(b, lv) for _one, _t, _r, b, lv in sorted(order)]
-
-    def weights_for(ids, outline):
-        t = {i: room_target(rooms[i], stair_cells.get(i, 0)) for i in ids}
-        spare = outline.w * outline.d - sum(t.values())
+    def weights_for(ids, free_area):
+        """Each room's share: what it needs, grown toward its ceiling when the
+        storey has floor to spare; floor beyond every ceiling is a store."""
+        t = {i: room_target(rooms[i]) for i in ids}
+        cap = {i: max(PURPOSE_AREA[purpose_key(rooms[i])][1], t[i]) * MAX_GROWTH for i in ids}
+        spare = free_area - sum(t.values())
         flex = [i for i in ids if purpose_key(rooms[i]) in FLEXIBLE] or list(ids)
-        tf = sum(t[i] for i in flex) or 1.0
-        if spare > 0:
-            for i in flex:
-                t[i] += spare * t[i] / tf
-        return t
+        for _round in range(3):
+            room_for = [i for i in flex if t[i] < cap[i]]
+            if spare <= 0.5 or not room_for:
+                break
+            tf = sum(t[i] for i in room_for) or 1.0
+            given = 0.0
+            for i in room_for:
+                add = min(cap[i] - t[i], spare * t[i] / tf)
+                t[i] += add
+                given += add
+            spare -= given
+        return t, max(0.0, spare)
 
-    candidates = {}
-    for b, lv in order:
-        ids = [rid for rid, r in rooms.items() if r["block"] == b and r["level"] == lv]
-        outline = outlines[b][lv]
-        weights = weights_for(ids, outline)
-        candidates[(b, lv)] = (ids, outline, weights, list(_divisions(outline, ids, rooms, weights, rng)))
+    # BLOCK BY BLOCK -- the entrance's first -- the stair halls are placed
+    # first (several placements tried), every storey divided around them, and
+    # the placement whose storeys score best kept.
+    block_order = sorted(outlines, key=lambda b: (b != (rooms[entrance["room"]]["block"] if entrance else b)))
+    chosen = {}          # (block, level) -> parts
+    hall_at = {}         # shaft id -> (kind, Rect)
+    for b in block_order:
+        mine = [sh for sh in shafts if sh.block == b]
+        spots = {sh.id: _shaft_spots(sh, outlines, rng) for sh in mine}
 
-    # BEAM ACROSS STOREYS: keep the layouts whose stairs line up
-    states = [(0.0, {}, {})]   # (score, {(b, lv): parts}, {stair id: well})
-    stairs_by_room = {}
-    for st in stairs:
-        stairs_by_room.setdefault(st.low, []).append(st)
-        stairs_by_room.setdefault(st.high, []).append(st)
-    for b, lv in order:
-        ids, outline, weights, divs = candidates[(b, lv)]
-        grown = []
-        for score, done, wells in states:
-            fixed = {}
-            for (b2, lv2), parts in done.items():
-                if lv2 == lv:
-                    fixed.update(parts)
-            ctx = {"pinned": [], "free": [], "enclosed": [s for s in stairs if s.enclosed], "stairs": stairs,
-                   "outward": outward if lv == 0 else {}, "outward_weight": outward_weight}
-            for rid in ids:
-                for st in stairs_by_room.get(rid, ()):
-                    if st.id in wells:
-                        ctx["pinned"].append((st, rid, wells[st.id]))
-                    else:
-                        other = st.high if rid == st.low else st.low
-                        ctx["free"].append((st, rid, outlines[rooms[other]["block"]][rooms[other]["level"]]))
-            scored = []
-            for parts in divs:
-                for rank in ((0, 1, 2) if ctx["free"] else (0,)):
-                    sc, here = _score(parts, ids, rooms, weights, outline, fixed, ctx, rank)
-                    scored.append((sc + 0.5 * rank, parts, here))
-            scored.sort(key=lambda t: t[0])
-            for sc, parts, here in scored[:KEEP]:
-                nd = dict(done)
-                nd[(b, lv)] = parts
-                nw = dict(wells)
-                for sid, (well, _land, _side) in here.items():
-                    nw.setdefault(sid, well)
-                grown.append((score + sc, nd, nw, here, lv))
-        grown.sort(key=lambda t: t[0])
-        states = [(sc, nd, nw) for sc, nd, nw, _h, _lv in grown[:KEEP]]
-    best_score, done, wells = states[0]
+        def evaluate(pick, tries):
+            # every placement is judged by the same sequence of divisions
+            # (common random numbers), so comparing two placements compares
+            # them, not their luck
+            rng = random.Random(seed * 7919 + len(b))
+            total, parts_by_level = 0.0, {}
+            for lv in sorted(outlines[b]):
+                outline = outlines[b][lv]
+                ids = [rid for rid, r in rooms.items() if r["block"] == b and r["level"] == lv]
+                holes = {f"{sid}@{lv}": rect for sid, (kind, rect) in pick.items()
+                         if lv in next(sh.levels for sh in mine if sh.id == sid)}
+                free_area = outline.w * outline.d - sum(h.w * h.d for h in holes.values())
+                weights, spare = weights_for(ids, free_area)
+                items = list(ids)
+                if spare > max(6.0, 0.12 * free_area):
+                    weights[f"spare:{lv}:x"] = spare
+                    items.append(f"spare:{lv}:x")
+                    every.setdefault(f"spare:{lv}:x", {"id": f"spare:{lv}:x", "purpose": "storage",
+                                                       "level": lv, "block": b, "joins": [], "fixtures": []})
+                # a shape other than the one asked or ruled costs a little
+                for sid, (kind, _r) in pick.items():
+                    if lv == min(next(sh.levels for sh in mine if sh.id == sid)) and \
+                            kind != next(sh.kind for sh in mine if sh.id == sid):
+                        total += 4
+                # a hall leaving a sliver of one or two paces to the wall wastes it
+                for h in holes.values():
+                    for gap in (h.x - outline.x, outline.x + outline.w - h.x - h.w,
+                                h.y - outline.y, outline.y + outline.d - h.y - h.d):
+                        if gap in (1, 2):
+                            total += 10
+                fixed = {}
+                for (b2, lv2), prts in chosen.items():
+                    if lv2 == lv:
+                        fixed.update(prts)
+                ids_all = ids + list(holes)
+                best_lv = None
+                for _t in range(tries):
+                    prts = _divide(outline, holes, items, every, weights, rng, lv)
+                    out_here = dict(outward if lv == 0 else {"_front": front})
+                    out_here.update(facing.get(lv, {}))
+                    sc = _score(prts, ids_all, every, weights, outline, fixed, out_here, outward_weight, lv)
+                    if best_lv is None or sc < best_lv[0]:
+                        best_lv = (sc, prts)
+                total += best_lv[0]
+                parts_by_level[lv] = best_lv[1]
+            return total, parts_by_level
 
-    for (b, lv), parts in done.items():
-        layout.floors.setdefault(lv, {}).update({rid: [r] for rid, r in parts.items()})
-    for (b, lv) in order:
-        for rid in candidates[(b, lv)][0]:
-            if rid not in done[(b, lv)]:
+        def clashes(sh, spot, pick):
+            return any(spot[1].overlaps(pick[o.id][1]) and set(o.levels) & set(sh.levels)
+                       for o in mine if o.id in pick and o.id != sh.id)
+
+        # START from a placement that fits, then IMPROVE one shaft at a time
+        # against the others (coordinate descent), quickly; the best gets a
+        # full search
+        # the shafts with the fewest places go first; a start that blocks one
+        # is tried again with other choices
+        pick = {}
+        ordered = sorted(mine, key=lambda sh: len(spots[sh.id]))
+        for attempt in range(60):
+            trial = {}
+            for sh in ordered:
+                options = [sp for sp in spots[sh.id] if not clashes(sh, sp, trial)]
+                if options:
+                    trial[sh.id] = options[len(options) // 2] if attempt == 0 else rng.choice(options)
+            if len(trial) > len(pick):
+                pick = trial
+            if len(pick) == len(mine):
+                break
+        for sh in mine:
+            if sh.id not in pick:
+                layout.warnings.append(f"{sh.name} found no room for its stair hall")
+        quick = QUICK
+        current = evaluate(pick, quick)[0]
+        for _round in range(2):
+            for sh in mine:
+                if sh.id not in pick:
+                    continue
+                for spot in spots[sh.id]:
+                    if spot == pick[sh.id] or clashes(sh, spot, pick):
+                        continue
+                    trial = dict(pick)
+                    trial[sh.id] = spot
+                    sc = evaluate(trial, quick)[0]
+                    if sc < current:
+                        current, pick = sc, trial
+        total, parts_by_level = evaluate(pick, TRIES)
+        best = (total, parts_by_level, pick)
+        _total, parts_by_level, pick = best
+        for lv, prts in parts_by_level.items():
+            chosen[(b, lv)] = prts
+        hall_at.update(pick)
+
+    # the layout's rooms: the spec's, the stair halls, and the stores left over
+    for (b, lv), prts in chosen.items():
+        for rid, r in prts.items():
+            if rid.startswith("spare:"):
+                sid = f"store_{lv}_{r.x}_{r.y}".replace("-", "m")
+                every[sid] = {"id": sid, "name": _spare_name(lv, r.w * r.d), "level": lv, "block": b,
+                              "purpose": "storage", "joins": [], "fixtures": [], "zones": [],
+                              "details": [], "contents": {}, "synthetic": True}
+                layout.names[sid] = every[sid]["name"]
+                layout.purposes[sid] = "storage"
+                rid = sid
+            layout.floors.setdefault(lv, {})[rid] = [r]
+            layout.blocks[rid] = b
+    for (b, lv), prts in chosen.items():
+        for rid in [r for r, x in rooms.items() if x["block"] == b and x["level"] == lv]:
+            if rid not in prts:
                 layout.warnings.append(f"{layout.names[rid]} found no floor on storey {lv}")
+    for k in [k for k in every if k.startswith("spare:")]:
+        del every[k]
+    # a store opens from the largest room beside it
+    for sid, r in every.items():
+        if not sid.startswith("store_"):
+            continue
+        rect = layout.floors[r["level"]][sid][0]
+        beside = [(o[0].w * o[0].d, oid) for oid, o in layout.floors[r["level"]].items()
+                  if oid != sid and every[oid].get("purpose") != "stair" and _door_cells(rect, o[0])[1]]
+        if beside:
+            r["joins"] = [{"to": max(beside)[1], "kind": "door"}]
 
-    _finish_stairs(layout, rooms, stairs, wells)
+    for sh in shafts:
+        if sh.id not in hall_at:
+            continue
+        kind, rect = hall_at[sh.id]
+        if kind != sh.kind:
+            layout.warnings.append(f"{sh.name}: a {sh.kind} stair would not fit; it is a {kind} stair")
+        layout.stairwells.append({
+            "id": sh.id, "name": sh.name, "kind": kind, "levels": sh.levels, "rect": rect.as_dict(),
+            "enclosed": sh.enclosed, "door": sh.door, "flights": [st.id for st in sh.flights],
+            "halls": {str(lv): f"{sh.id}@{lv}" for lv in sh.levels}})
+
     approaches = {str(w.get("id")) for w in grounds.get("ways") or ()
                   if isinstance(w, dict) and str(w.get("from") or "entrance") == "entrance"}
-    _place_doors(layout, rooms, stairs, outdoor_ids, approaches)
-    _place_windows(layout, rooms)
-    _place_zones(layout, rooms)
-    _furnish(layout, rooms)
-    _grounds(layout, rooms, grounds)
+    _place_doors(layout, every, outdoor_ids, approaches)
+    _place_windows(layout, every)
+    _place_zones(layout, every)
+    _furnish(layout, every)
+    _grounds(layout, every, grounds)
     return layout
 
 
-# ------------------------------------------------------------ stairs, doors
-
-def _finish_stairs(layout, rooms, stairs, wells):
-    for st in stairs:
-        if st.id not in wells:
-            layout.warnings.append(f"{st.name} found no place in "
-                                   f"{layout.names[st.low]} or {layout.names[st.high]}")
-            continue
-        well = wells[st.id]
-        landings, sides = {}, {}
-        for rid in (st.low, st.high):
-            lv = rooms[rid]["level"]
-            room = layout.floors.get(lv, {}).get(rid)
-            if not room:
-                continue
-            shared = next((x for x in layout.stairwells if x["rect"] == well.as_dict()
-                           and str(lv) in x["landings"]), None)
-            if shared is not None:
-                landings[str(lv)] = shared["landings"][str(lv)]
-                sides[str(lv)] = shared["sides"][str(lv)]
-                continue
-            pen, land, side = _pinned_fit(room[0], well, st.at.get(rid))
-            if land is None:
-                layout.warnings.append(f"{st.name} has no floor before it in {layout.names[rid]}")
-                continue
-            if pen >= 10:
-                layout.warnings.append(f"{st.name} stands free in {layout.names[rid]}, "
-                                       f"not against its {st.at.get(rid) or 'any'} wall")
-            elif pen:
-                layout.warnings.append(f"{st.name} stands at the {side} wall of {layout.names[rid]}, "
-                                       f"not the {st.at.get(rid)} wall asked")
-            landings[str(lv)] = land.as_dict()
-            sides[str(lv)] = side
-        if len(landings) < 2:
-            continue
-        shaft = None
-        if st.enclosed:
-            # an enclosed stair is its well walled off from the room, a door
-            # in the wall that faces its landing; the landing is the room's
-            # own floor, the place a body stands to open that door
-            shaft = {lv: well.as_dict() for lv in landings}
-        layout.stairwells.append({
-            "id": st.id, "name": st.name, "low": st.low, "high": st.high,
-            "levels": [rooms[st.low]["level"], rooms[st.high]["level"]],
-            "rect": well.as_dict(), "landings": landings, "sides": sides,
-            "enclosed": st.enclosed, "door": st.door, "shaft": shaft})
-
+# ------------------------------------------------------------ doors
 
 def _solid(layout, lv):
-    """Cells on storey `lv` no doorway may open from and no fixture may take:
-    every well, and the whole of every enclosed stairwell."""
-    out = set()
-    for s in layout.stairwells:
-        if lv in s["levels"]:
-            out |= Rect(**s["rect"]).cells()
-            if s["shaft"] and str(lv) in s["shaft"]:
-                out |= Rect(**s["shaft"][str(lv)]).cells()
-    return out
+    """Cells no doorway may open from and no fixture may take. Stairs are
+    rooms of their own now, so a room holds none."""
+    return set()
 
 
 def _room_cells(layout, rid, lv):
@@ -1128,7 +1407,7 @@ def _room_cells(layout, rid, lv):
     return cells
 
 
-def _place_doors(layout, rooms, stairs, outdoor_ids, approaches=frozenset()):
+def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset()):
     """One doorway per join between rooms, spread along a shared wall in
     declared order; a doorway onto every enclosed stairwell; the entrance
     and every other outside door on the outside wall asked."""
@@ -1156,26 +1435,14 @@ def _place_doors(layout, rooms, stairs, outdoor_ids, approaches=frozenset()):
         n = len(items)
         for k, (_o, other, cells, kind) in enumerate(items):
             pos = cells[min(len(cells) - 1, int((k + 1) * len(cells) / (n + 1)))]
-            layout.doors.append({"a": rid, "b": other, "level": lv, "side": side,
-                                 "cell": list(pos), "kind": kind})
-    # enclosed stairwells: a doorway in the well's wall facing its landing
-    for s in layout.stairwells:
-        if not s["shaft"]:
-            continue
-        well = Rect(**s["rect"])
-        for rid in (s["low"], s["high"]):
-            lv = rooms[rid]["level"]
-            side = s["sides"][str(lv)]          # the room wall the well stands against
-            face = _OPP[side]                   # the well's wall that looks at the landing
-            dx, dy = _STEP[face]
-            land = Rect(**s["landings"][str(lv)]).cells()
-            cells = [c for c in sorted(well.cells()) if (c[0] + dx, c[1] + dy) in land]
-            if not cells:
-                layout.warnings.append(f"{s['name']} has no wall facing its landing in {layout.names[rid]}")
-                continue
-            pos = cells[len(cells) // 2]
-            layout.doors.append({"a": s["id"], "b": rid, "level": lv, "side": face,
-                                 "cell": list(pos), "kind": s["door"], "stair": True})
+            door = {"a": rid, "b": other, "level": lv, "side": side, "cell": list(pos), "kind": kind}
+            if kind == "open":
+                # an open stair: no wall between it and its room, the whole
+                # shared wall open
+                door["span"] = [list(c) for c in cells]
+            if "stair" in (rooms.get(rid, {}).get("purpose"), rooms.get(other, {}).get("purpose")):
+                door["stair"] = True
+            layout.doors.append(door)
     # outside doors
     outside = {}
     for b, levels in layout.outlines.items():
@@ -1359,10 +1626,6 @@ def _furnish(layout, rooms):
                 clear |= {c for c in ((x, y),) if c in cells}
             if d["b"] == rid:
                 clear |= {c for c in ((x + dx, y + dy),) if c in cells}
-        for s in layout.stairwells:
-            land = s["landings"].get(str(lv))
-            if land:
-                clear |= Rect(**land).cells() & cells
         zones = {z["id"]: z["rect"].cells() & cells for z in layout.zones.get(rid, ())}
         windows = {}
         for w in layout.windows:
@@ -1423,6 +1686,17 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
                 s -= abs(math.hypot(cx - (o.x + o.w / 2), cy - (o.y + o.d / 2)) - want)
         if str(fx.get("at") or "") == "middle":
             s -= 0.3 * math.hypot(cx - centre[0], cy - centre[1])
+        # SEVERAL ALIKE STAND IN A ROW: a copy beside the one before it, in
+        # line with it -- stalls along a wall, jars on a shelf's length
+        base, _, n = str(fx["id"]).rpartition("_")
+        if base and n.isdigit() and int(n) > 1 and f"{base}_{int(n) - 1}" in placed \
+                and str(fx.get("at") or "") != "walls":
+            o = placed[f"{base}_{int(n) - 1}"]
+            side, _cells = _shared_wall(r, o)
+            if side:
+                s += 4
+                if (side in "ew" and r.y == o.y) or (side in "ns" and r.x == o.x):
+                    s += 2
         return s
 
     def fits(r):
@@ -1759,9 +2033,9 @@ def check(layout: Layout):
             if ids and covered != o.cells():
                 out.append(f"block {b} storey {lv}: rooms leave {len(o.cells() - covered)} cells of the outline empty")
     for s in layout.stairwells:
+        rect = Rect(**s["rect"])
         for lv in s["levels"]:
-            rid = s["low"] if lv == s["levels"][0] else s["high"]
-            room = layout.floors.get(lv, {}).get(rid)
-            if not room or not room[0].contains(Rect(**s["rect"])):
-                out.append(f"{s['id']}: the well is not inside {rid} on storey {lv}")
+            hall = layout.floors.get(lv, {}).get(s["halls"][str(lv)])
+            if not hall or not hall[0].contains(rect):
+                out.append(f"{s['id']}: its stair is not inside its hall on storey {lv}")
     return out

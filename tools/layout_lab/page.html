@@ -248,7 +248,8 @@ function drawPlan() {
   if (state.below && beneath && lv > 0) for (const rs of Object.values(beneath)) for (const r of rs)
     el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "none", stroke: "var(--line)", "stroke-dasharray": "3 4", opacity: .7 }, svg);
   const doors = lay.doors.filter(d => d.level === lv);
-  const gaps = new Set(doors.filter(d => !d.stair).map(d => `${d.cell[0]},${d.cell[1]},${d.side}`));
+  const gaps = new Set();
+  for (const d of doors) for (const c of (d.span || [d.cell])) gaps.add(`${c[0]},${c[1]},${d.side}`);
   const wells = lay.stairwells.filter(s => s.levels.includes(lv));
   for (const [rid, rs] of Object.entries(floor)) {
     const g = el("g", { class: "room", tabindex: 0, role: "button", "aria-label": lay.names[rid] || rid }, svg);
@@ -278,25 +279,45 @@ function drawPlan() {
       if (r.w * C > 44) label(g, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 3, f.name.length > r.w * C / 6 ? f.name.slice(0, Math.floor(r.w * C / 6)) + "…" : f.name, Math.max(8, Math.min(11, C * .3)), 400);
     }
   }
-  // stairs
+  // stairs: a plan symbol by shape, in the hall
   for (const s of wells) {
     const r = s.rect, g = el("g", {}, svg);
-    el("rect", { x: X(r.x) + 1, y: Y(r.y) + 1, width: r.w * C - 2, height: r.d * C - 2, fill: "url(#hatch)", stroke: "var(--cobalt)", "stroke-width": 1.2 }, g);
-    const up = s.levels[1] > lv;
-    label(g, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, up ? "▲" : "▼", Math.max(10, C * .4), 700, "var(--cobalt)");
-    el("title", {}, g).textContent = `${s.name}: ${up ? "up to" : "down to"} ${lay.names[up ? s.high : s.low]}${s.enclosed ? " (behind a " + s.door + ")" : " (open)"}`;
-    const ld = s.landings[String(lv)];
-    if (ld) el("rect", { x: X(ld.x) + 2, y: Y(ld.y) + 2, width: ld.w * C - 4, height: ld.d * C - 4, fill: "none", stroke: "var(--cobalt)", "stroke-dasharray": "2 2" }, g);
+    const x0 = X(r.x) + 3, y0 = Y(r.y) + 3, w = r.w * C - 6, h = r.d * C - 6;
+    const ink = { stroke: "var(--cobalt)", "stroke-width": 1, fill: "none" };
+    const treads = (ax, ay, bw, bh, alongX, n) => {
+      for (let i = 1; i < n; i++) {
+        if (alongX) el("line", Object.assign({ x1: ax + bw * i / n, y1: ay, x2: ax + bw * i / n, y2: ay + bh }, ink), g);
+        else el("line", Object.assign({ x1: ax, y1: ay + bh * i / n, x2: ax + bw, y2: ay + bh * i / n }, ink), g);
+      }
+      el("rect", Object.assign({ x: ax, y: ay, width: bw, height: bh }, ink), g);
+    };
+    const long = w >= h;
+    if (s.kind === "spiral") {
+      const cx = x0 + w / 2, cy = y0 + h / 2, rr = Math.min(w, h) / 2;
+      el("circle", Object.assign({ cx, cy, r: rr }, ink), g);
+      el("circle", Object.assign({ cx, cy, r: rr * .18 }, ink), g);
+      for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5; el("line", Object.assign({ x1: cx + Math.cos(a) * rr * .18, y1: cy + Math.sin(a) * rr * .18, x2: cx + Math.cos(a) * rr, y2: cy + Math.sin(a) * rr }, ink), g); }
+    } else if (s.kind === "ladder") {
+      const lx = long ? 0 : w * .2, ly = long ? h * .2 : 0;
+      treads(x0 + lx, y0 + ly, w - 2 * lx, h - 2 * ly, long, 6);
+    } else if (s.kind === "u") {
+      // two flights side by side, a half landing across their far end
+      if (long) { const land = w * .25; treads(x0 + land, y0, w - land, h / 2, true, 6); treads(x0 + land, y0 + h / 2, w - land, h / 2, true, 6); el("rect", Object.assign({ x: x0, y: y0, width: land, height: h }, ink), g); }
+      else { const land = h * .25; treads(x0, y0 + land, w / 2, h - land, false, 6); treads(x0 + w / 2, y0 + land, w / 2, h - land, false, 6); el("rect", Object.assign({ x: x0, y: y0, width: w, height: land }, ink), g); }
+    } else if (s.kind === "l") {
+      // a quarter turn: one arm along the top, one down the side
+      const t = Math.min(w, h) * .45;
+      treads(x0, y0, w, t, true, 5); treads(x0 + w - t, y0 + t, t, h - t, false, 4);
+    } else {
+      treads(x0, y0, w, h, long, 8);
+    }
+    const up = s.levels[s.levels.length - 1] > lv, down = s.levels[0] < lv;
+    label(g, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, (up ? "▲" : "") + (down ? "▼" : ""), Math.max(10, C * .4), 700, "var(--cobalt)");
+    el("title", {}, g).textContent = `${s.name} (${s.kind} stair${s.enclosed ? ", behind a " + s.door : ", open"}): storeys ${s.levels.join(", ")}`;
   }
   // walls: each room's own outline, broken at its doorways
   for (const [rid, rs] of Object.entries(floor)) walls(svg, cellsOf(rs), X, Y, C, gaps, "var(--ink)", 2.4);
-  // enclosed stairwells: walled, their door in the wall
-  for (const s of wells) if (s.shaft && s.shaft[String(lv)]) {
-    const r = s.shaft[String(lv)];
-    const own = new Set(doors.filter(d => d.stair && d.a === s.id).map(d => `${d.cell[0]},${d.cell[1]},${d.side}`));
-    walls(svg, cellsOf([r]), X, Y, C, own, "var(--ink)", 2.4);
-  }
-  for (const d of doors) doorSeg(svg, d, X, Y, d.outside ? "var(--ok)" : "var(--cobalt)");
+  for (const d of doors) if (!d.span) doorSeg(svg, d, X, Y, d.outside ? "var(--ok)" : "var(--cobalt)");
   for (const w of (lay.windows || []).filter(w => w.level === lv)) {
     const [x, y] = w.cell, s = w.side;
     const seg = { n: [X(x) + 3, Y(y), X(x + 1) - 3, Y(y)], s: [X(x) + 3, Y(y + 1), X(x + 1) - 3, Y(y + 1)], w: [X(x), Y(y) + 3, X(x), Y(y + 1) - 3], e: [X(x + 1), Y(y) + 3, X(x + 1), Y(y + 1) - 3] }[s];
@@ -328,7 +349,7 @@ function drawPlan() {
     if (r) { const t = label(svg, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, short(lay.names[wid] || wid), 11, 600, "var(--line)"); }
   }
   document.getElementById("drawingTitle").textContent = `${levelName(lv)} plan`;
-  document.getElementById("hint").textContent = "Click a room for what the model asked of it. Blue gaps are doorways, green ones open outside; a thin blue line in a wall is a window. Hatched blue is a stairwell, the same cells on both storeys; a walled one is enclosed behind its door, and the dotted box is its landing. Dashed ochre areas are zones: a part of the room's floor, not a room. On the ground floor the dashed green line is the edge of the plot, and gravel marks the ways.";
+  document.getElementById("hint").textContent = "Click a room for what the model asked of it. Blue gaps are doorways, green ones open outside; a thin blue line in a wall is a window. A stair is its own hall, at the same cells on every storey it joins, drawn by its shape (a straight flight, an L, a U with its half landing, a spiral, a ladder); an open stair has no wall to its room, an enclosed one is walled with its door. Dashed ochre areas are zones: a part of the room's floor, not a room. On the ground floor the dashed green line is the edge of the plot, and gravel marks the ways.";
   legend();
   highlight();
 }
@@ -356,7 +377,7 @@ function drawStack() {
     const t = el("text", { x: left - 12, y: at + 4, "text-anchor": "end", "font-size": 13, "font-weight": 600, fill: "var(--line)" }, g); t.textContent = levelName(lv);
   }
   for (const s of lay.stairwells) {
-    const [a, b] = s.levels, r = s.rect;
+    const a = s.levels[0], b = s.levels[s.levels.length - 1], r = s.rect;
     for (const [x, y] of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.d], [r.x + r.w, r.y + r.d]]) {
       const p = iso(x, y, a, k, H), q = iso(x, y, b, k, H);
       el("line", { x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: "var(--cobalt)", "stroke-width": 1.3, "stroke-dasharray": "4 3" }, svg);

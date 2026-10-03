@@ -76,7 +76,7 @@ Answer with one JSON object:
  "storeys": [{"level": <n>, "smaller": true}]  (only the storeys the inventory marks smaller),
  "blocks": [{"id": "<snake_case>", "apart": true|false, "beside": {"block": "<block id, or main>", "side": "n|e|s|w"}}],
  "rooms": [ROOM, ...],
- "stairs": [{"id", "name", "from", "to", "enclosed": true|false, "door": "<when enclosed>", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "straight|spiral|ladder (only when the description says, or the stair plainly must be)"}],
+ "stairs": [{"id", "name", "from", "to", "enclosed": true|false, "door": "<when enclosed>", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "straight|l|u|spiral|ladder -- a straight flight, a quarter turn, a half turn with a landing between two flights, a spiral, a ladder; only when the description says, or the stair plainly must be"}],
  "grounds": {"areas": [{"id", "name", "kind": "garden|yard|courtyard|field", "where": "around | n|e|s|w"}],
              "ways": [{"id", "name", "from": "entrance | <way id>", "to": "<feature id, for a way that leads to one>"}],
              "features": [FEATURE, ...]},
@@ -105,7 +105,7 @@ How to read the fields:
 - A building whose parts rise separately -- a tower beside a cottage -- names each part a block, "apart": false.
 - A stair stands inside the room at each end: `from_at` is the wall of the FROM room it stands against, `to_at` the wall of the TO room where it arrives; the two must agree, since both rooms are the same building seen on two storeys.
 - The approach to the entrance is a way "from": "entrance". A gate on it is "across" it at its far end; things that flank it or line it say so; a thing the way leads to is its "to".
-- Keep every fixture and window of the inventory, with its mount and count. A window's side follows from what it faces once the compass is fixed (the moon and sun rise in the east); a window "on the left wall" is on the left of a person walking in.
+- Keep every fixture and window of the inventory, with its mount and count. A thing made of several parts (a nest of futons and quilts, a bed and its bedding) is ONE fixture whose parts are its contents; "count" is for separate things alike. A window's side follows from what it faces once the compass is fixed (the moon and sun rise in the east); a window "on the left wall" is on the left of a person walking in.
 - Say only what the description gives, or what a real place of this kind plainly has. Nothing from "elsewhere" is laid out."""
 
 SCENARIOS = {

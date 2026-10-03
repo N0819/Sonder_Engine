@@ -93,28 +93,6 @@ def test_a_storey_under_the_roof_is_inset_in_the_outline():
     assert full.contains(roof) and roof.w * roof.d < full.w * full.d
 
 
-def test_stairs_line_up_and_have_floor_before_them_on_both_storeys():
-    lay = _house()
-    assert {s["id"] for s in lay.stairwells} == {"up", "loft_stair"}
-    for s in lay.stairwells:
-        well = Rect(**s["rect"])
-        for lv, rid in zip(s["levels"], (s["low"], s["high"])):
-            room = lay.floors[lv][rid][0]
-            assert room.contains(well)
-            assert room.contains(Rect(**s["landings"][str(lv)]))
-
-
-def test_an_enclosed_stair_is_walled_off_with_a_door_on_each_storey():
-    lay = _house()
-    s = next(s for s in lay.stairwells if s["id"] == "loft_stair")
-    assert s["shaft"]
-    doors = [d for d in lay.doors if d.get("stair") and d["a"] == "loft_stair"]
-    assert sorted(d["level"] for d in doors) == [1, 2]
-    assert all(d["kind"] == "shoji" for d in doors)
-    open_stair = next(s for s in lay.stairwells if s["id"] == "up")
-    assert not open_stair["shaft"]
-
-
 def test_every_join_between_rooms_has_a_doorway():
     lay = _house()
     pairs = {tuple(sorted((d["a"], d["b"]))) for d in lay.doors}
@@ -130,30 +108,6 @@ def test_the_entrance_opens_on_the_front_and_its_zone_holds_the_door():
     assert tuple(door["cell"]) in step["rect"].cells()
     rack = next(f for f in lay.fixtures["hall"] if f["id"] == "rack")
     assert step["rect"].contains(rack["rect"])
-
-
-def test_fixtures_never_cut_a_rooms_doorways_off_from_each_other():
-    lay = _house()
-    for lv, parts in lay.floors.items():
-        for rid, rects in parts.items():
-            cells = rects[0].cells()
-            for s in lay.stairwells:
-                if lv in s["levels"]:
-                    cells -= Rect(**s["rect"]).cells()
-                    if s["shaft"] and str(lv) in s["shaft"]:
-                        cells -= Rect(**s["shaft"][str(lv)]).cells()
-            for f in lay.fixtures.get(rid, ()):
-                cells -= f["rect"].cells()
-            own = [tuple(d["cell"]) for d in lay.doors if d["level"] == lv and d["a"] == rid]
-            own = [c for c in own if c in cells]
-            seen, stack = set(), own[:1]
-            while stack:
-                c = stack.pop()
-                if c in seen or c not in cells:
-                    continue
-                seen.add(c)
-                stack += [(c[0] + 1, c[1]), (c[0] - 1, c[1]), (c[0], c[1] + 1), (c[0], c[1] - 1)]
-            assert all(c in seen for c in own), rid
 
 
 def test_the_approach_runs_out_of_the_front_with_its_gate_at_the_far_end():
@@ -179,15 +133,6 @@ def test_features_stand_by_what_they_name_and_behind_when_asked():
     assert abs(well["rect"].x - door["cell"][0]) + abs(well["rect"].y - door["cell"][1]) <= 6
     for f in lay.features:
         assert not (f["rect"].cells() & house.cells())
-
-
-def test_a_tower_beside_a_cottage_is_its_own_narrower_block():
-    lay = solve(TOWER)
-    tower, cottage = lay.outlines["tower"][0], lay.outlines["cottage"][0]
-    assert tower.x + tower.w == cottage.x                  # beside it, to the west
-    assert tower.w * tower.d < cottage.w * cottage.d
-    assert all(lay.outlines["tower"][lv] == tower for lv in (1, 2))
-    assert {s["id"] for s in lay.stairwells} == {"s1", "s2"}
 
 
 def test_the_layout_is_the_same_every_time():
@@ -324,3 +269,102 @@ def test_a_zone_is_big_enough_for_what_stands_in_it():
     assert not lay.unplaced
     zone = lay.zones["hall"][0]["rect"]
     assert all(zone.contains(f["rect"]) for f in lay.fixtures["hall"])
+
+
+def test_every_stair_is_a_hall_at_the_same_cells_on_each_storey_it_joins():
+    lay = _house()
+    assert {s["id"] for s in lay.stairwells} == {"up", "loft_stair"}
+    for s in lay.stairwells:
+        rect = Rect(**s["rect"])
+        for lv in s["levels"]:
+            assert lay.floors[lv][s["halls"][str(lv)]][0].contains(rect)
+    # each hall opens onto the rooms its flight serves
+    pairs = {(d["a"], d["b"]) for d in lay.doors} | {(d["b"], d["a"]) for d in lay.doors}
+    assert ("up@0", "hall") in pairs and ("up@1", "corridor") in pairs
+    assert ("loft_stair@1", "corridor") in pairs and ("loft_stair@2", "loft") in pairs
+
+
+def test_an_enclosed_stair_has_its_door_and_an_open_one_is_open_to_its_room():
+    lay = _house()
+    loft = [d for d in lay.doors if "loft_stair@" in d["a"] + d["b"]]
+    assert loft and all(d["kind"] == "shoji" for d in loft)
+    up = [d for d in lay.doors if "up@" in d["a"] + d["b"]]
+    assert up and all(d["kind"] == "open" and len(d["span"]) >= 2 for d in up)
+
+
+def test_fixtures_never_cut_a_rooms_doorways_off_from_each_other():
+    lay = _house()
+    for lv, parts in lay.floors.items():
+        for rid, rects in parts.items():
+            cells = rects[0].cells()
+            for f in lay.fixtures.get(rid, ()):
+                cells -= f["rect"].cells()
+            own = [tuple(d["cell"]) for d in lay.doors if d["level"] == lv and d["a"] == rid]
+            own = [c for c in own if c in cells]
+            seen, stack = set(), own[:1]
+            while stack:
+                c = stack.pop()
+                if c in seen or c not in cells:
+                    continue
+                seen.add(c)
+                stack += [(c[0] + 1, c[1]), (c[0] - 1, c[1]), (c[0], c[1] + 1), (c[0], c[1] - 1)]
+            assert all(c in seen for c in own), rid
+
+
+def test_a_tower_beside_a_cottage_climbs_by_one_spiral_through_its_storeys():
+    lay = solve(TOWER)
+    tower, cottage = lay.outlines["tower"][0], lay.outlines["cottage"][0]
+    assert tower.x + tower.w == cottage.x
+    assert tower.w * tower.d < cottage.w * cottage.d
+    assert len(lay.stairwells) == 1
+    shaft = lay.stairwells[0]
+    assert shaft["kind"] == "spiral" and shaft["levels"] == [0, 1, 2] and shaft["flights"] == ["s1", "s2"]
+
+
+def test_the_stair_shape_follows_the_building_unless_the_spec_names_one():
+    def stair_kind(spec):
+        return {s["id"]: s["kind"] for s in solve(spec).stairwells}
+
+    three = {"name": "three", "front": "s", "entrance": {"room": "a0"},
+             "rooms": [{"id": f"{n}{lv}", "level": lv, "purpose": "bedroom",
+                        "fixtures": [{"id": f"b{n}{lv}", "kind": "bed"}],
+                        "joins": [{"to": f"b{lv}", "side": "e"}] if n == "a" else []}
+                       for lv in (0, 1, 2) for n in ("a", "b")],
+             "stairs": [{"id": "s1", "from": "a0", "to": "a1"}, {"id": "s2", "from": "a1", "to": "a2"}]}
+    assert stair_kind(three) == {"s1": "u"}                   # stacked through three storeys
+    named = dict(three, stairs=[dict(st, kind="spiral") for st in three["stairs"]])
+    assert stair_kind(named) == {"s1": "spiral"}
+
+
+def test_floor_beyond_every_room_s_ceiling_is_a_store_not_a_bigger_room():
+    spec = {"name": "spare", "front": "s", "entrance": {"room": "hall"},
+            "rooms": [{"id": "hall", "level": 0, "purpose": "hall", "size": "huge",
+                       "fixtures": [{"id": f"t{i}", "kind": "table"} for i in range(10)]},
+                      {"id": "up", "level": 1, "purpose": "bedroom", "joins": [{"to": "closet", "side": "e"}],
+                       "fixtures": [{"id": "b", "kind": "bed"}]},
+                      {"id": "closet", "level": 1, "purpose": "closet"}],
+            "storeys": [],
+            "stairs": [{"id": "s", "from": "hall", "to": "up"}]}
+    lay = solve(spec)
+    assert check(lay) == []
+    bed = lay.floors[1]["up"][0]
+    assert bed.w * bed.d <= 36 * 1.4 + 1
+
+
+def test_rooms_are_near_square():
+    # the cutter's own test: no roof storey pinning a stair mid-building
+    roomy = dict(HOUSE, storeys=[], stairs=[st for st in HOUSE["stairs"] if st["id"] != "loft_stair"],
+                 rooms=[dict(r, fixtures=list(r.get("fixtures", [])) +
+                             [{"id": f"x_{r['id']}_{i}", "kind": "chest"} for i in range(3)])
+                        if r["purpose"] == "bedroom" else r for r in HOUSE["rooms"] if r["id"] != "loft"])
+    for spec in (roomy, TOWER):
+        lay = solve(spec)
+        for lv, parts in lay.floors.items():
+            for rid, rects in parts.items():
+                r = rects[0]
+                if lay.purposes.get(rid) in ("hallway", "corridor", "stair") or rid.startswith("store_"):
+                    continue
+                # the review's strips ran 3.7:1 (a 3 x 11 cellar); a narrow
+                # room beside a stair the roof pins mid-building is allowed
+                assert max(r.w, r.d) / min(r.w, r.d) <= 2.7, (rid, r)
+
