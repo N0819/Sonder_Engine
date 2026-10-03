@@ -82,7 +82,7 @@ from world.spatial_barriers import (
 )
 
 
-from world.spatial_sound_field import pitched_level_db, word_for_level
+from world.spatial_sound_field import C50_SMEAR_DB, clarity_db, pitched_level_db, word_for_level
 from world.spatial_walk import (
     BLOCKING_HEIGHT, DEFAULT_BEAT_SECONDS, PACES, PACES_PER_SECOND,
     RUN_PACES_PER_SECOND, blocked_cells, cell_path, door_cell, entry_cell,

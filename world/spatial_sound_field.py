@@ -1358,6 +1358,44 @@ PACE_M = 0.75
 #: carries whole across a hall and still smears down a shaft or from the
 #: far end of a nave. The owner's number.
 REVERB_SMEAR_DB = 15.0
+#: WHAT ACTUALLY SMEARS SPEECH IS THE LATE PART OF THE RING (the owner,
+#: 2026-10-02: "fix it to what makes sense to real reality"). Reflections
+#: arriving within `EARLY_WINDOW_S` of the direct sound fuse with it and help
+#: a listener; only what arrives after blurs the words. The measure is
+#: clarity, C50 (ISO 3382-1): early energy -- direct plus the early part of
+#: the ring -- over late, in dB. The ring decays 60 dB in its room's
+#: reverberation time, so the share of it arriving late is
+#: 10^(-6 * window / rt60): a short-lived ring is mostly early, a long one
+#: mostly late. Words smear below `C50_SMEAR_DB`, -5 dB, the conventional
+#: line where speech clarity goes from fair to poor -- and what the old rule
+#: (`REVERB_SMEAR_DB` of total ring over the direct voice) came to in the
+#: long-ringing stone hall it was calibrated on, so a nave or a shaft still
+#: smears. Measured on chat 161 turn 14: in a 6 x 5 pace bare steel lift
+#: car the whole ring stood ~17.6 dB over a voice three paces off and the
+#: old rule turned a normal line into "something you cannot make out"; its
+#: ring is short, most of it early, C50 about -3 dB -- boomy, and understood.
+EARLY_WINDOW_S = 0.05
+C50_SMEAR_DB = -5.0
+
+
+def clarity_db(direct, reverberant, rt60):
+    """C50 in dB for a voice whose direct and reverberant gains at the
+    listener are `direct` and `reverberant`, in a room ringing for `rt60`
+    seconds; +inf where nothing arrives late."""
+    try:
+        rt60 = float(rt60)
+    except (TypeError, ValueError):
+        rt60 = 0.0
+    if reverberant <= 0.0 or rt60 <= 0.0:
+        return float("inf")
+    late_share = 10.0 ** (-6.0 * EARLY_WINDOW_S / rt60)
+    late = reverberant * late_share
+    early = direct + reverberant * (1.0 - late_share)
+    if late <= 0.0:
+        return float("inf")
+    if early <= 0.0:
+        return float("-inf")
+    return 10.0 * math.log10(early / late)
 #: A bare room this long (its longer side, in paces) gives a sharp sound
 #: back as a second, separate sound -- about seventeen metres of extra
 #: path, the fifty milliseconds an ear needs to hear two.
@@ -2324,7 +2362,11 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
                                  listener_room=observer_room)
         if parts is not None:
             direct, rev = parts
-            if rev > 0.0 and rev >= direct * ratio_of_db(REVERB_SMEAR_DB):
+            # Graded by clarity (`clarity_db`), in the ring of the room the
+            # voice is spoken in -- its reverberation time decides how much
+            # of that ring arrives too late to help.
+            _ring = room_reverberation(scene, t_room) or room_reverberation(scene, o_room) or {}
+            if rev > 0.0 and clarity_db(direct, rev, _ring.get("rt60")) < C50_SMEAR_DB:
                 rel["reverberant"] = True
         ring = room_reverberation(scene, o_room)
         if ring and ring.get("echo") and str(o_room) == str(t_room):

@@ -229,7 +229,7 @@
 | `world/spatial_routing.py` | 1257 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
 | `world/spatial_senses.py` | 1894 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
-| `world/spatial_sound_field.py` | 3252 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
+| `world/spatial_sound_field.py` | 3294 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 957 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 441 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
@@ -2826,13 +2826,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `sound_sources()` | 1440 | 165 lines |
-| `stamp_sound_relation()` | 2279 | 94 lines |
-| `sound_shape()` | 3161 | 92 lines |
+| `sound_sources()` | 1478 | 165 lines |
+| `stamp_sound_relation()` | 2317 | 98 lines |
+| `sound_shape()` | 3203 | 92 lines |
 | `spread()` | 1146 | 88 lines |
-| `room_sound_flood()` | 2819 | 73 lines |
-| `far_path_gain()` | 2190 | 66 lines |
-| `distant_sounds()` | 2970 | 59 lines |
+| `room_sound_flood()` | 2861 | 73 lines |
+| `far_path_gain()` | 2228 | 66 lines |
+| `distant_sounds()` | 3012 | 59 lines |
 | `quantise_hearing_db()` | 1020 | 56 lines |
 
 ### `world/spatial_substance.py`

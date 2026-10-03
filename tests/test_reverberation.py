@@ -74,10 +74,30 @@ def test_only_an_enclosed_room_rings():
         rel = spatial_rel_between(sc, "B", "A")
         assert not rel.get("reverberant"), exposure
         assert hear_level(rel, "normal") == "full", exposure
-    # The same stone under a roof is a hall, and its ring still smears.
+    # The same stone under a roof RINGS -- but a ring smears words only by
+    # what arrives LATE (clarity, C50; the owner 2026-10-02, "what makes
+    # sense to real reality"). This corridor rings ~2.2 s, a quarter of it
+    # early: talking down a stone corridor is echoey and understood.
     roofed = breakwater("enclosed")
     assert room_reverberation(roofed, "wall") is not None
-    assert spatial_rel_between(roofed, "B", "A").get("reverberant") is True
+    assert hear_level(spatial_rel_between(roofed, "B", "A"), "normal") == "full"
+
+
+def test_a_small_bare_room_is_boomy_and_understood():
+    """Chat 161 turn 14 (2026-10-02): in a 6 x 5 pace bare steel lift car the
+    whole ring stood ~17.6 dB over a voice three paces off, the old rule
+    smeared it, and a normal line arrived as "something you cannot make
+    out". The car's ring is short and mostly early: C50 about -3 dB."""
+    from world.spatial import C50_SMEAR_DB, clarity_db
+    car = {"rooms": {"car": {"name": "car", "extent": {"w": 6, "d": 5}, "anchors": {},
+                             "adjacent": [], "surface": "bare", "exposure": "enclosed"}},
+           "positions": {"A": "car", "B": "car"},
+           "stations": {"A": {"cell": [4, 1]}, "B": {"cell": [1, 2]}}, "entities": {}}
+    assert room_reverberation(car, "car") is not None
+    assert hear_level(spatial_rel_between(car, "B", "A"), "normal") == "full"
+    # Clarity is the ring's late share, and a longer ring is more of it late.
+    assert clarity_db(1.0, 50.0, 1.0) > clarity_db(1.0, 50.0, 4.0)
+    assert clarity_db(1.0, 50.0, 6.0) < C50_SMEAR_DB < clarity_db(1.0, 0.5, 6.0)
 
 
 def test_a_voice_carries_further_through_bare_rooms():
