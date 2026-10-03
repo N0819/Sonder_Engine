@@ -682,7 +682,6 @@ def _specialist_payload(name, ctx, sc, view, extras):
             # Existing debts and evident public roles constrain the social
             # consequence of a routed act. They are standing context only;
             # receiving them grants no new output channel or invented act.
-            "pending_obligations": extras.get("pending_obligations") or [],
             "social_standing": extras.get("social_standing") or {},
             "crowds": extras.get("crowds") or [],
             "couriers": extras.get("couriers") or [],

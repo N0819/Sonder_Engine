@@ -322,9 +322,6 @@
     "consequences": {
       "$text": "jev_questions/consequences.txt"
     },
-    "obligations": {
-      "$text": "jev_questions/obligations.txt"
-    },
     "contact_ops": {
       "$text": "jev_questions/contact_ops.txt"
     },

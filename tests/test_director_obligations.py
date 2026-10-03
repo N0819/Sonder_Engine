@@ -162,7 +162,10 @@ def test_discharge_removes_entry_by_id_and_fuzzy(temp_db):
     assert not ctx.warnings
 
 
-def test_overdue_redeferral_warns_and_entry_survives(temp_db):
+def test_an_overdue_entry_survives_and_is_pressed_on_nobody(temp_db):
+    """Retired 2026-10-02 (the owner): the ledger no longer reaches the
+    Director, and nothing demands a debt "MUST be discharged ... next beat"
+    -- it was pressed every beat on debts only the player could settle."""
     ctx = _make_ctx(temp_db, turn_idx=6)
     temp_db.wset(ctx.chat.id, "pending_obligations", [
         {"id": "obl:3:0", "who": "Mara", "what": "deliver the diagnostic report",
@@ -174,7 +177,7 @@ def test_overdue_redeferral_warns_and_entry_survives(temp_db):
 
     assert result["overdue"] == 1
     assert len(temp_db.wget(ctx.chat.id, "pending_obligations", [])) == 1
-    assert any("re-deferred" in w for w in ctx.warnings)
+    assert not any("re-deferred" in w or "MUST" in w for w in ctx.warnings)
 
 
 def test_fresh_obligation_does_not_warn(temp_db):
@@ -191,11 +194,10 @@ def test_fresh_obligation_does_not_warn(temp_db):
     assert not ctx.warnings
 
 
-def test_resolve_payload_surfaces_overdue_flag(temp_db, prose_director, monkeypatch):
-    """Ported 2026-09-27: the owed debts and the standing reach the one
-    encoder, which writes the `obligations` channel; the prose Director is not
-    shown them.
-    """
+def test_resolve_payload_carries_no_obligation_ledger(temp_db, prose_director, monkeypatch):
+    """Retired 2026-10-02 (the owner: "the character themselves should" close
+    what they owe): the ledger's debts and their must-discharge flags no
+    longer reach the encoder or the Director."""
     ctx = _make_ctx(temp_db, turn_idx=5)
     temp_db.wset(ctx.chat.id, "pending_obligations", [
         {"id": "obl:2:0", "who": "Mara", "what": "deliver the diagnostic report",
@@ -206,11 +208,7 @@ def test_resolve_payload_surfaces_overdue_flag(temp_db, prose_director, monkeypa
 
     captured = _capture(ctx, monkeypatch)
 
-    obls = {o["id"]: o for o in captured["pending_obligations"]}
-    assert obls["obl:2:0"]["age_beats"] == 3
-    assert obls["obl:2:0"]["must_discharge_this_beat"] is True
-    assert obls["obl:4:0"]["age_beats"] == 1
-    assert obls["obl:4:0"]["must_discharge_this_beat"] is False
+    assert "pending_obligations" not in captured
 
 
 # ---- W2: player-asserted fact adjudication ----

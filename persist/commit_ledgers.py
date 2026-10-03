@@ -310,18 +310,14 @@ def commit_obligations(ctx, nonce, *, causal_program=None):
             ledger.pop(idx)
             discharged += 1
 
-    overdue = []
-    for entry in ledger:
-        age = _beats_open(turn.idx, entry.get("opened_turn", turn.idx),
-                          chat_id=cid)
-        if age >= OBLIGATION_OVERDUE_AGE:
-            overdue.append(entry)
-            ctx.add_warning(
-                f"Obligation re-deferred past its window: {entry.get('who')!r} "
-                f"still owes {entry.get('what')!r} (opened turn "
-                f"{entry.get('opened_turn')}, age {age} beats). It MUST be "
-                "discharged or explicitly refused on-page next beat."
-            )
+    # NO OVERDUE PRESS (the owner, 2026-10-02): an obligation is the mind's
+    # that owes it, kept and struck in its own notebook. The Director no
+    # longer reads this ledger, and nothing here demands it be discharged --
+    # "MUST be discharged or explicitly refused on-page next beat" was
+    # pressed every beat on debts only the player could settle.
+    overdue = [entry for entry in ledger
+               if _beats_open(turn.idx, entry.get("opened_turn", turn.idx),
+                              chat_id=cid) >= OBLIGATION_OVERDUE_AGE]
 
     if len(ledger) > OBLIGATION_CAP:
         # The oldest debts leave here, and leaving here is not the same event

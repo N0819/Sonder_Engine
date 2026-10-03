@@ -1240,10 +1240,12 @@ def test_a_line_that_quotes_someone_keeps_its_words():
     assert out == events
 
 
-def test_jev_is_told_what_is_already_owed(temp_db, monkeypatch):
-    """Round 7 (2026-09-23) idx 7-22: Jev is asked whether a passage fulfils
-    "one already owed" and was never told what was, so the miller's order,
-    carried out three times, stayed open fifteen beats."""
+def test_obligations_are_never_a_channel_the_prose_director_writes(temp_db, monkeypatch):
+    """Retired 2026-10-02 (the owner): what a mind owes is its own to keep
+    and strike in its notebook, never the Director's ledger -- so
+    `obligations` is no candidate, whatever the passage does, and a channel
+    with no question (which `select_channels` grants unasked) cannot reach
+    the encoder through the back door."""
     from types import SimpleNamespace
     seen = []
 
@@ -1259,9 +1261,9 @@ def test_jev_is_told_what_is_already_owed(temp_db, monkeypatch):
     selected, _record = director_prose.select_channels(
         ctx, "resolve", "Emory works tallow into the underside of the neck.",
         {"identity_index": {}}, facts={}, owed=owed)
-    assert ("ALREADY OWED: Emory Vane: Slap it thick along the underside "
-            "of the neck") in seen[0]
-    assert "obligations" in selected
+    assert "obligations" not in selected
+    assert "obligations" not in director_prose.candidate_channels("resolve")
+    assert "obligations" not in director_prose.candidate_channels("interpret")
 
 
 def test_a_past_act_is_not_conjugated_again():

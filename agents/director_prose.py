@@ -146,6 +146,13 @@ def _extension_channels(stage=None):
         return []
 
 
+#: Engine channels the prose Director never writes. `obligations` (the owner,
+#: 2026-10-02): what a mind owes is that mind's to keep and strike in its own
+#: notebook, never a Director ledger pressed as must-discharge -- see
+#: the note in `director.director_resolve`'s payload and `commit_ledgers.commit_obligations`.
+RETIRED_CHANNELS = frozenset({"obligations"})
+
+
 def candidate_channels(stage, facts=None):
     """Every engine channel this story keeps that this stage can carry, in
     canonical hand order. An extension's channel is not a candidate here: it
@@ -157,6 +164,8 @@ def candidate_channels(stage, facts=None):
         if spec.get("ext_id"):
             continue
         for channel in spec["channels"]:
+            if channel in RETIRED_CHANNELS:
+                continue
             if not channel_serves_stage(channel, stage):
                 continue
             if not facts.get(_STRUCTURAL_CHANNEL_FACTS.get(channel), True):
@@ -336,8 +345,9 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
                     owed=None):
     """`(selected, record)`. Fails OPEN: if the decision model cannot answer,
     every candidate is granted -- a larger sheet, never a lost change.
-    ``owed`` is the open obligation ledger (`pending_obligation_view`), so a
-    passage that discharges a debt can be recognised as doing so.
+    ``owed`` is no longer passed by the Director (obligations retired,
+    2026-10-02, `RETIRED_CHANNELS`); a caller that passes debts still has
+    them shown to Jev.
 
     The same one call also asks, for each PLANNED room in reach (the
     Writers' Room's stubs, `planned_room_brief`), whether the passage enters
@@ -1807,9 +1817,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     planned = extras.get("planned_rooms") if isinstance(extras, dict) else None
     planned = planned if isinstance(planned, dict) else {}
     channels, jev = select_channels(
-        ctx, stage, prose, model_payload, facts, planned,
-        owed=((extras.get("pending_obligations") if isinstance(extras, dict) else None)
-              or model_payload.get("pending_obligations")))
+        ctx, stage, prose, model_payload, facts, planned)
     develop = {rid: planned[rid] for rid in jev.get("entered") or () if rid in planned}
     # Designs prepared between turns for the planned rooms this beat enters.
     try:

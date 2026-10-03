@@ -62,9 +62,11 @@ def test_current_specialist_pipeline_keeps_debts_outside_scene_state(
     assert "obligations" not in state
     assert all("obligations" not in step["patch"] for step in state["causal_steps"])
     assert any(row["patch"].get("obligations") for row in out["orchestration"]["transform_history"])
+    # The Director no longer carries the ledger (obligations retired from
+    # the Director, 2026-10-02): what a mind owes is its own to keep.
     payload = next(call["payload"] for call in calls
                    if call["step_key"] == "director_specialist")
-    assert payload["pending_obligations"][0]["id"] == "old"
+    assert "pending_obligations" not in payload
 
 
 def test_asserted_onset_open_then_resolve_discharge_is_not_duplicated(temp_db):

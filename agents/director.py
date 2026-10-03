@@ -1690,7 +1690,6 @@ def director_interpret(ctx, nonce):
         """A hand's interpret payload extras, read against `out`. Shared by
         the causal fan-out below and the prose contract's encoder, which
         is assembled before any `out` exists and reads it empty."""
-        from persist.commit import pending_obligation_view
         _iparts = scene_extra_parts(ctx.cast, pers, p_name)
         return {
             "nonce": nonce,
@@ -1721,7 +1720,6 @@ def director_interpret(ctx, nonce):
             "couriers": _icouriers(),
             "carried_reports": _ireports(),
             "unratified_claims": _iunratified(),
-            "pending_obligations": pending_obligation_view(chat["id"], ctx.turn.idx),
         }
 
     # THE DIRECTOR WRITES PROSE (agents/director_prose.py): see
@@ -5063,7 +5061,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # payload view is built there so the flag the prompt's hard rule keys
     # on and the flag commit warns on can never disagree. world_pressure_view
     # rides the same convention (F5).
-    from persist.commit import pending_obligation_view, world_pressure_view
+    from persist.commit import world_pressure_view
     _mv_for_context = movement_for_resolve(ctx, interp)
     _mv_target = _mv_for_context.get("to_room") if isinstance(_mv_for_context, dict) else None
 
@@ -5408,7 +5406,13 @@ def director_resolve(ctx, nonce, _corrections=None):
         "dialogue_mode": bool(flow.get("dialogue_mode", False)),
         "relevant_lore": lore_for(ctx),
         "standing_intentions": raw_intents[:12],
-        "pending_obligations": pending_obligation_view(chat["id"], turn["idx"]),
+        # NO OBLIGATION LEDGER (the owner, 2026-10-02): what a mind owes is
+        # that mind's to keep -- its own notebook, its own strike -- and
+        # never the Director's to press. The ledger opened debts for the
+        # player's own character and flagged them must-discharge every beat
+        # after two, so the prose held scenes open on answers only the
+        # player could give (chat 161: eight debts on Hinami, four of them
+        # "when the doors open" from a lift that had since fallen).
         # F5: the world-pressure ledger -- every open ongoing off-character
         # process, each of which the prompt's WORLD PRESSURE rule requires
         # this resolve to tick, hold, or resolve. Deterministic floor: the
@@ -5637,7 +5641,6 @@ def director_resolve(ctx, nonce, _corrections=None):
         "author_notes": payload.get("author_notes"),
         # Standing social context belongs to the hand that adjudicates
         # claims and speech consequences, not the minimal event slicer.
-        "pending_obligations": payload.get("pending_obligations") or [],
         "social_standing": payload.get("social_standing") or {},
         "crowds": payload.get("crowds") or [],
         "couriers": payload.get("couriers") or [],
