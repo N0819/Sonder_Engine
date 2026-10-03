@@ -1596,6 +1596,38 @@ def _with_comm_channel(scene, rel, *, speaker, observer, observer_room=None,
     return {**rel, "comm_channel": channel} if channel else rel
 
 
+def _sourceless_event_rel(scene, observer, targets, observer_room):
+    """Where an event with no body behind it happened, for one observer: the
+    relation to the nearest of its targets the scene places, or None when
+    it names none. A target the observer stands INSIDE -- the car it rides,
+    the ship it sails -- is the observer's own place: what happens to it
+    happens around them. The authored event, the world process and the
+    engine's own sources are placed nowhere; their targets are where they
+    happen."""
+    from world.spatial import _unique_entity_keyed
+    rooms = (scene or {}).get("rooms") or {}
+    holder = str((rooms.get(observer_room) or {}).get("parent_entity") or "")
+    best = None
+    for target in targets or ():
+        target = str(target or "").strip()
+        if not target:
+            continue
+        if holder:
+            eid, _entity = _unique_entity_keyed(scene, target)
+            if eid == holder or target == holder:
+                return {"same_room": True, "barrier": "open", "distance": "near",
+                        "note": "it happened to the place this observer is inside"}
+        target_room = room_of(scene, target)
+        if not target_room:
+            continue
+        rel = spatial_rel_between(scene, observer, target,
+                                  observer_room=observer_room, target_room=target_room)
+        if rel.get("same_room"):
+            return rel
+        best = best or rel
+    return best
+
+
 def _in_plain_view(rel, vis):
     """Is this source available to SIGHT for this perceiver.
 
@@ -6643,12 +6675,29 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     # THE BEAT'S FOOTFALLS ARE SOUND EVENTS (`spatial_sound_field.tread_events`):
     # a tread in the walker's room, and one in every room it lies over.
     _incoming = list(_incoming) + tread_events(sc, _beat_movers(ctx))
-    _sensory = [record for record in (
-        normalize_sensory_event(event, rooms=sc.get("rooms") or {})
-        for event in _incoming
-        if isinstance(event, dict)) if record]
+    # WHEN IT SOUNDED: the causal step a sound came from (`from_event`),
+    # kept beside the normalised record so it is graded against the world
+    # of that moment rather than the world the beat ended in. Chat 160 turn
+    # 11: an elevator's brakes shrieked and its cables snapped in the shaft
+    # the car was falling through; graded at the end of the beat the car had
+    # landed, the shaft lay behind a wall, and its riders heard neither.
+    _sensory = []
+    for event in _incoming:
+        if not isinstance(event, dict):
+            continue
+        record = normalize_sensory_event(event, rooms=sc.get("rooms") or {})
+        if record:
+            if event.get("from_event") not in (None, ""):
+                record = dict(record, _at=str(event["from_event"]))
+            _sensory.append(record)
     beat_sounds = [dict(record, desc=record["detail"])
                    for record in _sensory if record.get("detail")]
+    _sound_moments = {}
+    for _world in getattr(ctx.get("_composed_beat"), "causal_worlds", None) or ():
+        if str(_world.get("stage") or "") == "resolve" and isinstance(_world.get("after"), dict):
+            _sound_moments[str(_world.get("chrono_id"))] = _world["after"]
+    _now_sounds = [e for e in beat_sounds if e.get("_at") not in _sound_moments]
+    _then_sounds = [e for e in beat_sounds if e.get("_at") in _sound_moments]
 
     # The complete set of lines actually spoken this beat (the invented-
     # dialogue tripwire's ground truth).
@@ -6924,7 +6973,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         # A walker's own footfalls are no news to the walker,
                         # and a walker in plain view is seen walking, not
                         # heard: the tread reaches whoever cannot see them.
-                        [e for e in beat_sounds
+                        [e for e in _now_sounds
                          if not (e.get("tread") and (
                              str(e.get("source") or "") == str(name)
                              or (str(e.get("room") or "") == str(p.get("room") or "")
@@ -6940,9 +6989,21 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 # `ambient_percepts`' own-room admission takes it; the gate
                 # still scrubs the text.
                 afar = heard_events(
-                    sc, name, beat_sounds, room=p.get("room"),
+                    sc, name, _now_sounds, room=p.get("room"),
                     turn_idx=getattr(ctx.turn, "idx", None),
                     crowds=ctx.get("_sound_crowds"))
+                # A sound tied to its moment is graded in that moment's world,
+                # from where this listener stood then (see `_sound_moments`).
+                for _sound in _then_sounds:
+                    _then = _sound_moments[_sound["_at"]]
+                    _there = room_of(_then, name) or p.get("room")
+                    if str(_sound.get("room") or "") == str(_there or ""):
+                        afar.append((_sound, "full"))
+                        continue
+                    afar.extend(heard_events(
+                        _then, name, [_sound], room=_there,
+                        turn_idx=getattr(ctx.turn, "idx", None),
+                        crowds=ctx.get("_sound_crowds")))
                 if afar:
                     here = str(p.get("room") or "")
                     percepts.extend(_gated_ambient_percepts(
@@ -6963,7 +7024,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         turn_idx=getattr(ctx.turn, "idx", None),
                         near_rooms=(field.grid.offsets if field else ()),
                         crowds=ctx.get("_sound_crowds"),
-                        events=beat_sounds)))
+                        events=_now_sounds)))
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(
@@ -7222,6 +7283,20 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     order += 1
                     continue
                 rel, _prox = _channel_as_of(actor, at_index)
+                # AN EVENT WITH NO BODY BEHIND IT HAPPENED WHERE ITS TARGETS
+                # ARE (`_sourceless_event_rel`): a scheduled event or a
+                # world process is placed nowhere, so its relation to every
+                # observer read "no known spatial channel" and the whole of
+                # it was refused -- chat 160 turn 11, an elevator's power
+                # failing, the free fall and the cables snapping, refused
+                # for the two people riding it.
+                _sourceless = False
+                if not room_of(event_scene, actor):
+                    _placed = _sourceless_event_rel(
+                        event_scene, name, (act.get("event") or {}).get("targets"),
+                        event_observer_room)
+                    if _placed is not None:
+                        rel, _sourceless = _placed, True
                 if rel is None:
                     order += 1
                     continue
@@ -7248,6 +7323,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     display_map=display_map, bodies_by_name=bodies_by_name,
                     can_see=True, unseen="", appearances=appearances,
                     cast_aliases=cast_aliases)
+                if _sourceless:
+                    # Nobody did it: the surface is the whole sentence, never
+                    # "The unfamiliar person fluorescent tube flickers".
+                    display = ""
                 # A BODY THE SURFACE NAMES IS A PERCEPT OF ITS OWN (PX5),
                 # asked before the identity scrub rewrites the names.
                 surface, _cut = _act_surface_admission(
