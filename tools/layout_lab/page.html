@@ -145,6 +145,7 @@ function renderSwitchers() {
   const vs = document.getElementById("views"); vs.textContent = "";
   const views = [["plan", "Plan by storey"], ["stack", "Stacked storeys"], ["sort", "What the model sorted"]];
   if (rec().current) views.push(["current", "The engine today"]);
+  if (rec().diffusion) views.push(["diffusion", "Diffusion test"]);
   views.forEach(([k, label]) => {
     const b = h("button", { type: "button", "aria-pressed": String(k === state.view) }, label);
     b.onclick = () => { state.view = k; render(); };
@@ -514,6 +515,56 @@ function drawCurrent() {
   document.getElementById("legend").textContent = "";
 }
 
+// HouseDiffusion (Shabani et al., CVPR 2023), its published model given the
+// same room graph: four samples per storey, beside the solver's own plan.
+function drawDiffusion() {
+  const host = document.getElementById("drawing"); host.textContent = "";
+  document.getElementById("levels").textContent = "";
+  const d = rec(), lay = d.layout;
+  const typeFill = { living_room: "var(--living)", kitchen: "var(--service)", bedroom: "var(--private)",
+    bathroom: "var(--service)", entrance: "var(--circ)", storage: "var(--store)" };
+  for (const [level, samples] of Object.entries(d.diffusion)) {
+    host.appendChild(h("h2", { style: "margin:14px 0 6px" }, `${levelName(Number(level))}: the solver, then HouseDiffusion's four samples`));
+    const row = h("div", { style: "display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start" });
+    host.appendChild(row);
+    // the solver's own storey, rooms only
+    const floor = lay.floors[level] || {};
+    const rects = Object.values(floor).flat();
+    if (rects.length) {
+      const x0 = Math.min(...rects.map(r => r.x)), y0 = Math.min(...rects.map(r => r.y));
+      const x1 = Math.max(...rects.map(r => r.x + r.w)), y1 = Math.max(...rects.map(r => r.y + r.d));
+      const k = 190 / Math.max(x1 - x0, y1 - y0);
+      const box = h("div"); box.appendChild(h("div", { class: "tag" }, "solver"));
+      const svg = el("svg", { viewBox: `-4 -4 ${(x1 - x0) * k + 8} ${(y1 - y0) * k + 8}`, width: (x1 - x0) * k + 8, height: (y1 - y0) * k + 8 }, null);
+      for (const [rid, rs] of Object.entries(floor)) for (const r of rs) {
+        el("rect", { x: (r.x - x0) * k, y: (r.y - y0) * k, width: r.w * k, height: r.d * k, fill: fillFor(lay.purposes[rid]), stroke: "var(--ink)", "stroke-width": 1.5 }, svg);
+        label(svg, (r.x - x0 + r.w / 2) * k, (r.y - y0 + r.d / 2) * k + 3, short(lay.names[rid] || rid).slice(0, 16), 9, 600);
+      }
+      box.appendChild(svg); row.appendChild(box);
+    }
+    for (const smp of samples) {
+      const pts = smp.rooms.flatMap(r => r.polygon);
+      const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+      const x0 = Math.min(...xs), y0 = Math.min(...ys), k = 190 / Math.max(Math.max(...xs) - x0, Math.max(...ys) - y0);
+      const box = h("div"); box.appendChild(h("div", { class: "tag" }, `diffusion sample ${smp.sample}`));
+      const W = (Math.max(...xs) - x0) * k + 8, H = (Math.max(...ys) - y0) * k + 8;
+      const svg = el("svg", { viewBox: `-4 -4 ${W} ${H}`, width: W, height: H }, null);
+      for (const r of smp.rooms) {
+        el("polygon", { points: r.polygon.map(p => `${(p[0] - x0) * k},${(p[1] - y0) * k}`).join(" "), fill: typeFill[r.type] || "var(--store)", stroke: "var(--ink)", "stroke-width": 1.5 }, svg);
+        const cx = r.polygon.reduce((a, p) => a + p[0], 0) / r.polygon.length, cy = r.polygon.reduce((a, p) => a + p[1], 0) / r.polygon.length;
+        label(svg, (cx - x0) * k, (cy - y0) * k + 3, short(lay.names[r.id] || r.id).slice(0, 16), 9, 600);
+      }
+      for (const dr of smp.doors || []) {
+        el("polygon", { points: dr.polygon.map(p => `${(p[0] - x0) * k},${(p[1] - y0) * k}`).join(" "), fill: dr.between && dr.between[1] === "outside" ? "var(--ok)" : "var(--cobalt)", opacity: .8 }, svg);
+      }
+      box.appendChild(svg); row.appendChild(box);
+    }
+  }
+  document.getElementById("drawingTitle").textContent = "Diffusion test: HouseDiffusion beside the solver";
+  document.getElementById("hint").textContent = "HouseDiffusion (Shabani et al., CVPR 2023) is the published model trained on about 60,000 real apartment plans. It was given the same room graph as the solver (which rooms connect), with our room types mapped onto its own; it knows no stairs, outlines, storeys, fixtures or walls asked for. Blue marks are its doors, green the front door.";
+  document.getElementById("legend").textContent = "";
+}
+
 function legend() {
   const lg = document.getElementById("legend"); lg.textContent = "";
   [["living", "Living"], ["private", "Private"], ["service", "Service"], ["circ", "Circulation"], ["store", "Storage"], ["sacred", "Sacred"], ["grass", "Open ground"], ["gravel", "Way"]].forEach(([k, t]) => {
@@ -570,7 +621,8 @@ function renderNotes() {
 
 function render() {
   renderSwitchers(); renderChips();
-  if (state.view === "plan") drawPlan(); else if (state.view === "stack") drawStack(); else if (state.view === "sort") drawSort(); else drawCurrent();
+  if (state.view === "plan") drawPlan(); else if (state.view === "stack") drawStack(); else if (state.view === "sort") drawSort();
+  else if (state.view === "diffusion") drawDiffusion(); else drawCurrent();
   renderRoom(); renderNotes();
 }
 render();

@@ -16,10 +16,19 @@ TEMPLATE = Path(__file__).with_name("page.html")
 
 def main(dest):
     data = []
+    hd = Path(os.environ.get("HOUSE_DIFFUSION_OUT", ""))
     for name in ("shrine", "inn", "lighthouse"):
         path = OUT / f"{name}.json"
         if path.exists():
-            data.append(json.loads(path.read_text()))
+            record = json.loads(path.read_text())
+            # HouseDiffusion samples of the same storeys, when the test ran
+            samples = {}
+            for f in sorted(hd.glob(f"{name}_level*_*.json")) if hd.name else ():
+                level = f.stem.split("_level")[1].split("_")[0]
+                samples.setdefault(level, []).append(json.loads(f.read_text()))
+            if samples:
+                record["diffusion"] = samples
+            data.append(record)
     html = TEMPLATE.read_text().replace(
         "__DATA__", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
     Path(dest).write_text(html)
