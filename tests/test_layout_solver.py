@@ -1,0 +1,259 @@
+"""The layout prototype keeps what its design promises (world/layout_solver.py).
+
+Hand-made buildings, never model output: each test names one promise of the
+design -- rooms are whole rectangles filling their block's outline, stairs
+line up and have floor before them, an enclosed stair is walled with a
+door, a zone is floor in its room, the grounds are open ground with things
+standing in them by plain relations.
+"""
+
+from world.layout_solver import Rect, check, solve
+
+HOUSE = {
+    "name": "test house", "front": "s",
+    "entrance": {"room": "hall", "zone": "step", "kind": "door"},
+    "storeys": [{"level": 2, "smaller": True}],
+    "rooms": [
+        {"id": "hall", "name": "Hall", "level": 0, "purpose": "living",
+         "joins": [{"to": "kitchen", "side": "w"}, {"to": "store", "side": "e"}],
+         "zones": [{"id": "step", "name": "Entry step", "by": "entrance", "size": "medium"},
+                   {"id": "sitting", "name": "Sitting area", "at": "middle", "size": "large"}],
+         "fixtures": [{"id": "rack", "name": "Shoe rack", "kind": "shelf", "in": "step"},
+                      {"id": "table", "name": "Low table", "kind": "low_table", "in": "sitting"},
+                      {"id": "alcove", "name": "Alcove", "kind": "tokonoma", "at": "n"}]},
+        {"id": "kitchen", "name": "Kitchen", "level": 0, "purpose": "kitchen",
+         "fixtures": [{"id": "stove", "name": "Stove", "kind": "stove", "at": "w"},
+                      {"id": "basin", "name": "Basin", "kind": "basin"}]},
+        {"id": "store", "name": "Store", "level": 0, "purpose": "storage",
+         "fixtures": [{"id": "shelf", "name": "Shelf", "kind": "shelf"}]},
+        {"id": "corridor", "name": "Corridor", "level": 1, "purpose": "hallway",
+         "joins": [{"to": "bed_a", "side": "e", "order": 1}, {"to": "bed_b", "side": "e", "order": 2}]},
+        {"id": "bed_a", "name": "Bedroom A", "level": 1, "purpose": "bedroom",
+         "fixtures": [{"id": "bed1", "name": "Bed", "kind": "futon"}]},
+        {"id": "bed_b", "name": "Bedroom B", "level": 1, "purpose": "bedroom",
+         "fixtures": [{"id": "bed2", "name": "Bed", "kind": "futon"}, {"id": "chest", "name": "Chest", "kind": "chest"}]},
+        {"id": "loft", "name": "Loft", "level": 2, "purpose": "attic",
+         "fixtures": [{"id": "nest", "name": "Nest", "kind": "futon", "at": "middle"}]},
+    ],
+    "stairs": [
+        {"id": "up", "name": "Stair up", "from": "hall", "to": "corridor", "enclosed": False,
+         "from_at": "n", "to_at": "s"},
+        {"id": "loft_stair", "name": "Loft stair", "from": "corridor", "to": "loft", "enclosed": True,
+         "door": "shoji", "from_at": "n"},
+    ],
+    "grounds": {
+        "areas": [{"id": "garden", "name": "Garden", "kind": "garden", "where": "around"}],
+        "ways": [{"id": "approach", "name": "Approach", "from": "entrance"}],
+        "features": [
+            {"id": "gate", "name": "Gate", "kind": "gate", "across": "approach", "end": "far"},
+            {"id": "guard", "name": "Guardian", "kind": "statue", "flank": "approach", "end": "far", "count": 2},
+            {"id": "lamp", "name": "Lantern", "kind": "lantern", "along": "approach", "count": 4},
+            {"id": "well", "name": "Well", "kind": "well", "by": "entrance"},
+            {"id": "tree", "name": "Tree", "kind": "tree", "side": "n"},
+        ],
+    },
+    "elsewhere": [{"name": "The far valley", "why": "seen from the gate"}],
+}
+
+TOWER = {
+    "name": "test light", "front": "s",
+    "entrance": {"room": "kitchen"},
+    "blocks": [{"id": "tower", "beside": {"block": "cottage", "side": "w"}}],
+    "rooms": [
+        {"id": "kitchen", "name": "Kitchen", "level": 0, "block": "cottage", "purpose": "kitchen",
+         "joins": [{"to": "bedroom", "side": "n"}, {"to": "base", "side": "w"}],
+         "fixtures": [{"id": "range", "name": "Range", "kind": "stove"}, {"id": "t", "name": "Table", "kind": "table"}]},
+        {"id": "bedroom", "name": "Bedroom", "level": 0, "block": "cottage", "purpose": "bedroom",
+         "fixtures": [{"id": "b", "name": "Bed", "kind": "bed"}]},
+        {"id": "base", "name": "Store", "level": 0, "block": "tower", "purpose": "storage"},
+        {"id": "mid", "name": "Watch room", "level": 1, "block": "tower", "purpose": "study",
+         "fixtures": [{"id": "desk", "name": "Desk", "kind": "desk"}]},
+        {"id": "top", "name": "Lamp room", "level": 2, "block": "tower", "purpose": "other",
+         "fixtures": [{"id": "lamp", "name": "Lamp", "kind": "lamp", "at": "middle"}]},
+    ],
+    "stairs": [
+        {"id": "s1", "name": "Tower stair", "from": "base", "to": "mid", "kind": "spiral"},
+        {"id": "s2", "name": "Tower stair", "from": "mid", "to": "top", "kind": "spiral"},
+    ],
+}
+
+
+def _house():
+    return solve(HOUSE)
+
+
+def test_every_room_is_one_rectangle_filling_its_outline():
+    assert check(_house()) == []
+    assert check(solve(TOWER)) == []
+
+
+def test_a_storey_under_the_roof_is_inset_in_the_outline():
+    lay = _house()
+    full, roof = lay.outlines["main"][1], lay.outlines["main"][2]
+    assert full.contains(roof) and roof.w * roof.d < full.w * full.d
+
+
+def test_stairs_line_up_and_have_floor_before_them_on_both_storeys():
+    lay = _house()
+    assert {s["id"] for s in lay.stairwells} == {"up", "loft_stair"}
+    for s in lay.stairwells:
+        well = Rect(**s["rect"])
+        for lv, rid in zip(s["levels"], (s["low"], s["high"])):
+            room = lay.floors[lv][rid][0]
+            assert room.contains(well)
+            assert room.contains(Rect(**s["landings"][str(lv)]))
+
+
+def test_an_enclosed_stair_is_walled_off_with_a_door_on_each_storey():
+    lay = _house()
+    s = next(s for s in lay.stairwells if s["id"] == "loft_stair")
+    assert s["shaft"]
+    doors = [d for d in lay.doors if d.get("stair") and d["a"] == "loft_stair"]
+    assert sorted(d["level"] for d in doors) == [1, 2]
+    assert all(d["kind"] == "shoji" for d in doors)
+    open_stair = next(s for s in lay.stairwells if s["id"] == "up")
+    assert not open_stair["shaft"]
+
+
+def test_every_join_between_rooms_has_a_doorway():
+    lay = _house()
+    pairs = {tuple(sorted((d["a"], d["b"]))) for d in lay.doors}
+    for a, b in (("hall", "kitchen"), ("hall", "store"), ("corridor", "bed_a"), ("corridor", "bed_b")):
+        assert (a, b) in pairs or (b, a) in pairs
+
+
+def test_the_entrance_opens_on_the_front_and_its_zone_holds_the_door():
+    lay = _house()
+    door = next(d for d in lay.doors if d["b"] == "entrance")
+    assert door["a"] == "hall" and door["side"] == "s"
+    step = next(z for z in lay.zones["hall"] if z["id"] == "step")
+    assert tuple(door["cell"]) in step["rect"].cells()
+    rack = next(f for f in lay.fixtures["hall"] if f["id"] == "rack")
+    assert step["rect"].contains(rack["rect"])
+
+
+def test_fixtures_never_cut_a_rooms_doorways_off_from_each_other():
+    lay = _house()
+    for lv, parts in lay.floors.items():
+        for rid, rects in parts.items():
+            cells = rects[0].cells()
+            for s in lay.stairwells:
+                if lv in s["levels"]:
+                    cells -= Rect(**s["rect"]).cells()
+                    if s["shaft"] and str(lv) in s["shaft"]:
+                        cells -= Rect(**s["shaft"][str(lv)]).cells()
+            for f in lay.fixtures.get(rid, ()):
+                cells -= f["rect"].cells()
+            own = [tuple(d["cell"]) for d in lay.doors if d["level"] == lv and d["a"] == rid]
+            own = [c for c in own if c in cells]
+            seen, stack = set(), own[:1]
+            while stack:
+                c = stack.pop()
+                if c in seen or c not in cells:
+                    continue
+                seen.add(c)
+                stack += [(c[0] + 1, c[1]), (c[0] - 1, c[1]), (c[0], c[1] + 1), (c[0], c[1] - 1)]
+            assert all(c in seen for c in own), rid
+
+
+def test_the_approach_runs_out_of_the_front_with_its_gate_at_the_far_end():
+    lay = _house()
+    house = lay.outlines["main"][0]
+    way = lay.ways["approach"]
+    assert way["side"] == "s" and min(c[1] for c in way["cells"]) >= house.y + house.d
+    gate = next(f for f in lay.features if f["id"] == "gate")
+    xs = {c[0] for c in way["cells"]}
+    assert gate["rect"].w >= len(xs)                       # spans the way
+    assert gate["rect"].y == max(c[1] for c in way["cells"])  # at its far end
+    guards = [f for f in lay.features if f["id"].startswith("guard")]
+    assert len(guards) == 2 and all(not (g["rect"].cells() & way["cells"]) for g in guards)
+
+
+def test_features_stand_by_what_they_name_and_behind_when_asked():
+    lay = _house()
+    house = lay.outlines["main"][0]
+    tree = next(f for f in lay.features if f["id"] == "tree")
+    assert tree["rect"].y + tree["rect"].d <= house.y      # behind: the front is south
+    well = next(f for f in lay.features if f["id"] == "well")
+    door = next(d for d in lay.doors if d["b"] == "entrance")
+    assert abs(well["rect"].x - door["cell"][0]) + abs(well["rect"].y - door["cell"][1]) <= 6
+    for f in lay.features:
+        assert not (f["rect"].cells() & house.cells())
+
+
+def test_a_tower_beside_a_cottage_is_its_own_narrower_block():
+    lay = solve(TOWER)
+    tower, cottage = lay.outlines["tower"][0], lay.outlines["cottage"][0]
+    assert tower.x + tower.w == cottage.x                  # beside it, to the west
+    assert tower.w * tower.d < cottage.w * cottage.d
+    assert all(lay.outlines["tower"][lv] == tower for lv in (1, 2))
+    assert {s["id"] for s in lay.stairwells} == {"s1", "s2"}
+
+
+def test_the_layout_is_the_same_every_time():
+    assert _house().as_dict() == _house().as_dict()
+
+
+def test_an_open_stair_up_and_an_enclosed_stair_down_are_two_stairs():
+    spec = {
+        "name": "two stairs", "front": "s", "entrance": {"room": "hall"},
+        "rooms": [
+            {"id": "hall", "level": 0, "purpose": "common room", "joins": [{"to": "back", "side": "n"}]},
+            {"id": "back", "level": 0, "purpose": "kitchen", "fixtures": [{"id": "r", "kind": "stove"}]},
+            {"id": "up", "level": 1, "purpose": "hallway", "joins": [{"to": "bed", "side": "s"}]},
+            {"id": "bed", "level": 1, "purpose": "bedroom", "fixtures": [{"id": "b", "kind": "bed"}]},
+            {"id": "cellar", "level": -1, "purpose": "cellar"},
+        ],
+        "stairs": [
+            {"id": "s_up", "from": "hall", "to": "up", "enclosed": False},
+            {"id": "s_down", "from": "hall", "to": "cellar", "enclosed": True, "door": "low door"},
+        ],
+    }
+    lay = solve(spec)
+    wells = {s["id"]: Rect(**s["rect"]) for s in lay.stairwells}
+    assert set(wells) == {"s_up", "s_down"}
+    assert not wells["s_up"].overlaps(wells["s_down"])
+
+
+def test_a_storey_of_one_room_never_decides_where_stairs_stand():
+    """The cellar is one room: it takes the stair wherever the floor above
+    puts it, so the floor above keeps the kitchen behind the hall."""
+    spec = {
+        "name": "cellar last", "front": "s", "entrance": {"room": "hall"},
+        "rooms": [
+            {"id": "hall", "level": 0, "purpose": "common room", "joins": [{"to": "kitchen", "side": "n"}]},
+            {"id": "kitchen", "level": 0, "purpose": "kitchen", "fixtures": [{"id": "r", "kind": "stove"}]},
+            {"id": "cellar", "level": -1, "purpose": "cellar"},
+        ],
+        "stairs": [{"id": "down", "from": "hall", "to": "cellar", "enclosed": True, "from_at": "n", "to_at": "n"}],
+    }
+    lay = solve(spec)
+    hall, kitchen = lay.floors[0]["hall"][0], lay.floors[0]["kitchen"][0]
+    assert kitchen.y + kitchen.d == hall.y                 # the kitchen is behind the hall
+    assert not [w for w in lay.warnings if "Kitchen" in w or "kitchen" in w and "side" in w]
+
+
+def test_a_storey_that_holds_less_covers_part_of_the_building():
+    spec = {
+        "name": "part storey", "front": "s", "entrance": {"room": "hall"},
+        "rooms": [
+            {"id": "hall", "level": 0, "purpose": "hall", "size": "huge", "joins": [{"to": "k", "side": "n"}],
+             "fixtures": [{"id": f"t{i}", "kind": "table"} for i in range(6)]},
+            {"id": "k", "level": 0, "purpose": "kitchen", "fixtures": [{"id": "s", "kind": "stove"}]},
+            {"id": "loft", "level": 1, "purpose": "bedroom", "fixtures": [{"id": "b", "kind": "bed"}]},
+        ],
+        "stairs": [{"id": "up", "from": "hall", "to": "loft", "enclosed": False}],
+    }
+    lay = solve(spec)
+    ground, upper = lay.outlines["main"][0], lay.outlines["main"][1]
+    assert ground.contains(upper) and upper.w * upper.d < 0.7 * ground.w * ground.d
+    assert check(lay) == [] and {s["id"] for s in lay.stairwells} == {"up"}
+
+
+def test_an_upper_storey_stands_within_the_one_below():
+    for spec in (HOUSE, TOWER):
+        lay = solve(spec)
+        for b, levels in lay.outlines.items():
+            for lv, o in levels.items():
+                if lv > 0 and lv - 1 in levels:
+                    assert levels[lv - 1].contains(o), (b, lv)

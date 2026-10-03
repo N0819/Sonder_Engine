@@ -3,12 +3,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* Layout: a drafting sheet -- building switcher, then the drawing beside its legend and notes. */
+/* Layout: a drafting sheet -- place switcher, then the drawing beside the room card, notes and the model's sort. */
 :root {
   --paper: #f2f4f1; --sheet: #fbfcfa; --ink: #1c2427; --line: #56656b; --faint: #c9d1cf;
   --cobalt: #2a55c4; --ochre: #a8731a; --warn: #b4501f; --ok: #3b7a4a;
   --living: #ead9bd; --private: #d6e2f0; --service: #d9e7d2; --circ: #e9e4f1;
-  --store: #e5dfd6; --sacred: #f0dcd8; --outdoor: #e2ebd9; --hatch: #2a55c4;
+  --store: #e5dfd6; --sacred: #f0dcd8; --grass: #e3ecd8; --gravel: #ddd8cc; --hatch: #2a55c4;
   --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
@@ -16,21 +16,21 @@
   --paper: #111618; --sheet: #171d20; --ink: #e2e8e9; --line: #9aa9ae; --faint: #2c3639;
   --cobalt: #7ea0ff; --ochre: #e0a94a; --warn: #f08a5d; --ok: #7cc48d;
   --living: #4a3f2c; --private: #2c3b4d; --service: #2f4030; --circ: #3a3448;
-  --store: #3d3831; --sacred: #4d3330; --outdoor: #26331f; --hatch: #7ea0ff; color-scheme: dark } }
+  --store: #3d3831; --sacred: #4d3330; --grass: #222e1d; --gravel: #35322c; --hatch: #7ea0ff; color-scheme: dark } }
 :root[data-theme="dark"] {
   --paper: #111618; --sheet: #171d20; --ink: #e2e8e9; --line: #9aa9ae; --faint: #2c3639;
   --cobalt: #7ea0ff; --ochre: #e0a94a; --warn: #f08a5d; --ok: #7cc48d;
   --living: #4a3f2c; --private: #2c3b4d; --service: #2f4030; --circ: #3a3448;
-  --store: #3d3831; --sacred: #4d3330; --outdoor: #26331f; --hatch: #7ea0ff; color-scheme: dark }
+  --store: #3d3831; --sacred: #4d3330; --grass: #222e1d; --gravel: #35322c; --hatch: #7ea0ff; color-scheme: dark }
 * { box-sizing: border-box }
 body { background: var(--paper); color: var(--ink); font-family: var(--display); font-size: 15px; line-height: 1.45; }
-.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 22px 48px; display: grid; gap: 18px; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 22px 48px; display: grid; gap: 18px; }
+header { display: grid; gap: 6px; }
 h1 { font-size: 30px; font-weight: 700; letter-spacing: .01em; margin: 0; text-wrap: balance; }
-.lede { color: var(--line); margin: 0; max-width: 70ch; }
+.lede { color: var(--line); margin: 0; max-width: 78ch; }
 .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-button, .seg button { font: inherit; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+button { font: inherit; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .seg button { background: transparent; color: var(--ink); border: 0; padding: 7px 14px; cursor: pointer; font-weight: 500; }
 .seg button + button { border-left: 1px solid var(--faint); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
@@ -39,13 +39,14 @@ button, .seg button { font: inherit; }
 .chip { font-family: var(--mono); font-size: 12px; border: 1px solid var(--faint); border-radius: 999px; padding: 2px 10px; color: var(--line); font-variant-numeric: tabular-nums; }
 .chip b { color: var(--ink); font-weight: 500; }
 .chip.warn { border-color: var(--warn); color: var(--warn); }
-.main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; align-items: start; }
-@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+@media (max-width: 920px) { .main { grid-template-columns: minmax(0, 1fr); } }
 .sheet { background: var(--sheet); border: 1px solid var(--faint); border-radius: 8px; padding: 14px; min-width: 0; }
 .sheet h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--line); margin: 0 0 10px; font-weight: 600; }
 .drawing { overflow-x: auto; }
 svg { display: block; max-width: 100%; height: auto; }
-.levels { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+svg text { font-family: var(--display); }
+.levels { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
 .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--line); font-size: 14px; cursor: pointer; }
 .side { display: grid; gap: 14px; min-width: 0; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 14px; }
@@ -53,30 +54,33 @@ svg { display: block; max-width: 100%; height: auto; }
 ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 14px; }
 ul.plain li { display: grid; grid-template-columns: 1fr auto; gap: 8px; border-bottom: 1px dotted var(--faint); padding-bottom: 4px; }
 .tag { font-family: var(--mono); font-size: 11.5px; color: var(--line); white-space: nowrap; }
-.tag.moved { color: var(--warn); }
-.notes li { grid-template-columns: 18px 1fr; }
-.dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; background: var(--line); }
-.dot.side { background: var(--warn); } .dot.moved { background: var(--ochre); } .dot.miss { background: var(--cobalt); }
+.notes li { grid-template-columns: 12px 1fr; }
+.dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; background: var(--line); }
+.dot.breach { background: var(--warn); } .dot.unplaced { background: var(--cobalt); } .dot.warn { background: var(--ochre); }
 details { font-size: 14px; } summary { cursor: pointer; color: var(--line); font-weight: 600; }
 pre { font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; word-break: break-word; max-height: 420px; overflow: auto; background: var(--paper); padding: 10px; border-radius: 6px; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--line); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--line); margin-top: 8px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .sw { width: 14px; height: 10px; border: 1px solid var(--line); display: inline-block; }
-.hint { color: var(--line); font-size: 13.5px; margin: 8px 0 0; }
-svg text { font-family: var(--display); }
+.hint { color: var(--line); font-size: 13.5px; margin: 8px 0 0; max-width: 90ch; }
 .room { cursor: pointer; }
-@media (prefers-reduced-motion: no-preference) { .room rect { transition: filter .15s; } }
-.room:hover rect { filter: brightness(.96); }
+.sort { overflow-x: auto; }
+.sort table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.sort th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--line); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--faint); }
+.sort td { padding: 6px 8px; border-bottom: 1px dotted var(--faint); vertical-align: top; }
+.sort td.kind { font-family: var(--mono); font-size: 12px; color: var(--line); white-space: nowrap; }
+.sort td.why { color: var(--line); font-style: italic; max-width: 60ch; }
+.sort tr.group td { padding-top: 14px; font-weight: 700; border-bottom: 1px solid var(--faint); }
 </style>
 
 <div class="wrap">
   <header>
     <h1>Layout Lab</h1>
-    <p class="lede">Each building was described to the room designer's model, which wrote only relations: what joins what and on which side, what stands against which wall. The solver sizes every room from what it holds and grows each storey room by room, standing on the storey below. Each stair stands against a wall of the room at both ends, at the same cells on both storeys. The building stands inside its grounds. One square is a pace (0.75 m).</p>
+    <p class="lede">Each place's description went to the room designer's model twice. First it sorted everything the description names: rooms, zones of a room, fixtures, open or enclosed stairs, outbuildings, open ground, ways, outdoor features, and places that are elsewhere. Then it wrote relations for what it sorted. The solver owns every coordinate. Each block gets an outline first, and every storey divides that outline into whole rectangles. Stairs stand in their rooms at the same cells on both storeys. The grounds are open ground with things standing in them. One square is a pace (0.75 m).</p>
   </header>
 
   <div class="bar">
-    <div class="seg" id="buildings" role="group" aria-label="Building"></div>
+    <div class="seg" id="places" role="group" aria-label="Place"></div>
     <div class="seg" id="views" role="group" aria-label="View"></div>
   </div>
   <div class="chips" id="chips"></div>
@@ -95,9 +99,13 @@ svg text { font-family: var(--display); }
         <h2>Solver notes</h2>
         <ul class="plain notes" id="notes"></ul>
       </section>
+      <section class="sheet" aria-label="Elsewhere">
+        <h2>Elsewhere, not laid out</h2>
+        <ul class="plain" id="elsewhere"></ul>
+      </section>
       <section class="sheet">
-        <details><summary>What the model was told</summary><pre id="brief"></pre></details>
-        <details><summary>What the model wrote (the relation spec)</summary><pre id="spec"></pre></details>
+        <details><summary>The description</summary><pre id="brief"></pre></details>
+        <details><summary>The relations the model wrote</summary><pre id="spec"></pre></details>
       </section>
     </aside>
   </div>
@@ -106,44 +114,37 @@ svg text { font-family: var(--display); }
 <script id="data" type="application/json">__DATA__</script>
 <script>
 const DATA = JSON.parse(document.getElementById("data").textContent);
-const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const state = { b: 0, view: "plan", level: null, below: true, room: null };
+const state = { p: 0, view: "plan", level: null, below: true, room: null };
 const NS = "http://www.w3.org/2000/svg";
 const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
 const h = (tag, attrs = {}, text) => { const e = document.createElement(tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
-
 const GROUP = {
   living: ["living", "hall", "common_room", "dining"],
-  private: ["bedroom", "guest_room", "study", "office", "meditation"],
-  service: ["kitchen", "washroom", "bath", "toilet", "workshop"],
+  private: ["bedroom", "guest_room", "study", "office", "meditation", "attic"],
+  service: ["kitchen", "washroom", "bath", "toilet", "latrine", "workshop"],
   circ: ["entryway", "hallway", "corridor", "stair"],
-  store: ["storage", "closet", "cellar", "basement", "attic"],
+  store: ["storage", "closet", "cellar", "basement"],
   sacred: ["shrine"],
-  outdoor: ["garden", "courtyard", "path", "yard"],
 };
 const fillFor = p => { for (const g in GROUP) if (GROUP[g].includes(p)) return `var(--${g})`; return "var(--store)"; };
 const levelName = lv => lv < 0 ? `Below ${-lv}` : lv === 0 ? "Ground" : `Floor ${lv}`;
-const pacesM = n => (n * 0.75).toFixed(1);
-
-function rec() { return DATA[state.b]; }
-function specRoom(id) {
-  const s = rec().spec;
-  for (const f of s.floors || []) for (const r of f.rooms || []) if (r.id === id) return { r, level: f.level };
-  for (const g of s.grounds || []) if (g.id === id) return { r: g, level: "grounds" };
-  return null;
-}
-function levelsOf(L) { return Object.keys(L.floors).map(Number).sort((a, b) => b - a); }
+const rec = () => DATA[state.p];
+const L = () => rec().layout;
+const levelsOf = lay => Object.keys(lay.floors).map(Number).sort((a, b) => b - a);
+const cellsOf = rects => { const s = new Set(); for (const r of rects) for (let x = r.x; x < r.x + r.w; x++) for (let y = r.y; y < r.y + r.d; y++) s.add(x + "," + y); return s; };
+const short = n => String(n || "").replace(/\s*\(.*?\)\s*/g, " ").trim();
+function specRoom(id) { return (rec().spec.rooms || []).find(r => r.id === id); }
 
 function renderSwitchers() {
-  const bs = document.getElementById("buildings"); bs.textContent = "";
+  const ps = document.getElementById("places"); ps.textContent = "";
   DATA.forEach((d, i) => {
-    const b = h("button", { type: "button", "aria-pressed": String(i === state.b) }, d.layout.name || d.title);
-    b.onclick = () => { state.b = i; state.level = null; state.room = null; if (state.view === "current" && !rec().current) state.view = "plan"; render(); };
-    bs.appendChild(b);
+    const b = h("button", { type: "button", "aria-pressed": String(i === state.p) }, d.layout.name || d.title);
+    b.onclick = () => { state.p = i; state.level = null; state.room = null; if (state.view === "current" && !rec().current) state.view = "plan"; render(); };
+    ps.appendChild(b);
   });
   const vs = document.getElementById("views"); vs.textContent = "";
-  const views = [["plan", "Plan by storey"], ["stack", "Stacked storeys"]];
-  if (rec().current) views.push(["current", "Current engine"]);
+  const views = [["plan", "Plan by storey"], ["stack", "Stacked storeys"], ["sort", "What the model sorted"]];
+  if (rec().current) views.push(["current", "The engine today"]);
   views.forEach(([k, label]) => {
     const b = h("button", { type: "button", "aria-pressed": String(k === state.view) }, label);
     b.onclick = () => { state.view = k; render(); };
@@ -152,28 +153,69 @@ function renderSwitchers() {
 }
 
 function renderChips() {
-  const L = rec().layout, c = document.getElementById("chips"); c.textContent = "";
-  const rooms = Object.values(L.floors).reduce((n, f) => n + Object.keys(f).length, 0);
-  const fx = Object.values(L.fixtures).reduce((n, f) => n + f.length, 0);
-  const side = L.warnings.filter(w => w.includes(" was asked on the ")).length;
-  const moved = L.warnings.filter(w => w.includes("could not stand")).length;
-  const items = [["storeys", Object.keys(L.floors).length], ["rooms", rooms], ["outdoors", Object.keys(L.grounds).length],
-    ["stairwells", L.stairwells.length], ["fixtures placed", fx], ["unplaced", L.unplaced.length],
-    ["joins off their side", side], ["fixtures moved", moved],
-    ["footprint", L.footprint ? `${L.footprint.w}×${L.footprint.d} (${pacesM(L.footprint.w)}×${pacesM(L.footprint.d)} m)` : "-"]];
-  items.forEach(([k, v]) => { const s = h("span", { class: "chip" + ((k === "unplaced" || k === "joins off their side") && v ? " warn" : "") }); s.append(k + " "); s.appendChild(h("b", {}, String(v))); c.appendChild(s); });
+  const lay = L(), inv = rec().inventory || {}, c = document.getElementById("chips"); c.textContent = "";
+  const rooms = Object.values(lay.floors).reduce((n, f) => n + Object.keys(f).length, 0);
+  const zones = Object.values(lay.zones || {}).reduce((n, z) => n + z.length, 0);
+  const items = [["storeys", Object.keys(lay.floors).length], ["rooms", rooms], ["zones", zones],
+    ["stairs", lay.stairwells.length], ["outdoor features", (lay.features || []).length],
+    ["elsewhere", (lay.elsewhere || []).length], ["unplaced", lay.unplaced.length],
+    ["warnings", lay.warnings.length], ["breaches", (rec().breaches || []).length]];
+  items.forEach(([k, v]) => { const s = h("span", { class: "chip" + ((k === "breaches" || k === "unplaced") && v ? " warn" : "") }); s.append(k + " "); s.appendChild(h("b", {}, String(v))); c.appendChild(s); });
 }
 
-function cellsOf(rects) { const s = new Set(); for (const r of rects) for (let x = r.x; x < r.x + r.w; x++) for (let y = r.y; y < r.y + r.d; y++) s.add(x + "," + y); return s; }
-function bbox(rectLists) {
+function frame(host, rects, pad = 1) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const rs of rectLists) for (const r of rs) { x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.d); }
-  return { x0, y0, x1, y1 };
+  for (const r of rects) { x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.d); }
+  const W = x1 - x0 + 2 * pad, D = y1 - y0 + 2 * pad;
+  const avail = Math.max(320, host.clientWidth || 800);
+  const C = Math.max(14, Math.min(36, Math.floor(avail / W)));
+  const svg = el("svg", { viewBox: `0 0 ${W * C} ${D * C}`, width: W * C, height: D * C, role: "img" }, host);
+  return { svg, C, X: x => (x - x0 + pad) * C, Y: y => (y - y0 + pad) * C };
+}
+
+function defs(svg) {
+  const d = el("defs", {}, svg);
+  const p = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, d);
+  el("rect", { width: 6, height: 6, fill: "var(--sheet)" }, p);
+  el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--hatch)", "stroke-width": 2 }, p);
+  const g = el("pattern", { id: "gravel", width: 8, height: 8, patternUnits: "userSpaceOnUse" }, d);
+  el("rect", { width: 8, height: 8, fill: "var(--gravel)" }, g);
+  el("circle", { cx: 2, cy: 2, r: .9, fill: "var(--line)", opacity: .45 }, g);
+  el("circle", { cx: 6, cy: 5, r: .7, fill: "var(--line)", opacity: .35 }, g);
+}
+
+function walls(svg, cells, X, Y, C, gaps, stroke, width, dash) {
+  const segs = [];
+  for (const key of cells) {
+    const [x, y] = key.split(",").map(Number);
+    const sides = { n: [x, y - 1, X(x), Y(y), X(x + 1), Y(y)], s: [x, y + 1, X(x), Y(y + 1), X(x + 1), Y(y + 1)],
+      w: [x - 1, y, X(x), Y(y), X(x), Y(y + 1)], e: [x + 1, y, X(x + 1), Y(y), X(x + 1), Y(y + 1)] };
+    for (const s in sides) {
+      const [nx, ny, ax, ay, bx, by] = sides[s];
+      if (cells.has(nx + "," + ny)) continue;
+      if (gaps.has(`${x},${y},${s}`) || gaps.has(`${nx},${ny},${({ n: "s", s: "n", e: "w", w: "e" })[s]}`)) continue;
+      segs.push(`M${ax} ${ay}L${bx} ${by}`);
+    }
+  }
+  el("path", { d: segs.join(""), stroke, "stroke-width": width, "stroke-linecap": "square", fill: "none", "stroke-dasharray": dash || "" }, svg);
+}
+
+function doorSeg(svg, d, X, Y, colour) {
+  const [x, y] = d.cell, s = d.side;
+  const seg = { n: [X(x), Y(y), X(x + 1), Y(y)], s: [X(x), Y(y + 1), X(x + 1), Y(y + 1)], w: [X(x), Y(y), X(x), Y(y + 1)], e: [X(x + 1), Y(y), X(x + 1), Y(y + 1)] }[s];
+  if (!seg) return;
+  const line = el("line", { x1: seg[0], y1: seg[1], x2: seg[2], y2: seg[3], stroke: colour, "stroke-width": 5, "stroke-linecap": "butt" }, svg);
+  const t = el("title", {}, line); t.textContent = `${d.kind || "door"}: ${L().names[d.a] || d.a} – ${L().names[d.b] || d.b}`;
+}
+
+function label(svg, x, y, text, size, weight, fill) {
+  const t = el("text", { x, y, "text-anchor": "middle", "font-size": size, "font-weight": weight || 600, fill: fill || "var(--ink)", "pointer-events": "none", "paint-order": "stroke", stroke: "var(--sheet)", "stroke-width": 3 }, svg);
+  t.textContent = text; return t;
 }
 
 function drawPlan() {
-  const d = rec(), L = d.layout, host = document.getElementById("drawing"); host.textContent = "";
-  const levels = levelsOf(L);
+  const lay = L(), host = document.getElementById("drawing"); host.textContent = "";
+  const levels = levelsOf(lay);
   if (state.level === null || !levels.includes(state.level)) state.level = levels.includes(0) ? 0 : levels[levels.length - 1];
   const lv = state.level;
   const lvBar = document.getElementById("levels"); lvBar.textContent = "";
@@ -183,151 +225,164 @@ function drawPlan() {
   const tg = h("label", { class: "toggle" }); const cb = h("input", { type: "checkbox", id: "belowToggle" }); cb.checked = state.below;
   cb.onchange = () => { state.below = cb.checked; render(); }; tg.append(cb, "Show the storey beneath"); lvBar.appendChild(tg);
 
-  const floor = L.floors[String(lv)] || {};
-  const grounds = lv === 0 ? L.grounds : {};
-  const beneathLv = lv > 0 ? lv - 1 : null;
-  const beneath = (state.below && beneathLv !== null) ? (L.floors[String(beneathLv)] || {}) : {};
-  const all = [...Object.values(floor), ...Object.values(grounds), ...Object.values(beneath)];
-  if (L.footprint) all.push([L.footprint]);
-  if (lv === 0 && L.site) all.push([L.site]);
-  const bb = bbox(all);
-  const W = bb.x1 - bb.x0 + 2, D = bb.y1 - bb.y0 + 2;
-  const avail = Math.max(320, host.clientWidth || 760);
-  const C = Math.max(16, Math.min(38, Math.floor(avail / W)));
-  const ox = (1 - bb.x0) * C, oy = (1 - bb.y0) * C;
-  const svg = el("svg", { viewBox: `0 0 ${W * C} ${D * C}`, width: W * C, height: D * C, role: "img", "aria-label": `${levelName(lv)} plan of ${L.name}` }, host);
-  const defs = el("defs", {}, svg);
-  const pat = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
-  el("rect", { width: 6, height: 6, fill: "var(--sheet)" }, pat);
-  el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--hatch)", "stroke-width": 2 }, pat);
-  // pace grid
-  const g0 = el("g", { opacity: .55 }, svg);
-  for (let x = 0; x <= W; x++) for (let y = 0; y <= D; y++) el("circle", { cx: x * C, cy: y * C, r: .9, fill: "var(--faint)" }, g0);
-  const X = x => ox + x * C, Y = y => oy + y * C;
-  // the storey beneath, as a ghost
-  for (const [rid, rs] of Object.entries(beneath)) for (const r of rs)
-    el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "none", stroke: "var(--line)", "stroke-dasharray": "3 4", "stroke-width": 1, opacity: .7 }, svg);
-  // the plot the building stands in, and ground nobody was named for
-  if (lv === 0 && L.site) {
-    for (const r of L.open_ground || []) el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "var(--outdoor)", opacity: .35 }, svg);
-    const f = L.site; el("rect", { x: X(f.x), y: Y(f.y), width: f.w * C, height: f.d * C, fill: "none", stroke: "var(--ok)", "stroke-width": 1.5, "stroke-dasharray": "8 4" }, svg);
+  const floor = lay.floors[String(lv)] || {};
+  const ground = lv === 0 && lay.site;
+  const extent = [];
+  for (const rs of Object.values(floor)) extent.push(...rs);
+  if (ground) extent.push(lay.site);
+  for (const b in lay.outlines) if (lay.outlines[b][String(lv)]) extent.push(lay.outlines[b][String(lv)]);
+  const { svg, C, X, Y } = frame(host, extent);
+  defs(svg);
+  if (ground) {
+    el("rect", { x: X(lay.site.x), y: Y(lay.site.y), width: lay.site.w * C, height: lay.site.d * C, fill: "var(--grass)" }, svg);
+    for (const [aid, rects] of Object.entries(lay.areas || {})) {
+      for (const r of rects) el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "var(--grass)" }, svg);
+    }
+    for (const [wid, w] of Object.entries(lay.ways || {})) {
+      for (const r of w.rects) el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "url(#gravel)" }, svg);
+    }
+    el("rect", { x: X(lay.site.x), y: Y(lay.site.y), width: lay.site.w * C, height: lay.site.d * C, fill: "none", stroke: "var(--ok)", "stroke-width": 1.5, "stroke-dasharray": "8 4" }, svg);
   }
-  const doors = L.doors.filter(dr => dr.level === lv || (lv === 0 && (dr.a in L.grounds || dr.b in L.grounds)));
-  const doorAt = new Map(); // "x,y,side" in room a -> door
-  doors.forEach(dr => doorAt.set(dr.a + "|" + dr.cell[0] + "," + dr.cell[1] + "|" + dr.side, dr));
-  const rooms = { ...floor, ...grounds };
-  for (const [rid, rs] of Object.entries(rooms)) {
-    const g = el("g", { class: "room", tabindex: 0, role: "button", "aria-label": L.names[rid] || rid }, svg);
+  // the storey beneath, as a ghost
+  const beneath = lay.floors[String(lv - 1)];
+  if (state.below && beneath && lv > 0) for (const rs of Object.values(beneath)) for (const r of rs)
+    el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "none", stroke: "var(--line)", "stroke-dasharray": "3 4", opacity: .7 }, svg);
+  const doors = lay.doors.filter(d => d.level === lv);
+  const gaps = new Set(doors.filter(d => !d.stair).map(d => `${d.cell[0]},${d.cell[1]},${d.side}`));
+  const wells = lay.stairwells.filter(s => s.levels.includes(lv));
+  for (const [rid, rs] of Object.entries(floor)) {
+    const g = el("g", { class: "room", tabindex: 0, role: "button", "aria-label": lay.names[rid] || rid }, svg);
+    g.dataset.rid = rid;
     g.onclick = () => { state.room = rid; renderRoom(); highlight(); };
     g.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); g.onclick(); } };
-    g.dataset.rid = rid;
-    const isOut = rid in grounds;
-    for (const r of rs) el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: fillFor(L.purposes[rid]), opacity: isOut ? .75 : 1 }, g);
-    // walls: every cell edge whose neighbour is not this room, broken where a door stands
-    const cells = cellsOf(rs);
-    const pathD = [];
-    for (const key of cells) {
-      const [x, y] = key.split(",").map(Number);
-      const sides = { n: [x, y - 1, X(x), Y(y), X(x + 1), Y(y)], s: [x, y + 1, X(x), Y(y + 1), X(x + 1), Y(y + 1)],
-        w: [x - 1, y, X(x), Y(y), X(x), Y(y + 1)], e: [x + 1, y, X(x + 1), Y(y), X(x + 1), Y(y + 1)] };
-      for (const s in sides) {
-        const [nx, ny, ax, ay, bx, by] = sides[s];
-        if (cells.has(nx + "," + ny)) continue;
-        const dr = doorAt.get(rid + "|" + x + "," + y + "|" + s);
-        if (dr) continue;
-        pathD.push(`M${ax} ${ay}L${bx} ${by}`);
-      }
+    for (const r of rs) el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: fillFor(lay.purposes[rid]) }, g);
+  }
+  // zones: marked floor inside their room
+  for (const [rid, zs] of Object.entries(lay.zones || {})) {
+    if (!(rid in floor)) continue;
+    for (const z of zs) {
+      const r = z.rect;
+      el("rect", { x: X(r.x) + 2, y: Y(r.y) + 2, width: r.w * C - 4, height: r.d * C - 4, fill: "var(--sheet)", "fill-opacity": .45, stroke: "var(--ochre)", "stroke-width": 1.2, "stroke-dasharray": "5 3" }, svg);
+      label(svg, X(r.x + r.w / 2), Y(r.y + r.d) - 5, short(z.name), Math.max(9, Math.min(12, C * .33)), 500, "var(--ochre)");
     }
-    el("path", { d: pathD.join(""), stroke: isOut ? "var(--line)" : "var(--ink)", "stroke-width": isOut ? 1 : 2.4, "stroke-linecap": "square", fill: "none", "stroke-dasharray": isOut ? "4 3" : "" }, g);
-  }
-  // doors
-  for (const dr of doors) {
-    const [x, y] = dr.cell, s = dr.side;
-    const seg = { n: [X(x), Y(y), X(x + 1), Y(y)], s: [X(x), Y(y + 1), X(x + 1), Y(y + 1)], w: [X(x), Y(y), X(x), Y(y + 1)], e: [X(x + 1), Y(y), X(x + 1), Y(y + 1)] }[s];
-    if (!seg) continue;
-    el("line", { x1: seg[0], y1: seg[1], x2: seg[2], y2: seg[3], stroke: "var(--cobalt)", "stroke-width": 4, "stroke-linecap": "butt" }, svg);
-    const t = el("title", {}, svg); t.textContent = `${L.names[dr.a] || dr.a} – ${L.names[dr.b] || dr.b}`;
-  }
-  // stairwells on this storey
-  for (const s of L.stairwells) {
-    if (!s.levels.includes(lv)) continue;
-    const r = s.rect;
-    const g = el("g", {}, svg);
-    el("rect", { x: X(r.x) + 1, y: Y(r.y) + 1, width: r.w * C - 2, height: r.d * C - 2, fill: "url(#hatch)", stroke: "var(--cobalt)", "stroke-width": 1.5 }, g);
-    const other = s.levels[0] === lv ? s.levels[1] : s.levels[0];
-    const up = other > lv;
-    const label = (up ? "▲ up to " : "▼ down to ") + (L.names[up ? (s.levels[1] === other ? s.to : s.from) : (s.levels[0] === other ? s.from : s.to)] || "");
-    const tx = el("text", { x: X(r.x + r.w / 2), y: Y(r.y + r.d / 2) + 4, "text-anchor": "middle", "font-size": Math.max(10, C * .36), "font-weight": 700, fill: "var(--cobalt)", "paint-order": "stroke", stroke: "var(--sheet)", "stroke-width": 3 }, g);
-    tx.textContent = up ? "▲" : "▼";
-    const tt = el("title", {}, g); tt.textContent = `${s.name || "stair"}: ${label}`;
-    const ld = (s.landings || {})[String(lv)];
-    if (ld) el("rect", { x: X(ld.x) + 2, y: Y(ld.y) + 2, width: ld.w * C - 4, height: ld.d * C - 4, fill: "none", stroke: "var(--cobalt)", "stroke-width": 1, "stroke-dasharray": "2 2" }, g);
   }
   // fixtures
-  for (const [rid, fx] of Object.entries(L.fixtures)) {
-    if (!(rid in rooms)) continue;
+  for (const [rid, fx] of Object.entries(lay.fixtures)) {
+    if (!(rid in floor)) continue;
     for (const f of fx) {
       const r = f.rect, g = el("g", {}, svg);
-      el("rect", { x: X(r.x) + 3, y: Y(r.y) + 3, width: r.w * C - 6, height: r.d * C - 6, rx: 3, fill: "var(--ochre)", "fill-opacity": .22, stroke: "var(--ochre)", "stroke-width": 1.3 }, g);
-      const t = el("title", {}, g); t.textContent = `${f.name} (${f.kind}${f.at ? ", " + f.at : ""})`;
-      if (r.w * C > 40) {
-        const tx = el("text", { x: X(r.x + r.w / 2), y: Y(r.y + r.d / 2) + 3, "text-anchor": "middle", "font-size": Math.max(8, Math.min(11, C * .3)), fill: "var(--ink)" }, g);
-        tx.textContent = f.name.length > r.w * C / 6 ? f.name.slice(0, Math.floor(r.w * C / 6)) + "…" : f.name;
-      }
+      el("rect", { x: X(r.x) + 3, y: Y(r.y) + 3, width: r.w * C - 6, height: r.d * C - 6, rx: 3, fill: "var(--ochre)", "fill-opacity": .22, stroke: "var(--ochre)", "stroke-width": 1.2 }, g);
+      el("title", {}, g).textContent = `${f.name} (${f.kind}${f.at ? ", " + f.at : ""}${f.in ? ", in " + f.in : ""})`;
+      if (r.w * C > 44) label(g, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 3, f.name.length > r.w * C / 6 ? f.name.slice(0, Math.floor(r.w * C / 6)) + "…" : f.name, Math.max(8, Math.min(11, C * .3)), 400);
     }
   }
+  // stairs
+  for (const s of wells) {
+    const r = s.rect, g = el("g", {}, svg);
+    el("rect", { x: X(r.x) + 1, y: Y(r.y) + 1, width: r.w * C - 2, height: r.d * C - 2, fill: "url(#hatch)", stroke: "var(--cobalt)", "stroke-width": 1.2 }, g);
+    const up = s.levels[1] > lv;
+    label(g, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, up ? "▲" : "▼", Math.max(10, C * .4), 700, "var(--cobalt)");
+    el("title", {}, g).textContent = `${s.name}: ${up ? "up to" : "down to"} ${lay.names[up ? s.high : s.low]}${s.enclosed ? " (behind a " + s.door + ")" : " (open)"}`;
+    const ld = s.landings[String(lv)];
+    if (ld) el("rect", { x: X(ld.x) + 2, y: Y(ld.y) + 2, width: ld.w * C - 4, height: ld.d * C - 4, fill: "none", stroke: "var(--cobalt)", "stroke-dasharray": "2 2" }, g);
+  }
+  // walls: each room's own outline, broken at its doorways
+  for (const [rid, rs] of Object.entries(floor)) walls(svg, cellsOf(rs), X, Y, C, gaps, "var(--ink)", 2.4);
+  // enclosed stairwells: walled, their door in the wall
+  for (const s of wells) if (s.shaft && s.shaft[String(lv)]) {
+    const r = s.shaft[String(lv)];
+    const own = new Set(doors.filter(d => d.stair && d.a === s.id).map(d => `${d.cell[0]},${d.cell[1]},${d.side}`));
+    walls(svg, cellsOf([r]), X, Y, C, own, "var(--ink)", 2.4);
+  }
+  for (const d of doors) doorSeg(svg, d, X, Y, d.outside ? "var(--ok)" : "var(--cobalt)");
+  // outdoor features
+  if (ground) for (const f of lay.features || []) {
+    const r = f.rect, g = el("g", {}, svg);
+    const round = ["tree", "well", "boulder", "pond", "lantern", "statue"].includes(f.kind);
+    el("rect", { x: X(r.x) + 2, y: Y(r.y) + 2, width: r.w * C - 4, height: r.d * C - 4, rx: round ? Math.min(r.w, r.d) * C / 2 - 2 : 2, fill: "var(--ochre)", "fill-opacity": .3, stroke: "var(--ochre)", "stroke-width": 1.4 }, g);
+    el("title", {}, g).textContent = `${f.name} (${f.kind})`;
+    const nm = short(f.name).replace(/_\d+$/, "");
+    if (!/_\d+$/.test(f.id) || /_1$/.test(f.id)) label(g, X(r.x + r.w / 2), Y(r.y) - 4, nm, Math.max(9, Math.min(12, C * .34)), 600, "var(--ochre)");
+  }
   // room names
-  for (const [rid, rs] of Object.entries(rooms)) {
-    // label at the cell nearest the middle of the area (gardens wrap corners)
-    const cs = [...cellsOf(rs)].map(k => k.split(",").map(Number));
-    const mx = cs.reduce((a, c) => a + c[0], 0) / cs.length, my = cs.reduce((a, c) => a + c[1], 0) / cs.length;
-    const at = cs.reduce((a, c) => (Math.hypot(c[0] - mx, c[1] - my) < Math.hypot(a[0] - mx, a[1] - my) ? c : a));
-    const name = (L.names[rid] || rid).replace(/\s*\(.*?\)\s*/, " ").trim();
-    const fs = Math.max(10, Math.min(15, C * .42));
-    const tx = el("text", { x: X(at[0] + .5), y: Y(at[1] + .5) + fs / 3, "text-anchor": "middle", "font-size": fs, "font-weight": 600, fill: "var(--ink)", "pointer-events": "none", "paint-order": "stroke", stroke: "var(--sheet)", "stroke-width": 3 }, svg);
-    tx.textContent = name;
+  for (const [rid, rs] of Object.entries(floor)) {
+    const r = rs[0];
+    label(svg, X(r.x + r.w / 2), Y(r.y) + Math.max(12, Math.min(16, C * .45)) + 4, short(lay.names[rid] || rid), Math.max(10, Math.min(15, C * .42)), 700);
+  }
+  if (ground) for (const [aid, rects] of Object.entries(lay.areas || {})) {
+    const top = rects.reduce((a, b) => (a.y < b.y ? a : b));
+    label(svg, X(top.x + top.w / 2), Y(top.y) + 14, short(lay.names[aid] || aid), 12, 600, "var(--ok)");
+  }
+  if (ground) for (const [wid, w] of Object.entries(lay.ways || {})) {
+    const r = w.rects[Math.floor(w.rects.length / 2)];
+    if (r) { const t = label(svg, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, short(lay.names[wid] || wid), 11, 600, "var(--line)"); }
   }
   document.getElementById("drawingTitle").textContent = `${levelName(lv)} plan`;
-  document.getElementById("hint").textContent = "Click a room for what the model asked of it. Hatched blue is a stairwell, the same cells on both storeys it joins; the dotted box in front of it is its landing. Dashed grey outlines are the storey beneath; the dashed green line on the ground floor is the edge of the plot.";
-  legend(true);
+  document.getElementById("hint").textContent = "Click a room for what the model asked of it. Blue gaps are doorways, green ones open outside. Hatched blue is a stairwell, the same cells on both storeys; a walled one is enclosed behind its door, and the dotted box is its landing. Dashed ochre areas are zones: a part of the room's floor, not a room. On the ground floor the dashed green line is the edge of the plot, and gravel marks the ways.";
+  legend();
   highlight();
 }
 
 function iso(x, y, lv, k, H) { return [(x - y) * k * .87, (x + y) * k * .5 - lv * H]; }
 function drawStack() {
-  const L = rec().layout, host = document.getElementById("drawing"); host.textContent = "";
+  const lay = L(), host = document.getElementById("drawing"); host.textContent = "";
   document.getElementById("levels").textContent = "";
-  const levels = levelsOf(L).slice().reverse();
-  const all = levels.map(l => Object.values(L.floors[String(l)]).flat());
-  const bb = bbox(all.length ? all : [[{ x: 0, y: 0, w: 1, d: 1 }]]);
-  const k = 14, H = 120;
-  const pts = [];
-  for (const lv of levels) for (const r of Object.values(L.floors[String(lv)]).flat())
+  const levels = levelsOf(lay).slice().reverse();
+  const k = 13, H = 110, pts = [];
+  for (const lv of levels) for (const r of Object.values(lay.floors[String(lv)]).flat())
     for (const [x, y] of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.d], [r.x + r.w, r.y + r.d]]) pts.push(iso(x, y, lv, k, H));
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-  const pad = 30, minx = Math.min(...xs) - pad - 70, miny = Math.min(...ys) - pad, w = Math.max(...xs) - minx + pad, hh = Math.max(...ys) - miny + pad;
-  const svg = el("svg", { viewBox: `${minx} ${miny} ${w} ${hh}`, width: w, height: hh, role: "img", "aria-label": `Stacked storeys of ${L.name}` }, host);
+  const minx = Math.min(...xs) - 90, miny = Math.min(...ys) - 30, w = Math.max(...xs) - minx + 30, hh = Math.max(...ys) - miny + 30;
+  const svg = el("svg", { viewBox: `${minx} ${miny} ${w} ${hh}`, width: w, height: hh, role: "img", "aria-label": "Stacked storeys" }, host);
   const poly = (r, lv) => [[r.x, r.y], [r.x + r.w, r.y], [r.x + r.w, r.y + r.d], [r.x, r.y + r.d]].map(([x, y]) => iso(x, y, lv, k, H).join(",")).join(" ");
   for (const lv of levels) {
     const g = el("g", {}, svg);
-    for (const [rid, rs] of Object.entries(L.floors[String(lv)]))
-      for (const r of rs) el("polygon", { points: poly(r, lv), fill: fillFor(L.purposes[rid]), "fill-opacity": .9, stroke: "var(--ink)", "stroke-width": 1 }, g);
-    for (const s of L.stairwells) if (s.levels.includes(lv)) el("polygon", { points: poly(s.rect, lv), fill: "var(--cobalt)", "fill-opacity": .55, stroke: "var(--cobalt)" }, g);
-    const corner = iso(bb.x0, bb.y1, lv, k, H);
-    const t = el("text", { x: corner[0] - 12, y: corner[1] + 4, "text-anchor": "end", "font-size": 13, "font-weight": 600, fill: "var(--line)" }, g);
-    t.textContent = levelName(lv);
+    let left = Infinity, at = 0;
+    for (const [rid, rs] of Object.entries(lay.floors[String(lv)])) for (const r of rs) {
+      el("polygon", { points: poly(r, lv), fill: fillFor(lay.purposes[rid]), "fill-opacity": .92, stroke: "var(--ink)", "stroke-width": 1 }, g);
+      const p = iso(r.x, r.y + r.d, lv, k, H); if (p[0] < left) { left = p[0]; at = p[1]; }
+    }
+    for (const s of lay.stairwells) if (s.levels.includes(lv)) el("polygon", { points: poly(s.rect, lv), fill: "var(--cobalt)", "fill-opacity": .55, stroke: "var(--cobalt)" }, g);
+    const t = el("text", { x: left - 12, y: at + 4, "text-anchor": "end", "font-size": 13, "font-weight": 600, fill: "var(--line)" }, g); t.textContent = levelName(lv);
   }
-  // shafts: each stairwell's corners joined between the storeys it links
-  for (const s of L.stairwells) {
+  for (const s of lay.stairwells) {
     const [a, b] = s.levels, r = s.rect;
     for (const [x, y] of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.d], [r.x + r.w, r.y + r.d]]) {
       const p = iso(x, y, a, k, H), q = iso(x, y, b, k, H);
-      el("line", { x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: "var(--cobalt)", "stroke-width": 1.4, "stroke-dasharray": "4 3" }, svg);
+      el("line", { x1: p[0], y1: p[1], x2: q[0], y2: q[1], stroke: "var(--cobalt)", "stroke-width": 1.3, "stroke-dasharray": "4 3" }, svg);
     }
   }
   document.getElementById("drawingTitle").textContent = "Stacked storeys";
-  document.getElementById("hint").textContent = "Every storey cut from one footprint. Blue blocks are stairwells; the dashed lines show a stair climbing through the same cells from one storey to the next.";
-  legend(false);
+  document.getElementById("hint").textContent = "Every storey of a block divides the same outline; a storey under the roof is narrower. Blue blocks are stairwells, and the dashed lines show each stair climbing through the same cells.";
+  document.getElementById("legend").textContent = "";
+}
+
+function drawSort() {
+  const inv = rec().inventory || {}, host = document.getElementById("drawing"); host.textContent = "";
+  document.getElementById("levels").textContent = "";
+  const wrap = h("div", { class: "sort" }); const t = h("table"); wrap.appendChild(t);
+  const head = h("tr"); ["", "Name", "Where", "The words it rests on"].forEach(x => head.appendChild(h("th", {}, x))); t.appendChild(head);
+  const groups = [["rooms", "Rooms", r => (r.level != null ? levelName(r.level) : "")], ["zones", "Zones of a room", z => z.room],
+    ["fixtures", "Fixtures", f => f.in], ["stairs", "Stairs", s => `${s.from} → ${s.to}${s.enclosed ? ", behind a " + (s.door || "door") : ", open"}`],
+    ["outbuildings", "Outbuildings", o => (o.rooms || []).join(", ")], ["areas", "Open ground", () => ""], ["ways", "Ways", () => ""],
+    ["features", "Outdoor features", () => ""], ["elsewhere", "Elsewhere", e => e.via ? "via " + e.via : ""]];
+  for (const [key, title, where] of groups) {
+    const items = inv[key] || [];
+    if (!items.length) continue;
+    const g = h("tr", { class: "group" }); const c = h("td", { colspan: 4 }, `${title} (${items.length})`); g.appendChild(c); t.appendChild(g);
+    for (const it of items) {
+      const tr = h("tr");
+      tr.appendChild(h("td", { class: "kind" }, it.id || ""));
+      tr.appendChild(h("td", {}, it.name || ""));
+      tr.appendChild(h("td", { class: "kind" }, where(it) || ""));
+      tr.appendChild(h("td", { class: "why" }, it.why || ""));
+      t.appendChild(tr);
+    }
+  }
+  host.appendChild(wrap);
+  document.getElementById("drawingTitle").textContent = "What the model sorted, before any layout";
+  document.getElementById("hint").textContent = "The first call only decides what each named thing is. Zones stay inside their room, outdoor features stand in the open, and places elsewhere are listed, not laid out.";
+  document.getElementById("legend").textContent = "";
 }
 
 function drawCurrent() {
@@ -343,90 +398,75 @@ function drawCurrent() {
     cursor += (x1 - x0) + gap;
   }
   const W = cursor + 1, D = Math.max(...placed.map(p => p.d)) + 3;
-  const svg = el("svg", { viewBox: `0 0 ${W * C} ${D * C}`, width: W * C, height: D * C, role: "img", "aria-label": "Current engine layout" }, host);
+  const svg = el("svg", { viewBox: `0 0 ${W * C} ${D * C}`, width: W * C, height: D * C, role: "img", "aria-label": "The engine today" }, host);
   for (const p of placed) for (const r of p.comp.rooms) {
     const g = el("g", {}, svg);
     const lvl = cur.levels[r.id];
-    for (const [cx, cy] of r.cells) el("rect", { x: (p.dx + r.offset[0] + cx) * C + C, y: (p.dy + r.offset[1] + cy) * C + 2 * C, width: C, height: C, fill: fillFor((d.layout.purposes || {})[r.id] || "other"), stroke: "var(--sheet)", "stroke-width": .5 }, g);
+    for (const [cx, cy] of r.cells) el("rect", { x: (p.dx + r.offset[0] + cx) * C + C, y: (p.dy + r.offset[1] + cy) * C + 2 * C, width: C, height: C, fill: "var(--store)", stroke: "var(--sheet)", "stroke-width": .5 }, g);
     const an = cur.anchors[r.id] || {};
     for (const a of Object.values(an)) for (const [cx, cy] of a.cells || []) el("rect", { x: (p.dx + r.offset[0] + cx) * C + C + 2, y: (p.dy + r.offset[1] + cy) * C + 2 * C + 2, width: C - 4, height: C - 4, rx: 2, fill: "var(--ochre)", "fill-opacity": .3, stroke: "var(--ochre)" }, g);
     for (const ex of r.exits || []) for (const [cx, cy] of ex.cells || []) el("rect", { x: (p.dx + r.offset[0] + cx) * C + C + 4, y: (p.dy + r.offset[1] + cy) * C + 2 * C + 4, width: C - 8, height: C - 8, fill: "var(--cobalt)" }, g);
     const cx = r.cells.reduce((s, c) => s + c[0], 0) / r.cells.length, cy = Math.min(...r.cells.map(c => c[1]));
-    const t = el("text", { x: (p.dx + r.offset[0] + cx) * C + C * 1.5, y: (p.dy + r.offset[1] + cy) * C + 2 * C + 12, "text-anchor": "middle", "font-size": 11, "font-weight": 600, fill: "var(--ink)", "paint-order": "stroke", stroke: "var(--sheet)", "stroke-width": 3 }, g);
-    t.textContent = `${r.name.replace(/^The /, "")} [${lvl === undefined || lvl === null ? "?" : levelName(lvl)}]`;
-    if (r.collided) el("rect", { x: (p.dx + r.offset[0]) * C + C, y: (p.dy + r.offset[1]) * C + 2 * C, width: r.w * C, height: r.d * C, fill: "none", stroke: "var(--warn)", "stroke-width": 2 }, g);
+    label(g, (p.dx + r.offset[0] + cx) * C + C * 1.5, (p.dy + r.offset[1] + cy) * C + 2 * C + 12, `${r.name.replace(/^The /, "")} [${lvl === undefined || lvl === null ? "?" : levelName(lvl)}]`, 11, 600);
   }
-  document.getElementById("drawingTitle").textContent = "The shrine as the current engine holds it (chat 163)";
-  document.getElementById("hint").textContent = "Drawn by the World Browser's own map: every room placed by its doorways' compass bearings, all storeys on one plane, in separate islands wherever the bearings do not connect. Small blue squares are doorway cells; ochre squares are fixtures. The level each room claims is in brackets.";
-  legend(false);
+  document.getElementById("drawingTitle").textContent = "The shrine as the engine holds it today (chat 163)";
+  document.getElementById("hint").textContent = "Drawn by the World Browser's own map: every room placed by its doorways' compass bearings, all storeys on one plane, in separate islands wherever the bearings do not connect.";
+  document.getElementById("legend").textContent = "";
 }
 
-function legend(plan) {
+function legend() {
   const lg = document.getElementById("legend"); lg.textContent = "";
-  const items = [["living", "Living"], ["private", "Private"], ["service", "Service"], ["circ", "Circulation"], ["store", "Storage"], ["sacred", "Sacred"], ["outdoor", "Outdoors"]];
-  items.forEach(([k, t]) => { const s = h("span"); const sw = h("i", { class: "sw" }); sw.style.background = `var(--${k})`; s.append(sw, t); lg.appendChild(s); });
-  const s1 = h("span"); const sw1 = h("i", { class: "sw" }); sw1.style.background = "var(--cobalt)"; s1.append(sw1, plan ? "Doorway / stairwell" : "Doorway"); lg.appendChild(s1);
-  const s2 = h("span"); const sw2 = h("i", { class: "sw" }); sw2.style.background = "var(--ochre)"; sw2.style.opacity = ".5"; s2.append(sw2, "Fixture"); lg.appendChild(s2);
+  [["living", "Living"], ["private", "Private"], ["service", "Service"], ["circ", "Circulation"], ["store", "Storage"], ["sacred", "Sacred"], ["grass", "Open ground"], ["gravel", "Way"]].forEach(([k, t]) => {
+    const s = h("span"); const sw = h("i", { class: "sw" }); sw.style.background = `var(--${k})`; s.append(sw, t); lg.appendChild(s);
+  });
 }
 
 function highlight() {
-  document.querySelectorAll(".room").forEach(g => { g.querySelectorAll("rect").forEach(r => r.setAttribute("stroke", g.dataset.rid === state.room ? "var(--cobalt)" : "none")); g.querySelectorAll("rect").forEach(r => r.setAttribute("stroke-width", g.dataset.rid === state.room ? 3 : 0)); });
+  document.querySelectorAll(".room").forEach(g => g.querySelectorAll("rect").forEach(r => { r.setAttribute("stroke", g.dataset.rid === state.room ? "var(--cobalt)" : "none"); r.setAttribute("stroke-width", g.dataset.rid === state.room ? 4 : 0); }));
 }
 
 function renderRoom() {
-  const p = document.getElementById("roomPanel"), L = rec().layout; p.textContent = "";
+  const p = document.getElementById("roomPanel"), lay = L(); p.textContent = "";
   p.appendChild(h("h2", {}, "Room"));
   if (!state.room) { p.appendChild(h("p", { class: "hint" }, state.view === "plan" ? "Select a room on the plan." : "Switch to the plan to select a room.")); return; }
-  const found = specRoom(state.room); const rs = (L.floors[String(state.level)] || {})[state.room] || L.grounds[state.room] || [];
-  const cells = cellsOf(rs).size;
-  p.appendChild(h("div", { style: "font-size:20px;font-weight:700;margin-bottom:6px" }, L.names[state.room] || state.room));
+  const r = specRoom(state.room) || {};
+  const rect = (lay.floors[String(state.level)] || {})[state.room][0];
+  p.appendChild(h("div", { style: "font-size:20px;font-weight:700;margin-bottom:6px" }, lay.names[state.room] || state.room));
   const dl = h("dl", { class: "kv" });
   const add = (k, v) => { dl.appendChild(h("dt", {}, k)); dl.appendChild(h("dd", {}, v)); };
-  add("purpose", (found && found.r.purpose) || L.purposes[state.room]);
-  if (L.blocks && L.blocks[state.room] && L.blocks[state.room] !== "main") add("block", L.blocks[state.room]);
-  add("floor", `${cells} sq paces · ${(cells * .5625).toFixed(1)} m²`);
-  if (found && found.r.size) add("asked size", found.r.size);
-  if (found && found.r.smaller_than) add("smaller than", L.names[found.r.smaller_than] || found.r.smaller_than);
+  add("purpose", r.purpose || lay.purposes[state.room]);
+  add("floor", `${rect.w}×${rect.d} paces · ${(rect.w * rect.d * .5625).toFixed(1)} m²`);
+  if (lay.blocks && lay.blocks[state.room] && lay.blocks[state.room] !== "main") add("block", lay.blocks[state.room]);
   p.appendChild(dl);
-  const joins = (found && found.r.joins) || [];
-  if (joins.length) {
-    p.appendChild(h("h2", { style: "margin-top:12px" }, "Joins asked"));
+  const list = (title, items, fmt) => {
+    if (!items.length) return;
+    p.appendChild(h("h2", { style: "margin-top:12px" }, title));
     const ul = h("ul", { class: "plain" });
-    joins.forEach(j => { const li = h("li"); li.append(h("span", {}, L.names[j.to] || j.to + " (no such room)")); li.append(h("span", { class: "tag" }, `${j.side || "-"}${j.order ? " · #" + j.order : ""}`)); ul.appendChild(li); });
+    items.forEach(it => { const li = h("li"); const [a, b] = fmt(it); li.append(h("span", {}, a)); li.append(h("span", { class: "tag" }, b)); ul.appendChild(li); });
     p.appendChild(ul);
-  }
-  const fx = (found && found.r.fixtures) || [];
-  if (fx.length) {
-    p.appendChild(h("h2", { style: "margin-top:12px" }, "Fixtures"));
-    const ul = h("ul", { class: "plain" });
-    const placed = new Map((L.fixtures[state.room] || []).map(f => [f.id, f]));
-    const movedNames = L.warnings.filter(w => w.startsWith((L.names[state.room] || state.room) + ":")).join(" ");
-    fx.forEach(f => {
-      const li = h("li"); li.append(h("span", {}, f.name || f.id));
-      const moved = movedNames.includes((f.name || f.id) + " could not");
-      const rel = [f.at, f.near && "near " + f.near, f.beside && "beside " + f.beside, f.facing && "facing " + f.facing].filter(Boolean).join(", ");
-      li.append(h("span", { class: "tag" + (moved ? " moved" : "") }, (placed.has(f.id) ? "" : "unplaced · ") + (moved ? "moved · " : "") + (rel || f.kind)));
-      ul.appendChild(li);
-    });
-    p.appendChild(ul);
-  }
+  };
+  list("Joins asked", r.joins || [], j => [lay.names[j.to] || j.to, `${j.side || "-"}${j.order ? " · #" + j.order : ""}${j.kind ? " · " + j.kind : ""}`]);
+  list("Zones", r.zones || [], z => [z.name || z.id, z.by ? "by " + z.by : (z.at || "")]);
+  const placed = new Set((lay.fixtures[state.room] || []).map(f => f.id));
+  list("Fixtures", r.fixtures || [], f => [f.name || f.id, (placed.has(f.id) ? "" : "unplaced · ") + [f.in && "in " + f.in, f.at, f.near && "near " + f.near].filter(Boolean).join(", ")]);
 }
 
 function renderNotes() {
-  const L = rec().layout, ul = document.getElementById("notes"); ul.textContent = "";
-  const all = [...L.warnings, ...L.unplaced.map(u => `${L.names[u.room] || u.room}: ${u.fixture} not placed (${u.why})`)];
-  if (!all.length) { ul.appendChild(h("li", {}, "Every join and fixture was placed as asked.")); return; }
-  all.forEach(w => {
-    const kind = w.includes(" was asked on the ") ? "side" : w.includes("could not stand") ? "moved" : "miss";
-    const li = h("li"); li.append(h("i", { class: "dot " + kind }), h("span", {}, w)); ul.appendChild(li);
-  });
+  const lay = L(), ul = document.getElementById("notes"); ul.textContent = "";
+  const all = [...(rec().breaches || []).map(b => ["breach", b]), ...lay.unplaced.map(u => ["unplaced", `${lay.names[u.room] || u.room}: ${u.fixture} not placed (${u.why})`]), ...lay.warnings.map(w => ["warn", w])];
+  if (!all.length) ul.appendChild(h("li", {}, "Everything was placed as asked."));
+  all.forEach(([k, w]) => { const li = h("li"); li.append(h("i", { class: "dot " + k }), h("span", {}, w)); ul.appendChild(li); });
+  const el2 = document.getElementById("elsewhere"); el2.textContent = "";
+  const es = lay.elsewhere || [];
+  if (!es.length) el2.appendChild(h("li", {}, "Nothing."));
+  es.forEach(e => { const li = h("li"); li.append(h("span", {}, e.name)); li.append(h("span", { class: "tag" }, e.via ? "via " + e.via : "")); el2.appendChild(li); });
   document.getElementById("brief").textContent = rec().brief;
   document.getElementById("spec").textContent = JSON.stringify(rec().spec, null, 1);
 }
 
 function render() {
   renderSwitchers(); renderChips();
-  if (state.view === "plan") drawPlan(); else if (state.view === "stack") drawStack(); else drawCurrent();
+  if (state.view === "plan") drawPlan(); else if (state.view === "stack") drawStack(); else if (state.view === "sort") drawSort(); else drawCurrent();
   renderRoom(); renderNotes();
 }
 render();

@@ -1,23 +1,28 @@
-"""Layout lab: a building's description -> the room designer's model writes
-RELATIONS -> `world.layout_solver` places them -> JSON for the browse page.
+"""Layout lab: one place's description -> the room designer's model SORTS what
+it names, then writes RELATIONS -> `world.layout_solver` places them -> JSON
+for the browse page (`render.py`).
 
-PROTOTYPE (branch layout-solver-test, 2026-10-03). The owner: "Do a test
-branch and return to me an artifact to browse the layouts it outputs."
+PROTOTYPE (branch layout-solver-test, 2026-10-03). Two calls, because the
+owner read the first two labs' outdoors as "throwing everything in the
+lorebook together without logic" and the Genkan as a room when the lore
+makes it a zone of the Main Hall: the model must first decide what each
+named thing IS -- a room, a zone of a room, a fixture, an open or enclosed
+stair, an outbuilding, open ground, a way, an outdoor feature, or a place
+elsewhere -- before it says where anything goes.
 
     ENGINE_DB=<scratch db, outside the tree> python tools/layout_lab/run.py setup
     ENGINE_DB=... python tools/layout_lab/run.py run [scenario ...]
-    python tools/layout_lab/render.py   # the browse page
+    python tools/layout_lab/run.py resolve      # re-solve saved answers, no model call
 
 Reads the owner's engine.db READ-ONLY for providers, settings, the shrine's
-lorebook and chat 163's current engine layout; the model is the room
-designer's own role (`director_rooms`).
+own lore entries and chat 163's current engine layout; the model is the room
+designer's role (`director_rooms`).
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 import sqlite3
 import sys
 import time
@@ -29,55 +34,101 @@ sys.path.insert(0, str(ROOT))
 OUT = Path(os.environ.get("LAYOUT_LAB_OUT", "/tmp/layout_lab"))
 SRC = ROOT / "engine.db"
 
-SYSTEM = """You lay out a building as RELATIONS. You never write a coordinate, a measurement or a size in paces: an engine computes every position, every room's size and every stair from what you say. Your job is to say WHAT is there and HOW it is arranged, faithfully to the description, and plausibly where the description is silent.
+SORT = """You read the description of ONE place and sort every thing it names by what KIND of thing it is. You do not lay anything out yet.
+
+The kinds:
+- room: a space with walls of its own, entered through a doorway or an opening.
+- zone: a part of a room with no walls of its own -- a stretch of its floor where something happens or where a rule begins. It belongs to the room it is in.
+- fixture: a thing that stands in a room or a zone -- furniture, an alcove, a closet in a wall, a stove, an altar.
+- stair: a way between storeys. It is OPEN when it rises in the room itself, ENCLOSED when it lies behind a door in a stairwell of its own; take which from the words.
+- outbuilding: a separate structure on the grounds, with a room or rooms of its own.
+- area: open ground the building stands in or beside -- a garden, a yard, a courtyard.
+- way: a path, approach or drive across the grounds.
+- feature: a thing standing in the open -- a gate, a tree, a well, a lantern, a statue.
+- elsewhere: a place the description mentions that is not part of this building or its grounds -- reached through it, seen from it, or simply somewhere else. Say what leads there.
+
+DECIDE BY WALLS, NEVER BY NAME OR HEADING. A room has walls or a door of its own between it and the next space; a zone has none -- however it is headed, and whatever the place would be called elsewhere. When the description calls something a zone, an area or a part of a room, it is telling you it has no walls of its own: it is a zone of the room it lies in. Every room and zone answers "walls": what the description gives it (a door, a wall, a threshold it is entered through) or "none".
+
+Every entry quotes the words it rests on ("why"). A thing named twice is one thing. Storeys are counted from the one the entrance is on (level 0); a storey above is 1, below is -1.
 
 Answer with one JSON object:
-{"name": "<the building>",
- "floors": [{"level": <0 the ground floor, 1 the floor above, -1 below ground>, "rooms": [ROOM, ...]}, ...],
- "grounds": [OUTDOOR, ...],
- "stairs": [{"id": "<id>", "from": "<room id>", "to": "<room id on the storey directly above or below>", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "straight|spiral|ladder (only when the description says, or the stair plainly must be: a tower's stair turns)", "name": "<what the stair is>"}]}
+{"name": "<the place>",
+ "storeys": [{"level": 0, "name": "<what the description calls it>", "smaller": true when the description says it is smaller}],
+ "rooms": [{"id": "<snake_case>", "name": "...", "level": 0, "walls": "...", "why": "..."}],
+ "zones": [{"id", "name", "room": "<room id>", "walls": "none", "why"}],
+ "fixtures": [{"id", "name", "in": "<room, zone, outbuilding room or feature id>", "why"}],
+ "stairs": [{"id", "name", "from": "<room id>", "to": "<room id>", "enclosed": true|false, "door": "<the door, when enclosed>", "why"}],
+ "outbuildings": [{"id", "name", "rooms": ["<room id>", ...], "why"}],
+ "areas": [{"id", "name", "why"}],
+ "ways": [{"id", "name", "why"}],
+ "features": [{"id", "name", "why"}],
+ "elsewhere": [{"name", "via": "<the door, stair or way that leads there, if any>", "why"}]}
+Rooms of an outbuilding go in "rooms" too, at level 0."""
 
-ROOM = {"id": "<snake_case>", "name": "<its name>", "purpose": "<what it is for, one or two words: entryway, hallway, bedroom, guest room, kitchen, washroom, storage, closet, living, hall, study, shrine, meditation, attic, cellar, basement, workshop, common room ...>",
-        "size": "tiny|small|medium|large|huge (optional: only when the description says how big it feels)",
-        "block": "<the part of the building it is in, when the building has parts that rise separately: tower, cottage, wing, keep ...; leave out for a building that is one mass>",
-        "over": "<room id on the storey below>" (on an upper storey: the room it stands over, when the description says or the building's shape makes it plain),
-        "joins": [{"to": "<room id>", "side": "n|e|s|w", "order": <1, 2, ... when several share one wall, counted from its north or west end>, "kind": "door|sliding|opening|gate"}],
-        "fixtures": [FIXTURE, ...]}
+RELATE = """You lay out ONE place as RELATIONS. You never write a coordinate, a measurement or a size in paces: an engine computes every position, every room's size, every stair and every distance from what you say. You are given the description and an inventory that has already sorted what the description names; keep every id from the inventory and the kind it was sorted into.
 
-OUTDOOR = a ROOM whose purpose is one of: garden, yard, courtyard (open ground that wraps around the building), path (a way from a door out to the edge of the grounds), or a word for a small outdoor place (well, tree, shrine, pond, gate...); add "around": true to the ONE open area the building stands in.
+Answer with one JSON object:
+{"name": "...",
+ "front": "n|e|s|w -- the side the entrance faces",
+ "entrance": {"room": "<the room the entrance opens into>", "zone": "<the zone at the door, if the description puts one there>", "kind": "<the door>"},
+ "storeys": [{"level": <n>, "smaller": true}]  (only the storeys the inventory marks smaller),
+ "blocks": [{"id": "<snake_case>", "apart": true|false, "beside": {"block": "<block id, or main>", "side": "n|e|s|w"}}],
+ "rooms": [ROOM, ...],
+ "stairs": [{"id", "name", "from", "to", "enclosed": true|false, "door": "<when enclosed>", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "straight|spiral|ladder (only when the description says, or the stair plainly must be)"}],
+ "grounds": {"areas": [{"id", "name", "kind": "garden|yard|courtyard|field", "where": "around | n|e|s|w"}],
+             "ways": [{"id", "name", "from": "entrance | <way id>", "to": "<feature id, for a way that leads to one>"}],
+             "features": [FEATURE, ...]},
+ "elsewhere": [{"name", "via", "why"}]}
 
-FIXTURE = {"id": "<snake_case>", "name": "<what it is called here>", "kind": "<one of: bed futon nest table low_table chabudai desk writing_desk chair cushion bench sofa shelf bookshelf cabinet chest trunk wardrobe stove hearth counter sink basin bath tub toilet altar alcove tokonoma screen lantern statue well tree gate workbench barrel crate rack window_seat fireplace bar piano pillar rug -- or another word, with size>",
-           "size": "tiny|small|medium|large|huge (only for a kind not in that list)",
-           "at": "n|e|s|w (against that wall) | middle | corner_ne|corner_se|corner_sw|corner_nw",
-           "near": "<fixture id>", "beside": "<fixture id>", "facing": "<fixture id>"}
+ROOM = {"id", "name", "level", "block": "<only for a room not in the main building>", "purpose": "<one or two words: entryway, hallway, bedroom, guest room, kitchen, washroom, latrine, storage, closet, living, hall, study, shrine, meditation, attic, cellar, basement, workshop, common room ...>",
+        "joins": [{"to": "<room id, or the id of an area or way it opens onto>", "side": "n|e|s|w", "order": <1, 2 ... when several share one wall, counted from its north or west end>, "kind": "<the door>"}],
+        "zones": [{"id", "name", "at": "n|e|s|w|middle|corner_ne|corner_se|corner_sw|corner_nw", "by": "entrance (for the zone at the entrance door)", "size": "small|medium|large"}],
+        "fixtures": [{"id", "name", "kind": "<one of: bed futon nest table low_table chabudai desk writing_desk chair cushion bench sofa shelf bookshelf cabinet closet chest trunk wardrobe stove hearth counter sink basin bath tub toilet altar alcove tokonoma screen lantern statue well tree gate workbench barrel crate rack window_seat fireplace bar piano pillar rug boulder pond lamp -- or another word, with size>", "size": "tiny|small|medium|large|huge (only for another word)", "at": "<a wall, middle or a corner>", "in": "<zone id, when it stands in a zone>", "count": <how many, when the description gives several alike>, "near"|"beside"|"facing": "<fixture id>"}]}
+
+FEATURE = {"id", "name", "kind": "<a kind from the fixture list, or another word with size>", "size", "count": <how many, when there are several alike>,
+           and exactly ONE placement:
+           "across": "<way id>" (spans the way: a gate), or
+           "flank": "<way id>" (one on each side of the way), or
+           "along": "<way id>" (beside the way along its length),
+           each with "end": "far|near" -- the far end is the end away from the building; or
+           "by": "<id of a room, feature or way, or entrance>", or
+           "side": "n|e|s|w" (on that side of the building)}
 
 How to read the fields:
-- `side` on a join is where the OTHER room lies from THIS one: {"to": "kitchen", "side": "e"} means the kitchen is through this room's east wall. Write each join once, on either room.
-- Pick one compass orientation for the whole building and keep it on every storey: decide which way the entrance faces and derive front, back, left and right from it. North on the first floor is north on the attic.
-- A storey is every room on that level. An upper storey stands on the one below and may be smaller. A building whose parts rise separately -- a tower beside a cottage, a two-storey wing off a one-storey hall -- names each part as a `block`: a room stands on its own block's rooms below, never on another block's.
-- A stair is not a room (unless the description makes a room of it, a stair hall). It stands inside the room at each end: `from_at` is the wall of the FROM room it stands against, `to_at` the wall of the TO room where it arrives. Both rooms are the same building seen on two storeys, so the two walls must agree with each other: a stair against the back wall below arrives at the back of the room above.
-- A fixture is a THING in the room that a body could stand at, use or hide behind. A stretch of floor, a view, a smell or a quality of light is not a fixture. Doors and windows are not fixtures: a door is a join; leave windows out.
-- Say only what the description gives or a real building of this kind would plainly have. Keep every room the description names, on the storey the description puts it.
-"""
+- Pick ONE compass for the whole place and keep it on every storey. Decide the front first; a person entering faces the opposite way, so with the front on the south, their left is west and their right is east; "the back" or "behind" is north.
+- `side` on a join is where the OTHER room lies from THIS one: {"to": "kitchen", "side": "e"} means the kitchen is through this room's east wall. Write each join once.
+- An outbuilding is a block of its own, "apart": true, beside the main building on the side the description gives (or a plausible one); its rooms join the area or way they open onto.
+- A building whose parts rise separately -- a tower beside a cottage -- names each part a block, "apart": false.
+- A stair stands inside the room at each end: `from_at` is the wall of the FROM room it stands against, `to_at` the wall of the TO room where it arrives; the two must agree, since both rooms are the same building seen on two storeys.
+- The approach to the entrance is a way "from": "entrance". A gate on it is "across" it at its far end; things that flank it or line it say so; a thing the way leads to is its "to".
+- Say only what the description gives, or what a real place of this kind plainly has. Nothing from "elsewhere" is laid out."""
 
 SCENARIOS = {
     "inn": ("The Moorland Coaching Inn",
             "A two-storey coaching inn on a moorland road, entered from the road on the south. "
             "Ground floor: a common room with a long bar along its back wall, a big stone hearth on "
             "the west wall and tables; behind it the kitchen with a range and a scullery off the kitchen; "
-            "a narrow stair at the back of the common room leads up, and a cellar stair leads down to a "
-            "barrel cellar. Upstairs a corridor runs the length of the building with five guest rooms off "
-            "it -- three on the front, two on the back -- and the landlord's room at the east end. A stable "
-            "yard lies behind the inn, reached through the kitchen."),
+            "a narrow stair at the back of the common room leads up, and behind a low door a cellar stair "
+            "leads down to a barrel cellar. Upstairs a corridor runs the length of the building with five "
+            "guest rooms off it -- three on the front, two on the back -- and the landlord's room at the east "
+            "end. A stable yard lies behind the inn, reached through the kitchen; across the yard stands "
+            "the stable, a long low building with stalls for six horses. The road runs on west to the "
+            "market town of Hallow, a day's ride."),
     "lighthouse": ("Greyrock Light",
                    "A stone lighthouse on a headland with the keeper's cottage built against its foot on "
                    "the landward (east) side. The cottage is one storey: a kitchen with a range and table, "
                    "and a small bedroom. The tower's ground floor is a store room, entered from the "
-                   "cottage kitchen. Above it, reached by a stair that climbs the north wall, the oil "
+                   "cottage kitchen. Above it, reached by a stair that turns up inside the tower wall, the oil "
                    "store; above that the watch room with a desk, a chair and a logbook shelf; and at the "
                    "very top the lamp room around the great lamp. A path runs from the cottage door down "
-                   "to the landing."),
+                   "to the landing stage, where the supply boat ties up."),
 }
+
+#: The shrine's OWN lore entries, in reading order: the place, its three
+#: floors and basement, its grounds, and the cavern beneath it (kept so the
+#: sort has an "elsewhere" to find). The entries about the realm beyond the
+#: seal are not this place and are left out.
+SHRINE_ENTRIES = (231, 230, 229, 228, 227, 232, 233, 225)
 
 
 def _src():
@@ -104,21 +155,12 @@ def setup():
 
 def shrine_brief():
     src = _src()
-    rows = src.execute("select title, content from lore_entries where lorebook_id=17").fetchall()
-    keep, seen = [], set()
-    for r in rows:
-        text = str(r["content"] or "")
-        key = text[:120]
-        if key in seen or len(text) < 200:
-            continue
-        if not re.search(r"floor|room|hall|garden|basement|genkan|kitchen|stair|torii|path|well|roost|shrine",
-                         text, re.I):
-            continue
-        if re.search(r"First Contact|Doctor", str(r["title"] or "") + text[:200]):
-            continue
-        seen.add(key)
-        keep.append(f"## {r['title'] or ''}\n{text}")
-    return "The Shrine of the Golden Fox", "\n\n".join(keep)[:24000]
+    parts = []
+    for i in SHRINE_ENTRIES:
+        row = src.execute("select content from lore_entries where id=?", (i,)).fetchone()
+        if row:
+            parts.append(str(row["content"]).strip())
+    return "The Shrine of the Golden Fox", "\n\n".join(parts)
 
 
 def current_engine_layout():
@@ -143,9 +185,7 @@ def current_engine_layout():
             anchors[rid] = {}
     rooms = scene.get("rooms") or {}
     return {"map": view, "anchors": anchors,
-            "levels": {rid: (room or {}).get("level") for rid, room in rooms.items()},
-            "extents": {rid: (room or {}).get("extent") for rid, room in rooms.items()},
-            "sizes": {rid: (room or {}).get("size") for rid, room in rooms.items()}}
+            "levels": {rid: (room or {}).get("level") for rid, room in rooms.items()}}
 
 
 def _parse(text):
@@ -154,54 +194,71 @@ def _parse(text):
     return json.loads(text[start:end + 1])
 
 
-def run(names):
+def _ask(system, user, tries=3):
+    """One JSON answer; a malformed or silent one is asked again."""
     from llm.providers import chat_complete
-    from world.layout_solver import solve
+    last = None
+    for _k in range(tries):
+        try:
+            return _parse(chat_complete("director_rooms", system, user, max_tokens=16000))
+        except Exception as exc:
+            last = exc
+            print("  retrying:", str(exc)[:120])
+    raise last
+
+
+def run(names):
+    from world.layout_solver import check, solve
     OUT.mkdir(parents=True, exist_ok=True)
     briefs = dict(SCENARIOS)
     briefs["shrine"] = shrine_brief()
     for name in names or ["shrine", "inn", "lighthouse"]:
         title, brief = briefs[name]
         t0 = time.time()
-        raw = chat_complete("director_rooms", SYSTEM,
-                            f"BUILDING: {title}\n\nDESCRIPTION:\n{brief}\n\nLay it out.",
-                            max_tokens=16000)
         try:
-            spec = _parse(raw)
+            inventory = _ask(SORT, f"PLACE: {title}\n\nDESCRIPTION:\n{brief}\n\nSort it.")
+            spec = _ask(RELATE, f"PLACE: {title}\n\nDESCRIPTION:\n{brief}\n\nINVENTORY:\n"
+                        f"{json.dumps(inventory, ensure_ascii=False, indent=1)}\n\nLay it out.")
         except Exception as exc:
-            print(name, "unparseable:", exc, str(raw)[:400])
+            print(name, "failed:", exc)
             continue
-        layout = solve(spec).as_dict()
-        record = {"scenario": name, "title": title, "brief": brief, "spec": spec, "layout": layout,
+        layout = solve(spec)
+        record = {"scenario": name, "title": title, "brief": brief, "inventory": inventory,
+                  "spec": spec, "layout": layout.as_dict(), "breaches": check(layout),
                   "model_seconds": round(time.time() - t0, 1)}
         if name == "shrine":
             record["current"] = current_engine_layout()
         (OUT / f"{name}.json").write_text(json.dumps(record, ensure_ascii=False, indent=1))
-        print(f"{name}: {sum(len(f['rooms']) for f in spec.get('floors') or [])} rooms over "
-              f"{len(spec.get('floors') or [])} storeys, {len(spec.get('grounds') or [])} grounds, "
-              f"{len(layout['stairwells'])} stairwells, {len(layout['unplaced'])} fixtures unplaced, "
-              f"{len(layout['warnings'])} warnings ({record['model_seconds']} s)")
+        _report(record)
 
 
 def resolve():
     """Re-solve every saved spec with the current solver (no model call)."""
-    from world.layout_solver import solve
+    from world.layout_solver import check, solve
     for path in sorted(OUT.glob("*.json")):
         record = json.loads(path.read_text())
-        record["layout"] = solve(record["spec"]).as_dict()
-        if record["scenario"] == "shrine":
-            record["current"] = current_engine_layout()
+        layout = solve(record["spec"])
+        record["layout"] = layout.as_dict()
+        record["breaches"] = check(layout)
         path.write_text(json.dumps(record, ensure_ascii=False, indent=1))
-        L = record["layout"]
-        print(f"{record['scenario']}: {len(L['stairwells'])} stairwells, {len(L['unplaced'])} unplaced, "
-              f"{len(L['warnings'])} warnings")
+        _report(record)
+
+
+def _report(record):
+    L = record["layout"]
+    inv = record.get("inventory") or {}
+    print(f"{record['scenario']}: sorted {len(inv.get('rooms') or [])} rooms, {len(inv.get('zones') or [])} zones, "
+          f"{len(inv.get('outbuildings') or [])} outbuildings, {len(inv.get('features') or [])} features, "
+          f"{len(inv.get('elsewhere') or [])} elsewhere; laid out {len(L['stairwells'])} stairwells, "
+          f"{len(L['features'])} features, {len(L['unplaced'])} unplaced, {len(L['warnings'])} warnings, "
+          f"{len(record['breaches'])} breaches")
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1]
-    if cmd == "resolve":
-        resolve()
     if cmd == "setup":
         setup()
     elif cmd == "run":
         run(sys.argv[2:])
+    elif cmd == "resolve":
+        resolve()
