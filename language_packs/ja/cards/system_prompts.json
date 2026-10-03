@@ -391,6 +391,9 @@
     "walk_stopped": {
       "$text": "jev_questions/walk_stopped.txt"
     },
+    "pressure_ended": {
+      "$text": "jev_questions/pressure_ended.txt"
+    },
     "conditions__awareness": {
       "$text": "jev_questions/conditions__awareness.txt"
     },

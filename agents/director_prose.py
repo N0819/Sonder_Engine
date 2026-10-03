@@ -2065,3 +2065,46 @@ def attach_record(ctx, out):
         ctx[CTX_KEY] = None
     except Exception:
         pass
+
+
+#: The yes-share at which the decision model's "is it over?" ends a pressure.
+PRESSURE_ENDED_FLOOR = 0.5
+
+
+def pressures_ended(ctx, prose, pressures):
+    """The open world pressures this beat's passage shows over, `{id:
+    probability}`. Asked of the passage alone (`jev_questions.pressure_ended`),
+    never of the ledger: a check against a state that already states the claim
+    confirms it.
+
+    THE PROSE DIRECTOR COULD NOT END A PRESSURE. It ticks the ones the beat's
+    events touch and nothing else, so a process that finished stayed open,
+    stalled, was flagged must-tick and handed back to the Director as a due
+    process to advance. Chat 160 (2026-10-01): the elevator crashed at the
+    foot of its shaft on turn 11, its power-instability pressure stayed open,
+    and on turn 13 the Director re-told the descent to tick it, set the
+    wrecked car under way with no route, and its door left the world. Fails
+    open: no answer ends nothing."""
+    prose = str(prose or "").strip()
+    battery = {}
+    for pressure in pressures or ():
+        if not isinstance(pressure, dict) or not pressure.get("id"):
+            continue
+        text = jev_question("pressure_ended", getattr(ctx, "language", None),
+                            subject=str(pressure.get("subject") or "").replace("_", " "),
+                            note=str(pressure.get("note") or "").strip())
+        if text:
+            battery[f"ended:{pressure['id']}"] = {"type": "noul", "instructions": text}
+    if not prose or not battery:
+        return {}
+    try:
+        answers = decisions.decide("PASSAGE:\n" + prose, battery)
+    except Exception as exc:  # noqa: BLE001 -- the beat never waits on this
+        ctx.add_warning(f"resolve: could not ask whether a world pressure ended: {exc}")
+        return {}
+    out = {}
+    for key in battery:
+        p = round(decisions.probability(answers.get(key)), 4)
+        if p >= PRESSURE_ENDED_FLOOR:
+            out[key[len("ended:"):]] = p
+    return out

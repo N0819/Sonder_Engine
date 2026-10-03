@@ -151,8 +151,9 @@ def prose_director(temp_db, monkeypatch):
     (2026-09-28): a decision model that answers yes to everything would flag
     every sentence missing and every write wrong, and the pass has its own
     tests with their own fakes (`tests/test_encoder_repair.py`). For the same
-    reason a walk under way is never stopped (`WALK_PREFIX` answers no): a
-    test that means to stop one says so with its own answer.
+    reason a walk under way is never stopped (`WALK_PREFIX` answers no), nor
+    a world pressure ended (`ended:`): a test that means either says so with
+    its own answer.
     """
     from agents.director_prose import WALK_PREFIX
     from llm import decisions
@@ -163,8 +164,11 @@ def prose_director(temp_db, monkeypatch):
 
     def answer(state, questions):
         asked.append({"state": state, "questions": dict(questions)})
+        # A walk is never stopped and a world pressure never ended unless a
+        # test says so with its own answer (`ended:` -- 2026-10-02,
+        # `director_prose.pressures_ended`).
         return {key: {"type": "noul",
-                      "noul": 0.01 if key.startswith(WALK_PREFIX) else 0.99}
+                      "noul": 0.01 if key.startswith((WALK_PREFIX, "ended:")) else 0.99}
                 for key in questions}
 
     monkeypatch.setattr(decisions, "OVERRIDE", answer)

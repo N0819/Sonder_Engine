@@ -5705,6 +5705,24 @@ def director_resolve(ctx, nonce, _corrections=None):
             if isinstance(pressure, dict)
             and f"world_pressure:{pressure.get('id')}" in _ledger_by_source
         ]
+    # AND A PRESSURE THE PASSAGE SHOWS OVER IS RESOLVED (the owner,
+    # 2026-10-02): asked of the passage alone, per open pressure
+    # (`director_prose.pressures_ended`). Without it nothing on the prose
+    # path ever ended one, and a finished process was forced back on the
+    # page as a due process to advance.
+    _ended = director_prose.pressures_ended(ctx, _authority_prose, _pressures)
+    if _ended:
+        out["world_pressure"] = [
+            op for op in (out.get("world_pressure") or [])
+            if not (isinstance(op, dict) and str(op.get("id") or "") in _ended)
+        ] + [
+            {"op": "resolve", "id": str(pressure.get("id")),
+             "subject": str(pressure.get("subject") or ""),
+             "note": "the passage shows it over"}
+            for pressure in _pressures
+            if isinstance(pressure, dict) and str(pressure.get("id") or "") in _ended
+        ]
+        out.setdefault("orchestration", {})["pressures_ended"] = _ended
     # PLAYER-ACT AUTHORITY, enforced. The prompt rule alone measurably reduced
     # this (a live reroll dropped an invented drink-and-nod down to a single
     # invented "Hinami straightens") but did not eliminate it, and a warning
