@@ -272,7 +272,9 @@ function drawPlan() {
     for (const f of fx) {
       const r = f.rect, g = el("g", {}, svg);
       el("rect", { x: X(r.x) + 3, y: Y(r.y) + 3, width: r.w * C - 6, height: r.d * C - 6, rx: 3, fill: "var(--ochre)", "fill-opacity": .22, stroke: "var(--ochre)", "stroke-width": 1.2 }, g);
-      el("title", {}, g).textContent = `${f.name} (${f.kind}${f.at ? ", " + f.at : ""}${f.in ? ", in " + f.in : ""})`;
+      const inside = ((lay.contents || {})[rid] || {})[f.id] || [];
+      el("title", {}, g).textContent = `${f.name} (${f.kind}${f.at ? ", " + f.at : ""}${f.in ? ", in " + f.in : ""})` + (inside.length ? `\nholds: ${inside.map(c => c.name + (c.count > 1 ? " ×" + c.count : "")).join(", ")}` : "");
+      if (inside.length) label(g, X(r.x + r.w) - 6, Y(r.y) + 10, "+" + inside.length, 9, 700, "var(--ochre)");
       if (r.w * C > 44) label(g, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 3, f.name.length > r.w * C / 6 ? f.name.slice(0, Math.floor(r.w * C / 6)) + "…" : f.name, Math.max(8, Math.min(11, C * .3)), 400);
     }
   }
@@ -295,6 +297,14 @@ function drawPlan() {
     walls(svg, cellsOf([r]), X, Y, C, own, "var(--ink)", 2.4);
   }
   for (const d of doors) doorSeg(svg, d, X, Y, d.outside ? "var(--ok)" : "var(--cobalt)");
+  for (const w of (lay.windows || []).filter(w => w.level === lv)) {
+    const [x, y] = w.cell, s = w.side;
+    const seg = { n: [X(x) + 3, Y(y), X(x + 1) - 3, Y(y)], s: [X(x) + 3, Y(y + 1), X(x + 1) - 3, Y(y + 1)], w: [X(x), Y(y) + 3, X(x), Y(y + 1) - 3], e: [X(x + 1), Y(y) + 3, X(x + 1), Y(y + 1) - 3] }[s];
+    const g = el("g", {}, svg);
+    el("line", { x1: seg[0], y1: seg[1], x2: seg[2], y2: seg[3], stroke: "var(--sheet)", "stroke-width": 5 }, g);
+    el("line", { x1: seg[0], y1: seg[1], x2: seg[2], y2: seg[3], stroke: "var(--cobalt)", "stroke-width": 1.2 }, g);
+    el("title", {}, g).textContent = `window in ${lay.names[w.room] || w.room}, facing ${s}`;
+  }
   // outdoor features
   if (ground) for (const f of lay.features || []) {
     const r = f.rect, g = el("g", {}, svg);
@@ -318,7 +328,7 @@ function drawPlan() {
     if (r) { const t = label(svg, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, short(lay.names[wid] || wid), 11, 600, "var(--line)"); }
   }
   document.getElementById("drawingTitle").textContent = `${levelName(lv)} plan`;
-  document.getElementById("hint").textContent = "Click a room for what the model asked of it. Blue gaps are doorways, green ones open outside. Hatched blue is a stairwell, the same cells on both storeys; a walled one is enclosed behind its door, and the dotted box is its landing. Dashed ochre areas are zones: a part of the room's floor, not a room. On the ground floor the dashed green line is the edge of the plot, and gravel marks the ways.";
+  document.getElementById("hint").textContent = "Click a room for what the model asked of it. Blue gaps are doorways, green ones open outside; a thin blue line in a wall is a window. Hatched blue is a stairwell, the same cells on both storeys; a walled one is enclosed behind its door, and the dotted box is its landing. Dashed ochre areas are zones: a part of the room's floor, not a room. On the ground floor the dashed green line is the edge of the plot, and gravel marks the ways.";
   legend();
   highlight();
 }
@@ -363,7 +373,8 @@ function drawSort() {
   const wrap = h("div", { class: "sort" }); const t = h("table"); wrap.appendChild(t);
   const head = h("tr"); ["", "Name", "Where", "The words it rests on"].forEach(x => head.appendChild(h("th", {}, x))); t.appendChild(head);
   const groups = [["rooms", "Rooms", r => (r.level != null ? levelName(r.level) : "")], ["zones", "Zones of a room", z => z.room],
-    ["fixtures", "Fixtures", f => f.in], ["stairs", "Stairs", s => `${s.from} → ${s.to}${s.enclosed ? ", behind a " + (s.door || "door") : ", open"}`],
+    ["fixtures", "Fixtures", f => [f.in, f.mount && f.mount !== "floor" ? f.mount : "", f.count > 1 ? "×" + f.count : "", f.implied ? "implied" : ""].filter(Boolean).join(" · ")],
+    ["windows", "Windows", w => `${w.room}, faces ${w.faces}${w.count > 1 ? " ×" + w.count : ""}`], ["stairs", "Stairs", s => `${s.from} → ${s.to}${s.enclosed ? ", behind a " + (s.door || "door") : ", open"}`],
     ["outbuildings", "Outbuildings", o => (o.rooms || []).join(", ")], ["areas", "Open ground", () => ""], ["ways", "Ways", () => ""],
     ["features", "Outdoor features", () => ""], ["elsewhere", "Elsewhere", e => e.via ? "via " + e.via : ""]];
   for (const [key, title, where] of groups) {
@@ -373,7 +384,7 @@ function drawSort() {
     for (const it of items) {
       const tr = h("tr");
       tr.appendChild(h("td", { class: "kind" }, it.id || ""));
-      tr.appendChild(h("td", {}, it.name || ""));
+      tr.appendChild(h("td", {}, it.name || (key === "windows" ? "window" : "")));
       tr.appendChild(h("td", { class: "kind" }, where(it) || ""));
       tr.appendChild(h("td", { class: "why" }, it.why || ""));
       t.appendChild(tr);
@@ -448,7 +459,11 @@ function renderRoom() {
   list("Joins asked", r.joins || [], j => [lay.names[j.to] || j.to, `${j.side || "-"}${j.order ? " · #" + j.order : ""}${j.kind ? " · " + j.kind : ""}`]);
   list("Zones", r.zones || [], z => [z.name || z.id, z.by ? "by " + z.by : (z.at || "")]);
   const placed = new Set((lay.fixtures[state.room] || []).map(f => f.id));
-  list("Fixtures", r.fixtures || [], f => [f.name || f.id, (placed.has(f.id) ? "" : "unplaced · ") + [f.in && "in " + f.in, f.at, f.near && "near " + f.near].filter(Boolean).join(", ")]);
+  list("Fixtures", r.fixtures || [], f => [f.name || f.id + (f.count > 1 ? " ×" + f.count : ""), [f.mount && f.mount !== "floor" && f.mount, f.in && "in " + f.in, f.at, f.near && "near " + f.near].filter(Boolean).join(", ")]);
+  list("On its walls and ceiling", (lay.details || {})[state.room] || [], d => [d.name + (d.count > 1 ? " ×" + d.count : ""), d.mount]);
+  const cont = (lay.contents || {})[state.room] || {};
+  list("Inside other fixtures", Object.entries(cont).flatMap(([host, items]) => items.map(c => [host, c])), ([host, c]) => [c.name + (c.count > 1 ? " ×" + c.count : ""), "in " + host]);
+  list("Windows", (lay.windows || []).filter(w => w.room === state.room), w => [w.id, "faces " + w.side]);
 }
 
 function renderNotes() {

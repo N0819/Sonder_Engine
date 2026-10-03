@@ -39,7 +39,8 @@ SORT = """You read the description of ONE place and sort every thing it names by
 The kinds:
 - room: a space with walls of its own, entered through a doorway or an opening.
 - zone: a part of a room with no walls of its own -- a stretch of its floor where something happens or where a rule begins. It belongs to the room it is in.
-- fixture: a thing that stands in a room or a zone -- furniture, an alcove, a closet in a wall, a stove, an altar.
+- fixture: a thing in a room or a zone -- furniture, an alcove, a closet in a wall, a stove, an altar. What a room's floor, walls or ceiling are MADE of (its mats, boards, stone, paper panels) is its surface, never a fixture. Say how a fixture stands ("mount"): "floor" when it stands on the floor, against a wall or not -- and a thing built INTO a wall (an alcove, a closet, a hearth) takes floor along that wall, so it is "floor" too; "hung" only when it is fixed to a wall's face and takes no floor (a scroll, a picture); "ceiling" when it hangs from above; or in or on another fixture (a vase in an alcove, chests in a closet). List EVERY piece the description names, each its own entry even when two are named together; a thing named in the plural is several (give "count"). A room also holds what its purpose plainly requires even when the description takes it for granted -- a latrine its latrine, a bedroom its bed -- marked "implied": true.
+- window: an opening in a room's wall to the outside. List every window the description gives, with the room it is in and what it faces or which wall it is on, in the description's own words.
 - stair: a way between storeys. It is OPEN when it rises in the room itself, ENCLOSED when it lies behind a door in a stairwell of its own; take which from the words.
 - outbuilding: a separate structure on the grounds, with a room or rooms of its own.
 - area: open ground the building stands in or beside -- a garden, a yard, a courtyard.
@@ -47,16 +48,17 @@ The kinds:
 - feature: a thing standing in the open -- a gate, a tree, a well, a lantern, a statue.
 - elsewhere: a place the description mentions that is not part of this building or its grounds -- reached through it, seen from it, or simply somewhere else. Say what leads there.
 
-DECIDE BY WALLS, NEVER BY NAME OR HEADING. A room has walls or a door of its own between it and the next space; a zone has none -- however it is headed, and whatever the place would be called elsewhere. When the description calls something a zone, an area or a part of a room, it is telling you it has no walls of its own: it is a zone of the room it lies in. Every room and zone answers "walls": what the description gives it (a door, a wall, a threshold it is entered through) or "none".
+DECIDE BY WALLS, NEVER BY NAME OR HEADING. A room has walls or a door of its own between it and the next space; a zone has none -- however it is headed, and whatever the place would be called elsewhere. When the description calls something a zone, an area or a part of a room, it is telling you it has no walls of its own: it is a zone of the room it lies in. Every room answers "own_walls" with the description's EXACT WORDS that give it walls or a door of its own -- or "" when no words do -- and "part_of": the room it lies in, for when it has none. A room whose own_walls is "" is a zone of its part_of room, and is moved there.
 
-Every entry quotes the words it rests on ("why"). A thing named twice is one thing. Storeys are counted from the one the entrance is on (level 0); a storey above is 1, below is -1.
+Every entry quotes the words it rests on ("why"). Inside any JSON string use single quotes, never double quotes -- the description's own speech included. A thing named twice is one thing. Storeys are counted from the one the entrance is on (level 0); a storey above is 1, below is -1.
 
 Answer with one JSON object:
 {"name": "<the place>",
  "storeys": [{"level": 0, "name": "<what the description calls it>", "smaller": true when the description says it is smaller}],
- "rooms": [{"id": "<snake_case>", "name": "...", "level": 0, "walls": "...", "why": "..."}],
- "zones": [{"id", "name", "room": "<room id>", "walls": "none", "why"}],
- "fixtures": [{"id", "name", "in": "<room, zone, outbuilding room or feature id>", "why"}],
+ "rooms": [{"id": "<snake_case>", "name": "...", "level": 0, "own_walls": "<exact words, or empty>", "part_of": "<room id, or empty>", "why": "..."}],
+ "zones": [{"id", "name", "room": "<room id>", "why"}],
+ "fixtures": [{"id", "name", "in": "<room, zone, outbuilding room or feature id>", "mount": "floor|hung|ceiling|in <fixture id>|on <fixture id>", "count": <how many, when several>, "implied": true|false, "why"}],
+ "windows": [{"room": "<room id>", "faces": "<what it faces, or which wall>", "count": <how many>, "why"}],
  "stairs": [{"id", "name", "from": "<room id>", "to": "<room id>", "enclosed": true|false, "door": "<the door, when enclosed>", "why"}],
  "outbuildings": [{"id", "name", "rooms": ["<room id>", ...], "why"}],
  "areas": [{"id", "name", "why"}],
@@ -65,7 +67,7 @@ Answer with one JSON object:
  "elsewhere": [{"name", "via": "<the door, stair or way that leads there, if any>", "why"}]}
 Rooms of an outbuilding go in "rooms" too, at level 0."""
 
-RELATE = """You lay out ONE place as RELATIONS. You never write a coordinate, a measurement or a size in paces: an engine computes every position, every room's size, every stair and every distance from what you say. You are given the description and an inventory that has already sorted what the description names; keep every id from the inventory and the kind it was sorted into.
+RELATE = """You lay out ONE place as RELATIONS. You never write a coordinate, a measurement or a size in paces: an engine computes every position, every room's size, every stair and every distance from what you say. You are given the description and an inventory that has already sorted what the description names; keep every id from the inventory and the kind it was sorted into. Inside any JSON string use single quotes, never double quotes.
 
 Answer with one JSON object:
 {"name": "...",
@@ -83,7 +85,9 @@ Answer with one JSON object:
 ROOM = {"id", "name", "level", "block": "<only for a room not in the main building>", "purpose": "<one or two words: entryway, hallway, bedroom, guest room, kitchen, washroom, latrine, storage, closet, living, hall, study, shrine, meditation, attic, cellar, basement, workshop, common room ...>",
         "joins": [{"to": "<room id, or the id of an area or way it opens onto>", "side": "n|e|s|w", "order": <1, 2 ... when several share one wall, counted from its north or west end>, "kind": "<the door>"}],
         "zones": [{"id", "name", "at": "n|e|s|w|middle|corner_ne|corner_se|corner_sw|corner_nw", "by": "entrance (for the zone at the entrance door)", "size": "small|medium|large"}],
-        "fixtures": [{"id", "name", "kind": "<one of: bed futon nest table low_table chabudai desk writing_desk chair cushion bench sofa shelf bookshelf cabinet closet chest trunk wardrobe stove hearth counter sink basin bath tub toilet altar alcove tokonoma screen lantern statue well tree gate workbench barrel crate rack window_seat fireplace bar piano pillar rug boulder pond lamp -- or another word, with size>", "size": "tiny|small|medium|large|huge (only for another word)", "at": "<a wall, middle or a corner>", "in": "<zone id, when it stands in a zone>", "count": <how many, when the description gives several alike>, "near"|"beside"|"facing": "<fixture id>"}]}
+        "windows": [{"id", "side": "n|e|s|w -- the wall it is in, from what it faces", "count": <how many>}],
+        "fixtures": [{"id", "name", "kind": "<one of: bed futon nest table low_table chabudai desk writing_desk chair cushion bench sofa shelf bookshelf cabinet closet chest trunk wardrobe stove hearth counter sink basin bath tub toilet altar alcove tokonoma screen lantern statue well tree gate workbench barrel crate rack window_seat fireplace bar piano pillar rug boulder pond lamp -- or another word, with size>", "size": "tiny|small|medium|large|huge (only for another word)", "at": "<a wall, middle or a corner>", "in": "<zone id, when it stands in a zone>", "mount": "floor|hung|ceiling|in <fixture id>|on <fixture id> (from the inventory)", "count": <how many, when the description gives several alike>, "near"|"beside"|"facing": "<fixture or window id>"}]}
+        A fixture's "size" also scales a kind from the list: a large tub is larger than a tub. "at": "walls" spreads several alike round the room's walls.
 
 FEATURE = {"id", "name", "kind": "<a kind from the fixture list, or another word with size>", "size", "count": <how many, when there are several alike>,
            and exactly ONE placement:
@@ -101,6 +105,7 @@ How to read the fields:
 - A building whose parts rise separately -- a tower beside a cottage -- names each part a block, "apart": false.
 - A stair stands inside the room at each end: `from_at` is the wall of the FROM room it stands against, `to_at` the wall of the TO room where it arrives; the two must agree, since both rooms are the same building seen on two storeys.
 - The approach to the entrance is a way "from": "entrance". A gate on it is "across" it at its far end; things that flank it or line it say so; a thing the way leads to is its "to".
+- Keep every fixture and window of the inventory, with its mount and count. A window's side follows from what it faces once the compass is fixed (the moon and sun rise in the east); a window "on the left wall" is on the left of a person walking in.
 - Say only what the description gives, or what a real place of this kind plainly has. Nothing from "elsewhere" is laid out."""
 
 SCENARIOS = {
@@ -194,16 +199,43 @@ def _parse(text):
     return json.loads(text[start:end + 1])
 
 
+def _demote_wall_less(inv):
+    """A room the description gives no walls of its own -- no words quoted in
+    `own_walls` -- and that lies in another room is a ZONE of that room. The
+    sort is asked to decide this itself; this holds it to its own answer."""
+    rooms = {r.get("id"): r for r in inv.get("rooms") or () if isinstance(r, dict)}
+    for rid, r in list(rooms.items()):
+        parent = r.get("part_of")
+        if str(r.get("own_walls") or "").strip() or parent not in rooms or parent == rid:
+            continue
+        inv["rooms"] = [x for x in inv["rooms"] if x.get("id") != rid]
+        inv.setdefault("zones", []).append({"id": rid, "name": r.get("name"), "room": parent,
+                                           "why": r.get("why"), "demoted": True})
+        for f in inv.get("fixtures") or ():
+            if f.get("in") == rid:
+                f["in"] = rid       # still names the zone; the zone is in its parent
+        for st in inv.get("stairs") or ():
+            for end in ("from", "to"):
+                if st.get(end) == rid:
+                    st[end] = parent
+    return inv
+
+
 def _ask(system, user, tries=3):
     """One JSON answer; a malformed or silent one is asked again."""
     from llm.providers import chat_complete
     last = None
-    for _k in range(tries):
+    for k in range(tries):
+        raw = ""
         try:
-            return _parse(chat_complete("director_rooms", system, user, max_tokens=16000))
+            raw = chat_complete("director_rooms", system, user, max_tokens=48000)
+            return _parse(raw)
         except Exception as exc:
             last = exc
             print("  retrying:", str(exc)[:120])
+            if raw:
+                OUT.mkdir(parents=True, exist_ok=True)
+                (OUT / f"failed_{int(time.time())}_{k}.txt").write_text(str(raw))
     raise last
 
 
@@ -216,7 +248,7 @@ def run(names):
         title, brief = briefs[name]
         t0 = time.time()
         try:
-            inventory = _ask(SORT, f"PLACE: {title}\n\nDESCRIPTION:\n{brief}\n\nSort it.")
+            inventory = _demote_wall_less(_ask(SORT, f"PLACE: {title}\n\nDESCRIPTION:\n{brief}\n\nSort it."))
             spec = _ask(RELATE, f"PLACE: {title}\n\nDESCRIPTION:\n{brief}\n\nINVENTORY:\n"
                         f"{json.dumps(inventory, ensure_ascii=False, indent=1)}\n\nLay it out.")
         except Exception as exc:

@@ -247,12 +247,60 @@ def _door_cells(a: Rect, b: Rect, avoid=frozenset()):
 
 # ------------------------------------------------------------ sizing
 
+#: How a size word scales a kind the table knows: a large tub is larger than
+#: a tub.
+SIZE_SCALE = {"tiny": 0.6, "small": 0.8, "medium": 1.0, "large": 1.5, "huge": 2.0}
+
+
 def fixture_footprint(fx):
     kind = str(fx.get("kind") or "").strip().casefold().replace(" ", "_")
+    word = str(fx.get("size") or "").casefold()
     if kind in FIXTURE_SIZES:
-        return FIXTURE_SIZES[kind]
-    word = str(fx.get("size") or "medium").casefold()
-    return SIZE_WORD_FOOTPRINT.get(word, SIZE_WORD_FOOTPRINT["medium"])
+        w, d, h = FIXTURE_SIZES[kind]
+        k = SIZE_SCALE.get(word, 1.0)
+        return max(1, round(w * k)), max(1, round(d * k)), h
+    return SIZE_WORD_FOOTPRINT.get(word or "medium", SIZE_WORD_FOOTPRINT["medium"])
+
+
+#: Mounts that take no floor: a thing hung on a wall's face or from the
+#: ceiling. A thing that stands AGAINST a wall stands on the floor (its wall
+#: is its "at"); "wall" alone is read that way, since a model writes it for
+#: a bar along the back wall as readily as for a scroll on it.
+_OFF_FLOOR = ("hung", "ceiling")
+
+
+def _sort_fixtures(r):
+    """A room's fixtures split by how they stand: (floor, details, contents).
+    Only a floor thing takes floor. A thing on a wall or hung from the
+    ceiling is a DETAIL of the room; a thing in or on another fixture is that
+    fixture's CONTENTS. Several alike are that many things; several asked
+    along the walls go round the walls."""
+    raw = [f for f in r.get("fixtures") or () if isinstance(f, dict) and f.get("id")]
+    ids = {f["id"] for f in raw}
+    zones = {z.get("id") for z in r.get("zones") or ()}
+    floor, details, contents = [], [], {}
+    for f in raw:
+        mount = str(f.get("mount") or "floor").casefold()
+        host = str(f.get("on") or f.get("in") or "")
+        if mount.split()[0] in ("in", "on") and len(mount.split()) > 1:
+            host = mount.split()[1]
+        n = max(1, min(24, int(f.get("count") or 1)))
+        if mount.split()[0] in _OFF_FLOOR:
+            details.append({"id": f["id"], "name": f.get("name") or f["id"], "mount": mount.split()[0], "count": n})
+            continue
+        if host in ids and host not in zones and host != f["id"]:
+            contents.setdefault(host, []).append({"id": f["id"], "name": f.get("name") or f["id"], "count": n})
+            continue
+        if n == 1:
+            floor.append(f)
+            continue
+        around = str(f.get("at") or "").casefold() == "walls"
+        for i in range(n):
+            copy = dict(f, id=f"{f['id']}_{i + 1}", count=1)
+            if around:
+                copy["at"] = _SIDES[i % 4]
+            floor.append(copy)
+    return floor, details, contents
 
 
 def purpose_key(room):
@@ -306,20 +354,17 @@ def _read(spec, layout):
     for r in spec.get("rooms") or ():
         if isinstance(r, dict) and r.get("id"):
             r = dict(r)
-            fx = []
-            for f in r.get("fixtures") or ():
-                if not isinstance(f, dict) or not f.get("id"):
-                    continue
-                n = max(1, min(24, int(f.get("count") or 1)))
-                # several alike are that many things, each standing somewhere
-                fx += [f] if n == 1 else [dict(f, id=f"{f['id']}_{i + 1}", count=1) for i in range(n)]
-            r["fixtures"] = fx
+            r["fixtures"], r["details"], r["contents"] = _sort_fixtures(r)
             r["level"] = int(r.get("level") or 0)
             r["block"] = str(r.get("block") or "main")
             rooms[r["id"]] = r
     for r in rooms.values():
         layout.names[r["id"]] = r.get("name") or r["id"]
         layout.purposes[r["id"]] = purpose_key(r)
+        if r["details"]:
+            layout.details[r["id"]] = r["details"]
+        if r["contents"]:
+            layout.contents[r["id"]] = r["contents"]
     stairs = []
     for st in spec.get("stairs") or ():
         if not isinstance(st, dict):
@@ -865,6 +910,9 @@ class Layout:
     features: list = field(default_factory=list)
     elsewhere: list = field(default_factory=list)
     entrance: dict = field(default_factory=dict)
+    details: dict = field(default_factory=dict)      # room_id -> [things on its walls or ceiling]
+    windows: list = field(default_factory=list)      # {id, room, level, side, cell}
+    contents: dict = field(default_factory=dict)     # room_id -> {fixture_id: [things in or on it]}
 
     def as_dict(self):
         return {
@@ -887,6 +935,7 @@ class Layout:
                      for w, v in self.ways.items() if v.get("cells")},
             "features": [dict(f, rect=f["rect"].as_dict()) for f in self.features],
             "elsewhere": self.elsewhere, "entrance": self.entrance,
+            "details": self.details, "contents": self.contents, "windows": self.windows,
         }
 
 
@@ -1005,6 +1054,7 @@ def solve(spec, seed=SEED) -> Layout:
     approaches = {str(w.get("id")) for w in grounds.get("ways") or ()
                   if isinstance(w, dict) and str(w.get("from") or "entrance") == "entrance"}
     _place_doors(layout, rooms, stairs, outdoor_ids, approaches)
+    _place_windows(layout, rooms)
     _place_zones(layout, rooms)
     _furnish(layout, rooms)
     _grounds(layout, rooms, grounds)
@@ -1170,6 +1220,52 @@ def _place_doors(layout, rooms, stairs, outdoor_ids, approaches=frozenset()):
                 layout.warnings.append(f"{layout.names[rid]} has no outside wall to open to {target}")
 
 
+# ------------------------------------------------------------ windows
+
+def _place_windows(layout, rooms):
+    """A window is an opening in a room's OUTSIDE wall, on the side asked --
+    another outside side when that wall is inside the building -- spread
+    along the wall, never where a doorway is."""
+    for rid, r in rooms.items():
+        lv = r["level"]
+        room = layout.floors.get(lv, {}).get(rid)
+        if not room or not r.get("windows"):
+            continue
+        rect = room[0]
+        inside = set()
+        for b, levels in layout.outlines.items():
+            if lv in levels:
+                inside |= levels[lv].cells()
+        doors = {tuple(d["cell"]) for d in layout.doors if d["level"] == lv and rid in (d["a"], d["b"])}
+        solid = _solid(layout, lv)
+
+        def outside_cells(side):
+            dx, dy = _STEP[side]
+            return [c for c in sorted(rect.cells())
+                    if (c[0] + dx, c[1] + dy) not in inside and (c[0] + dx, c[1] + dy) not in rect.cells()
+                    and c not in doors and c not in solid]
+
+        for k, wdef in enumerate(r["windows"]):
+            if not isinstance(wdef, dict):
+                continue
+            asked = str(wdef.get("side") or "")[:1]
+            n = max(1, min(8, int(wdef.get("count") or 1)))
+            sides = ([asked] if asked in _SIDES else []) + [s for s in _SIDES if s != asked]
+            side = next((sd for sd in sides if outside_cells(sd)), None)
+            if side is None:
+                layout.warnings.append(f"{layout.names[rid]} has no outside wall for its window")
+                continue
+            if asked in _SIDES and side != asked:
+                layout.warnings.append(f"{layout.names[rid]}: its window could not face {asked} "
+                                       f"(that wall is inside the building) and faces {side}")
+            cells = outside_cells(side)
+            for i in range(n):
+                cell = cells[min(len(cells) - 1, int((i + 0.5) * len(cells) / n))]
+                wid = str(wdef.get("id") or f"{rid}_window_{k + 1}") + (f"_{i + 1}" if n > 1 else "")
+                layout.windows.append({"id": wid, "base": wdef.get("id"), "room": rid, "level": lv,
+                                       "side": side, "cell": list(cell)})
+
+
 # ------------------------------------------------------------ zones, fixtures
 
 def _place_zones(layout, rooms):
@@ -1185,6 +1281,13 @@ def _place_zones(layout, rooms):
         out = []
         for z in r.get("zones") or ():
             zw, zd = _zone_size(z)
+            # a zone holds what stands in it: grown to its fixtures at about
+            # half its floor, never below its size word
+            held = sum(w * d for w, d, _h in (fixture_footprint(f) for f in r["fixtures"]
+                                              if f.get("in") == z.get("id")))
+            if held / 0.5 > zw * zd:
+                k = math.sqrt(held / 0.5 / (zw * zd))
+                zw, zd = math.ceil(zw * k), math.ceil(zd * k)
             by = str(z.get("by") or "")
             door = None
             if by:
@@ -1261,10 +1364,16 @@ def _furnish(layout, rooms):
             if land:
                 clear |= Rect(**land).cells() & cells
         zones = {z["id"]: z["rect"].cells() & cells for z in layout.zones.get(rid, ())}
-        _place_fixtures(rid, r, cells, layout, clear=clear, zones=zones)
+        windows = {}
+        for w in layout.windows:
+            if w["room"] == rid:
+                windows[w["id"]] = Rect(w["cell"][0], w["cell"][1], 1, 1)
+                if w.get("base"):
+                    windows.setdefault(w["base"], windows[w["id"]])
+        _place_fixtures(rid, r, cells, layout, clear=clear, zones=zones, landmarks=windows)
 
 
-def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=None):
+def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=None, landmarks=None):
     """Fixtures by relation, backtracking. Hard: inside the room (inside its
     zone when it names one, out of every zone when it does not), no overlap,
     never on a doorway's step or a landing, against the wall it names, and
@@ -1277,14 +1386,14 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
     fixtures = sorted(room.get("fixtures") or (),
                       key=lambda f: (f.get("in") not in zones, -fixture_footprint(f)[0] * fixture_footprint(f)[1]))
     furniture = set()
-    placed = {}
+    placed = dict(landmarks or {})   # a fixture may be near or facing a window
     box = _bbox(cells)
     centre = (box.x + box.w / 2, box.y + box.d / 2)
 
-    def candidates(fx, at):
+    def candidates(fx, at, into_zones=False):
         w, d, _h = fixture_footprint(fx)
         zone = zones.get(fx.get("in"))
-        allowed = zone if zone else cells - reserved
+        allowed = zone if zone else (cells if into_zones else cells - reserved)
         out = []
         for ww, dd in {(w, d), (d, w)}:
             if at in _SIDES and ((at in "ns" and ww < dd) or (at in "ew" and dd < ww)):
@@ -1332,6 +1441,10 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
         fx = fixtures[i]
         at = str(fx.get("at") or "").casefold()
         cands = [r for r in candidates(fx, at) if fits(r)]
+        if not cands and not zones.get(fx.get("in")):
+            # nowhere outside the zones: it may stand in one -- a cushion by
+            # the table in the sitting area, where its relation puts it
+            cands = [r for r in candidates(fx, at, True) if fits(r)]
         if not cands and at:
             for alt in [s for s in _SIDES if s != at] + [""]:
                 cands = [r for r in candidates(fx, alt) if fits(r)]

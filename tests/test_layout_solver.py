@@ -257,3 +257,70 @@ def test_an_upper_storey_stands_within_the_one_below():
             for lv, o in levels.items():
                 if lv > 0 and lv - 1 in levels:
                     assert levels[lv - 1].contains(o), (b, lv)
+
+
+ROOMY = {
+    "name": "furnishing", "front": "s", "entrance": {"room": "hall"},
+    "rooms": [
+        {"id": "hall", "level": 0, "purpose": "living", "joins": [{"to": "bath", "side": "e"}],
+         "windows": [{"id": "hw", "side": "s"}, {"id": "inner", "side": "e"}],
+         "fixtures": [
+             {"id": "alcove", "kind": "tokonoma", "at": "n"},
+             {"id": "vase", "kind": "vase", "mount": "in alcove"},
+             {"id": "scroll", "kind": "scroll", "mount": "hung"},
+             {"id": "bar", "kind": "bar", "mount": "wall", "at": "w"},
+             {"id": "lamps", "kind": "lantern", "mount": "ceiling", "count": 3},
+             {"id": "pools", "kind": "pond", "count": 4, "at": "walls"},
+             {"id": "seat", "kind": "cushion", "near": "hw"}]},
+        {"id": "bath", "level": 0, "purpose": "washroom",
+         "fixtures": [{"id": "tub", "kind": "tub", "size": "large"}]},
+    ],
+}
+
+
+def test_things_on_walls_ceilings_or_in_other_fixtures_take_no_floor():
+    lay = solve(ROOMY)
+    placed = {f["id"] for f in lay.fixtures["hall"]}
+    assert not placed & {"vase", "scroll", "lamps", "lamps_1"}
+    assert {d["id"] for d in lay.details["hall"]} == {"scroll", "lamps"}
+    assert "bar" in placed                                   # against a wall is on the floor
+    assert [c["id"] for c in lay.contents["hall"]["alcove"]] == ["vase"]
+
+
+def test_several_alike_along_the_walls_go_round_the_walls():
+    lay = solve(ROOMY)
+    pools = [f for f in lay.fixtures["hall"] if f["id"].startswith("pools_")]
+    assert len(pools) == 4
+    assert len({f["at"] for f in pools}) >= 3
+
+
+def test_a_size_word_scales_a_known_kind():
+    lay = solve(ROOMY)
+    tub = next(f for f in lay.fixtures["bath"] if f["id"] == "tub")
+    assert tub["rect"].w * tub["rect"].d > 4                 # larger than a plain 2x2 tub
+
+
+def test_a_window_is_on_an_outside_wall():
+    lay = solve(ROOMY)
+    wins = {w["id"]: w for w in lay.windows}
+    assert wins["hw"]["side"] == "s"
+    assert wins["inner"]["side"] != "e"                      # the east wall is the bath's
+    hall = lay.floors[0]["hall"][0]
+    outline = lay.outlines["main"][0]
+    for w in wins.values():
+        x, y = w["cell"]
+        dx, dy = {"n": (0, -1), "s": (0, 1), "e": (1, 0), "w": (-1, 0)}[w["side"]]
+        assert (x, y) in hall.cells() and (x + dx, y + dy) not in outline.cells()
+
+
+def test_a_zone_is_big_enough_for_what_stands_in_it():
+    spec = {"name": "z", "front": "s", "entrance": {"room": "hall"},
+            "rooms": [{"id": "hall", "level": 0, "purpose": "living",
+                       "zones": [{"id": "sit", "at": "middle", "size": "small"}],
+                       "fixtures": [{"id": "t", "kind": "chabudai", "in": "sit"},
+                                    {"id": "c", "kind": "cushion", "in": "sit", "count": 4},
+                                    {"id": "b", "kind": "basin", "in": "sit"}]}]}
+    lay = solve(spec)
+    assert not lay.unplaced
+    zone = lay.zones["hall"][0]["rect"]
+    assert all(zone.contains(f["rect"]) for f in lay.fixtures["hall"])
