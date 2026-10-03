@@ -277,6 +277,30 @@ def fixture_footprint(fx):
     return SIZE_WORD_FOOTPRINT.get(word or "medium", SIZE_WORD_FOOTPRINT["medium"])
 
 
+#: USE-SPACE: the clear floor a fixture needs to be used, in paces -- the
+#: engine's table, like FIXTURE_SIZES. (front, back): standing room before it,
+#: and an aisle behind it (a bar is served from behind). A table needs a ring
+#: of floor all round, where its seats go; a bed needs one long side free.
+#: A kind not listed needs a pace before it when it is bigger than a pace.
+USE_SPACE = {
+    "bar": (1, 1), "counter": (1, 0), "stove": (1, 0), "hearth": (1, 0), "fireplace": (1, 0),
+    "range": (1, 0), "kamado": (1, 0), "oven": (1, 0), "sink": (1, 0), "basin": (1, 0),
+    "altar": (1, 0), "alcove": (1, 0), "tokonoma": (1, 0), "shelf": (1, 0), "bookshelf": (1, 0),
+    "cabinet": (1, 0), "closet": (1, 0), "wardrobe": (1, 0), "chest": (1, 0), "trunk": (1, 0),
+    "rack": (1, 0), "workbench": (1, 0), "desk": (1, 0), "writing_desk": (1, 0), "piano": (1, 0),
+    "bath": (1, 0), "tub": (1, 0), "toilet": (1, 0), "latrine": (1, 0), "screen": (0, 0),
+    "chair": (0, 0), "cushion": (0, 0), "stool": (0, 0), "barrel": (0, 0), "crate": (0, 0),
+    "lantern": (0, 0), "statue": (0, 0), "pillar": (0, 0), "rug": (0, 0), "box": (0, 0),
+}
+_TABLES = ("table", "low_table", "chabudai", "dining_table")
+_SEATS = ("chair", "cushion", "stool", "zabuton", "bench")
+_BEDS = ("bed", "futon", "nest")
+
+
+def _kind(fx):
+    return str(fx.get("kind") or "").strip().casefold().replace(" ", "_")
+
+
 #: Mounts that take no floor: a thing hung on a wall's face or from the
 #: ceiling. A thing that stands AGAINST a wall stands on the floor (its wall
 #: is its "at"); "wall" alone is read that way, since a model writes it for
@@ -1597,6 +1621,31 @@ def _place_zones(layout, rooms):
             layout.zones[rid] = out
 
 
+def _grow(r, side, n):
+    """`r` grown by n paces on `side`."""
+    if not n:
+        return r
+    return {"n": Rect(r.x, r.y - n, r.w, r.d + n), "s": Rect(r.x, r.y, r.w, r.d + n),
+            "w": Rect(r.x - n, r.y, r.w + n, r.d), "e": Rect(r.x, r.y, r.w + n, r.d)}[side]
+
+
+def _strip_beside(r, side, n):
+    """The cells of a strip n paces deep along `side` of `r`, outside it."""
+    if not n:
+        return set()
+    return _grow(r, side, n).cells() - r.cells()
+
+
+def _front_of(r, use):
+    """The side of `r` its use-space lies on most -- where it is used from."""
+    best, side = 0, None
+    for sd in _SIDES:
+        k = len(_strip_beside(r, sd, 1) & set(use))
+        if k > best:
+            best, side = k, sd
+    return side
+
+
 def _flush_room(rect, cells, side):
     """Is `rect` against the room's `side` wall (nothing of the room beyond)?"""
     dx, dy = _STEP[side]
@@ -1667,7 +1716,8 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
                     rcs = rc.cells()
                     if not rcs <= allowed:
                         continue
-                    if at in _SIDES and not _flush_room(rc, cells, at):
+                    back = USE_SPACE.get(_kind(fx), (0, 0))[1]
+                    if at in _SIDES and not _flush_room(_grow(rc, at, back), cells, at):
                         continue
                     if at.startswith("corner_") and not (_flush_room(rc, cells, at[7]) and _flush_room(rc, cells, at[8])):
                         continue
@@ -1699,9 +1749,69 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
                     s += 2
         return s
 
-    def fits(r):
+    use_of = {}          # fixture id -> the floor it keeps clear to be used
+
+    def table_for(fx):
+        """The table a seat belongs to: the one it is near, else the one in
+        its zone, else the room's only table."""
+        if _kind(fx) not in _SEATS:
+            return None
+        tables = {f["id"]: f for f in fixtures if _kind(f) in _TABLES}
+        if fx.get("near") in tables:
+            return fx["near"]
+        inzone = [t for t, f in tables.items() if fx.get("in") and f.get("in") == fx.get("in")]
+        if inzone:
+            return inzone[0]
+        return next(iter(tables)) if len(tables) == 1 else None
+
+    def use_space(fx, r):
+        """The cells `fx` at `r` keeps clear, or None when its use-space would
+        fall outside the room."""
+        kind = _kind(fx)
         rc = r.cells()
-        return not (rc & furniture) and not (rc & clear) and _connected(cells - furniture - rc, clear)
+        if kind in _TABLES:
+            ring = {(x + dx, y + dy) for x, y in rc for dx, dy in _STEP.values()} - rc
+            return ring & cells if len(ring & cells) >= len(ring) // 2 else None
+        if kind in _BEDS:
+            long_sides = ("n", "s") if r.w >= r.d else ("e", "w")
+            for side in long_sides:
+                strip = _strip_beside(r, side, 1)
+                if strip <= cells and not (strip & furniture):
+                    return strip
+            return None
+        front, back = USE_SPACE.get(kind, (1 if r.w * r.d > 1 else 0, 0))
+        if not front and not back:
+            return set()
+        walls = [sd for sd in _SIDES if _flush_room(_grow(r, sd, back), cells, sd)]
+        if walls:
+            wall = walls[0]
+            out = _strip_beside(r, _OPP[wall], front)
+            if back:
+                out |= _strip_beside(r, wall, back)
+        else:
+            # standing free: its front faces the middle of the room
+            cx, cy = r.x + r.w / 2, r.y + r.d / 2
+            face = (("e" if centre[0] > cx else "w") if abs(centre[0] - cx) > abs(centre[1] - cy)
+                    else ("s" if centre[1] > cy else "n"))
+            out = _strip_beside(r, face, front)
+        return out if out <= cells else None
+
+    def fits(r, fx=None):
+        rc = r.cells()
+        if rc & furniture or rc & clear:
+            return False
+        mine = table_for(fx) if fx is not None else None
+        others = set()
+        for fid, u in use_of.items():
+            if fid != mine:
+                others |= u
+        if rc & others:
+            return False
+        if fx is not None:
+            u = use_space(fx, r)
+            if u is None or u & furniture:
+                return False
+        return _connected(cells - furniture - rc, clear)
 
     budget = [3000]
     moved = []
@@ -1714,14 +1824,20 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
             return False
         fx = fixtures[i]
         at = str(fx.get("at") or "").casefold()
-        cands = [r for r in candidates(fx, at) if fits(r)]
+        table = table_for(fx)
+        if table in placed:
+            # a seat stands in its table's ring
+            ring = use_of.get(table, set())
+            cands = [Rect(x, y, 1, 1) for x, y in sorted(ring) if fits(Rect(x, y, 1, 1), fx)]
+        else:
+            cands = [r for r in candidates(fx, at) if fits(r, fx)]
         if not cands and not zones.get(fx.get("in")):
             # nowhere outside the zones: it may stand in one -- a cushion by
             # the table in the sitting area, where its relation puts it
-            cands = [r for r in candidates(fx, at, True) if fits(r)]
+            cands = [r for r in candidates(fx, at, True) if fits(r, fx)]
         if not cands and at:
             for alt in [s for s in _SIDES if s != at] + [""]:
-                cands = [r for r in candidates(fx, alt) if fits(r)]
+                cands = [r for r in candidates(fx, alt) if fits(r, fx)]
                 if cands:
                     moved.append((fx.get("name") or fx.get("id"), at, alt or "where it fits"))
                     break
@@ -1729,10 +1845,12 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
         for r in cands[:10]:
             placed[fx["id"]] = r
             furniture.update(r.cells())
+            use_of[fx["id"]] = use_space(fx, r) or set()
             if go(i + 1):
                 return True
             furniture.difference_update(r.cells())
             del placed[fx["id"]]
+            del use_of[fx["id"]]
         layout.unplaced.append({"room": room_id, "fixture": fx.get("name") or fx.get("id"),
                                 "why": "no free place" + (f" at {fx.get('at')}" if fx.get("at") else "")})
         return go(i + 1)
@@ -1743,7 +1861,9 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
                                f"moved to {('the ' + now + ' wall') if now in _SIDES else now}")
     layout.fixtures[room_id] = [
         {"id": f["id"], "name": f.get("name") or f["id"], "kind": f.get("kind"), "at": f.get("at"),
-         "in": f.get("in"), "rect": placed[f["id"]], "height": fixture_footprint(f)[2]}
+         "in": f.get("in"), "rect": placed[f["id"]], "height": fixture_footprint(f)[2],
+         "front": _front_of(placed[f["id"]], use_of.get(f["id"], set())),
+         "use": sorted(use_of.get(f["id"], set()))}
         for f in fixtures if f["id"] in placed]
 
 

@@ -208,6 +208,75 @@ function doorSeg(svg, d, X, Y, colour) {
   const t = el("title", {}, line); t.textContent = `${d.kind || "door"}: ${L().names[d.a] || d.a} – ${L().names[d.b] || d.b}`;
 }
 
+// A fixture as a floor plan draws it: the kind's symbol, the name only where
+// it fits (always on hover).
+function fixtureSymbol(g, f, X, Y, C) {
+  const r = f.rect, k = String(f.kind || "").toLowerCase().replace(/ /g, "_");
+  const x = X(r.x) + 2, y = Y(r.y) + 2, w = r.w * C - 4, h = r.d * C - 4;
+  const ink = { stroke: "var(--ink)", "stroke-width": 1, fill: "none", "stroke-opacity": .75 };
+  const body = (extra) => el("rect", Object.assign({ x, y, width: w, height: h, rx: 1.5, fill: "var(--sheet)", stroke: "var(--ink)", "stroke-width": 1.1, "stroke-opacity": .8 }, extra || {}), g);
+  const line = (x1, y1, x2, y2) => el("line", Object.assign({ x1, y1, x2, y2 }, ink), g);
+  const circ = (cx, cy, rr, extra) => el("circle", Object.assign({ cx, cy, r: rr }, ink, extra || {}), g);
+  const front = f.front || "s";
+  const is = (...names) => names.some(n => k === n || k.includes(n));
+  if (is("bed", "futon", "nest")) {
+    body();
+    // the pillow at the end away from the side it is used from
+    const long = w >= h, pad = Math.min(w, h) * .12;
+    if (long) { const px = front === "e" ? x + pad : x + w - pad - Math.min(w * .22, C * .8); el("rect", Object.assign({ x: px, y: y + pad, width: Math.min(w * .22, C * .8), height: h - 2 * pad, rx: 2 }, ink), g); }
+    else { const py = front === "s" ? y + pad : y + h - pad - Math.min(h * .22, C * .8); el("rect", Object.assign({ x: x + pad, y: py, width: w - 2 * pad, height: Math.min(h * .22, C * .8), rx: 2 }, ink), g); }
+  } else if (is("table", "chabudai")) {
+    body({ fill: "var(--living)" });
+  } else if (is("chair", "stool")) {
+    body({ fill: "var(--living)" });
+  } else if (is("cushion", "zabuton")) {
+    el("rect", Object.assign({ x: x + 2, y: y + 2, width: w - 4, height: h - 4, rx: 4 }, ink, { fill: "var(--living)" }), g);
+  } else if (is("stove", "hearth", "range", "kamado", "oven", "fireplace", "brazier", "hibachi")) {
+    body({ fill: "var(--store)" });
+    const n = Math.max(1, Math.round(Math.max(w, h) / C));
+    for (let i = 0; i < n; i++) { const t = (i + .5) / n; circ(w >= h ? x + w * t : x + w / 2, w >= h ? y + h / 2 : y + h * t, Math.min(w, h) * .28); }
+  } else if (is("tub", "bath", "ofuro")) {
+    body(); el("rect", Object.assign({ x: x + 4, y: y + 4, width: w - 8, height: h - 8, rx: Math.min(w, h) / 3 }, ink), g);
+  } else if (is("toilet", "latrine")) {
+    el("ellipse", Object.assign({ cx: x + w / 2, cy: y + h / 2, rx: w * .35, ry: h * .42 }, ink, { fill: "var(--sheet)" }), g);
+  } else if (is("sink", "basin")) {
+    body(); circ(x + w / 2, y + h / 2, Math.min(w, h) * .3);
+  } else if (is("closet", "oshiire", "wardrobe", "cabinet", "shelf", "bookshelf", "rack", "shelves")) {
+    body(); line(x, y, x + w, y + h);
+  } else if (is("chest", "trunk", "box", "crate")) {
+    body(); const lid = w >= h ? h * .3 : w * .3; if (w >= h) line(x, y + lid, x + w, y + lid); else line(x + lid, y, x + lid, y + h);
+  } else if (is("bar", "counter", "desk", "workbench")) {
+    body({ fill: "var(--living)" });
+    const e = { n: [x, y + 3, x + w, y + 3], s: [x, y + h - 3, x + w, y + h - 3], w: [x + 3, y, x + 3, y + h], e: [x + w - 3, y, x + w - 3, y + h] }[front] || [x, y + h - 3, x + w, y + h - 3];
+    line(...e);
+  } else if (is("altar", "tokonoma", "alcove", "shrine", "seal")) {
+    body(); el("rect", Object.assign({ x: x + w * .25, y: y + h * .25, width: w * .5, height: h * .5 }, ink), g);
+  } else if (is("barrel", "pond", "spring", "pool", "well")) {
+    circ(x + w / 2, y + h / 2, Math.min(w, h) / 2 - 1, { fill: is("pond", "spring", "pool") ? "var(--private)" : "var(--sheet)" });
+    if (is("well")) circ(x + w / 2, y + h / 2, Math.min(w, h) / 4);
+  } else if (is("lantern", "lamp")) {
+    const rr = Math.min(w, h) / 2 - 1; circ(x + w / 2, y + h / 2, rr, { fill: "var(--sheet)" });
+    line(x + w / 2 - rr * .7, y + h / 2, x + w / 2 + rr * .7, y + h / 2); line(x + w / 2, y + h / 2 - rr * .7, x + w / 2, y + h / 2 + rr * .7);
+  } else if (is("statue", "guardian")) {
+    el("polygon", Object.assign({ points: `${x + w / 2},${y} ${x + w},${y + h / 2} ${x + w / 2},${y + h} ${x},${y + h / 2}` }, ink, { fill: "var(--sheet)" }), g);
+  } else if (is("pillar", "column")) {
+    el("rect", { x: x + w * .2, y: y + h * .2, width: w * .6, height: h * .6, fill: "var(--ink)", "fill-opacity": .6 }, g);
+  } else if (is("tree")) {
+    circ(x + w / 2, y + h / 2, Math.min(w, h) / 2 - 1, { fill: "var(--grass)", "stroke-dasharray": "3 2" });
+    circ(x + w / 2, y + h / 2, 2, { fill: "var(--ink)" });
+  } else if (is("boulder", "rock", "stone")) {
+    el("rect", Object.assign({ x, y, width: w, height: h, rx: Math.min(w, h) / 2.5 }, ink, { fill: "var(--store)" }), g);
+  } else if (is("gate", "torii")) {
+    body({ fill: "var(--sacred)" });
+    el("rect", { x, y, width: Math.min(w, h), height: Math.min(w, h), fill: "var(--ink)", "fill-opacity": .6 }, g);
+    el("rect", { x: x + w - Math.min(w, h), y: y + h - Math.min(w, h), width: Math.min(w, h), height: Math.min(w, h), fill: "var(--ink)", "fill-opacity": .6 }, g);
+  } else if (is("rug", "mat")) {
+    el("rect", Object.assign({ x, y, width: w, height: h }, ink, { "stroke-dasharray": "4 3" }), g);
+  } else {
+    body();
+  }
+}
+
 function label(svg, x, y, text, size, weight, fill) {
   const t = el("text", { x, y, "text-anchor": "middle", "font-size": size, "font-weight": weight || 600, fill: fill || "var(--ink)", "pointer-events": "none", "paint-order": "stroke", stroke: "var(--sheet)", "stroke-width": 3 }, svg);
   t.textContent = text; return t;
@@ -272,11 +341,11 @@ function drawPlan() {
     if (!(rid in floor)) continue;
     for (const f of fx) {
       const r = f.rect, g = el("g", {}, svg);
-      el("rect", { x: X(r.x) + 3, y: Y(r.y) + 3, width: r.w * C - 6, height: r.d * C - 6, rx: 3, fill: "var(--ochre)", "fill-opacity": .22, stroke: "var(--ochre)", "stroke-width": 1.2 }, g);
+      fixtureSymbol(g, f, X, Y, C);
       const inside = ((lay.contents || {})[rid] || {})[f.id] || [];
       el("title", {}, g).textContent = `${f.name} (${f.kind}${f.at ? ", " + f.at : ""}${f.in ? ", in " + f.in : ""})` + (inside.length ? `\nholds: ${inside.map(c => c.name + (c.count > 1 ? " ×" + c.count : "")).join(", ")}` : "");
       if (inside.length) label(g, X(r.x + r.w) - 6, Y(r.y) + 10, "+" + inside.length, 9, 700, "var(--ochre)");
-      if (r.w * C > 44) label(g, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 3, f.name.length > r.w * C / 6 ? f.name.slice(0, Math.floor(r.w * C / 6)) + "…" : f.name, Math.max(8, Math.min(11, C * .3)), 400);
+      if (r.w * C >= 70 && !/(_\d+)$/.test(f.id)) label(g, X(r.x + r.w / 2), Y(r.y + r.d) + 11, short(f.name).length > r.w * C / 6 ? short(f.name).slice(0, Math.floor(r.w * C / 6)) + "…" : short(f.name), Math.max(8, Math.min(10, C * .28)), 500, "var(--line)");
     }
   }
   // stairs: a plan symbol by shape, in the hall
@@ -329,8 +398,7 @@ function drawPlan() {
   // outdoor features
   if (ground) for (const f of lay.features || []) {
     const r = f.rect, g = el("g", {}, svg);
-    const round = ["tree", "well", "boulder", "pond", "lantern", "statue"].includes(f.kind);
-    el("rect", { x: X(r.x) + 2, y: Y(r.y) + 2, width: r.w * C - 4, height: r.d * C - 4, rx: round ? Math.min(r.w, r.d) * C / 2 - 2 : 2, fill: "var(--ochre)", "fill-opacity": .3, stroke: "var(--ochre)", "stroke-width": 1.4 }, g);
+    fixtureSymbol(g, f, X, Y, C);
     el("title", {}, g).textContent = `${f.name} (${f.kind})`;
     const nm = short(f.name).replace(/_\d+$/, "");
     if (!/_\d+$/.test(f.id) || /_1$/.test(f.id)) label(g, X(r.x + r.w / 2), Y(r.y) - 4, nm, Math.max(9, Math.min(12, C * .34)), 600, "var(--ochre)");

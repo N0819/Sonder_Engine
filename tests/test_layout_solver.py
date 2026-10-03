@@ -368,3 +368,35 @@ def test_rooms_are_near_square():
                 # room beside a stair the roof pins mid-building is allowed
                 assert max(r.w, r.d) / min(r.w, r.d) <= 2.7, (rid, r)
 
+
+
+TAVERN = {"name": "taproom", "front": "s", "entrance": {"room": "tap"},
+          "rooms": [{"id": "tap", "level": 0, "purpose": "common room",
+                     "fixtures": [{"id": "bar", "kind": "bar", "at": "n"},
+                                  {"id": "table", "kind": "table", "at": "middle"},
+                                  {"id": "chairs", "kind": "chair", "near": "table", "count": 4},
+                                  {"id": "hearth", "kind": "hearth", "at": "w"}]}]}
+
+
+def test_a_bar_has_its_server_s_aisle_behind_it():
+    lay = solve(TAVERN)
+    room = lay.floors[0]["tap"][0]
+    bar = next(f for f in lay.fixtures["tap"] if f["id"] == "bar")["rect"]
+    assert bar.y > room.y                                   # off the wall it stands along
+    behind = {(x, y) for x in range(bar.x, bar.x + bar.w) for y in range(room.y, bar.y)}
+    taken = set().union(*(f["rect"].cells() for f in lay.fixtures["tap"]))
+    assert behind and not (behind & taken)
+
+
+def test_seats_stand_round_their_table_and_nothing_else_in_any_use_space():
+    lay = solve(TAVERN)
+    fx = {f["id"]: f for f in lay.fixtures["tap"]}
+    table = fx["table"]["rect"]
+    ring = {(x + dx, y + dy) for x, y in table.cells() for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}
+    seats = [f for k, f in fx.items() if k.startswith("chairs_")]
+    assert len(seats) == 4 and all(f["rect"].cells() <= ring for f in seats)
+    for f in fx.values():
+        for g in fx.values():
+            if f is g or (g["id"] == "table" and f["id"].startswith("chairs_")):
+                continue
+            assert not (f["rect"].cells() & set(map(tuple, g["use"]))), (f["id"], g["id"])
