@@ -259,9 +259,11 @@ class TestASiblingCollisionSparesTheIncumbent:
         assert edges == {"terrace": "w", "tardis": "n"}
         assert merged["rooms"]["tardis"]["adjacent"][0]["dir"] == "s"
 
-    def test_two_fresh_claims_still_both_drop(self):
-        """Unchanged where the drop rule was right: neither bearing was
-        standing, so nothing chooses between them and neither is guessed."""
+    def test_two_fresh_doors_in_one_wall_both_stand(self):
+        """Two doors declared in one wall at once are two places along it
+        (the owner, 2026-10-03: "whenever I try to place multiple doors on
+        one cardinal direction such as east they both disappear"). The drop
+        rule took both; each now keeps the bearing and a place of its own."""
         scene = _scene({"hall": {"name": "hall", "adjacent": []}})
         diff = {"rooms": {
             "hall": {"adjacent": [
@@ -272,8 +274,9 @@ class TestASiblingCollisionSparesTheIncumbent:
             "cellar": {"name": "cellar", "adjacent": [
                 {"to": "hall", "barrier": "open"}]}}}
         merged = merge_scene_with_diff(scene, diff)
-        assert all(e.get("dir") is None
-                   for e in merged["rooms"]["hall"]["adjacent"])
+        edges = merged["rooms"]["hall"]["adjacent"]
+        assert [e.get("dir") for e in edges] == ["e", "e"]
+        assert len({e.get("offset") for e in edges}) == 2
 
     def test_a_two_sided_replan_still_moves_the_incumbent(self):
         """The incumbent is defended only while the diff leaves it alone.

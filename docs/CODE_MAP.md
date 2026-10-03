@@ -224,7 +224,7 @@
 | `world/spatial_light_field.py` | 1246 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 444 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
 | `world/spatial_merge.py` | 2653 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
-| `world/spatial_orientation.py` | 398 | Bearing math and reciprocal spatial-edge normalization. | — |
+| `world/spatial_orientation.py` | 432 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1257 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
@@ -2765,14 +2765,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_scene_bearings()` | 153 | 159 lines |
-| `derived_edge_bearings()` | 328 | 71 lines |
+| `normalize_scene_bearings()` | 153 | 170 lines |
+| `derived_edge_bearings()` | 362 | 71 lines |
+| `_spread_along_wall()` | 325 | 21 lines |
 | `travel_bearing()` | 133 | 18 lines |
 | `relative_bearing()` | 97 | 11 lines |
 | `lateral_of()` | 110 | 11 lines |
 | `turn_bearing()` | 64 | 10 lines |
 | `normalize_bearing()` | 47 | 9 lines |
-| `normalize_vertical()` | 83 | 8 lines |
 
 ### `world/spatial_prose.py`
 

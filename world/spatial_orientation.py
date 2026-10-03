@@ -299,8 +299,19 @@ def normalize_scene_bearings(scene: dict) -> dict:
                     from world.spatial_levels import edge_way
                     key = "%s|%s|%s" % (key, edge["vertical"], edge_way(edge))
                 by_bearing.setdefault(key, []).append(edge)
-        for colliding in by_bearing.values():
+        for key, colliding in by_bearing.items():
             if len(colliding) < 2:
+                continue
+            if "|" not in key:
+                # TWO DOORS IN ONE WALL ARE TWO PLACES ALONG IT, NOT A
+                # CONTRADICTION (the owner, 2026-10-03: "whenever I try to
+                # place multiple doors on one cardinal direction such as east
+                # they both disappear"). A wall is long enough for more than
+                # one doorway, and `offset` says where along it each stands
+                # (`spatial_geometry.normalize_offset`); the bearing is kept,
+                # and a doorway with no place of its own -- or sharing one --
+                # is given the next free one, spread evenly along the wall.
+                _spread_along_wall(colliding)
                 continue
             for edge in colliding:
                 edge.pop("dir", None)
@@ -309,6 +320,29 @@ def normalize_scene_bearings(scene: dict) -> dict:
                     back.pop("dir", None)
 
     return scene
+
+
+def _spread_along_wall(edges):
+    """Give each of several doorways on one wall a place of its own along it:
+    an `offset` already held, and not shared, stays; the rest take the free
+    slots of an even spread (1/(n+1), 2/(n+1), ...), in declared order."""
+    from world.spatial_geometry import normalize_offset
+
+    n = len(edges)
+    slots = [round((i + 1) / (n + 1), 3) for i in range(n)]
+    kept, taken = set(), set()
+    for index, edge in enumerate(edges):
+        offset = normalize_offset(edge.get("offset"))
+        if offset is not None and offset not in taken:
+            taken.add(offset)
+            kept.add(index)
+    free = [slot for slot in slots if all(abs(slot - t) > 1e-6 for t in taken)]
+    for index, edge in enumerate(edges):
+        if index in kept:
+            continue
+        slot = free.pop(0) if free else round((index + 1) / (n + 1), 3)
+        edge["offset"] = slot
+        taken.add(slot)
 
 
 #: The order a doorway with no stated bearing is offered a wall in. Walls

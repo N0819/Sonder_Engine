@@ -78,9 +78,12 @@ def test_an_unoriented_mover_asserts_no_direction():
     assert exits.get("unclassified")
 
 
-def test_two_neighbors_on_one_bearing_lose_the_bearing():
-    """west_deep_passage claimed both lower_descent and functional_chamber
-    due west, so egocentric_frame offered two different rooms as 'ahead'."""
+def test_two_neighbors_on_one_bearing_are_two_places_along_the_wall():
+    """west_deep_passage put lower_descent and functional_chamber both on its
+    west wall. That was read as a false bearing and stripped from both; two
+    doorways on one side of a passage are ordinary, and since 2026-10-03 (the
+    owner: two doors placed on one side "both disappear") each keeps the
+    bearing and takes a place of its own along the wall."""
     scene = {"rooms": {
         "deep_passage": {"adjacent": [
             {"to": "descent", "dir": "e"},
@@ -92,12 +95,12 @@ def test_two_neighbors_on_one_bearing_lose_the_bearing():
     }}
     out = normalize_scene_bearings(copy.deepcopy(scene))
     edges = {e["to"]: e for e in out["rooms"]["deep_passage"]["adjacent"]}
-    # The colliding pair keeps its doorways but loses the false bearing...
-    assert "dir" not in edges["lower_descent"]
-    assert "dir" not in edges["functional_chamber"]
-    # ...and so do their reciprocals, so the next pass cannot re-derive it.
-    assert "dir" not in out["rooms"]["lower_descent"]["adjacent"][0]
-    assert "dir" not in out["rooms"]["functional_chamber"]["adjacent"][0]
+    # Both stand on the west wall, at two places along it.
+    assert edges["lower_descent"]["dir"] == edges["functional_chamber"]["dir"] == "w"
+    assert edges["lower_descent"]["offset"] != edges["functional_chamber"]["offset"]
+    # Their reciprocals keep the east bearing back.
+    assert out["rooms"]["lower_descent"]["adjacent"][0]["dir"] == "e"
+    assert out["rooms"]["functional_chamber"]["adjacent"][0]["dir"] == "e"
     # An uncontested bearing is untouched.
     assert edges["descent"]["dir"] == "e"
     # Stable: running it again changes nothing.
