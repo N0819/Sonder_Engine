@@ -444,7 +444,17 @@ def _shape_cells(shape, w, d, parts) -> frozenset:
 def room_grid(scene: dict, room_id) -> RoomGrid:
     """The grid a room's geometry runs over. With an `extent`, the box it
     measures and the shape it declares; without one, the size tier's square
-    -- the whole of what existed before extents, unchanged."""
+    -- the whole of what existed before extents, unchanged.
+
+    Built once per room inside a `scene_read_pass`: one perception pass over
+    six bodies in one room built it 391 times, half the cost of their sight
+    (measured 2026-10-03, a 64-pace yard). A grid is never written after it
+    is built, so the one object is shared."""
+    return scene_memo(scene, ("room_grid", str(room_id)),
+                      lambda: _room_grid(scene, room_id))
+
+
+def _room_grid(scene: dict, room_id) -> RoomGrid:
     room = ((scene or {}).get("rooms") or {}).get(room_id)
     room = room if isinstance(room, dict) else {}
     extent = normalize_extent(room.get("extent"))
@@ -1191,6 +1201,17 @@ def room_field(scene: dict, room_id, *, through=None,
     carries the predicate's `pass` for its aperture -- 1.0 under the sight
     rule -- beside the five keys it always had.
     """
+    if through is None:
+        # THE SIGHT FIELD DEPENDS ON THE ROOM ALONE, not on who looks: built
+        # once per room inside a `scene_read_pass`, never once per pair of
+        # bodies (measured 2026-10-03: 30 builds for six bodies). Nothing
+        # writes to a field after this function returns it.
+        return scene_memo(scene, ("room_field", str(room_id), bool(derive)),
+                          lambda: _room_field(scene, room_id, None, derive))
+    return _room_field(scene, room_id, through, derive)
+
+
+def _room_field(scene, room_id, through, derive):
     if not room_id or room_id not in ((scene or {}).get("rooms") or {}):
         return None
     field = _Field()
