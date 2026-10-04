@@ -377,3 +377,41 @@ def test_sight_across_storeys_is_symmetric_at_every_distance():
                 a = body_visibility(sc, "Visitor", "Hinami")["visible"]
                 b = body_visibility(sc, "Hinami", "Visitor")["visible"]
                 assert a == b, (hinami, vx, posture, a, b)
+
+
+def test_a_hole_in_the_floor_is_a_drop_and_a_hatch_is_looked_through_as_before():
+    from world.site_plan import drop_m, elevated_pair
+    sc = _garden_round_a_house()
+    sc["rooms"]["bedroom"]["adjacent"].append(
+        {"to": "hall", "barrier": "open", "vertical": "down", "way": "overlook"})
+    sc["rooms"]["bedroom"]["adjacent"] = [e for e in sc["rooms"]["bedroom"]["adjacent"]
+                                          if e.get("way") == "overlook"]
+    sc["rooms"]["hall"]["adjacent"] = [e for e in sc["rooms"]["hall"]["adjacent"]
+                                       if not e.get("vertical")]
+    assert drop_m(sc, "bedroom", "hall") == STOREY_M
+    assert not elevated_pair(sc, "bedroom", "hall")
+
+
+def test_a_building_the_designer_made_gets_a_plan_its_stairs_stacked():
+    from world.site_plan import derive_site_plans, room_site
+    sc = {"rooms": {
+        "hall": {"name": "Hall", "desc": ".", "level": 0, "extent": {"w": 4, "d": 3},
+                 "adjacent": [{"to": "yard", "barrier": "open_door", "dir": "s", "offset": 0.5},
+                              {"to": "landing", "barrier": "open", "vertical": "up", "way": "stair"}]},
+        "landing": {"name": "Landing", "desc": ".", "level": 1, "extent": {"w": 4, "d": 3},
+                    "adjacent": [{"to": "hall", "barrier": "open", "vertical": "down", "way": "stair"}]},
+        "yard": {"name": "Yard", "desc": ".", "level": 0, "exposure": "open",
+                 "extent": {"w": 8, "d": 5},
+                 "adjacent": [{"to": "hall", "barrier": "open_door", "dir": "n", "offset": 0.5}]},
+        "street": {"name": "Street", "desc": ".", "adjacent": []}},
+        "entities": {}, "positions": {}}
+    placed = derive_site_plans(sc)
+    assert set(placed) == {"hall", "landing", "yard"}          # the lone street has no storeys
+    hall, landing, yard = (room_site(sc, r) for r in ("hall", "landing", "yard"))
+    assert (hall["x"], hall["y"]) == (landing["x"], landing["y"])
+    assert landing["elev_m"] == STOREY_M and hall["elev_m"] == 0.0
+    assert site_overlaps(sc) == [] and derive_site_plans(sc) == []   # idempotent
+    # the hall's south door meets the yard's north door across the wall
+    (dh,), _ = _door_cells(sc, "hall", "yard")
+    (dy,), _ = _door_cells(sc, "yard", "hall")
+    assert (dh[0] + hall["x"], dh[1] + hall["y"] + 1) == (dy[0] + yard["x"], dy[1] + yard["y"])

@@ -2428,6 +2428,12 @@ def merge_scene_with_diff(
         )
 
     _report_unsourced_light(merged, light_report)
+    # A BUILDING OF STOREYS STANDS ON A PLAN (`world/site_plan`): what the
+    # room designer wrote -- storeys, boxes, doorways, stairs -- is laid
+    # out and stacked, so height reaches it. Only rooms with no plan yet.
+    from world.site_plan import derive_site_plans
+    derive_site_plans(merged)
+
     return merged
 
 

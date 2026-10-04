@@ -209,7 +209,7 @@
 | `world/regions.py` | 587 |  | `world.spatial` |
 | `world/routines.py` | 256 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 195 |  | — |
-| `world/site_plan.py` | 474 |  | — |
+| `world/site_plan.py` | 592 |  | — |
 | `world/spatial.py` | 369 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
 | `world/spatial_barriers.py` | 945 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 592 |  | `world.spatial`, `world.spatial_frames` |
@@ -224,7 +224,7 @@
 | `world/spatial_light.py` | 508 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1246 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 462 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2689 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2695 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 432 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1271 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
@@ -2588,14 +2588,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `plan_sight()` | 286 | 51 lines |
-| `_window_on_line()` | 235 | 35 lines |
+| `derive_site_plans()` | 521 | 72 lines |
+| `plan_sight()` | 294 | 51 lines |
+| `_window_on_line()` | 243 | 35 lines |
 | `normalize_site()` | 37 | 30 lines |
-| `report_drops()` | 399 | 29 lines |
+| `report_drops()` | 408 | 29 lines |
+| `drop_m()` | 374 | 19 lines |
 | `site_overlaps()` | 126 | 18 lines |
-| `drop_m()` | 366 | 18 lines |
-| `_mass_heights()` | 217 | 16 lines |
-| `normalize_altitude()` | 449 | 15 lines |
+| `_mass_heights()` | 225 | 16 lines |
 
 ### `world/spatial_barriers.py`
 
@@ -2767,12 +2767,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1607 | 825 lines |
+| `merge_scene_with_diff()` | 1607 | 831 lines |
 | `_expire_transient_entity_state()` | 616 | 116 lines |
 | `_shield_standing_bearings()` | 898 | 107 lines |
 | `_merge_room()` | 190 | 106 lines |
 | `_shield_minted_edges()` | 1159 | 95 lines |
-| `beat_movement_cuts()` | 2560 | 94 lines |
+| `beat_movement_cuts()` | 2566 | 94 lines |
 | `sync_scene_passages()` | 1421 | 90 lines |
 | `_mirror_symmetric_barriers()` | 1069 | 88 lines |
 

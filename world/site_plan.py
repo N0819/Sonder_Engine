@@ -191,11 +191,19 @@ def _open_air(scene, room_id) -> bool:
 
 
 def elevated_pair(scene, a, b) -> bool:
-    """Are rooms `a` and `b` on one plan with floors a storey apart?"""
+    """Are rooms `a` and `b` on one plan with floors a storey apart, joined
+    through a WALL (a window, a door onto a drop) rather than a vertical way?
+    A hatch, a stair or an overlook is looked up and down through by the
+    vertical edge's own rules (`spatial_levels`); the line in three
+    dimensions is for an opening in a wall a storey up."""
     sa, sb = room_site(scene, a), room_site(scene, b)
     if not sa or not sb or sa["plan"] != sb["plan"] or a == b:
         return False
-    return abs(room_elevation_m(scene, a) - room_elevation_m(scene, b)) >= LEVEL_STEP_M
+    if abs(room_elevation_m(scene, a) - room_elevation_m(scene, b)) < LEVEL_STEP_M:
+        return False
+    from world.spatial import normalize_vertical
+    edge = _direct_edge(scene, a, b)
+    return not (edge is not None and normalize_vertical(edge.get("vertical")))
 
 
 def plan_point(scene, name) -> Optional[tuple]:
@@ -370,7 +378,8 @@ def drop_m(scene, from_room, to_room) -> Optional[float]:
     them, or the way is a stair, a ladder or a hatch (`vertical` + `way`)."""
     from world.spatial import normalize_vertical
 
-    if not elevated_pair(scene, from_room, to_room):
+    sa, sb = room_site(scene, from_room), room_site(scene, to_room)
+    if not sa or not sb or sa["plan"] != sb["plan"] or from_room == to_room:
         return None
     height = room_elevation_m(scene, from_room) - room_elevation_m(scene, to_room)
     if height < LEVEL_STEP_M:
@@ -472,3 +481,112 @@ def body_altitude_m(scene, name) -> float:
     if not isinstance(station, dict):
         return 0.0
     return normalize_altitude(scene, room_of(scene, name), station.get("altitude_m")) or 0.0
+
+
+# ---------------------------------------------------------------------------
+# A plan derived from what the room designer already wrote (2026-10-04)
+# ---------------------------------------------------------------------------
+#
+# The room designer writes every fact a plan needs -- a storey (`level`), a
+# measured box (`extent`), doorways with bearings, stairs as vertical edges --
+# and only the lab's converter ever wrote a `site`. So a building the planner
+# and the designer made had no plan, and none of the height above reached it.
+# Here each storey of a building is laid out by its doorways, rooms sharing
+# their walls, and the storeys stacked so a stair lands over where it left;
+# elevations come from the storeys. A group whose bearings cannot all be
+# drawn gets no plan rather than a wrong one; a room added later is placed
+# against its neighbours already on the plan.
+
+_UNIT4 = {"n": (0, -1), "s": (0, 1), "e": (1, 0), "w": (-1, 0)}
+
+
+def _placeable(scene, rid) -> bool:
+    room = _scene_rooms(scene).get(rid)
+    return isinstance(room, dict) and not room.get("parent_entity")
+
+
+def _neighbour_offset(scene, a, a_xy, b):
+    """Where `b` stands if its doorway onto `a` meets `a`'s across the wall,
+    or None when the doorway has no placed cell on a straight wall."""
+    from world.spatial import _door_cells
+    da, ba = _door_cells(scene, a, b)
+    db, _bb = _door_cells(scene, b, a)
+    if not da or not db or ba not in _UNIT4:
+        return None
+    ux, uy = _UNIT4[ba]
+    target = (a_xy[0] + da[0][0] + ux, a_xy[1] + da[0][1] + uy)
+    return (target[0] - db[0][0], target[1] - db[0][1])
+
+
+def derive_site_plans(scene) -> list:
+    """Give every room of a multi-storey group that has no `site` one, in
+    place; returns the room ids it placed. Idempotent."""
+    from world.spatial import effective_adjacent, normalize_vertical, room_grid
+    rooms = _scene_rooms(scene)
+    placed_now = []
+    # the groups: rooms joined by any edge, vertical included
+    seen = set()
+    for start in sorted(rooms, key=str):
+        if start in seen or not _placeable(scene, start):
+            continue
+        group, frontier = {start}, [start]
+        while frontier:
+            cur = frontier.pop()
+            for e in effective_adjacent(scene, cur):
+                to = str((e or {}).get("to") or "")
+                if to in rooms and to not in group and _placeable(scene, to):
+                    group.add(to)
+                    frontier.append(to)
+        seen |= group
+        if len({room_level(scene, r) for r in group}) < 2:
+            continue                       # one storey: nothing for height to do
+        if all(room_site(scene, r) for r in group):
+            continue
+        plan = next((room_site(scene, r)["plan"] for r in sorted(group) if room_site(scene, r)),
+                    None) or str((rooms[start].get("region") or start))
+        xy = {r: (room_site(scene, r)["x"], room_site(scene, r)["y"])
+              for r in group if room_site(scene, r)}
+        if not xy:
+            xy[start] = (0, 0)
+        # grow outward from what is placed: across doorways on a storey,
+        # straight up or down a stair (a stair lands over where it left)
+        changed = True
+        while changed:
+            changed = False
+            for a in sorted(xy, key=str):
+                for e in effective_adjacent(scene, a):
+                    b = str((e or {}).get("to") or "")
+                    if b not in group or b in xy:
+                        continue
+                    if normalize_vertical(e.get("vertical")):
+                        xy[b] = xy[a]
+                    else:
+                        if room_level(scene, a) != room_level(scene, b):
+                            continue
+                        spot = _neighbour_offset(scene, a, xy[a], b)
+                        if spot is None:
+                            continue
+                        xy[b] = spot
+                    changed = True
+        new = [r for r in group if r in xy and not room_site(scene, r)]
+        if not new:
+            continue
+        # a plan that does not hold together is not written
+        held = {}
+        clash = False
+        for r in sorted(xy, key=str):
+            for x, y in room_grid(scene, r).cells:
+                key = (room_level(scene, r), x + xy[r][0], y + xy[r][1])
+                if key in held:
+                    clash = True
+                    break
+                held[key] = r
+            if clash:
+                break
+        if clash:
+            continue
+        for r in new:
+            rooms[r]["site"] = {"plan": plan, "x": int(xy[r][0]), "y": int(xy[r][1]),
+                                "elev_m": room_level(scene, r) * STOREY_M}
+            placed_now.append(r)
+    return placed_now

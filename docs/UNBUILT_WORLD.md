@@ -2216,10 +2216,12 @@ leaves, in the order the owner agreed:
   not list them (it gets them through the view), and the visibility table is
   the engine's, not the owner's, until the owner rules on it.
 * **Ground is flat**: no slope, no cliff, no bank between two cells.
-* **Nothing produces a plan in play.** Only `tools/site_plan_from_layout.py`
-  writes one, from the layout lab; the room designer and the Writers' Room do
-  not, and the lab's solver is on `layout-solver-test` at roughly one good
-  answer in three fresh runs.
+* **A plan is derived in play since 2026-10-04** (`site_plan.derive_site_plans`,
+  every merge): a group of rooms spanning two storeys or more is laid out by
+  its doorways and stacked by its stairs. Still open: one-storey groups get
+  no plan (nothing for height to do, and no vista horizon from buildings);
+  a group whose bearings cannot be drawn gets none; once placed, a room's
+  box is the plan's and a beat can no longer re-measure it.
 * **A window between storeys is an anchor, not an edge**: an edge is one per
   pair of rooms, and the ground-floor door already holds it.
 
