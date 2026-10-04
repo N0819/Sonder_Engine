@@ -1163,6 +1163,7 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
 .wb-sm-exit{stroke:var(--acc);stroke-width:3;fill:var(--acc)}
 .wb-sm-exit.far-unplaced{stroke-dasharray:2 2}
 .wb-sm-name{font-size:7.5px;font-weight:600}
+.wb-sm-plan{font-size:8px;font-weight:700;fill:var(--dim)}
 .wb-sm-who{font-size:6px;fill:var(--dim)}
 .wb-sm-unbeared{font-size:6.5px;fill:var(--dim)}
 .wb-sm-lint{fill:var(--warn);stroke:var(--bg);stroke-width:.8}

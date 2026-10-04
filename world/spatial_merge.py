@@ -260,6 +260,13 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
     if existing.get("planned") and existing.get("extent"):
         _planned_geometry = {"extent", "shape", "parts", "size", "exposure",
                              "level", "surface", "quiet"}
+    # A ROOM ON A SITE PLAN STANDS WHERE THE PLAN PUT IT (`world/site_plan`):
+    # its box, its shape and its storey are the plan's, so a beat that
+    # re-measures it would lay it over its neighbours. Described, never
+    # re-measured; the plan itself moves it.
+    if isinstance(existing.get("site"), dict):
+        _planned_geometry |= {"extent", "shape", "parts", "size", "level",
+                              "site"}
     for key, value in incoming.items():
         if key in ("name", "desc", "notes", "parent_entity", "adjacent",
                    "remove_anchors"):

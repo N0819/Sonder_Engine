@@ -105,6 +105,8 @@
   "${total.toLocaleString()} stored, ${stranded.toLocaleString()} written by a different model.": "${total.toLocaleString()} 件を保存済み。うち ${stranded.toLocaleString()} 件は別のモデルで書かれています。",
   "${total.toLocaleString()} stored.": "${total.toLocaleString()}件保存済み。",
   "${toWord} ${x.name} (${x.barrier})": "${toWord} ${x.name} (${x.barrier})",
+  "${comp.plan} · ${storeyWord} ${comp.level}": "${comp.plan} · ${storeyWord} ${comp.level}",
+  "${storeyWord} ${comp.level}": "${storeyWord} ${comp.level}",
   "${wbRoomLabel(r)} (${t(\"Planned\")})": "${wbRoomLabel(r)} (${t(\"Planned\")})",
   "${what} holds no word, so it says nothing": "${what} には語がひとつもなく、何も述べていません",
   "${x},${y}": "${x},${y}",

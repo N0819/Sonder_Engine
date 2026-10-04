@@ -2188,6 +2188,29 @@ dropped from the draft, and Jev says when a design is finished. Left:
   at `medium`, one loop took 162-174 s and met the 150 s wall; every
   measurement here is plain `z-ai/glm-5.2` with `reasoning_effort` `off`.
 
+<a id="unbuilt-2-39"></a>
+
+### 2.39 The site plan: sight with height, drops, flight, terrain
+
+Step 1 landed 2026-10-03 ([`design/DESIGN_SITE_PLAN.md`](design/DESIGN_SITE_PLAN.md)):
+a room may stand on a plan at a position and a floor height, the structure map
+draws it there, and a layout lab result converts into engine rooms. What it
+leaves, in the order the owner agreed:
+
+* **Sight does not read elevation.** A window joining a third-storey room to
+  the garden below is still read as a ground-floor window (`spatial_rel`
+  answers `near`; the line falls back to `basis: open`). Step 2.
+* **A drop is not a fact.** Nothing tells the Director how far a body falls
+  from a window, a balcony or a bank. Step 3.
+* **No body has an altitude**, so flight has no number to stand on.
+* **Ground is flat**: no slope, no cliff, no bank between two cells.
+* **Nothing produces a plan in play.** Only `tools/site_plan_from_layout.py`
+  writes one, from the layout lab; the room designer and the Writers' Room do
+  not, and the lab's solver is on `layout-solver-test` at roughly one good
+  answer in three fresh runs.
+* **A window between storeys is an anchor, not an edge**: an edge is one per
+  pair of rooms, and the ground-floor door already holds it.
+
 ## 4. Architecture gaps
 
 <a id="unbuilt-4-7"></a>

@@ -48,6 +48,8 @@
   "${skipped.length} ${skipped.length === 1 ? \"story was\" : \"stories were\"}": "placeholders and punctuation only — no prose to translate",
   "${th.name}${th.kind ? \" (\" + th.kind + \")\" : \"\"}${source ? \" — \" + lightWord + \" (\" + source.height + \")\" : \"\"} — ${thingHint}": "a name, a kind, an already-translated word, an engine word and an already-translated hint joined by punctuation",
   "${toWord} ${x.name} (${x.barrier})": "an already-translated word, a room name and a barrier word",
+  "${comp.plan} \u00b7 ${storeyWord} ${comp.level}": "a plan id, an already-translated word and a storey number",
+  "${storeyWord} ${comp.level}": "an already-translated word and a storey number",
   "${wbRoomLabel(r)} (${t(\"Planned\")})": "placeholders and punctuation only — no prose to translate",
   "${x},${y}": "a cell key the map indexes targets by, never shown",
   "&model=": "URL, route, or query-string fragment",

@@ -377,7 +377,8 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
         if isinstance(anchor, dict):
             out[aid] = anchor
 
-    def add(neighbor_id, barrier, bearing, vertical, offset=None, width=None):
+    def add(neighbor_id, barrier, bearing, vertical, offset=None, width=None,
+            cell=None):
         aid = door_anchor_id(neighbor_id)
         if aid in out:
             return
@@ -398,6 +399,13 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
         # east or west one -- so the far side's value reads unchanged.
         if offset is not None:
             anchor["offset"] = offset
+        # A DOORWAY PINNED TO ITS CELL (2026-10-03, `world/site_plan`): on a
+        # room that is not a rectangle -- a garden round a house, an L, any
+        # composite -- "the north wall" is several walls, and a fraction
+        # along it is ambiguous. A cell, room-local as an anchor's is, says
+        # which; it outranks the offset exactly as it does on an anchor.
+        if cell is not None:
+            anchor["cell"] = list(cell)
         # AN OPEN SIDE, NOT A DOORWAY (the owner, 2026-09-15). Outdoors an
         # `open` edge between two open-air cells -- a road onto a field, a
         # yard onto a lane -- is the whole shared side: sight, sound, light
@@ -450,7 +458,8 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
                 normalize_bearing(edge.get("dir"))
                 or derived.get((str(room_id), str(edge["to"]))),
                 normalize_vertical(edge.get("vertical")),
-                normalize_offset(edge.get("offset")), edge.get("width"))
+                normalize_offset(edge.get("offset")), edge.get("width"),
+                normalize_cell(edge.get("cell")))
     # An edge declared only from the neighbour's side is still a doorway in
     # THIS room; its bearing and verticality read reciprocally, the same rule
     # travel_bearing already applies.

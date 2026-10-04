@@ -347,6 +347,11 @@ legitimately perceive, learn, remember or infer.
   room it is leaving for a beat rather than vanishing.
 - **Up and down** — Stairs and ladders read as above and below, not as another
   side door.
+- **Site plans** — A planned place can stand on one plan: each room at its
+  position and floor height, a building standing inside the open ground round
+  it, and the World Browser's map draws it storey by storey. Rooms may be up to
+  96 paces a side. *(partial: sight between storeys, drops and flight are not
+  built yet.)*
 - **Gates, portals and seals** — A way between two places can be a thing
   standing in a room rather than a doorway in a wall. It can be seen through
   while shut, let only the bodies it names pass, and be worn down by force a

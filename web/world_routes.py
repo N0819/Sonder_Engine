@@ -304,6 +304,7 @@ ANCHOR_ENUMS = {"height": HEIGHTS, "footprint": FOOTPRINTS, "opacity": OPACITIES
 LINT_FIELDS = {
     "reciprocal_bearing_disagrees": "exits",
     "rooms_overlap_when_placed": "exits",
+    "site_plan_overlap": "extent",
     "openings_overlap": "exits",
     "wall_overfull": "anchors",
     "corner_in_round_room": "shape",
@@ -1054,6 +1055,65 @@ def _overlays(scene, room_id, sound_from=None):
             "light_sources": light_sources}
 
 
+def _map_component(scene, rooms_, occupants, lint_rows, start, layout, *,
+                   plan=None, level=None):
+    """One drawn component of the structure map: its rooms at their
+    offsets, each with its box, shape, exits, occupants and lint count.
+    `plan`/`level` name a site plan's storey (`world/site_plan`)."""
+    offsets = dict(layout.get("offsets") or {})
+    collided = dict(layout.get("collided") or {})
+    landed = {other: (onto, via) for other, onto, via in layout["collisions"]}
+    parents = dict(layout.get("parents") or {})
+    rows = []
+    for rid in list(offsets) + [r for r in collided if r not in offsets]:
+        grid = room_grid(scene, rid)
+        offset = offsets.get(rid, collided.get(rid))
+        exits = []
+        for edge in effective_adjacent(scene, rid):
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            to = str(edge["to"])
+            # The doorway's cells in THIS room's frame (`_door_cells`,
+            # the placement the layout itself used), so the structure
+            # map draws the door where it stands rather than at the
+            # middle of its wall; empty when the edge has no bearing.
+            door_cells, _b = _door_cells(scene, rid, to)
+            exits.append({"to": to, "name": _room_name(scene, to),
+                          "dir": normalize_bearing(edge.get("dir")),
+                          "barrier": normalize_barrier(edge.get("barrier")),
+                          "cells": _cells(door_cells or []),
+                          "passage": str(edge["passage"])
+                          if passage_of(scene, edge) else None,
+                          "placed": to in offsets or to in collided})
+        exits.sort(key=lambda e: e["to"])
+        onto, via = landed.get(rid, (None, None))
+        rows.append({
+            "id": rid, "name": _room_name(scene, rid),
+            "offset": [int(offset[0]), int(offset[1])],
+            "w": grid.w, "d": grid.d, "shape": grid.shape,
+            "measured": bool(grid.measured), "cells": _cells(grid.cells),
+            "exits": exits,
+            "occupants": list(occupants.get(rid, [])),
+            "lint": len(_room_lint(lint_rows, rid)),
+            "holder": rooms_[rid].get("parent_entity") or None,
+            "region": str(rooms_[rid].get("region") or "") or None,
+            "collided": rid in collided and rid not in offsets,
+            "onto": onto, "via": via,
+            # The room this one was placed FROM (`layout_rooms`'s
+            # `parents`): the edge a drag on the structure map re-bears.
+            "placed_via": parents.get(rid) or via,
+        })
+    out = {
+        "start": start, "rooms": rows,
+        "collisions": [{"room": a, "onto": b, "via": c}
+                       for a, b, c in layout["collisions"]],
+    }
+    if plan is not None:
+        # Additive: a story with no plan renders byte for byte as before.
+        out.update(plan=plan, level=level)
+    return out
+
+
 def map_view(scene, lint_rows, charter=None):
     """Every live room placed by bearing, as the lint's embedding places
     them (`layout_rooms`, one component per connected set of beared,
@@ -1072,60 +1132,45 @@ def map_view(scene, lint_rows, charter=None):
         occupants.setdefault(rec["room"], []).append(key)
     components = []
     placed = set()
+    # A SITE PLAN IS DRAWN WHERE IT STANDS (`world/site_plan`): one component
+    # per plan and storey, every room at its stored position, so a house can
+    # stand in the hole of the garden around it -- which the walk by bearings
+    # below can only report as a collision. Rooms on no plan are laid out
+    # exactly as before.
+    from world.site_plan import room_site, site_overlaps, site_plans
+    overlaps = site_overlaps(scene)
+    on_plan = set()
+    for plan, levels in sorted(site_plans(scene).items()):
+        for level in sorted(levels):        # cellar first, roof last
+            ids = [rid for rid in levels[level] if rid in rooms_]
+            placed.update(ids)
+            on_plan.update(ids)
+            offsets = {rid: (room_site(scene, rid)["x"], room_site(scene, rid)["y"])
+                       for rid in ids}
+            components.append(_map_component(
+                scene, rooms_, occupants, lint_rows, ids[0] if ids else plan,
+                {"offsets": offsets, "collided": {}, "collisions": [
+                    (b, a, None) for p_, lv, a, b in overlaps
+                    if p_ == plan and lv == level], "parents": {}},
+                plan=plan, level=level))
     for start in sorted(rooms_):
         if start in placed:
             continue
         layout = layout_rooms(scene, start)
-        offsets = dict(layout.get("offsets") or {})
-        collided = dict(layout.get("collided") or {})
-        placed.update(offsets)
-        placed.update(collided)
-        landed = {other: (onto, via) for other, onto, via in layout["collisions"]}
-        parents = dict(layout.get("parents") or {})
-        rows = []
-        for rid in list(offsets) + [r for r in collided if r not in offsets]:
-            grid = room_grid(scene, rid)
-            offset = offsets.get(rid, collided.get(rid))
-            exits = []
-            for edge in effective_adjacent(scene, rid):
-                if not isinstance(edge, dict) or not edge.get("to"):
-                    continue
-                to = str(edge["to"])
-                # The doorway's cells in THIS room's frame (`_door_cells`,
-                # the placement the layout itself used), so the structure
-                # map draws the door where it stands rather than at the
-                # middle of its wall; empty when the edge has no bearing.
-                door_cells, _b = _door_cells(scene, rid, to)
-                exits.append({"to": to, "name": _room_name(scene, to),
-                              "dir": normalize_bearing(edge.get("dir")),
-                              "barrier": normalize_barrier(edge.get("barrier")),
-                              "cells": _cells(door_cells or []),
-                              "passage": str(edge["passage"])
-                              if passage_of(scene, edge) else None,
-                              "placed": to in offsets or to in collided})
-            exits.sort(key=lambda e: e["to"])
-            onto, via = landed.get(rid, (None, None))
-            rows.append({
-                "id": rid, "name": _room_name(scene, rid),
-                "offset": [int(offset[0]), int(offset[1])],
-                "w": grid.w, "d": grid.d, "shape": grid.shape,
-                "measured": bool(grid.measured), "cells": _cells(grid.cells),
-                "exits": exits,
-                "occupants": list(occupants.get(rid, [])),
-                "lint": len(_room_lint(lint_rows, rid)),
-                "holder": rooms_[rid].get("parent_entity") or None,
-                "region": str(rooms_[rid].get("region") or "") or None,
-                "collided": rid in collided and rid not in offsets,
-                "onto": onto, "via": via,
-                # The room this one was placed FROM (`layout_rooms`'s
-                # `parents`): the edge a drag on the structure map re-bears.
-                "placed_via": parents.get(rid) or via,
-            })
-        components.append({
-            "start": start, "rooms": rows,
-            "collisions": [{"room": a, "onto": b, "via": c}
-                           for a, b, c in layout["collisions"]],
-        })
+        if on_plan:
+            # A plan's room is drawn on its plan, never a second time where
+            # a doorway from a room off the plan would walk to it.
+            layout = {**layout,
+                      "offsets": {r: o for r, o in (layout.get("offsets") or {}).items()
+                                  if r not in on_plan},
+                      "collided": {r: o for r, o in (layout.get("collided") or {}).items()
+                                   if r not in on_plan},
+                      "collisions": [c for c in layout.get("collisions") or []
+                                     if c[0] not in on_plan and c[1] not in on_plan]}
+        components.append(_map_component(scene, rooms_, occupants, lint_rows,
+                                          start, layout))
+        placed.update(layout.get("offsets") or {})
+        placed.update(layout.get("collided") or {})
     return {"components": components}
 
 

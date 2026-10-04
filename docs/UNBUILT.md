@@ -318,6 +318,7 @@ Not scheduled and not committed to a phase. See the
 - [§2.28 — The day cycle's residuals](UNBUILT_WORLD.md#unbuilt-2-28)
 - [§2.37 — Room fidelity — what the 2026-09-04 prototype left](UNBUILT_WORLD.md#unbuilt-2-37)
 - [§2.38 — The room designer's shortcuts: what they leave (2026-09-27)](UNBUILT_WORLD.md#unbuilt-2-38)
+- [§2.39 — The site plan: sight with height, drops, flight, terrain](UNBUILT_WORLD.md#unbuilt-2-39)
 
 **4. Architecture gaps**
 

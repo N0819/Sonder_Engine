@@ -47,6 +47,7 @@ LAYOUT_LINT_KINDS = (
     "parts_disconnected",
     "shape_disconnected",
     "rooms_overlap_when_placed",
+    "site_plan_overlap",
     "size_disagrees_with_extent",
     "extent_unreadable",
 )
@@ -343,6 +344,7 @@ def _embedding_rows(scene, rooms, disagreeing=frozenset()):
     """Lay out each connected component once, from its smallest id. A
     collision across a doorway whose two bearings already disagree is that
     row's consequence, not a second fact, and is not repeated here."""
+    from world.site_plan import room_site
     out = []
     placed = set()
     for rid in sorted(rooms):
@@ -353,6 +355,13 @@ def _embedding_rows(scene, rooms, disagreeing=frozenset()):
         for other, onto, via in layout["collisions"]:
             placed.add(other)
             if frozenset((other, via)) in disagreeing:
+                continue
+            # Two rooms ONE SITE PLAN places are where the plan put them: a
+            # house in the hole of its garden is no contradiction, and the
+            # walk's one-cell wall band would call it one every time. The
+            # plan's own overlaps are `site_plan_overlap`.
+            a_site, b_site = room_site(scene, other), room_site(scene, onto)
+            if a_site and b_site and a_site["plan"] == b_site["plan"]:
                 continue
             out.append({"kind": "rooms_overlap_when_placed",
                         "rooms": [other, onto], "via": via,
@@ -384,6 +393,10 @@ def room_layout_lint(scene: dict, prev_scene: dict = None) -> list:
     rows += bearing_rows
     rows += _embedding_rows(scene, rooms, frozenset(
         frozenset(r["rooms"]) for r in bearing_rows))
+    from world.site_plan import site_overlaps
+    rows += [{"kind": "site_plan_overlap", "plan": plan, "level": level,
+              "rooms": [a, b], "names": [_name(rooms, a), _name(rooms, b)]}
+             for plan, level, a, b in site_overlaps(scene)]
     if prev_scene is not None:
         standing = {_row_key(r) for r in room_layout_lint(prev_scene)}
         rows = [r for r in rows if _row_key(r) not in standing]
@@ -406,6 +419,11 @@ def layout_warning(row) -> str:
                 f"{b!r} (reached through {row['via']!r}); this set of "
                 f"bearings cannot be drawn on one plane. One of the bearings "
                 f"is wrong, or a room is missing between them.")
+    if kind == "site_plan_overlap":
+        a, b = row["names"]
+        return (f"On the site plan {row.get('plan')!r}, storey {row.get('level')}, "
+                f"{a!r} and {b!r} stand on the same ground; move one, or "
+                f"shrink it, so the plan holds together.")
     if kind == "openings_overlap":
         return (f"Room {row['room']!r}: two doorways on the {row['wall']} wall "
                 f"({', '.join(row['openings'])}) are placed on the same cells; "

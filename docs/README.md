@@ -192,6 +192,10 @@ they answer different questions about it:
   actually is (the planned set, not the live scene), why the grouping already
   exists in `room_registry`, and the computed/authored split that keeps it from
   becoming a second ledger.
+- [`DESIGN_SITE_PLAN.md`](design/DESIGN_SITE_PLAN.md) — rooms where a plan put
+  them and floors at their heights (2026-10-03): a building standing in its
+  grounds, the map drawing it storey by storey, and the order the rest comes
+  in -- sight with height, drops as facts, flight. Step 1 built.
 - [`DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md)
   — design draft for one cross-system Writers' Room agent set: the Story
   Planner and Dramaturge share broad authorial sway, while a narrow Charter

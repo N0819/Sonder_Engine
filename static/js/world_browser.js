@@ -2558,6 +2558,16 @@ function wbRenderStructureMap(host, data, ctx, selectedId) {
     if (r.region && !regions.includes(r.region)) regions.push(r.region);
   }
   svg.dataset.regions = JSON.stringify(regions);
+  // A site plan's storey is captioned with its plan and storey, since the
+  // storeys of one building are drawn side by side (`world/site_plan`).
+  const storeyWord = t("storey");
+  for (const { comp, dx } of laid) {
+    if (comp.plan == null) continue;   // absent on a component no plan placed
+    let minX = Infinity;
+    for (const r of comp.rooms) minX = Math.min(minX, r.offset[0]);
+    svg.append(wbSvg("text", { x: (minX + dx) * S, y: -S * 0.25, class: "wb-sm-plan" },
+      wbSvg("title", {}, `${comp.plan} · ${storeyWord} ${comp.level}`), `${storeyWord} ${comp.level}`));
+  }
   for (const { comp, dx, dy } of laid) {
     for (const r of comp.rooms) {
       const ox = (r.offset[0] + dx) * S, oy = (r.offset[1] + dy) * S;
@@ -3134,7 +3144,7 @@ async function openWorldBrowser(opts = {}) {
       if (state.zoom === "map") {
         map.bar.append(el("b", {}, "Every room, placed by bearing"),
           el("span", { class: "dim" }, "— click a room to open its grid; drag one to re-bear it"),
-          undoButton);
+          ...(undoButton ? [undoButton] : []));
         return;
       }
       const name = state.grid && state.grid.room ? state.grid.room.name
@@ -3171,7 +3181,7 @@ async function openWorldBrowser(opts = {}) {
         }
         map.bar.append(toggles);
       }
-      map.bar.append(undoButton);
+      if (undoButton) map.bar.append(undoButton);
       if (state.slice && state.slice.record) {
         map.bar.append(el("button", { class: "small wb-remove wb-remove-room", title: "Remove this room from the scene (refused while anything stands in it)",
           onclick: () => ctx.removeRoom(state.selected) }, "Remove room"));
