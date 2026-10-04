@@ -1150,6 +1150,12 @@ def _placed_neighbours(scene, room_id, through, *, derive=False):
         other = str(edge["to"])
         if other not in rooms or other == str(room_id):
             continue
+        # A ROOM A STOREY AWAY ON ONE PLAN IS NOT LAID FLAT BESIDE THIS ONE:
+        # the window of a bedroom over the garden is eight metres up, and the
+        # line between them is `site_plan.plan_sight`'s, in three dimensions.
+        from world.site_plan import elevated_pair
+        if elevated_pair(scene, room_id, other):
+            continue
         factor = through(scene, room_id, edge)
         if not factor or factor <= 0:
             continue
@@ -1707,6 +1713,23 @@ def body_visibility(scene: dict, observer: str, target: str) -> dict:
     t_room = room_of(scene, target)
     if not o_room or not t_room:
         return open_answer
+    # A STOREY APART ON ONE PLAN, the line is three-dimensional and needs no
+    # measured station to be drawn: an unmeasured body stands at its room's
+    # centre, and the answer is the plan's, never the open default -- the
+    # default is what read a third-storey bedroom as a pace from the lawn.
+    from world.site_plan import plan_sight
+    raised = plan_sight(scene, observer, target) if o_room != t_room else None
+    if raised is not None:
+        facing = effective_facing(scene, observer)
+        sector = _cone_sector(facing, raised["origin"], raised["goal"]) \
+            if facing and raised["origin"] != raised["goal"] else None
+        return {"visible": raised["visible"], "fraction": raised["fraction"],
+                "sector": sector, "side": _side_label(sector),
+                "tier": _tier(scene, observer, target),
+                "occluded_by": raised["occluded_by"],
+                "hidden_below": raised["hidden_below"],
+                "through": t_room, "basis": "plan",
+                "distance_m": raised["distance_m"]}
     if not (_has_measured_station(scene, observer)
             and _has_measured_station(scene, target)):
         return open_answer

@@ -167,3 +167,69 @@ def test_a_lab_layout_becomes_rooms_on_one_plan_that_hold_together():
     assert room_elevation_m(sc, "loft") == STOREY_M
     assert rooms["parlour"]["anchors"]["hearth"]["cell"] == [0, 0]
     assert rooms["loft"]["anchors"]["loft_w1"]["dir"] == "n"
+
+
+# ---------------------------------------------------------------------------
+# Step 2: sight with height (2026-10-04)
+# ---------------------------------------------------------------------------
+
+def _window_over_the_garden(hinami_cell=(3, 1), visitor_cell=(9, 4), posture=None):
+    """The bedroom (a storey up, over the hall) has a window in its east wall
+    at plan cell (6, 4), looking over the garden's east strip; Hinami is in
+    the bedroom and a visitor in the garden."""
+    sc = _garden_round_a_house()
+    bedroom, garden = sc["rooms"]["bedroom"], sc["rooms"]["garden"]
+    bedroom["adjacent"].append({"to": "garden", "barrier": "window", "dir": "e", "offset": 0.5})
+    garden["adjacent"].append({"to": "bedroom", "barrier": "window", "dir": "w", "cell": [7, 4]})
+    sc["positions"] = {"Hinami": "bedroom", "Visitor": "garden"}
+    sc["stations"] = {"Visitor": {"cell": list(visitor_cell)}}
+    if hinami_cell is not None:
+        sc["stations"]["Hinami"] = {"cell": list(hinami_cell)}
+    if posture:
+        sc["poses"] = {"Hinami": {"posture": posture}}
+    return sc
+
+
+def test_a_body_at_a_window_a_storey_up_is_seen_from_the_garden_above_the_sill():
+    from world.spatial import body_visibility
+    sc = _window_over_the_garden()
+    up = body_visibility(sc, "Visitor", "Hinami")
+    assert up["basis"] == "plan" and up["visible"] and up["through"] == "bedroom"
+    assert up["hidden_below"] == "waist"          # head and shoulders over the sill
+    down = body_visibility(sc, "Hinami", "Visitor")
+    assert down["visible"]
+
+
+def test_a_body_deep_in_the_room_is_hidden_by_the_sill_and_so_is_one_with_no_station():
+    from world.spatial import body_visibility, visual_level_between
+    deep = _window_over_the_garden(hinami_cell=(0, 1))
+    assert not body_visibility(deep, "Visitor", "Hinami")["visible"]
+    assert body_visibility(deep, "Visitor", "Hinami")["occluded_by"] == "the sill"
+    assert visual_level_between(deep, "Visitor", "Hinami") == "none"
+    # no station: the room's centre, never the open default that read the
+    # bedroom as a pace from the lawn
+    unplaced = _window_over_the_garden(hinami_cell=None)
+    assert body_visibility(unplaced, "Visitor", "Hinami")["basis"] == "plan"
+
+
+def test_lying_down_by_the_window_drops_below_the_sill():
+    from world.spatial import body_visibility
+    sc = _window_over_the_garden(posture="lying")
+    assert not body_visibility(sc, "Visitor", "Hinami")["visible"]
+
+
+def test_from_below_the_window_shows_who_is_at_it_never_the_room_behind():
+    from world.spatial import observer_field, visible_adjacent_rooms
+    sc = _window_over_the_garden()
+    assert "bedroom" not in [r["room_id"] for r in visible_adjacent_rooms(sc, "garden")]
+    assert "garden" in [r["room_id"] for r in visible_adjacent_rooms(sc, "bedroom")]
+    # and the garden's field never lays the bedroom flat beside it
+    assert "bedroom" not in observer_field(sc, "Visitor").offsets
+
+
+def test_rooms_on_one_level_are_seen_between_as_they_always_were():
+    from world.spatial import body_visibility
+    sc = _garden_round_a_house()
+    sc["positions"] = {"A": "hall", "B": "garden"}
+    sc["stations"] = {"A": {"cell": [1, 2]}, "B": {"cell": [4, 7]}}
+    assert body_visibility(sc, "A", "B")["basis"] != "plan"

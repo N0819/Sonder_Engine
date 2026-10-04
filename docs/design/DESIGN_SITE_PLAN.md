@@ -1,7 +1,7 @@
 # The site plan: rooms where a plan put them, floors at their heights
 
-Status: STEP 1 BUILT 2026-10-03 (positions, elevations, the map). Steps 2
-and 3, and flight, are argument; the register entry is
+Status: STEP 1 BUILT 2026-10-03 (positions, elevations, the map); STEP 2
+BUILT 2026-10-04 (sight with height). Step 3 and flight are argument; the register entry is
 [`../UNBUILT_WORLD.md` §2.39](../UNBUILT_WORLD.md#unbuilt-2-39).
 
 ## Why
@@ -68,9 +68,27 @@ against a diff, as a planned room's measurements already were
 * Rooms may be 96 paces a side (`EXTENT_MAX_PACES`, the owner's number), after
   sight was measured cheap (`spatial_fov.room_grid`'s memo).
 
-## Step 2 -- sight with height
+## Step 2 -- sight with height (built 2026-10-04)
 
-The field-of-view model is a 2-D grid with height ranks for what stands in it.
+`site_plan.plan_sight`, asked by `spatial_fov.body_visibility` for two bodies
+in rooms of one plan whose floors differ by `LEVEL_STEP_M` or more. The line
+runs from the observer's eye to the top of the other body (`EYE_M`, `TOP_M`
+by posture; an unmeasured body stands at its room's centre). It must cross
+the upper room's wall inside the window -- between `SILL_M` and `LINTEL_M`
+above that floor -- and pass through no building slab on the cells between
+(each enclosed room a slab floor to ceiling, the two rooms of the line
+excepted). Reaching the top but not `CHEST_BELOW_TOP_M` lower is
+`hidden_below: "waist"`. Past `FACE_READ_M` (25 m) a body is a shape.
+`visual_level_between` trusts this line in place of the room-grain opening
+cone, the field never lays such a room flat beside the other
+(`_placed_neighbours`), and from below `visible_adjacent_rooms` shows the
+window and not the room behind it. Measured on the shrine: Hinami at her east
+window is seen from the waist up 7-10 paces out, hidden by the lower wing's
+roof at its foot, and hidden by the sill from anywhere when she stands deep in
+the room. The converter now gives every upper-floor window a window edge to
+the grounds, pinned on the first open-ground cell outward from it.
+
+The argument it built: the field-of-view model is a 2-D grid with height ranks for what stands in it.
 With elevations, a line between two rooms of one plan has a rise. From the
 garden below a third-storey window the observer sees what stands at the sill
 and the ceiling; the sill hides a body deeper in or sitting, more so the

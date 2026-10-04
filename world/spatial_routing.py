@@ -1117,6 +1117,7 @@ def visible_adjacent_rooms(
 ) -> list[dict]:
     if not room_id:
         return []
+    from world.site_plan import interior_hidden_from_below
 
     all_rooms = dict(
         scene.get("rooms") or {}
@@ -1144,6 +1145,10 @@ def visible_adjacent_rooms(
 
         adjacent_id = edge.get("to")
         if _is_carried_interior(scene, adjacent_id):
+            continue
+        # From below, a window a storey up shows the window and who stands
+        # at it (`site_plan.plan_sight`), never the room behind it.
+        if interior_hidden_from_below(scene, room_id, adjacent_id):
             continue
 
         if (
@@ -1231,6 +1236,7 @@ def visible_adjacent_rooms(
                 or barrier == "one_way_window"
                 or barrier not in _SIGHT_BARRIERS
                 or _is_carried_interior(scene, other_id)
+                or interior_hidden_from_below(scene, room_id, other_id)
                 # Same light gate as the forward loop: sight does not care
                 # which room declared the edge, and neither does the dark.
                 or light_blocks_sight(effective_light(scene, other_id))

@@ -2197,9 +2197,10 @@ a room may stand on a plan at a position and a floor height, the structure map
 draws it there, and a layout lab result converts into engine rooms. What it
 leaves, in the order the owner agreed:
 
-* **Sight does not read elevation.** A window joining a third-storey room to
-  the garden below is still read as a ground-floor window (`spatial_rel`
-  answers `near`; the line falls back to `basis: open`). Step 2.
+* **Sight with height (step 2) landed 2026-10-04** for a body a storey
+  away through a window. Still flat: an anchor in the garden (a tree, a
+  wall) does not stand in that line, sound and hearing across storeys read
+  the edge's barrier only, and two plans never see each other.
 * **A drop is not a fact.** Nothing tells the Director how far a body falls
   from a window, a balcony or a bank. Step 3.
 * **No body has an altitude**, so flight has no number to stand on.

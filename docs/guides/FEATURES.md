@@ -350,8 +350,10 @@ legitimately perceive, learn, remember or infer.
 - **Site plans** — A planned place can stand on one plan: each room at its
   position and floor height, a building standing inside the open ground round
   it, and the World Browser's map draws it storey by storey. Rooms may be up to
-  96 paces a side. *(partial: sight between storeys, drops and flight are not
-  built yet.)*
+  96 paces a side. Someone at an upper window is seen from the garden above
+  the sill, hidden by the roof of a lower wing or by the sill when deep in the
+  room, and from below the window shows who stands at it, not the room behind.
+  *(partial: drops and flight are not built yet.)*
 - **Gates, portals and seals** — A way between two places can be a thing
   standing in a room rather than a doorway in a wall. It can be seen through
   while shut, let only the bodies it names pass, and be worn down by force a

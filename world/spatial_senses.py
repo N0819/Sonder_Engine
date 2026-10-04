@@ -969,7 +969,12 @@ def _visual_level_between(scene: dict, observer: str, target: str,
     if level in ("shapes", "conduct") and rel.get("same_room") \
             and _measured_intimacy(scene, observer, target):
         level = "full"
-    if not rel.get("same_room"):
+    from world.site_plan import elevated_pair
+    raised = not rel.get("same_room") and elevated_pair(scene, o_room, t_room)
+    if not rel.get("same_room") and not raised:
+        # (A pair a storey apart on one plan is answered by the line in
+        # three dimensions below -- `site_plan.plan_sight` -- which already
+        # says what the window shows; the room-grain cone has nothing to add.)
         cap = _weaker_sight(
             _opening_view_cap(scene, t_room, target, o_room),
             _opening_view_cap(scene, o_room, observer, t_room),
@@ -988,8 +993,13 @@ def _visual_level_between(scene: dict, observer: str, target: str,
     if level != "none":
         from world.spatial_fov import body_visibility
         line = body_visibility(scene, observer, target)
-        if line.get("basis") == "line" and not line.get("visible"):
+        if line.get("basis") in ("line", "plan") and not line.get("visible"):
             level = "none"
+        # Up a storey and across a garden, a face is read only so far.
+        if line.get("basis") == "plan" and level != "none":
+            from world.site_plan import FACE_READ_M
+            if (line.get("distance_m") or 0) > FACE_READ_M:
+                level = _weaker_sight(level, "shapes")
     if crossing and level == "none":
         return "shapes"
     return level

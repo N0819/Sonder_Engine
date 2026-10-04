@@ -236,6 +236,34 @@ def rooms_from_layout(layout: dict, plan: str, region: str = "") -> dict:
         joined.add(key)
         edge(door["a"], b, door["side"], door["cell"], _barrier(door.get("kind")))
 
+    # A WINDOW WITH NO DOOR TO THE GROUNDS LOOKS OUT OVER THEM: a window
+    # edge from its room to the grounds, the grounds' end pinned on the
+    # first open-ground cell outward from it (past the roof of a lower
+    # wing). Sight across the storeys is `site_plan.plan_sight`'s; an edge is
+    # one per pair of rooms, so a room with a door out already has its way.
+    if GROUNDS in rooms:
+        g = rooms[GROUNDS]
+        ground_cells = {(p["at"][0] + g["site"]["x"] + dx, p["at"][1] + g["site"]["y"] + dy)
+                        for p in g["parts"] for dx in range(p["w"]) for dy in range(p["d"])}
+        for win in layout.get("windows") or ():
+            rid = room_id(win["room"])
+            if rid not in rooms or any(e.get("to") == GROUNDS for e in rooms[rid]["adjacent"]):
+                continue
+            side, (cx, cy) = win["side"], win["cell"]
+            ux, uy = _UNIT[side]
+            out = (cx + ux, cy + uy)
+            for _ in range(200):
+                if out in ground_cells:
+                    break
+                out = (out[0] + ux, out[1] + uy)
+            else:
+                continue
+            rooms[rid]["adjacent"].append({"to": GROUNDS, "barrier": "window", "dir": side,
+                                           "offset": _offset(rects[win["room"]], side, (cx, cy))})
+            rooms[GROUNDS]["adjacent"].append({
+                "to": rid, "barrier": "window", "dir": _OPPOSITE[side],
+                "cell": [out[0] - g["site"]["x"], out[1] - g["site"]["y"]]})
+
     for well in layout.get("stairwells") or ():
         halls = {int(k): v for k, v in (well.get("halls") or {}).items()}
         for lo in sorted(halls):
