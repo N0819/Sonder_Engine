@@ -123,23 +123,30 @@ def site_cells(scene, room_id) -> frozenset:
     return frozenset((x + ox, y + oy) for x, y in room_grid(scene, room_id).cells)
 
 
+def _stands_on(scene, a, b) -> bool:
+    """Is one of two rooms open ground and the other a building on it? A
+    building stands IN its grounds -- the landing under a tower's legs, the
+    yard round a house -- so where their cells meet is the building's
+    footprint on the ground, never a contradiction."""
+    return _open_air(scene, a) != _open_air(scene, b)
+
+
 def site_overlaps(scene) -> list:
     """`(plan, level, room, other)` for two rooms of one plan and storey
     whose cells land on each other: a plan that does not hold together.
-    Sorted, so a reroll reports the same pair."""
+    A building over open ground is not one (`_stands_on`). Sorted, so a
+    reroll reports the same pair."""
     out = []
     for plan, levels in sorted(site_plans(scene).items()):
         for level, ids in sorted(levels.items()):
             held: dict = {}
             for rid in ids:
                 for cell in site_cells(scene, rid):
-                    other = held.get(cell)
-                    if other is not None:
+                    for other in held.get(cell, ()):
                         pair = (plan, level, other, rid)
-                        if pair not in out:
+                        if pair not in out and not _stands_on(scene, other, rid):
                             out.append(pair)
-                    else:
-                        held[cell] = rid
+                    held.setdefault(cell, []).append(rid)
     return out
 
 
@@ -571,16 +578,19 @@ def derive_site_plans(scene) -> list:
         new = [r for r in group if r in xy and not room_site(scene, r)]
         if not new:
             continue
-        # a plan that does not hold together is not written
+        # a plan that does not hold together is not written -- but a building
+        # standing on open ground is not a clash (`_stands_on`): live, the
+        # Larch Hill tower's kitchen corner fell on the landing under its
+        # legs, and a whole tower went without a plan (2026-10-04)
         held = {}
         clash = False
         for r in sorted(xy, key=str):
             for x, y in room_grid(scene, r).cells:
                 key = (room_level(scene, r), x + xy[r][0], y + xy[r][1])
-                if key in held:
+                if any(not _stands_on(scene, o, r) for o in held.get(key, ())):
                     clash = True
                     break
-                held[key] = r
+                held.setdefault(key, []).append(r)
             if clash:
                 break
         if clash:

@@ -164,6 +164,12 @@ moment of looking:
   buildings, higher terraces -- with earth curvature and refraction
   (k = 0.13).
 
+A room's own `windows` (compass bearings of glass or windows onto open air
+with no room beyond) open the same outlook as an edge does; the room
+vocabulary says a view is never written into a desc (live, the first Larch
+Hill opening wrote the range into the clearing's desc and glassed a watch
+cabin with no way to see out of it).
+
 It reaches every view as a sight line (`composer.vista_percepts`, en and ja
 templates) and is never a target of touch or movement. Prior art: TADS 3
 `Distant`, Inform 7 backdrops, Discworld MUD's terrain rooms, open-world

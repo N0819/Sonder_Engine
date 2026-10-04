@@ -66,7 +66,9 @@ def test_a_house_in_the_hole_of_its_garden_is_no_overlap_and_a_real_one_is():
     sc = _garden_round_a_house()
     assert site_overlaps(sc) == []
     assert site_plans(sc) == {"manor": {0: ["garden", "hall"], 1: ["bedroom"]}}
-    sc["rooms"]["hall"]["site"]["x"] = 1            # into the ring
+    sc["rooms"]["hall"]["site"]["x"] = 1            # onto the ring: a building
+    assert site_overlaps(sc) == []                   # standing on its ground
+    sc["rooms"]["shed"] = _room("Shed", 2, 3, 3, 3)  # two buildings on one spot
     assert site_overlaps(sc) and site_overlaps(sc)[0][:2] == ("manor", 0)
     kinds = [r["kind"] for r in room_layout_lint(sc)]
     assert "site_plan_overlap" in kinds
@@ -415,3 +417,21 @@ def test_a_building_the_designer_made_gets_a_plan_its_stairs_stacked():
     (dh,), _ = _door_cells(sc, "hall", "yard")
     (dy,), _ = _door_cells(sc, "yard", "hall")
     assert (dh[0] + hall["x"], dh[1] + hall["y"] + 1) == (dy[0] + yard["x"], dy[1] + yard["y"])
+
+
+def test_a_building_on_the_ground_it_stands_in_still_gets_a_plan():
+    """Live, Larch Hill (2026-10-04): the kitchen's corner fell one cell onto
+    the open landing under the tower's legs, and the whole tower went
+    without a plan."""
+    from world.site_plan import derive_site_plans, room_site
+    sc = {"rooms": {
+        "landing": {"name": "Landing", "desc": ".", "exposure": "open", "extent": {"w": 6, "d": 3},
+                    "adjacent": [{"to": "hall", "barrier": "open_door", "dir": "n", "offset": 0.0}]},
+        "hall": {"name": "Hall", "desc": ".", "level": 0, "extent": {"w": 3, "d": 3},
+                 "adjacent": [{"to": "landing", "barrier": "open_door", "dir": "s", "offset": 1.0},
+                              {"to": "loft", "barrier": "open", "vertical": "up", "way": "stair"}]},
+        "loft": {"name": "Loft", "desc": ".", "level": 1, "extent": {"w": 3, "d": 3},
+                 "adjacent": [{"to": "hall", "barrier": "open", "vertical": "down", "way": "stair"}]}},
+        "entities": {}, "positions": {}}
+    assert set(derive_site_plans(sc)) == {"landing", "hall", "loft"}
+    assert room_site(sc, "hall")["plan"] == room_site(sc, "landing")["plan"]

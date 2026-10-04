@@ -161,3 +161,18 @@ def test_the_schema_keeps_a_rooms_windows():
     dumped = room.model_dump(exclude_none=True) if hasattr(room, "model_dump") else room.dict(exclude_none=True)
     assert dumped["windows"] == ["n", "e"]
 
+
+
+def test_the_storeys_over_a_kitchen_are_its_ceiling_not_a_wall_before_its_window():
+    """Live, Larch Hill (2026-10-04): the rooms stacked over the kitchen were
+    read as a column standing in front of its south window, at 87 degrees."""
+    sc = _yard()
+    sc["rooms"]["yard"].update(extent={"w": 8, "d": 8}, site={"plan": "p", "x": 0, "y": 4})
+    sc["rooms"]["hall"].update(extent={"w": 4, "d": 4}, windows=["s"],
+                               site={"plan": "p", "x": 2, "y": 0})
+    sc["rooms"]["hall"]["adjacent"] = []
+    sc["rooms"]["loft"] = {"name": "Loft", "desc": ".", "exposure": "enclosed", "level": 1,
+                           "extent": {"w": 4, "d": 4}, "adjacent": [],
+                           "site": {"plan": "p", "x": 2, "y": 0}}
+    sc["positions"]["Ren"] = "hall"
+    assert _names(sc) == ["the valley town"]

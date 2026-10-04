@@ -124,25 +124,20 @@ def visibility_km(air) -> float:
     return VISIBILITY_KM.get(str(air or "clear").strip().casefold(), VISIBILITY_KM["clear"])
 
 
-def vista_verdict(vista, *, air="clear", dark=False, eye_m=1.6,
-                  horizon_rad=None) -> Optional[str]:
-    """Why a vista is not seen, or None when it is:
+def vista_verdict(vista, *, air="clear", dark=False, eye_m=1.6) -> Optional[str]:
+    """Why a vista is not seen, or None when it is, before anything nearer
+    is asked (`obstructed` follows the line over the site plan):
 
     * "air" -- further than the weather lets anyone see;
     * "dark" -- night, and nothing on it is lit;
-    * "below" -- its top does not clear the horizon or what stands nearer
-      in its direction (`horizon_rad`, the elevation angle of the highest
-      nearer obstruction that way; None for an open horizon). Its TOP must
-      clear, not its foot: a range half behind a ridge is still seen.
+    * "below" -- the earth's curve has taken its top below the horizon.
+    Its TOP must clear, not its foot: a range half hidden is still seen.
     """
     if vista["distance_km"] > visibility_km(air):
         return "air"
     if dark and not vista["lit"]:
         return "dark"
-    angle = elevation_angle(vista, eye_m)
-    if horizon_rad is not None and angle <= horizon_rad:
-        return "below"
-    if horizon_rad is None and vista["height_m"] > 0 and angle < -0.002:
+    if vista["height_m"] > 0 and elevation_angle(vista, eye_m) < -0.002:
         return "below"
     return None
 
@@ -222,47 +217,46 @@ _UNIT8 = {b: (math.sin(math.radians(45 * i)), -math.cos(math.radians(45 * i)))
           for i, b in enumerate(BEARINGS)}
 
 
-def horizon_angle(scene, name, bearing, eye_z) -> Optional[float]:
-    """The elevation angle (radians) of the highest thing nearer than the
-    horizon in `bearing` from a body on a site plan: every enclosed room's
-    slab top and every open-air room's ground higher than the eye, along the
-    plan. None off any plan, or when nothing stands that way."""
-    from world.site_plan import (PACE_M, plan_point, room_elevation_m,
-                                 site_cells, site_plans, room_site, STOREY_M,
-                                 _open_air)
+def obstructed(scene, name, vista, eye_z) -> bool:
+    """Does something nearer stand in the line from a body's eye to a
+    vista's top, on the body's site plan? The line is followed outward along
+    the vista's bearing at the vista's own rise; it is cut where its height
+    falls inside an enclosed room's slab (floor to ceiling) standing there,
+    or below open ground standing higher. The body's own room's footprint is
+    behind its window and is skipped -- the storeys above a kitchen are its
+    ceiling, not a wall in front of its window (live, Larch Hill 2026-10-04:
+    read as a column, they put the kitchen's horizon at 87 degrees)."""
+    from world.site_plan import (PACE_M, STOREY_M, plan_point, room_elevation_m,
+                                 room_site, site_cells, site_plans, _open_air)
     from world.spatial import room_of
     rid = room_of(scene, name)
     site = room_site(scene, rid) if rid else None
     point = plan_point(scene, name) if site else None
     if not point:
-        return None
-    marks: dict = {}
+        return False
+    own = site_cells(scene, rid)
+    slabs: dict = {}
     for levels in site_plans(scene).get(site["plan"], {}).values():
         for other in levels:
             if other == rid:
                 continue
             floor = room_elevation_m(scene, other)
-            top = floor if _open_air(scene, other) else floor + STOREY_M
+            span = (float("-inf"), floor) if _open_air(scene, other) else (floor, floor + STOREY_M)
             for cell in site_cells(scene, other):
-                if top > marks.get(cell, float("-inf")):
-                    marks[cell] = top
-    if not marks:
-        return None
-    ux, uy = _UNIT8[bearing]
-    # out to the farthest thing on the plan, not the size of the things
-    reach = max(math.hypot(c[0] + 0.5 - point[0], c[1] + 0.5 - point[1])
-                for c in marks) + 2
-    best = None
-    steps = int(reach * 2)
-    for i in range(1, steps + 1):
+                if cell not in own:
+                    slabs.setdefault(cell, []).append(span)
+    if not slabs:
+        return False
+    rise = math.tan(elevation_angle(vista, eye_z))
+    ux, uy = _UNIT8[vista["bearing"]]
+    reach = max(math.hypot(c[0] + 0.5 - point[0], c[1] + 0.5 - point[1]) for c in slabs) + 2
+    for i in range(1, int(reach * 2) + 1):
         t = i / 2.0
         cell = (math.floor(point[0] + ux * t), math.floor(point[1] + uy * t))
-        top = marks.get(cell)
-        if top is None or top <= eye_z:
-            continue
-        angle = math.atan2(top - eye_z, t * PACE_M)
-        best = angle if best is None else max(best, angle)
-    return best
+        z = eye_z + t * PACE_M * rise
+        if any(lo <= z <= hi for lo, hi in slabs.get(cell, ())):
+            return True
+    return False
 
 
 def visible_vistas(scene, name) -> list:
@@ -293,8 +287,9 @@ def visible_vistas(scene, name) -> list:
         if facing and relative_bearing(facing, vista["bearing"]) in (
                 "behind", "behind_left", "behind_right"):
             continue
-        why = vista_verdict(vista, air=air, dark=dark and not moonlit, eye_m=eye_z,
-                            horizon_rad=horizon_angle(scene, name, vista["bearing"], eye_z))
+        why = vista_verdict(vista, air=air, dark=dark and not moonlit, eye_m=eye_z)
+        if why is None and obstructed(scene, name, vista, eye_z):
+            why = "below"
         if why is None:
             out.append((vista, "silhouette" if dark and not vista["lit"] else "clear"))
     return out

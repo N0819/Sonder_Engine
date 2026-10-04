@@ -209,7 +209,7 @@
 | `world/regions.py` | 587 |  | `world.spatial` |
 | `world/routines.py` | 256 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 195 |  | — |
-| `world/site_plan.py` | 592 |  | — |
+| `world/site_plan.py` | 602 |  | — |
 | `world/spatial.py` | 369 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
 | `world/spatial_barriers.py` | 945 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 592 |  | `world.spatial`, `world.spatial_frames` |
@@ -238,7 +238,7 @@
 | `world/structure.py` | 1750 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
-| `world/vistas.py` | 300 |  | — |
+| `world/vistas.py` | 295 |  | — |
 | `world/weather.py` | 1411 |  | — |
 
 ## Largest top-level functions
@@ -2588,14 +2588,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `derive_site_plans()` | 521 | 72 lines |
-| `plan_sight()` | 294 | 51 lines |
-| `_window_on_line()` | 243 | 35 lines |
+| `derive_site_plans()` | 528 | 75 lines |
+| `plan_sight()` | 301 | 51 lines |
+| `_window_on_line()` | 250 | 35 lines |
 | `normalize_site()` | 37 | 30 lines |
-| `report_drops()` | 408 | 29 lines |
-| `drop_m()` | 374 | 19 lines |
-| `site_overlaps()` | 126 | 18 lines |
-| `_mass_heights()` | 225 | 16 lines |
+| `report_drops()` | 415 | 29 lines |
+| `drop_m()` | 381 | 19 lines |
+| `site_overlaps()` | 134 | 17 lines |
+| `_mass_heights()` | 232 | 16 lines |
 
 ### `world/spatial_barriers.py`
 
@@ -2941,13 +2941,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `horizon_angle()` | 225 | 41 lines |
-| `visible_vistas()` | 268 | 33 lines |
-| `outlooks()` | 188 | 31 lines |
+| `obstructed()` | 220 | 40 lines |
+| `visible_vistas()` | 262 | 34 lines |
+| `outlooks()` | 183 | 31 lines |
 | `normalize_vista()` | 67 | 25 lines |
-| `vista_verdict()` | 127 | 21 lines |
-| `air_from_weather()` | 154 | 19 lines |
-| `_darkness()` | 175 | 11 lines |
+| `air_from_weather()` | 149 | 19 lines |
+| `vista_verdict()` | 127 | 16 lines |
+| `_darkness()` | 170 | 11 lines |
 | `normalize_bearing8()` | 59 | 6 lines |
 
 ### `world/weather.py`
