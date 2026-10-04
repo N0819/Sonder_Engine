@@ -122,7 +122,7 @@
 | `story/mandates.py` | 626 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/opening_plan.py` | 121 |  | `core.db` |
-| `story/plot_packages.py` | 3862 |  | `world.spatial` |
+| `story/plot_packages.py` | 3864 |  | `world.spatial` |
 | `story/prelude.py` | 188 |  | `core.db` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 445 |  | `core.db` |
@@ -1554,13 +1554,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 3040 | 143 lines |
+| `_package_checks()` | 3042 | 143 lines |
 | `_preview_plan_rooms()` | 1010 | 108 lines |
-| `fire_due_clocks()` | 3613 | 102 lines |
-| `publish_package()` | 3394 | 84 lines |
-| `_reach_warning()` | 3185 | 79 lines |
+| `fire_due_clocks()` | 3615 | 102 lines |
+| `publish_package()` | 3396 | 84 lines |
+| `_reach_warning()` | 3187 | 79 lines |
 | `normalize_package()` | 253 | 77 lines |
-| `_tick_triggered_clocks()` | 3510 | 73 lines |
+| `_tick_triggered_clocks()` | 3512 | 73 lines |
 | `_plan_geometry()` | 771 | 68 lines |
 
 ### `story/prelude.py`
