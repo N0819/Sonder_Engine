@@ -269,7 +269,13 @@ def posture_class(scene: dict, name: str) -> str:
 
 
 def eye_rank(scene: dict, name: str) -> float:
-    return _EYE_RANK.get(posture_class(scene, name), 2.0)
+    rank = _EYE_RANK.get(posture_class(scene, name), 2.0)
+    # OFF THE GROUND, OVER EVERYTHING THE ROOM HOLDS (`site_plan`, flight): a
+    # body aloft sees over the tallest fixture and is seen over it.
+    from world.site_plan import CLEAR_ALTITUDE_M, body_altitude_m
+    if body_altitude_m(scene, name) >= CLEAR_ALTITUDE_M:
+        rank = max(rank, _HEIGHT_RANK["full"] + 0.5)
+    return rank
 
 
 # ---------------------------------------------------------------------------
@@ -1461,6 +1467,36 @@ def _occluders_on(field, origin, target, eye, top, ignore=()):
     return None, tallest, tallest_id
 
 
+#: A fixture's height word in metres, for a line that rises (flight).
+_HEIGHT_M = {0.0: 0.3, 1.0: 1.0, 2.0: 1.8, 3.0: 2.6}
+
+
+def _aloft_blocker(scene, field, observer, target, origin, goal, o_alt, t_alt):
+    """The anchor id (or `__wall__`) that cuts a line between two bodies one
+    of which is off the ground, or None: walls as on the ground; each
+    fixture against the line's height where it stands, in metres."""
+    from world.site_plan import EYE_M, TOP_M
+    if not _wall_verdict(field, origin, goal):
+        return "__wall__"
+    eye = o_alt + EYE_M.get(posture_class(scene, observer), EYE_M["standing"])
+    top = t_alt + TOP_M.get(posture_class(scene, target), TOP_M["standing"])
+    steps = _line_steps(origin, goal)
+    for i, step in enumerate(steps):
+        z = eye + (top - eye) * (i + 1) / (len(steps) + 1)
+        hits = []
+        for cell in step:
+            if cell in (origin, goal):
+                continue
+            if cell not in field.inside and not _on_wall_line(field, cell):
+                return "__wall__"
+            rank = field.height.get(cell)
+            if rank is not None and _HEIGHT_M.get(float(rank), 2.6) >= z:
+                hits.append(field.occluder.get(cell) or "__wall__")
+        if hits and len(hits) == len([c for c in step if c not in (origin, goal)]):
+            return hits[0]
+    return None
+
+
 def _tier(scene, observer, target):
     return proximity_rel(scene, observer, target)
 
@@ -1760,6 +1796,25 @@ def body_visibility(scene: dict, observer: str, target: str) -> dict:
     # man at the stair foot from the woman at the pit's lip). A fixture a
     # body stands AT still hides it from the far side -- that is cover.
     touching = t_room == o_room and max(abs(origin[0] - goal[0]), abs(origin[1] - goal[1])) <= 1
+    from world.site_plan import CLEAR_ALTITUDE_M, body_altitude_m
+    o_alt, t_alt = body_altitude_m(scene, observer), body_altitude_m(scene, target)
+    if max(o_alt, t_alt) >= CLEAR_ALTITUDE_M:
+        # OFF THE GROUND THE LINE HAS A RISE (`site_plan`, flight): its height
+        # at each fixture against the fixture's own, in metres -- a flier just
+        # over a wall still loses the body pressed behind it, one high over
+        # the yard does not.
+        blocker = _aloft_blocker(scene, field, observer, target, origin, goal,
+                                 o_alt, t_alt)
+        visible = touching or blocker is None
+        rec = (field.anchors.get(o_room, {}).get(blocker)
+               or field.anchors.get(t_room, {}).get(blocker) or {})
+        return {"visible": visible, "fraction": 1.0 if visible else 0.0,
+                "sector": sector, "side": _side_label(sector),
+                "tier": _tier(scene, observer, target),
+                "occluded_by": None if visible else (
+                    rec.get("desc") or (None if blocker in (None, "__wall__") else str(blocker))),
+                "hidden_below": None,
+                "through": t_room if t_room != o_room else None, "basis": "line"}
     seen = _visible_set(field, origin, eye, top)
     blocker, tallest, tallest_id = _occluders_on(field, origin, goal, eye, top)
     visible = touching or (goal in seen and blocker is None)

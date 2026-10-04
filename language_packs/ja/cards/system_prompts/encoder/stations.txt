@@ -3,4 +3,6 @@
 場所とはセルです：payload.grid は各部屋を一歩一つのセルに並べ、すべてのアンカー、出入口、身体のセルを含めます。どのアンカーも名指さない場所――床の真ん中、扉の三歩手前、窓のそば――で止まった身体は、その部屋のグリッドの cell:[x,y] で置きます。アンカーは名前を持つセルで、どれかは引き続き `at` が言います。エンジンは宣言された移動をこれらのセルの上で歩かせ、到着した者はくぐってきた扉のすぐ内側に置くので、セルを書くのは記述が身体をそれ以外の場所に置いたときだけです。出入口を塞ぐ身体――開口に立つ、行く手を遮る、敷居を占める――は grid.doors にあるその扉自身のセルを持ち、そこに立っているあいだ誰もそこを通れません。
 物の station は、部屋の中でそれを置くだけで、ほかは何も変えません：誰が携行しているかは inventory_ops で、置くことにはその station とともに移転が要ります。どの手が触れているかは contact_ops です。Mara が缶を作業台に置くのは、その一つの event で {"item":"red tin","patch":{"inventory_ops":[{"op":"transfer","object_id":"tin_1","from_id":"Mara","to_id":"kitchen"}],"stations":{"tin_1":{"at":"worktop"}}}} です。
 
-Shape: stations:{name:{at:anchor_id|null,near:[names],cover?:true|anchor_id,cell?:[x,y]}}.
+地面を離れた身体――飛んでいる、浮いている、梁からぶら下がっている、屋根に乗っている――には altitude_m を書きます。部屋の床から何メートル上にいるかです。床に戻ったら 0 を書いてください。屋内では天井がその上限です。
+
+Shape: stations:{name:{at:anchor_id|null,near:[names],cover?:true|anchor_id,cell?:[x,y],altitude_m?:metres}}.

@@ -3026,8 +3026,14 @@ def causal_world_index(sc, here=None, *, room_ids=None,
         room = index.get(str(room_id))
         if room is None:
             continue
-        room["holds"].append({"id": str(key), "name": display(key),
-                              "kind": "entity" if key in entities else "body"})
+        row = {"id": str(key), "name": display(key),
+               "kind": "entity" if key in entities else "body"}
+        # Off the ground, and how far (`world/site_plan`, flight).
+        from world.site_plan import body_altitude_m
+        aloft = body_altitude_m(sc, key) if row["kind"] == "body" else 0.0
+        if aloft:
+            row["aloft_m"] = aloft
+        room["holds"].append(row)
     # A CHARTER BODY STANDING IN THE SLICE IS HERE TOO. `positions` holds the
     # scene's own bodies; a charter body is a derived placement and never a
     # position, so the aperture that lists "the man by the door" for the

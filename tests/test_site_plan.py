@@ -294,3 +294,71 @@ def test_a_beat_that_drops_a_body_tells_the_director():
     quiet = []
     merge_scene_with_diff(sc, {"positions": {"Hinami": "garden"}}, crossing_report=quiet)
     assert not any("drop" in note for note in quiet)
+
+
+# ---------------------------------------------------------------------------
+# Flight (2026-10-04)
+# ---------------------------------------------------------------------------
+
+def test_altitude_is_kept_under_an_indoor_ceiling_and_unbounded_outdoors():
+    from world.site_plan import body_altitude_m
+    from world.spatial import normalize_scene_stations
+    sc = _garden_round_a_house()
+    sc["positions"] = {"Bird": "garden", "Moth": "hall", "Cat": "hall"}
+    sc["stations"] = {"Bird": {"altitude_m": 40}, "Moth": {"altitude_m": 9},
+                      "Cat": {"altitude_m": 0}}
+    normalize_scene_stations(sc)
+    assert body_altitude_m(sc, "Bird") == 40.0
+    assert body_altitude_m(sc, "Moth") == STOREY_M - 1.7      # under the ceiling
+    assert "altitude_m" not in sc["stations"]["Cat"]
+
+
+def test_a_body_aloft_sees_over_what_the_room_holds_and_is_out_of_reach():
+    from world.spatial import body_visibility, proximity_rel
+    sc = {"rooms": {"yard": {"name": "Yard", "desc": "A yard.", "exposure": "open",
+                             "extent": {"w": 9, "d": 3}, "adjacent": [], "anchors": {
+                                 "wall": {"desc": "a wall", "cell": [4, 0], "footprint": "run",
+                                          "height": "full", "opacity": "opaque"}}}},
+          "entities": {}, "positions": {"A": "yard", "B": "yard"},
+          "stations": {"A": {"cell": [1, 1]}, "B": {"cell": [7, 1]}}}
+    for c in range(3):
+        sc["rooms"]["yard"]["anchors"][f"w{c}"] = {"desc": "a wall", "cell": [4, c],
+                                                   "footprint": "point", "height": "full",
+                                                   "opacity": "opaque"}
+    assert not body_visibility(sc, "A", "B")["visible"]
+    sc["stations"]["A"]["altitude_m"] = 6
+    assert body_visibility(sc, "A", "B")["visible"]
+    sc["stations"]["B"]["cell"] = [2, 1]
+    assert proximity_rel(sc, "A", "B") != "within_reach"
+
+
+def test_a_flier_in_the_garden_looks_straight_into_the_upper_window():
+    from world.spatial import body_visibility
+    sc = _window_over_the_garden(hinami_cell=(0, 1))      # deep in the room
+    assert not body_visibility(sc, "Visitor", "Hinami")["visible"]
+    sc["stations"]["Visitor"]["altitude_m"] = 3.0          # level with her floor
+    assert body_visibility(sc, "Visitor", "Hinami")["visible"]
+
+
+def test_the_director_sees_who_is_aloft():
+    from agents.director import causal_world_index
+    sc = _garden_round_a_house()
+    sc["positions"] = {"Bird": "garden"}
+    sc["stations"] = {"Bird": {"altitude_m": 12}}
+    holds = causal_world_index(sc)["rooms"]["garden"]["holds"]
+    assert holds[0]["aloft_m"] == 12.0
+
+
+def test_a_low_flier_still_loses_the_body_pressed_behind_the_wall():
+    from world.spatial import body_visibility
+    sc = {"rooms": {"yard": {"name": "Yard", "desc": "A yard.", "exposure": "open",
+                             "extent": {"w": 9, "d": 3}, "adjacent": [], "anchors": {}}},
+          "entities": {}, "positions": {"A": "yard", "B": "yard"},
+          "stations": {"A": {"cell": [1, 1], "altitude_m": 1.2}, "B": {"cell": [5, 1]}}}
+    for c in range(3):
+        sc["rooms"]["yard"]["anchors"][f"w{c}"] = {"desc": "a wall", "cell": [4, c],
+                                                   "footprint": "point", "height": "full",
+                                                   "opacity": "opaque"}
+    assert not body_visibility(sc, "A", "B")["visible"]
+    sc["stations"]["A"]["altitude_m"] = 8
+    assert body_visibility(sc, "A", "B")["visible"]

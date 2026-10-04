@@ -1045,7 +1045,22 @@ def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
     full derivation follows.
     """
     return scene_memo(scene, ("proximity_rel", str(observer), str(target)),
-                      lambda: _proximity_rel(scene, observer, target))
+                      lambda: _out_of_reach_aloft(
+                          scene, observer, target,
+                          _proximity_rel(scene, observer, target)))
+
+
+def _out_of_reach_aloft(scene, observer, target, tier):
+    """`within_reach` is a fact about arms: two bodies `REACH_ALTITUDE_M`
+    apart in height are `near` at most, whatever their cells say -- a flier
+    over the courtyard is out of reach of the ground (`world/site_plan`)."""
+    if tier != "within_reach":
+        return tier
+    from world.site_plan import REACH_ALTITUDE_M, body_altitude_m
+    if abs(body_altitude_m(scene, observer) - body_altitude_m(scene, target)) \
+            >= REACH_ALTITUDE_M:
+        return "near"
+    return tier
 
 
 def _proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
@@ -1278,6 +1293,15 @@ def normalize_scene_stations(scene: dict) -> dict:
                 st.pop("cell", None)
             else:
                 st["cell"] = [cell[0], cell[1]]
+        # `altitude_m`: a body off the ground (`world/site_plan`, flight),
+        # kept as metres under the ceiling of an enclosed room, dropped at 0.
+        if "altitude_m" in st:
+            from world.site_plan import normalize_altitude
+            height = normalize_altitude(scene, my_room, st.get("altitude_m"))
+            if height is None:
+                st.pop("altitude_m", None)
+            else:
+                st["altitude_m"] = height
 
     for name, st in list(stations.items()):
         for other in list(st.get("near") or []):

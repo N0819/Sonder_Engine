@@ -2,7 +2,7 @@
 
 Status: STEP 1 BUILT 2026-10-03 (positions, elevations, the map); STEP 2
 BUILT 2026-10-04 (sight with height); STEP 3 BUILT 2026-10-04 (drops as
-facts). Flight and terrain are argument; the register entry is
+facts); FLIGHT BUILT 2026-10-04. Terrain is argument; the register entry is
 [`../UNBUILT_WORLD.md` §2.39](../UNBUILT_WORLD.md#unbuilt-2-39).
 
 ## Why
@@ -118,7 +118,23 @@ state: how far, onto what. The Director is told it and writes what the fall
 does. Injury stays the story's judgement, with a real number under it; a body
 cannot step off a balcony into the garden and the drop pass unremarked.
 
-## Flight
+## Flight (built 2026-10-04)
+
+`stations[body].altitude_m` is a body's height above its floor
+(`site_plan.normalize_altitude`: positive metres, capped under the ceiling of
+an enclosed room, dropped at 0; kept by `normalize_scene_stations`). Its
+readers: `plan_point` (so a flier in the garden looks straight into an upper
+window); `body_visibility`, which draws the line within a room with a rise
+whenever either body is aloft -- each fixture against the line's height where
+it stands (`_aloft_blocker`), so a flier just over a wall still loses the body
+pressed behind it and one high over the yard does not; `eye_rank`, so a flier
+sees over the fixtures a room holds; `proximity_rel`, which caps
+`within_reach` at `near` across `REACH_ALTITUDE_M` (1.5 m); and the
+Director's index, which marks a body aloft with `aloft_m`. The encoder card
+(stations, en and ja) asks for `altitude_m`, and 0 on landing. Landing and
+falling are the Director's to tell apart.
+
+The argument it built:
 
 A body's own height above its floor (an altitude) is the same number: the
 body's eye is its floor's elevation plus its altitude. Outdoors the air over a

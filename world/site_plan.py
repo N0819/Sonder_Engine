@@ -211,7 +211,7 @@ def plan_point(scene, name) -> Optional[tuple]:
     if cell is None:
         cell = room_grid(scene, rid).centre()
     return (site["x"] + cell[0] + 0.5, site["y"] + cell[1] + 0.5,
-            room_elevation_m(scene, rid))
+            room_elevation_m(scene, rid) + body_altitude_m(scene, name))
 
 
 def _mass_heights(scene, plan, exclude) -> dict:
@@ -300,7 +300,8 @@ def plan_sight(scene, observer, target) -> Optional[dict]:
     o_post, t_post = posture_class(scene, observer), posture_class(scene, target)
     eye = (p0[0], p0[1], p0[2] + EYE_M.get(o_post, EYE_M["standing"]))
     top_z = q0[2] + TOP_M.get(t_post, TOP_M["standing"])
-    upper, lower = (o_room, t_room) if p0[2] > q0[2] else (t_room, o_room)
+    upper, lower = (o_room, t_room) if room_elevation_m(scene, o_room) > \
+        room_elevation_m(scene, t_room) else (t_room, o_room)
     plan = room_site(scene, upper)["plan"]
     tops = _mass_heights(scene, plan, {o_room, t_room})
 
@@ -417,3 +418,50 @@ def report_drops(before, after, report=None) -> list:
                 f"{height:g} m" + (f" onto {surface}" if surface else "")
                 + ": a fall of that height, whatever the beat makes of it.")
     return out
+
+
+# ---------------------------------------------------------------------------
+# Flight (2026-10-04)
+# ---------------------------------------------------------------------------
+#
+# A body's own height above its floor -- flying, levitating, hanging from a
+# rafter, perched on the eaves -- is `stations[body].altitude_m`. Outdoors
+# the air over a room is that room, and no ceiling bounds it; indoors the
+# ceiling does (`STOREY_M` less a body's own height). Sight and reach read
+# it; whether a body coming down landed or fell is the Director's to say.
+
+#: Two bodies this far apart in height, in metres, are not within reach of
+#: each other, whatever their cells say.
+REACH_ALTITUDE_M = 1.5
+
+#: Off the ground by this much, a body's eye is over every fixture a room
+#: holds (`spatial_fov`'s `full` height), and it is seen over them.
+CLEAR_ALTITUDE_M = 1.0
+
+
+def normalize_altitude(scene, room_id, value) -> Optional[float]:
+    """A body's altitude in metres, or None for the ground and anything that
+    is not a height: a positive number, capped under the ceiling when the
+    room is enclosed (`exposure` not `open`)."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        height = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(height) or height <= 0:
+        return None
+    if not _open_air(scene, room_id):
+        height = min(height, max(0.0, STOREY_M - TOP_M["standing"]))
+    return round(height, 2) if height > 0 else None
+
+
+def body_altitude_m(scene, name) -> float:
+    """How far above its floor a body is, in metres; 0 on the ground."""
+    from world.spatial import room_of
+    from world.spatial import _ci_get
+
+    station = _ci_get((scene or {}).get("stations") or {}, name)
+    if not isinstance(station, dict):
+        return 0.0
+    return normalize_altitude(scene, room_of(scene, name), station.get("altitude_m")) or 0.0

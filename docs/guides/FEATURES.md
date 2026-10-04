@@ -354,8 +354,11 @@ legitimately perceive, learn, remember or infer.
   the sill, hidden by the roof of a lower wing or by the sill when deep in the
   room, and from below the window shows who stands at it, not the room behind.
   The Director is told how far a window or balcony drops before it writes,
-  and told again when somebody goes that way. *(partial: flight and sloping
-  ground are not built yet.)*
+  and told again when somebody goes that way. A body can be off the
+  ground -- flying, levitating, perched on a roof -- and sees over what a room
+  holds, is out of reach of the floor, and can look into an upper window.
+  *(partial: sloping ground is not built yet, and a flier still travels by
+  doorways.)*
 - **Gates, portals and seals** — A way between two places can be a thing
   standing in a room rather than a doorway in a wall. It can be seen through
   while shut, let only the bodies it names pass, and be worn down by force a

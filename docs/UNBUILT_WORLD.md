@@ -2206,7 +2206,11 @@ leaves, in the order the owner agreed:
   inside one room has nowhere to fall to; the movement floor still refuses
   a body through a window nobody opened, which is the right floor and means
   "she climbed out of the window" needs the window opened in the same beat.
-* **No body has an altitude**, so flight has no number to stand on.
+* **Flight landed 2026-10-04** (`stations[body].altitude_m`). Still open:
+  a flier walks the doorway graph like anyone -- over a garden wall into the
+  next lane is no route; nothing renders "hovering" unless the pose says so;
+  hearing ignores altitude; a body coming down from height is never reported
+  as a fall, because landing and falling look alike to code.
 * **Ground is flat**: no slope, no cliff, no bank between two cells.
 * **Nothing produces a plan in play.** Only `tools/site_plan_from_layout.py`
   writes one, from the layout lab; the room designer and the Writers' Room do
