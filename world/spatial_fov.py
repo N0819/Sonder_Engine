@@ -174,7 +174,7 @@ _POSTURE_TOKENS = {
 #: room may have (`spatial_geometry.EXTENT_MAX_PACES`). Indoors the cast is
 #: bounded by the room and its open doorways; outdoors and in a vast room
 #: this is the owner's cap on what a sweep takes in.
-SWEEP_REACH_PACES = 24
+SWEEP_REACH_PACES = 96
 
 _FRONT_SECTORS = frozenset({"ahead", "ahead_left", "ahead_right"})
 _SIDE_SECTORS = frozenset({"left", "right"})

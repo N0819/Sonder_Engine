@@ -215,9 +215,9 @@
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1976 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3357 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_fov.py` | 1801 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_fov.py` | 1822 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2671 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
-| `world/spatial_geometry.py` | 2209 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_geometry.py` | 2212 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 887 |  | — |
 | `world/spatial_levels.py` | 244 |  | `world.spatial_orientation` |
 | `world/spatial_light.py` | 508 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
@@ -2648,14 +2648,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_place_anchors()` | 544 | 125 lines |
-| `feature_visibility()` | 1454 | 111 lines |
-| `body_visibility()` | 1669 | 81 lines |
-| `body_cell()` | 784 | 76 lines |
-| `neighbour_feature_visibility()` | 1598 | 69 lines |
-| `room_field()` | 1179 | 62 lines |
-| `_placed_neighbours()` | 1118 | 49 lines |
-| `shadowcast()` | 963 | 47 lines |
+| `_place_anchors()` | 554 | 125 lines |
+| `feature_visibility()` | 1475 | 111 lines |
+| `body_visibility()` | 1690 | 81 lines |
+| `body_cell()` | 794 | 76 lines |
+| `neighbour_feature_visibility()` | 1619 | 69 lines |
+| `_placed_neighbours()` | 1128 | 49 lines |
+| `_room_field()` | 1214 | 48 lines |
+| `shadowcast()` | 973 | 47 lines |
 
 ### `world/spatial_frames.py`
 
@@ -2675,13 +2675,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_effective_anchors()` | 355 | 114 lines |
-| `invalidate_transferred_pose_details()` | 1756 | 113 lines |
+| `invalidate_transferred_pose_details()` | 1759 | 113 lines |
 | `spatial_digest()` | 150 | 107 lines |
-| `derive_scene_stations()` | 2106 | 104 lines |
-| `invalidate_moved_body_place_details()` | 1548 | 102 lines |
+| `derive_scene_stations()` | 2109 | 104 lines |
+| `invalidate_moved_body_place_details()` | 1551 | 102 lines |
 | `egocentric_frame()` | 62 | 86 lines |
-| `invalidate_moved_body_pose_details()` | 1438 | 79 lines |
-| `invalidate_contact_bound_poses()` | 1871 | 75 lines |
+| `invalidate_moved_body_pose_details()` | 1441 | 79 lines |
+| `invalidate_contact_bound_poses()` | 1874 | 75 lines |
 
 ### `world/spatial_identity.py`
 

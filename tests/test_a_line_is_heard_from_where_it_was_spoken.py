@@ -71,7 +71,10 @@ def _strand(doctor_at):
         }},
         "positions": {"Hinami": STRAND, "The Doctor": STRAND,
                       "Ocean Surf": STRAND},
-        "stations": {"Hinami": {"at": SHELF, "near": [], "cell": [7, 22]},
+        # Chat 122 pinned her at [7, 22] in the grid the 24-pace clamp
+        # made of this strand; at its authored 40 x 25 (the cap is 96 since
+        # 2026-10-03) the shelf stands at [12, 24], and she beside it.
+        "stations": {"Hinami": {"at": SHELF, "near": [], "cell": [12, 23]},
                      "The Doctor": {"at": doctor_at, "near": []},
                      "Ocean Surf": {"at": "surf_line", "near": []}},
         "entities": {"Ocean Surf": {

@@ -244,14 +244,16 @@ def test_a_clamped_extent_can_be_reported_back_to_whoever_wrote_it():
     paces deep" and "32 paces wide by 18 paces deep" while the rows it had
     just written held `{w: 24, d: 16}` and `{w: 24, d: 18}` -- two
     differently-sized terraces the same width, and nothing said so."""
-    note = extent_clamp({"w": 28, "d": 16})
-    assert note["requested"]["w"] == 28 and note["stored"]["w"] == 24
+    # The terraces' own numbers (28, 32) are within the cap since it was
+    # raised to 96 (2026-10-03); the clamp is the same rule above it.
+    note = extent_clamp({"w": 128, "d": 16})
+    assert note["requested"]["w"] == 128 and note["stored"]["w"] == 96
     assert note["sides"] == ["w"]
-    assert note["max"] == 24 and note["min"] == 2
+    assert note["max"] == 96 and note["min"] == 2
     # Both sides, either way past the range.
-    both = extent_clamp({"w": 32, "d": 1})
+    both = extent_clamp({"w": 132, "d": 1})
     assert both["sides"] == ["w", "d"]
-    assert both["stored"] == {"w": 24, "d": 2}
+    assert both["stored"] == {"w": 96, "d": 2}
 
 
 def test_rounding_a_pace_is_not_a_clamp():

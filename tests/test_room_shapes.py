@@ -167,8 +167,9 @@ def test_the_closed_sets_and_the_clamp():
     # doesn't cover the multi room shape design"); `l` stays, the two-part
     # case, readable exactly as it was.
     assert SHAPES == ("rectangle", "round", "l", "composite")
-    assert (EXTENT_MIN_PACES, EXTENT_MAX_PACES) == (2, 24)
-    assert normalize_extent({"w": 100, "d": 1}) == {"w": 24, "d": 2}
+    # 24 until 2026-10-03; 96 the owner's, once sight was measured cheap.
+    assert (EXTENT_MIN_PACES, EXTENT_MAX_PACES) == (2, 96)
+    assert normalize_extent({"w": 100, "d": 1}) == {"w": 96, "d": 2}
     assert normalize_extent({"width": 3.4, "depth": 11.6}) == {"w": 3, "d": 12}
 
 

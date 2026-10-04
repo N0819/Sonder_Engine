@@ -264,8 +264,8 @@ class TestDoorways:
         assert r.status_code == 400 and "no doorway stands" in r.text
         r = client.patch(f"/api/chats/{cid}/doorways/kitchen/hallway", json={"colour": "red"})
         assert r.status_code == 400 and "a doorway has the fields" in r.text
-        r = client.patch(f"/api/chats/{cid}/doorways/kitchen/hallway", json={"width": 40})
-        assert r.status_code == 400 and "between 1 and 24" in r.text
+        r = client.patch(f"/api/chats/{cid}/doorways/kitchen/hallway", json={"width": 140})
+        assert r.status_code == 400 and "between 1 and 96" in r.text
         r = client.patch(f"/api/chats/{cid}/doorways/kitchen/hallway", json={"offset": 1.5})
         assert r.status_code == 400 and "between 0 and 1" in r.text
         r = client.patch(f"/api/chats/{cid}/doorways/kitchen/hallway", json={"vertical": "sideways"})

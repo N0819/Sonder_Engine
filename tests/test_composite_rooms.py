@@ -89,7 +89,7 @@ def test_parts_box_is_the_box_the_parts_need():
     assert parts_box([{"w": 8, "d": 3, "at": "nw"}, {"w": 3, "d": 8, "at": "ne"}]) == (8, 8)
     assert parts_box([{"w": 4, "d": 2, "at": [0, 0]}, {"w": 2, "d": 5, "at": [1, 2]}]) == (4, 7)
     # Clamped to the extent range like every measurement.
-    assert parts_box([{"w": 24, "d": 2, "at": [10, 0]}]) == (24, 2)
+    assert parts_box([{"w": 96, "d": 2, "at": [10, 0]}]) == (96, 2)
     assert parts_box([{"w": 2, "d": 2, "at": [0, 0]}])[0] >= 2
 
 

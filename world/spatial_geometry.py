@@ -607,12 +607,15 @@ DEFAULT_ROOM_SIZE = "medium"
 #: is long, and the grid, the prose and the picture all need to know
 #: (`docs/design/DESIGN_ROOM_FIDELITY.md`). Both sides are clamped to this
 #: range. Two paces is the floor because a place narrower than two paces is
-#: a passage a body crosses, which `transit_seconds` already describes;
-#: twenty-four is twice the `vast` tier's side, and the shadowcast is
-#: O(cells) per observer, so 576 cells is the ceiling accepted without a
-#: measurement. Owner-visible: widen here, nowhere else.
+#: a passage a body crosses, which `transit_seconds` already describes.
+#: Ninety-six is the owner's (2026-10-03: "96 seems fine"), for grounds, a
+#: square, a field or a nave, once it was measured: six bodies in one
+#: 96-pace room cost 0.84 s for every sight pair in a read pass, after the
+#: grid and field memo (`spatial_fov.room_grid`). It was twenty-four, twice
+#: the `vast` tier's side, "accepted without a measurement". Owner-visible:
+#: widen here, nowhere else.
 EXTENT_MIN_PACES = 2
-EXTENT_MAX_PACES = 24
+EXTENT_MAX_PACES = 96
 
 #: The side of the square grid each size tier gives a room with no extent.
 #: `spatial_fov.GRID_SIDE` is the same table under the name the geometry note
