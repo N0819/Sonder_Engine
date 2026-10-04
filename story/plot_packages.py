@@ -2915,12 +2915,30 @@ def operation_rooms(op):
 
 def operation_shape_text():
     """One line per kind for a tool description: `op` names the kind, the
-    other keys are its fields (`?` marks an optional one)."""
+    other keys are its fields (`?` marks an optional one).
+
+    A LIMIT IS SHOWN AS ITS NUMBER. The field texts name this module's
+    numeric caps by their constant (`DIRECTOR_NOTE_CHARS`, `EVENT_DUE_CAP`,
+    ...) so the number lives once; the text the model reads gets the value.
+    It used to get the name: live, the Larch Hill opening (2026-10-04) was
+    told a director_note is "at most DIRECTOR_NOTE_CHARS characters", wrote
+    1249, was refused three times for it, and ran out of time unpublished."""
     lines = []
     for kind, fields in OPERATION_FIELDS.items():
         lines.append("%s: %s" % (kind, ", ".join(
             "%s=%s" % (k, v) if v else k for k, v in fields.items())))
-    return "; ".join(lines)
+    text = "; ".join(lines)
+    # The caps the fields name live here and in the two seams that enforce
+    # theirs (a plant's strength, a region event's reach and ramp).
+    from world import charter_surgery, region_events
+    caps = {}
+    for space in (vars(charter_surgery), vars(region_events), globals()):
+        caps.update({name: value for name, value in space.items()
+                     if re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+", name)
+                     and isinstance(value, (int, float)) and not isinstance(value, bool)})
+    return re.sub(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b",
+                  lambda m: ("%g" % caps[m.group(0)]) if m.group(0) in caps else m.group(0),
+                  text)
 
 
 #: Who authored a package decides whether it needs a grant. A package the
