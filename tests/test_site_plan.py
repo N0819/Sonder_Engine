@@ -362,3 +362,18 @@ def test_a_low_flier_still_loses_the_body_pressed_behind_the_wall():
     assert not body_visibility(sc, "A", "B")["visible"]
     sc["stations"]["A"]["altitude_m"] = 8
     assert body_visibility(sc, "A", "B")["visible"]
+
+
+def test_sight_across_storeys_is_symmetric_at_every_distance():
+    """Prior art (Cataclysm: DDA): one-way sight between storeys -- a body
+    on a roof seen and not seeing. Swept along the garden, sitting and
+    standing, at the window and deep in the room."""
+    from world.spatial import body_visibility
+    for hinami in ((3, 1), (2, 1), (0, 1)):
+        for vx in range(7, 10):
+            for posture in (None, "sitting"):
+                sc = _window_over_the_garden(hinami_cell=hinami, visitor_cell=(vx, 4),
+                                             posture=posture)
+                a = body_visibility(sc, "Visitor", "Hinami")["visible"]
+                b = body_visibility(sc, "Hinami", "Visitor")["visible"]
+                assert a == b, (hinami, vx, posture, a, b)

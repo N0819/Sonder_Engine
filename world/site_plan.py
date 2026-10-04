@@ -299,6 +299,13 @@ def plan_sight(scene, observer, target) -> Optional[dict]:
         return None
     o_post, t_post = posture_class(scene, observer), posture_class(scene, target)
     eye = (p0[0], p0[1], p0[2] + EYE_M.get(o_post, EYE_M["standing"]))
+    # SIGHT IS ONE LINE, BOTH WAYS. Whether two bodies see each other is the
+    # line between their EYES, which is the same line from either end; only
+    # how much of the other shows (above the sill or whole) is the
+    # observer's own. Eye to head-top one way and head-top to eye the other
+    # let one see without being seen at the sill's edge -- Cataclysm: DDA's
+    # zombies on the roof, in miniature (prior-art survey, 2026-10-04).
+    their_eye = q0[2] + EYE_M.get(t_post, EYE_M["standing"])
     top_z = q0[2] + TOP_M.get(t_post, TOP_M["standing"])
     upper, lower = (o_room, t_room) if room_elevation_m(scene, o_room) > \
         room_elevation_m(scene, t_room) else (t_room, o_room)
@@ -314,7 +321,7 @@ def plan_sight(scene, observer, target) -> Optional[dict]:
             return False, "the building"
         return True, None
 
-    top_ok, why = reaches(top_z)
+    top_ok, why = reaches(their_eye)
     chest_ok = reaches(top_z - CHEST_BELOW_TOP_M)[0] if top_ok else False
     horizontal = math.hypot(q0[0] - p0[0], q0[1] - p0[1]) * PACE_M
     distance = math.hypot(horizontal, top_z - eye[2])

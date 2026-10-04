@@ -1475,11 +1475,12 @@ def _aloft_blocker(scene, field, observer, target, origin, goal, o_alt, t_alt):
     """The anchor id (or `__wall__`) that cuts a line between two bodies one
     of which is off the ground, or None: walls as on the ground; each
     fixture against the line's height where it stands, in metres."""
-    from world.site_plan import EYE_M, TOP_M
+    from world.site_plan import EYE_M
     if not _wall_verdict(field, origin, goal):
         return "__wall__"
+    # Eye to eye: the one line both bodies look along (`site_plan.plan_sight`).
     eye = o_alt + EYE_M.get(posture_class(scene, observer), EYE_M["standing"])
-    top = t_alt + TOP_M.get(posture_class(scene, target), TOP_M["standing"])
+    top = t_alt + EYE_M.get(posture_class(scene, target), EYE_M["standing"])
     steps = _line_steps(origin, goal)
     for i, step in enumerate(steps):
         z = eye + (top - eye) * (i + 1) / (len(steps) + 1)
