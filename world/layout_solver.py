@@ -647,6 +647,8 @@ def _place_blocks(spec, rooms, shafts, front, layout):
         # a tower -- every storey one room -- keeps one cross-section
         tower = all(sum(1 for r in rooms.values() if r["block"] == b and r["level"] == lv) <= 1
                     for lv in levels)
+        if tower:
+            layout.towers.add(b)
         for lv in sorted(levels, key=lambda v: (v < 0, abs(v))):
             o = base
             if lv != 0 and not tower and carried.get(lv, 0) * PART_SLACK < PART_SHARE * base.w * base.d:
@@ -1106,7 +1108,7 @@ def _shaft_spots(shaft, outlines, rng):
 
 # ------------------------------------------------------------ scoring
 
-def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, level):
+def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, level, sheer=False):
     """Lower is better: a room missing, a join with no wall to open in, a
     join on the wrong side, a room too thin or too long, a room far from its
     size, a room that opens outdoors with no outside wall, a private room on
@@ -1117,6 +1119,17 @@ def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, 
             s += 300
     every = dict(fixed)
     every.update(parts)
+    roof = set() if sheer else _roof_cells(parts, outline, level)
+
+    def on_edge(r, side):
+        if _on_edge(r, outline, side):
+            return True
+        if not roof:
+            return False
+        dx, dy = _STEP[side]
+        own = r.cells()
+        return all((c[0] + dx, c[1] + dy) in roof or (c[0] + dx, c[1] + dy) in own for c in own)
+
     for rid, r in parts.items():
         if rid.startswith("spare:"):
             lo_side = min(r.w, r.d)
@@ -1158,9 +1171,22 @@ def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, 
         want = outward.get(rid)
         if want is not None:
             sides = [want] if want in _SIDES else list(_SIDES)
-            if not any(_on_edge(r, outline, sd) for sd in sides):
+            if not any(on_edge(r, sd) for sd in sides):
                 s += outward_weight.get(rid, 15)
     return s
+
+
+def _roof_cells(parts, outline, level):
+    """Above the ground, floor no room takes that reaches the outline's edge
+    is not floor at all: it is roof over the storey below, outside this
+    storey's walls."""
+    if level <= 0:
+        return set()
+    cells = set()
+    for rid, r in parts.items():
+        if rid.startswith("spare:") and any(_on_edge(r, outline, sd) for sd in _SIDES):
+            cells |= r.cells()
+    return cells
 
 
 def _on_edge(r, outline, side):
@@ -1195,6 +1221,8 @@ class Layout:
     details: dict = field(default_factory=dict)      # room_id -> [things on its walls or ceiling]
     windows: list = field(default_factory=list)      # {id, room, level, side, cell}
     voids: dict = field(default_factory=dict)        # level -> [Rect] open to the storey below
+    roofs: dict = field(default_factory=dict)        # level -> [Rect] roof of the storey below, outside this one
+    towers: set = field(default_factory=set)         # blocks whose walls rise sheer: no storey has roof beside it
     contents: dict = field(default_factory=dict)     # room_id -> {fixture_id: [things in or on it]}
 
     def as_dict(self):
@@ -1220,6 +1248,7 @@ class Layout:
             "elsewhere": self.elsewhere, "entrance": self.entrance,
             "details": self.details, "contents": self.contents, "windows": self.windows,
             "voids": {str(lv): [r.as_dict() for r in rs] for lv, rs in self.voids.items()},
+            "roofs": {str(lv): [r.as_dict() for r in rs] for lv, rs in self.roofs.items()},
         }
 
 
@@ -1355,7 +1384,8 @@ def solve(spec, seed=SEED) -> Layout:
                     prts = _divide(outline, holes, items, every, weights, rng, lv)
                     out_here = dict(outward if lv == 0 else {"_front": front})
                     out_here.update(facing.get(lv, {}))
-                    sc = _score(prts, ids_all, every, weights, outline, fixed, out_here, outward_weight, lv)
+                    sc = _score(prts, ids_all, every, weights, outline, fixed, out_here, outward_weight, lv,
+                                b in layout.towers)
                     if best_lv is None or sc < best_lv[0]:
                         best_lv = (sc, prts)
                 total += best_lv[0]
@@ -1409,7 +1439,12 @@ def solve(spec, seed=SEED) -> Layout:
 
     # the layout's rooms: the spec's, the stair halls, and the stores left over
     for (b, lv), prts in chosen.items():
+        # a tower's walls rise sheer: beside its stair is a well, never roof
+        roof = set() if b in layout.towers else _roof_cells(prts, outlines[b][lv], lv)
         for rid, r in prts.items():
+            if rid.startswith("spare:") and lv > 0 and r.cells() <= roof:
+                layout.roofs.setdefault(lv, []).append(r)
+                continue
             if rid.startswith("spare:") and lv > 0:
                 # floor above the ground no named room can take whole is not a
                 # room: it is open to the storey below
@@ -1573,6 +1608,8 @@ def _place_windows(layout, rooms):
         for b, levels in layout.outlines.items():
             if lv in levels:
                 inside |= levels[lv].cells()
+        for rf in layout.roofs.get(lv, ()):
+            inside -= rf.cells()
         doors = {tuple(d["cell"]) for d in layout.doors if d["level"] == lv and rid in (d["a"], d["b"])}
         solid = _solid(layout, lv)
 
@@ -2254,7 +2291,7 @@ def check(layout: Layout):
                 covered |= cs
                 if not cs <= o.cells():
                     out.append(f"{rid} stands outside its block's outline on storey {lv}")
-            for v in layout.voids.get(lv, ()):
+            for v in list(layout.voids.get(lv, ())) + list(layout.roofs.get(lv, ())):
                 if v.cells() <= o.cells():
                     covered |= v.cells()
             if ids and covered != o.cells():

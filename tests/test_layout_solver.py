@@ -418,3 +418,31 @@ def test_stairs_with_different_names_are_different_stairs():
     lay = solve(spec)
     assert {s["id"] for s in lay.stairwells} == {"box", "stone"}
     assert all(len(s["levels"]) == 2 for s in lay.stairwells)
+
+
+def test_upper_floor_no_room_takes_at_the_edge_is_roof_and_a_window_may_face_it():
+    import copy
+    spec = copy.deepcopy(HOUSE)
+    for r in spec["rooms"]:
+        if r["id"] == "corridor":
+            r["windows"] = [{"side": "w", "count": 2}]
+        if r["id"] in ("bed_a", "bed_b"):
+            r["area_m2"] = 7
+    lay = solve(spec)
+    assert not check(lay)
+    assert lay.roofs.get(1), "the floor the stated rooms leave is roof over the storey below"
+    roof = set().union(*(r.cells() for r in lay.roofs[1]))
+    for rf in lay.roofs[1]:
+        o = lay.outlines["main"][1]
+        assert any(getattr(rf, a) == getattr(o, a) for a in ("x", "y")) or \
+            rf.x + rf.w == o.x + o.w or rf.y + rf.d == o.y + o.d
+    win = [w for w in lay.windows if w["room"] == "corridor"]
+    assert win and all(w["side"] == "w" for w in win)
+    for w in win:
+        x, y = w["cell"]
+        assert (x - 1, y) in roof or (x - 1, y) not in lay.outlines["main"][1].cells()
+
+
+def test_a_towers_walls_rise_sheer_so_no_storey_of_it_has_roof():
+    lay = solve(TOWER)
+    assert not any(lay.roofs.values())

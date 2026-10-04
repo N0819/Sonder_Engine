@@ -334,6 +334,11 @@ function drawPlan() {
     walls(svg, cellsOf([r]), X, Y, C, new Set(), "var(--line)", 1, "4 3");
     label(svg, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, "open to below", 11, 500, "var(--line)");
   }
+  // roof of the storey below: outside this storey's walls
+  for (const r of ((lay.roofs || {})[String(lv)] || [])) {
+    el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "url(#hatch)", opacity: .18 }, svg);
+    label(svg, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, "roof below", 11, 500, "var(--line)");
+  }
   // zones: marked floor inside their room
   for (const [rid, zs] of Object.entries(lay.zones || {})) {
     if (!(rid in floor)) continue;
