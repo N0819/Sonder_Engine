@@ -246,7 +246,7 @@ def run(names):
     briefs["shrine"] = shrine_brief()
     # the shrine's layout rewritten for its architectural style (lab only;
     # the owner's lorebook is not changed)
-    rewritten = HERE / "briefs" / "shrine_rewritten.txt"
+    rewritten = Path(os.environ.get("LAYOUT_LAB_BRIEF") or HERE / "briefs" / "shrine_rewritten.txt")
     if rewritten.exists():
         text = rewritten.read_text()
         briefs["shrine2"] = (text.splitlines()[0].strip(), text.split("\n", 1)[1].strip())

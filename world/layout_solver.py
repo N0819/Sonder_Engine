@@ -373,11 +373,12 @@ def room_target(room, stated=True):
     key = purpose_key(room)
     lo, _hi = PURPOSE_AREA[key]
     area = _stated_area(room) if stated else None
-    if area:
-        return area
     furniture = sum(w * d for w, d, _h in (fixture_footprint(f) for f in room.get("fixtures") or ()))
     zones = sum(a * b for a, b in (_zone_size(z) for z in room.get("zones") or ()))
     doors = len(room.get("joins") or ())
+    if area:
+        # a stated size never squeezes a room below what it is said to hold
+        return max(area, furniture / COVERAGE + 0.6 * zones + 1.5 * doors)
     if key in CORRIDORS:
         return max(lo, 2 * max(4, 2.5 * doors))
     hint = {"tiny": 0.7, "small": 0.85, "large": 1.25, "huge": 1.5}.get(
@@ -1633,6 +1634,7 @@ def _place_windows(layout, rooms):
                 layout.warnings.append(f"{layout.names[rid]}: its window could not face {asked} "
                                        f"(that wall is inside the building) and faces {side}")
             cells = outside_cells(side)
+            n = min(n, len(cells))
             for i in range(n):
                 cell = cells[min(len(cells) - 1, int((i + 0.5) * len(cells) / n))]
                 wid = str(wdef.get("id") or f"{rid}_window_{k + 1}") + (f"_{i + 1}" if n > 1 else "")

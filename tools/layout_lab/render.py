@@ -31,6 +31,14 @@ def main(dest):
             if name == "shrine2":
                 record["layout"]["name"] = record["layout"].get("name", "") + " (rewritten)"
             data.append(record)
+    # fresh runs of the whole pipeline on the same brief, no hand edits:
+    # LAYOUT_LAB_RERUNS=dir1:dir2:... each holding a shrine2.json
+    for k, d in enumerate(p for p in os.environ.get("LAYOUT_LAB_RERUNS", "").split(":") if p):
+        path = Path(d) / "shrine2.json"
+        if path.exists():
+            record = json.loads(path.read_text())
+            record["layout"]["name"] = record["layout"].get("name", "") + f" (fresh run {k + 1})"
+            data.insert(1 + k, record)
     html = TEMPLATE.read_text().replace(
         "__DATA__", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
     Path(dest).write_text(html)
