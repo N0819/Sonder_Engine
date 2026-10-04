@@ -328,6 +328,12 @@ function drawPlan() {
     g.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); g.onclick(); } };
     for (const r of rs) el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: fillFor(lay.purposes[rid]) }, g);
   }
+  // floor open to the storey below: no room
+  for (const r of ((lay.voids || {})[String(lv)] || [])) {
+    el("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "url(#hatch)", opacity: .35 }, svg);
+    walls(svg, cellsOf([r]), X, Y, C, new Set(), "var(--line)", 1, "4 3");
+    label(svg, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, "open to below", 11, 500, "var(--line)");
+  }
   // zones: marked floor inside their room
   for (const [rid, zs] of Object.entries(lay.zones || {})) {
     if (!(rid in floor)) continue;
@@ -375,9 +381,19 @@ function drawPlan() {
       if (long) { const land = w * .25; treads(x0 + land, y0, w - land, h / 2, true, 6); treads(x0 + land, y0 + h / 2, w - land, h / 2, true, 6); el("rect", Object.assign({ x: x0, y: y0, width: land, height: h }, ink), g); }
       else { const land = h * .25; treads(x0, y0 + land, w / 2, h - land, false, 6); treads(x0 + w / 2, y0 + land, w / 2, h - land, false, 6); el("rect", Object.assign({ x: x0, y: y0, width: w, height: land }, ink), g); }
     } else if (s.kind === "l") {
-      // a quarter turn: one arm along the top, one down the side
-      const t = Math.min(w, h) * .45;
-      treads(x0, y0, w, t, true, 5); treads(x0 + w - t, y0 + t, t, h - t, false, 4);
+      // an L wraps the corner its hall stands in: a flight up each of the two
+      // walls that are the building's own, the landing where they meet
+      const c = (s.corner && s.corner.length >= 2) ? s.corner : ["n", "w"];
+      const ns = c.find(x => x === "n" || x === "s") || "n", ew = c.find(x => x === "e" || x === "w") || "w";
+      const t = 2 * C - 2;                                  // a flight is two paces wide
+      const ay = ns === "n" ? y0 : y0 + h - t, ax = ew === "w" ? x0 : x0 + w - t;
+      // the flight along the n/s wall, short of the corner landing
+      const bx0 = ew === "w" ? x0 + t : x0, bw = w - t;
+      treads(bx0, ay, bw, t, true, 5);
+      // the flight along the e/w wall, short of the landing
+      const by0 = ns === "n" ? y0 + t : y0, bh = h - t;
+      treads(ax, by0, t, bh, false, 4);
+      el("rect", Object.assign({ x: ax, y: ay, width: t, height: t }, ink), g);   // the landing
     } else {
       treads(x0, y0, w, h, long, 8);
     }
