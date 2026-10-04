@@ -209,6 +209,12 @@ def outlooks(scene, room_id) -> Optional[set]:
         if b:
             i = BEARINGS.index(b)
             out.update({BEARINGS[(i - 1) % 8], b, BEARINGS[(i + 1) % 8]})
+    # The room's own windows onto open air with no room beyond (`windows`).
+    for raw in room.get("windows") or ():
+        b = normalize_bearing8(raw)
+        if b:
+            i = BEARINGS.index(b)
+            out.update({BEARINGS[(i - 1) % 8], b, BEARINGS[(i + 1) % 8]})
     return out
 
 

@@ -56,7 +56,7 @@
 | `llm/prompts.py` | 645 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 5021 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 6723 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 6729 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2551 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 282 |  | `llm`, `llm.prompts` |
@@ -122,7 +122,7 @@
 | `story/mandates.py` | 626 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/opening_plan.py` | 121 |  | `core.db` |
-| `story/plot_packages.py` | 3844 |  | `world.spatial` |
+| `story/plot_packages.py` | 3862 |  | `world.spatial` |
 | `story/prelude.py` | 188 |  | `core.db` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 445 |  | `core.db` |
@@ -224,7 +224,7 @@
 | `world/spatial_light.py` | 508 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1246 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 462 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2695 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2696 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 432 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1271 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
@@ -238,7 +238,7 @@
 | `world/structure.py` | 1750 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
-| `world/vistas.py` | 294 |  | — |
+| `world/vistas.py` | 300 |  | — |
 | `world/weather.py` | 1411 |  | — |
 
 ## Largest top-level functions
@@ -796,13 +796,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 5411 | 290 lines |
+| `preprocess_llm_output()` | 5417 | 290 lines |
 | `_lenient_coerce()` | 864 | 159 lines |
-| `validate_llm_output_strict()` | 6585 | 139 lines |
-| `semantic_output_errors()` | 6214 | 128 lines |
-| `canonicalize_prose_markup()` | 5177 | 102 lines |
+| `validate_llm_output_strict()` | 6591 | 139 lines |
+| `semantic_output_errors()` | 6220 | 128 lines |
+| `canonicalize_prose_markup()` | 5183 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
-| `_uncross_concealed_speech()` | 5301 | 69 lines |
+| `_uncross_concealed_speech()` | 5307 | 69 lines |
 | `_coerce_list_valued_map()` | 168 | 57 lines |
 
 ### `mind/affect.py`
@@ -1554,13 +1554,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 3022 | 143 lines |
+| `_package_checks()` | 3040 | 143 lines |
 | `_preview_plan_rooms()` | 1010 | 108 lines |
-| `fire_due_clocks()` | 3595 | 102 lines |
-| `publish_package()` | 3376 | 84 lines |
-| `_reach_warning()` | 3167 | 79 lines |
+| `fire_due_clocks()` | 3613 | 102 lines |
+| `publish_package()` | 3394 | 84 lines |
+| `_reach_warning()` | 3185 | 79 lines |
 | `normalize_package()` | 253 | 77 lines |
-| `_tick_triggered_clocks()` | 3492 | 73 lines |
+| `_tick_triggered_clocks()` | 3510 | 73 lines |
 | `_plan_geometry()` | 771 | 68 lines |
 
 ### `story/prelude.py`
@@ -2767,14 +2767,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1607 | 831 lines |
-| `_expire_transient_entity_state()` | 616 | 116 lines |
-| `_shield_standing_bearings()` | 898 | 107 lines |
+| `merge_scene_with_diff()` | 1608 | 831 lines |
+| `_expire_transient_entity_state()` | 617 | 116 lines |
+| `_shield_standing_bearings()` | 899 | 107 lines |
 | `_merge_room()` | 190 | 106 lines |
-| `_shield_minted_edges()` | 1159 | 95 lines |
-| `beat_movement_cuts()` | 2566 | 94 lines |
-| `sync_scene_passages()` | 1421 | 90 lines |
-| `_mirror_symmetric_barriers()` | 1069 | 88 lines |
+| `_shield_minted_edges()` | 1160 | 95 lines |
+| `beat_movement_cuts()` | 2567 | 94 lines |
+| `sync_scene_passages()` | 1422 | 90 lines |
+| `_mirror_symmetric_barriers()` | 1070 | 88 lines |
 
 ### `world/spatial_orientation.py`
 
@@ -2941,10 +2941,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `horizon_angle()` | 219 | 41 lines |
-| `visible_vistas()` | 262 | 33 lines |
+| `horizon_angle()` | 225 | 41 lines |
+| `visible_vistas()` | 268 | 33 lines |
+| `outlooks()` | 188 | 31 lines |
 | `normalize_vista()` | 67 | 25 lines |
-| `outlooks()` | 188 | 25 lines |
 | `vista_verdict()` | 127 | 21 lines |
 | `air_from_weather()` | 154 | 19 lines |
 | `_darkness()` | 175 | 11 lines |

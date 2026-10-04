@@ -1689,6 +1689,12 @@ class RoomDef(LenientModel):
     # as "enclosed" gets no weather at all. Absent falls back to
     # weather.room_exposure's keyword derivation, never to "it rains here".
     exposure: Optional[str] = None
+    # WHICH WAY THE WALLS LET A BODY SEE OUT (2026-10-04, `world/vistas`):
+    # compass bearings of windows or glass onto open air with no room beyond
+    # -- a glassed watch cabin, a window over a drop. What stands on the
+    # horizon is seen through them. Declared for the same reason `exposure`
+    # is: the round-trip drops what it does not declare.
+    windows: Optional[list[str]] = None
     # A STUB THE OPENING DOES NOT SEE (2026-09-16). `planned: true` beside an
     # empty `desc` marks a room written from outside -- the far side of a
     # shut door, the back room a sign names -- so `world/structure.

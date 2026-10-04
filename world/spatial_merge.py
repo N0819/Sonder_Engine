@@ -404,6 +404,7 @@ def _merge_anchor_fields(prior: dict, incoming: dict) -> dict:
 # a corridor.
 _ROOM_SILENT_WHEN_EMPTY = frozenset({"anchors", "size", "zone", "region", "light",
                                      "exposure", "transit_seconds", "quiet",
+                                     "windows",
                                      "extent", "shape", "parts"})
 
 # Every SceneEntityDef field whose schema default is indistinguishable from

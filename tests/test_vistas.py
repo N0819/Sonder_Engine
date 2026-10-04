@@ -141,3 +141,23 @@ def test_the_writers_room_sets_the_horizon(temp_db):
         {"vistas": [dict(RANGE, desc="cloud on the peaks")]}), 0)
     scene = temp_db.wget(cid, "scene")
     assert [v["desc"] for v in scene["vistas"]] == ["cloud on the peaks"]
+
+
+def test_a_glassed_room_sees_out_its_own_windows_and_no_other_way():
+    """A watch cabin glassed on its north side over open air, with no room
+    beyond the glass: live, the Larch Hill opening built a 'glassed-in
+    watch cabin' whose only edges were a stair and a shut balcony door, so
+    nothing on the horizon could ever be seen from it (2026-10-04)."""
+    sc = _yard()
+    sc["rooms"]["cabin"] = {"name": "Cabin", "desc": ".", "exposure": "enclosed",
+                            "windows": ["n"], "adjacent": []}
+    sc["positions"]["Ren"] = "cabin"
+    assert _names(sc) == ["the Kurogane range"]
+
+
+def test_the_schema_keeps_a_rooms_windows():
+    from llm.schemas import RoomDef
+    room = RoomDef(name="Cabin", desc=".", windows=["n", "e"])
+    dumped = room.model_dump(exclude_none=True) if hasattr(room, "model_dump") else room.dict(exclude_none=True)
+    assert dumped["windows"] == ["n", "e"]
+

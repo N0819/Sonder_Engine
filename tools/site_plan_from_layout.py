@@ -203,6 +203,8 @@ def rooms_from_layout(layout: dict, plan: str, region: str = "") -> dict:
         rect = rects.get(win["room"])
         if rect:
             rid = room_id(win["room"])
+            if win["side"] not in rooms[rid].setdefault("windows", []):
+                rooms[rid]["windows"].append(win["side"])
             ox, oy = rooms[rid]["site"]["x"], rooms[rid]["site"]["y"]
             rooms[rid]["anchors"][room_id(win["id"])] = {
                 "desc": "a window", "dir": win["side"],
