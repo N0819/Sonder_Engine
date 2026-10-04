@@ -2201,8 +2201,11 @@ leaves, in the order the owner agreed:
   away through a window. Still flat: an anchor in the garden (a tree, a
   wall) does not stand in that line, sound and hearing across storeys read
   the edge's barrier only, and two plans never see each other.
-* **A drop is not a fact.** Nothing tells the Director how far a body falls
-  from a window, a balcony or a bank. Step 3.
+* **Drops as facts (step 3) landed 2026-10-04.** Still open: a drop is
+  only known between rooms of one plan; a body that falls off a ledge
+  inside one room has nowhere to fall to; the movement floor still refuses
+  a body through a window nobody opened, which is the right floor and means
+  "she climbed out of the window" needs the window opened in the same beat.
 * **No body has an altitude**, so flight has no number to stand on.
 * **Ground is flat**: no slope, no cliff, no bank between two cells.
 * **Nothing produces a plan in play.** Only `tools/site_plan_from_layout.py`

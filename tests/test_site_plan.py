@@ -233,3 +233,64 @@ def test_rooms_on_one_level_are_seen_between_as_they_always_were():
     sc["positions"] = {"A": "hall", "B": "garden"}
     sc["stations"] = {"A": {"cell": [1, 2]}, "B": {"cell": [4, 7]}}
     assert body_visibility(sc, "A", "B")["basis"] != "plan"
+
+
+# ---------------------------------------------------------------------------
+# Step 3: drops as facts (2026-10-04)
+# ---------------------------------------------------------------------------
+
+def test_a_window_over_the_garden_is_a_drop_and_a_stair_never_is():
+    from world.site_plan import drop_m, drops_from
+    sc = _window_over_the_garden()
+    assert drop_m(sc, "bedroom", "garden") == STOREY_M
+    assert drop_m(sc, "garden", "bedroom") is None          # up is not a fall
+    assert drop_m(sc, "bedroom", "hall") is None             # the stair down
+    assert drops_from(sc, "bedroom") == {"garden": STOREY_M}
+
+
+def test_the_director_is_shown_the_drop_before_it_writes():
+    from agents.director import causal_world_index
+    rooms = causal_world_index(_window_over_the_garden())["rooms"]
+    assert rooms["bedroom"]["drops"] == {"garden": STOREY_M}
+    assert "drops" not in rooms["garden"] and "drops" not in rooms["hall"]
+
+
+def _moved(sc, who, to):
+    after = copy.deepcopy(sc)
+    after["positions"][who] = to
+    return after
+
+
+def test_a_body_out_of_an_open_window_is_reported_as_a_fall_and_a_shut_one_is_passed_by_nobody():
+    from world.site_plan import report_drops
+    shut = _window_over_the_garden()
+    assert report_drops(shut, _moved(shut, "Hinami", "garden")) == []
+    opened = _window_over_the_garden()
+    for edge in opened["rooms"]["bedroom"]["adjacent"] + opened["rooms"]["garden"]["adjacent"]:
+        if edge.get("barrier") == "window":
+            edge["barrier"] = "open"
+    notes = []
+    assert report_drops(opened, _moved(opened, "Hinami", "garden"), notes) == [
+        ("Hinami", "bedroom", "garden", STOREY_M)]
+    assert "drop of 3 m" in notes[0]
+
+
+def test_walking_down_the_stair_is_no_fall():
+    from world.site_plan import report_drops
+    sc = _window_over_the_garden()
+    assert report_drops(sc, _moved(sc, "Hinami", "hall")) == []
+
+
+def test_a_beat_that_drops_a_body_tells_the_director():
+    sc = _window_over_the_garden()
+    for edge in sc["rooms"]["bedroom"]["adjacent"]:
+        if edge.get("barrier") == "window":
+            edge["barrier"] = "open"
+    report = []
+    merge_scene_with_diff(sc, {"positions": {"Hinami": "garden"}},
+                          clock_seconds=100.0, crossing_report=report)
+    assert any("Hinami" in note and "drop" in note for note in report)
+    # outside a beat (no clock) nothing is reported
+    quiet = []
+    merge_scene_with_diff(sc, {"positions": {"Hinami": "garden"}}, crossing_report=quiet)
+    assert not any("drop" in note for note in quiet)

@@ -1,7 +1,8 @@
 # The site plan: rooms where a plan put them, floors at their heights
 
 Status: STEP 1 BUILT 2026-10-03 (positions, elevations, the map); STEP 2
-BUILT 2026-10-04 (sight with height). Step 3 and flight are argument; the register entry is
+BUILT 2026-10-04 (sight with height); STEP 3 BUILT 2026-10-04 (drops as
+facts). Flight and terrain are argument; the register entry is
 [`../UNBUILT_WORLD.md` §2.39](../UNBUILT_WORLD.md#unbuilt-2-39).
 
 ## Why
@@ -96,7 +97,19 @@ nearer the wall. From the window, the garden, less the strip the wall hides at
 its foot. Terrain that rises between two bodies blocks them. Distance becomes
 three-dimensional for hearing and for recognising a face.
 
-## Step 3 -- drops as facts
+## Step 3 -- drops as facts (built 2026-10-04)
+
+`site_plan.drop_m`: a way out of a room that is not a stair and opens onto a
+room of the same plan a storey or more below is a drop of the floors'
+difference. The Director sees it before it writes -- `causal_world_index`
+gives the room `drops: {exit: metres}`, and one sentence of the resolve card
+(en, ja) says what it means -- and is told after the beat
+(`report_drops`, through the crossing report and `ctx.tell_director`) when a
+body went straight down one through a way it could pass that beat: an opened
+window, an open side. A shut window is passed by nobody; a walk down the
+stair is never a fall. Injury is not computed.
+
+The argument it built:
 
 Geometry proposes, the Director disposes
 ([`DESIGN_METRIC_SPACE.md`](DESIGN_METRIC_SPACE.md) §4). A body that leaves a

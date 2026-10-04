@@ -353,7 +353,9 @@ legitimately perceive, learn, remember or infer.
   96 paces a side. Someone at an upper window is seen from the garden above
   the sill, hidden by the roof of a lower wing or by the sill when deep in the
   room, and from below the window shows who stands at it, not the room behind.
-  *(partial: drops and flight are not built yet.)*
+  The Director is told how far a window or balcony drops before it writes,
+  and told again when somebody goes that way. *(partial: flight and sloping
+  ground are not built yet.)*
 - **Gates, portals and seals** — A way between two places can be a thing
   standing in a room rather than a doorway in a wall. It can be seen through
   while shut, let only the bodies it names pass, and be worn down by force a

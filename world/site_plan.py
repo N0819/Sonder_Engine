@@ -334,3 +334,86 @@ def interior_hidden_from_below(scene, observer_room, other_room) -> bool:
     `other_room` is a storey or more above `observer_room` on one plan."""
     return (elevated_pair(scene, observer_room, other_room)
             and room_elevation_m(scene, other_room) > room_elevation_m(scene, observer_room))
+
+
+# ---------------------------------------------------------------------------
+# Drops as facts (step 3, 2026-10-04)
+# ---------------------------------------------------------------------------
+#
+# Geometry proposes, the Director disposes (DESIGN_METRIC_SPACE §4). A way
+# out of a room that is not a stair and opens onto a room a storey or more
+# below -- a window over the garden, a balcony, the lip of a bank -- is a
+# drop of a stated height onto a stated place. The Director is shown that
+# height before it writes (`causal_world_index`'s `drops`), and told after
+# the beat when a body went that way (`report_drops`). What the fall does is
+# its judgement; how far it was is not.
+
+def _direct_edge(scene, a, b):
+    from world.spatial import effective_adjacent
+
+    return next((e for e in effective_adjacent(scene, a)
+                 if isinstance(e, dict) and str(e.get("to")) == str(b)), None)
+
+
+def drop_m(scene, from_room, to_room) -> Optional[float]:
+    """How far a body falls going from `from_room` straight to `to_room`, in
+    metres, or None when that way is no drop: the rooms are not a storey
+    apart on one plan, the far room is not below, there is no way between
+    them, or the way is a stair, a ladder or a hatch (`vertical` + `way`)."""
+    from world.spatial import normalize_vertical
+
+    if not elevated_pair(scene, from_room, to_room):
+        return None
+    height = room_elevation_m(scene, from_room) - room_elevation_m(scene, to_room)
+    if height < LEVEL_STEP_M:
+        return None
+    edge = _direct_edge(scene, from_room, to_room)
+    if edge is None:
+        return None
+    if normalize_vertical(edge.get("vertical")) and str(edge.get("way") or "stair") != "overlook":
+        return None
+    return round(height, 1)
+
+
+def drops_from(scene, room_id) -> dict:
+    """{exit room id: metres} for every way out of `room_id` that is a drop."""
+    from world.spatial import effective_adjacent
+
+    out = {}
+    for edge in effective_adjacent(scene, room_id):
+        if isinstance(edge, dict) and edge.get("to"):
+            height = drop_m(scene, room_id, str(edge["to"]))
+            if height is not None:
+                out[str(edge["to"])] = height
+    return out
+
+
+def report_drops(before, after, report=None) -> list:
+    """`(body, from room, to room, metres)` for every body the beat took
+    straight from a room down a drop -- through a way it can pass this beat
+    (an opened window, a balcony's open side), never down a stair -- with
+    one Director-facing sentence each on `report`. A shut window is passed
+    by nobody, so nobody falls through one by accident."""
+    from world.spatial import edge_passable, room_of
+
+    out = []
+    names = (after or {}).get("positions") or {}
+    for body in sorted(names, key=str):
+        a, b = room_of(before or {}, body), room_of(after or {}, body)
+        if not a or not b or a == b:
+            continue
+        height = drop_m(after, a, b)
+        edge = _direct_edge(after, a, b) if height is not None else None
+        if edge is None or not edge_passable(edge, a, body):
+            continue
+        out.append((str(body), a, b, height))
+        if report is not None:
+            rooms = _scene_rooms(after)
+            onto = rooms.get(b) or {}
+            surface = str(onto.get("surface") or "").strip()
+            report.append(
+                f"{body} went from {(rooms.get(a) or {}).get('name') or a} to "
+                f"{onto.get('name') or b} by a way that is a drop of "
+                f"{height:g} m" + (f" onto {surface}" if surface else "")
+                + ": a fall of that height, whatever the beat makes of it.")
+    return out

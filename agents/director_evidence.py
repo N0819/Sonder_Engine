@@ -3015,6 +3015,13 @@ def causal_world_index(sc, here=None, *, room_ids=None,
                if isinstance(room.get("anchors"), dict) and room["anchors"]
                else {}),
         }
+        # A WAY OUT THAT IS A DROP, AND HOW FAR (`world/site_plan`): a window
+        # over the garden, a balcony. Place, not state -- how high a room
+        # stands is where it is -- and only where a site plan says so.
+        from world.site_plan import drops_from
+        _drops = drops_from(sc, room_id)
+        if _drops:
+            index[str(room_id)]["drops"] = _drops
     for key, room_id in positions.items():
         room = index.get(str(room_id))
         if room is None:

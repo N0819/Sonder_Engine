@@ -1620,6 +1620,7 @@ def merge_scene_with_diff(
     causal_apply=None,
     causal_guard=None,
     age_contacts=True,
+    _in_program=False,
 ) -> dict:
     """`carriers` is ``{spelling: room}`` for the bodies another ledger
     stands in the scene's rooms this beat (`charter_runtime.charter_carriers`),
@@ -1673,7 +1674,8 @@ def merge_scene_with_diff(
                 clock_seconds=clock_seconds if index == len(steps) - 1 else None,
                 crossing_report=crossing_report, inventory_report=inventory_report,
                 light_report=light_report, carriers=carriers,
-                age_contacts=age_contacts and not contact_aged)
+                age_contacts=age_contacts and not contact_aged,
+                _in_program=True)
             from world.spatial_contacts import _contact_ops_are_evidence
             contact_aged |= _contact_ops_are_evidence(
                 (step.get("patch") or {}).get("contact_ops"))
@@ -1689,6 +1691,9 @@ def merge_scene_with_diff(
         if settle_link_conditions(scene, current, clock_seconds,
                                   report=crossing_report):
             apply_transit_dock_edges(current)
+        if clock_seconds is not None:
+            from world.site_plan import report_drops
+            report_drops(scene, current, report=crossing_report)
         return current
     # A scene is a nested mutable structure.  A shallow copy allowed
     # downstream normalization and deterministic backstops (zone stamping,
@@ -2346,6 +2351,13 @@ def merge_scene_with_diff(
     # in-room anchor in the SAME merge; a mover written from outside this
     # function would keep an anchor pinned to the room it left.
     advance_room_transits(merged, clock_seconds, report=crossing_report)
+
+    # A BODY THAT WENT DOWN A DROP IS TOLD TO THE DIRECTOR (`world/site_plan`):
+    # how far, onto what. Once per beat, against where the beat started; a
+    # program of steps reports at its end, never once per step.
+    if clock_seconds is not None and not _in_program:
+        from world.site_plan import report_drops
+        report_drops(scene, merged, report=crossing_report)
 
     # Within-room position, last of all. Contact is settled by now, and contact
     # is what the derivation reads: a hand on the quilt is a body at the bed.
