@@ -82,7 +82,7 @@ Answer with one JSON object:
              "features": [FEATURE, ...]},
  "elsewhere": [{"name", "via", "why"}]}
 
-ROOM = {"id", "name", "level", "block": "<only for a room not in the main building>", "purpose": "<one or two words: entryway, hallway, bedroom, guest room, kitchen, washroom, latrine, storage, closet, living, hall, study, shrine, meditation, attic, cellar, basement, workshop, common room ...>",
+ROOM = {"id", "name", "level", "block": "<only for a room not in the main building>", "area_m2": <the room's floor area in square metres, ONLY when the description states it (a tatami mat is about 1.65 m2, so a six-mat room is about 10)>, "purpose": "<one or two words: entryway, hallway, bedroom, guest room, kitchen, washroom, latrine, storage, closet, living, hall, study, shrine, meditation, attic, cellar, basement, workshop, common room ...>",
         "joins": [{"to": "<room id, or the id of an area or way it opens onto>", "side": "n|e|s|w", "order": <1, 2 ... when several share one wall, counted from its north or west end>, "kind": "<the door>"}],
         "zones": [{"id", "name", "at": "n|e|s|w|middle|corner_ne|corner_se|corner_sw|corner_nw", "by": "entrance (for the zone at the entrance door)", "size": "small|medium|large"}],
         "windows": [{"id", "side": "n|e|s|w -- the wall it is in, from what it faces", "count": <how many>}],

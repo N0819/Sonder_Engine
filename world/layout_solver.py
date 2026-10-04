@@ -357,11 +357,24 @@ def _zone_size(z):
     return ZONE_SIZES.get(str(z.get("size") or "medium").casefold(), ZONE_SIZES["medium"])
 
 
+def _stated_area(room):
+    """The floor area the description gives a room, in square paces, or None:
+    a six-mat room is a six-mat room, whatever floor is spare around it."""
+    try:
+        m2 = float(room.get("area_m2") or 0)
+    except (TypeError, ValueError):
+        return None
+    return m2 / (PACE_M * PACE_M) if m2 > 0 else None
+
+
 def room_target(room):
     """Square paces a room needs: its furniture at COVERAGE of the floor, its
     zones' floor, a step inside each door; never under its purpose's floor."""
     key = purpose_key(room)
     lo, _hi = PURPOSE_AREA[key]
+    stated = _stated_area(room)
+    if stated:
+        return stated
     furniture = sum(w * d for w, d, _h in (fixture_footprint(f) for f in room.get("fixtures") or ()))
     zones = sum(a * b for a, b in (_zone_size(z) for z in room.get("zones") or ()))
     doors = len(room.get("joins") or ())
@@ -1263,7 +1276,8 @@ def solve(spec, seed=SEED) -> Layout:
         """Each room's share: what it needs, grown toward its ceiling when the
         storey has floor to spare; floor beyond every ceiling is a store."""
         t = {i: room_target(rooms[i]) for i in ids}
-        cap = {i: max(PURPOSE_AREA[purpose_key(rooms[i])][1], t[i]) * MAX_GROWTH for i in ids}
+        cap = {i: (t[i] * 1.15 if _stated_area(rooms[i]) else
+                   max(PURPOSE_AREA[purpose_key(rooms[i])][1], t[i]) * MAX_GROWTH) for i in ids}
         spare = free_area - sum(t.values())
         flex = [i for i in ids if purpose_key(rooms[i]) in FLEXIBLE] or list(ids)
         for _round in range(3):
@@ -1280,7 +1294,10 @@ def solve(spec, seed=SEED) -> Layout:
         if spare > 0.5:
             # past every ceiling: the floor still goes to the rooms the
             # description names -- never to a room it does not
-            share = [i for i in ids if purpose_key(rooms[i]) not in CORRIDORS] or list(ids)
+            # a room whose size the description states keeps it
+            share = [i for i in ids if purpose_key(rooms[i]) not in CORRIDORS and not _stated_area(rooms[i])]
+            if not share:
+                return t, spare
             ts = sum(t[i] for i in share) or 1.0
             for i in share:
                 t[i] += spare * t[i] / ts
@@ -1868,6 +1885,15 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
                 if cands:
                     moved.append((fx.get("name") or fx.get("id"), at, alt or "where it fits"))
                     break
+        if not cands and fx.get("size"):
+            # a size word cannot make a thing larger than its room can hold:
+            # at its plain size, then, where the room allows
+            plain = dict(fx, size=None)
+            for alt in [at] + [s for s in _SIDES if s != at] + [""]:
+                cands = [r for r in candidates(plain, alt) if fits(r, plain)]
+                if cands:
+                    fixtures[i] = fx = plain
+                    break
         cands.sort(key=lambda r: -score(fx, r))
         for r in cands[:10]:
             placed[fx["id"]] = r
@@ -1934,6 +1960,10 @@ def _grounds(layout, rooms, grounds):
     for w in ways:
         joined_by = [d for d in layout.doors if d.get("outside") and d["b"] == w["id"]]
         start = str(w.get("from") or ("" if joined_by else "entrance"))
+        if start == "entrance" and joined_by and any(v.get("rows") for v in layout.ways.values()):
+            # the entrance has its approach already; a way rooms open onto
+            # runs between their doors
+            start = ""
         if start == "entrance" and door is not None:
             side = door["side"]
             dx, dy = _STEP[side]
@@ -2132,7 +2162,7 @@ def _grounds(layout, rooms, grounds):
         return cells
 
     for w in ways:
-        if w["id"] in layout.ways or w.get("from"):
+        if w["id"] in layout.ways or (w.get("from") and w.get("from") != "entrance"):
             continue
         outs = []
         for d in layout.doors:
