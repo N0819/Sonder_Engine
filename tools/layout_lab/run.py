@@ -244,6 +244,12 @@ def run(names):
     OUT.mkdir(parents=True, exist_ok=True)
     briefs = dict(SCENARIOS)
     briefs["shrine"] = shrine_brief()
+    # the shrine's layout rewritten for its architectural style (lab only;
+    # the owner's lorebook is not changed)
+    rewritten = HERE / "briefs" / "shrine_rewritten.txt"
+    if rewritten.exists():
+        text = rewritten.read_text()
+        briefs["shrine2"] = (text.splitlines()[0].strip(), text.split("\n", 1)[1].strip())
     for name in names or ["shrine", "inn", "lighthouse"]:
         title, brief = briefs[name]
         t0 = time.time()

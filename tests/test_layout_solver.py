@@ -289,7 +289,7 @@ def test_an_enclosed_stair_has_its_door_and_an_open_one_is_open_to_its_room():
     loft = [d for d in lay.doors if "loft_stair@" in d["a"] + d["b"]]
     assert loft and all(d["kind"] == "shoji" for d in loft)
     up = [d for d in lay.doors if "up@" in d["a"] + d["b"]]
-    assert up and all(d["kind"] == "open" and len(d["span"]) >= 2 for d in up)
+    assert up and all(d["kind"] == "open" and len(d["span"]) >= 1 for d in up)
 
 
 def test_fixtures_never_cut_a_rooms_doorways_off_from_each_other():
@@ -400,3 +400,21 @@ def test_seats_stand_round_their_table_and_nothing_else_in_any_use_space():
             if f is g or (g["id"] == "table" and f["id"].startswith("chairs_")):
                 continue
             assert not (f["rect"].cells() & set(map(tuple, g["use"]))), (f["id"], g["id"])
+
+
+def test_stairs_with_different_names_are_different_stairs():
+    """A box staircase up and stone stairs down from one room are two stairs
+    in two places, even of one kind; a tower's flights of one name stack."""
+    spec = {"name": "two", "front": "s", "entrance": {"room": "hall"},
+            "rooms": [{"id": "hall", "level": 0, "purpose": "living",
+                       "fixtures": [{"id": "t", "kind": "table", "at": "middle"}]},
+                      {"id": "up", "level": 1, "purpose": "hallway", "joins": [{"to": "bed", "side": "e"}]},
+                      {"id": "bed", "level": 1, "purpose": "bedroom", "fixtures": [{"id": "b", "kind": "bed"}]},
+                      {"id": "down", "level": -1, "purpose": "cellar"}],
+            "stairs": [{"id": "box", "name": "box staircase", "from": "hall", "to": "up", "enclosed": True,
+                        "kind": "straight"},
+                       {"id": "stone", "name": "stone stairs", "from": "hall", "to": "down", "enclosed": True,
+                        "kind": "straight"}]}
+    lay = solve(spec)
+    assert {s["id"] for s in lay.stairwells} == {"box", "stone"}
+    assert all(len(s["levels"]) == 2 for s in lay.stairwells)

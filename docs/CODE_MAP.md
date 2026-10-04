@@ -198,7 +198,7 @@
 | `world/degradation.py` | 171 |  | — |
 | `world/exposure.py` | 232 |  | `story`, `world.spatial`, `world.weather` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
-| `world/layout_solver.py` | 2161 |  | — |
+| `world/layout_solver.py` | 2236 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1333 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
@@ -2450,14 +2450,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_grounds()` | 1872 | 259 lines |
-| `solve()` | 1196 | 221 lines |
-| `_place_fixtures()` | 1688 | 180 lines |
-| `_place_blocks()` | 561 | 113 lines |
-| `_spine_h()` | 876 | 91 lines |
-| `_place_doors()` | 1434 | 78 lines |
-| `_place_zones()` | 1562 | 60 lines |
-| `_score()` | 1081 | 55 lines |
+| `_grounds()` | 1899 | 304 lines |
+| `solve()` | 1211 | 233 lines |
+| `_place_fixtures()` | 1715 | 180 lines |
+| `_place_blocks()` | 567 | 116 lines |
+| `_spine_h()` | 885 | 91 lines |
+| `_place_doors()` | 1461 | 78 lines |
+| `_place_zones()` | 1589 | 60 lines |
+| `_shafts()` | 444 | 57 lines |
 
 ### `world/living_world.py`
 

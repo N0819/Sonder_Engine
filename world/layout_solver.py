@@ -444,7 +444,7 @@ def _read(spec, layout):
 def _shafts(rooms, stairs, layout):
     """Group flights into shafts: a flight that climbs on from the room the
     last one arrived in, of the same kind (open over open, enclosed over
-    enclosed) and in the same block, stacks over it. Each shaft takes the
+    enclosed), in the same block and read as the same stair, stacks over it. Each shaft takes the
     shape its spec names, else the engine's rule: a tower (every storey one
     room) turns in a spiral; flights stacked through three storeys or more
     double back in a U; steps into a cellar run straight; anything else is a
@@ -464,6 +464,12 @@ def _shafts(rooms, stairs, layout):
             if rooms[a.low]["block"] != rooms[b.high]["block"]:
                 continue
             if a.kind and b.kind and a.kind != b.kind:
+                continue
+            # only flights that read as ONE stair stack: the same name (a
+            # tower's "tower stair" floor after floor), or a spiral; a box
+            # staircase up and stone stairs down are two stairs, two places
+            same_name = a.name.strip().casefold() == b.name.strip().casefold()
+            if not same_name and "spiral" not in (a.kind, b.kind):
                 continue
             parent[find(b.id)] = find(a.id)
     groups = {}
@@ -619,7 +625,10 @@ def _place_blocks(spec, rooms, shafts, front, layout):
         # a storey carries the storeys above it: it covers at least what they need
         carried = dict(need)
         for lv in sorted((lv for lv in levels if lv > 0), reverse=True):
-            carried[lv] = max(need.get(lv, 0), carried.get(lv + 1, 0))
+            # a storey under the roof (smaller by the roofline) fits itself to
+            # the floor below; it never makes that floor grow
+            above = 0 if (lv + 1) in smaller else carried.get(lv + 1, 0)
+            carried[lv] = max(need.get(lv, 0), above)
         # a tower -- every storey one room -- keeps one cross-section
         tower = all(sum(1 for r in rooms.values() if r["block"] == b and r["level"] == lv) <= 1
                     for lv in levels)
@@ -983,7 +992,7 @@ def _slice_band(band, ids, weights, out, along_x):
         pos += n
 
 
-def _absorb(out, rooms):
+def _absorb(out, rooms, halls=None):
     """A leftover piece joins the room beside it when the two together are
     still a rectangle -- the room takes the floor; only a piece no room can
     take whole stays a store. Stair halls and corridors take none."""
@@ -997,9 +1006,13 @@ def _absorb(out, rooms):
             for rid, r in cands:
                 if rid.startswith("spare:") or purpose_key(rooms.get(rid, {})) in CORRIDORS:
                     continue
-                # a landing is about the size of its stair, never a hall of its own
-                if purpose_key(rooms.get(rid, {})) == "stair" and p.w * p.d > max(6, 2 * r.w * r.d):
-                    continue
+                # a landing is at most about the size of its stair -- measured
+                # against the stair as placed, so landings never chain
+                if purpose_key(rooms.get(rid, {})) == "stair":
+                    own = (halls or {}).get(rid, r)
+                    upper = sid.split(":")[1].lstrip("-").isdigit() and int(sid.split(":")[1]) > 0
+                    if upper and r.w * r.d + p.w * p.d > own.w * own.d + max(4, own.w * own.d // 2):
+                        continue
                 merged = None
                 if r.y == p.y and r.d == p.d and (r.x + r.w == p.x or p.x + p.w == r.x):
                     merged = Rect(min(r.x, p.x), r.y, r.w + p.w, r.d)
@@ -1024,12 +1037,12 @@ def _divide(outline, halls, ids, rooms, weights, rng, level):
         parts = _spine(outline, holes, ids, rooms, weights, rng)
         if parts is not None:
             parts.update(halls)
-            return _absorb(parts, rooms)
+            return _absorb(parts, rooms, halls)
     out = {}
     pieces = _carve(outline, holes, rng)
     _fill(pieces, _order(ids, rooms, rng), weights, out, rng, level)
     out.update(halls)
-    _absorb(out, rooms)
+    _absorb(out, rooms, halls)
     if not holes:
         fx, fy = rng.random() < 0.5, rng.random() < 0.5
         out = {i: _mirror(r, outline, fx, fy) for i, r in out.items()}
@@ -1166,6 +1179,7 @@ class Layout:
     entrance: dict = field(default_factory=dict)
     details: dict = field(default_factory=dict)      # room_id -> [things on its walls or ceiling]
     windows: list = field(default_factory=list)      # {id, room, level, side, cell}
+    voids: dict = field(default_factory=dict)        # level -> [Rect] open to the storey below
     contents: dict = field(default_factory=dict)     # room_id -> {fixture_id: [things in or on it]}
 
     def as_dict(self):
@@ -1190,6 +1204,7 @@ class Layout:
             "features": [dict(f, rect=f["rect"].as_dict()) for f in self.features],
             "elsewhere": self.elsewhere, "entrance": self.entrance,
             "details": self.details, "contents": self.contents, "windows": self.windows,
+            "voids": {str(lv): [r.as_dict() for r in rs] for lv, rs in self.voids.items()},
         }
 
 
@@ -1262,7 +1277,14 @@ def solve(spec, seed=SEED) -> Layout:
                 t[i] += add
                 given += add
             spare -= given
-        return t, max(0.0, spare)
+        if spare > 0.5:
+            # past every ceiling: the floor still goes to the rooms the
+            # description names -- never to a room it does not
+            share = [i for i in ids if purpose_key(rooms[i]) not in CORRIDORS] or list(ids)
+            ts = sum(t[i] for i in share) or 1.0
+            for i in share:
+                t[i] += spare * t[i] / ts
+        return t, 0.0
 
     # BLOCK BY BLOCK -- the entrance's first -- the stair halls are placed
     # first (several placements tried), every storey divided around them, and
@@ -1369,6 +1391,11 @@ def solve(spec, seed=SEED) -> Layout:
     # the layout's rooms: the spec's, the stair halls, and the stores left over
     for (b, lv), prts in chosen.items():
         for rid, r in prts.items():
+            if rid.startswith("spare:") and lv > 0:
+                # floor above the ground no named room can take whole is not a
+                # room: it is open to the storey below
+                layout.voids.setdefault(lv, []).append(r)
+                continue
             if rid.startswith("spare:"):
                 sid = f"store_{lv}_{r.x}_{r.y}".replace("-", "m")
                 every[sid] = {"id": sid, "name": _spare_name(lv, r.w * r.d), "level": lv, "block": b,
@@ -1905,7 +1932,8 @@ def _grounds(layout, rooms, grounds):
     for f in feats:
         layout.names[f["id"]] = f.get("name") or f["id"]
     for w in ways:
-        start = str(w.get("from") or "entrance")
+        joined_by = [d for d in layout.doors if d.get("outside") and d["b"] == w["id"]]
+        start = str(w.get("from") or ("" if joined_by else "entrance"))
         if start == "entrance" and door is not None:
             side = door["side"]
             dx, dy = _STEP[side]
@@ -1925,8 +1953,8 @@ def _grounds(layout, rooms, grounds):
                 row = [(a + dx, b + dy) for a, b in row]
             layout.ways[w["id"]] = {"cells": cells, "side": side, "rows": rows}
             taken |= cells
-        elif start in layout.ways:
-            pass   # a branch: laid once its target stands (below)
+        elif start in layout.ways or joined_by:
+            pass   # a branch, or a way between doors: laid below
         else:
             layout.warnings.append(f"{layout.names[w['id']]} has nothing to run from")
 
@@ -2077,6 +2105,50 @@ def _grounds(layout, rooms, grounds):
             continue
         place(f, best[1])
 
+    # A WAY BETWEEN DOORS -- one the rooms opening onto it define, with no
+    # start of its own: the shortest walk through open ground from the first
+    # such door to the others (a roofed walkway from a back door to an
+    # outbuilding's door)
+    def walk_between(src, goals):
+        walk = open_ground - {c for f in layout.features for c in f["rect"].cells()}
+        prev = {c: None for c in src}
+        frontier, hit = list(src), None
+        while frontier and hit is None:
+            nxt = []
+            for c in frontier:
+                if c in goals:
+                    hit = c
+                    break
+                for dx, dy in _STEP.values():
+                    n = (c[0] + dx, c[1] + dy)
+                    if n in walk and n not in prev:
+                        prev[n] = c
+                        nxt.append(n)
+            frontier = nxt
+        cells = set()
+        while hit is not None:
+            cells.add(hit)
+            hit = prev[hit]
+        return cells
+
+    for w in ways:
+        if w["id"] in layout.ways or w.get("from"):
+            continue
+        outs = []
+        for d in layout.doors:
+            if d.get("outside") and d["b"] == w["id"]:
+                dx, dy = _STEP[d["side"]]
+                outs.append((d["cell"][0] + dx, d["cell"][1] + dy))
+        outs = [c for c in outs if c in open_ground]
+        if len(outs) >= 2:
+            cells = set()
+            for goal in outs[1:]:
+                cells |= walk_between({outs[0]}, {goal})
+            layout.ways[w["id"]] = {"cells": cells, "side": None, "rows": []}
+            taken.update(cells)
+        elif outs:
+            layout.warnings.append(f"{layout.names[w['id']]}: only one door opens onto it")
+
     # branch ways: the shortest walk from the way they leave to their target
     for w in ways:
         start = str(w.get("from") or "")
@@ -2150,6 +2222,9 @@ def check(layout: Layout):
                 covered |= cs
                 if not cs <= o.cells():
                     out.append(f"{rid} stands outside its block's outline on storey {lv}")
+            for v in layout.voids.get(lv, ()):
+                if v.cells() <= o.cells():
+                    covered |= v.cells()
             if ids and covered != o.cells():
                 out.append(f"block {b} storey {lv}: rooms leave {len(o.cells() - covered)} cells of the outline empty")
     for s in layout.stairwells:

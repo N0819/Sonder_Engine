@@ -17,7 +17,7 @@ TEMPLATE = Path(__file__).with_name("page.html")
 def main(dest):
     data = []
     hd = Path(os.environ.get("HOUSE_DIFFUSION_OUT", ""))
-    for name in ("shrine", "inn", "lighthouse"):
+    for name in ("shrine2", "shrine", "inn", "lighthouse"):
         path = OUT / f"{name}.json"
         if path.exists():
             record = json.loads(path.read_text())
@@ -28,6 +28,8 @@ def main(dest):
                 samples.setdefault(level, []).append(json.loads(f.read_text()))
             if samples:
                 record["diffusion"] = samples
+            if name == "shrine2":
+                record["layout"]["name"] = record["layout"].get("name", "") + " (rewritten)"
             data.append(record)
     html = TEMPLATE.read_text().replace(
         "__DATA__", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
