@@ -23,19 +23,15 @@ HOUSE = {
                       {"id": "alcove", "name": "Alcove", "kind": "tokonoma", "at": "n"}]},
         {"id": "kitchen", "name": "Kitchen", "level": 0, "purpose": "kitchen",
          "fixtures": [{"id": "stove", "name": "Stove", "kind": "stove", "at": "w"},
-                      {"id": "basin", "name": "Basin", "kind": "basin"},
-                      {"id": "counter", "name": "Counter", "kind": "counter"},
-                      {"id": "ktable", "name": "Table", "kind": "table"}]},
+                      {"id": "basin", "name": "Basin", "kind": "basin"}]},
         {"id": "store", "name": "Store", "level": 0, "purpose": "storage",
          "fixtures": [{"id": "shelf", "name": "Shelf", "kind": "shelf"}]},
         {"id": "corridor", "name": "Corridor", "level": 1, "purpose": "hallway",
          "joins": [{"to": "bed_a", "side": "e", "order": 1}, {"to": "bed_b", "side": "e", "order": 2}]},
         {"id": "bed_a", "name": "Bedroom A", "level": 1, "purpose": "bedroom",
-         "fixtures": [{"id": "bed1", "name": "Bed", "kind": "bed"}, {"id": "wa", "kind": "wardrobe"},
-                      {"id": "ca", "kind": "chest"}]},
+         "fixtures": [{"id": "bed1", "name": "Bed", "kind": "futon"}]},
         {"id": "bed_b", "name": "Bedroom B", "level": 1, "purpose": "bedroom",
-         "fixtures": [{"id": "bed2", "name": "Bed", "kind": "bed"}, {"id": "chest", "name": "Chest", "kind": "chest"},
-                      {"id": "wb", "kind": "wardrobe"}]},
+         "fixtures": [{"id": "bed2", "name": "Bed", "kind": "futon"}, {"id": "chest", "name": "Chest", "kind": "chest"}]},
         {"id": "loft", "name": "Loft", "level": 2, "purpose": "attic",
          "fixtures": [{"id": "nest", "name": "Nest", "kind": "futon", "at": "middle"}]},
     ],
@@ -43,7 +39,7 @@ HOUSE = {
         {"id": "up", "name": "Stair up", "from": "hall", "to": "corridor", "enclosed": False,
          "from_at": "n", "to_at": "s"},
         {"id": "loft_stair", "name": "Loft stair", "from": "corridor", "to": "loft", "enclosed": True,
-         "door": "shoji", "from_at": "n", "kind": "ladder"},
+         "door": "shoji", "from_at": "n"},
     ],
     "grounds": {
         "areas": [{"id": "garden", "name": "Garden", "kind": "garden", "where": "around"}],
@@ -404,26 +400,3 @@ def test_seats_stand_round_their_table_and_nothing_else_in_any_use_space():
             if f is g or (g["id"] == "table" and f["id"].startswith("chairs_")):
                 continue
             assert not (f["rect"].cells() & set(map(tuple, g["use"]))), (f["id"], g["id"])
-
-
-def test_a_stair_between_two_storeys_wraps_a_corner():
-    spec = {"name": "wrap", "front": "s", "entrance": {"room": "hall"},
-            "rooms": [{"id": "hall", "level": 0, "purpose": "living", "joins": [{"to": "kit", "side": "e"}],
-                       "fixtures": [{"id": "t", "kind": "table", "at": "middle"},
-                                    {"id": "c", "kind": "chair", "near": "t", "count": 4},
-                                    {"id": "s", "kind": "shelf", "at": "w"}, {"id": "h", "kind": "hearth", "at": "n"}]},
-                      {"id": "kit", "level": 0, "purpose": "kitchen",
-                       "fixtures": [{"id": "st", "kind": "stove"}, {"id": "ct", "kind": "counter"}]},
-                      {"id": "land", "level": 1, "purpose": "hallway",
-                       "joins": [{"to": "bed", "side": "e"}, {"to": "bed2", "side": "w"}]},
-                      {"id": "bed", "level": 1, "purpose": "bedroom", "fixtures": [{"id": "b", "kind": "bed"},
-                                                                                  {"id": "w", "kind": "wardrobe"}]},
-                      {"id": "bed2", "level": 1, "purpose": "bedroom", "fixtures": [{"id": "b2", "kind": "bed"}]}],
-            "stairs": [{"id": "up", "from": "hall", "to": "land"}]}
-    lay = solve(spec)
-    assert check(lay) == []
-    s = lay.stairwells[0]
-    assert s["kind"] == "l"
-    assert len(s["corner"]) == 2                              # in a corner of the building
-    pairs = {tuple(sorted((d["a"], d["b"]))) for d in lay.doors}
-    assert ("hall", "up@0") in pairs and ("land", "up@1") in pairs

@@ -76,7 +76,7 @@ Answer with one JSON object:
  "storeys": [{"level": <n>, "smaller": true}]  (only the storeys the inventory marks smaller),
  "blocks": [{"id": "<snake_case>", "apart": true|false, "beside": {"block": "<block id, or main>", "side": "n|e|s|w"}}],
  "rooms": [ROOM, ...],
- "stairs": [{"id", "name", "from", "to", "enclosed": true|false, "door": "<when enclosed>", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "straight|l|u|spiral|ladder -- a straight flight; an L that climbs one wall and turns the corner up the next; a U, two flights doubling back; a spiral; a ladder -- only when the description says, or the stair plainly must be"}],
+ "stairs": [{"id", "name", "from", "to", "enclosed": true|false, "door": "<when enclosed>", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "straight|l|u|spiral|ladder -- a straight flight, a quarter turn, a half turn with a landing between two flights, a spiral, a ladder; only when the description says, or the stair plainly must be"}],
  "grounds": {"areas": [{"id", "name", "kind": "garden|yard|courtyard|field", "where": "around | n|e|s|w"}],
              "ways": [{"id", "name", "from": "entrance | <way id>", "to": "<feature id, for a way that leads to one>"}],
              "features": [FEATURE, ...]},
@@ -158,20 +158,6 @@ def setup():
     print("scratch ready:", os.environ.get("ENGINE_DB"))
 
 
-#: The lab's clearer wording for the shrine's stairs (the owner, 2026-10-03:
-#: "you probably want to alter the lorebook to be more specific too"). The
-#: owner's lorebook is NOT changed; these replace sentences in the lab's
-#: copy only, and are offered to the owner as suggested lore.
-SHRINE_CLARIFY = {
-    "A narrow wooden staircase rises from the back of the first floor, opening into a hallway.":
-        "Two shoji doors stand side by side in the rear wall of the Main Hall. The first opens onto a "
-        "narrow wooden staircase that climbs along the rear wall and turns at the corner, rising into "
-        "the hallway above.",
-    "Behind a shoji door at the rear of the first floor, steep stone stairs descend into the mountain.":
-        "Behind the second shoji door, steep stone stairs descend straight into the mountain.",
-}
-
-
 def shrine_brief():
     src = _src()
     parts = []
@@ -179,10 +165,7 @@ def shrine_brief():
         row = src.execute("select content from lore_entries where id=?", (i,)).fetchone()
         if row:
             parts.append(str(row["content"]).strip())
-    text = "\n\n".join(parts)
-    for old, new in SHRINE_CLARIFY.items():
-        text = text.replace(old, new)
-    return "The Shrine of the Golden Fox", text
+    return "The Shrine of the Golden Fox", "\n\n".join(parts)
 
 
 def current_engine_layout():
