@@ -238,7 +238,7 @@
 | `world/structure.py` | 1750 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
-| `world/vistas.py` | 299 |  | — |
+| `world/vistas.py` | 300 |  | — |
 | `world/weather.py` | 1411 |  | — |
 
 ## Largest top-level functions
@@ -2941,13 +2941,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `obstructed()` | 220 | 40 lines |
-| `visible_vistas()` | 262 | 38 lines |
-| `outlooks()` | 183 | 31 lines |
+| `obstructed()` | 221 | 40 lines |
+| `visible_vistas()` | 263 | 38 lines |
+| `outlooks()` | 184 | 31 lines |
 | `normalize_vista()` | 67 | 25 lines |
 | `air_from_weather()` | 149 | 19 lines |
 | `vista_verdict()` | 127 | 16 lines |
-| `_darkness()` | 170 | 11 lines |
+| `_darkness()` | 170 | 12 lines |
 | `normalize_bearing8()` | 59 | 6 lines |
 
 ### `world/weather.py`

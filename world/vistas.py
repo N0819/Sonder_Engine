@@ -168,15 +168,16 @@ def air_from_weather(weather) -> str:
 
 
 def _darkness(scene, weather) -> tuple:
-    """(dark, moonlit) for the sky over a scene: night and the hour before
-    dawn are dark; a moon that lights the ground through clear air leaves the
-    skyline as a silhouette."""
-    from world.weather import moon_lights
+    """(dark, moonlit) for the sky over a scene, ASKED OF THE DAY CYCLE:
+    dark is whatever `day_cycle.SUN_LIGHT` calls dark for the phase, and the
+    moon that lifts it is the one `day_cycle.sun_light` lifts the ground's
+    light by. A second list here disagreed with the first: it counted night
+    and pre-dawn only, so at 19:50 -- "evening", dark by the engine's own
+    table -- the Larch Hill range still read as clear (2026-10-04)."""
+    from world.day_cycle import SUN_LIGHT, sun_light
     phase = str((scene or {}).get("day_phase") or "").strip().casefold()
-    dark = phase in ("night", "pre-dawn")
-    moonlit = dark and moon_lights(weather) and \
-        str((weather or {}).get("cloud") or "") != "covered" and \
-        str((weather or {}).get("air") or "clear") == "clear"
+    dark = SUN_LIGHT.get(phase) == "dark"
+    moonlit = dark and sun_light(phase, weather or {}) == "dim"
     return dark, moonlit
 
 

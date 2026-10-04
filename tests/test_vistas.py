@@ -179,3 +179,17 @@ def test_the_storeys_over_a_kitchen_are_its_ceiling_not_a_wall_before_its_window
                            "site": {"plan": "p", "x": 2, "y": 0}}
     sc["positions"]["Ren"] = "hall"
     assert _names(sc) == ["the valley town"]
+
+
+def test_dark_is_what_the_day_cycle_calls_dark():
+    """Live, Larch Hill (2026-10-04): at 19:50 -- the day cycle's
+    "evening", dark by its own table -- the range still read as clear,
+    because this module kept a second, shorter list of dark phases."""
+    from world.day_cycle import SUN_LIGHT
+    for phase, light in SUN_LIGHT.items():
+        sc = _yard(day_phase=phase, weather={"air": "clear", "moon": "none"})
+        seen = _names(sc)
+        if light == "dark":
+            assert seen == ["the valley town"], phase
+        else:
+            assert "the Kurogane range" in seen, phase
