@@ -87,9 +87,12 @@ def test_a_dark_night_keeps_only_what_is_lit_and_a_moon_leaves_a_silhouette():
     assert seen == {"the Kurogane range": "silhouette", "the valley town": "clear"}
 
 
-def test_nothing_behind_a_body_is_seen_unless_it_looks_around():
+def test_which_way_a_body_faces_does_not_hide_the_horizon():
+    """Live, Larch Hill (2026-10-04): at the south windows looking for the
+    town, Ren's facing read north-west -- derived from the man beside her --
+    and the lit town was withheld as behind her."""
     sc = _yard(orientation={"Ren": {"facing": "n"}})
-    assert _names(sc) == ["the Kurogane range"]
+    assert _names(sc) == ["the Kurogane range", "the valley town"]
 
 
 def test_a_building_between_hides_a_low_skyline_and_not_a_peak_over_it():

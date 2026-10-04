@@ -2,8 +2,8 @@
 
 Far scenery is not a place. Nobody walks to the range in a scene, so it is
 not a room; it is a record on the scene, seen from open air or through a
-window facing its way, and hidden by weather, by night, by which way a body
-faces, and by anything nearer that stands higher in its direction. Every
+window facing its way, and hidden by weather, by night, and by anything
+nearer that stands higher in its direction. Every
 open-world game keeps the same split -- Skyrim's and Morrowind's distant
 land are view-only and never simulated -- and the text tradition reaches
 the same rules: TADS 3's `Distant` (examined, never touched), Discworld
@@ -261,12 +261,20 @@ def obstructed(scene, name, vista, eye_z) -> bool:
 
 def visible_vistas(scene, name) -> list:
     """`[(vista, "clear" | "silhouette")]` a body sees now: its room looks
-    that way, it is not facing away (a sweep looks every way), the weather
-    reaches that far, the dark leaves it (lit, or a silhouette under a
-    moon), and its top clears what stands nearer. Decided at the moment of
-    looking; nothing is cached."""
+    that way, the weather reaches that far, the dark leaves it (lit, or a
+    silhouette under a moon), and its top clears what stands nearer. Decided
+    at the moment of looking; nothing is cached.
+
+    WHICH WAY THE BODY FACES DOES NOT HIDE THE HORIZON. A view is part of
+    where a body is, seen by turning its head, like the room it stands in;
+    the walls and windows decide which way it can look, not the last thing
+    it attended to. It was filtered by facing until a live run showed the
+    facing is not the look: at Larch Hill (2026-10-04) Ren stood at the
+    south windows looking for the town while her facing read north-west,
+    derived from her attention on the man beside her, and the lit town was
+    withheld as "behind" her."""
     from world.site_plan import EYE_M, body_altitude_m, room_elevation_m
-    from world.spatial import effective_facing, posture_class, relative_bearing, room_of
+    from world.spatial import posture_class, room_of
     vistas = scene_vistas(scene)
     rid = room_of(scene, name)
     if not vistas or not rid:
@@ -277,15 +285,11 @@ def visible_vistas(scene, name) -> list:
     weather = (scene or {}).get("weather") or {}
     air = air_from_weather(weather)
     dark, moonlit = _darkness(scene, weather)
-    facing = effective_facing(scene, name)
     eye_z = room_elevation_m(scene, rid) + body_altitude_m(scene, name) + \
         EYE_M.get(posture_class(scene, name), EYE_M["standing"])
     out = []
     for vista in vistas:
         if ways is not None and vista["bearing"] not in ways:
-            continue
-        if facing and relative_bearing(facing, vista["bearing"]) in (
-                "behind", "behind_left", "behind_right"):
             continue
         why = vista_verdict(vista, air=air, dark=dark and not moonlit, eye_m=eye_z)
         if why is None and obstructed(scene, name, vista, eye_z):

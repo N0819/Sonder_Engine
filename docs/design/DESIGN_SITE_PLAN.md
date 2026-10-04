@@ -154,7 +154,9 @@ moment of looking:
 * its room looks that way: open air every way; an enclosed room through a
   window, an open door or bars onto open air, that edge's bearing and the
   two beside it;
-* it is not facing away (a sweep looks every way);
+* (not which way it faces: that filter withheld the lit town from a body
+  at the south windows whose facing, derived from the man beside her, read
+  north-west -- Larch Hill, 2026-10-04 -- so it was cut);
 * the weather reaches that far (`VISIBILITY_KM`, sourced where the condition
   is defined by visibility: fog under 1 km, mist 1-5, haze up to 5; snow
   light 1.5, moderate 0.8, heavy 0.4; rain kept generous, 10/5/2);
