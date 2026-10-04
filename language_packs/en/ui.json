@@ -2132,6 +2132,7 @@
   "Set active": "Set active",
   "Set an embeddings provider above first — rebuilding onto the local fallback would replace real vectors with a weaker one.": "Set an embeddings provider above first — rebuilding onto the local fallback would replace real vectors with a weaker one.",
   "Set the scene — where this starts, what's mapped so far, who's present.": "Set the scene — where this starts, what's mapped so far, who's present.",
+  "set_vistas lists one or more vistas, each with a name and a compass bearing (n, ne, e, se, s, sw, w, nw)": "set_vistas lists one or more vistas, each with a name and a compass bearing (n, ne, e, se, s, sw, w, nw)",
   "Setting only Default is enough to start playing": "Setting only Default is enough to start playing",
   "Setting the scene": "Setting the scene",
   "Setting up story": "Setting up story",

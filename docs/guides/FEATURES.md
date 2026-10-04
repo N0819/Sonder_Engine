@@ -359,6 +359,12 @@ legitimately perceive, learn, remember or infer.
   holds, is out of reach of the floor, and can look into an upper window.
   *(partial: sloping ground is not built yet, and a flier still travels by
   doorways.)*
+- **Vistas** — What stands on the horizon -- a mountain range, the sea, a
+  city's lights -- is set by the Writers' Room and seen from open air or a
+  window facing its way, hidden by fog, rain and snow at the distances those
+  conditions are defined by, by night unless it is lit or the moon shows its
+  silhouette, by which way you face, and by anything nearer and taller in
+  its direction.
 - **Gates, portals and seals** — A way between two places can be a thing
   standing in a room rather than a doorway in a wall. It can be seen through
   while shut, let only the bodies it names pass, and be worn down by force a

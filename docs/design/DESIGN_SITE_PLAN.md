@@ -143,6 +143,32 @@ bounds it. A flier over a courtyard sees over its wall and is out of reach
 from the ground; landing, falling when flight fails, and swooping to a window
 are the same question about heights, which is why it follows step 3.
 
+## Vistas -- what stands on the horizon (built 2026-10-04)
+
+Far scenery is not a place (`world/vistas.py`). A vista is a record on the
+scene -- `{name, desc, bearing, distance_km, height_m, lit}` -- set by the
+Writers' Room's `set_vistas` operation (allowed at the opening), shown to the
+Director in `causal_world_index["vistas"]`, and seen by a body when, at the
+moment of looking:
+
+* its room looks that way: open air every way; an enclosed room through a
+  window, an open door or bars onto open air, that edge's bearing and the
+  two beside it;
+* it is not facing away (a sweep looks every way);
+* the weather reaches that far (`VISIBILITY_KM`, sourced where the condition
+  is defined by visibility: fog under 1 km, mist 1-5, haze up to 5; snow
+  light 1.5, moderate 0.8, heavy 0.4; rain kept generous, 10/5/2);
+* the dark leaves it: night and pre-dawn hide what is not `lit`, and a moon
+  through clear air leaves a skyline as a silhouette;
+* its top clears what stands nearer on the site plan in that direction --
+  buildings, higher terraces -- with earth curvature and refraction
+  (k = 0.13).
+
+It reaches every view as a sight line (`composer.vista_percepts`, en and ja
+templates) and is never a target of touch or movement. Prior art: TADS 3
+`Distant`, Inform 7 backdrops, Discworld MUD's terrain rooms, open-world
+games' distant-land layers, GIS viewsheds.
+
 ## Ground that is not flat
 
 Terrain is flat by default. A room may later state a slope, and a cliff, bank

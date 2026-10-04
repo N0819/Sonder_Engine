@@ -75,6 +75,9 @@ MANDATE_CAPABILITIES = (
     "plan_creature",
     "post_artifact", "schedule_event",
     "file_lore", "answer_need", "close_need", "request_location",
+    # What stands on the horizon (`world/vistas`): set by the opening and by
+    # any grant that may plan the world.
+    "set_vistas",
     "presimulate",
     "create_people", "author_prehistory", "schedule_harm",
     # Reach the web (`story/room_research.py`): a query leaves the machine,

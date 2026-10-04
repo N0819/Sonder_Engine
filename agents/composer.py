@@ -2662,6 +2662,30 @@ def scent_percepts(sources):
     return out
 
 
+def vista_percepts(seen):
+    """What stands on the horizon, to a body that can see it
+    (`world.vistas.visible_vistas`): one line each, by compass bearing, in
+    the pack's own words -- a skyline under a moon as a silhouette. A
+    distant thing is seen and may be spoken of; nothing here makes it a
+    thing a hand reaches (`world/vistas.py`)."""
+    from language_runtime import compositor_text
+    from world.spatial import _phrase_table
+    compass = _phrase_table("compass_words")
+    out = []
+    for vista, clarity in seen or ():
+        where = compass.get(vista["bearing"], vista["bearing"])
+        if clarity == "silhouette":
+            text = compositor_text("vista_silhouette", compass=where, name=vista["name"])
+        else:
+            desc = compositor_text("vista_desc_join", desc=vista["desc"]) if vista["desc"] else ""
+            text = compositor_text("vista_seen", compass=where, name=vista["name"], desc=desc)
+        out.append(Percept(
+            kind="ambient", channel="sight", source_label=vista["name"],
+            data={"desc": text},
+            dedupe_key=standing_key("vista", (vista["id"],), (clarity,))))
+    return out
+
+
 def weather_percepts(reach):
     """What the sky is doing, to a body that can tell -- sight and skin.
 

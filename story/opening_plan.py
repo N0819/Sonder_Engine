@@ -30,7 +30,8 @@ OPENING_PLACEMENTS_KEY = "opening_placements"
 #: `request_location`: a charter is an option the player takes, never one the
 #: planner assumes. No `plan_entity`: the cast exists and background people
 #: are the establish stage's. No `create_people`, no `presimulate`.
-OPENING_CAPABILITIES = ("plan_rooms", "place_at_opening", "director_note")
+OPENING_CAPABILITIES = ("plan_rooms", "place_at_opening", "director_note",
+                        "set_vistas")
 
 #: The sentence the mandate keeps. Engine-minted, so it is worded as the
 #: standing rule it is rather than as something the player typed.

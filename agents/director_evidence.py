@@ -3137,6 +3137,15 @@ def causal_world_index(sc, here=None, *, room_ids=None,
             entity_rows[entity_id] = row
         if entity_rows:
             out["entities"] = entity_rows
+    # WHAT STANDS ON THE HORIZON (`world/vistas`): place, not state -- the
+    # range to the north is where the world is -- so the Director's account
+    # of a view, a storm rolling off the peaks or a fire on the far ridge
+    # names the same thing perception shows.
+    from world.vistas import scene_vistas
+    _vistas = [{k: v for k, v in vista.items() if k != "desc"}
+               for vista in scene_vistas(sc)]
+    if _vistas:
+        out["vistas"] = _vistas
     if here:
         out["here"] = str(here)
     return out

@@ -5236,6 +5236,11 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         from world.weather import weather_for_room
         percepts.extend(composer.weather_percepts(
             weather_for_room(sc, room, name)))
+        # WHAT STANDS ON THE HORIZON (`world/vistas`): from open air or a
+        # window facing its way, through the weather, by the light, over what
+        # stands nearer -- decided now, for this body.
+        from world.vistas import visible_vistas
+        percepts.extend(composer.vista_percepts(visible_vistas(sc, name)))
     percepts.extend(composer.room_content_percepts(
         p.get("crowds"), p.get("couriers"), p.get("notices"),
         _visible_things(sc, name, room, sweep=sweep,

@@ -650,6 +650,7 @@
   "Close pipeline": "パイプラインを閉じる",
   "Close the room": "ルームを閉じる",
   "close_need names the need uid and the reason": "close_need にはニーズのUIDと理由を指定してください",
+  "set_vistas lists one or more vistas, each with a name and a compass bearing (n, ne, e, se, s, sw, w, nw)": "set_vistas には名前と方角（n, ne, e, se, s, sw, w, nw）を持つ眺めを一つ以上挙げてください",
   "Clothes are tracked by body region — head, torso, arms, hands, waist, legs, feet — and come off a step at a time rather than all at once: worn, loosened, open, off. A garment that leaves someone becomes a real object in the room. Character and persona cards can also describe what each region shows once nothing covers it.": "衣服は身体の部位ごとに追跡されます — 頭、胴、腕、手、腰、脚、足 — そして一度にすべてではなく、段階を追って脱げていきます：着用、緩んだ状態、開いた状態、脱いだ状態。誰かの身体から離れた衣服は、部屋の中の実在する物になります。キャラクターやペルソナのカードには、何にも覆われていないときに各部位が何を見せるかを記述することもできます。",
   "Clothing and the body": "衣服と身体",
   "clothing over that region is worn around the part (a tail through a skirt). Unchecked: the part is tucked beneath clothing and hidden while the region is covered.": "その部位の衣服は、その部分の周りに着用されます（スカートを通る尾など）。チェックなし: その部分は衣服の下に隠され、その部位が覆われている間は隠されます。",

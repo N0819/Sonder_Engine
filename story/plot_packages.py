@@ -1780,6 +1780,49 @@ def _apply_close_need(cid, frame_id, op, turn_idx):
     return {"need_uid": op["need_uid"], "closed": record is not None}
 
 
+# -- set_vistas ---------------------------------------------------------------
+#
+# What stands on the horizon (`world/vistas.py`): mountains, a coastline, a
+# city's skyline. Not places -- nobody walks to the range in a scene -- so not
+# rooms; records on the scene that perception shows from open air or a window
+# facing their way. Replaced by id, added otherwise.
+
+def _shape_set_vistas(op):
+    from world.vistas import normalize_vista
+    raw = op.get("vistas")
+    vistas = [v for v in (normalize_vista(item) for item in (raw or ())) if v] \
+        if isinstance(raw, list) else []
+    if not vistas:
+        raise ValueError("set_vistas lists one or more vistas, each with a name "
+                         "and a compass bearing (n, ne, e, se, s, sw, w, nw)")
+    return {"vistas": vistas}
+
+
+def _preview_set_vistas(cid, frame_id, op, world):
+    return {"changes": [{"kind": "vista", "id": v["id"], "name": v["name"],
+                         "bearing": v["bearing"]} for v in op["vistas"]],
+            "errors": [], "warnings": []}
+
+
+def _apply_set_vistas(cid, frame_id, op, turn_idx):
+    from core.db import active_frame_id, q, wset
+    from story.scene import get_scene
+    from world.vistas import scene_vistas
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    token = active_frame_id.set(frame_id) if frame_id is not None else None
+    try:
+        scene = get_scene(cid, chat) or {}
+        merged = {v["id"]: v for v in scene_vistas(scene)}
+        for vista in op["vistas"]:
+            merged[vista["id"]] = vista
+        scene["vistas"] = list(merged.values())
+        wset(cid, "scene", scene)
+    finally:
+        if token is not None:
+            active_frame_id.reset(token)
+    return {"vistas": [v["id"] for v in op["vistas"]]}
+
+
 # -- request_location (LONG: a model call; runs in prepare) -------------------
 
 def _shape_request_location(op):
@@ -2575,6 +2618,9 @@ OPERATIONS = {
     "answer_need": {"shape": _shape_answer_need, "preview": _preview_answer_need,
                     "apply": _apply_answer_need, "long": False,
                     "seam": "world.planning_needs.fill_planning_need"},
+    "set_vistas": {"shape": _shape_set_vistas, "preview": _preview_set_vistas,
+                   "apply": _apply_set_vistas, "long": False,
+                   "seam": "world.vistas (scene['vistas'])"},
     "close_need": {"shape": _shape_close_need, "preview": _preview_close_need,
                    "apply": _apply_close_need, "long": False,
                    "seam": "world.planning_needs.close_planning_need"},
@@ -2747,6 +2793,10 @@ OPERATION_FIELDS = {
                   "knowledge_locations?": "[room ids]", "book_id?": "lorebook id"},
     "answer_need": {"need_uid": "an open need", "fill": "{...what fills it}"},
     "close_need": {"need_uid": "an open need", "reason": "why it closes unanswered"},
+    "set_vistas": {"vistas": "[{name, bearing: n|ne|e|se|s|sw|w|nw, distance_km, "
+                             "height_m, desc?: how it looks from here, lit?: true "
+                             "when it shows at night -- a city, a lighthouse}] -- "
+                             "what stands on the horizon, never a place to walk to"},
     "request_location": {"request": "{name | brief, ...as the Charter Planner returned it}"},
     "presimulate": {"hours": "0 < hours <= PRESIM_HOURS_CAP", "charters?": "[charter keys]"},
     "arrival": {"who": "a plan uid, a name the world holds, or {charter, body}",

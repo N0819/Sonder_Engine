@@ -2211,6 +2211,10 @@ leaves, in the order the owner agreed:
   next lane is no route; nothing renders "hovering" unless the pose says so;
   hearing ignores altitude; a body coming down from height is never reported
   as a fall, because landing and falling look alike to code.
+* **Vistas landed 2026-10-04** (`world/vistas.py`). Still open: the room
+  designer cannot mint one mid-scene, the narrator's sensory manifest does
+  not list them (it gets them through the view), and the visibility table is
+  the engine's, not the owner's, until the owner rules on it.
 * **Ground is flat**: no slope, no cliff, no bank between two cells.
 * **Nothing produces a plan in play.** Only `tools/site_plan_from_layout.py`
   writes one, from the layout lab; the room designer and the Writers' Room do
