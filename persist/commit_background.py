@@ -3092,7 +3092,7 @@ def apply_presence_departures(scene, reactions, presences, warn=None,
                 warn(f"{name} declared a departure to {dest!r}, which is no "
                      f"room here; stays in {here or 'place'}")
             continue
-        if not here or not passable_route_exists(scene or {}, here, dest):
+        if not here or not passable_route_exists(scene or {}, here, dest, body=name):
             if warn:
                 warn(f"{name} declared a departure to {dest!r}, which no "
                      f"open route reaches from {here or 'nowhere'}; stays")

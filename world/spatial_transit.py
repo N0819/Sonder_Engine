@@ -2,6 +2,7 @@
 """parent_entity-linked rooms: derived dock edges, inferred body enclosures, and
 nesting-aware ambient scope."""
 
+import re
 from typing import Optional
 
 from world.spatial_barriers import (_AMBIENT_BARRIERS, neighbor_map,
@@ -295,6 +296,121 @@ def _link_state(entity) -> Optional[dict]:
         return None
     return link
 
+# A LINK THAT CHOOSES WHO CROSSES AND YIELDS ONLY TO SUSTAINED FORCE. The
+# owner's shrine (2026-10-03) keeps a Seal between a cavern and a divine realm:
+# freestanding, seen through, crossed by one goddess and nobody else, and
+# breakable -- "not a fragile thing", but "some enemy shouldn't be able to
+# break it instantly". So a link may carry, beside `rooms` and `phase`:
+#
+# * `admits` -- the bodies it lets through while closed. A list the engine
+#   owns (character / entity ids), never words to match.
+# * `condition` -- one rung of `LINK_CONDITIONS`. `cracked` lets sound and
+#   scent through a closed link as well as sight; `broken` is open to everyone,
+#   both ways, whatever `phase` and `admits` say.
+#
+# Whether a blow COUNTS against it is the Director's judgement (it reads who
+# is striking); how fast it may fall is code's (`settle_link_conditions`).
+# Mending is the Director's prose to declare and is never held back.
+LINK_CONDITIONS = ("intact", "strained", "cracked", "broken")
+
+#: The least story time between two rungs a link may lose: one weakening is
+#: free, every further one waits this long after the last, and no beat drops
+#: more than one. The owner's number (2026-10-03: "some enemy shouldn't be
+#: able to break it instantly"), at a first guess of three hours.
+LINK_STEP_SECONDS = 3 * 3600
+
+
+def link_condition(link) -> str:
+    """The rung a link stands on; `intact` when it names none or one the
+    ladder does not hold."""
+    word = str((link or {}).get("condition") or "").strip().casefold()
+    return word if word in LINK_CONDITIONS else "intact"
+
+
+def fold_body_id(value) -> str:
+    """A body id as `admits` compares it: case, spaces and hyphens folded."""
+    return re.sub(r"[\s\-]+", "_", str(value or "").strip().casefold())
+
+
+def _link_edge(ent, link):
+    """The edge a link derives, or None: open (or broken) is an open
+    doorway; closed is a window when the link is see-through, bars when it
+    is cracked, and otherwise -- only when it admits someone -- a wall that
+    lets them through. A closed link that is none of those joins nothing,
+    as it always did."""
+    condition = link_condition(link)
+    if condition == "broken":
+        return {"barrier": "open_door"}
+    if str(link.get("phase") or "open").casefold() == "open":
+        return {"barrier": "open_door"}
+    admits = [fold_body_id(a) for a in (link.get("admits") or [])
+              if str(a or "").strip()] if isinstance(link.get("admits"), list) else []
+    if condition == "cracked":
+        barrier = "bars"
+    elif str((ent or {}).get("enclosure") or "").strip().casefold() == "transparent":
+        barrier = "window"
+    elif admits:
+        barrier = "wall"
+    else:
+        return None
+    edge = {"barrier": barrier}
+    if admits:
+        edge["admits"] = admits
+    return edge
+
+
+def settle_link_conditions(before: dict, after: dict, clock_seconds,
+                           report=None) -> bool:
+    """Hold every link's weakening to what sustained force can do.
+
+    A HARD NO-OP WITHOUT A CLOCK, as `advance_room_transits` is: a merge that
+    is not living a beat (a World Browser edit, a preview, a migration) sets
+    a condition freely. On a beat, against the scene the beat started from:
+    a link drops at most one rung, and a rung after the first only once
+    `LINK_STEP_SECONDS` of story time has passed since the last one. Mending
+    -- a climb back up -- is never held. A link the beat itself made is the
+    story's to describe however it stands. The stamp of the last weakening is
+    `condition_since`, written here and never taken from the model."""
+    if clock_seconds is None:
+        return False
+    changed = False
+    prior = (before or {}).get("entities") or {}
+    for eid, ent in ((after or {}).get("entities") or {}).items():
+        link = _link_state(ent)
+        old_link = _link_state(prior.get(eid)) if isinstance(prior, dict) else None
+        if not link or not old_link:
+            continue
+        old_i = LINK_CONDITIONS.index(link_condition(old_link))
+        new_i = LINK_CONDITIONS.index(link_condition(link))
+        since = old_link.get("condition_since")
+        target = new_i
+        if new_i > old_i:
+            target = old_i + 1
+            if old_i > 0 and isinstance(since, (int, float)) \
+                    and clock_seconds - since < LINK_STEP_SECONDS:
+                target = old_i
+            if target != new_i and report is not None:
+                name = (ent or {}).get("name") or eid
+                report.append(
+                    f"{name}: written {LINK_CONDITIONS[new_i]} from "
+                    f"{LINK_CONDITIONS[old_i]}; it can only be worn down a "
+                    f"step at a time under sustained force, so it stands "
+                    f"{LINK_CONDITIONS[target]}.")
+        stamp = clock_seconds if target > old_i else since
+        if link.get("condition") != LINK_CONDITIONS[target] and (
+                target != old_i or "condition" in link or "condition" in old_link):
+            link["condition"] = LINK_CONDITIONS[target]
+            changed = True
+        if stamp is None:
+            if "condition_since" in link:
+                link.pop("condition_since")
+                changed = True
+        elif link.get("condition_since") != stamp:
+            link["condition_since"] = stamp
+            changed = True
+    return changed
+
+
 def _entity_exterior_room(scene: dict, eid: str, entity: dict, *,
                           index=None) -> Optional[str]:
     """The room the entity itself currently occupies: `room_of`'s answer for
@@ -566,7 +682,7 @@ def apply_transit_dock_edges(scene: dict) -> bool:
         link = _link_state(ent)
         if link:
             a, b = (str(link["rooms"][0] or ""), str(link["rooms"][1] or ""))
-            is_open = str(link.get("phase") or "open").casefold() == "open"
+            derived = _link_edge(ent, link)
             for room in rooms.values():
                 if not isinstance(room, dict):
                     continue
@@ -580,10 +696,10 @@ def apply_transit_dock_edges(scene: dict) -> bool:
             # one room WRITE in this function, and every read above it skips a
             # malformed record rather than raising. A non-dict room here took
             # the whole merge down instead.
-            if (is_open and a != b and isinstance(rooms.get(a), dict)
+            if (derived and a != b and isinstance(rooms.get(a), dict)
                     and b in rooms):
                 rooms[a].setdefault("adjacent", []).append({
-                    "to": b, "barrier": "open_door",
+                    "to": b, **derived,
                     "distance": str(link.get("distance") or "near"),
                     "via_link": eid,
                 })

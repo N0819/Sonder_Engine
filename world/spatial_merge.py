@@ -63,6 +63,7 @@ from world.spatial_transit import (apply_transit_dock_edges,
                                   evict_self_contained_entities,
                                   infer_body_enclosures,
                                   settle_departures,
+                                  settle_link_conditions,
                                   sync_entity_interior_rooms)
 
 
@@ -549,7 +550,14 @@ def _merge_entity(entity_id, existing: dict, incoming: dict) -> dict:
     incoming_state = incoming.get("state")
     if isinstance(incoming_state, dict):
         state = dict(existing.get("state") or {})
+        old_link = state.get("link")
         state.update(incoming_state)
+        # A LINK IS ONE RECORD WRITTEN A FIELD AT A TIME: `{"link": {"phase":
+        # "closed"}}` closes the portal; replacing the whole link with it
+        # dropped the two rooms it joins and the portal ceased to exist.
+        new_link = incoming_state.get("link")
+        if isinstance(old_link, dict) and isinstance(new_link, dict):
+            state["link"] = {**old_link, **new_link}
         merged["state"] = state
     elif "state" in incoming:
         merged["state"] = incoming_state
@@ -1669,6 +1677,11 @@ def merge_scene_with_diff(
                 causal_worlds.append({**copy.deepcopy(step),
                                       "before": before, "after": current,
                                       "completion": execution_receipt(before, current, step)})
+        # A program of steps is still ONE beat to a link worn under force:
+        # held against where the beat started, not step by step.
+        if settle_link_conditions(scene, current, clock_seconds,
+                                  report=crossing_report):
+            apply_transit_dock_edges(current)
         return current
     # A scene is a nested mutable structure.  A shallow copy allowed
     # downstream normalization and deterministic backstops (zone stamping,
@@ -1990,6 +2003,10 @@ def merge_scene_with_diff(
     # is the only record of where it stood. The dock rewrite then derives the
     # doorway from what that leaves.
     settle_departures(scene, merged)
+
+    # A link worn down faster than sustained force can is held to the rung it
+    # may reach, before its doorway is derived from it.
+    settle_link_conditions(scene, merged, clock_seconds, report=crossing_report)
 
     apply_transit_dock_edges(merged)
 

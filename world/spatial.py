@@ -74,7 +74,7 @@ from world.spatial_barriers import (
     _BARRIER_SHUT_QUALIFIERS, _OPENING_WORDS, _PASSABLE_BARRIERS,
     _ROUTE_MEMORY_BARRIERS, _SCENT_BARRIER_LEVELS,
     _SIGHT_BARRIERS, _VALID_BARRIERS, barrier_fastening,
-    barrier_opens_to_a_hand, edge_crossable_from, edge_passable,
+    barrier_opens_to_a_hand, edge_admits, edge_crossable_from, edge_passable,
     effective_adjacent, neighbor_map, normalize_barrier,
     normalize_scene_barriers, normalize_scene_passages, PASSAGE_FIELDS,
     passage_direction, passage_id_for, passage_of, resolve_edge,
@@ -104,6 +104,8 @@ from world.spatial_transit import (
     _transit_state, ambient_scope, apply_transit_dock_edges,
     CONTAINER_ENCLOSURES, containment_chain, evict_self_contained_entities,
     infer_body_enclosures, settle_departures, sync_entity_interior_rooms,
+    fold_body_id, LINK_CONDITIONS, LINK_STEP_SECONDS, link_condition,
+    settle_link_conditions,
 )
 
 

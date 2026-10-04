@@ -71,12 +71,11 @@ def test_a_staircase_is_something_a_body_can_walk():
 
 
 def test_a_seal_is_not_softened_into_a_door():
-    """The fold must not run the other way. `sealed`, `warded` and `bolted`
-    already meant `wall` in the alias table and a qualifier pass that promoted
-    them back to an openable door would be worse than the bug it replaced.
+    """The fold must not run the other way. `sealed` and `bolted` already
+    meant `wall` in the alias table and a qualifier pass that promoted them
+    back to an openable door would be worse than the bug it replaced.
     """
     assert normalize_barrier("sealed_blast_door") == "wall"
-    assert normalize_barrier("warded_door") == "wall"
     assert normalize_barrier("bolted_hatch") == "wall"
     assert normalize_barrier("solid_wall") == "wall"
 
@@ -336,3 +335,17 @@ class TestOneNeighbourMapForFourDifferentWalks:
         from world.spatial import neighbor_map
         graph = neighbor_map(self._scene())
         assert graph["yard"] == {"hall"}
+
+
+def test_a_ward_is_a_fastening_that_chooses_who_passes():
+    """A warded door is a door its ward opens for some and not others (the
+    owner, 2026-10-03: "it's just a particularly discriminating door"). As a
+    wall, the residents of a warded cellar could never reach it. It is a
+    FASTENED door: shut against an ordinary hand, and the Director's to open
+    for whoever the ward admits."""
+    from world.spatial import barrier_fastening, barrier_opens_to_a_hand
+    for spelling in ("warded_door", "warded door", "warded_closed_door"):
+        assert normalize_barrier(spelling) == "closed_door", spelling
+        assert barrier_fastening(spelling) == "warded", spelling
+        assert not barrier_opens_to_a_hand(spelling), spelling
+    assert normalize_barrier("warded_open_door") == "open_door"

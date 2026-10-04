@@ -6159,7 +6159,8 @@ def director_resolve(ctx, nonce, _corrections=None):
                 # (A door the resolve opens this beat is already open in
                 # route_scene and makes the whole route passable.)
                 reached, contested_door, blocked = declared_walk_leg(
-                    route_scene, prev_room, mv["to_room"])
+                    route_scene, prev_room, mv["to_room"],
+                    body=move_subject or p_name)
                 contested = not blocked and bool(contested_door)
             else:
                 # Directly adjacent: the single edge's barrier decides.
@@ -6169,6 +6170,12 @@ def director_resolve(ctx, nonce, _corrections=None):
                 # Still-closed means the move is CONTESTED: crossing
                 # requires an action whose outcome the resolve owns.
                 contested = rel.get("barrier") == "closed_door"
+            # A way that ADMITS this walker is open to them, whatever it is
+            # to everyone else (`spatial_transit._link_edge`).
+            if (blocked or contested) and passable_route_exists(
+                    route_scene, prev_room, mv["to_room"],
+                    body=move_subject or p_name):
+                blocked = contested = False
         if blocked:
             ctx.warnings.append(
                 f"Blocked movement: no passable route from '{prev_room}' to "

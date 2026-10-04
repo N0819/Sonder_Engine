@@ -564,7 +564,7 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
         for body in component:
             origin = room_of(scene, body)
             if origin and origin != target_room and not passable_route_exists(
-                    route_scene, origin, target_room):
+                    route_scene, origin, target_room, body=body):
                 blocked.append(f"{body} from {origin}")
         if blocked:
             ctx.warnings.append(
@@ -769,7 +769,7 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             if target.casefold() in rapid:
                 continue
             if origin != target_dest and not passable_route_exists(
-                    route_scene, origin, target_dest):
+                    route_scene, origin, target_dest, body=follower):
                 continue
             if positions.get(follower) == target_dest:
                 continue
@@ -825,7 +825,8 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             continue
         if target.casefold() in rapid:
             continue
-        if not passable_route_exists(route_scene, origin, target_room):
+        if not passable_route_exists(route_scene, origin, target_room,
+                                     body=follower):
             ctx.add_warning(
                 f"{follower} started following {target} from {origin!r}, "
                 f"but no open route reaches {target_room!r}; the relation "
@@ -947,10 +948,10 @@ def _unreachable_position_writes(scene, route_scene, positions, bodies,
         origin = room_of(scene, body)
         if not origin or origin not in rooms or origin == dest:
             continue
-        if passable_route_exists(route_scene or scene, origin, dest):
+        if passable_route_exists(route_scene or scene, origin, dest, body=body):
             continue
         if (declared or {}).get(folded) == dest and not declared_walk_leg(
-                route_scene or scene, origin, dest)[2]:
+                route_scene or scene, origin, dest, body=body)[2]:
             continue
         refused.append((str(body), origin, dest))
     return refused
@@ -1135,7 +1136,7 @@ def _walk_back(prev, room) -> list:
     return list(reversed(out))
 
 
-def declared_walk_leg(scene, from_room, to_room):
+def declared_walk_leg(scene, from_room, to_room, body=None):
     """How far a declared walk gets on its own feet, and which door stopped it.
 
     Returns `(reached, door_to, blocked)`:
@@ -1175,7 +1176,7 @@ def declared_walk_leg(scene, from_room, to_room):
     """
     if not from_room or not to_room or from_room == to_room:
         return (from_room, None, False)
-    if passable_route_exists(scene, from_room, to_room):
+    if passable_route_exists(scene, from_room, to_room, body=body):
         return (to_room, None, False)
     route = _door_route(scene, from_room, to_room)
     if not route:

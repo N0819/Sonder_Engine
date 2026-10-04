@@ -347,6 +347,12 @@ legitimately perceive, learn, remember or infer.
   room it is leaving for a beat rather than vanishing.
 - **Up and down** — Stairs and ladders read as above and below, not as another
   side door.
+- **Gates, portals and seals** — A way between two places can be a thing
+  standing in a room rather than a doorway in a wall. It can be seen through
+  while shut, let only the bodies it names pass, and be worn down by force a
+  rung at a time (intact, strained, cracked, broken): no single beat breaks it,
+  each further rung waits for sustained force, and mending is the story's to
+  tell. A warded door is a fastened door, not a wall.
 - **Destroying a place** — A building, vehicle or region can be destroyed; its
   rooms are retired rather than deleted, stay readable as history, and anyone
   inside is moved out.

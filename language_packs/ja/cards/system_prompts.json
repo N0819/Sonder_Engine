@@ -415,6 +415,9 @@
     "entities__transit": {
       "$text": "jev_questions/entities__transit.txt"
     },
+    "entities__link": {
+      "$text": "jev_questions/entities__link.txt"
+    },
     "entities__examined": {
       "$text": "jev_questions/entities__examined.txt"
     }
@@ -512,6 +515,9 @@
     },
     "entities__transit": {
       "$text": "encoder/entities__transit.txt"
+    },
+    "entities__link": {
+      "$text": "encoder/entities__link.txt"
     },
     "entities__examined": {
       "$text": "encoder/entities__examined.txt"

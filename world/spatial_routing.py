@@ -8,7 +8,7 @@ from typing import Optional
 from world.spatial_orientation import normalize_bearing, opposite_bearing
 
 from world.spatial_barriers import (_PASSABLE_BARRIERS, _SIGHT_BARRIERS,
-                              edge_passable, effective_adjacent, neighbor_map,
+                              edge_admits, edge_passable, effective_adjacent, neighbor_map,
                               normalize_barrier, resolve_edge)
 from world.spatial_containment import container_of
 from world.spatial_geometry import effective_room_size
@@ -487,7 +487,7 @@ def _body_enclosure_rooms(scene: dict, rooms) -> set:
     return out
 
 
-def passable_neighbors(scene: dict) -> dict:
+def passable_neighbors(scene: dict, body=None) -> dict:
     """{room_id: {rooms reachable in one step}} over passable edges only.
 
     Undirected in the edges it reads -- an open doorway declared from either
@@ -499,7 +499,14 @@ def passable_neighbors(scene: dict) -> dict:
     on the one graph everyone else walks, and §5 of the crowd proposal asks for
     exactly no second pathfinder.
     """
-    return neighbor_map(scene, _PASSABLE_BARRIERS, directional=True)
+    if not body:
+        return neighbor_map(scene, _PASSABLE_BARRIERS, directional=True)
+    # A NAMED BODY ALSO WALKS WHAT ADMITS IT: a link that lets one being
+    # through what is a wall or a window to everyone else.
+    return neighbor_map(
+        scene, None, directional=True,
+        crossable=lambda edge: (normalize_barrier(edge.get("barrier")) in _PASSABLE_BARRIERS
+                                or edge_admits(edge, body)))
 
 
 def passable_route_next_step(
@@ -545,6 +552,7 @@ def passable_route_exists(
     scene: dict,
     from_room: Optional[str],
     to_room: Optional[str],
+    body=None,
 ) -> bool:
     """True when to_room is reachable from from_room by walking only
     through passable doorways (barrier open / open_door), across any
@@ -572,7 +580,7 @@ def passable_route_exists(
     if from_room == to_room:
         return True
 
-    neighbors = passable_neighbors(scene)
+    neighbors = passable_neighbors(scene, body)
 
     seen = {from_room}
     frontier = [from_room]

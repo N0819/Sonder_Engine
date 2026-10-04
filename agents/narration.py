@@ -1215,8 +1215,14 @@ def _visible_portal_states(scene, room_id, visible_rooms):
             portal_rooms = set(link.get("rooms") or [])
             if portal_rooms and not portal_rooms.issubset(visible_rooms):
                 continue
-            out[name] = ("open" if str(link.get("phase") or "").lower()
-                         == "open" else "shut")
+            from world.spatial import link_condition
+            worn = link_condition(link)
+            out[name] = ("open" if worn == "broken"
+                         or str(link.get("phase") or "").lower() == "open"
+                         else "shut")
+            # How far force has worn it is seen by whoever sees it.
+            if worn in ("strained", "cracked", "broken"):
+                out[name] += f", {worn}"
             continue
         # Where this entity IS, not where two of its spellings are filed
         # (review 2026-09-07, B18): a lift whose `positions` row sits under

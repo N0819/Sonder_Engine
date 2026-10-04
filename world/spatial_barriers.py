@@ -166,8 +166,10 @@ _BARRIER_ALIASES = {
     "noren": "membrane",
     "partition": "wall",
     "bulkhead": "wall",
-    "warded_door": "wall",
-    "warded door": "wall",
+    # A WARD CHOOSES WHO PASSES; it is a fastening, not a wall (the owner,
+    # 2026-10-03: "it's just a particularly discriminating door").
+    "warded_door": "closed_door",
+    "warded door": "closed_door",
 }
 
 # What a qualifier does to the family it is attached to. `open_shoji` and
@@ -203,14 +205,14 @@ _BARRIER_SHUT_QUALIFIERS = ("closed", "shut")
 #: nothing anywhere able to record that it was stuck -- `stuck_door` and
 #: `closed_door` normalise to one value, so saying so was a no-op write.
 _BARRIER_FAST_QUALIFIERS = ("locked", "padlocked", "jammed", "stuck",
-                            "blocked")
+                            "blocked", "warded")
 _BARRIER_CLOSED_QUALIFIERS = (_BARRIER_SHUT_QUALIFIERS
                               + _BARRIER_FAST_QUALIFIERS)
 # Stronger than closed: the existing table already read `sealed_door` and
 # `bolted_door` as walls, and a qualifier must not quietly promote one back to
 # a door it can be opened through. `barred` is deliberately absent -- it is a
 # FAMILY here (`bars`), not a state.
-_BARRIER_SEAL_QUALIFIERS = ("sealed", "warded", "bolted", "welded", "bricked",
+_BARRIER_SEAL_QUALIFIERS = ("sealed", "bolted", "welded", "bricked",
                             "boarded", "solid")
 # A sealed anything is a wall, whatever it was before. Sight-passing families
 # keep their sight: a welded-shut viewport is still glass.
@@ -700,7 +702,18 @@ def edge_crossable_from(edge, from_room) -> bool:
     return not named or named == str(from_room)
 
 
-def edge_passable(edge, from_room) -> bool:
+def edge_admits(edge, body) -> bool:
+    """Does this edge name `body` among those it lets through whatever its
+    barrier -- a link that chooses who crosses (`spatial_transit._link_edge`)?
+    Ids compare with case, spaces and hyphens folded."""
+    admits = edge.get("admits") if isinstance(edge, dict) else None
+    if not body or not isinstance(admits, list):
+        return False
+    fold = lambda v: re.sub(r"[\s\-]+", "_", str(v or "").strip().casefold())
+    return fold(body) in {fold(a) for a in admits}
+
+
+def edge_passable(edge, from_room, body=None) -> bool:
     """May a body cross this edge, starting from `from_room`?
 
     The whole question in one place: the barrier lets a body through AND the
@@ -717,7 +730,8 @@ def edge_passable(edge, from_room) -> bool:
     from world.spatial_levels import is_overlook
     if is_overlook(edge):
         return False
-    return (normalize_barrier(edge.get("barrier")) in _PASSABLE_BARRIERS
+    return ((normalize_barrier(edge.get("barrier")) in _PASSABLE_BARRIERS
+             or edge_admits(edge, body))
             and edge_crossable_from(edge, from_room))
 
 

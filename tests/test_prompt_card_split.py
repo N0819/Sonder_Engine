@@ -49,7 +49,10 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 259   # -1 (2026-10-02): `jev_questions.obligations` retired with
+PART_COUNT = 261   # +2 (2026-10-03): `jev_questions.entities__link` and
+                   # `encoder.entities__link`, a way that is a thing (a gate,
+                   # portal or seal) worn and crossed by its `state.link`.
+                   # -1 (2026-10-02): `jev_questions.obligations` retired with
                    # the Director's obligation ledger.
                    # +1 (2026-10-02): `jev_questions.pressure_ended`, the
                    # "is it over?" a resolve asks of each open world pressure.

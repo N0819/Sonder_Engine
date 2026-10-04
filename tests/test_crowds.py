@@ -510,7 +510,9 @@ class TestACrowdWalksTheGraphEveryoneElseWalks:
         import inspect
 
         from world import spatial
-        assert "passable_neighbors(scene)" in \
+        # `passable_neighbors(scene, body)` since a link may admit one body
+        # (tests/test_link_seal.py): still the one graph, asked for that body.
+        assert "passable_neighbors(scene" in \
             inspect.getsource(spatial.passable_route_exists)
 
 

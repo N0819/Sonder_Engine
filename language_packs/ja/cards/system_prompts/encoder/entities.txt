@@ -6,6 +6,6 @@ state は beat を越えて続く構成です：開いている、着ている�
 通り道が開いているかどうかも決して state のキーではありません。二つの部屋のあいだの扉はその出入口の辺で、何が通るかを決めるのはその barrier だけです：同じ扉の entity は情景です――何でできているか、どう吊られているか、歪み、錆、焦げ――開いている、半開き、閉じている、封じられている、かんぬきが掛かっている、とは決して書きません。通行を決めるものは何一つそれを読まず、ページには二つの答えが同時に渡されるからです。蓋、ハッチ、内側を持つもの――箱、戸棚、乗り物――の扉は、この記録のものです：その state.hatch がそれを開け閉めします。
 記録は一つ：物が示すもの、物について真であることは、その物自身の上にあり、別の entity への二つ目の写しには決してしません。
 
-物のいくつかの変化には独自の部分があり、記述がそれを必要とすると判断されたときに届きます：entities__new（シーンに持ち込まれる人や物）、entities__inside（誰かが中に入れるものと、その蓋）、entities__emits（光、音、匂い）、entities__transit（移動中の乗り物、昇降機、船）、entities__examined（間近に見られ、読まれ、傷つけられる物）。記述がそのどれかをし、その部分が下にないときは、missing_tools でその部分を求めてください。
+物のいくつかの変化には独自の部分があり、記述がそれを必要とすると判断されたときに届きます：entities__new（シーンに持ち込まれる人や物）、entities__inside（誰かが中に入れるものと、その蓋）、entities__emits（光、音、匂い）、entities__transit（移動中の乗り物、昇降機、船）、entities__link（二つの場所をつなぐ門、ポータル、封印）、entities__examined（間近に見られ、読まれ、傷つけられる物）。記述がそのどれかをし、その部分が下にないときは、missing_tools でその部分を求めてください。
 
 Shape: entities:{entity_id:{name,kind,description,aliases:[],portable,container,interior_rooms:[],state:{},scent,ubiquitous}} -- a redeclared entity merges onto the existing record by id; state is that body's OWN doing only.
