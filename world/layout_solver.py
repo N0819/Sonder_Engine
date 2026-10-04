@@ -367,14 +367,14 @@ def _stated_area(room):
     return m2 / (PACE_M * PACE_M) if m2 > 0 else None
 
 
-def room_target(room):
+def room_target(room, stated=True):
     """Square paces a room needs: its furniture at COVERAGE of the floor, its
     zones' floor, a step inside each door; never under its purpose's floor."""
     key = purpose_key(room)
     lo, _hi = PURPOSE_AREA[key]
-    stated = _stated_area(room)
-    if stated:
-        return stated
+    area = _stated_area(room) if stated else None
+    if area:
+        return area
     furniture = sum(w * d for w, d, _h in (fixture_footprint(f) for f in room.get("fixtures") or ()))
     zones = sum(a * b for a, b in (_zone_size(z) for z in room.get("zones") or ()))
     doors = len(room.get("joins") or ())
@@ -568,7 +568,9 @@ def _level_need(b, rooms, shafts):
     need = {}
     for r in rooms.values():
         if r["block"] == b:
-            need[r["level"]] = need.get(r["level"], 0) + room_target(r)
+            # a stated size sets its room, not the building: the outline
+            # comes from what each storey holds
+            need[r["level"]] = need.get(r["level"], 0) + room_target(r, stated=False)
     for sh in shafts:
         if sh.block == b:
             w, d = STAIRS[sh.kind]
