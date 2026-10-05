@@ -2251,76 +2251,60 @@ leaves, in the order the owner agreed:
   pair of rooms, and the ground-floor door already holds it.
 
 <a id="unbuilt-2-40"></a>
-### 2.40 A level of detail for distant landscapes -- the owner's ask, and what it needs decided (2026-10-05)
+### 2.40 A level of detail for distant landscapes -- BUILT 2026-10-05, what is left
 
 The ask: "for distant objects we might need something like the text
-equivalent of an LOD" (2026-10-04); and after a build that graded detail by
-metres inside ordinary range (dab39f66) was reverted (594e4f67): "all I
-wanted it for was distant landscapes. like 5 or so rooms of distance or
-more." The room and one doorway keep their full detail.
+equivalent of an LOD" (2026-10-04); after a build that graded detail by
+metres inside ordinary range was reverted (594e4f67), "all I wanted it for
+was distant landscapes. like 5 or so rooms of distance or more", and "go
+ahead" to: places, not people; far starts past the next room, detail by
+measured distance where the world measures it, else two to four rooms off
+the place and what is big on it and five or more its outline; a far place
+named only once the mind knows it. Built as `world/landscape.py` (Design.md,
+"A far place is seen as landscape"), from a survey of five readers and a
+critic and a panel of three designs and three judges. Left:
 
-What the engine sees beyond one doorway (surveyed 2026-10-05 by five readers
-and a critic; every load-bearing claim spot-checked):
-
-- No body, act, fixture or room description two or more rooms away, for any
-  observer at any height. `spatial_rel` answers `separated` for a
-  non-adjacent pair and sight refuses it; `room_field` lays one ring. A
-  flier 200 m up sees the next field as `shapes` and the one after nothing.
-- What does cross: `corridor_sightlines` (characters only; a straight lit
-  line, at most 6 rooms, names 2), the run end in `sprint_offers`, vistas
-  (`world/vistas.py`: horizon records, not rooms), the non-speech sound far
-  field (no hop cap), scent (a room a beat), and a Director event targeted
-  at a room, delivered at full detail wherever it happened.
-- `SWEEP_REACH_PACES` has been read by nothing since it was added
-  (aeecf008); a sweep lifts the cone and never extends reach.
-
-What the owner's worlds hold at that scale (engine.db, read-only):
-
-- No open-air chain of five rooms: the longest is four (the Kansai shrine
-  path, chats 38/59/63/64), then three (the beach in 122/123, the shrine in
-  163, the market lane in 65). Minase (150-159) is one only by hand: its
-  empty-desc harbour rooms read `enclosed` through the keyword fallback.
-- Five hops is not far. The Larch Hill tower foot is five hops from the
-  balcony and about 8 m away; across the corpus a five-hop path is a median
-  of about 30 m.
-- None of the 75 rooms five or more hops from a player can be given a
-  direction: 36% of live edges carry `dir`, planned rooms none, and no scene
-  in engine.db has a site plan or a vista (scratch chat 165 has both).
-- Far places live in prose (a desc's "dark rooftops show over it", a
-  scenario), in planned registry rows outside the scene (chat 114's 31-room
-  district), in another locale (chat 10's colony seen from orbit), or are
-  minted as an adjacent room the moment they are seen (chat 46's distant
-  building, `distance: "short"`).
-
-What a design has to decide, and whose it is (the owner's):
-
-1. The unit: room hops; metres where a plan or an edge measures them; or the
-   kind of far thing (open ground, a structure, a vista, a district).
-2. What shows two to four rooms off. A strict five-room gate leaves them as
-   dark as today, so a body walking in would show far off, vanish, and
-   reappear at the door.
-3. Places only, or people too. People bring causality bubbles (a major
-   character more than one hop off lives in her own frame and is absent from
-   the player's), the beat aperture (`rooms_in_view` is "sight plus
-   earshot", owner 2026-09-23 -- far sight inside it puts far townsfolk on
-   screen and model-voiced), the `seen` ledger (which licenses attire
-   deltas and prunes appearance), and hailing what is seen.
-4. Names: whether a far place is named to a mind that has never been there
-   (vistas and the corridor name; the sound far field never does).
-5. The substrate -- vistas, far scene rooms, planned rooms -- and for rooms,
-   where a bearing and a distance come from.
-
-Found on the way, in the vista path, each probed: `outlooks` reads the raw
-`exposure` field where weather derives it (116 rooms in 129 owner scenes are
-open to the weather and look out nowhere); `obstructed` skips the whole
-footprint of the observer's own room, so a building standing in an open
-field never hides the ridge behind it; a lit vista renders its daytime
-`desc` at night; a card whose sight is absent still sees both vista lines;
-after a look the next beat repeats the vista once as standing state; the
-"below" test hides any top under the eye, not only one past the horizon (a
-village's 20 m roof 1 km off, from a 60 m eye); a negative `height_m` is
-clamped to 0, so a town down the valley cannot sit below the ridge; and a
-look by compass word ("south", chat 165) never becomes the look event.
+- **People at that range**, by the plan. Showing them would need rulings on
+  causality bubbles (a major character more than one hop off lives in her own
+  frame and is absent from the player's), the beat aperture (`rooms_in_view`
+  is "sight plus earshot", owner 2026-09-23 -- far sight inside it puts far
+  townsfolk on screen and model-voiced), the `seen` ledger (which licenses
+  attire deltas and prunes appearance) and hailing what is seen.
+- **A look AT a far place** is not an event yet: a vista looked at is
+  (`vistas.looked_vistas`, by id, name or compass word), a far place is only
+  standing description. One matcher would serve both.
+- **What the far layer cannot read**: planned registry rooms outside the
+  scene (chat 114's 31-room district), frontier stubs, another locale (chat
+  10's colony seen from orbit), and an event happening far off -- an event
+  carries targets and no place (`UnifiedEvent`), so a Director event is
+  delivered where it is targeted, at full detail.
+- **The world rarely says where its far rooms are.** Ground is DECLARED
+  exposure only (the keyword fallback `weather.room_exposure` uses for
+  weather, light and sound misreads indoor rooms as open air and is never an
+  outlook); 8.7% of the owner's rooms declare it, and 36% of live edges carry
+  a compass, so 4 of 283 placed bodies in the owner's current scenes get a far
+  line. From 2026-10-05 the planner is asked to declare exposure on every
+  room and a compass and a measured distance on the ways that cover ground,
+  and a plan keeps both (Design.md, "A plan keeps where a place is and how
+  far"); older worlds stay as they are, and whether a model writes them is
+  for the next live run to show.
+- **Off a site plan a height is inferred from the graph**: an eye a storey up
+  looks over the open ground its own building fronts, and nothing between is
+  tested -- on a plan the line over every building is. Ground is flat
+  (§2.39): a ridge does not hide the valley behind it.
+- **Messy data, as found**: chat 114's TARDIS console room declares itself
+  `sheltered` with no `parent_entity`, so the layer -- reading declared data
+  -- has it look out over the beach to the terrace.
+- **The numbers**, named to the owner: two to four rooms the place and what
+  is big on it, five or more the outline (the owner's); a measured path under
+  250 m mid and over it outline; the walk stops at 12 rooms; at most 4 lines a
+  view, 3 places a line (the nearest two and the farthest), 2 big things a
+  place, 32 places graded a walk; an eye 1 m over a roof sees past the
+  building; over 7.5 m is "tall" (engine estimates). Cost: 0.09 ms a call on
+  the owner's scenes; about 9 ms a body on a 625-field open plain inside a
+  read pass; on a site plan about 17 ms a body on a 24-room plan of
+  two-storey halls (every line to a far place is sampled four times a pace
+  over the plan's slabs), against 2 ms off it -- the one cost left to cut.
 
 ## 4. Architecture gaps
 

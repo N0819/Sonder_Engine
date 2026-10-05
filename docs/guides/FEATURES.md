@@ -362,8 +362,17 @@ legitimately perceive, learn, remember or infer.
 - **Vistas** — What stands on the horizon -- a mountain range, the sea, a
   city's lights -- is set by the Writers' Room and seen from open air or a
   window facing its way, hidden by fog, rain and snow at the distances those
-  conditions are defined by, by night unless it is lit or the moon shows its
-  silhouette, and by anything nearer and taller in its direction.
+  conditions are defined by, by night unless it is lit (then it is its
+  lights) or the moon shows its silhouette, and by anything nearer and
+  taller in its direction.
+- **Far places** — The places past the next room are seen as landscape from
+  open air, a window or a height: open ground and buildings, what is big on
+  them, their lights at night, at the grain distance leaves them -- two to
+  four rooms off the place and what stands on it, five or more its outline,
+  or by metres where the world measured the way. Places only, never the
+  people in them; a far place is named once the character knows it and
+  described until then. *(partial: it reads only rooms that declare their
+  exposure, which the planner does from 2026-10-05; older worlds rarely do.)*
 - **Gates, portals and seals** — A way between two places can be a thing
   standing in a room rather than a doorway in a wall. It can be seen through
   while shut, let only the bodies it names pass, and be worn down by force a

@@ -1402,7 +1402,7 @@ def _sound_field_for(ctx, sc, name, room, events=None):
                        events=events or None)
 
 
-def _looked_vistas(sc, res, interp, name, player_name, ctx):
+def _looked_vistas(sc, res, interp, name, player_name, ctx, senses=None):
     """The vistas `name`'s own act this beat aimed a `look` at, by the
     looking row's actor: the player's rows (`persona:`/self) and each cast
     member's (`character:<id>`), read off the interpret and resolve
@@ -1428,7 +1428,7 @@ def _looked_vistas(sc, res, interp, name, player_name, ctx):
             who = actor
         if who.strip().casefold() == str(name or "").strip().casefold():
             looks.append(element["look"])
-    return looked_vistas(sc, looks)
+    return looked_vistas(sc, looks, name=name, senses=senses)
 
 
 def _walk_underway(sc, res, name):
@@ -2174,6 +2174,37 @@ def _behind_rooms(scene, observer):
     return behind
 
 
+def _character_known_places(row):
+    """{room id: the name this mind knows it by} -- the far layer's ruling
+    3, a far place named only once the mind knows it (`world/landscape`).
+    Its place graph's nodes, the rooms it walked or looked into, by the
+    name it learned each under (`commit_place_graph.update_place_graph`
+    rewrites a name only when the mind stands in or sees the room again);
+    and the rooms it has stood in, by their name now ("")."""
+    from story.scene import cast_state
+    state = cast_state(row) or {}
+    graph = state.get("place_graph") if isinstance(state.get("place_graph"), dict) else {}
+    out = {}
+    for rid, node in (graph.get("nodes") or {}).items():
+        if isinstance(node, dict):
+            out[str(rid)] = str(node.get("name") or "").strip()
+    for rid in state.get("visited_rooms") or ():
+        out.setdefault(str(rid), "")
+    return out
+
+
+def _player_known_places(ctx):
+    """{room id: ""} -- the rooms the player has stood in, by their name now:
+    the `subject_last_seen` stamps the commit writes every beat, where the
+    player's own room is stamped under its own key (`world.gaps`). Only
+    those keys: the ledger shares its namespace with every subject the
+    player saw, so a key counts when its stamp's room IS the key."""
+    from world.gaps import LAST_SEEN_KEY
+    ledger = wget(ctx.chat.id, LAST_SEEN_KEY, {}) or {}
+    return {str(key): "" for key, stamp in ledger.items()
+            if isinstance(stamp, dict) and str(stamp.get("room") or "") == str(key)}
+
+
 def _visible_rooms_for(scene, observer, room_id):
     """`visible_adjacent_rooms`, minus whatever is at this observer's back.
 
@@ -2885,6 +2916,7 @@ def perception_establish(ctx, nonce):
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
+        "known_places": _player_known_places(ctx),
         "senses": senses_of(pers), "sense_card": _sense_card(pers),
         "attention": "engaged",
         "knows_identity": True,
@@ -2921,6 +2953,7 @@ def perception_establish(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
             "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
+            "known_places": _character_known_places(c),
             "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
@@ -3138,6 +3171,7 @@ def perception_act(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
             "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
+            "known_places": _character_known_places(c),
             "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
             "spatial_to_actor": rel,
@@ -3679,6 +3713,7 @@ def perception_outcome(ctx, nonce):
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
+        "known_places": _player_known_places(ctx),
         "senses": senses_of(pers), "sense_card": _sense_card(pers),
         "attention": "engaged",
         "knows_identity": True,
@@ -3708,6 +3743,7 @@ def perception_outcome(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, e_room, chatter),
             "notices": artifacts_for_room(ctx.chat.id, sc, e_room, chatter),
             "visible_rooms": _visible_rooms_for(sc, e_name, e_room),
+            "known_places": {},
             "senses": senses_of(extra), "sense_card": _sense_card(extra),
             "attention": "engaged",
             "knows_identity": True,
@@ -3741,6 +3777,7 @@ def perception_outcome(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
             "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
+            "known_places": _character_known_places(c),
             "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
@@ -5051,7 +5088,8 @@ def _is_dark(level):
         "dark", "none", "pitch_black", "black")
 
 
-def _visible_openings(sc, name, room, *, sweep=False, gate=None):
+def _visible_openings(sc, name, room, *, sweep=False, gate=None,
+                      named_out=None):
     """The boundaries of `room` this observer can see, and what sight reaches
     past each -- or [] when the room has none it can offer.
 
@@ -5148,6 +5186,10 @@ def _visible_openings(sc, name, room, *, sweep=False, gate=None):
             out.append(row)
             continue
         row["state"] = "seen"
+        if named_out is not None:
+            # The rooms this view NAMES through a doorway: a far line leaving
+            # through one may say "past" it by that name (`world.landscape`).
+            named_out[to_room] = far_name
         # THE SAME PROSE THE ROOM UNDERFOOT DELIVERS (`room_prose`): notes,
         # else desc. Reading `notes` alone here handed a freshly minted room
         # through its doorway as a bare name -- chat 123 turn 9, the TARDIS
@@ -5209,6 +5251,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     nothing, never as "the room was silent"."""
     percepts = []
     room = p.get("room")
+    via_names = {}
     room_notes = p.get("room_notes")
     if gate is not None:
         room_notes = gate(room_notes)
@@ -5223,7 +5266,8 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         room, p.get("room_name"), room_notes,
         effective_light(sc, room) if room else "",
         features=_visible_features(sc, name, room, sweep=sweep),
-        openings=_visible_openings(sc, name, room, sweep=sweep, gate=gate),
+        openings=_visible_openings(sc, name, room, sweep=sweep, gate=gate,
+                                   named_out=via_names),
         light_shape=light_shape(sc, name, sweep=sweep) if room else None)
     if env:
         percepts.append(env)
@@ -5304,13 +5348,22 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         from world.weather import weather_for_room
         percepts.extend(composer.weather_percepts(
             weather_for_room(sc, room, name)))
+        # WHAT LIES FAR OFF (`world/landscape`, UNBUILT_WORLD §2.40): the
+        # places past the next room a body sees from open air, a window or a
+        # height, at the grain distance leaves them -- places, never people,
+        # named only where this mind knows them, and never a room the near
+        # field already answers. Near to far: the weather, these, the horizon.
+        from world.landscape import far_places
+        percepts.extend(composer.landscape_percepts(far_places(
+            sc, name, known=p.get("known_places"), senses=p.get("sense_card"),
+            via_names=via_names, gate=gate)))
         # WHAT STANDS ON THE HORIZON (`world/vistas`): from open air or a
         # window facing its way, through the weather, by the light, over what
         # stands nearer -- decided now, for this body.
         from world.vistas import visible_vistas, what_a_look_finds
         percepts.extend(composer.vista_percepts(
-            visible_vistas(sc, name),
-            looked=[(v, what_a_look_finds(sc, name, v))
+            visible_vistas(sc, name, senses=p.get("sense_card")),
+            looked=[(v, what_a_look_finds(sc, name, v, senses=p.get("sense_card")))
                     for v in (p.get("looked_vistas") or ())]))
     if p.get("walk_underway"):
         percepts.extend(composer.walk_underway_percepts(p["walk_underway"]))
@@ -6363,18 +6416,25 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
         # every percept in it are what the outcome's episode leaves out, so
         # the two halves never say one thing twice.
         if not _is_player_view(pid):
+            # FAR SIGHT IS NO PART OF WHAT A MIND WITNESSED BEFORE IT ACTED:
+            # it is filed once, by the outcome's episode, after the beat --
+            # in this half it opened the memory row and its gist overrode
+            # the outcome's (review 2026-10-05: a town's lights at dusk took
+            # the gist from the question put to her). Its keys stay out of
+            # `keys`, so the outcome is free to file it.
+            near = [p for p in percepts if not composer.far_sight(p)]
             w_content, w_gist, w_entities = composer.render_episode(
-                percepts, prev_standing=prev_standing,
+                near, prev_standing=prev_standing,
                 prev_described=prev_described, language=ctx.language)
             w_content, w_gist = _scrub_episode_identities(
                 ctx, "perception_act", name, w_content, w_gist, known, roster)
             witnessed[pid] = {
                 "episode": w_content, "gist": w_gist, "entities": w_entities,
-                "keys": sorted({p.dedupe_key for p in percepts if p.dedupe_key}),
+                "keys": sorted({p.dedupe_key for p in near if p.dedupe_key}),
                 # what each percept says, one entry per percept: an act
                 # re-minted at the outcome under a new event id keeps its
                 # words, not its key
-                "said": [s for s in (composer.episode_signature(p) for p in percepts) if s]}
+                "said": [s for s in (composer.episode_signature(p) for p in near) if s]}
     merged = dict(prev_ledger)
     merged.update(ledger)
     ctx["_composer_turn_ledger"] = merged
@@ -7019,7 +7079,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             p["walk_underway"] = _walk_underway(sc, res, name)
             # WHAT THIS BODY'S OWN ACT LOOKED AT on the horizon this beat
             # (`world.vistas.looked_vistas`): delivered as an event.
-            p["looked_vistas"] = _looked_vistas(sc, res, interp, name, p_name, ctx)
+            p["looked_vistas"] = _looked_vistas(sc, res, interp, name, p_name, ctx,
+                                                senses=p.get("sense_card"))
             display_map = composer.observer_display_map(
                 sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(
@@ -7522,8 +7583,11 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         # and `observations_from_render` files it `standing`, which
         # `_render_observed_events` skips, so it reaches the model as the
         # frame it is and never as a numbered obligation.
+        # Asked of the NEAR spans: a far line alone is added to a view and
+        # is never the whole of one, so it does not stand in for the room
+        # the narrator must be handed (`composer.near_text`).
         if (is_player_view and not full_player_render and percepts
-                and not rendered.text.strip()):
+                and not composer.near_text(rendered)):
             rendered = composer.render_view(
                 percepts, mode="player", prev_standing=prev_standing,
                 prev_described=prev_described, full_render=True,

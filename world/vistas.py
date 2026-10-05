@@ -75,7 +75,7 @@ def normalize_vista(value) -> Optional[dict]:
     if not name or not bearing:
         return None
 
-    def number(key, default):
+    def number(key, default, signed=False):
         raw = value.get(key)
         if raw is None or isinstance(raw, bool):
             return default
@@ -83,12 +83,14 @@ def normalize_vista(value) -> Optional[dict]:
             out = float(raw)
         except (TypeError, ValueError):
             return default
-        return out if math.isfinite(out) and out >= 0 else default
+        if not math.isfinite(out):
+            return default
+        return out if (signed or out >= 0) else default
 
     vid = str(value.get("id") or "").strip() or name.casefold().replace(" ", "_")
     return {"id": vid, "name": name, "desc": str(value.get("desc") or "").strip(),
             "bearing": bearing, "distance_km": number("distance_km", 10.0) or 10.0,
-            "height_m": number("height_m", 0.0), "lit": bool(value.get("lit"))}
+            "height_m": number("height_m", 0.0, signed=True), "lit": bool(value.get("lit"))}
 
 
 def scene_vistas(scene) -> list:
@@ -124,6 +126,24 @@ def visibility_km(air) -> float:
     return VISIBILITY_KM.get(str(air or "clear").strip().casefold(), VISIBILITY_KM["clear"])
 
 
+def beyond_the_horizon(vista, eye_m) -> bool:
+    """Has the earth's curve taken the vista's TOP out of sight from this
+    eye: is it further than the eye's horizon and the top's own together
+    (d > sqrt(2 R' h_eye) + sqrt(2 R' h_top), R' the radius the refraction
+    coefficient lengthens)? A top merely below the eye is not hidden -- a
+    village seen from a tower is below the eye and in plain view; the old
+    test asked whether the top stood below eye level and hid it
+    (2026-10-05: a 20 m roof 1 km off from a 60 m eye). A top at or under
+    the ground is never hidden by the curve: that is a valley, which
+    terrain and nearer things decide (`obstructed`)."""
+    if vista["height_m"] <= 0:
+        return False
+    radius = EARTH_RADIUS_M / (1.0 - REFRACTION_K)
+    reach = (math.sqrt(2.0 * radius * max(eye_m, 0.0))
+             + math.sqrt(2.0 * radius * vista["height_m"]))
+    return vista["distance_km"] * 1000.0 > reach
+
+
 def vista_verdict(vista, *, air="clear", dark=False, eye_m=1.6) -> Optional[str]:
     """Why a vista is not seen, or None when it is, before anything nearer
     is asked (`obstructed` follows the line over the site plan):
@@ -137,7 +157,7 @@ def vista_verdict(vista, *, air="clear", dark=False, eye_m=1.6) -> Optional[str]
         return "air"
     if dark and not vista["lit"]:
         return "dark"
-    if vista["height_m"] > 0 and elevation_angle(vista, eye_m) < -0.002:
+    if vista["height_m"] > 0 and beyond_the_horizon(vista, eye_m):
         return "below"
     return None
 
@@ -183,35 +203,21 @@ def _darkness(scene, weather) -> tuple:
 
 def outlooks(scene, room_id) -> Optional[set]:
     """The bearings a body in `room_id` can look out along: every bearing
-    under open sky; through a window, an open door or bars onto an open-air
-    room, that edge's bearing and the two beside it; none from a closed room
-    (an empty set). None means "every way"."""
-    from world.spatial import effective_adjacent, normalize_barrier
-    rooms = (scene or {}).get("rooms") or {}
-    room = rooms.get(room_id) or {}
-    if str(room.get("exposure") or "").strip().casefold() in ("open", "sheltered"):
-        return None
-    out = set()
-    for edge in effective_adjacent(scene, room_id):
-        if not isinstance(edge, dict):
-            continue
-        if normalize_barrier(edge.get("barrier")) not in (
-                "window", "open", "open_door", "bars", "one_way_window"):
-            continue
-        other = rooms.get(str(edge.get("to"))) or {}
-        if str(other.get("exposure") or "").strip().casefold() not in ("open", "sheltered"):
-            continue
-        b = normalize_bearing8(edge.get("dir"))
-        if b:
-            i = BEARINGS.index(b)
-            out.update({BEARINGS[(i - 1) % 8], b, BEARINGS[(i + 1) % 8]})
-    # The room's own windows onto open air with no room beyond (`windows`).
-    for raw in room.get("windows") or ():
-        b = normalize_bearing8(raw)
-        if b:
-            i = BEARINGS.index(b)
-            out.update({BEARINGS[(i - 1) % 8], b, BEARINGS[(i + 1) % 8]})
-    return out
+    from open ground; through a window, an open door or bars onto open
+    ground that sight crosses from here, that edge's bearing and the two
+    beside it; none from a closed room (an empty set). None means "every
+    way".
+
+    ONE READER for the horizon and the far places (`landscape.outlook`), on
+    DECLARED exposure: the inside of a thing (`parent_entity`) looks out
+    nowhere whatever it declares -- a sheltered cabin aboard a ship saw
+    every vista -- and a one-way pane looks out only from its seeing side.
+    An outdoor room that declares nothing looks out nowhere until it does:
+    the keyword guess `weather.room_exposure` falls back on read a tavern's
+    staircase landing and a shrine's roost as open air, and an outlook is a
+    sightline prose may not open (2026-10-05, the landscape panel)."""
+    from world.landscape import outlook
+    return outlook(scene, room_id)
 
 
 _UNIT8 = {b: (math.sin(math.radians(45 * i)), -math.cos(math.radians(45 * i)))
@@ -235,7 +241,14 @@ def obstructed(scene, name, vista, eye_z) -> bool:
     point = plan_point(scene, name) if site else None
     if not point:
         return False
-    own = site_cells(scene, rid)
+    # THE BODY'S OWN ROOM IS BEHIND ITS WINDOW, and only when it has walls:
+    # the storeys over a kitchen are its ceiling, not a wall in front of its
+    # window. Open ground has no ceiling -- a mill standing in the field is
+    # in front of the ridge behind it (2026-10-05: it was skipped with the
+    # field's whole footprint, and hid nothing).
+    from world.landscape import OPEN_GROUND, declared_ground
+    own = (frozenset() if declared_ground(scene, rid) in OPEN_GROUND
+           else site_cells(scene, rid))
     slabs: dict = {}
     for levels in site_plans(scene).get(site["plan"], {}).values():
         for other in levels:
@@ -260,11 +273,14 @@ def obstructed(scene, name, vista, eye_z) -> bool:
     return False
 
 
-def visible_vistas(scene, name) -> list:
-    """`[(vista, "clear" | "silhouette")]` a body sees now: its room looks
-    that way, the weather reaches that far, the dark leaves it (lit, or a
-    silhouette under a moon), and its top clears what stands nearer. Decided
-    at the moment of looking; nothing is cached.
+def visible_vistas(scene, name, senses=None) -> list:
+    """`[(vista, "clear" | "lights" | "silhouette")]` a body sees now: its
+    room looks that way, the weather reaches that far, the dark leaves it --
+    a lit one as its LIGHTS (its daytime `desc` is roofs and a spire no eye
+    makes out at midnight), an unlit one as a silhouette under a moon -- and
+    its top clears what stands nearer. Decided at the moment of looking;
+    nothing is cached. `senses` is the body's card: an eye that sees
+    nothing sees no horizon either (it saw both lines, 2026-10-05).
 
     WHICH WAY THE BODY FACES DOES NOT HIDE THE HORIZON. A view is part of
     where a body is, seen by turning its head, like the room it stands in;
@@ -275,10 +291,10 @@ def visible_vistas(scene, name) -> list:
     derived from her attention on the man beside her, and the lit town was
     withheld as "behind" her."""
     from world.site_plan import EYE_M, body_altitude_m, room_elevation_m
-    from world.spatial import posture_class, room_of
+    from world.spatial import posture_class, room_of, sense_adjusted
     vistas = scene_vistas(scene)
     rid = room_of(scene, name)
-    if not vistas or not rid:
+    if not vistas or not rid or sense_adjusted("full", "sight", senses) == "none":
         return []
     ways = outlooks(scene, rid)
     if ways is not None and not ways:
@@ -296,7 +312,8 @@ def visible_vistas(scene, name) -> list:
         if why is None and obstructed(scene, name, vista, eye_z):
             why = "below"
         if why is None:
-            out.append((vista, "silhouette" if dark and not vista["lit"] else "clear"))
+            out.append((vista, ("lights" if dark and vista["lit"] else
+                                "silhouette" if dark else "clear")))
     return out
 
 
@@ -304,17 +321,30 @@ def _fold_name(value) -> str:
     return " ".join(str(value or "").replace("_", " ").casefold().split())
 
 
-def looked_vistas(scene, looks) -> list:
-    """The vistas a set of `look` values names, by id or by name."""
+def looked_vistas(scene, looks, name=None, senses=None) -> list:
+    """The vistas a set of `look` values names: by id or by name -- the
+    actor named it, so the name is theirs -- or by the compass point a vista
+    this body can SEE stands on: "look south" is a look at what is in view
+    to the south (chat 165: `south`, binoculars down the valley, never
+    became the look event). A compass word carries no knowledge of what
+    stands that way, so it finds only what is in view; matched to every
+    vista on the bearing, a look south in a windowless cellar was told the
+    name of a town it could not see, and remembered it (review
+    2026-10-05)."""
     wanted = {_fold_name(v) for v in looks or () if str(v or "").strip()}
+    bearings = {b for b in (normalize_bearing8(v) for v in looks or ()) if b}
+    in_view = ({v["id"] for v, _how in visible_vistas(scene, name, senses=senses)}
+               if bearings and name else set())
     return [v for v in scene_vistas(scene)
-            if _fold_name(v["id"]) in wanted or _fold_name(v["name"]) in wanted]
+            if _fold_name(v["id"]) in wanted or _fold_name(v["name"]) in wanted
+            or (v["bearing"] in bearings and v["id"] in in_view)]
 
 
-def what_a_look_finds(scene, name, vista) -> str:
-    """"clear" | "silhouette" when the vista is seen now, else "unseen":
-    a look aimed at the range in fog finds that it cannot be made out."""
-    for seen, how in visible_vistas(scene, name):
+def what_a_look_finds(scene, name, vista, senses=None) -> str:
+    """"clear" | "lights" | "silhouette" when the vista is seen now, else
+    "unseen": a look aimed at the range in fog finds that it cannot be made
+    out."""
+    for seen, how in visible_vistas(scene, name, senses=senses):
         if seen["id"] == vista["id"]:
             return how
     return "unseen"

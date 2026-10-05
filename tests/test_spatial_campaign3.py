@@ -416,13 +416,19 @@ def test_a_planned_edge_can_say_the_crossing_is_not_a_step():
 
     assert _plan_edge({"to": "roof", "bearing": "e",
                        "distance": "far"})["distance"] == "far"
-    # The world's own vocabulary, numbers and units included...
-    assert _plan_edge({"to": "roof", "distance": "40 m"})["distance"] == "far"
+    # The world's own vocabulary, numbers and units included -- a
+    # measurement KEPT as one (2026-10-05: the far layer reads its metres),
+    # which every reader of the tier folds to `far` exactly as before...
+    from world.spatial import normalize_edge_distance
+    kept = _plan_edge({"to": "roof", "distance": "40 m"})["distance"]
+    assert kept == "40 m" and normalize_edge_distance(kept) == "far"
     # ...and a word it cannot read is not a measurement, so it falls to the
     # default every consumer already assumed rather than reaching the graph.
     assert _plan_edge({"to": "roof", "distance": "treacherous"})["distance"] \
         == "near"
     assert "distance" not in _plan_edge({"to": "roof", "bearing": "e"})
+    # ...and its compass is a `dir`, which the world reads (`bearing` was not).
+    assert _plan_edge({"to": "roof", "bearing": "e"})["dir"] == "e"
 
 
 # ---------------------------------------------------------------------------

@@ -427,19 +427,6 @@ The fix that is right either way: keep out of recall only the rows delivered
 is the owner's; with the whole window delivered the two sets coincide and the
 fix is a no-op.
 
-<a id="unbuilt-1-178"></a>
-### 1.178 English memory never files what was seen far off or heard this beat (2026-10-05)
-
-`composer._episode_sentence` has no `ambient` branch, and the
-changed-standing filter admits only environment, sensation, pose, scent and
-appearance. So in English a vista line, what a deliberate look at one found
-(43946e73), and a beat's ordered sound event never enter an episode; the
-Japanese adapter files them. Probed by the landscape survey (2026-10-05): a
-vista line and a beat's hiss each episode to `('', '', [])`. In the Larch
-Hill live test (scratch chat 165) none of the Doctor's 14 memories holds a
-vista line. It is the class 43946e73 fixed in `_render_event`, still open
-one renderer over -- on the line the owner made the priority.
-
 ## 2. Roadmap
 
 <a id="unbuilt-2-2"></a>

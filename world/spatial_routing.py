@@ -47,6 +47,27 @@ _DISTANCE_UNIT_METERS = {
 }
 
 
+_DISTANCE_NUMBER = re.compile(r"^~?\s*(\d+(?:\.\d+)?)\s*([a-z]+)?\.?$")
+
+
+def edge_metres(value):
+    """An authored edge `distance` as METRES, or None when it states no
+    length -- a tier word ("far"), an alias ("short"), nothing, or a unit
+    the table does not know. The number `normalize_edge_distance` folds
+    into a tier and throws away, kept for the one reader that needs it:
+    the far layer measures a path only where every step of it was measured
+    (`world/landscape.py`; DESIGN_METRIC_SPACE's "keep the number"). Takes
+    the value or the edge that carries it."""
+    if isinstance(value, dict):
+        value = value.get("distance")
+    raw = str(value if value is not None else "").strip().casefold()
+    matched = _DISTANCE_NUMBER.match(raw) if raw else None
+    if not matched:
+        return None
+    scale = _DISTANCE_UNIT_METERS.get(matched.group(2) or "m")
+    return None if scale is None else float(matched.group(1)) * scale
+
+
 def normalize_edge_distance(value) -> str:
     """Collapse an authored edge `distance` to one of DISTANCE_TIERS.
 
@@ -62,7 +83,7 @@ def normalize_edge_distance(value) -> str:
         return "near"
     if raw in _DISTANCE_ALIASES:
         return _DISTANCE_ALIASES[raw]
-    matched = re.match(r"^~?\s*(\d+(?:\.\d+)?)\s*([a-z]+)?\.?$", raw)
+    matched = _DISTANCE_NUMBER.match(raw)
     if not matched:
         return "near"
     scale = _DISTANCE_UNIT_METERS.get(matched.group(2) or "m")

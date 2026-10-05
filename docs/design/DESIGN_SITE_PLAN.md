@@ -160,8 +160,10 @@ moment of looking:
 * the weather reaches that far (`VISIBILITY_KM`, sourced where the condition
   is defined by visibility: fog under 1 km, mist 1-5, haze up to 5; snow
   light 1.5, moderate 0.8, heavy 0.4; rain kept generous, 10/5/2);
-* the dark leaves it: night and pre-dawn hide what is not `lit`, and a moon
-  through clear air leaves a skyline as a silhouette;
+* the dark leaves it: whatever the day cycle calls dark (`SUN_LIGHT`,
+  evening included since 1dbea654) hides what is not `lit` -- a lit one shows
+  as its lights -- and a moon through clear air leaves a skyline as a
+  silhouette;
 * its top clears what stands nearer on the site plan in that direction --
   buildings, higher terraces -- with earth curvature and refraction
   (k = 0.13).

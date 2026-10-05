@@ -2701,22 +2701,331 @@ def vista_percepts(seen, looked=()):
             return compositor_text("vista_unseen", compass=where, name=vista["name"])
         if clarity == "silhouette":
             return compositor_text("vista_silhouette", compass=where, name=vista["name"])
+        if clarity == "lights":
+            return compositor_text("vista_lit_night", compass=where, name=vista["name"])
         desc = compositor_text("vista_desc_join", desc=vista["desc"]) if vista["desc"] else ""
         return compositor_text("vista_seen", compass=where, name=vista["name"], desc=desc)
 
     for vista, clarity in looked:
+        # A LOOK IS THE VIEW'S NEWS, AND IT FILES WHAT IT SAW: the standing
+        # line the look stands in for goes into the ledger with it, or the
+        # next beat announced the same range again as if first seen
+        # (`files_standing`, read by every pack's view as a voice key is).
+        data = {"desc": line(vista, clarity)}
+        if clarity != "unseen":
+            data["files_standing"] = standing_key("vista", (vista["id"],), (clarity,))
         out.append(Percept(
             kind="ambient", channel="sight", source_label=vista["name"],
-            data={"desc": line(vista, clarity)}, order_key=-1, salience=0.6,
+            data=data, order_key=-1, salience=0.6,
             dedupe_key=standing_key("vista_look", (vista["id"],), (clarity,))))
     for vista, clarity in seen or ():
         if vista["id"] in looked_ids:
             continue
+        # Under the room's own salience, as far places are: the horizon is
+        # never a memory's gist over where the body stood.
         out.append(Percept(
             kind="ambient", channel="sight", source_label=vista["name"],
-            data={"desc": line(vista, clarity)},
+            data={"desc": line(vista, clarity)}, salience=0.15,
             dedupe_key=standing_key("vista", (vista["id"],), (clarity,))))
     return out
+
+
+#: FAR SIGHT: the standing lines about what is seen past the near field --
+#: the horizon (`vista_percepts`) and the far places on the way to it
+#: (`landscape_percepts`). Two rules read them by this tag and nothing else:
+#: they are ADDED to a view and are never the whole of one (the roll-call
+#: rule below and `perception`'s empty-view floor decide on the near spans,
+#: so a first sighting never stands in for the room the narrator is handed),
+#: and they are what English memory files of a view's far half
+#: (`_files_as_memory`).
+FAR_SIGHT_TAGS = frozenset(("vista", "landscape"))
+
+
+def far_sight(percept):
+    """Is this a standing line of far sight -- a vista or a far place?"""
+    if percept.kind != "ambient" or percept.order_key is not None:
+        return False
+    return str(percept.dedupe_key or "").split(":", 1)[0] in FAR_SIGHT_TAGS
+
+
+def near_text(rendered):
+    """A rendered view's text without its far-sight spans -- what the
+    roll-call rule and the empty-view floor ask about."""
+    return " ".join(sentence for p, sentence in (rendered.spans or ())
+                    if not far_sight(p)).strip()
+
+
+def is_landscape(percept):
+    return (percept.kind == "ambient"
+            and isinstance((percept.data or {}).get("landscape"), dict))
+
+
+#: What a far place's percept may carry and nothing more, so a field added
+#: upstream cannot ride into a view (`DISTANT_SOUND_LEVELS`' precedent).
+#: Room ids ride only inside hashes; a name only when the mind knows it.
+LANDSCAPE_GROUNDS = ("open", "sheltered", "building")
+LANDSCAPE_HEIGHTS = ("one", "two", "tall")
+LANDSCAPE_GRAINS = ("mid", "outline")
+
+
+def landscape_percepts(places):
+    """The far places a body sees (`world.landscape.far_places`), one
+    standing sight percept per PLACE.
+
+    Keyed by the place and what is seen of it -- never by the way the eye
+    reached it, its compass or the name -- so walking along a path does not
+    re-announce, or re-file in memory, a place already seen, and learning a
+    place's name is not news about it (the scent precedent). Salience under
+    the room's own, so a far line never takes a memory's gist from where the
+    body stood. Grouped back into lines by `landscape_lines`."""
+    from world.landscape import BIG_PER_PLACE
+    out = []
+    for place in places or ():
+        if not isinstance(place, dict) or not place.get("room"):
+            continue
+        ground = place.get("ground")
+        grain = place.get("grain")
+        if ground not in LANDSCAPE_GROUNDS or grain not in LANDSCAPE_GRAINS:
+            continue
+        lead = place.get("lead") if isinstance(place.get("lead"), dict) else {}
+        subject = place.get("key_room") or place["room"]
+        data = {
+            "line": _short_hash("landscape-line", place.get("line")),
+            "order": int(place.get("order") or 0),
+            "id": _short_hash("landscape-place", subject),
+            "front": (_short_hash("landscape-place", place["front"])
+                      if place.get("front") else ""),
+            "lead": {"compass": str(lead.get("compass") or ""),
+                     "via": str(lead.get("via") or ""),
+                     "rise": str(lead.get("rise") or ""),
+                     "via_id": (_short_hash("landscape-place", lead["via_room"])
+                                if lead.get("via_room") else "")},
+            "ground": ground,
+            "breadth": "wide" if place.get("breadth") == "wide" else "",
+            "name": str(place.get("name") or ""),
+            "height": (place.get("height") if place.get("height") in LANDSCAPE_HEIGHTS
+                       else ""),
+            "lights": int(place.get("lights") or 0),
+            "high": bool(place.get("high")),
+            "dark": bool(place.get("dark")),
+            "big": [str(t) for t in (place.get("big") or ()) if str(t).strip()][:BIG_PER_PLACE],
+            "tier": "outline" if place.get("tier") == "outline" else "mid",
+            "grain": grain,
+        }
+        signature = (data["grain"], data["ground"], data["breadth"], data["height"],
+                     data["lights"], data["high"], data["dark"], len(data["big"]))
+        out.append(Percept(
+            kind="ambient", channel="sight", source_label=data["name"],
+            data={"landscape": data}, salience=0.15,
+            dedupe_key=standing_key("landscape", (subject,), signature)))
+    return out
+
+
+def _plain_ground(row):
+    g = row.get("ground")
+    if (g is None or row.get("buildings") or g.get("name") or g.get("big")
+            or g.get("lights") or g.get("dark")):
+        return None
+    return ("plain", g.get("ground"), g.get("breadth"))
+
+
+def landscape_lines(percepts):
+    """[(representative percept, line)] -- the far places of one view laid
+    out as lines, for EVERY language pack (`player_view_order`'s
+    precedent): one line per way out, nearest first; ground in order along
+    it, each with the buildings fronting it; the buildings fronting the way
+    out itself said beside it; a run of plain unnamed ground of one kind said
+    once ("stretching on"); at most `SEGMENTS_PER_LINE` rows, the nearest
+    two and the farthest. The representative is the line's first place, the
+    one an observation is filed against."""
+    from world.landscape import SEGMENTS_PER_LINE
+    groups, order = {}, []
+    for p in percepts or ():
+        data = (p.data or {}).get("landscape") if is_landscape(p) else None
+        if not isinstance(data, dict):
+            continue
+        key = data.get("line")
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append((p, data))
+    out = []
+    for key in order:
+        members = sorted(groups[key], key=lambda pd: pd[1].get("order", 0))
+        percept_of = {id(d): p for p, d in members}
+        rep, first = members[0]
+        lead = first.get("lead") or {}
+        grounds = [d for _p, d in members if d.get("ground") != "building"]
+        buildings = [d for _p, d in members if d.get("ground") == "building"]
+        ground_ids = {d.get("id") for d in grounds}
+        beside = [b for b in buildings
+                  if lead.get("via_id") and b.get("front") == lead.get("via_id")]
+        rows = [{"ground": g, "buildings": [b for b in buildings
+                                            if b.get("front") == g.get("id")],
+                 "tier": g.get("tier"), "order": g.get("order", 0)} for g in grounds]
+        rows += [{"ground": None, "buildings": [b], "tier": b.get("tier"),
+                  "order": b.get("order", 0)} for b in buildings
+                 if b not in beside and b.get("front") not in ground_ids]
+        rows.sort(key=lambda r: r["order"])
+        merged = []
+        for row in rows:
+            plain = _plain_ground(row)
+            if plain and merged and merged[-1]["plain"] == plain:
+                merged[-1]["run"] = True
+                merged[-1]["also"].append(row["ground"])
+                continue
+            merged.append({**row, "plain": plain, "run": False, "also": []})
+        if len(merged) > SEGMENTS_PER_LINE:
+            merged = merged[:SEGMENTS_PER_LINE - 1] + merged[-1:]
+        # WHAT THE LINE SAYS: every place it shows -- a run's places are said
+        # as the run -- and the names among them, so memory files what the
+        # view delivered and indexes what the line names (review 2026-10-05:
+        # an episode re-laid from the changed places alone filed a place the
+        # view had trimmed away).
+        said = list(beside)
+        for row in merged:
+            said += ([row["ground"]] if row.get("ground") else []) + row["also"]
+            said += row.get("buildings") or []
+        out.append((rep, {
+            "lead": lead, "beside": beside, "rows": merged,
+            "shown": [percept_of[id(d)] for d in said if id(d) in percept_of],
+            "names": [d["name"] for d in said if d.get("name")]}))
+    return out
+
+
+def compose_landscape_line(line, text, *, episode=False, thing=None,
+                           compass_words=None):
+    """One far line in a language's own words: `text(key, **values)` is the
+    pack's template reader, `thing` how an authored desc is spliced into a
+    list (English's `_noun_phrase`), `compass_words` the pack's compass. The
+    layout is `landscape_lines`'; nothing here decides what is shown."""
+    thing = thing or (lambda s: str(s).strip().rstrip(".。"))
+    compass_words = compass_words or {}
+    joiner = str(text("landscape_and"))
+    sep = str(text("landscape_items"))
+
+    def lights_word(d):
+        if not d.get("lights"):
+            return ""
+        if d.get("high") and d["lights"] == 1:
+            return text("landscape_light_high")
+        return text("landscape_light_n") if d["lights"] > 1 else text("landscape_light_1")
+
+    def building(d):
+        lights = lights_word(d)
+        base = text("landscape_building_" + (d.get("height") or "one"))
+        if d.get("name"):
+            base = text("landscape_building_named", building=base, name=d["name"])
+            # The light at the named building, never trailing its name: "a
+            # building where The Mill is with a light" said the mill was.
+            if lights:
+                return text("landscape_lit_known", lights=lights, place=base)
+            return base if not d.get("dark") else ""
+        if d.get("dark"):
+            return lights
+        return text("landscape_with_lights", place=base, lights=lights) if lights else base
+
+    def buildings(bs):
+        named = [b for b in bs if b.get("name")]
+        plain = [b for b in bs if not b.get("name") and (b.get("height") or "one") == "one"
+                 and not b.get("lights") and not b.get("dark")]
+        notable = [b for b in bs if b not in named and b not in plain]
+        parts = [building(b) for b in named + notable]
+        if len(plain) == 1:
+            parts.append(text("landscape_building_one"))
+        elif len(plain) == 2:
+            parts.append(text("landscape_buildings_2"))
+        elif 3 <= len(plain) <= 5:
+            parts.append(text("landscape_buildings_few"))
+        elif len(plain) > 5:
+            parts.append(text("landscape_buildings_many"))
+        parts = [str(x) for x in parts if x]
+        if len(parts) <= 1:
+            return parts[0] if parts else ""
+        return str(text("landscape_list")).join(parts[:-1]) + joiner + parts[-1]
+
+    def ground(d, run=False, standing=()):
+        if d.get("name"):
+            base = d["name"]
+        elif d.get("ground") == "sheltered":
+            base = text("landscape_sheltered")
+        elif run:
+            base = text("landscape_open_run")
+        else:
+            base = text("landscape_open_wide" if d.get("breadth") == "wide"
+                        else "landscape_open")
+        lights = lights_word(d)
+        if d.get("dark"):
+            return text("landscape_lit_known", lights=lights, place=base) if d.get("name") else lights
+        # What stands on it -- its big things, then its buildings -- is ONE
+        # list after "with", so nothing in it can read as standing on the
+        # last noun of another (review: "an oak, and on it two buildings").
+        things = [thing(t) for t in d.get("big") or () if thing(t)]
+        bs = buildings(standing)
+        things += ([bs] if bs else []) + ([lights] if lights else [])
+        return text("landscape_with", place=base, things=joiner.join(things)) if things else base
+
+    def row_phrase(row):
+        if row.get("ground") is None:
+            return buildings(row.get("buildings") or ())
+        return ground(row["ground"], run=row.get("run"), standing=row.get("buildings") or ())
+
+    lead = line.get("lead") or {}
+    compass = compass_words.get(lead.get("compass") or "", "") if lead.get("compass") else ""
+    rows = line.get("rows") or []
+    suffix = "_episode" if episode else ""
+    beside = buildings(line.get("beside") or ())
+    via = lead.get("via") or ""
+    # What fronts an UNNAMED way out is simply the line's first item, so the
+    # connectors are given after it takes its place (it was spliced in front
+    # of a first item that kept no "then": "a building, open ground").
+    phrases = ([(beside, "mid")] if beside and not via else []) + [
+        (row_phrase(row), row.get("tier")) for row in rows]
+    items, far_said = [], False
+    for phrase, tier in phrases:
+        if not phrase:
+            continue
+        outline = tier == "outline"
+        if not items:
+            items.append(phrase)
+            far_said = outline           # the lead says it (`_outline` leads)
+        elif outline and not far_said:
+            items.append(text("landscape_far", item=phrase))
+            far_said = True
+        else:
+            items.append(text("landscape_then", item=phrase))
+    if beside and via:
+        if items:
+            key = "landscape_line_beside" if compass else "landscape_line_beside_bare"
+            return text(key + suffix, compass=compass, beside=beside, via=via,
+                        items=sep.join(str(i) for i in items))
+        key = "landscape_beside_only" if compass else "landscape_beside_only_bare"
+        return text(key + suffix, compass=compass, beside=beside, via=via)
+    first_far = bool(rows) and rows[0].get("tier") == "outline" and not beside
+    if not items:
+        return ""
+    far = "_outline" if first_far else ""
+    if lead.get("rise") == "below":
+        # A memory is the mind's own: "below me", never "below you".
+        lead_text = (text("landscape_lead_compass_below" + suffix, compass=compass) if compass
+                     else text("landscape_lead_below" + suffix))
+    elif via:
+        lead_text = (text("landscape_lead_compass_via" + far, compass=compass, via=via) if compass
+                     else text("landscape_lead_via" + far, via=via))
+    elif compass:
+        lead_text = text("landscape_lead_compass" + far, compass=compass)
+    else:
+        lead_text = text("landscape_lead_outline" if first_far else "landscape_lead_mid")
+    return text("landscape_line" + suffix, lead=lead_text,
+                items=sep.join(str(i) for i in items))
+
+
+def render_landscape_line(line, episode=False):
+    """A far line in English (`compose_landscape_line`), with the English
+    pack's own compass whatever language scope the caller is in."""
+    return _cap(str(compose_landscape_line(
+        line, _en, episode=episode, thing=_noun_phrase,
+        compass_words=dict(_ENGLISH_COMPOSITOR.get("compass_words") or {}))))
 
 
 def weather_percepts(reach):
@@ -3694,6 +4003,7 @@ _SIZE_PHRASES = dict(_ENGLISH_COMPOSITOR["size_phrases"])
 # the group can be rendered once the whole set is known without losing
 # where it belongs in the discourse order. Identity comparison only.
 _PRESENCE_SLOT = ("presence-slot", None)
+_LANDSCAPE_SLOT = ("landscape-slot", None)
 
 
 #: The five verdicts a standing percept can carry for ONE observer.
@@ -4339,6 +4649,15 @@ def _render_openings(openings):
     return " ".join(parts)
 
 
+def _end_sentence(text):
+    """`text` ending a sentence: its own terminal stop kept, one added only
+    where it has none. A clause the pack writes as a whole sentence ("The
+    air is mild.") was given a second one by the sensation renderer, in
+    every outdoor view and memory ("The air is mild..", seen 2026-10-05)."""
+    text = str(text or "").rstrip()
+    return text if (not text or text[-1] in ".!?\u3002") else text + "."
+
+
 def _render_standing(p):
     if p.kind == "environment":
         parts = []
@@ -4412,7 +4731,7 @@ def _render_standing(p):
         return " ".join(parts)
     if p.kind == "sensation":
         clause = str(p.data.get("clause") or "").strip()
-        return _cap(clause) + "." if clause else ""
+        return _end_sentence(_cap(clause)) if clause else ""
     if p.kind == "body_region":
         place = str(p.data.get("place") or "").strip()
         detail = str(p.data.get("detail") or "").strip()
@@ -4466,6 +4785,9 @@ def carried_voices(prev_standing):
 
 def _render_ambient(p):
     """An ambient percept's sentence, standing or ordered alike."""
+    if p.data.get("landscape"):
+        lines = landscape_lines([p])
+        return render_landscape_line(lines[0][1]) if lines else ""
     if p.data.get("ceased"):
         return _en("sound_subsided" if p.data.get("subsided")
                    else "sound_ceased")
@@ -4538,7 +4860,7 @@ def _render_event(p):
         return _en("departed", label=_cap(p.source_label))
     if p.kind == "substance":
         clause = str(p.data.get("clause") or "").strip()
-        return _cap(clause) + "." if clause else ""
+        return _end_sentence(_cap(clause)) if clause else ""
     # AN AMBIENT PERCEPT WITH AN ORDER IS A THING THAT HAPPENED THIS BEAT --
     # a beat's own sound event (`ambient_percepts(order_key=...)`), what a
     # look at the horizon found (`vista_percepts`). This renderer had no
@@ -4653,6 +4975,15 @@ def _render_view_english(percepts, *, mode="character",
     presence_leads = player and (_stranger_present or any(
         leads_the_beat(p, verdicts.get(p.dedupe_key, "first"), prev_standing)
         for p in standing if p.kind == "presence"))
+    # The far places are one view of one landscape, said as lines rather
+    # than a sentence each (`landscape_lines`), so like the roll-call they
+    # take one half of the partition: the beat's, when any place in them is
+    # this beat's news.
+    landscape_group = []
+    landscape_leads = player and any(
+        leads_the_beat(p, verdicts.get(p.dedupe_key, "first"), prev_standing)
+        for p in standing
+        if is_landscape(p) and not (delta and p.dedupe_key in prev_standing))
 
     standing_spans = []         # the background half in player mode
     beat_spans = []             # player mode only
@@ -4669,6 +5000,14 @@ def _render_view_english(percepts, *, mode="character",
         if unheard_ceasing(p, verdict):
             continue
         leads = player and leads_the_beat(p, verdict, prev_standing)
+        if is_landscape(p):
+            if delta and p.dedupe_key in prev_standing:
+                continue
+            landscape_group.append(p)
+            if len(landscape_group) == 1:
+                (beat_spans if landscape_leads else standing_spans).append(
+                    _LANDSCAPE_SLOT)
+            continue
         if p.kind == "presence":
             # NEVER SUPPRESSED, only shortened. A body that stands still is
             # still in the room, and the sentence that says who is here is
@@ -4741,6 +5080,12 @@ def _render_view_english(percepts, *, mode="character",
             if half is beat_spans:
                 group = [(as_beat(gp), sentence) for gp, sentence in group]
             half[at:at + 1] = group
+        if _LANDSCAPE_SLOT in half:
+            at = half.index(_LANDSCAPE_SLOT)
+            group = [(as_beat(rep) if half is beat_spans else rep, sentence)
+                     for rep, line in landscape_lines(landscape_group)
+                     for sentence in [render_landscape_line(line)] if sentence]
+            half[at:at + 1] = group
 
     event_spans = []
     for p in events:
@@ -4753,6 +5098,9 @@ def _render_view_english(percepts, *, mode="character",
             # A voice heard is a voice established for this observer.
             if p.data.get("voice_key"):
                 standing_keys.add(str(p.data["voice_key"]))
+            # A look at a standing thing files the thing (`vista_percepts`).
+            if p.data.get("files_standing"):
+                standing_keys.add(str(p.data["files_standing"]))
 
     if player:
         # The ordering rule itself lives in `player_view_order`, which every
@@ -4771,10 +5119,14 @@ def _render_view_english(percepts, *, mode="character",
         # beat where a hunter holds still at arm's reach is exactly the beat
         # the player most needs, and it is the one this rule was emptying
         # (chat 117 turn 59, the beat after it walked in).
-        if (delta and spans and not _stranger_present
+        # Decided on the NEAR spans: a far line beside an unchanged roll-call
+        # is added to the view, never the whole of it -- kept, so the floor
+        # (which also asks the near spans) re-renders the room around it.
+        near_spans = [(p, s) for p, s in spans if not far_sight(p)]
+        if (delta and near_spans and not _stranger_present
                 and all(row[1] for row in presence_group)
-                and all(p.kind == "presence" for p, _s in spans)):
-            spans = []
+                and all(p.kind == "presence" for p, _s in near_spans)):
+            spans = [(p, s) for p, s in spans if far_sight(p)]
     else:
         # Discourse rule: a sudden event chain leads; otherwise standing state
         # anchors the view and the beat follows.
@@ -4937,7 +5289,7 @@ def _episode_sentence(p):
         return _en("episode_departed", label=_cap(p.source_label))
     if p.kind == "substance":
         clause = _first_person(str(p.data.get("clause") or "").strip())
-        return _cap(clause) + "." if clause else ""
+        return _end_sentence(_cap(clause)) if clause else ""
     if p.kind == "environment":
         name = p.data.get("room_name")
         return _en("episode_room", room=name) if name else ""
@@ -4945,7 +5297,7 @@ def _episode_sentence(p):
         return _render_pose(p, past=True)
     if p.kind == "sensation":
         clause = _first_person(str(p.data.get("clause") or "").strip())
-        return _cap(clause) + "." if clause else ""
+        return _end_sentence(_cap(clause)) if clause else ""
     if p.kind == "appearance":
         desc = _appearance_as_prose(p.data.get("description"))
         return _en("episode_appearance", description=desc) if desc else ""
@@ -4956,7 +5308,36 @@ def _episode_sentence(p):
             p.data.get("level"), targeted=p.data.get("targeted", False),
             loud_event=p.data.get("loud_event", False),
             pain=p.data.get("pain", False))
+    if p.kind == "ambient":
+        # What was seen far off and what was heard this beat: a vista line,
+        # what a look at one found, a beat's own sound. The view rendered
+        # them and memory did not -- the class 43946e73 fixed in
+        # `_render_event`, one renderer over (UNBUILT_CHARACTERS §1.178).
+        if p.data.get("landscape"):
+            lines = landscape_lines([p])
+            return render_landscape_line(lines[0][1], episode=True) if lines else ""
+        return _first_person(_render_ambient(p))
     return ""
+
+
+#: The standing kinds an episode keeps when they are NEW OR CHANGED, plus far
+#: sight (`far_sight`): a room, a sensation, a pose, a scent -- and what
+#: stands on the horizon or far off, which is where a place sits in a mind's
+#: memory of it. Every other standing line is the room's furniture.
+_EPISODE_STANDING_KINDS = ("environment", "sensation", "pose", "scent")
+#: A beat's own sound, as the outcome stage mints it: STANDING, keyed by
+#: what it says (`ambient_percepts`, `distant_sound_percepts`), so new only
+#: on the beat it is heard -- English filed it nowhere (review 2026-10-05).
+_EPISODE_SOUND_TAGS = ("ambient", "distant_sound")
+
+
+def _files_as_memory(p):
+    """Does English memory keep this standing percept when it is new or
+    changed (appearance has its own ledger and is decided apart)?"""
+    if p.kind in _EPISODE_STANDING_KINDS or far_sight(p):
+        return True
+    return (p.kind == "ambient"
+            and str(p.dedupe_key or "").split(":", 1)[0] in _EPISODE_SOUND_TAGS)
 
 
 def _render_episode_english(percepts, *, prev_standing=frozenset(),
@@ -4983,14 +5364,13 @@ def _render_episode_english(percepts, *, prev_standing=frozenset(),
         key=lambda p: p.order_key)
     changed = []
     for p in percepts:
-        if p.order_key is not None:
+        if p.order_key is not None or is_landscape(p):
             continue
         if p.kind == "appearance":
             if p.data.get("force") \
                     or str(p.data.get("source_key") or "") not in prev_described:
                 changed.append(p)
-        elif p.kind in ("environment", "sensation", "pose", "scent") \
-                and p.dedupe_key not in prev_standing:
+        elif _files_as_memory(p) and p.dedupe_key not in prev_standing:
             # A pose that CHANGED is a real memory -- somebody knelt, or was
             # pinned. An unchanged one is furniture and the dedupe key keeps
             # it out, which is the same rule the room already lives under.
@@ -5000,7 +5380,18 @@ def _render_episode_english(percepts, *, prev_standing=frozenset(),
             # grade does, so walking into range of one is the change.
             changed.append(p)
 
-    if not events and not changed:
+    # FAR PLACES are laid out from every far percept, exactly as the view
+    # lays them out, and a line is filed when a place it SHOWS is new or
+    # changed -- re-laid from the changed places alone, an episode filed a
+    # place the view had trimmed away (review 2026-10-05).
+    far_lines = []
+    for rep, line in landscape_lines([p for p in percepts if is_landscape(p)]):
+        if any(q.dedupe_key not in prev_standing for q in line["shown"]):
+            sentence = _cap(render_landscape_line(line, episode=True))
+            if sentence:
+                far_lines.append((rep, sentence, line["names"]))
+
+    if not events and not changed and not far_lines:
         return "", "", []
 
     # Event-bearing content LEADS; changed standing state trails, with any
@@ -5012,12 +5403,19 @@ def _render_episode_english(percepts, *, prev_standing=frozenset(),
     # episode that opens with scene-setting embeds as its room, not its
     # event. When the only change IS the room, the movement is the event
     # and may lead.
+    # FAR SIGHT TRAILS EVERYTHING, near to far -- the far places, then the
+    # horizon -- and is a memory's gist only when it is all the memory holds:
+    # it is where the place sat in view, never what happened (review
+    # 2026-10-05: a town's lights at dusk took the gist from the question
+    # put to the mind that beat).
+    near = [c for c in changed if not far_sight(c)]
+    horizon = [c for c in changed if far_sight(c)]
     if events:
         ordering = (events
-                    + [c for c in changed if c.kind != "environment"]
-                    + [c for c in changed if c.kind == "environment"])
+                    + [c for c in near if c.kind != "environment"]
+                    + [c for c in near if c.kind == "environment"])
     else:
-        ordering = changed
+        ordering = near
 
     sentences = []
     entities = []
@@ -5032,6 +5430,22 @@ def _render_episode_english(percepts, *, prev_standing=frozenset(),
             entities.append(label)
         if best is None or p.salience > best[0].salience:
             best = (p, sentence)
+    far = []
+    for rep, sentence, names in far_lines:
+        far.append((rep, sentence))
+        for name in names:
+            if name.casefold() not in _GENERIC_LABELS and name not in entities:
+                entities.append(name)
+    for p in horizon:
+        sentence = _episode_sentence(p)
+        if sentence:
+            far.append((p, sentence))
+            label = str(p.source_label or "")
+            if label.casefold() not in _GENERIC_LABELS and label not in entities:
+                entities.append(label)
+    sentences += far
+    if best is None and far:
+        best = far[0]
 
     seen = set()
     ordered = []
@@ -5070,6 +5484,12 @@ def episode_signature(p):
     The act stage and the outcome mint one act under different event ids, so
     its `dedupe_key` differs between them while what it says does not
     (`perception.perception_outcome`, 2026-09-30)."""
+    if p.kind == "ambient":
+        # An act re-minted under a new event id is what this exists for; an
+        # ambient line is keyed by what it says already, and a look at a
+        # vista said the standing line's words and was dropped as a repeat
+        # of it -- in no memory at all (review 2026-10-05).
+        return ""
     try:
         return " ".join(str(_episode_sentence(p) or "").split()).casefold()
     except Exception:  # noqa: BLE001 -- a percept no sentence covers has no signature

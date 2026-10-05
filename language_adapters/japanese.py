@@ -66,6 +66,10 @@ def _full_stop(text):
         ("。", "！", "？", ".", "!", "?", "」", "…", "‥")) else text + "。"
 
 
+#: Where the far lines go in a view (`composer._LANDSCAPE_SLOT`'s twin).
+_LANDSCAPE_SLOT = ("landscape-slot", None)
+
+
 class JapaneseRenderer:
     language = "ja"
 
@@ -195,6 +199,15 @@ class JapaneseRenderer:
         if shape["self"]:
             parts.append(self._text("light_self_" + shape["self"]))
         return "".join(parts)
+
+    def _landscape_line(self, line, episode=False):
+        """A far line in this pack's words (`composer.compose_landscape_line`,
+        which owns the layout)."""
+        from agents.composer import compose_landscape_line
+        from world.spatial import _phrase_table
+        return str(compose_landscape_line(
+            line, self._text, episode=episode,
+            compass_words=_phrase_table("compass_words")))
 
     def _distant_sound(self, distant):
         """One sound from beyond the near field: how loud, which way, what it
@@ -500,6 +513,10 @@ class JapaneseRenderer:
                               else "sound_ceased")
         if p.kind == "ambient" and data.get("soundscape") and not prefix:
             return self._sound_shape(data.get("soundscape"))
+        if p.kind == "ambient" and data.get("landscape"):
+            from agents import composer
+            lines = composer.landscape_lines([p])
+            return self._landscape_line(lines[0][1], episode=bool(prefix)) if lines else ""
         if p.kind == "ambient" and data.get("distant") and not prefix:
             # A SOUND FROM BEYOND THE NEAR FIELD carries no clause -- a level,
             # a bearing and a character (`composer.distant_sound_percepts`)
@@ -590,6 +607,16 @@ class JapaneseRenderer:
         beat, background = [], []
         brief_only = True
         seen = set()
+        # The far places are one landscape said as lines (`composer.
+        # landscape_lines`), placed where the first of them falls and in the
+        # half the composer's rule gives them: the beat's, when any place in
+        # them is this beat's news.
+        landscape_group = []
+        landscape_leads = player and any(
+            composer.leads_the_beat(
+                p, verdicts.get(p.dedupe_key, "first"), prev_standing)
+            for p in percepts if composer.is_landscape(p)
+            and not (not full_render and p.dedupe_key in (prev_standing or ())))
         ordered = sorted(
             enumerate(percepts),
             key=lambda item: (item[1].order_key is not None,
@@ -622,6 +649,11 @@ class JapaneseRenderer:
                         brief = True
                     elif p.kind not in composer.ACTIVE_STANDING_KINDS:
                         continue
+            if composer.is_landscape(p):
+                landscape_group.append(p)
+                if len(landscape_group) == 1:
+                    (beat if landscape_leads else background).append(_LANDSCAPE_SLOT)
+                continue
             if p.kind == "presence" and not brief:
                 brief_only = False
             source_key = str((p.data or {}).get("source_key") or "")
@@ -632,6 +664,9 @@ class JapaneseRenderer:
             # same ledger entry the reference renderer files (D2).
             if (p.data or {}).get("voice_key"):
                 standing_keys.add(str(p.data["voice_key"]))
+            # ...and a look at a standing thing files the thing.
+            if (p.data or {}).get("files_standing"):
+                standing_keys.add(str(p.data["files_standing"]))
             # Character mode keeps the sequence it always had: standing
             # state in percept order, then the beat. Only the player view
             # partitions.
@@ -651,15 +686,26 @@ class JapaneseRenderer:
         # the order it iterated -- standing before events -- so a Japanese
         # player view opened on the changed pose where English opened on the
         # act that moved it.
+        for half in (beat, background):
+            if _LANDSCAPE_SLOT in half:
+                at = half.index(_LANDSCAPE_SLOT)
+                half[at:at + 1] = [
+                    (composer.as_beat(rep) if half is beat else rep, sentence)
+                    for rep, line in composer.landscape_lines(landscape_group)
+                    for sentence in [_full_stop(self._landscape_line(line))]
+                    if sentence]
         spans = (composer.player_view_order(beat + background) if player
                  else beat + background)
         # A roll-call is added to a view; it is never the whole of one. The
         # composer's rule, shared -- an all-unchanged presence view has told
         # this mind nothing, and the EMPTY view is what the outcome floor
-        # reads before asking for the background instead.
-        if (player and not full_render and spans and brief_only
-                and all(p.kind == "presence" for p, _s in spans)):
-            spans = []
+        # reads before asking for the background instead. Decided on the
+        # NEAR spans: a far line beside the roll-call stays, and the floor
+        # re-renders the room around it.
+        near_spans = [(p, s) for p, s in spans if not composer.far_sight(p)]
+        if (player and not full_render and near_spans and brief_only
+                and all(p.kind == "presence" for p, _s in near_spans)):
+            spans = [(p, s) for p, s in spans if composer.far_sight(p)]
         return RenderedView(
             text="".join(sentence for _, sentence in spans), spans=spans,
             standing_keys=standing_keys, described=described)
@@ -680,33 +726,52 @@ class JapaneseRenderer:
                                      for p in residue) if s]
             content = "".join(dict.fromkeys(sentences))
             return content, (sentences[0][:240] if sentences else ""), []
+        from agents import composer
+        from agents.composer import _first_person
         selected = [p for p in percepts if p.order_key is not None]
         selected.extend(
             p for p in percepts
-            if p.order_key is None and p.dedupe_key not in (prev_standing or ())
+            if p.order_key is None and not composer.is_landscape(p)
+            and p.dedupe_key not in (prev_standing or ())
             and (p.kind != "appearance" or (p.data or {}).get("force")
                  or str((p.data or {}).get("source_key") or "")
                  not in (prev_described or ())))
-        if not selected:
+        # FAR SIGHT TRAILS, near to far, and is the gist only when it is all
+        # there is (the composer's rule, shared). Far places are laid out from
+        # every far percept as the view lays them out, and a line is filed
+        # when a place it shows is new or changed.
+        near = [p for p in selected if not composer.far_sight(p)]
+        horizon = [p for p in selected if composer.far_sight(p)]
+        far_lines = [
+            (_full_stop(self._landscape_line(line, episode=True)), line["names"])
+            for _rep, line in composer.landscape_lines(
+                [p for p in percepts if composer.is_landscape(p)])
+            if any(q.dedupe_key not in (prev_standing or ()) for q in line["shown"])]
+        far_lines = [(s, names) for s, names in far_lines if s]
+        if not near and not horizon and not far_lines:
             return "", "", []
         # An episode is the character's own memory, so second person becomes
         # first. The English renderer does this and the adapter did not, so a
         # Japanese memory mixed 「あなたは立っている。」 with 「私は中庭にいた。」
-        from agents.composer import _first_person
-        sentences = [_full_stop(_first_person(self._sentence(p, episode=True)))
-                     for p in selected]
-        sentences = [s for s in sentences if s]
+        near_sentences = [s for s in (_full_stop(_first_person(self._sentence(p, episode=True)))
+                                      for p in near) if s]
+        far_sentences = [s for s, _names in far_lines] + [
+            s for s in (_full_stop(_first_person(self._sentence(p, episode=True)))
+                        for p in horizon) if s]
+        sentences = near_sentences + far_sentences
         content = "".join(dict.fromkeys(sentences))
         # Generic labels are descriptors, not entities. Indexing "a voice" or
         # "an indistinct figure" as a memory entity pollutes recall with rows
         # that name nobody; English filters them and this did not.
         generic = {str(g) for g in (self._value("generic_labels") or ())}
         entities = []
-        for p in selected:
-            label = str(p.source_label or "")
+        for label in ([str(p.source_label or "") for p in near]
+                      + [n for _s, names in far_lines for n in names]
+                      + [str(p.source_label or "") for p in horizon]):
             if label and label not in entities and label not in generic:
                 entities.append(label)
-        return content, (sentences[0][:240] if sentences else ""), entities[:16]
+        gist = (near_sentences or far_sentences or [""])[0]
+        return content, gist[:240], entities[:16]
 
 
 register_renderer("japanese", JapaneseRenderer())

@@ -1622,6 +1622,19 @@ the practice room" moved the player to the rehearsal room while she was on
 the stage in a bubble of her own; the two spoke through a shut door for two
 beats while the narrator sat them on one bench and blamed the acoustics.
 
+<a id="unbuilt-1-179"></a>
+### 1.179 The sky on a body's skin is said in English in every language (2026-10-05)
+
+`composer.weather_percepts` builds the clauses for what the weather does to
+a body -- what is landing on it, the wind pulling at it, how the air feels --
+with `_en`, the English pack, whatever the story's language; they ride
+`sensation` percepts as finished text, so a Japanese view reads 「…」 around
+"The air is mild." Found while reproducing the landscape review's memory
+findings (`review/near-field/repro_look_memory.py`, the Japanese outcome
+view). The class is any Layer-A builder that renders text itself instead of
+handing the pack structured data or rendering through `compositor_text` in
+the story's language scope.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-11"></a>

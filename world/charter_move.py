@@ -123,11 +123,17 @@ def edge_seconds(scene, here, nxt) -> float:
     if not isinstance(rooms, dict) or str(here) not in rooms:
         return town
     room = rooms.get(str(here)) or {}
+    from world.spatial import edge_metres
     edge_paces = None
     for edge in room.get("adjacent") or ():
         if isinstance(edge, dict) and str(edge.get("to")) == str(nxt):
-            edge_paces = WALK_EDGE_PACES.get(
-                str(edge.get("distance") or "").strip().casefold())
+            # A MEASURED crossing costs what it measures -- a pace is about
+            # the metre here -- and a word what the table says (a plan keeps
+            # its number since 2026-10-05, and "40 m" read as no word at all
+            # cost two paces).
+            metres = edge_metres(edge)
+            edge_paces = (metres if metres is not None else WALK_EDGE_PACES.get(
+                str(edge.get("distance") or "").strip().casefold()))
             break
     # A ROOM IS A ROOM EVEN WHEN NOBODY MEASURED IT (the owner, twice:
     # "ten minutes is still quite too long to cross a single room").

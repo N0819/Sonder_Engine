@@ -84,7 +84,9 @@ def test_a_dark_night_keeps_only_what_is_lit_and_a_moon_leaves_a_silhouette():
     assert _names(sc) == ["the valley town"]
     sc["weather"]["moon"] = "full"
     seen = dict((v["name"], how) for v, how in visible_vistas(sc, "Ren"))
-    assert seen == {"the Kurogane range": "silhouette", "the valley town": "clear"}
+    # A lit town at night is its lights, not its daytime desc
+    # (`vista_lit_night`, 2026-10-05).
+    assert seen == {"the Kurogane range": "silhouette", "the valley town": "lights"}
 
 
 def test_which_way_a_body_faces_does_not_hide_the_horizon():
