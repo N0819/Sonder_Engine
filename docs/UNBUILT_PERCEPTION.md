@@ -1926,8 +1926,10 @@ body is, a stranger heard in the dark and a figure across a far edge are
 called what the composed view of the same beat calls them; and it refuses an
 act from a body the composed view cannot see (`perception._sight_detail`).
 It does NOT give a `shapes` body's act as motion, which the composed view
-does -- deliberately, while the doorway cone's size fallback that produces
-most of those shapes waits on the owner (UNBUILT_WORLD §1.162). ADMISSION is
+does -- deliberately: since the doorway cone's size fallback became
+`conduct` (2026-10-05) the shapes left one doorway away are an authored far
+edge, whose subtraction is an open question of the owner's (UNBUILT_WORLD
+§1.162). ADMISSION is
 still the two families, and still drifts: `_delivery_ok`'s room-level light
 test drops a co-present act in an unlit room that the composed view
 delivers, and the micro-round labels one actor at a time, so two strangers

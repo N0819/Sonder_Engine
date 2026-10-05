@@ -101,16 +101,17 @@ def test_the_same_room_carve_out_is_untouched():
 
 
 def test_sight_that_needs_no_light_sees_the_act_it_sees_the_body_in():
-    """The doorway's cone leaves a body deep in the barn a shape; the dark
-    leaves ordinary eyes nothing, and eyes that need no light the shape."""
+    """The doorway's cone leaves a body deep in a large barn its doing and
+    not its face (UNBUILT_WORLD §1.162); the dark leaves ordinary eyes
+    nothing, and eyes that need no light the doing."""
     from agents.perception import _sight_detail
     sc = _yard_and_dark_barn()
     owl = [{"channel": "sight", "needs_light": False}]
     rel = spatial_rel_between(sc, "Ada", "Ben")
     assert visual_level_between(sc, "Ada", "Ben") == "none"
-    assert visual_level_between(sc, "Ada", "Ben", owl) == "shapes"
+    assert visual_level_between(sc, "Ada", "Ben", owl) == "conduct"
     assert _sight_detail(sc, "Ada", "Ben", rel) == "none"
-    assert _sight_detail(sc, "Ada", "Ben", rel, senses=owl) == "shapes"
+    assert _sight_detail(sc, "Ada", "Ben", rel, senses=owl) == "full"
 
 
 def test_keen_eyes_never_read_an_act_through_a_door():

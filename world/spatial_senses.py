@@ -777,7 +777,7 @@ _SECTOR_STEPS = {"ahead": 0, "ahead_left": 1, "ahead_right": 1,
 
 def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
     """S2a: how much of `body`, standing in `room_id`, the view through this
-    room's opening to/from `other_room` can carry: full | shapes | none.
+    room's opening to/from `other_room` can carry: full | conduct | none.
 
     Sight through an opening used to be whole-room binary -- a body pressed
     against the wall beside the doorframe was fully seen from the next room,
@@ -805,8 +805,9 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
 
     Placement unknown: fall back by room size -- tiny/small has no off-axis
     corner worth modelling (always in cone), medium keeps today's fail-open,
-    large+ caps at `shapes` (through a door you can tell a big room is
-    occupied, not read a face across it). The same test gates the OBSERVER's
+    large+ caps at `conduct` (through a door you see what people across a
+    big room are doing, not their faces; it was `shapes` until 2026-10-05,
+    which took their doing too). The same test gates the OBSERVER's
     side, called with both orderings: someone off-axis beside their own
     doorframe cannot see through the opening either. Pure subtraction: every
     failure mode of the approximation can only withhold, never grant.
@@ -880,7 +881,17 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
         if steps is not None:
             return "full" if steps <= 1 else "none"
     if size in ("large", "huge", "vast"):
-        return "shapes"
+        # WHAT THEY DO, NOT THEIR FACE. This was `shapes`, written before the
+        # ladder had a rung for "a body's doing plain, its face not", and the
+        # act channel gives a shape's act as motion -- so a body standing in
+        # a lit hall through an open door "moves, too little of it to make
+        # out". Measured over the owner's chats it was the ordinary case,
+        # not the hedge: 659 of 1,296 next-room sightings, 748 of 751 of the
+        # bodies with no station at all. Owner, 2026-10-05: show what they do,
+        # not their face (UNBUILT_WORLD §1.162). `conduct` still withholds
+        # the face -- the display map gives a stranger short of full sight a
+        # figure, never a descriptor.
+        return "conduct"
     return "full"
 
 

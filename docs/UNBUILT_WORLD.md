@@ -1819,15 +1819,16 @@ At minimum the skip should not be silent: it is the one branch here that
 discards a write and says nothing.
 
 <a id="unbuilt-1-162"></a>
-### 1.162 The doorway cone reads no cell, so a body a pace from the door is a shape through it
+### 1.162 The doorway cone reads no cell, so a body a pace from the door is graded by the room's size
 
 `world/spatial_senses._opening_view_cap` grades what a body in the next room
 shows through an opening: in the cone (the strip from the doorway through the
 centre to the far wall) it is `full`, beside the doorframe it is `none`, and
 with "placement unknown" it falls back on the room's size, which for a
-`large` room is `shapes`. The bearing test reads `_anchor_dir(at)` and
-nothing else, so a body stationed by `cell` and no anchor is "placement
-unknown" even though the grid knows exactly where it stands.
+`large` room is `conduct` (it was `shapes` until 2026-10-05; see below). The
+bearing test reads `_anchor_dir(at)` and nothing else, so a body stationed by
+`cell` and no anchor is "placement unknown" even though the grid knows
+exactly where it stands.
 
 Measured on the owner's chat 126, turn 9 (2026-09-16): Hinami stood at cell
 (6,1) of the reception parlor, one pace from the north wall the door is in,
@@ -1848,34 +1849,32 @@ leaning past Mirelle's shoulder to look through it. So the honest fix has two
 parts, and the second needs a measurement: read the cell, and let a body
 `near` one that stands at the door share the door (or let the hand write the
 door's own cell, which its stations chunk already asks for). Until both land,
-a cell-placed body in a large room is graded by the size fallback, which
-withholds and never grants.
+a cell-placed body in a large room is graded by the size fallback.
 
-**The fallback is the ordinary case, not the cell-placed one (measured
-2026-10-05, owner's question).** Across every distinct scene in the owner's
-checkpoints (3,473 scenes, 133 chats), 1,296 next-room body pairs had sight
-admitted by the edge; 766 of them graded `shapes`, and 659 of those were this
-size fallback on one side or both (344 both sides, 164 the target's, 151 the
-observer's own doorframe), with no crossing involved and the edge itself
-passing `full`. 748 of the 751 targets had no station at all -- "placement
-unknown" is what most bodies are. The act channel then collapses the shape to
-motion (`perception._sight_detail`), so in 26 chats a body standing in a lit
-room through an open door was "an indistinct figure" that "moves, too little
-of it to make out". The fallback was written to withhold a FACE ("through a
-door you can tell a big room is occupied, not read a face across it") before
-the ladder had a `conduct` rung for exactly that -- a body's doing plain, its
-face not. It is the same ordinary-range subtraction the owner ruled out for
-distance the same day (level of detail is for landscapes five or more rooms
-off), so the decision is theirs: the fallback to `conduct` (identity still
-withheld, conduct delivered), to `full`, or kept. The interaction micro-round
-does not collapse a shape to motion meanwhile (`agents/loops.py`), so as not
-to spread the subtraction to a second channel before the ruling. One
-subtraction does reach the act channel through it, deliberately: for an eye
-whose card is dulled the fallback's shape is `none`, which the presence line
-already gave, and the act from that body is now refused with it in both
-channels (one card of 67 in the owner's db, "failing" sight) -- an act from
-a body the eye cannot make out at all is the leak direction. The same ruling
-would restore both.
+**The fallback is `conduct` -- what they do, not their face (owner,
+2026-10-05).** Measured that day across every distinct scene in the owner's
+checkpoints (3,473 scenes, 133 chats): 1,296 next-room body pairs had sight
+admitted by the edge, 766 graded `shapes`, and 659 of those were this
+fallback on one side or both (344 both sides, 164 the target's, 151 the
+observer's own doorframe), with 748 of the 751 targets carrying no station
+at all -- "placement unknown" was the ordinary case, not the hedge. The act
+channel gave each one's act as motion, so in 26 chats a body standing in a
+lit room through an open door "moves, too little of it to make out". The
+fallback was written to withhold a FACE before the ladder had a rung for
+exactly that, and the owner took that option ("go ahead"): after the change
+the same 1,296 pairs grade 530 `full`, 674 `conduct` (the act delivered, the
+face withheld -- a stranger is still a figure, never a descriptor) and 92
+`shapes`. A dulled eye now sees those bodies' doing as motion where it saw
+nothing (`tests/test_view_cone.py`).
+
+**Open, the owner's: the 92 left are an authored far edge.** A `far` or
+`remote` edge caps sight across it at `shapes` (`_visual_level_between`;
+`far` is 20-75 m by `normalize_edge_distance`), written with the same intent
+("a figure across a courtyard is `shapes`, not a readable face") and with the
+same effect: a wave thirty metres off across a far edge is "moves, too little
+of it to make out", one doorway away. The interaction micro-round does not
+collapse a shape to motion (`agents/loops.py`), so it does not take that
+subtraction on before the question is answered.
 
 <a id="unbuilt-1-168"></a>
 

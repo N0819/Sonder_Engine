@@ -229,7 +229,7 @@
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1271 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
-| `world/spatial_senses.py` | 1904 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
+| `world/spatial_senses.py` | 1915 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_sound_field.py` | 3294 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 1073 |  | `world.spatial_barriers`, `world.spatial_identity` |
@@ -2828,13 +2828,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_hear_level()` | 1151 | 182 lines |
-| `_opening_view_cap()` | 778 | 107 lines |
+| `_hear_level()` | 1162 | 182 lines |
+| `_opening_view_cap()` | 778 | 118 lines |
 | `spatial_rel_between()` | 666 | 91 lines |
-| `_visual_level_between()` | 915 | 91 lines |
+| `_visual_level_between()` | 926 | 91 lines |
 | `comms_reachable_rooms()` | 279 | 66 lines |
 | `comms_link()` | 375 | 66 lines |
-| `hear_level()` | 1084 | 57 lines |
+| `hear_level()` | 1095 | 57 lines |
 | `scent_level()` | 38 | 56 lines |
 
 ### `world/spatial_sound_field.py`

@@ -398,10 +398,13 @@ def test_a_gesture_between_opening_and_closing_a_door_is_seen(temp_db, monkeypat
     ctx.director_resolve = {"resolved_event": "He briefly opens the door and signals.",
                             "state_diff": diff, "dialogue_log": []}
     out = perception_outcome(ctx, "n0")
-    # The distant doorway admits motion, not finger-level detail.
+    # Only the gesture made while the door stood open is seen, and it is
+    # seen as what it is: the hall is large and nobody's place in it is
+    # recorded, which withholds a face across it, never a body's doing
+    # (UNBUILT_WORLD §1.162, owner 2026-10-05 -- it read "moves").
     assert admitted["door:2"].channel == "sight"
     assert admitted["door:1"] is None
-    assert "moves" in out["views"]["player"]
+    assert "raises two fingers" in out["views"]["player"]
     final = ctx["_composed_beat"].scene
     assert final["rooms"]["hall"]["adjacent"][0]["barrier"] == "closed_door"
 

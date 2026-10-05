@@ -102,9 +102,24 @@ def test_a_crossing_body_is_watched_through_the_opening():
     assert visual_level_between(sc, "O", "T") == "full"
 
 
-def test_unknown_placement_in_a_large_room_caps_at_shapes():
+def test_unknown_placement_in_a_large_room_shows_conduct_not_a_face():
+    """The size fallback was written to withhold a FACE ("through a door you
+    can tell a big room is occupied, not read a face across it") before the
+    ladder had a rung for exactly that -- a body's doing plain, its face not.
+    At `shapes` the act channel gave every such body's act as motion, and
+    measured over the owner's chats (2026-10-05) that was the ordinary case:
+    659 of 1,296 next-room sightings, 748 of 751 of the bodies with no
+    station at all. Owner, 2026-10-05, "go ahead" to the recommended option:
+    show what they do, not their face (UNBUILT_WORLD §1.162)."""
+    from agents.composer import DIM_FIGURE, observer_display_map
+    from agents.perception import _sight_detail
+    from world.spatial import spatial_rel_between
     sc = _scene(size="large")
-    assert visual_level_between(sc, "O", "T") == "shapes"
+    assert visual_level_between(sc, "O", "T") == "conduct"
+    assert _sight_detail(sc, "O", "T", spatial_rel_between(sc, "O", "T")) == "full"
+    labels = observer_display_map(
+        sc, "O", [{"name": "T", "appearance": "A tall fox-eared woman."}], {})
+    assert labels == {"T": DIM_FIGURE}
 
 
 def test_the_observers_side_is_gated_symmetrically():

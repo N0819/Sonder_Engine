@@ -491,13 +491,13 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                 # as `composer.act_percept` records the same refusal.
                 #
                 # Only the refusal. The composed view also gives a `shapes`
-                # body's act as "moves, too little of it to make out", and in
-                # the owner's chats that collapse fires mostly on the doorway
-                # cone's guess for a body with no station in a large room
-                # (659 of 1,296 next-room sightings, 2026-10-05) -- an
-                # ordinary-range subtraction of the kind the owner ruled out
-                # that day for distance, awaiting a ruling of its own, and not
-                # one to spread to a second channel meanwhile.
+                # body's act as "moves, too little of it to make out". Since
+                # the doorway cone's size fallback became `conduct` (owner,
+                # 2026-10-05) the shapes left one doorway away are an
+                # authored far edge -- the same ordinary-range subtraction,
+                # an open question of the owner's (UNBUILT_WORLD §1.162) --
+                # and not one to spread to a second channel before it is
+                # answered.
                 if _sight_detail(scene, observer_name, actor_name, relation,
                                  senses=observer_senses) == "none":
                     note_step_decision(
