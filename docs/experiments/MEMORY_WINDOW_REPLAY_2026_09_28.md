@@ -208,7 +208,11 @@ variance; the reading of conduct is one reader's, not blind.
    `window`). It restores what the old code did for the undelivered rows, and it
    is right whichever way (2) goes: when the whole window is delivered, the two
    sets are the same. `UNBUILT_CHARACTERS.md` §1.170.
-2. **The owner's call: should absorption still cut the recent lane?** In these
+   (Landed 2026-10-05 by way of (2): the whole window is now always
+   delivered, so the two sets are one.)
+2. **The owner's call: should absorption still cut the recent lane?**
+   Decided 2026-10-05: no -- "absorption should be adjusted to apply to
+   recall only". In these
    chats it did so on 12 of 16 calls, so "8 turns of recent memory" holds in
    practice for calm minds only.
 3. Watch refrains under the full window (27:89).

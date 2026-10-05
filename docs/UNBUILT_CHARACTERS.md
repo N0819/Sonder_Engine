@@ -408,25 +408,6 @@ or withdraw the promise the field's NAME makes — is an owner's, and either way
 `static/js/components.js` is the other half of whichever answer wins. Audit
 MIND-F16.
 
-<a id="unbuilt-1-170"></a>
-
-### 1.170 An absorbed mind cannot reach the middle of its recent window
-
-Since 2026-09-28 the recent lane is the last 8 turns (`RECENT_TURNS`) and
-recall keeps that WHOLE window out (`mind/memory_context.py`, `recent_ids` from
-`window`). Absorption still cuts the lane to its newest 8 rows (>= 0.35) or 4
-(>= 0.7), so the rows between the cut and the window's start reach the mind by
-no lane at all; the code before kept out only the rows it delivered. Replayed
-on twelve real beats ([`MEMORY_WINDOW_REPLAY_2026_09_28.md`](experiments/MEMORY_WINDOW_REPLAY_2026_09_28.md)
-§ 2): 12 of 16 calls were absorbed, every one reached fewer of its last 8
-turns' rows than the old code, and at worst 7 of 8 turns were unreachable. No
-fiction failure in those beats traces to it yet.
-
-The fix that is right either way: keep out of recall only the rows delivered
-(`recent`, not `window`). Whether absorption should still cut the lane at all
-is the owner's; with the whole window delivered the two sets coincide and the
-fix is a no-op.
-
 ## 2. Roadmap
 
 <a id="unbuilt-2-2"></a>

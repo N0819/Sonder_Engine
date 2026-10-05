@@ -238,8 +238,9 @@ recent_memories:           every row of the last 8 turns (`RECENT_TURNS`),
                            chronological stream, oldest first, each row
                            carrying its kind in `epistemic_origin`
                            (what_i_experienced / what_i_was_told /
-                           what_i_concluded); absorption cuts it to the newest
-                           8 or 4 rows. The whole window stays out of recall.
+                           what_i_concluded); absorption never cuts it (owner,
+                           2026-10-05: absorption narrows recall only). The
+                           whole window stays out of recall.
                            (Three lanes by kind, 4 turns, newest 12, until the
                            owner's 2026-09-28 rulings.)
 recalled_old_memories:     the decision model's pick (mind/memory_jev.py): a
@@ -320,12 +321,17 @@ vividness cannot launder testimony or interpretation into knowledge.
 
 ### Psychology bandwidth and memory modulation
 
-`cognitive_absorption` reaches the memory seam. Below 0.35 the normal budget is
-12 recent / 16 recalled / 2 earlier windows. From 0.35–0.70 it narrows to
-8 / 8 / 1; at ≥0.70 it narrows to 4 / 4 / 0. Those last raw memories are the
-automatic-recognition lane: bodily absorption reduces deliberative historical
-search without erasing a familiar face, warning, or promise associated with
-the present cue.
+`cognitive_absorption` reaches the memory seam, and narrows RECALL only (owner,
+2026-10-05: "absorption should be adjusted to apply to recall only"). Below
+0.35 recall keeps its budget of 30 and 2 earlier summary windows; from
+0.35–0.70 it narrows to 8 and 1; at ≥0.70 to 4 and none. The last 8 turns
+arrive whole at every level: they are what the mind just lived, not chapters
+it works back through, and absorption cutting them while recall kept the
+whole window out of its net left the turns between reachable by no lane
+(up to 7 of 8, replayed: `MEMORY_WINDOW_REPLAY_2026_09_28.md` § 2). The small
+recall that survives is the automatic-recognition lane: bodily absorption
+reduces deliberative historical search without erasing a familiar face,
+warning, or promise associated with the present cue.
 
 Character appraisal has the same structural split. Present novelty, goal
 impact and somatic impact require current evidence. Remembered past may change

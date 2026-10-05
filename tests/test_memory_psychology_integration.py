@@ -146,9 +146,43 @@ def test_absorption_narrows_deliberative_recall_without_erasing_it(temp_db):
         chat_id, char_id, 30, "The brass door rings.", {}, absorption=.9)
     assert len(low["recalled_old_memories"]) > len(
         high["recalled_old_memories"])
-    assert len(high["recent_memories"]) <= 4
+    # Recall narrows; the recent turns do not (the test below).
     assert len(high["recalled_old_memories"]) <= 4
     assert high["recent_memories"] or high["recalled_old_memories"]
+
+
+def test_an_absorbed_mind_still_holds_its_last_turns_whole(temp_db):
+    """Absorption narrows RECALL only (owner, 2026-10-05: "absorption should
+    be adjusted to apply to recall only"). It cut the recent lane to the
+    newest 4 rows while recall kept the whole 8-turn window out of its net,
+    so the turns between reached the mind by no lane at all -- up to 7 of 8,
+    replayed (UNBUILT_CHARACTERS §1.170)."""
+    chat_id, char_id = _chat_and_char(temp_db)
+    for turn in range(1, 30):
+        # One row per turn, each its own moment, with a marker to find it by.
+        memory.add_memory(
+            chat_id, char_id, None, "episode", "witnessed", .7,
+            f"Marker {turn:02d}: the brass door rang a different note.",
+            turn_idx=turn, gist=f"marker {turn:02d} brass door",
+            event_key=f"event:door:{turn}")
+
+    def turns_in(rows):
+        found = set()
+        for row in rows:
+            text = json.dumps(row)
+            found |= {t for t in range(1, 30) if f"marker {t:02d}" in text.lower()}
+        return found
+
+    calm = memory.build_character_memory_context(
+        chat_id, char_id, 30, "The brass door rings.", {}, absorption=0.0)
+    absorbed = memory.build_character_memory_context(
+        chat_id, char_id, 30, "The brass door rings.", {}, absorption=.9)
+    last_eight = set(range(22, 30))
+    assert turns_in(calm["recent_memories"]) == last_eight
+    assert turns_in(absorbed["recent_memories"]) == last_eight
+    # What absorption does narrow, and never into the recent turns.
+    assert len(absorbed["recalled_old_memories"]) <= 4
+    assert not turns_in(absorbed["recalled_old_memories"]) & last_eight
 
 
 def test_ponder_adds_labelled_recall_without_replacing_normal_recall(temp_db):

@@ -384,7 +384,6 @@ Not scheduled and not committed to a phase. See the
 - [§1.85 — A memory's age off a per-beat estimate, not a per-beat record](UNBUILT_CHARACTERS.md#unbuilt-1-85)
 - [§1.99g — Memories the player owns, and the one thing that must be true first](UNBUILT_CHARACTERS.md#unbuilt-1-99g)
 - [§1.107 — `generalization_tags` promises a mechanism that does not exist](UNBUILT_CHARACTERS.md#unbuilt-1-107)
-- [§1.170 — An absorbed mind cannot reach the middle of its recent window](UNBUILT_CHARACTERS.md#unbuilt-1-170)
 
 **2. Roadmap**
 

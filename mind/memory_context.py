@@ -315,24 +315,31 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # automatic-recognition lane.  A body monopolising attention should reduce
     # how many old chapters can be worked through, not erase a salient face,
     # warning, or promise already associated with the present cue.
+    #
+    # RECALL ONLY (owner, 2026-10-05: "absorption should be adjusted to apply
+    # to recall only"). It cut the recent lane too -- to the newest 8 rows at
+    # 0.35, 4 at 0.7 -- while recall kept the whole window out of its net, so
+    # the rows between the cut and the window's start reached the mind by no
+    # lane at all: replayed, 12 of 16 calls were absorbed and at worst 7 of 8
+    # recent turns were unreachable (`MEMORY_WINDOW_REPLAY_2026_09_28.md`
+    # § 2, formerly UNBUILT_CHARACTERS §1.170). What the mind
+    # lived these last turns is not an old chapter to work back through.
     absorption = _clamp(absorption)
     if absorption >= 0.7:
-        recent_limit, recall_limit, summary_limit = 4, min(recall_limit, 4), 0
+        recall_limit, summary_limit = min(recall_limit, 4), 0
     elif absorption >= 0.35:
-        recent_limit, recall_limit, summary_limit = 8, min(recall_limit, 8), 1
+        recall_limit, summary_limit = min(recall_limit, 8), 1
     else:
-        # The whole window, however many rows its turns hold (the owner's
-        # "8 turns worth"); it was the newest 12 of 4 turns.
-        recent_limit, summary_limit = None, _SUMMARY_RECALL_LIMIT
-    window = recent_memory_buffer(
+        summary_limit = _SUMMARY_RECALL_LIMIT
+    # The whole window, however many rows its turns hold (the owner's "8
+    # turns worth"); it was the newest 12 of 4 turns.
+    recent = recent_memory_buffer(
         chat_id, char_id, current_turn_idx, turns=recent_turns,
         limit=None, bank=bank)
-    recent = window if recent_limit is None else window[-recent_limit:]
-    # THE WHOLE WINDOW IS KEPT OUT OF RECALL, whatever absorption delivers of
-    # it (owner, 2026-09-28: "with the recent memories excluded from the RRF
-    # search"): recall is for what is older than the recent turns, so a row
-    # the narrowed buffer did not deliver does not come back as "recalled".
-    recent_ids = {m["id"] for m in window}
+    # THE RECENT TURNS ARE KEPT OUT OF RECALL (owner, 2026-09-28: "with the
+    # recent memories excluded from the RRF search"): recall is for what is
+    # older, and a row delivered as recent must not come back as "recalled".
+    recent_ids = {m["id"] for m in recent}
     summary = get_memory_summary(
         chat_id, char_id, before_turn_idx=current_turn_idx)
     # WHAT IS STILL UNSETTLED, COMPUTED ONCE. Two things leave a question
