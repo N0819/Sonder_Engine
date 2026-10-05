@@ -1698,7 +1698,7 @@ work.
 
 <a id="unbuilt-1-173"></a>
 
-### 1.173 The prose Director is not shown the time of day (2026-10-04)
+### 1.173 A body that crosses rooms to bar a doorway no longer bars it that beat (2026-10-04)
 
 What the Larch Hill test story (scratch chat 165) found in the Director is
 repaired, and this entry's first account of it was wrong twice. The climb on
@@ -1706,25 +1706,42 @@ turn 3 that "fell a floor short" was the walk engine stopping it, not the
 Director overclaiming: the player had declared "all the way to the top", and
 the Doctor's end-of-beat cell on the watch cabin's stairhead -- he climbed
 behind her -- read as a body standing in that doorway all beat. A body the
-beat carries between rooms now passes (`spatial_walk.walk`'s `passing`). And
-the rerun's "outside stair" was the Director routing the climb by the only
-steps its index held, the short steps at the tower's foot: the stair and the
-two storeys it climbs were not in the index at all. Every room the world holds
-is now on the Director's map (`causal_world_index`'s `elsewhere`, with each
-exit's `ways`), and both Director cards say the way a body goes is the
-world's. Three reruns of turn 3 from interpret routed the climb kitchen,
-stair, sleeping room, watch cabin, and arrived: 3 of 3.
+beat carries between rooms now passes (`spatial_walk.walk`'s `passing`,
+`6f4fcd41`). And the rerun's "outside stair" was the Director routing the
+climb by the only steps its index held, the short steps at the tower's foot;
+every room the world holds is now on its map (`causal_world_index`'s
+`elsewhere`, each exit's `ways`, `79c67f67`), and 3 of 3 reruns route the
+climb by the stair.
 
-Left, and the owner's call because it widens the Director's input again:
-neither prose Director call is handed the clock. On one of those reruns the
-resolve wrote "the last dusk light has drained to iron" at 15:47 in the
-afternoon; perception's page had the daylight right. The encoder had the same
-gap for "until it is fully dark", and code now prices that (`58f00ce4`).
+Not defects, by the owner's ruling (2026-10-04, "The director doesn't
+necessarily have to be in charge of everything in perception"): the prose
+Director is not handed the clock -- the resolve that wrote "the last dusk
+light has drained to iron" at 15:47 never reached the page, where perception
+had the daylight right -- and a walk too long for its beat is told whole in
+the account while the walker's own line is what the page shows.
 
-Also left: a body that crosses rooms to plant itself in a doorway no longer
-bars a walker in the same beat -- the price of `passing`; a body that keeps
-its room still does -- and a walk too long for its beat is still told whole
-in the account, where the walker's own line wins on the page.
+What is left is the price of `passing`: a body that crosses rooms to plant
+itself in a doorway no longer bars a walker in the same beat. A body that
+keeps its room still does.
+
+<a id="unbuilt-1-174"></a>
+
+### 1.174 An outdoor room's declared light can hold the hour it was written in (2026-10-04)
+
+On open ground a room's own `light` meets the sky as the darker of the two
+(`spatial_light.room_light`), so a declaration can only darken a day. That is
+right for what a PLACE does to light -- a cedar canopy, an overhang, a street
+of shuttered lamps -- and wrong for WHEN it was written: chat 44's
+`city_rooftop` ("Sloped rooftops of the city at night...") is declared `dark`
+and chat 58's `northern_plaza` ("A rain-slicked urban plaza at night...")
+`dim`, so both stay night at noon. Measured on the corpus copy 2026-10-04: 54
+of 172 open rooms declare `dim` or `dark` (49 and 5), and two more
+`moonlight`. The room author's card reads "how the light falls" in the prose
+as a requirement for the place, and the encoder's rooms chunk may write
+`light` too. Under the ruling in §1.173 the sky's light is the engine's -- the
+day cycle and the weather -- so the repair is on the authoring side: a
+declared light says what the place does to the light it is given, never the
+hour or the weather. Not built: a clause every story reads, the owner's call.
 
 ## 2. Roadmap
 
