@@ -976,12 +976,18 @@ def _line_steps(a: tuple, b: tuple) -> list:
     return out
 
 
-def shadowcast(origin: tuple, radius: int, blocked) -> set:
+def shadowcast(origin: tuple, radius: int, blocked, circle: bool = True) -> set:
     """Recursive shadowcasting over eight octants.
 
     `blocked(x, y)` answers whether a cell stops the line. Returns every
     cell the origin can see, the origin included. Cells outside the shape
     are the caller's business: `blocked` should answer True for them.
+
+    `radius` bounds the rows cast, and with `circle` (the default) also
+    keeps the cast inside a disc of that radius -- a light's own reach. A
+    cast its FIELD bounds passes `circle=False`: the walls end it, and a
+    disc sized to the field's Chebyshev reach cuts the far diagonals off
+    (`_visible_set`).
     """
     ox, oy = origin
     visible = {origin}
@@ -1005,7 +1011,7 @@ def shadowcast(origin: tuple, radius: int, blocked) -> set:
                     continue
                 if end > l_slope:
                     break
-                if dx * dx + dy * dy <= radius * radius + radius:
+                if not circle or dx * dx + dy * dy <= radius * radius + radius:
                     visible.add((X, Y))
                 if blocked_prev:
                     if blocked(X, Y):
@@ -1357,7 +1363,14 @@ def _visible_set(field, origin, eye, top):
             return not _on_wall_line(field, (x, y))
         h = field.height.get((x, y))
         return h is not None and _blocks(h, eye, top)
-    return shadowcast(origin, side_max + 1, blocked)
+    # THE FIELD BOUNDS THE CAST, NOT A DISC. `side_max` is the field's
+    # Chebyshev reach, and the cast's disc test admits cells by Euclidean
+    # distance, so with the disc on, a room's far diagonal fell outside it:
+    # two lit, pinned bodies at the corners of a 12x12 room graded `none`,
+    # the same pair read `full` once an unrelated open doorway laid a wider
+    # neighbour and grew the reach, and a light source in a far corner was
+    # out of view (found 2026-10-04 surveying sight for distance detail).
+    return shadowcast(origin, side_max + 1, blocked, circle=False)
 
 
 def _on_wall_line(field, cell) -> bool:
