@@ -838,7 +838,8 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
         from world.spatial import standing_cell
         landed = walk(route_scene, follower, target_room,
                       paces=paces_for(beat_seconds(ctx, state_diff)),
-                      from_room=origin, from_cell=standing_cell(scene, follower))
+                      from_room=origin, from_cell=standing_cell(scene, follower),
+                      passing=in_transit(scene, route_scene))
         if landed is None:
             continue
         positions[follower] = landed["room"]
@@ -1288,6 +1289,20 @@ def _travel_record(out):
     return record
 
 
+def in_transit(scene, route_scene):
+    """The bodies this beat carries from one room to another: in a room as
+    the beat began, and in a different one in the scene as the beat's diff
+    leaves it. A walk passes them rather than meeting them where they end
+    (`spatial_walk.walk`'s `passing`), because a route scene has no clock
+    inside the beat -- only its end. A body minted this beat had no room to
+    leave and is not among them."""
+    before = (scene or {}).get("positions") or {}
+    after = (route_scene or {}).get("positions") or {}
+    return frozenset(
+        str(name) for name, room in after.items()
+        if before.get(name) is not None and str(before.get(name)) != str(room))
+
+
 def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
                   interp=None):
     """Land a declared walk whose route is open: as far as the beat's paces
@@ -1325,6 +1340,7 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
             if beside is not None:
                 mv = {**mv, "to_cell": list(beside)}
     paces = paces_for(beat_seconds(ctx, sd), pace)
+    passing = in_transit(scene, route_scene)
     # FROM WHERE THE BEAT BEGAN. `route_scene` carries this beat's diff, and
     # the diff already holds the declared destination as the body's room
     # (asserted movement enters the preview world at interpret), so the
@@ -1334,7 +1350,8 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
                   to_cell=mv.get("to_cell"), to_anchor=mv.get("to_anchor"),
                   paces=paces, from_room=prev_room,
                   from_cell=(standing_cell(scene, subject)
-                             if room_of(scene, subject) else None))
+                             if room_of(scene, subject) else None),
+                  passing=passing)
     if result is None:
         sd["positions"][subject] = mv["to_room"]
         return None
@@ -1401,7 +1418,7 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
         landed = walk(route_scene, other, mv["to_room"],
                       to_cell=mv.get("to_cell"), to_anchor=mv.get("to_anchor"),
                       paces=paces, from_room=prev_room,
-                      from_cell=standing_cell(scene, other))
+                      from_cell=standing_cell(scene, other), passing=passing)
         if landed is None:
             continue
         sd["positions"][other] = landed["room"]

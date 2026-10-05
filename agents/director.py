@@ -204,6 +204,7 @@ from .director_movement import (
     _travel_continues,
     _guard_approach_is_not_arrival,
     crossing_legs,
+    in_transit,
     route_scene_for,
 )
 from .director_floors import (

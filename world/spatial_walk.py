@@ -92,12 +92,16 @@ def blocked_cells(scene: dict, room_id) -> frozenset:
     return frozenset(blocked)
 
 
-def held_cells(scene: dict, room_id, walker=None) -> frozenset:
-    """The cells of `room_id` some OTHER body stands on."""
+def held_cells(scene: dict, room_id, walker=None, passing=()) -> frozenset:
+    """The cells of `room_id` some OTHER body stands on -- other than the
+    bodies in `passing`, which the beat carries through (see `walk`)."""
     me = str(walker or "").strip().casefold()
+    through = {str(n).strip().casefold() for n in passing or ()}
     held = set()
     for name, where in ((scene or {}).get("positions") or {}).items():
         if str(where) != str(room_id) or str(name).strip().casefold() == me:
+            continue
+        if str(name).strip().casefold() in through:
             continue
         # A fixture's derived standing cell is where someone AT it stands,
         # not another body occupying that cell. Its physical footprint is
@@ -263,7 +267,8 @@ def standing_cell(scene: dict, name: str) -> tuple:
 
 
 def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
-         to_anchor=None, from_room=None, from_cell=None) -> Optional[dict]:
+         to_anchor=None, from_room=None, from_cell=None,
+         passing=()) -> Optional[dict]:
     """Where `name` is after walking up to `paces` paces toward `to_room`
     (and `to_cell` or `to_anchor` in it): {room, cell, arrived, crossed,
     paces} -- or None when the body has no room, the destination is no
@@ -278,6 +283,12 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
     `from_room` / `from_cell` say where the walk STARTS when the scene
     handed in already carries this beat's diff (a route scene): the body's
     room and cell as the beat began, not where the diff put it.
+
+    `passing` names the bodies the same beat carries from one room to
+    another. A route scene holds where they END, and a body that ends on a
+    stairhead got there when it got there -- not before the walker passed.
+    So none of them fills a doorway against this walk; arriving, nobody
+    stands on anybody still counts them all.
     """
     here = str(from_room or "").strip() or room_of(scene, name)
     rooms = (scene or {}).get("rooms") or {}
@@ -312,7 +323,7 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
                         if came_from else cell)
                 goal = free_cell_near(scene, room_id, goal, name)
         else:
-            taken = held_cells(scene, room_id, name)
+            taken = held_cells(scene, room_id, name, passing)
             goal = door_cell(scene, room_id, legs[0], near=cell, avoid=taken)
             all_cells, _b = _door_cells(scene, room_id, legs[0])
             if goal is None and all_cells:
@@ -388,10 +399,15 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
         # the far room's door cell fills it as surely as one in this
         # room's; the check above saw only this side, so a keeper planted
         # in the stairhead was stepped past and the climber seated beside
-        # her one pace inside (Skerry Light turn 8, 2026-09-15).
+        # her one pace inside (Skerry Light turn 8, 2026-09-15). A body
+        # this beat carried there is not standing in it while this one
+        # passes (`passing`): the Doctor climbing BEHIND Ren ended on the
+        # watch cabin's stairhead and held her a floor short of it
+        # (Larch Hill turn 3, chat 165, 2026-10-04).
         far_cells, _fb = _door_cells(scene, nxt, prev)
         far_cells = [tuple(c) for c in far_cells] if far_cells else []
-        if far_cells and all(c in held_cells(scene, nxt, name) for c in far_cells):
+        if far_cells and all(c in held_cells(scene, nxt, name, passing)
+                             for c in far_cells):
             return {"room": room_id, "cell": cell, "arrived": False,
                     "crossed": crossed, "paces": walked, "blocked": True,
                     "held_by": "doorway"}

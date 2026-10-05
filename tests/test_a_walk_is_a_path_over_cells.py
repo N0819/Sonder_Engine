@@ -185,3 +185,68 @@ def test_juns_causal_arrival_is_not_rewound_by_the_shelfs_standing_cell():
     assert result["arrived"]
     assert diff["positions"]["Jun"] == "glasshouse"
     assert not warnings
+
+
+def _tower():
+    """Three storeys joined by one stair, its foot and head on the walls the
+    Larch Hill lookout put them on: kitchen (0) -> sleeping room (1) -> watch
+    cabin (2)."""
+    def room(level, w, d, edges):
+        return {"name": None, "level": level, "extent": {"w": w, "d": d},
+                "adjacent": edges}
+    return {
+        "rooms": {
+            "kitchen": room(0, 5, 4, [{"to": "sleeping_room", "vertical": "up", "way": "stair",
+                                        "barrier": "open", "dir": "n"}]),
+            "sleeping_room": room(1, 5, 4, [
+                {"to": "kitchen", "vertical": "down", "way": "stair", "barrier": "open", "dir": "s"},
+                {"to": "watch_cabin", "vertical": "up", "way": "stair", "barrier": "open", "dir": "n"}]),
+            "watch_cabin": room(2, 4, 4, [{"to": "sleeping_room", "vertical": "down", "way": "stair",
+                                            "barrier": "open", "dir": "s"}]),
+        },
+        "positions": {"Ren": "kitchen", "Doctor": "kitchen"},
+        "stations": {"Ren": {"cell": [0, 3]}, "Doctor": {"cell": [2, 2]}},
+        "entities": {},
+    }
+
+
+def test_a_body_that_climbs_behind_you_does_not_bar_the_stair_it_arrives_by():
+    """Live, Larch Hill turn 3 (chat 165, 2026-10-04): Ren climbed for the
+    watch cabin with the Doctor on the stair behind her. The beat's diff
+    ended him at the cabin's stairhead, and the walk -- which reads the room
+    graph from the scene as the beat leaves it -- took that end-of-beat cell
+    for a body standing in the doorway all beat: "Walk stopped: Ren Aoki's
+    way toward 'watch_cabin' is held at 'sleeping_room' -- a body stands in
+    the doorway", 18 of 99 paces, a floor short. Then she, stopped in the
+    sleeping room's doorway, stopped him. A body the beat carries from one
+    room to another is passing through, not standing in a door."""
+    from world.spatial import door_cell as _door
+    sc = _tower()
+    route = {**sc, "positions": {"Ren": "watch_cabin", "Doctor": "watch_cabin"},
+             "stations": {"Ren": {"cell": [0, 3]},
+                          "Doctor": {"cell": list(_door(sc, "watch_cabin", "sleeping_room"))}}}
+    barred = walk(route, "Ren", "watch_cabin", paces=99, from_room="kitchen", from_cell=[0, 3])
+    assert barred["held_by"] == "doorway"           # what the engine did
+    walked = walk(route, "Ren", "watch_cabin", paces=99, from_room="kitchen",
+                  from_cell=[0, 3], passing={"Doctor"})
+    assert walked["arrived"] and walked["room"] == "watch_cabin"
+    # ...and arriving, nobody stands on anybody: the cell he ends on is his
+    assert walked["cell"] != tuple(route["stations"]["Doctor"]["cell"])
+
+
+def test_a_keeper_who_keeps_her_room_still_holds_the_stairhead():
+    """The rule the passing set must not undo (Skerry Light turn 8,
+    2026-09-15): a body planted in the stairhead all beat is the door."""
+    from world.spatial import door_cell as _door
+    sc = _tower()
+    sc["positions"]["Keeper"] = "watch_cabin"
+    sc["stations"]["Keeper"] = {"cell": list(_door(sc, "watch_cabin", "sleeping_room"))}
+    result = walk(sc, "Ren", "watch_cabin", paces=99, passing={"Doctor"})
+    assert not result["arrived"] and result["held_by"] == "doorway"
+
+
+def test_who_is_passing_is_who_the_beat_moved_between_rooms():
+    from agents.director import in_transit
+    sc = _tower()
+    route = {**sc, "positions": {"Ren": "watch_cabin", "Doctor": "kitchen", "New": "kitchen"}}
+    assert in_transit(sc, route) == {"Ren"}
