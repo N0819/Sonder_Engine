@@ -266,6 +266,7 @@ from .director_evidence import (
     normalize_causal_ledger,
     causal_scene_room_ids,
     causal_contact_rows,
+    causal_room_names,
     causal_world_index,
     authority_by_entity,
     speech_transforms,
@@ -1644,10 +1645,7 @@ def director_interpret(ctx, nonce):
         "event_inputs": _event_inputs,
         "identity_index": _interpret_identities,
         "object_index": {
-            "rooms": {
-                str(rid): str((room or {}).get("name") or rid)
-                for rid, room in (_causal_index.get("rooms") or {}).items()
-            },
+            "rooms": causal_room_names(_causal_index),
             "entities": {
                 str(eid): str((entity or {}).get("name") or eid)
                 for eid, entity in (_causal_index.get("entities") or {}).items()
@@ -5566,10 +5564,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         "event_inputs": _resolve_event_inputs,
         "identity_index": _identity_index,
         "object_index": {
-            "rooms": {
-                str(rid): str((room or {}).get("name") or rid)
-                for rid, room in (_resolve_causal_index.get("rooms") or {}).items()
-            },
+            "rooms": causal_room_names(_resolve_causal_index),
             "entities": {
                 str(eid): str((entity or {}).get("name") or eid)
                 for eid, entity in (_resolve_causal_index.get("entities") or {}).items()

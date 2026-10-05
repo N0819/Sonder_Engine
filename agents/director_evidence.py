@@ -2951,6 +2951,18 @@ def causal_contact_rows(sc, room_ids):
     ]
 
 
+def causal_room_names(index):
+    """{room id: name} for every room a causal world index names -- the
+    slice and the rest of the map alike. The identity index the Director and
+    its decision model read: "PLACES ALREADY KNOWN" was the slice alone, so
+    a room the world held two rooms off read as a NEW place to build."""
+    names = {}
+    for table in ("rooms", "elsewhere"):
+        for room_id, room in ((index or {}).get(table) or {}).items():
+            names[str(room_id)] = str((room or {}).get("name") or room_id)
+    return names
+
+
 def causal_world_index(sc, here=None, *, room_ids=None,
                        include_entity_interiors=False,
                        exclude_entity_interiors=(), figures=None):
@@ -2972,7 +2984,14 @@ def causal_world_index(sc, here=None, *, room_ids=None,
     ``room_ids`` narrows that index to the actors' immediate sight aperture.
     An exit may still name a room outside the slice -- adjacency is precisely
     the fact the causal Director needs -- but that far room's contents do not
-    come with it. ``include_entity_interiors`` adds one structural fact for
+    come with it. Every other room the world holds is still on the map, under
+    ``elsewhere``: its name, storey and ways, never what is in it. A place a
+    body is bound for is routed by the world's own ways, and a Director shown
+    only the next room routes by whatever it can see: Larch Hill turn 3 (chat
+    165, 2026-10-04) sent "show me the watch cabin ... up the steep stairs"
+    out of the door to the short steps at the tower's foot, the only steps in
+    its index -- the watch cabin and the stair to it were two rooms off and
+    nowhere in it. ``include_entity_interiors`` adds one structural fact for
     entities in the slice: which room ids, if any, are their interior. It adds
     no entity state.
 
@@ -2998,14 +3017,43 @@ def causal_world_index(sc, here=None, *, room_ids=None,
             return str(record["name"])
         return str(key)
 
+    from world.spatial import edge_way, normalize_vertical, room_level
+
+    def place(room_id, room):
+        """Where a room is and how it is left: its name, its storey where
+        the world knows one, its exits, and the WAY of every exit that is
+        more than a doorway -- a stair or ladder or hatch, up or down, by
+        the world's own name for it. Place, never state: whether a door
+        stands open is the hands'."""
+        row = {"name": str(room.get("name") or room_id)}
+        level = room_level(sc, room_id)
+        if level is not None:
+            row["level"] = level
+        row["exits"] = sorted(
+            str(edge.get("to")) for edge in room.get("adjacent") or []
+            if isinstance(edge, dict) and edge.get("to"))
+        ways = {}
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            way = {}
+            vertical = normalize_vertical(edge.get("vertical"))
+            if vertical:
+                way["way"] = edge_way(edge)
+                way["vertical"] = vertical
+            if str(edge.get("name") or "").strip():
+                way["name"] = str(edge["name"]).strip()
+            if way:
+                ways[str(edge["to"])] = way
+        if ways:
+            row["ways"] = ways
+        return row
+
     index = {}
     for room_id, room in rooms.items():
         room = room if isinstance(room, dict) else {}
         index[str(room_id)] = {
-            "name": str(room.get("name") or room_id),
-            "exits": sorted(
-                str(edge.get("to")) for edge in room.get("adjacent") or []
-                if isinstance(edge, dict) and edge.get("to")),
+            **place(room_id, room),
             "holds": [],
             # The room's own fixtures by id, so a walk that ends at one
             # ("to the hearth") can name it (`movement.to_anchor`). Ids
@@ -3080,6 +3128,20 @@ def causal_world_index(sc, here=None, *, room_ids=None,
             worn[str(who)] = wearing
 
     out = {"rooms": index}
+    # THE REST OF THE MAP. Every room outside the slice, as a place: where it
+    # is and how it is reached, never what it holds. The inside of a thing
+    # (a vehicle's cabin, a body's interior) is not a place on the map; it is
+    # reached through its thing, and `entities` below names it when the
+    # thing is in the slice.
+    if selected is not None:
+        elsewhere = {
+            str(room_id): place(room_id, room)
+            for room_id, room in sorted(all_rooms.items(), key=lambda kv: str(kv[0]))
+            if str(room_id) not in index and isinstance(room, dict)
+            and not str(room.get("parent_entity") or "").strip()
+        }
+        if elsewhere:
+            out["elsewhere"] = elsewhere
     if worn:
         out["worn"] = worn
     # The anchors a body can be AT -- a bench, a hearth, a counter. The grain

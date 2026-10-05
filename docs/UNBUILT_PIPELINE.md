@@ -1698,20 +1698,33 @@ work.
 
 <a id="unbuilt-1-173"></a>
 
-### 1.173 An event's text can still claim an arrival the walk did not make (2026-10-04)
+### 1.173 The prose Director is not shown the time of day (2026-10-04)
 
-The three classes the Larch Hill test story found in the narrator and the
-Director were repaired on the owner's word ("Those sound like they need
-repair"): a look's finding is an event (`43946e73`), a walk the beat did not
-finish is the walker's own line and the narrator's rule 1 names absences and
-arrivals (`43946e73`), and a wait that names its end is priced by the engine
-(`58f00ce4`). What is left is upstream of the page: the Director's account
-and the encoder's event text still say "climbs all the way to the top floor"
-when the paces leave the body a floor short (chat 165 turn 4582), and on a
-rerun the Director invented an outside stair the designed tower does not
-have. The walker's line now wins on the page; the event text that disagrees
-with the committed position is still produced, and nothing tells the
-Director its account outran the walk.
+What the Larch Hill test story (scratch chat 165) found in the Director is
+repaired, and this entry's first account of it was wrong twice. The climb on
+turn 3 that "fell a floor short" was the walk engine stopping it, not the
+Director overclaiming: the player had declared "all the way to the top", and
+the Doctor's end-of-beat cell on the watch cabin's stairhead -- he climbed
+behind her -- read as a body standing in that doorway all beat. A body the
+beat carries between rooms now passes (`spatial_walk.walk`'s `passing`). And
+the rerun's "outside stair" was the Director routing the climb by the only
+steps its index held, the short steps at the tower's foot: the stair and the
+two storeys it climbs were not in the index at all. Every room the world holds
+is now on the Director's map (`causal_world_index`'s `elsewhere`, with each
+exit's `ways`), and both Director cards say the way a body goes is the
+world's. Three reruns of turn 3 from interpret routed the climb kitchen,
+stair, sleeping room, watch cabin, and arrived: 3 of 3.
+
+Left, and the owner's call because it widens the Director's input again:
+neither prose Director call is handed the clock. On one of those reruns the
+resolve wrote "the last dusk light has drained to iron" at 15:47 in the
+afternoon; perception's page had the daylight right. The encoder had the same
+gap for "until it is fully dark", and code now prices that (`58f00ce4`).
+
+Also left: a body that crosses rooms to plant itself in a doorway no longer
+bars a walker in the same beat -- the price of `passing`; a body that keeps
+its room still does -- and a walk too long for its beat is still told whole
+in the account, where the walker's own line wins on the page.
 
 ## 2. Roadmap
 

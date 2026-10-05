@@ -365,9 +365,13 @@ or wrong back to the encoder as targeted jobs; and code converts the events
 into ledger rows. No model call writes narration.
 
 Its world index is the union of the acting bodies' immediate sight apertures:
-their rooms and physically visible adjacent rooms. Room rows expose exits;
-entities in that slice expose only identity, placement, and existing interior
-room ids. A disconnected room or entity is absent.
+their rooms and physically visible adjacent rooms. Room rows expose exits,
+storey and how each exit is taken (`ways`); entities in that slice expose only
+identity, placement, and existing interior room ids. Every other room is on the
+map under `elsewhere` -- name, storey, exits and ways, never what it holds --
+and `object_index.rooms`, which the decision model reads as the places already
+known, names them all. An entity outside the slice, and the inside of a thing,
+are absent.
 
 Each encoder event is one causal step: its source identity and the declared
 event it carries out (`source_event_id`), an objective statement (for speech

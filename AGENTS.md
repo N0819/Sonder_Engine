@@ -298,8 +298,14 @@ does not parse and did not run out of room is first mended locally
 never closing a cut-off answer), and a mend is used only if it validates.
 
 The Director's world index is the acting bodies' immediate sight aperture, not
-the scene registry. It receives room exits and, for entities in that aperture,
-existing interior room ids. Player/character bodies are omitted from this
+the scene registry. It receives room exits, each room's storey and how each
+exit is taken (`ways`: a stair, ladder or hatch, up or down, and the edge's own
+name), and, for entities in that aperture, existing interior room ids. Every
+other room the world holds is on its map under `elsewhere` -- name, storey,
+exits and ways, never what it holds; the inside of a thing is not on it --
+because a body bound for a place two rooms off is routed by the world's ways,
+and a Director shown only the next room routes by whatever it can see (Larch
+Hill turn 3, 2026-10-04). Player/character bodies are omitted from this
 ordinary interior roster unless the current event explicitly names that person
 AS THE INTERIOR HOLDER (``inside Sera``, ``Sera's interior``); mere mention or
 spatial relation does not opt a body in. Anatomical or bodily interiors are
