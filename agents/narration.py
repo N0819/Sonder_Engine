@@ -25,7 +25,10 @@ from story.scene import (
 import os
 import re
 
+from world.scene_memo import scene_read_pass
 from world.spatial import (
+    FACE_RANGE_M,
+    sight_between,
     containment_conceals,
     room_display_name,
     contact_sensation,
@@ -397,7 +400,10 @@ def _cast_pronouns(cast, label=None):
                  if isinstance(pronouns, dict) and pronouns.get(k)}
         if not (name and clean):
             continue
-        key = str(label(name) if label else name).strip() or name
+        shown = label(name) if label else name
+        if shown is None:
+            continue                # a body the view never named or showed
+        key = str(shown).strip() or name
         if key in out and out[key] != clean:
             collided.add(key)
         out[key] = clean
@@ -406,12 +412,40 @@ def _cast_pronouns(cast, label=None):
     return out
 
 
-def _speaker_display(name, recognized, appearance=None, aliases=None):
-    """How the narrator payload refers to one speaker: the canonical name when
-    the player recognizes them (rank/title variants included -- same
-    _recognizes rule perception used to build the view), else the same
-    appearance-derived anonymous label perception injects, so the binding
-    never leaks an identity past the view's own gate."""
+def _earned_labels(ctx):
+    """name -> the label the PLAYER's own composed view earned for each body
+    it was composed about (`perception._composer_company`, from the same
+    gated percepts the view was rendered from): a figure at a distance, an
+    indistinct figure in the dim, a descriptor only in full sight.
+
+    The narrator payload's label floor read appearance whatever the player
+    could see of the body, so a field of the payload named "the fox-eared
+    woman" while the view the page is written from said "a figure" -- two
+    representations of one body, and the page free to pick the one that
+    says more. Distance made it common (`spatial_range`, 2026-10-04); the dim
+    had it already.
+    """
+    for step in ("perception_outcome", "perception_establish"):
+        out = (ctx.get(step) or {}) if hasattr(ctx, "get") else {}
+        rows = ((out.get("company") or {}).get("player")
+                if isinstance(out, dict) else None)
+        if isinstance(rows, list):
+            return {str(r.get("name")): str(r.get("label")) for r in rows
+                    if isinstance(r, dict) and r.get("name") and r.get("label")}
+    return {}
+
+
+def _speaker_display(name, recognized, appearance=None, aliases=None,
+                     earned=None):
+    """How the narrator payload refers to one speaker: the label the player's
+    own view earned for them when it was composed about them (`earned`,
+    `_earned_labels`), else the canonical name when the player recognizes
+    them (rank/title variants included -- same _recognizes rule perception
+    used to build the view), else the same appearance-derived anonymous
+    label perception injects, so the binding never leaks an identity past
+    the view's own gate."""
+    if earned and str(name) in earned:
+        return earned[str(name)]
     if _recognizes(name, recognized):
         return name
     stripped = _strip_identity_tokens(appearance, [name, *(aliases or [])]) \
@@ -587,7 +621,8 @@ def _player_long_established(ctx, turn_idx, depth, pid="player"):
 
 def _sensory_channels_manifest(scene, player_name, view, observations,
                                recognized, cast_info, p_room,
-                               standing_verdicts=None, *, include_delivery_text=True):
+                               standing_verdicts=None, *, include_delivery_text=True,
+                               earned=None):
     """Per-sense delivery manifest for the narrator payload, or {}.
 
     THE DEFECT: percepts carry a real channel from every builder through
@@ -663,7 +698,7 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         if info is not None:
             return _speaker_display(other, recognized,
                                     info.get("appearance"),
-                                    info.get("aliases"))
+                                    info.get("aliases"), earned=earned)
         if _recognizes(other, recognized or ()):
             return other
         # A CONTACT PARTY IS NOT NECESSARILY A BODY, and "someone" asserts one.
@@ -850,10 +885,11 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
     # floor used for the actor label rather than leaking a name inside the
     # action surface while anonymising its speaker one field away.
     referent_labels = {str(p_name): "you"}
+    earned = _earned_labels(ctx)
     for canonical, info in (cast_info or {}).items():
         display = _speaker_display(
             canonical, recognized, info.get("appearance"),
-            info.get("aliases"))
+            info.get("aliases"), earned=earned)
         referent_labels[str(canonical)] = display
         for alias in info.get("aliases") or []:
             referent_labels[str(alias)] = display
@@ -1017,7 +1053,8 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                 continue  # the player never received this line
         info = cast_info.get(name) or {}
         display = name if name == p_name else _speaker_display(
-            name, recognized, info.get("appearance"), info.get("aliases"))
+            name, recognized, info.get("appearance"), info.get("aliases"),
+            earned=earned)
         ev = {"n": len(events) + 1, "actor": display, "kind": kind}
         if kind == "speech":
             if name == p_name:
@@ -1114,60 +1151,79 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
         for rid, r in rooms.items() if isinstance(r, dict) or r is None
     }
     payload, facts = {}, []
-    for name, info in cast_info.items():
-        prev_room = cast_room(prev_sc, name, ctx.cast)
-        now_room = cast_room(sc, name, ctx.cast)
-        if not now_room:
-            continue
-        # S3-A4: only include characters currently IN the player's room.
-        # Previously, a character who LEFT (prev_room == p_room but now_room
-        # != p_room) was included with their destination room name, leaking
-        # spatial info the player hasn't perceived. The player can only
-        # place someone who is still co-present -- a character who left is
-        # gone, and their destination is not the player's to know.
-        if not p_room or now_room != p_room:
-            continue
-        # S3-A4 (second half): co-location alone was the whole gate, so a
-        # character who ENTERED the player's pitch-dark room still arrived
-        # here with moved=True. The narrator prompt's POSITION CONTINUITY
-        # rule then invites rendering them and _check_narrator_fidelity
-        # ENFORCES prose agreement, turning an unperceived body into a
-        # required sentence.
-        if not _player_sees_character(sc, p_name, p_room, name, now_room):
-            continue
-        moved = (prev_room is None) or (prev_room != now_room)
-        # Where they came FROM is a separate perception from the fact that
-        # they are here now: seeing someone walk in tells you nothing about
-        # the room behind the door. Name the origin only when the player can
-        # see into it (barrier + light, via has_visual). Otherwise the entry
-        # still ships -- the player sees the arrival -- with no origin.
-        prev_display = None
-        if moved and prev_room and has_visual(
-                spatial_rel(sc, p_room, prev_room)):
-            prev_display = room_names.get(prev_room, prev_room)
-        display = _speaker_display(
-            name, recognized, info.get("appearance"), info.get("aliases"))
-        # HOW FAR OFF, when the geometry actually measured it (D4, review
-        # 2026-09-07). The payload named the ROOM and said nothing about the
-        # distance inside it, so a body at the far door and a body at the
-        # player's elbow arrived identical and the prose supplied the
-        # difference itself -- a body at the other door narrated "on my
-        # right" (UNBUILT 1.149). Through `measured_proximity_rel`, so the
-        # tier is never the "near" default that only means nobody wrote
-        # stations: absent is absent, and the narrator is told nothing
-        # rather than told wrong. Adds no admission -- every body here has
-        # already passed `_player_sees_character` above.
-        depth = measured_proximity_rel(sc, p_name, name)
-        payload[display] = {
-            "room": room_names.get(now_room, now_room),
-            "prev_room": prev_display,
-            "moved": moved,
-            **({"depth": depth} if depth else {}),
-        }
-        # The display is what prose says; the key is what the ledger is filed
-        # under, and the attire screen needs both.
-        facts.append({"name": display, "key": name, "room_id": now_room,
-                      "moved": moved})
+    # ONE DERIVATION PER PAIR: `_player_sees_character` and the depth read
+    # below ask the same pair's sight, and outside a read pass each ask
+    # re-derives it (measured 2026-10-04: 1075 ms against 600 on seven
+    # bodies in a 96-pace square).
+    with scene_read_pass(sc):
+        for name, info in cast_info.items():
+            prev_room = cast_room(prev_sc, name, ctx.cast)
+            now_room = cast_room(sc, name, ctx.cast)
+            if not now_room:
+                continue
+            # S3-A4: only include characters currently IN the player's room.
+            # Previously, a character who LEFT (prev_room == p_room but now_room
+            # != p_room) was included with their destination room name, leaking
+            # spatial info the player hasn't perceived. The player can only
+            # place someone who is still co-present -- a character who left is
+            # gone, and their destination is not the player's to know.
+            if not p_room or now_room != p_room:
+                continue
+            # S3-A4 (second half): co-location alone was the whole gate, so a
+            # character who ENTERED the player's pitch-dark room still arrived
+            # here with moved=True. The narrator prompt's POSITION CONTINUITY
+            # rule then invites rendering them and _check_narrator_fidelity
+            # ENFORCES prose agreement, turning an unperceived body into a
+            # required sentence.
+            if not _player_sees_character(sc, p_name, p_room, name, now_room):
+                continue
+            moved = (prev_room is None) or (prev_room != now_room)
+            # Where they came FROM is a separate perception from the fact that
+            # they are here now: seeing someone walk in tells you nothing about
+            # the room behind the door. Name the origin only when the player can
+            # see into it (barrier + light, via has_visual). Otherwise the entry
+            # still ships -- the player sees the arrival -- with no origin.
+            prev_display = None
+            if moved and prev_room and has_visual(
+                    spatial_rel(sc, p_room, prev_room)):
+                prev_display = room_names.get(prev_room, prev_room)
+            display = _speaker_display(
+                name, recognized, info.get("appearance"), info.get("aliases"),
+                earned=_earned_labels(ctx))
+            # HOW FAR OFF, when the geometry actually measured it (D4, review
+            # 2026-09-07). The payload named the ROOM and said nothing about the
+            # distance inside it, so a body at the far door and a body at the
+            # player's elbow arrived identical and the prose supplied the
+            # difference itself -- a body at the other door narrated "on my
+            # right" (UNBUILT 1.149). Through `measured_proximity_rel`, so the
+            # tier is never the "near" default that only means nobody wrote
+            # stations: absent is absent, and the narrator is told nothing
+            # rather than told wrong. Adds no admission -- every body here has
+            # already passed `_player_sees_character` above.
+            depth = measured_proximity_rel(sc, p_name, name)
+            # PAST THE DISTANCE A FACE IS READ AT, the view's own tier ("some way
+            # off", `composer.presence_percepts`), read off the same certain
+            # distance -- never "across" for a body the page calls distant.
+            _far = sight_between(sc, p_name, name).evidence.low
+            if depth and _far is not None and _far > FACE_RANGE_M:
+                depth = "distant"
+            # TWO BODIES THE VIEW CANNOT TELL APART ARE STILL TWO BODIES: keyed by
+            # a label they share ("a figure"), the second overwrote the first, and
+            # an arrival's `moved` went with it. Numbered as the company record
+            # numbers them (`perception._co_present_company`).
+            stem, n = display, 2
+            while display in payload:
+                display, n = f"{stem} ({n})", n + 1
+            payload[display] = {
+                "room": room_names.get(now_room, now_room),
+                "prev_room": prev_display,
+                "moved": moved,
+                **({"depth": depth} if depth else {}),
+            }
+            # The display is what prose says; the key is what the ledger is filed
+            # under, and the attire screen needs both.
+            facts.append({"name": display, "key": name, "room_id": now_room,
+                          "moved": moved})
     return payload, facts, room_names
 
 
@@ -2046,12 +2102,24 @@ def narrator(ctx, nonce):
             "aliases": character_scene_keys(_sh)[1:],
         }
 
+    _earned = _earned_labels(ctx)
+
     def _view_label(name):
         info = cast_info.get(str(name)) or {}
         return _speaker_display(name, recognized, info.get("appearance"),
-                                info.get("aliases"))
+                                info.get("aliases"), earned=_earned)
 
-    cast_pronouns = _cast_pronouns(ctx.cast, label=_view_label)
+    def _pronoun_label(name):
+        # Only a body the player's view NAMED or SHOWED is keyed here: an
+        # unperceived stranger keyed by its appearance handed the page a
+        # roster of faces the player never saw -- a body fifty-seven metres
+        # off in the dark (review 2026-10-04). The card already says a
+        # character absent from `cast_pronouns` keeps what the view set.
+        if str(name) in _earned or _recognizes(name, recognized):
+            return _view_label(name)
+        return None
+
+    cast_pronouns = _cast_pronouns(ctx.cast, label=_pronoun_label)
 
     # Consciousness gate: when the player is non-awake, their `player_view` is
     # already the deterministic residue (perception_outcome). Do NOT also hand
@@ -2133,7 +2201,7 @@ def narrator(ctx, nonce):
             if isinstance(pers, dict) else []
         _other_displays = [
             _speaker_display(_n, recognized, _i.get("appearance"),
-                             _i.get("aliases"))
+                             _i.get("aliases"), earned=_earned)
             for _n, _i in cast_info.items() if _n != player_name
         ]
         player_forms = self_name_forms(
@@ -2258,7 +2326,8 @@ def narrator(ctx, nonce):
         _senses = _sensory_channels_manifest(
             _scene_for_frame, player_name, view,
             player_observations, recognized, cast_info, p_room,
-            standing_verdicts=_verdicts, include_delivery_text=False)
+            standing_verdicts=_verdicts, include_delivery_text=False,
+            earned=_earned)
         if _senses:
             _world_fields["sensory_channels"] = _senses
         # STILL TRUE, AND NOT SAID SINCE BEFORE THE PAGE'S OWN MEMORY (D7).
@@ -2283,7 +2352,7 @@ def narrator(ctx, nonce):
                 str(f.get("name") or "") for f in pos_facts
                 if isinstance(f, dict) and f.get("name")} | {
                 _speaker_display(_n, recognized, _i.get("appearance"),
-                                 _i.get("aliases"))
+                                 _i.get("aliases"), earned=_earned)
                 for _n, _i in cast_info.items() if _n != player_name}),
         }
 

@@ -256,6 +256,15 @@ from world.spatial_senses import (
     sound_bearing, sound_bearing_via, sound_path,
     sound_walk_level, earshot_rooms,
     spatial_rel_between, visual_level_between,
+    SightGrade, sight_between, graded_sight, sight_for_acts,
+    distance_took_detail,
+)
+from world.spatial_range import (
+    FACE_RANGE_M, CONDUCT_RANGE_M, SMALL_SCALE, LARGE_SCALE,
+    RANGE_CLASS_REACH, RangeEvidence,
+    range_sight, range_of,
+    anchor_scale, thing_scale, sight_scale, sight_reach,
+    position_box, pair_range, edge_bounds,
 )
 
 
@@ -292,7 +301,7 @@ from world.spatial_lint import (
 
 
 from world.spatial_light_field import (
-    _FIELD_CACHE, _beat_hash, _cast, BEAT_KEY, beat_index, BOUNCE,
+    _FIELD_CACHE, _beat_hash, _cast, _lit, BEAT_KEY, beat_index, BOUNCE,
     BOUNCE_PASSES_CAP, BOUNCE_REACH, BRIGHT_T, compute_light_field,
     cone_factor, CONE_GAIN, CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD,
     ambient_floor_word, DEFAULT_LIGHT_SHAPE, DEFAULT_STEADINESS, DIM_T,

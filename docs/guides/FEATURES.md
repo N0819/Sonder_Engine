@@ -359,6 +359,7 @@ legitimately perceive, learn, remember or infer.
   holds, is out of reach of the floor, and can look into an upper window.
   *(partial: sloping ground is not built yet, and a flier still travels by
   doorways.)*
+- **Distance** — What a body sees of another fades with distance the way it does in life: a face to about fifteen metres, what someone is doing and wearing to about a hundred, a figure beyond. A stranger across a square is "a figure some way off" and someone you know keeps their name; what they hold, their expression and the tone of their voice go first; a small thing on a far table is not named while a cart is. Keen eyes carry further. *(partial: sight still reaches only one open doorway, fog does not shorten it yet, and a far act reads as movement rather than as its gesture)*
 - **Vistas** — What stands on the horizon -- a mountain range, the sea, a
   city's lights -- is set by the Writers' Room and seen from open air or a
   window facing its way, hidden by fog, rain and snow at the distances those

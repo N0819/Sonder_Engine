@@ -3,7 +3,7 @@
 material ladder and bearing, scent, and perceiver acuity."""
 
 import re
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from world.spatial_orientation import (
     normalize_vertical,
@@ -32,6 +32,8 @@ from world.spatial_geometry import (
 )
 from world.spatial_identity import _ci_get, room_of, same_subject
 from world.spatial_light import SIGHT_LEVELS, _LIGHT_SIGHT, light_at, normalize_light
+from world.spatial_range import (RangeEvidence, pair_range, range_of,
+                                 sight_reach, sight_scale)
 from world.spatial_routing import rooms_adjacent, spatial_rel
 
 
@@ -884,6 +886,113 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
     return "full"
 
 
+class SightGrade(NamedTuple):
+    """One pair's sight, in ONE derivation so its parts cannot disagree.
+
+    `level` is what every reader of `visual_level_between` gets: the weaker
+    of `base` -- the grade the light, the line, the cones and the crossing
+    floor give -- and `range`, what the distance between the two allows
+    (`spatial_range`, never `none`). A reader that has to tell a dim room
+    from a far field asks for the parts: a glove is seen at three metres in
+    the dim and not at sixty in the sun, and clothes show their colour at
+    sixty in the sun and not at three in the dim. `evidence` and `scale` are
+    what the range was read from, so an observer whose eyes carry further
+    (`graded_sight`) re-reads the same evidence rather than a second copy.
+    """
+    level: str
+    base: str
+    range: str
+    evidence: RangeEvidence
+    scale: float
+    #: The grade exactly as it was before distance became an input: `base`
+    #: with every cap the distance evidence replaced still applied -- the
+    #: doorway cone's guess, the plan's face limit, an authored far edge at
+    #: `shapes`. For the readers whose behaviour is left for a ruling
+    #: (`charter_observe._witnesses`), never for a view.
+    former: str = ""
+
+
+def sight_between(scene: dict, observer: str, target: str,
+                  senses=None) -> SightGrade:
+    """The whole sight record for one pair -- once per read pass, per pair
+    (`visual_level_between` is its level)."""
+    lightless = "" if sense_needs_light(senses) else "lightless"
+    return scene_memo(
+        scene,
+        ("sight_between", str(observer), str(target), lightless),
+        lambda: _sight_between(scene, observer, target, senses))
+
+
+def graded_sight(scene: dict, observer: str, target: str, senses=None) -> str:
+    """The sight one OBSERVER has of a body: the observer's card acuity
+    shifts the grade the place gave (`sense_adjusted`), and carries the
+    distance bands further or shorter (`sight_reach`) -- it never lifts a
+    grade past what the distance allows its eyes. Keen eyes read a face at
+    thirty metres, not at a hundred. With no card, `visual_level_between`.
+    """
+    grade = sight_between(scene, observer, target, senses)
+    if not senses:
+        return grade.level
+    level = _weaker_sight(
+        sense_adjusted(grade.base, "sight", senses),
+        range_of(grade.evidence, grade.scale, sight_reach(senses)))
+    # A BARE `remote` EDGE HAS NO FAR END, so a rise read across it cannot
+    # hold there: a dulled eye that the old flat `shapes` cap left with
+    # nothing still has nothing (`sense_adjusted` of that cap), where a
+    # bounded edge is read at its far end and a dulled eye sees a figure.
+    if grade.evidence.edge_unbounded:
+        level = _weaker_sight(level, sense_adjusted("shapes", "sight", senses))
+    return level
+
+
+def sight_for_acts(scene: dict, observer: str, target: str, senses=None):
+    """`(level, band)` for the ACT channel: the place's grade, never lifted
+    by the observer's card, against the distance band the card's eyes
+    carry (`sight_reach`).
+
+    The act channel never read acuity: a keen card whose sight lifted a
+    crossing's or a cone's `shapes` floor to `conduct` would read the whole
+    surface of an act through a locked door (the "Long Gallery" PC1 leak
+    this channel's grader was written against). The card may only scale
+    the bands -- keen eyes read a hand at thirty metres, dulled ones at
+    seven -- and the band is what takes the surface at range. One rule for
+    the composed view (`perception._sight_detail`) and the interaction
+    micro-loop alike.
+
+    Two parts of the card DO reach it, because neither lifts: sight that
+    needs no light sees the act in a dark room it sees the body in (the
+    card's lightless bit is inside the derivation, as for every reader),
+    and across a doorway a body the observer's own eyes cannot see at all
+    (`graded_sight` none -- a dulled eye the cone leaves nothing) shows no
+    act either: the outcome view showed nobody there while the onset view
+    and the micro-loop delivered the act.
+    """
+    grade = sight_between(scene, observer, target, senses)
+    band = range_of(grade.evidence, grade.scale, sight_reach(senses))
+    level = _weaker_sight(grade.base, band)
+    if senses and level != "none" \
+            and room_of(scene, observer) != room_of(scene, target) \
+            and graded_sight(scene, observer, target, senses) == "none":
+        level = "none"
+    return level, band
+
+
+def distance_took_detail(scene: dict, observer: str, target: str,
+                         senses=None, level=None) -> bool:
+    """Did DISTANCE, not light, leave this body short of full detail to
+    this observer? True when the light-side grade (the place's, shifted by
+    the observer's card) is full and the observer's grade is not -- what a
+    renderer needs to say "a figure" rather than the dim's "an indistinct
+    figure". Words for WHERE a body is read the distance itself
+    (`spatial_range`), never this cause."""
+    level = level if level is not None else graded_sight(scene, observer, target, senses)
+    if level in ("none", "full"):
+        return False
+    grade = sight_between(scene, observer, target, senses)
+    seen = sense_adjusted(grade.base, "sight", senses) if senses else grade.base
+    return seen == "full"
+
+
 def visual_level_between(scene: dict, observer: str, target: str,
                          senses=None) -> str:
     """Graded sight from one BODY to another -- once per read pass, per pair.
@@ -905,15 +1014,11 @@ def visual_level_between(scene: dict, observer: str, target: str,
 
     The full derivation follows.
     """
-    lightless = "" if sense_needs_light(senses) else "lightless"
-    return scene_memo(
-        scene,
-        ("visual_level_between", str(observer), str(target), lightless),
-        lambda: _visual_level_between(scene, observer, target, senses))
+    return sight_between(scene, observer, target, senses).level
 
 
-def _visual_level_between(scene: dict, observer: str, target: str,
-                          senses=None) -> str:
+def _sight_between(scene: dict, observer: str, target: str,
+                   senses=None) -> SightGrade:
     """Graded sight from one BODY to another, accounting for local light.
 
     The room-level form cannot know that the target is standing in a torch's
@@ -921,20 +1026,31 @@ def _visual_level_between(scene: dict, observer: str, target: str,
     carried light is for.
 
     Cross-room sight through an opening is additionally capped by the
-    opening's view-cone (`_opening_view_cap`, S2a) on BOTH sides, and by an
-    authored far/remote edge distance (a figure across a courtyard is
-    `shapes`, not a readable face). Both caps default to today's behaviour
-    exactly where the data is absent.
+    opening's view-cone (`_opening_view_cap`, S2a) on BOTH sides -- the
+    room-grain stand-in for "placement unknown", which a measured, clear
+    line between two pinned bodies answers directly.
+
+    DISTANCE IS THE SECOND INPUT (`spatial_range`, owner 2026-10-04): the
+    `base` grade below is the light, the line, the cones and the crossing
+    floor; the `range` is what the distance between the two leaves of the
+    target; the level is the weaker. An authored far or remote edge used to
+    cap at `shapes` flat -- a figure across a courtyard -- and is now that
+    distance's evidence, read at its far end.
     """
     o_room = room_of(scene, observer)
     t_room = room_of(scene, target)
     rel = spatial_rel(scene, o_room, t_room)
     crossing = crossing_visible_from(scene, o_room, target)
+
+    def no_range(level):
+        # With no line there is no distance to read: nothing is claimed.
+        return SightGrade(level, level, "full", RangeEvidence(), 1.0, level)
+
     if containment_conceals(scene, observer, target):
-        return "shapes" if crossing else "none"
+        return no_range("shapes" if crossing else "none")
     if not _sight_line(rel):
         # Still going through: a shape in the doorway, not yet gone.
-        return "shapes" if crossing else "none"
+        return no_range("shapes" if crossing else "none")
     # You see what is LIT, so the light that matters is the light on the thing
     # being looked at.
     level = _LIGHT_SIGHT.get(light_at(scene, target), "full")
@@ -971,17 +1087,36 @@ def _visual_level_between(scene: dict, observer: str, target: str,
         level = "full"
     from world.site_plan import elevated_pair
     raised = not rel.get("same_room") and elevated_pair(scene, o_room, t_room)
+    evidence = pair_range(scene, observer, target)
+    line = None
+    former = level
     if not rel.get("same_room") and not raised:
         # (A pair a storey apart on one plan is answered by the line in
         # three dimensions below -- `site_plan.plan_sight` -- which already
         # says what the window shows; the room-grain cone has nothing to add.)
+        #
+        # A MEASURED, CLEAR LINE IS THE ANSWER THE CONE GUESSES AT. The cone
+        # is the room-grain stand-in for placement unknown -- its own
+        # docstring -- and its large-room fallback caps at `shapes` "through
+        # a door you can tell a big room is occupied, not read a face across
+        # it". Two PINNED bodies (`evidence.exact`) whose line threads the
+        # doorway's aperture (`body_visibility`, basis "line") are placement
+        # known: the distance below answers the face. Probed before this:
+        # two pinned bodies four paces apart across a gateway between two
+        # big open rooms graded `shapes`. A dealt seat is never exact, so a
+        # body merely `at` an anchor keeps the cone.
+        if evidence.exact and evidence.basis == "field":
+            from world.spatial_fov import body_visibility
+            line = body_visibility(scene, observer, target)
         cap = _weaker_sight(
             _opening_view_cap(scene, t_room, target, o_room),
             _opening_view_cap(scene, o_room, observer, t_room),
         )
+        former = _weaker_sight(former, cap)
         if rel.get("distance") in ("far", "remote"):
-            cap = _weaker_sight(cap, "shapes")
-        level = _weaker_sight(level, cap)
+            former = _weaker_sight(former, "shapes")
+        if not (line and line.get("basis") == "line" and line.get("visible")):
+            level = _weaker_sight(level, cap)
     # WHAT THE LINE MEETS. The within-room geometry (`world.spatial_fov`)
     # is asked HERE, in the one function every sight decision goes through,
     # so a body behind the counter is refused to presence, pose,
@@ -990,19 +1125,30 @@ def _visual_level_between(scene: dict, observer: str, target: str,
     # -- both bodies at a measured station, an opaque anchor of a stated
     # height between them (`basis == "line"`) -- and otherwise leaves the
     # level exactly as the light and the barriers graded it.
-    if level != "none":
+    if level != "none" or former != "none":
         from world.spatial_fov import body_visibility
-        line = body_visibility(scene, observer, target)
+        if line is None:
+            line = body_visibility(scene, observer, target)
         if line.get("basis") in ("line", "plan") and not line.get("visible"):
             level = "none"
-        # Up a storey and across a garden, a face is read only so far.
-        if line.get("basis") == "plan" and level != "none":
+            former = "none"
+        # Up a storey and across a garden, a face is read only so far: for
+        # two pinned ends the distance below says how far; an end that is
+        # only somewhere in its room keeps the plan's own face limit.
+        if line.get("basis") == "plan":
             from world.site_plan import FACE_READ_M
             if (line.get("distance_m") or 0) > FACE_READ_M:
-                level = _weaker_sight(level, "shapes")
+                former = _weaker_sight(former, "shapes")
+                if not evidence.exact:
+                    level = _weaker_sight(level, "shapes")
     if crossing and level == "none":
-        return "shapes"
-    return level
+        level = "shapes"
+    if crossing and former == "none":
+        former = "shapes"
+    scale = sight_scale(scene, target)
+    band = range_of(evidence, scale)
+    return SightGrade(_weaker_sight(level, band), level, band, evidence, scale,
+                      former)
 
 
 def _measured_intimacy(scene: dict, observer: str, target: str) -> bool:

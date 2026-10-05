@@ -10,7 +10,7 @@ open doorway laid a wider neighbour (survey for distance detail,
 
 from __future__ import annotations
 
-from world.spatial import visual_level_between
+from world.spatial import sight_between, visual_level_between
 
 
 def _room(side, **extra):
@@ -22,10 +22,14 @@ def _room(side, **extra):
 
 
 def test_corner_to_corner_in_a_lit_room_is_seen():
+    """The LINE and the light give a far corner in full; how much of a body
+    that far away is made out is the distance's answer (`spatial_range`),
+    and never `none`."""
     for side in (8, 12, 24, 50):
         sc = _room(side)
-        assert visual_level_between(sc, "Ada", "Ben") == "full", side
-        assert visual_level_between(sc, "Ben", "Ada") == "full", side
+        for a, b in (("Ada", "Ben"), ("Ben", "Ada")):
+            assert sight_between(sc, a, b).base == "full", side
+            assert visual_level_between(sc, a, b) != "none", side
 
 
 def test_the_centre_sees_every_corner():

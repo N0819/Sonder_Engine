@@ -59,11 +59,14 @@
     "声",
     "見知らぬ人物",
     "ぼんやりした人影",
+    "人影",
     "あなた",
     ""
   ],
   "dim_figure": "ぼんやりした人影",
   "dim_figures": "いくつかのぼんやりした人影",
+  "far_figure": "人影",
+  "far_figures": "いくつかの人影",
   "count_names": {
     "1": "一人",
     "2": "二人",
@@ -96,6 +99,7 @@
     "within_reach": "手の届く距離",
     "near": "すぐ近く",
     "across": "部屋の向こう",
+    "distant": "少し離れたところ",
     "default": "ここ"
   },
   "leading_connectives": [

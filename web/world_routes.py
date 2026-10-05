@@ -910,19 +910,27 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
     # and the cone, `hear_level` over `spatial_rel_between` at a normal
     # voice for the ear. Built for the pipeline drawer, 2026-09-15.
     if sight_from and str(sight_from) in bodies:
-        from world.spatial import body_visibility, hear_level, spatial_rel_between
+        from world.spatial import (body_visibility, hear_level, sight_between,
+                                   spatial_rel_between)
         for who in bodies:
             if who == str(sight_from):
                 continue
             try:
                 seen = body_visibility(scene, str(sight_from), who)
                 heard = hear_level(spatial_rel_between(scene, str(sight_from), who), "normal")
+                # THE GRADE THE VIEW IS COMPOSED AT, beside the line: `visible`
+                # answers whether the line reaches, `level` how much of the
+                # body it carries and `range` what the distance left of it
+                # (`spatial_range`) -- so the map never says "visible" for a
+                # body the page calls a figure.
+                grade = sight_between(scene, str(sight_from), who)
             except Exception:
                 continue
             bodies[who]["from"] = {
                 "visible": bool(seen.get("visible")), "sector": seen.get("sector"),
                 "tier": seen.get("tier"), "occluded_by": seen.get("occluded_by"),
-                "basis": seen.get("basis"), "hears": heard}
+                "basis": seen.get("basis"), "hears": heard,
+                "level": grade.level, "range": grade.range}
     # The townspeople, after the scene's bodies: this room's, then the ones
     # standing in a neighbour the field lays (`room` says which). Their
     # ``source`` is the placement's (`PLACEMENT_SOURCES`), not the pin word.

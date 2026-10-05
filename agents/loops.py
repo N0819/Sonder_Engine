@@ -20,9 +20,12 @@ from story.scene import (
     get_scene,
     reaction_config,
 )
-from world.spatial import (hear_level, proximity_rel, room_of, sense_adjusted,
-                     sound_bearing, spatial_rel, spatial_rel_between,
-                     visual_level_between)
+from world.scene_memo import scene_read_pass
+from world.spatial import (graded_sight, hear_level, proximity_rel, room_of,
+                     sense_adjusted, sound_bearing, spatial_rel,
+                     spatial_rel_between, visual_level_between)
+from story.scene import appearance_of
+from . import composer
 
 from .character import _unanswered_question_note, character_step
 from .common import (
@@ -40,7 +43,6 @@ from .common import (
     character_scene_keys,
     _conceal_from_targets_observer,
     _delivery_ok,
-    _unknown_actor_label,
     character_room,
     _dict,
     _dict_list,
@@ -201,7 +203,7 @@ def _base_loop_observations(ctx):
 
 def _micro_observation(observer_id, sentence, *, event_prefix, event_index,
                        kind, channel, actor="", fidelity="rendered",
-                       directed_at_self=False):
+                       directed_at_self=False, ambiguity=None):
     """Wrap one admitted delivery without consulting its raw declaration."""
     from .composer import compact_observation
 
@@ -216,7 +218,8 @@ def _micro_observation(observer_id, sentence, *, event_prefix, event_index,
         "phase": "event",
         "order": event_index,
         "standing": False,
-        "ambiguity": 0.15 if fidelity == "rendered" else 0.65,
+        "ambiguity": (ambiguity if ambiguity is not None
+                      else 0.15 if fidelity == "rendered" else 0.65),
         "directed_at_self": directed_at_self,
     })
 
@@ -310,8 +313,7 @@ def _micro_seen_bodies(scene, observer_name, senses=None):
         subject = str(subject or "").strip()
         if not subject or subject == str(observer_name or "").strip():
             continue
-        level = visual_level_between(scene, observer_name, subject, senses)
-        if sense_adjusted(level, "sight", senses) != "none":
+        if graded_sight(scene, observer_name, subject, senses) != "none":
             seen.add(subject)
     return seen
 
@@ -339,25 +341,55 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
     # re-queries when given one, which inside this per-observer/per-event loop
     # is a query per event per observer.
     amap = awareness_map(ctx.chat.id)
+    # THE ACTOR AS THE COMPOSED VIEW KNOWS THEM: the outward form a disguise
+    # leaves every observer, and who may see through it -- the record
+    # `composer.observer_display_map` labels a body from. This round labelled
+    # from the card's TRUE appearance and bare name recognition, so it named
+    # a disguised actor to anyone who knew the name, and described an unseen
+    # stranger by a face nobody saw (review 2026-10-04).
+    from .perception import (_appearance_as_prose, _sight_detail,
+                             _subject_disguise_context)
+    _visible, _active, _known_to, _conceals = _subject_disguise_context(
+        ctx, actor_name, _appearance_as_prose(
+            appearance_of(actor_name, actor_appearance, scene)), known)
+    actor_record = {"name": actor_name, "appearance": _visible,
+                    "aliases": character_scene_keys(actor_sheet)[1:],
+                    "disguise_known_to": _known_to,
+                    "disguise_conceals_identity": _conceals}
     views = {}
     perceived_by = set()
+    with scene_read_pass(scene):
+        _micro_rounds(ctx, actor_id, actor_result, scene, actor_sheet,
+                      actor_name, actor_room, actor_record, known, amap,
+                      views, perceived_by, observation_out, event_prefix,
+                      _sight_detail)
+    return views, perceived_by
+
+
+def _micro_rounds(ctx, actor_id, actor_result, scene, actor_sheet, actor_name,
+                  actor_room, actor_record, known, amap, views, perceived_by,
+                  observation_out, event_prefix, _sight_detail):
+    """Every other cast member's delivery of one actor's micro round, inside
+    ONE read pass so each pair's sight is derived once
+    (`deterministic_micro_perception`)."""
     for row in ctx.cast:
         observer_id = int(row["id"])
         if observer_id == actor_id:
             continue
         observer_sheet = normalized_character_from_text(row["sheet"])
         observer_name = character_name(observer_sheet)
-        # THE SAME PREDICATE AS EVERY OTHER LABEL SITE (`_recognizes`): bare
-        # membership is string equality, so a rank or title variant of a
-        # body this observer knows was a stranger here and a person in the
-        # composed view a stage later; and the aliases the actor answers to
-        # go into the label's scrub as they do at every other site.
-        if _recognizes(actor_name, set(known.get(observer_name) or [])):
-            display = actor_name
-        else:
-            display = _unknown_actor_label(
-                actor_name, actor_appearance,
-                character_scene_keys(actor_sheet)[1:])
+        observer_senses = character_senses(observer_sheet)
+        # THE DISPLAY MAP'S RULE, not a second copy of it
+        # (`composer.observer_display_map`): a known body by name unless a
+        # disguise hides who it is, a stranger seen in full by the outward
+        # form, a stranger seen short of full as a figure -- "a figure" when
+        # distance took the detail, "an indistinct figure" when the dim did
+        # -- and an unseen one as the unfamiliar person. The composed view of
+        # the same beat says the same (the two delivery families, UNBUILT
+        # §3.8).
+        display = composer.observer_display_map(
+            scene, observer_name, [actor_record], known,
+            observer_senses).get(actor_name) or composer._unfamiliar_person()
         observer_room = character_room(scene, observer_sheet)
         # THE body-to-body relation builder: it carries concealment, the
         # crossing grace, and the enclosure directions the bare room-level
@@ -375,8 +407,7 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
         proximity = proximity_rel(scene, observer_name, actor_name)
         # G4: the observer's card senses gate what the channels carry. An
         # ordinary card is byte-identical to before; only explicitly authored
-        # acuity shifts anything.
-        observer_senses = character_senses(observer_sheet)
+        # acuity shifts anything (`observer_senses`, read above).
         additions = []
         observations = []
         for event_index, event in enumerate(actor_result.get("sequence") or []):
@@ -484,19 +515,49 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                     perceived=_micro_seen_bodies(
                         scene, observer_name, observer_senses),
                     who="%s -> %s" % (actor_name, observer_name))
-                sentence = _observable_predicate(display, surface) if surface else None
+                # THE ACT CHANNEL'S RULE, the same function the composed view
+                # grades acts with (`perception._sight_detail`): across a
+                # doorway the body-level grade is the answer, and where the
+                # place or the distance left the act short of full detail the
+                # act is a body moving -- its surface names what a hand holds.
+                _detail = _sight_detail(scene, observer_name, actor_name,
+                                        relation, senses=observer_senses)
+                if _detail == "none":
+                    continue
+                fidelity = "rendered"
+                if surface and _detail == "shapes":
+                    fidelity = "ambiguous"
+                    _where = (composer._visible_room_label(scene, actor_name)
+                              if room_of(scene, actor_name) != observer_room
+                              else "")
+                    sentence = (compositor_text(
+                        "act_shapes_placed", label=_cap_label(display),
+                        where=compositor_text("presence_in_room", room=_where))
+                        if _where else
+                        compositor_text("act_shapes", label=_cap_label(display)))
+                else:
+                    sentence = _observable_predicate(display, surface) if surface else None
                 if sentence:
                     additions.append(sentence)
                     observations.append(_micro_observation(
                         observer_id, sentence, event_prefix=event_prefix,
                         event_index=event_index, kind="action", channel="sight",
-                        actor=display))
+                        actor=display, fidelity=fidelity,
+                        # A body moving is filed as the composed view files
+                        # the same percept (`composer._FIDELITY_AMBIGUITY`).
+                        ambiguity=(composer._FIDELITY_AMBIGUITY["shapes"]
+                                   if fidelity == "ambiguous" else None)))
                     perceived_by.add(observer_id)
         if additions:
             views[observer_id] = additions
             if observation_out is not None:
                 observation_out[observer_id] = observations
     return views, perceived_by
+
+def _cap_label(label):
+    text = str(label or "")
+    return text[:1].upper() + text[1:]
+
 
 def _drop_non_awake(ctx, reactor_ids):
     """Remove unconscious/asleep/sedated cast from a reactor list -- a non-awake

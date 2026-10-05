@@ -1724,6 +1724,75 @@ What is left is the price of `passing`: a body that crosses rooms to plant
 itself in a doorway no longer bars a walker in the same beat. A body that
 keeps its room still does.
 
+
+<a id="unbuilt-1-175"></a>
+
+### 1.175 What distance does not reach yet (2026-10-04)
+
+Distance became sight's second input on the owner's word (`world/spatial_range.py`,
+`tests/test_sight_at_range.py`). Built from a survey of every sight path and a
+three-design panel; what follows was left out on purpose, each with its reason.
+
+- **Sight reaches one open doorway.** A figure two fields away is not seen at
+  all: `spatial_rel` relates direct edges only, and the composite field lays one
+  hop. A multi-hop open-air relation read ONLY by `_sight_between` -- never
+  `spatial_rel`, which also decides crossings, onset planning and hearing --
+  with a cost budget for `_visible_set` (18-43 ms a call on a 96-pace room).
+- **Weather does not shorten it.** The vistas' air (`world.vistas.air_from_weather`)
+  is the right input, but the densest air the weather produces is heavy snow at
+  0.4 km, where a person's bands do not bite; built against fog that can occur.
+- **A far act is a body moving.** At distance-conduct the act's surface names
+  what a hand holds and cannot be trimmed without a word list, so it renders as
+  motion. Its gesture needs an encoder-written far twin (a prompt and schema
+  change every story pays for) or the structured heading (`look`, the
+  movement's destination) -- the owner's ruling.
+- **Charter witnesses keep today's rule** (`charter_observe._witnesses`):
+  graded by the new bands, a public act's witnesses would end at 15 m and its
+  news would reach fewer people -- a living-world change for the owner's ruling.
+- **Still outside the one grading:** background presences (co-location only,
+  and the second delivery family of §3.8), ambient sight percepts -- a courier,
+  a crowd, a notice -- with no cell to measure, the Director's `sight_digest`,
+  and an extra player's narrator labels (`_extra_view_label`).
+- **Dim light and every non-distance `shapes` still deliver seen tells,
+  demeanor and a line's tone**, which those rungs' own definitions withhold;
+  distance-conduct now withholds them. Left for a ruling, not changed silently.
+- **A known name is kept at every distance**, the existing doctrine ("degraded
+  sight costs detail, not acquaintance"). Dropping it past 100 m would need the
+  grade to carry its cause through the voice path too, or one body gets two
+  names in a view.
+- **No hysteresis at a band's edge.** A body stepping back and forth across
+  fifteen metres is re-announced each time its face comes and goes. A twin key
+  that held the old band was built and removed in review: it claimed "still"
+  for a tier the view had never given and kept a stale sentence alive in the
+  narrator's long-established facts. If the churn shows in play, the fix is a
+  verdict that knows a match came through a twin, never a twin in the ledger.
+- **A dulled card across a bounded far edge now sees a figure.** The old flat
+  `shapes` cap, shifted down a rung by a dulled eye, left it nothing; read at
+  the far end of the evidence, a dulled eye makes out a figure at seventy-five
+  metres. A bare `remote` edge, which has no far end, keeps the old nothing.
+- **Fixtures and things are graded for ordinary eyes.** A card's reach scales
+  how far a BODY is read; the fixture and thing cuts, and the light and sound
+  sentences that read the same rows, do not take the observer's card.
+- **Untested wiring:** the footsteps check reading the light-side grade, and
+  the crossing label from the pack, are pinned by no test.
+- **Older splits the distance made easier to see** (each pre-dates it, and
+  each only subtracts or only reorders): the English roll-call renders the
+  full-detail presences before the degraded ones, so a giant read in full at
+  forty metres is listed before a person made out at seventeen; the
+  micro-loop's room-level gate (`common._delivery_ok`) drops a dark co-present
+  act the composed view gives as motion; and the micro-loop labels one actor
+  at a time, so two lookalike strangers lose the composed view's joint
+  "the second ..." (the two delivery families of §3.8).
+- **A dulled card sees no clothes at any distance.** Acuity shifts every grade
+  down a rung, so a dulled eye at arm's length is at `conduct` by its card --
+  "an indistinct figure", and now no attire to match it. The bands say conduct
+  shows cut and colour; for a dulled eye the card's own shift wins. A ruling
+  on what dulled sight means for clothing would settle it.
+- **Smaller residuals:** a pose at range keeps its posture but not what it rests
+  on; an unplaced thing has no distance and is named at any; a fixture's
+  description is delivered whole at conduct range; a body's size is relative to
+  its own baseline (`scales`), so a dragon card reads as person-sized.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

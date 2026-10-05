@@ -70,8 +70,8 @@ from story.scene import (
     sheet_state,
 )
 from llm.schemas import validate_llm_output
-from world.spatial import (contact_phrase, contacts_of, corridor_sightlines, room_of,
-                     sense_adjusted, spatial_digest,
+from world.spatial import (contact_phrase, contacts_of, corridor_sightlines, graded_sight,
+                     room_of, sense_adjusted, spatial_digest,
                      speech_articulation_impediment, sprint_reach,
                      visible_adjacent_rooms, visual_level_between)
 from world.survival import vitals_of
@@ -94,6 +94,7 @@ from .common import (
     self_name_forms,
     declared_goal,
     observer_label_fn,
+    observer_view_label_fn,
     observer_name_scrub,
     scrub_names_deep,
     _recognizes,
@@ -1043,11 +1044,9 @@ def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0, label=None):
     # the first half. Co-location alone handed the fact over. Sight is the
     # channel that places a silent body (a silent one makes no sound); the
     # observer's own card grades it, as the composed view's does.
-    if sense_adjusted(
-            visual_level_between(sc, _positions_key(sc, character_scene_keys(sh)),
-                                 _positions_key(sc, [player]),
-                                 character_senses(sh)),
-            "sight", character_senses(sh)) == "none":
+    if graded_sight(sc, _positions_key(sc, character_scene_keys(sh)),
+                    _positions_key(sc, [player]),
+                    character_senses(sh)) == "none":
         return {}
     # THE NAME PASSES THE SAME GATE THE VIEW DID. `observer_label_fn` exists
     # so a structured field cannot hand over an identity the prose beside it is
@@ -4318,9 +4317,9 @@ def character_step(ctx, cid, nonce):
             # deliberately withholding.
             "spatial_frame": _annotate_known_exits(
                 spatial_digest(sc, character_name(sh),
-                               label_for=observer_label_fn(
+                               label_for=observer_view_label_fn(
                                    chat, character_name(sh), ctx.cast,
-                                   scene=sc)), sc,
+                                   sc, senses=character_senses(sh))), sc,
                 stored_state.get("visited_rooms") or [],
                 known_exits=stored_state.get("known_exits") or {},
                 here_rid=char_room,
@@ -4399,7 +4398,11 @@ def character_step(ctx, cid, nonce):
                 sc, chat, sh, _p_spoke,
                 quiet_beats=(0 if _p_spoke else _player_quiet_beats(
                     chat.id, ctx.turn.idx, ctx.turn.frame_id, cache=shared)),
-                label=_contact_label),
+                # What the player is called in a note about THIS beat is the
+                # view's word for them now (`observer_view_label_fn`).
+                label=observer_view_label_fn(
+                    chat, character_name(sh), ctx.cast, sc,
+                    senses=character_senses(sh))),
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_debt,

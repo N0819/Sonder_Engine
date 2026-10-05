@@ -2817,6 +2817,23 @@ def coarsen_region_surface(surface):
     return _SURFACE_DETAIL_TAIL.sub("", str(surface or "")).strip()
 
 
+#: How `perceptible_region_surfaces` marks a thing worn AT a region that
+#: covers nothing there -- a clip, a ring, a pin.
+_ORNAMENT_MARK = "[worn at, covers nothing]"
+
+
+def distant_region_surface(surface):
+    """What a region shows from a distance where the cut and colour of
+    clothing are read and nothing finer is (`world.spatial_range`'s
+    conduct band, owner 2026-10-04): the coarse surface, without the things
+    worn at it that cover nothing. A clip or a ring is a small thing, and a
+    small thing is not read at any distance a face is not.
+    """
+    kept = [part for part in str(surface or "").split("; ")
+            if _ORNAMENT_MARK not in part]
+    return coarsen_region_surface("; ".join(kept))
+
+
 def perceptible_region_surfaces(regions, beneath_visible=False):
     """The visible surface of each authored region, without hidden layers.
 
@@ -2911,7 +2928,7 @@ def perceptible_region_surfaces(regions, beneath_visible=False):
                 parts.append("%s [displaced; not covering this region]"
                              % _garment_text(shoved))
         for ornament in ornaments:
-            text = "%s [worn at, covers nothing]" % _garment_text(ornament)
+            text = "%s %s" % (_garment_text(ornament), _ORNAMENT_MARK)
             if ornament.get("description"):
                 text += " — %s" % ornament["description"]
             parts.append(text)

@@ -20,8 +20,8 @@ import re
 from world.charter_figure import figure_claim
 from world.charter_identity import display_name, identity_aliases
 from world.charter_mind import cap_minds
-from world.spatial import (hear_level, room_of, spatial_rel_between,
-                           visual_level_between)
+from world.spatial import (hear_level, room_of, sight_between,
+                           spatial_rel_between)
 
 
 PUBLIC_EVIDENCE_CAP = 12
@@ -155,12 +155,27 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
         return hear_level(rel, evidence.get("volume") or "normal") == "full"
 
     if evidence.get("kind") == "action":
+        # WITNESSING IS THE LIGHT'S AND THE LINE'S ANSWER, as it was before
+        # distance became sight's second input (`spatial_range`, owner
+        # 2026-10-04): read at the full rung, the new bands would limit a
+        # public act's witnesses to fifteen metres and the news it starts
+        # would reach fewer people -- a living-world change of its own, left
+        # for the owner's ruling (UNBUILT). Today's rule, exactly.
         if placed:
-            return visual_level_between(scene, str(observer), actor) == "full"
+            return _witnesses(sight_between(scene, str(observer), actor))
         stand_in = f"__charter_observer__:{body_key}"
-        return visual_level_between(
-            _observer_scene(scene, stand_in, place), stand_in, actor) == "full"
+        return _witnesses(sight_between(
+            _observer_scene(scene, stand_in, place), stand_in, actor))
     return False
+
+
+def _witnesses(grade) -> bool:
+    """Full by today's rule exactly (`SightGrade.former`): the light, the
+    line, the doorway cone's guess, the plan's face limit and an authored
+    far edge at `shapes` -- every cap the distance evidence replaced for a
+    view still applied here, so a pinned witness across a gateway or under
+    a window is refused as it was."""
+    return grade.former == "full"
 
 
 def evidence_key(turn_id, source_id):

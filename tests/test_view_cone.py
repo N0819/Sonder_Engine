@@ -116,9 +116,15 @@ def test_the_observers_side_is_gated_symmetrically():
     assert visual_level_between(sc, "O", "T") == "none"
 
 
-def test_a_far_edge_degrades_cross_room_bodies_to_shapes():
+def test_a_far_edge_is_read_as_its_distance():
+    """An authored edge distance used to cap a body across it at `shapes`
+    flat; it is now that distance's evidence (`spatial_range`, 2026-10-04):
+    50 m leaves a person's conduct, 200 m and a bare `remote` a shape."""
     sc = _scene(distance="50m", stations={"T": {"at": "far_wall"}})
-    assert visual_level_between(sc, "O", "T") == "shapes"
+    assert visual_level_between(sc, "O", "T") == "conduct"
+    for far in ("200 m", "remote"):
+        sc = _scene(distance=far, stations={"T": {"at": "far_wall"}})
+        assert visual_level_between(sc, "O", "T") == "shapes", far
 
 
 def test_the_cone_never_outranks_darkness():
