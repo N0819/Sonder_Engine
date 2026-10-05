@@ -16,13 +16,14 @@ from llm.prompts import bare_character_prompt
 from llm.schemas import CharacterBareOutput, validate_llm_output
 from mind import character_jev as jev
 from tests.test_character_continuity import story  # noqa: F401 -- the fixture
+from tests.helpers import model_dict
 
 BARE_KEYS = ("want", "held_back", "hinge", "unsure", "sequence", "demeanor",
              "tells", "changes", "note", "notebook")
 
 
 def _dump(model):
-    return model.model_dump() if hasattr(model, "model_dump") else model.dict()
+    return model_dict(model)
 
 
 # --- the reply and the card --------------------------------------------------------

@@ -41,6 +41,7 @@ from world.spatial import (
     stamp_sound_relation,
     steadiness_this_beat,
 )
+from tests.helpers import model_dict
 
 
 # ---------------------------------------------------------------------------
@@ -755,8 +756,7 @@ def test_the_schema_round_trips_and_the_merge_keeps_the_fields():
     entity = SceneEntityDef(name="generator", kind="machine",
                             sound_source="loud", steadiness="failing",
                             state={"running": True})
-    dumped = entity.model_dump() if hasattr(entity, "model_dump") \
-        else entity.dict()
+    dumped = model_dict(entity)
     assert dumped["sound_source"] == "loud" and dumped["steadiness"] == "failing"
     existing = {"name": "generator", "kind": "machine", "sound_source": "loud",
                 "steadiness": "failing", "state": {"running": True}}

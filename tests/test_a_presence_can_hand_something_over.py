@@ -25,6 +25,7 @@ cannot hand over what it is not there to hand over.
 
 import agents.background as background
 from persist.commit import apply_presence_handovers
+from tests.helpers import model_fields_of
 
 
 SCENE = {
@@ -82,4 +83,4 @@ def test_a_nameless_thing_is_refused():
 
 def test_the_field_is_on_the_reaction_schema():
     from llm.schemas import BackgroundReactOutput
-    assert "hands_over" in BackgroundReactOutput.model_fields
+    assert "hands_over" in model_fields_of(BackgroundReactOutput)

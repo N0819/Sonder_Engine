@@ -53,6 +53,30 @@ def fast_tmp_dir():
 TMP_DIR = fast_tmp_dir()
 
 
+def model_dict(model, **kwargs):
+    """`model` as a plain dict on either Pydantic major the engine declares
+    (`pydantic>=1.10.13,<3`): `model_dump` on 2.x, `dict` on 1.x, the same
+    output. A test that called `model_dump()` itself passed on the shipped
+    2.x and failed CI's Pydantic 1 job, which nobody runs locally -- ten
+    tests, red from 2026-09-27 under a structure failure that hid them.
+    `tools/project_check.py` (`check_tests_reach_pydantic_through_helpers`)
+    keeps the 2.x-only names here; `llm.schemas` owns the engine's branch."""
+    dump = getattr(model, "model_dump", None)
+    return dump(**kwargs) if dump is not None else model.dict(**kwargs)
+
+
+def model_fields_of(model_cls):
+    """A model class's declared fields by name, on either major."""
+    from llm.schemas import _fields
+    return _fields(model_cls)
+
+
+def model_from(model_cls, data):
+    """`data` validated into `model_cls`, on either major."""
+    from llm.schemas import _validate
+    return _validate(model_cls, data)
+
+
 def scratch_db_path():
     """A path for a database a test will create itself, on tmpfs where there is
     one. The file is removed immediately: `db.init()` wants to make it."""

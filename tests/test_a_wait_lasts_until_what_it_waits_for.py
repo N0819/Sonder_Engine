@@ -11,6 +11,7 @@ honoured exactly. The owner: "Those sound like they need repair."
 from __future__ import annotations
 
 from world.day_cycle import SUN_LIGHT, phase_of_hour, seconds_until
+from tests.helpers import model_dict
 
 
 def test_until_dark_runs_to_the_day_cycles_own_dark():
@@ -49,5 +50,5 @@ def test_a_step_without_a_clock_keeps_what_it_wrote():
 def test_the_encoder_schema_keeps_a_steps_end():
     from llm.schemas import UnifiedEvent
     event = UnifiedEvent(event="They wait.", until_light="dark", until_hour=None)
-    dumped = event.model_dump() if hasattr(event, "model_dump") else event.dict()
+    dumped = model_dict(event)
     assert dumped["until_light"] == "dark"

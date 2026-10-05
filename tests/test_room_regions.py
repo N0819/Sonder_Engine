@@ -31,6 +31,7 @@ from world.regions import (
     REGIONS_KEY, assign_regions, backfill_regions, normalize_region_id,
     region_registry, room_pieces, room_region)
 from world.structure import plant_structure
+from tests.helpers import model_dict
 
 PLAYER = "The Stranger"
 
@@ -249,7 +250,7 @@ class TestDerivation:
 
     def test_the_director_may_write_region_and_validation_keeps_it(self):
         from llm.schemas import RoomDef
-        assert RoomDef(name="x", region="temple_hill").model_dump()["region"] == "temple_hill"
+        assert model_dict(RoomDef(name="x", region="temple_hill"))["region"] == "temple_hill"
 
     def test_a_retired_room_keeps_its_region(self, temp_db):
         cid = _chat(temp_db)

@@ -38,6 +38,7 @@ from world.spatial import (
     merge_scene_with_diff, quantise, reach_radius, sight_level,
     spatial_rel_between, visual_level_between,
 )
+from tests.helpers import model_dict
 
 
 # ---------------------------------------------------------------------------
@@ -773,10 +774,10 @@ def test_the_commit_records_a_failed_source_out_and_tells_the_director(temp_db):
 
 def test_the_schema_declares_the_fields_and_the_merge_keeps_them():
     from llm.schemas import SceneEntityDef
-    declared = SceneEntityDef(
+    declared = model_dict(SceneEntityDef(
         name="the lamp", light_source="lit", light_shape="cone",
         light_height="waist", steadiness="flickering",
-        state={"lit": True, "pointed_at": "n"}).model_dump()
+        state={"lit": True, "pointed_at": "n"}))
     assert declared["light_shape"] == "cone"
     assert declared["light_height"] == "waist"
     assert declared["steadiness"] == "flickering"
@@ -795,7 +796,7 @@ def test_the_schema_declares_the_fields_and_the_merge_keeps_them():
     assert lamp["steadiness"] == "flickering"
     assert lamp["state"]["pointed_at"] == "n"
     # A re-echo validated through the model (None-filled) keeps them too.
-    echo = SceneEntityDef(name="the lamp").model_dump()
+    echo = model_dict(SceneEntityDef(name="the lamp"))
     merged = merge_scene_with_diff(scene, {"entities": {"lamp": echo}})
     assert merged["entities"]["lamp"]["light_shape"] == "cone"
     # And a declaration that changes one changes it.

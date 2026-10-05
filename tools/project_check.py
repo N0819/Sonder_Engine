@@ -2075,6 +2075,47 @@ def check_pydantic_major_reads_are_owned(errors: list[str]) -> None:
                 f"one version branch.")
 
 
+#: What a TEST may not call on a model itself: the 2.x names, which do not
+#: exist on 1.x. (The 1.x names -- `dict`, `parse_obj`, `__fields__` -- still
+#: answer on 2.x, deprecated, so they fail no job inside the declared range.)
+_PYDANTIC_V2_ONLY_IN_TESTS = frozenset({
+    "model_dump", "model_dump_json", "model_validate", "model_validate_json",
+    "model_fields", "model_json_schema", "model_copy", "model_construct",
+})
+
+#: The one test module that owns the branch, as `llm/schemas.py` owns the
+#: engine's (`model_dict`, `model_fields_of`, `model_from`).
+_TEST_PYDANTIC_BRANCH_OWNER = "tests/helpers.py"
+
+
+def check_tests_reach_pydantic_through_helpers(errors: list[str]) -> None:
+    """A test reads a model through `tests/helpers.py`, never a 2.x-only name.
+
+    The engine declares `pydantic>=1.10.13,<3`, and CI runs the whole suite on
+    1.x in a job of its own, because nothing else does: the local gate and
+    every player run 2.x. Ten tests called `model_dump`, `model_validate` or
+    `model_fields` on a model themselves -- correct on the stack that ships,
+    an AttributeError on 1.x -- and that job was red from 2026-09-27 while the
+    structure failure beside it hid the result (2026-10-05). The engine half
+    of the rule is `check_pydantic_major_reads_are_owned`; this is the
+    suite's half, at the gate everyone runs.
+    """
+    for path in sorted((ROOT / "tests").rglob("*.py")):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == _TEST_PYDANTIC_BRANCH_OWNER:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr in _PYDANTIC_V2_ONLY_IN_TESTS:
+                errors.append(
+                    f"{rel}:{node.lineno}: calls {node.attr!r}, which exists only "
+                    f"on Pydantic 2; CI's Pydantic 1 job fails on it. Use "
+                    f"tests.helpers (model_dict / model_fields_of / model_from).")
+
+
 # ---------------------------------------------------------------------------
 # Version agreement across the four places the supported Python is written
 # ---------------------------------------------------------------------------
@@ -3280,7 +3321,46 @@ def check_pipeline_side_channels(errors: list[str]) -> None:
 DEFERRED_PACK_PARITY = ()
 
 
+def _check_against_a_scratch_database() -> None:
+    """Point `core.db` at a throwaway database before any check runs.
+
+    A structure check must say what it depends on, and the developer's
+    stories are not it. `check_language_pack_surfaces` builds the encoder's
+    assembled sheet, and a sheet reads the active preset
+    (`prompts._preset_override` -> `get_setting`). Against no database that
+    is `no such table: settings`, and CI has none: every push from
+    2026-09-28 (8f408adf) to 2026-10-05 stopped at `make structure` and ran
+    no test at all -- sixty red runs that read as one more flaky failure.
+    Against the developer's `engine.db` it is worse and silent: an edited
+    preset decides what the check reads. `tests/conftest.py` redirects the
+    suite the same way, for the same reason.
+    """
+    import atexit
+    import os
+    import tempfile
+
+    sys.path.insert(0, str(ROOT))
+    from core import db
+
+    fd, path = tempfile.mkstemp(suffix=".db", prefix="project-check-")
+    os.close(fd)
+    os.remove(path)          # `db.init()` makes it
+    db.configure(path)
+    db.init()
+
+    def _remove() -> None:
+        db.close_connection()
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(path + suffix)
+            except FileNotFoundError:
+                pass
+
+    atexit.register(_remove)
+
+
 def main() -> int:
+    _check_against_a_scratch_database()
     errors: list[str] = []
     check_undefined_names(errors)
     check_extension_manifests(errors)
@@ -3289,6 +3369,7 @@ def main() -> int:
     check_conftest_not_imported(errors)
     check_minimum_python_syntax(errors)
     check_pydantic_major_reads_are_owned(errors)
+    check_tests_reach_pydantic_through_helpers(errors)
     check_engine_imports_resolve(errors)
     check_asgi_targets(errors)
     check_duplicate_python_symbols(errors)

@@ -7,6 +7,7 @@ import pytest
 from agents import loops
 from llm.schemas import CharacterOutput
 from tests.test_beat_reissue import _Ctx, TestTheLoopOwnsTheChannel as _LoopHarness
+from tests.helpers import model_dict
 
 
 def _discarded():
@@ -47,13 +48,13 @@ def test_rerolled_interaction_preserves_only_this_runs_earlier_round(
                 active["active_concerns"] = initial["active_concerns"]
             if "decision_continuity" in initial:
                 choice["decision_continuity"] = initial["decision_continuity"]
-        return CharacterOutput(
+        return model_dict(CharacterOutput(
             sequence=[{"type": "speech", "text": f"Fresh line {len(calls)}."}],
             active_state=active,
             interaction={"expects_response": True, "urgency": 0.9,
                          "conversation_complete_for_me": False},
             **choice,
-        ).model_dump()
+        ))
 
     monkeypatch.setattr(loops, "character_step", declare)
     output = loops.interaction_loop(ctx, nonce=0)
@@ -139,7 +140,7 @@ def test_reaction_reroll_drops_unselected_stale_reactors(monkeypatch):
     monkeypatch.setattr(loops, "_drop_non_awake", lambda ctx, ids: ids)
     monkeypatch.setattr(loops, "_drop_absent", lambda ctx, ids: ids)
     monkeypatch.setattr(loops, "_requires_director_resolution", lambda result: False)
-    fresh = CharacterOutput(active_state={"mood": "alert"}).model_dump()
+    fresh = model_dict(CharacterOutput(active_state={"mood": "alert"}))
     monkeypatch.setattr(loops, "character_step", lambda *args: deepcopy(fresh))
 
     output = loops.reaction_loop(ctx, nonce=0)

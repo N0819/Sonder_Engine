@@ -13,6 +13,7 @@ import copy
 
 from world.vistas import (air_from_weather, normalize_vista, scene_vistas,
                           visible_vistas, vista_verdict)
+from tests.helpers import model_dict
 
 RANGE = {"name": "the Kurogane range", "bearing": "north", "distance_km": 30,
          "height_m": 2400, "desc": "snow on its saddle"}
@@ -163,7 +164,7 @@ def test_a_glassed_room_sees_out_its_own_windows_and_no_other_way():
 def test_the_schema_keeps_a_rooms_windows():
     from llm.schemas import RoomDef
     room = RoomDef(name="Cabin", desc=".", windows=["n", "e"])
-    dumped = room.model_dump(exclude_none=True) if hasattr(room, "model_dump") else room.dict(exclude_none=True)
+    dumped = model_dict(room, exclude_none=True)
     assert dumped["windows"] == ["n", "e"]
 
 

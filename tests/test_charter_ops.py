@@ -45,6 +45,7 @@ from world.charter_runtime import (author_charter_ops, normalize_registry,
                                    registry_for, save_registry)
 
 from charter_worlds import twin_towns
+from tests.helpers import model_fields_of
 
 
 # ---------------------------------------------------------------------------
@@ -790,8 +791,8 @@ def test_the_director_channel_is_registered_everywhere_a_channel_must_be():
     # PATCHES or reads the source of, and this one only reads a table.
     from agents.director import SPECIALISTS, _SUBJECT_OP_CHANNELS
 
-    assert "charter_ops" in StateDiff.model_fields
-    assert "charter_ops" in DirectorSocialSpecialist.model_fields
+    assert "charter_ops" in model_fields_of(StateDiff)
+    assert "charter_ops" in model_fields_of(DirectorSocialSpecialist)
     assert "charter_ops" in SPECIALIST_CHANNELS["director_social"]
     assert "charter_ops" in SPECIALISTS["social"]["channels"]
     assert _SUBJECT_OP_CHANNELS["charter_ops"] == ("body", "to")

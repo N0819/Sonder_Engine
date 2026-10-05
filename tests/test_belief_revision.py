@@ -6,6 +6,7 @@ import pytest
 
 from core.pipeline_context import current_warning_sink
 from mind import psychology_runtime as psych
+from tests.helpers import model_dict
 
 
 OLD = "The north stair is safe."
@@ -177,9 +178,9 @@ def test_schema_and_grounding_preserve_target_and_zero_resulting_confidence():
     from llm.schemas import BeliefUpdate
 
     existing = [{"belief": OLD, "confidence": 0.8}]
-    output = {"belief_updates": [BeliefUpdate(
+    output = {"belief_updates": [model_dict(BeliefUpdate(
         **_revision(confidence=0.0),
-    ).model_dump()]}
+    ))]}
     _ground_observation_citations(output, [{
         "observation_id": EVIDENCE["event_id"],
         "observed": {"text": EVIDENCE["fact"]},

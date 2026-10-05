@@ -30,6 +30,7 @@ from world.spatial import (
     normalize_parts, part_box, parts_box, room_field, room_grid,
     room_layout_lint,
 )
+from tests.helpers import model_from
 
 
 def scene(room, rooms=None):
@@ -259,7 +260,7 @@ def test_a_room_without_composite_parts_is_unchanged_and_junk_parts_are_no_parts
 
 
 def test_the_schema_keeps_a_corner_or_a_cell_part_and_heals_junk_to_none():
-    room = RoomDef.model_validate({
+    room = model_from(RoomDef, {
         "name": "R", "shape": "composite",
         "parts": [{"w": 4, "d": 2, "at": "nw"}, {"w": 2, "d": 4, "at": [3, 0]},
                   {"w": 2, "d": 2, "at": [1.0, 2.0]}, {"w": 2, "d": 2, "at": [True, 1]},
@@ -267,5 +268,5 @@ def test_the_schema_keeps_a_corner_or_a_cell_part_and_heals_junk_to_none():
     assert room.shape == "composite"
     assert room.parts == [{"w": 4.0, "d": 2.0, "at": "nw"}, {"w": 2.0, "d": 4.0, "at": [3, 0]},
                           {"w": 2.0, "d": 2.0, "at": [1, 2]}]
-    assert RoomDef.model_validate({"name": "R", "parts": "two bits"}).parts is None
-    assert RoomDef.model_validate({"name": "R", "parts": [{"w": 2, "d": 2}]}).parts is None
+    assert model_from(RoomDef, {"name": "R", "parts": "two bits"}).parts is None
+    assert model_from(RoomDef, {"name": "R", "parts": [{"w": 2, "d": 2}]}).parts is None
