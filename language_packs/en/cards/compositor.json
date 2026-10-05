@@ -127,14 +127,11 @@
     "a voice",
     "the unfamiliar person",
     "an indistinct figure",
-    "a figure",
     "you",
     ""
   ],
   "dim_figure": "an indistinct figure",
   "dim_figures": "indistinct figures",
-  "far_figure": "a figure",
-  "far_figures": "figures",
   "count_names": {
     "1": "a",
     "2": "two",
@@ -167,7 +164,6 @@
     "within_reach": "within arm's reach",
     "near": "close by",
     "across": "across the room",
-    "distant": "some way off",
     "default": "here"
   },
   "leading_connectives": [

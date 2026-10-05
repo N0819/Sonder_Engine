@@ -81,9 +81,6 @@ log = logging.getLogger(__name__)
 SCENE_READS = ("rooms", "positions", "entities", "stations", "orientation",
                "poses", "contacts", "contained", "crossings", "passages",
                "day_phase", "weather", "beat_idx",
-               # A body's size against its own baseline: how far its detail
-               # carries (`spatial_range.sight_scale`, 2026-10-04).
-               "scales",
                # The outcome pass's sweep marker (`effective_facing` reads
                # it; never stored): a working-copy key, stamped so a
                # derivation that read it is invalidated when it changes.

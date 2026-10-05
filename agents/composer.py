@@ -93,13 +93,6 @@ from world.spatial import (
     sound_bearing,
     size_relation,
     visual_level_between,
-    graded_sight,
-    sight_between,
-    range_sight,
-    anchor_scale,
-    sight_reach,
-    distance_took_detail,
-    FACE_RANGE_M,
 )
 
 from .common import (
@@ -582,7 +575,9 @@ def observer_display_map(scene, observer_name, co_present, known,
             # observer already holds; the dark takes the face, not the name.
             out[name] = name
             continue
-        level = graded_sight(scene, observer_name, name, senses)
+        level = _sense_graded(
+            visual_level_between(scene, observer_name, name, senses),
+            "sight", senses)
         if level == "full":
             strangers.append(
                 (name, body.get("appearance"), body.get("aliases") or [],
@@ -591,9 +586,7 @@ def observer_display_map(scene, observer_name, co_present, known,
         elif level == "none":
             out[name] = _unfamiliar_person()
         else:
-            silhouettes.append((name, body.get("surface"), level,
-                                distance_took_detail(scene, observer_name, name,
-                                                     senses, level)))
+            silhouettes.append((name, body.get("surface"), level))
     out.update(assign_stranger_labels(strangers))
     out.update(_silhouette_labels(silhouettes))
     return out
@@ -608,17 +601,13 @@ def _silhouette_labels(silhouettes):
     from world.charter_surface import surface_label
 
     labels = {}
-    far = {}
-    for entry in silhouettes:
-        name, surface, level = entry[:3]
-        far[name] = bool(entry[3]) if len(entry) > 3 else False
+    for name, surface, level in silhouettes:
         described = surface_label(surface, level) if surface else ""
         labels[name] = (str(compositor_text("unknown_actor",
                                             description=described))
-                        if described else (_far_figure() if far[name]
-                                           else _dim_figure()))
+                        if described else _dim_figure())
     for name in _collided_names(labels):
-        labels[name] = _far_figure() if far.get(name) else _dim_figure()
+        labels[name] = _dim_figure()
     return labels
 
 
@@ -1181,15 +1170,6 @@ def _dim_figure(plural=False):
     return str(_compositor("dim_figures" if plural else "dim_figure"))
 
 
-def _far_figure(plural=False):
-    """A stranger seen in good light at a distance no face is read at: "a
-    figure", where the dim gives "an indistinct figure" -- the body is plain
-    to see, only too far off to tell who (`spatial_range`)."""
-    return str(_compositor("far_figures" if plural else "far_figure"))
-
-
-
-
 def _unfamiliar_person():
     from language_runtime import compositor_text
     return str(compositor_text("unknown_actor_fallback"))
@@ -1248,7 +1228,7 @@ def _size_label(scene, observer_name, name):
 #: This ORDERS and never withholds: every body the observer can see is still
 #: named, in the same clause, with the same words.
 _PRESENCE_DEPTH_TIERS = {"within_reach": 0, "near": 1, "across": 2,
-                         "distant": 3, "beyond": 4}
+                         "beyond": 3}
 
 
 def _presence_depth(scene, observer_name, name):
@@ -1308,11 +1288,11 @@ def presence_percepts(scene, observer_name, co_present, display_map,
         name = str(body.get("name") or "")
         if not name or name == observer_name:
             continue
-        level = graded_sight(scene, observer_name, name, senses)
+        level = _sense_graded(
+            visual_level_between(scene, observer_name, name, senses),
+            "sight", senses)
         if level == "none":
             continue
-        far = distance_took_detail(scene, observer_name, name, senses, level)
-        _reach = sight_between(scene, observer_name, name, senses).evidence.low
         tier = proximity_rel(scene, observer_name, name)
         room = None
         if tier is None:
@@ -1334,14 +1314,6 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             if not room:
                 continue
             tier = "beyond"
-        elif _reach is not None and _reach > FACE_RANGE_M:
-            # SOME WAY OFF, NOT ACROSS THE ROOM. In the observer's own room a
-            # body past the distance a face is read at is at a range "across
-            # the room" does not name -- a field, a square, the far end of a
-            # nave (`spatial_range`). Read off the certain distance itself,
-            # never off what took the detail: a dim body seventy metres off
-            # is no nearer than a lit one at twenty.
-            tier = "distant"
         arc = entity_arc(scene, observer_name, name)
         if arc == "rear":
             continue                       # no new visual detail from behind
@@ -1375,7 +1347,7 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             # the name for a recognised body, a silhouette-tier descriptor
             # for a stranger with a structured surface, the fixed label
             # for everyone else (`observer_display_map`).
-            label = display or (_far_figure() if far else _dim_figure())
+            label = display or _dim_figure()
         side = entity_side(scene, observer_name, name) or (
             fov.get("side") if fov.get("basis") == "line" else None)
         # `body` is the opaque per-body ledger key, carried so the
@@ -1417,14 +1389,6 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             here = room_of(scene, name)
             record = (effective_anchors(scene, here) or {}).get(at) \
                 if (at and here) else None
-            if record is not None and _reach is not None \
-                    and range_sight(_reach, anchor_scale(record)) == "shapes":
-                # A FIXTURE IS NAMED AS FAR AS ITS OWN SIZE CARRIES, here as
-                # in the feature list (`spatial_fov.feature_visibility`), by
-                # the same certain distance and for ordinary eyes, whatever
-                # took the body's detail: a body by a small shrine sixty
-                # metres off is a figure, not a figure at the shrine.
-                record = None
             if record is not None:
                 # Spliced like every other authored description
                 # (`_noun_phrase`): this was the one reader that took the
@@ -1433,10 +1397,6 @@ def presence_percepts(scene, observer_name, co_present, display_map,
                 # surf.." -- sentence case and two stops (chat 123 turn 9).
                 station = (_noun_phrase(str((record or {}).get("desc") or ""))
                            or at.replace("_", " "))
-        _content = ((tier, arc, level, size or "")
-                    + (("beam",) if _beam else ())
-                    + ((station,) if station else ())
-                    + ((behind, shows) if behind else ()))
         out.append(Percept(
             kind="presence", channel="sight",
             source_label=label,
@@ -1463,13 +1423,19 @@ def presence_percepts(scene, observer_name, co_present, display_map,
                   **({"in_beam": True} if _beam else {}),
                   **({"behind": behind, "shows": shows} if behind else {})},
             salience=0.35,
-            # SWINGING THE BEAM OFF A BODY IS NEWS, and onto one is more so,
-            # so the aim is content and the presence reads `changed` on the
-            # beat it moves (D5). APPENDED rather than placed, like every
-            # optional part here: a body nobody is pointing a lamp at hashes
-            # to exactly what it hashed to before, so no live chat spends an
-            # upgrade beat re-announcing everyone standing in it.
-            dedupe_key=standing_key("presence", (body_key(name),), _content),
+            dedupe_key=standing_key(
+                "presence", (body_key(name),),
+                # SWINGING THE BEAM OFF A BODY IS NEWS, and onto one is
+                # more so, so the aim is content and the presence reads
+                # `changed` on the beat it moves (D5). APPENDED rather than
+                # placed, like every optional part here: a body nobody is
+                # pointing a lamp at hashes to exactly what it hashed to
+                # before, so no live chat spends an upgrade beat
+                # re-announcing everyone standing in it.
+                (tier, arc, level, size or "")
+                + (("beam",) if _beam else ())
+                + ((station,) if station else ())
+                + ((behind, shows) if behind else ())),
         ))
     # NEAR TO FAR (D4). Stable, so an unmeasured room -- every body sharing
     # one key -- comes back in exactly the order the caller gave it.
@@ -2176,7 +2142,9 @@ def pose_percepts(scene, observer_name, co_present, display_map,
             # here inherits the reason and not a comparison that has flipped.
             if proximity_rel(scene, observer_name, name) is None:
                 continue
-            level = graded_sight(scene, observer_name, name, senses)
+            level = _sense_graded(
+                visual_level_between(scene, observer_name, name, senses),
+                "sight", senses)
             if level == "none":
                 continue
             if entity_arc(scene, observer_name, name) == "rear":
@@ -3191,7 +3159,7 @@ def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
 # Layer A -- event percepts
 # --------------------------------------------------------------------------
 
-def speech_percept(entry, rel, observer_name, *, display, can_see, face_seen=True,
+def speech_percept(entry, rel, observer_name, *, display, can_see,
                    proximity=None, order_key=0, observer_id=None,
                    senses=None, voice="", prev_standing=None):
     """Admit one spoken line for one observer, or None.
@@ -3307,12 +3275,7 @@ def speech_percept(entry, rel, observer_name, *, display, can_see, face_seen=Tru
         "voice", (body_key(str(entry.get("speaker") or "")),),
         (str(voice or "").strip(),)) if register else ""
     established = bool(voice_key) and voice_key in (prev_standing or ())
-    # A LINE'S TONE IS PARTLY A FACE. The register is the speaker's voice and
-    # reaches whoever hears the line; the declared tone is free prose that
-    # names a smirk as readily as a sharpness, and at a distance where no
-    # face is read (`face_seen`, `spatial_range`) it is withheld whole --
-    # the register still renders on first hearing, so the voice is known.
-    manner = register if (register and not established) else (tone if face_seen else "")
+    manner = register if (register and not established) else tone
     data = {
         "level": level,
         "volume": volume,
@@ -4137,14 +4100,12 @@ def _render_presence_group(percepts):
             # adapter falls back to when it raises, and its contract is that
             # a malformed pack costs wording and never the beat. Losing a
             # fact the observer's own eyes have is not wording.
-            for singular, plural in ((_dim_figure(), _dim_figure(True)),
-                                     (_far_figure(), _far_figure(True))):
-                if n > 1 and clause.startswith(singular + " "):
-                    word = _COUNT_WORDS.get(n, str(n))
-                    rendered.append(
-                        f"{word.casefold()} {plural}"
-                        + clause[len(singular):].replace(" is ", " are ", 1))
-                    break
+            singular, plural = _dim_figure(), _dim_figure(True)
+            if n > 1 and clause.startswith(singular + " "):
+                word = _COUNT_WORDS.get(n, str(n))
+                rendered.append(
+                    f"{word.casefold()} {plural}"
+                    + clause[len(singular):].replace(" is ", " are ", 1))
             else:
                 rendered.append(clause)
         out.append((group[0][0], _cap(_join_clauses(rendered)) + "."))
@@ -5136,13 +5097,7 @@ def render_episode(percepts, *, prev_standing=frozenset(),
 # --------------------------------------------------------------------------
 
 _FIDELITY_AMBIGUITY = {"full": 0.15, "degraded": 0.5, "fragment": 0.7,
-                       "trace": 0.8,
-                       # A body moving, too little of it to make out: as
-                       # ambiguous as a degraded presence, never "rendered"
-                       # (it had no entry, and every motion-only act --
-                       # the dim, a cone, a crossing, now distance -- was
-                       # filed into memory at the 0.15 of a full sighting).
-                       "shapes": 0.5}
+                       "trace": 0.8}
 
 # What an observation says when it has nothing to say: the advisory axes'
 # resting values, and the two identity fields that repeat what the payload

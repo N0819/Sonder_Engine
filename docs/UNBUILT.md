@@ -194,7 +194,6 @@ Not scheduled and not committed to a phase. See the
 - [§1.163 — The opening is still one call with its own sheet](UNBUILT_PIPELINE.md#unbuilt-1-163)
 - [§1.164 — The Director's doctrine moved to the hands and what did not move was dropped](UNBUILT_PIPELINE.md#unbuilt-1-164)
 - [§1.173 — A body that crosses rooms to bar a doorway no longer bars it that beat (2026-10-04)](UNBUILT_PIPELINE.md#unbuilt-1-173)
-- [§1.175 — What distance does not reach yet (2026-10-04)](UNBUILT_PIPELINE.md#unbuilt-1-175)
 
 **2. Roadmap**
 

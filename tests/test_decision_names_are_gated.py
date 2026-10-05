@@ -108,14 +108,8 @@ class TestBothCallSitesPassTheGate:
         src = inspect.getsource(character.character_step)
         assert "_player_silence_note(" in src
         assert "_unanswered_question_note(" in src
-        # Both calls sit inside the decision block and must carry a gating
-        # label. The silence note is about THIS beat, so it carries the
-        # present-tense view labeller (`observer_view_label_fn`, which wraps
-        # the same identity floor and names a stranger seen at range as the
-        # view does, 2026-10-04); the owed-question note keeps the identity
-        # labeller.
-        for marker, gate in (("_player_silence_note(", "label=observer_view_label_fn("),
-                             ("_unanswered_question_note(", "label=_contact_label")):
+        # Both calls sit inside the decision block and must carry the label.
+        for marker in ("_player_silence_note(", "_unanswered_question_note("):
             start = src.index(marker)
-            window = src[start:start + 560]
-            assert gate in window, marker
+            window = src[start:start + 420]
+            assert "label=_contact_label" in window, marker

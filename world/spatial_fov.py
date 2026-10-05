@@ -169,11 +169,12 @@ _POSTURE_TOKENS = {
 
 #: The egocentric sectors sight reaches: full in front, an impression to the
 #: side, nothing behind. `_REAR_SECTORS` in `spatial_geometry` is the same
-#: rear arc; the peripheral band is this module's addition. (A deliberate
-#: look around drops the cone and nothing else: how far it reaches is the
-#: field's own -- the room and the rooms its open doorways lay -- and how
-#: much of what it reaches is made out is `spatial_range`'s. A
-#: `SWEEP_REACH_PACES` stood here, read by nothing, until 2026-10-04.)
+#: rear arc; the peripheral band is this module's addition.
+#: How far a deliberate look around reaches, in paces: the largest extent a
+#: room may have (`spatial_geometry.EXTENT_MAX_PACES`). Indoors the cast is
+#: bounded by the room and its open doorways; outdoors and in a vast room
+#: this is the owner's cap on what a sweep takes in.
+SWEEP_REACH_PACES = 96
 
 _FRONT_SECTORS = frozenset({"ahead", "ahead_left", "ahead_right"})
 _SIDE_SECTORS = frozenset({"left", "right"})
@@ -1596,12 +1597,6 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
     # threshold -- "the things are named and the distance is simply not
     # claimed, which is what the observer actually has".
     unbeared = _unbeared_doorways(scene, room_id)
-    # A FIXTURE IS NAMED AS FAR AS ITS SIZE CARRIES (`spatial_range`): a
-    # cart across the square, not the cup on the bench at the far end of it.
-    # The anchor's AUTHORED size -- the placed record's is the occlusion
-    # default -- and the observer's certain box.
-    raw_anchors = effective_anchors(scene, room_id) or {}
-    own_box = _certain_box_in(scene, field, observer)
     rows = []
     for aid, rec in placed.items():
         cells = rec["cells"]
@@ -1632,11 +1627,6 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
                 and aid != touching and all(c in unlit for c in cells):
             visible = False
             basis = "light"
-        low_m = _certain_low_m([field.cell_of(room_id, c) for c in cells], own_box)
-        if visible and not rec["implicit"] and aid != touching \
-                and _too_far_to_name(raw_anchors.get(aid), low_m):
-            visible = False
-            basis = "distance"
         rows.append({
             "anchor": aid, "desc": rec["desc"], "implicit": rec["implicit"],
             "visible": visible, "sector": None if guessed else sector,
@@ -1646,47 +1636,9 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
                      "near" if dist <= max(2.5, grid_side(scene, room_id) / 2.0)
                      else "across"),
             "occluded_by": occluded_by, "basis": basis, "distance": dist,
-            # The certain distance a thing standing at it is named by
-            # (`perception._visible_things`); absent with no observer box.
-            **({"low_m": low_m} if low_m is not None else {}),
         })
     rows.sort(key=lambda r: (r["distance"], r["anchor"]))
     return rows
-
-
-def _certain_box_in(scene, field, observer):
-    """The observer's own position box (`spatial_range.position_box`) in
-    the field's frame, or None when its station says nowhere -- the only
-    observer position a distance cut may read: a dealt seat is a hash, a
-    room-centre origin a guess."""
-    from world.spatial_range import position_box
-    found = position_box(scene, observer)
-    if not found or found[0] not in field.offsets:
-        return None
-    room, (x0, y0, x1, y1), _exact = found
-    ax, ay = field.cell_of(room, (x0, y0))
-    bx, by = field.cell_of(room, (x1, y1))
-    return (min(ax, bx), min(ay, by), max(ax, bx), max(ay, by))
-
-
-def _certain_low_m(cells, observer_box):
-    """The NEAREST, in metres, the observer's box and these cells can be --
-    a distance that is certain, so what it cuts is cut for certain. None
-    with no box."""
-    if observer_box is None or not cells:
-        return None
-    from world.spatial_range import _PACE_M, _bbox, _gap
-    return _gap(observer_box, _bbox(cells))[0] * _PACE_M
-
-
-def _too_far_to_name(raw, low_m) -> bool:
-    """Is a fixture beyond the distance its own size is named at -- the band
-    in which only a shape of it would be left (`spatial_range`, owner
-    2026-10-04)? No certain distance, no cut."""
-    if low_m is None:
-        return False
-    from world.spatial_range import anchor_scale, range_sight
-    return range_sight(low_m, anchor_scale(raw)) == "shapes"
 
 
 def _unbeared_doorways(scene, room_id) -> set:
@@ -1765,15 +1717,11 @@ def neighbour_feature_visibility(scene: dict, observer: str, to_room,
     facing = None if sweep else effective_facing(scene, observer)
     eye = eye_rank(scene, observer)
     ox, oy = field.offsets[to_room]
-    raw_anchors = effective_anchors(scene, to_room) or {}
-    own_box = _certain_box_in(scene, field, observer)
     rows = []
     for aid, rec in (field.anchors.get(to_room) or {}).items():
         if rec["implicit"] or not rec["cells"]:
             continue
         cells = [(x + ox, y + oy) for x, y in rec["cells"]]
-        if _too_far_to_name(raw_anchors.get(aid), _certain_low_m(cells, own_box)):
-            continue
         target = min(cells, key=lambda c: (c[0] - origin[0]) ** 2
                      + (c[1] - origin[1]) ** 2)
         dist = math.hypot(target[0] - origin[0], target[1] - origin[1])

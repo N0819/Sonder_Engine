@@ -226,13 +226,6 @@ class JapaneseRenderer:
         if prefix:
             return self._text(prefix + "presence", label=label)
         tiers = self._value("tier_phrases") or {}
-        # A BODY IN ANOTHER ROOM IS IN THAT ROOM. English names it ("in the
-        # kitchen", `composer._presence_clause`); this read the tier alone,
-        # found no phrase for `beyond`, and fell back to the default --
-        # 「…はここにいる」, a body seen through a doorway placed beside the
-        # observer. The bare room name, since the template carries its own
-        # particle.
-        room = str(data.get("room") or "").strip()
         if brief:
             # WHO IS PRESENT IS NOT A DELTA (`composer._render_presence_group`,
             # PM6). The wording is the pack's; that an unchanged body is still
@@ -241,10 +234,9 @@ class JapaneseRenderer:
             return self._text(
                 "presence_unchanged", label=label,
                 where=self._text("presence_at_bare", at=where) if where
-                else room or str(tiers.get(str(data.get("tier")),
-                                           tiers.get("default", ""))))
-        tier = room or str(tiers.get(str(data.get("tier")),
-                                     tiers.get("default", "")))
+                else str(tiers.get(str(data.get("tier")),
+                                   tiers.get("default", ""))))
+        tier = str(tiers.get(str(data.get("tier")), tiers.get("default", "")))
         side = data.get("side")
         sides = self._value("side_words") or {}
         side_clause = (self._text("side", side=sides.get(side, side))

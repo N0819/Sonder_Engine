@@ -10,12 +10,10 @@ import re
 
 from story import attire as attire_model
 from world import crowds as crowds_model
-from world.scene_memo import scene_read_pass
 from story.character_schema import (
     _UNSPACED_SCRIPT,
     _extra_part_placement,
     character_appearance,
-    character_senses,
     persona_appearance,
     character_body_interior,
     character_extra_parts,
@@ -66,11 +64,6 @@ from world.spatial import (
     sense_adjusted,
     sight_verdict,
     visual_level_between,
-    sight_between,
-    graded_sight,
-    distance_took_detail,
-    range_of,
-    sight_reach,
 )
 from mind.theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
 
@@ -1637,7 +1630,7 @@ def scene_extra_parts(cast, persona=None, player_name=None):
     return out
 
 
-def region_visibility(sc, observer, body, entry=None, senses=None):
+def region_visibility(sc, observer, body, entry=None):
     """Which of one body's regions THIS observer can see, and what conceals
     the rest -- concealment, applied to bodies instead of acts.
 
@@ -1703,22 +1696,7 @@ def region_visibility(sc, observer, body, entry=None, senses=None):
 
     body_level = None
     if not same_subject(sc, observer, body):
-        # THE OBSERVER'S OWN EYES, as the label beside these regions was
-        # graded with (`graded_sight`): a keen card reading a face at twenty
-        # metres reads the clothes there too, and a short-sighted one that
-        # sees only "a figure" at ten does not get the ring on its hand.
-        grade = sight_between(sc, observer, body, senses)
-        level = graded_sight(sc, observer, body, senses)
-        # DISTANCE IS NOT DARK (`spatial_range`, owner 2026-10-04). In good
-        # light at a range where no face is read, what a body wears still
-        # shows its cut and its colour: the regions are delivered, coarse
-        # (`observer_body_regions`), not concealed. Only the far band -- a
-        # figure, nothing of what it wears -- conceals them, and dim light,
-        # or dim and distance together, conceals them exactly as before.
-        _seen = sense_adjusted(grade.base, "sight", senses) if senses else grade.base
-        far_only = _seen == "full" and level != "none"
-        if far_only and level == "conduct":
-            level = "full"
+        level = visual_level_between(sc, observer, body)
         if level != "full":
             # Attribution only: whether sight fails is spatial's composed
             # answer (light, barriers, containment, crossing grace), never
@@ -1736,10 +1714,8 @@ def region_visibility(sc, observer, body, entry=None, senses=None):
                 # moving in a dim room would otherwise have been reported
                 # "out of sight". Anything short of full hides the regions;
                 # only `none` hides the body.
-                body_level = {"vantage": [
-                    "out of sight" if level == "none"
-                    else "too far off to make out" if far_only
-                    else "seen only in silhouette"]}
+                body_level = {"vantage": ["out of sight" if level == "none"
+                                          else "seen only in silhouette"]}
         elif entity_arc(sc, observer, body) == "rear":
             body_level = {"vantage": ["behind the observer"]}
 
@@ -1755,8 +1731,7 @@ def region_visibility(sc, observer, body, entry=None, senses=None):
     return out
 
 
-def observer_body_regions(sc, observer, body_labels=None, extra_parts=None,
-                          senses=None):
+def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
     """Observer-safe attire/body surfaces for a perception payload.
 
     ``body_labels`` maps canonical scene subjects to labels already safe for
@@ -1811,23 +1786,10 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None,
         surfaces = attire_model.perceptible_region_surfaces(
             regions, beneath_visible=beneath)
         visibility = region_visibility(
-            sc, observer, body, entry=coherent if coherent else None,
-            senses=senses)
+            sc, observer, body, entry=coherent if coherent else None)
         # The scale gap is a fact about the PAIR, not about a shoulder, so it
         # is asked once per body rather than once per region.
         resolves = detail_resolves_between(sc, observer, body)
-        # ...and so is distance: a body whose regions arrive at a range no
-        # face is read at (`region_visibility`'s far conduct) delivers the
-        # cut and colour of what it wears and no ornament, and none of its
-        # authored parts.
-        self_view = same_subject(sc, observer, body)
-        far = False
-        if not self_view and room_of(sc, observer) and room_of(sc, body):
-            _grade = sight_between(sc, observer, body, senses)
-            _seen = (sense_adjusted(_grade.base, "sight", senses) if senses
-                     else _grade.base)
-            far = _seen == "full" and range_of(
-                _grade.evidence, _grade.scale, sight_reach(senses)) != "full"
         delivered = {}
         for region in attire_model.REGIONS:
             surface = surfaces.get(region)
@@ -1850,12 +1812,12 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None,
             # consulted -- a body's ratio to itself is 1.0, so the self row is
             # never coarsened by construction.
             delivered[region] = (
-                attire_model.distant_region_surface(surface) if far
-                else surface if resolves
+                surface if resolves
                 else attire_model.coarsen_region_surface(surface))
         shown_parts = []
         shown_data = []
-        for part in parts if not far else ():
+        self_view = same_subject(sc, observer, body)
+        for part in parts:
             # A REGION THIS MAP KNOWS, or nothing is shown.
             #
             # `region_visibility` is keyed by attire.REGIONS. A part authored
@@ -5148,44 +5110,6 @@ def _uncarded_person(scene, name):
         return None
     appearance = ent.get("appearance") or ent.get("description") or None
     return appearance, [a for a in (ent.get("aliases") or []) if a]
-
-
-def observer_view_label_fn(chat, observer_name, cast, scene, senses=None):
-    """`observer_label_fn` for a field about what is in view RIGHT NOW --
-    the orientation frame's `ahead_entity`, the note that the player said
-    nothing -- where a stranger seen short of full detail is the view's own
-    word for them: "a figure" when distance took the detail, "an
-    indistinct figure" when the dim did (`composer.observer_display_map`'s
-    rule). `ahead_entity` named "the tall fox-eared woman" sixty metres off
-    while the view beside it said "A figure is some way off" (review
-    2026-10-04).
-
-    Never the identity labeller itself: that one names a body for every
-    reference -- an address the Director resolves, the teller of an old
-    report, a name in lore -- and a reference is not a sighting. Put there,
-    this rule made "the indistinct figure" resolve to a fountain and the
-    descriptor a character knew a stranger by resolve to nobody. A known
-    name, a thing, and a body out of view or in full view keep the identity
-    label here too.
-    """
-    from language_runtime import compositor_value
-    base = observer_label_fn(chat, observer_name, cast, scene=scene)
-
-    def label(name):
-        out = base(name)
-        text = str(name or "").strip()
-        if not text or out == text or not isinstance(scene, dict):
-            return out              # a known name, or a thing left as it is
-        if not room_of(scene, observer_name) or not room_of(scene, text):
-            return out
-        with scene_read_pass(scene):
-            level = graded_sight(scene, observer_name, text, senses)
-            if level in ("full", "none"):
-                return out
-            far = distance_took_detail(scene, observer_name, text, senses, level)
-        return str(compositor_value("far_figure" if far else "dim_figure"))
-
-    return label
 
 
 def observer_label_fn(chat, observer_name, cast, scene=None):

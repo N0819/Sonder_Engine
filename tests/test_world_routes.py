@@ -1903,8 +1903,6 @@ class TestTheGridSeesFromABody:
         assert "from" not in plain["bodies"]["Bob"]
         view = client.get(f"/api/chats/{cid}/rooms/kitchen/grid?sight_from=Alice").json()
         verdict = view["bodies"]["Bob"]["from"]
-        assert set(verdict) == {"visible", "sector", "tier", "occluded_by", "basis", "hears",
-                                "level", "range"}
-        assert verdict["level"] in ("none", "shapes", "conduct", "full")
+        assert set(verdict) == {"visible", "sector", "tier", "occluded_by", "basis", "hears"}
         assert verdict["hears"] in ("full", "fragment", "none")
         assert "from" not in view["bodies"]["Alice"]

@@ -80,14 +80,6 @@ from world.spatial import (
     sense_adjusted,
     sight_verdict,
     visual_level_between,
-    graded_sight,
-    sight_between,
-    sight_for_acts,
-    range_of,
-    range_sight,
-    sight_reach,
-    thing_scale,
-    _lit,
     hear_level,
     heard_events,
     light_shape,
@@ -1259,7 +1251,10 @@ def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel,
         if not scene:
             return False
         if room_of(scene, perceiver_name) is not None:
-            return graded_sight(scene, perceiver_name, source_name, senses) != "none"
+            return composer._sense_graded(
+                visual_level_between(scene, perceiver_name, source_name,
+                                     senses),
+                "sight", senses) != "none"
         return _sight_reaches(scene, perceiver_name, source_name, senses,
                               rel=rel)
     return _at(sc) or _at(prev_sc)
@@ -1696,20 +1691,7 @@ def _in_plain_view(rel, vis):
     return bool(rel.get("same_room")) or bool(vis)
 
 
-def _face_in_view(scene, observer, target, senses=None) -> bool:
-    """Is `target` near enough that this observer reads its face -- does
-    the DISTANCE leave full detail to these eyes (`spatial_range`, owner
-    2026-10-04)? Not a light question: what the dark takes is the light's
-    answer and stays exactly as it was. Not whether the body is seen at all:
-    a figure across a field is seen, its smirk is not. True wherever either
-    body has no room, so nothing outside the measured world is taken."""
-    if room_of(scene, observer) is None or room_of(scene, target) is None:
-        return True
-    grade = sight_between(scene, observer, target, senses)
-    return range_of(grade.evidence, grade.scale, sight_reach(senses)) == "full"
-
-
-def _sight_detail(sc, observer_name, actor_name, rel, senses=None):
+def _sight_detail(sc, observer_name, actor_name, rel):
     """How much CONDUCT sight admits: "full", "shapes" or "none".
 
     SIGHT IS GRADED AND THE ACT CHANNEL WAS NOT. Every grader here answers
@@ -1742,36 +1724,12 @@ def _sight_detail(sc, observer_name, actor_name, rel, senses=None):
     admission gate -- `_in_plain_view` still decides whether anything is seen
     at all -- so nothing this returns can refuse what today delivers; it can
     only say that what is seen is a body moving rather than a body acting.
-
-    CONDUCT IS TWO THINGS, AND ONLY ONE OF THEM CARRIES THE SURFACE. Dim
-    light takes a face and leaves a body's doing plain -- the glove is seen
-    at three metres. DISTANCE takes the small things first: the surface
-    names what a hand holds, and at sixty metres in the sun no hand is
-    read (`spatial_range`, owner 2026-10-04). The act's surface is free
-    prose and cannot be trimmed to its gross motion without a word list, so
-    where the distance is what left the act short of full detail, the act is
-    what `shapes` gives: a body moving. The observer's card carries the
-    distance as far as its eyes do and lifts nothing: `sight_for_acts`, the
-    one rule this channel and the interaction micro-loop share.
-
-    A CROSS-ROOM `none` STAYS `none`. The carve-out below is for a body in
-    the observer's own room, which `_in_plain_view` admits whatever the line
-    says; across a doorway the body-level grade -- the cone, a measured
-    line -- is the answer, and the onset view had been delivering the whole
-    surface of an act the cone refused (probed 2026-10-04: a lit yard,
-    an actor beside the doorframe, `visual_level_between` none, the act
-    delivered in full).
     """
     level = ""
-    band = "full"
-    measured = room_of(sc, observer_name) is not None
-    if measured:
-        level, band = sight_for_acts(sc, observer_name, actor_name, senses)
+    if room_of(sc, observer_name) is not None:
+        level = visual_level_between(sc, observer_name, actor_name) or ""
     if not level:
         level = sight_level(rel) or ""
-    if level == "none" and isinstance(rel, dict) and not rel.get("same_room") \
-            and measured:
-        return "none"
     if level == "none":
         # THE SAME QUESTION, ASKED INSIDE THE ROOM TOO (PE9, "Two Rooms and a
         # Kettle"): `_in_plain_view` short-circuits on `same_room`, so an
@@ -1784,15 +1742,9 @@ def _sight_detail(sc, observer_name, actor_name, rel, senses=None):
         # in the way. `body_visibility` answers only on two measured stations
         # and an opaque anchor of a stated height between them, so a scene
         # without geometry is unchanged.
-        # The distance takes its detail here too: a co-present act the dark
-        # lets through is no more legible at sixty metres than the same act
-        # in the sun.
-        if _line_of_sight_blocked(sc, observer_name, actor_name):
-            return "none"
-        return "full" if band == "full" else "shapes"
-    if level == "shapes" or band != "full":
-        return "shapes"
-    return "full"
+        return "none" if _line_of_sight_blocked(
+            sc, observer_name, actor_name) else "full"
+    return "shapes" if level == "shapes" else "full"
 
 
 def _line_of_sight_blocked(sc, observer_name, actor_name):
@@ -2573,13 +2525,9 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
                                   target_room=s.get("room"))
         # Per-BODY, so a source standing in a torch's pool is visible while the
         # rest of the dark room is not -- the room-level answer cannot see that.
-        # A TELL ON A BODY IS READ AS A FACE IS, and a demeanor with it: at
-        # a distance where the face is not (`_face_in_view`), what reaches
-        # the observer is only what the observer HEARS of it.
-        _card = _sense_card(observer_sheet)
-        visible = (graded_sight(scene, observer, sname, _card) != "none"
-                   and sname not in behind
-                   and _face_in_view(scene, observer, sname, _card))
+        visible = (visual_level_between(scene, observer, sname,
+                                        _sense_card(observer_sheet)) != "none"
+                   and sname not in behind)
         # A voice/breath tell needs clean hearing, not mere co-location: an
         # enclosed body's position derives to its carrier's room, so bare
         # `same_room` handed a breath tell across a seal that muffles the
@@ -3154,13 +3102,8 @@ def perception_act(ctx, nonce):
                 ctx, sc, p_name, character_name(sh), c["id"], p_room, r):
             rel = {**rel, "open_group_continuity": True}
         rdata = (sc.get("rooms") or {}).get(r) if r else None
-        # ONE DERIVATION PER PAIR: the display map and the roster ask each
-        # pair's sight two or three times over, and outside a read pass every
-        # ask re-derives it (measured 2026-10-04: +27-30% on this stage in a
-        # 96-pace room once distance joined the derivation).
-        with scene_read_pass(sc):
-            prox_to_others, behind_others = _co_present_company(
-                sc, character_name(sh), co_present, known)
+        prox_to_others, behind_others = _co_present_company(
+            sc, character_name(sh), co_present, known)
 
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
@@ -4000,8 +3943,8 @@ def _manifest_percepts(sc, manifest, observer, display_map, recognized,
             label = sname
         if not label:
             continue
-        can_see = (graded_sight(sc, observer, sname, sense_card) != "none"
-                   and _face_in_view(sc, observer, sname, sense_card))
+        can_see = visual_level_between(sc, observer, sname,
+                                       sense_card) != "none"
         demeanor = _composer_scrub_surface(
             str(entry.get("surface_demeanor") or ""), observer, recognized,
             unknown, labels=display_map)
@@ -4787,7 +4730,9 @@ def _scent_sources_for(sc, observer, observer_room, others, display_map,
         return composer._sense_graded(scent_level(rel), "scent", senses)
 
     def sees(subject):
-        return (graded_sight(sc, observer, subject, senses)
+        return (composer._sense_graded(
+            visual_level_between(sc, observer, subject, senses),
+            "sight", senses)
             == "full" and entity_arc(sc, observer, subject) != "rear")
 
     def rel_to(subject, room=None):
@@ -4975,12 +4920,9 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
     # Rule 5's evidence, read once: which anchors this observer's eyes reach,
     # and what each is called.
     seen_anchors = {}
-    seen_low = {}
     for row in (feature_visibility(sc, name, sweep=bool(sweep)) or ()):
         if row.get("visible"):
             seen_anchors[str(row.get("anchor") or "")] = str(row.get("desc") or "")
-            if row.get("low_m") is not None:
-                seen_low[str(row.get("anchor") or "")] = float(row["low_m"])
     # Rule 4: the room's own authored furniture, by anchor id and by name.
     furniture = {str(key).casefold() for key in
                  (((sc.get("rooms") or {}).get(room) or {}).get("anchors") or {})}
@@ -5044,15 +4986,6 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
         if at:
             if at not in seen_anchors:
                 continue                                    # rule 5, placed
-            # RULE 5c: A THING IS NAMED AS FAR AS ITS OWN SIZE CARRIES, not
-            # as far as the counter under it does (`spatial_range`, owner
-            # 2026-10-04): a coin on a seen counter thirty metres off is
-            # not a coin to anyone. A light that is lit is seen as far as
-            # it shines.
-            _low = seen_low.get(at)
-            if _low is not None and not _lit_source(entity) \
-                    and range_sight(_low, thing_scale(entity)) == "shapes":
-                continue                                    # rule 5c
             place = seen_anchors[at]
         elif not lit:
             continue                                        # rule 5, unplaced
@@ -5063,14 +4996,6 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
             continue
         rows.append({"what": what, "uid": str(eid), "state": [at or room]})
     return rows
-
-
-def _lit_source(entity) -> bool:
-    """Does this thing give light right now -- a `light_source` the light
-    field itself counts as lit (`spatial_light_field._lit`: out, doused,
-    off, 0 and false all put it out)?"""
-    return (isinstance(entity, dict) and bool(entity.get("light_source"))
-            and _lit(entity))
 
 
 def _bearer_of(sc, forms):
@@ -5405,7 +5330,9 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         b_name = body.get("name")
         if not b_name:
             continue
-        if graded_sight(sc, name, b_name, senses) != "full":
+        if composer._sense_graded(
+                visual_level_between(sc, name, b_name, senses),
+                "sight", senses) != "full":
             continue
         if entity_arc(sc, name, b_name) == "rear":
             continue
@@ -5556,8 +5483,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             region_labels[body["name"]] = display_map.get(
                 body["name"], "someone")
     rows = observer_body_regions(sc, name, region_labels,
-                                 extra_parts=extra_parts,
-                                 senses=p.get("sense_card"))
+                                 extra_parts=extra_parts)
     percepts.extend(
         composer.body_region_percepts(_composer_bare_details(rows)))
     # Authored extra parts ride the same gated projection as bare regions,
@@ -5798,7 +5724,8 @@ def _opening_line_percept(ctx, sc, p, pid, name, entry, order, *, field,
     if rel is None:
         return None
     senses = p.get("sense_card")
-    can_see = _in_plain_view(rel, graded_sight(sc, name, speaker, senses) != "none")
+    can_see = _in_plain_view(rel, composer._sense_graded(
+        visual_level_between(sc, name, speaker, senses), "sight", senses) != "none")
     display = _attributed_label(
         speaker, name, recognized=recognized, display_map=display_map,
         bodies_by_name=bodies_by_name, can_see=can_see, unseen="a voice",
@@ -5808,7 +5735,6 @@ def _opening_line_percept(ctx, sc, p, pid, name, entry, order, *, field,
                                   observer_room=p.get("room"),
                                   speaker_room=speaker_room),
         name, display=display, can_see=can_see,
-        face_seen=_face_in_view(sc, name, speaker, senses),
         proximity=measured_proximity_rel(sc, name, speaker),
         order_key=order, observer_id=pid, senses=senses,
         voice=_voice_register_for(ctx, speaker))
@@ -6316,8 +6242,6 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     percept = composer.speech_percept(
                         entry, speech_rel, name, display=event_display,
                         can_see=said_seen,
-                        face_seen=_face_in_view(event_scene, name, event_actor,
-                                                p.get("sense_card")),
                         proximity=event_proximity,
                         order_key=idx, observer_id=pid,
                         senses=p.get("sense_card"),
@@ -6391,8 +6315,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     percept = composer.act_percept(
                         event_scene, event, name, event_actor, act_rel, display=event_display,
                         can_see=act_seen,
-                        sight=_sight_detail(event_scene, name, event_actor, act_rel,
-                                            senses=p.get("sense_card")),
+                        sight=_sight_detail(event_scene, name, event_actor, act_rel),
                         self_forms=self_forms,
                         self_pronouns=p.get("pronouns"),
                         other_forms=tuple(
@@ -7117,16 +7040,12 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         # A walker's own footfalls are no news to the walker,
                         # and a walker in plain view is seen walking, not
                         # heard: the tread reaches whoever cannot see them.
-                        # "Plain view" is the LIGHT's answer (`base`): a
-                        # walker sixty metres across a lit square is seen
-                        # walking, and distance taking the face must not
-                        # add their footsteps (`spatial_range`).
                         [e for e in _now_sounds
                          if not (e.get("tread") and (
                              str(e.get("source") or "") == str(name)
                              or (str(e.get("room") or "") == str(p.get("room") or "")
-                                 and sight_between(
-                                     sc, name, str(e.get("source") or "")).base == "full")))],
+                                 and visual_level_between(
+                                     sc, name, str(e.get("source") or "")) == "full")))],
                         p.get("room")))
                 # ...THEN THE NEAR FIELD: a sound in a room the listener's
                 # own composite grid places is a one-beat source on that
@@ -7244,7 +7163,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 then = sc if moment is None else moment[0]
                 if room_of(then, _observer) is None:
                     return visual.get(counterparty, False)
-                return graded_sight(then, _observer, counterparty, _senses) != "none"
+                return composer._sense_graded(
+                    visual_level_between(then, _observer, counterparty,
+                                         _senses),
+                    "sight", _senses) != "none"
             def _channel_as_of(counterparty, at_index, _observer=name,
                                _spatial=spatial):
                 standing = _spatial.get(counterparty)
@@ -7349,8 +7271,6 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                                           if at_index in causal_moments
                                           else d.get("speaker_room"))),
                         name, display=display, can_see=can_see,
-                        face_seen=_face_in_view(event_scene, name, speaker,
-                                                p.get("sense_card")),
                         proximity=_prox,
                         order_key=order, observer_id=pid,
                         senses=p.get("sense_card"),
@@ -7500,8 +7420,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 percept = composer.act_percept(
                     event_scene, act.get("event") or {}, name, actor, rel,
                     display=display, can_see=can_see,
-                    sight=_sight_detail(event_scene, name, actor, rel,
-                                        senses=p.get("sense_card")),
+                    sight=_sight_detail(event_scene, name, actor, rel),
                     self_forms=self_forms,
                     self_pronouns=p.get("pronouns"),
                     other_forms=tuple(
@@ -7519,18 +7438,18 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     continue
                 if p.get("room") not in (from_room, to_room):
                     continue
-                _graded = (lambda scene: graded_sight(
-                    scene, name, mover, p.get("sense_card")))
+                _graded = (lambda scene: composer._sense_graded(
+                    visual_level_between(scene, name, mover,
+                                         p.get("sense_card")),
+                    "sight", p.get("sense_card")))
                 seen = _graded(sc) != "none" or (
                     prev_scene and _graded(prev_scene) != "none")
                 if not seen:
                     continue
                 label = display_map.get(mover)
                 if label is None:
-                    # The pack's word, never a literal: the English one
-                    # reached Japanese views as it was.
                     label = mover if _recognizes(mover, recognized) \
-                        else composer._far_figure()
+                        else "a figure"
                 direction = ("arrived" if to_room == p.get("room")
                              else "left")
                 percepts.append(composer.crossing_percept(
