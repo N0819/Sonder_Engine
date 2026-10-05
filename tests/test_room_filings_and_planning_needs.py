@@ -486,3 +486,24 @@ def test_the_ledgers_a_beat_re_derives_are_written_only_when_they_move(
     # Nothing moved, so no cached parse of those rows was invalidated.
     assert {key: _db.world_read_token(ctx.chat.id, key)
             for key in before} == before
+
+
+def test_a_rerun_opening_files_its_premise_into_the_book_the_database_holds(temp_db):
+    """A rerun of an opening restores the checkpoint from BEFORE the opening,
+    which deletes the canon book the opening minted and clears
+    `chats.lorebook_id`; the pipeline's chat copy, read before the restore,
+    still named the deleted book, and filing the premise into it failed the
+    foreign key and rolled the whole commit back (the Larch Hill copy,
+    2026-10-04: rerolling any step of turn 0 could not commit)."""
+    ctx, book = _cast_story(temp_db, opening=True, scenario=PREMISE)
+    # what the restore leaves behind: the book gone, the row cleared, the
+    # context still naming it
+    temp_db.qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (ctx.chat.id,))
+    temp_db.qi("DELETE FROM lorebooks WHERE id=?", (book,))
+    ctx.chat.lorebook_id = book
+    prepared = cm.prepare_mapping_commit(ctx)
+    cm.commit_mapping(ctx, "n", prepared=prepared)
+    (row,) = _premise_rows(temp_db, ctx.chat.id)
+    assert row["content"] == PREMISE
+    owner = temp_db.q("SELECT chat_id FROM lorebooks WHERE id=?", (row["lorebook_id"],), one=True)
+    assert owner and owner["chat_id"] == ctx.chat.id   # a book that exists, the chat's own

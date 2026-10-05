@@ -668,7 +668,16 @@ def commit_mapping(ctx, nonce, *, prepared=None):
     ops = prepared.get("ops") or []
     book_ops = prepared.get("book_ops") or []
     applied = {"created": 0, "updated": 0}
-    lb = chat.lorebook_id
+    # THE CANON BOOK AS THE DATABASE HOLDS IT NOW, never the pipeline's copy
+    # of the chat row: a rerun of an opening restores the checkpoint from
+    # before the opening, which deletes the canon book the opening minted and
+    # clears `chats.lorebook_id` -- and `ctx.chat`, read before the restore,
+    # still named the deleted book. Filing the premise into it failed the
+    # foreign key and rolled the whole commit back (a re-rendered opening on
+    # the Larch Hill copy, 2026-10-04): rerolling any step of turn 0 could not
+    # commit.
+    _live = q("SELECT lorebook_id FROM chats WHERE id=?", (cid,), one=True)
+    lb = _live["lorebook_id"] if _live else None
     if (ops or book_ops) and not lb:
         # One spelling of "the chat's canon book", shared with the other writer
         # that can mint it first (background_claims.write_canon).
