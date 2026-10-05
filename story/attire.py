@@ -3461,7 +3461,7 @@ def _compact_garment_piece(garment, look, look_said):
         # "A snug, ribbed tank top in charcoal" into "A snug" -- a bare
         # adjective, which is worse than no description at all. A comma
         # separates adjectives here far more often than clauses.
-        clause = re.split(r"[;—.]", str(garment.get("description") or ""), 1)[0]
+        clause = re.split(r"[;—.]", str(garment.get("description") or ""), maxsplit=1)[0]
         clause = " ".join(clause.split())
         if len(clause) > int(look):
             # On a word boundary. A look cut mid-word ("A snug") reads as a

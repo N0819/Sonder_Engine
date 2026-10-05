@@ -50,7 +50,7 @@
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 248 |  | `core.db` |
-| `llm/json_mend.py` | 272 |  | — |
+| `llm/json_mend.py` | 285 |  | — |
 | `llm/llm_quality.py` | 1394 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 645 | Default system prompts and prompt preset access. | `core.db` |
@@ -725,14 +725,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_decoder_edits()` | 131 | 49 lines |
-| `mend_candidates()` | 235 | 38 lines |
-| `_bracket_edits()` | 182 | 25 lines |
+| `_decoder_edits()` | 150 | 43 lines |
+| `mend_candidates()` | 248 | 38 lines |
+| `_bracket_edits()` | 195 | 25 lines |
 | `_bracket_fault()` | 77 | 22 lines |
+| `_trailing_comma_at()` | 131 | 17 lines |
 | `_string_start()` | 115 | 14 lines |
-| `_repeated()` | 213 | 14 lines |
+| `_repeated()` | 226 | 14 lines |
 | `_loads()` | 57 | 8 lines |
-| `_error()` | 67 | 8 lines |
 
 ### `llm/llm_quality.py`
 
@@ -3378,7 +3378,7 @@ Sections: Weather effects (`:2`); the tile (`:219`); the layers (`:292`); lifecy
 
 Declared functions: `weatherFxLater()`, `weatherFxCancel()`, `weatherFxClearTimers()`, `weatherFxClearBolt()`, `weatherFxReduced()`, `weatherFxEffectsOff()`, `weatherFxSupported()`, `weatherFxHost()`, `weatherFxRandom()`, `weatherFxTile()`, `weatherFxReach()`, `weatherFxBuild()`, `weatherFxClearLayers()`, `weatherFxSetPlayState()`, `weatherFxStop()`, `weatherFxVisible()`, `weatherFxApply()`, `weatherFxStormy()`, `weatherFxScheduleFlash()`, `weatherFxFlash()`, `weatherFxOpenSky()`, `weatherFxBolt()`, `weatherFxThunder()`, `weatherFxForTurn()`.
 
-### `static/js/world_browser.js` (3379 lines)
+### `static/js/world_browser.js` (3383 lines)
 
 Sections: The World Browser (`:3`); with its room, station, pose, and its FULL attire ledger, (`:31`); Edit controls (`:113`); The tree (`:216`); The room card (`:296`); Townspeople (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map) (`:419`); `size` is the word for the floor and `extent` its measurement, so the (`:546`); The Bodies tab: every body, and the attire editor (`:1262`); The Raw JSON tab: the two editors, unchanged (`:1534`); The map editor (`:1621`); the neighbours, faintly, where the field lays them (`:1926`); the room's cells, and the overlay's tint over them (`:1967`); the boundary as a line, with each doorway a gap in it (`:2000`); anchors: footprint cells, the id, a height mark (`:2047`); things placed by a position and a station (`:2082`); bodies: a marked cell with a facing tick; the unstationed in a lane (`:2120`); the lint, drawn at the thing each row concerns (`:2176`); the shape: parts as rectangles, the box's sides as handles (`:2232`); blank wall segments open a doorway; empty floor places a thing (`:2289`); the drops (`:2313`); through the doorways route, so a doorway declared from the far room (`:2424`); The dialog (`:2816`).
 

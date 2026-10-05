@@ -203,6 +203,11 @@ def test_quick_start_explains_the_featured_character_handoff(
     }
     _mock_api(page, bootstrap)
     page.goto(f"{ui_base_url}/static/index.html")
+    # `quickStartModal` reads `S.boot.personas`, filled by the bootstrap
+    # fetch AFTER the page loads -- the race the wizard test below already
+    # waits out. On CI's slower runner it lost every run from 2026-09-27:
+    # "Cannot read properties of null (reading 'personas')".
+    page.wait_for_function("() => typeof S !== 'undefined' && !!S.boot")
 
     page.evaluate("quickStartModal({id: 9, name: 'Sarah Moon'}, 0)")
 

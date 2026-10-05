@@ -53,6 +53,9 @@ def _mends_to(broken, expected):
     ("a raw line break inside a string",
      '{"prose": "first line\nsecond line"}', {"prose": "first line\nsecond line"}),
     ("a trailing comma", '{"a": [1, 2], "b": 3,}', {"a": [1, 2], "b": 3}),
+    # Python 3.13 names this slip at the comma ("Illegal trailing comma
+    # before end of array"); 3.12 at the closer after it. Both are mended.
+    ("a trailing comma in a list", '{"a": [1, 2,], "b": 3}', {"a": [1, 2], "b": 3}),
     ("a comma missing between two elements",
      '{"a": [{"x": 1} {"x": 2}]}', {"a": [{"x": 1}, {"x": 2}]}),
 ])

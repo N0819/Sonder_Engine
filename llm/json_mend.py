@@ -128,6 +128,25 @@ def _string_start(text, pos):
     return start if in_string else -1
 
 
+def _trailing_comma_at(text, pos):
+    """Where the trailing comma at the decoder's fault `pos` stands, or None.
+
+    READ OFF THE TEXT, NOT OFF THE MESSAGE. Python 3.11 and 3.12 report a
+    trailing comma at the closer after it, as "Expecting property name" or
+    "Expecting value"; 3.13 names it -- "Illegal trailing comma before end of
+    object" -- at the comma itself. Keyed on the older wording, the mend
+    mended nothing on the interpreter both launchers try first (CI on 3.13,
+    2026-10-05)."""
+    at = text[pos] if pos < len(text) else ""
+    if at and at in "]}":
+        comma = _previous_significant(text, pos)
+        return comma if comma >= 0 and text[comma] == "," else None
+    if at == ",":
+        closer = _next_significant(text, pos + 1)
+        return pos if closer < len(text) and text[closer] in "]}" else None
+    return None
+
+
 def _decoder_edits(text):
     """Edits at the point the decoder itself gave up: a key's quotes, a
     trailing comma, a comma missing between two elements. Each is
@@ -149,21 +168,15 @@ def _decoder_edits(text):
         return out
     pos, msg = loose
     at = text[pos] if pos < len(text) else ""
+    comma = _trailing_comma_at(text, pos)
+    if comma is not None:
+        out.append((text[:comma] + text[comma + 1:],
+                    "dropped a trailing comma", "trailing-comma"))
     if msg.startswith("Expecting property name"):
-        if at == "}":
-            comma = _previous_significant(text, pos)
-            if comma >= 0 and text[comma] == ",":
-                out.append((text[:comma] + text[comma + 1:],
-                            "dropped a trailing comma", "trailing-comma"))
         key = _BARE_KEY.match(text, pos)
         if key:
             out.append((text[:pos] + f'"{key.group(0)}"' + text[key.end():],
                         f"quoted the key {key.group(0)}", "bare-key"))
-    elif msg.startswith("Expecting value") and at and at in "]}":
-        comma = _previous_significant(text, pos)
-        if comma >= 0 and text[comma] == ",":
-            out.append((text[:comma] + text[comma + 1:],
-                        "dropped a trailing comma", "trailing-comma"))
     elif msg.startswith("Expecting ',' delimiter") and at and at in '"{[':
         before = _previous_significant(text, pos)
         if before >= 0 and text[before] in '"}]el0123456789':

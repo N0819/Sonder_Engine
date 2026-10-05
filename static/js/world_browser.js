@@ -2416,8 +2416,8 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
       anchors[aid] = { ...anchors[aid], dir: "", offset: null, cell: c };
       label = t(`Pinned ${aid} to (${c[0]}, ${c[1]})`);
     }
-    await writeAnchors(anchors, label, before);
     ctx.refocus(`.wb-m-anchor[data-anchor="${CSS.escape(aid)}"]`);
+    await writeAnchors(anchors, label, before);
   }
 
   // A doorway dragged along its wall sets its `offset`, on both rooms' edges
@@ -2434,9 +2434,9 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     const offset = wbOffsetAlong(idx, rim.length, width);
     if (quiet && d.offset != null && Math.abs(offset - d.offset) < 1e-9) return;
     const label = t(`Moved the doorway to ${d.name} along the wall`);
+    ctx.refocus(`.wb-m-doorway[data-exit="${CSS.escape(d.to)}"]`);
     const done = await ctx.patchDoorway(d.to, { offset }, label);
     if (done) ctx.undo.remember(label, () => ctx.patchDoorway(d.to, { offset: d.offset }, t(`Undid: ${label}`)));
-    ctx.refocus(`.wb-m-doorway[data-exit="${CSS.escape(d.to)}"]`);
   }
 
   // A body dropped on ANY cell of its room is pinned to it (`cell`, in the
@@ -2451,9 +2451,9 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
       const door = (view.doorways || []).find(d => d.cells.some(k => same(k, c)));
       const label = anchor ? t(`Placed ${name} at ${anchor[0]}`) : t(`Placed ${name} at (${c[0]}, ${c[1]})`);
       const previous = { at: b.at || null, near: b.near || [], cell: b.source === "cell" ? b.cell : null };
+      ctx.refocus(`.wb-m-body[data-body="${CSS.escape(name)}"]`);
       const done = await ctx.putStation(name, { at: anchor ? anchor[0] : door ? door.id : null, near: b.near || [], cell: c }, label);
       if (done) ctx.undo.remember(label, () => ctx.putStation(name, previous, t(`Undid: ${label}`)));
-      ctx.refocus(`.wb-m-body[data-body="${CSS.escape(name)}"]`);
       return;
     }
     if (quiet) return;
@@ -2481,9 +2481,9 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
       const door = (view.doorways || []).find(d => d.cells.some(k => same(k, c)));
       const label = anchor ? t(`Placed ${name} at ${anchor[0]}`) : t(`Placed ${name} at (${c[0]}, ${c[1]})`);
       const at = anchor ? anchor[0] : door ? door.id : null;
+      ctx.refocus(`.wb-m-body[data-body="${CSS.escape(name)}"]`);
       const done = await ctx.putCharterStation(b, { room: room.id, ...(at ? { at } : { cell: c }) }, label);
       if (done) ctx.undo.remember(label, () => restore(t(`Undid: ${label}`)));
-      ctx.refocus(`.wb-m-body[data-body="${CSS.escape(name)}"]`);
       return;
     }
     if (quiet) return;
@@ -2502,9 +2502,9 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     if (inRoom(c)) {
       const label = t(`Placed ${th.name} at (${c[0]}, ${c[1]})`);
       const previous = { at: null, near: [], cell: th.source === "cell" ? th.cell : null };
+      ctx.refocus(`.wb-m-thing[data-thing="${CSS.escape(th.id)}"]`);
       const done = await ctx.putStation(th.id, { at: null, near: [], cell: c }, label);
       if (done) ctx.undo.remember(label, () => ctx.putStation(th.id, previous, t(`Undid: ${label}`)));
-      ctx.refocus(`.wb-m-thing[data-thing="${CSS.escape(th.id)}"]`);
       return;
     }
     if (quiet) return;
@@ -2913,7 +2913,11 @@ async function openWorldBrowser(opts = {}) {
       pendingCell: null,
       pendingWall: null,
       // After a write from the map the mark that was dragged is focused
-      // again once the grid is redrawn, so a keyboard nudge can go on.
+      // again once the grid is redrawn, so a keyboard nudge can go on. Asked
+      // BEFORE the write: the write awaits its own redraw (`refresh` ->
+      // `loadGrid` -> `drawGrid`, which spends this), so a selector set after
+      // it waited for some later, unrelated redraw -- CI saw the mark
+      // unfocused after an arrow-key nudge from 2026-09-27.
       refocus: selector => { state.refocus = selector; },
       stationableOf: room => (state.slice && state.slice.id === room ? state.slice.stationable : []) || [],
       patchRoom: (fields, label = null) => wbWrite(ctx, async () => {
