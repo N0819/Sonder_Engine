@@ -298,3 +298,23 @@ def visible_vistas(scene, name) -> list:
         if why is None:
             out.append((vista, "silhouette" if dark and not vista["lit"] else "clear"))
     return out
+
+
+def _fold_name(value) -> str:
+    return " ".join(str(value or "").replace("_", " ").casefold().split())
+
+
+def looked_vistas(scene, looks) -> list:
+    """The vistas a set of `look` values names, by id or by name."""
+    wanted = {_fold_name(v) for v in looks or () if str(v or "").strip()}
+    return [v for v in scene_vistas(scene)
+            if _fold_name(v["id"]) in wanted or _fold_name(v["name"]) in wanted]
+
+
+def what_a_look_finds(scene, name, vista) -> str:
+    """"clear" | "silhouette" when the vista is seen now, else "unseen":
+    a look aimed at the range in fog finds that it cannot be made out."""
+    for seen, how in visible_vistas(scene, name):
+        if seen["id"] == vista["id"]:
+            return how
+    return "unseen"

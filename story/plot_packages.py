@@ -2794,8 +2794,9 @@ OPERATION_FIELDS = {
     "answer_need": {"need_uid": "an open need", "fill": "{...what fills it}"},
     "close_need": {"need_uid": "an open need", "reason": "why it closes unanswered"},
     "set_vistas": {"vistas": "[{name, bearing: n|ne|e|se|s|sw|w|nw, distance_km, "
-                             "height_m, desc?: how it looks from here -- its look, "
-                             "not its direction, which the bearing already says, "
+                             "height_m, desc?: how it looks from here by day -- its "
+                             "look, not its direction, which the bearing already "
+                             "says, nor its look at night, which lit says, "
                              "lit?: true when it shows at night -- a city, a "
                              "lighthouse}] -- what stands on the horizon, never a "
                              "place to walk to"},

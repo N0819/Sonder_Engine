@@ -1402,6 +1402,54 @@ def _sound_field_for(ctx, sc, name, room, events=None):
                        events=events or None)
 
 
+def _looked_vistas(sc, res, interp, name, player_name, ctx):
+    """The vistas `name`'s own act this beat aimed a `look` at, by the
+    looking row's actor: the player's rows (`persona:`/self) and each cast
+    member's (`character:<id>`), read off the interpret and resolve
+    sequences the way `swept_this_beat` reads a sweep."""
+    from world.vistas import looked_vistas
+    by_id = {}
+    for row in (getattr(ctx, "cast", None) or ()):
+        try:
+            by_id[str(row["id"])] = character_name_from_text(row["sheet"])
+        except Exception:
+            continue
+    looks = []
+    rows = list((res or {}).get("sequence") or []) + list((interp or {}).get("sequence") or [])
+    for element in rows:
+        if not isinstance(element, dict) or not str(element.get("look") or "").strip():
+            continue
+        actor = str(element.get("actor") or element.get("source_entity_id") or "")
+        if actor.startswith("persona:") or actor in ("", "self", "player"):
+            who = str(player_name or "")
+        elif actor.startswith("character:"):
+            who = by_id.get(actor[10:]) or ""
+        else:
+            who = actor
+        if who.strip().casefold() == str(name or "").strip().casefold():
+            looks.append(element["look"])
+    return looked_vistas(sc, looks)
+
+
+def _walk_underway(sc, res, name):
+    """`{"to": <destination room name>, "at": <room name>}` when this
+    beat's travel record left `name` short of a declared destination, else
+    None. Read from the resolve's own `travel.advanced` row for this body."""
+    travel = (res or {}).get("travel") if isinstance(res, dict) else None
+    rooms = (sc or {}).get("rooms") or {}
+    for rec in ((travel or {}).get("advanced") or []) if isinstance(travel, dict) else []:
+        if not isinstance(rec, dict) or not rec.get("underway"):
+            continue
+        if str(rec.get("subject") or "").strip().casefold() != str(name or "").strip().casefold():
+            continue
+        dest, here = str(rec.get("destination") or ""), str(rec.get("to") or "")
+        if not dest or dest == here:
+            continue
+        name_of = lambda rid: str((rooms.get(rid) or {}).get("name") or rid)
+        return {"to": name_of(dest), "at": name_of(here)}
+    return None
+
+
 def _beat_movers(ctx) -> dict:
     """{name: pace} for every body the beat walked (the resolve's `travel`
     records, paces > 0): its tread is a sound source at the cell it ended
@@ -5239,8 +5287,13 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         # WHAT STANDS ON THE HORIZON (`world/vistas`): from open air or a
         # window facing its way, through the weather, by the light, over what
         # stands nearer -- decided now, for this body.
-        from world.vistas import visible_vistas
-        percepts.extend(composer.vista_percepts(visible_vistas(sc, name)))
+        from world.vistas import visible_vistas, what_a_look_finds
+        percepts.extend(composer.vista_percepts(
+            visible_vistas(sc, name),
+            looked=[(v, what_a_look_finds(sc, name, v))
+                    for v in (p.get("looked_vistas") or ())]))
+    if p.get("walk_underway"):
+        percepts.extend(composer.walk_underway_percepts(p["walk_underway"]))
     percepts.extend(composer.room_content_percepts(
         p.get("crowds"), p.get("couriers"), p.get("notices"),
         _visible_things(sc, name, room, sweep=sweep,
@@ -6937,6 +6990,15 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             # re-render, or any body whose act this beat looked around.
             p["sweep"] = (is_player_view and full_player_render) \
                 or name in _swept_names
+            # A WALK THE BEAT DID NOT FINISH IS THE WALKER'S TO KNOW: where
+            # it got to and where it is still going (`walk_underway`). The
+            # event text can say "climbs all the way to the top floor" while
+            # the paces left the body a flight short; without this the page
+            # followed the text (Larch Hill turn 3, 2026-10-04).
+            p["walk_underway"] = _walk_underway(sc, res, name)
+            # WHAT THIS BODY'S OWN ACT LOOKED AT on the horizon this beat
+            # (`world.vistas.looked_vistas`): delivered as an event.
+            p["looked_vistas"] = _looked_vistas(sc, res, interp, name, p_name, ctx)
             display_map = composer.observer_display_map(
                 sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(

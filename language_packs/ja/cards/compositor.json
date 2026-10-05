@@ -335,6 +335,8 @@
     "thing_carried_by_you": "あなたは{desc}を運んでいる。",
     "thing_reads_touch": "手の下の{label}：{readings}。",
     "thing_reads_sight": "{label}の表示：{readings}。",
+    "walk_underway": "まだ{to}へ向かう途中です。いまは{at}まで来たところです。",
+    "vista_unseen": "{compass}の、{name}があるはずのあたりには、何も見分けられない。",
     "vista_seen": "{compass}に、{name}{desc}。",
     "vista_silhouette": "{compass}に、{name}が夜空に黒い影となっている。",
     "vista_desc_join": "――{desc}",

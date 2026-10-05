@@ -2662,26 +2662,59 @@ def scent_percepts(sources):
     return out
 
 
-def vista_percepts(seen):
+def walk_underway_percepts(walk):
+    """A walk this body declared and has not finished: where it has got to
+    and where it is still going, in the pack's words (`perception.
+    _walk_underway`). One line, the walker's own knowledge of its body."""
+    from language_runtime import compositor_text
+    if not isinstance(walk, dict) or not walk.get("to"):
+        return []
+    text = compositor_text("walk_underway", to=walk["to"], at=walk.get("at") or "")
+    return [Percept(kind="ambient", channel="interoception", data={"desc": text},
+                    dedupe_key=standing_key("walk_underway", (walk["to"],), (walk.get("at") or "",)))]
+
+
+def vista_percepts(seen, looked=()):
     """What stands on the horizon, to a body that can see it
     (`world.vistas.visible_vistas`): one line each, by compass bearing, in
     the pack's own words -- a skyline under a moon as a silhouette. A
     distant thing is seen and may be spoken of; nothing here makes it a
-    thing a hand reaches (`world/vistas.py`)."""
+    thing a hand reaches (`world/vistas.py`).
+
+    `looked` is `[(vista, clarity | "unseen")]` for the vistas this body's
+    own act LOOKED AT this beat: what the look found is the beat's, so it is
+    an EVENT, ordered first -- right after the body's own words -- never
+    standing background the player tier's delta may suppress, and a look
+    that finds nothing (fog, the dark, a ridge) says so. Live, Larch Hill
+    (2026-10-04): Ren went to the north windows and looked at the range,
+    the range sat in present_scene, and the page never said what she saw."""
     from language_runtime import compositor_text
     from world.spatial import _phrase_table
     compass = _phrase_table("compass_words")
+    looked = list(looked or ())
+    looked_ids = {v["id"] for v, _how in looked}
     out = []
-    for vista, clarity in seen or ():
+
+    def line(vista, clarity):
         where = compass.get(vista["bearing"], vista["bearing"])
+        if clarity == "unseen":
+            return compositor_text("vista_unseen", compass=where, name=vista["name"])
         if clarity == "silhouette":
-            text = compositor_text("vista_silhouette", compass=where, name=vista["name"])
-        else:
-            desc = compositor_text("vista_desc_join", desc=vista["desc"]) if vista["desc"] else ""
-            text = compositor_text("vista_seen", compass=where, name=vista["name"], desc=desc)
+            return compositor_text("vista_silhouette", compass=where, name=vista["name"])
+        desc = compositor_text("vista_desc_join", desc=vista["desc"]) if vista["desc"] else ""
+        return compositor_text("vista_seen", compass=where, name=vista["name"], desc=desc)
+
+    for vista, clarity in looked:
         out.append(Percept(
             kind="ambient", channel="sight", source_label=vista["name"],
-            data={"desc": text},
+            data={"desc": line(vista, clarity)}, order_key=-1, salience=0.6,
+            dedupe_key=standing_key("vista_look", (vista["id"],), (clarity,))))
+    for vista, clarity in seen or ():
+        if vista["id"] in looked_ids:
+            continue
+        out.append(Percept(
+            kind="ambient", channel="sight", source_label=vista["name"],
+            data={"desc": line(vista, clarity)},
             dedupe_key=standing_key("vista", (vista["id"],), (clarity,))))
     return out
 
@@ -4399,17 +4432,7 @@ def _render_standing(p):
                     if place.casefold() in PLURAL_PLACES else "exposed_detail")
         return _en(template, subject=subject, detail=detail)
     if p.kind == "ambient":
-        if p.data.get("ceased"):
-            return _en("sound_subsided" if p.data.get("subsided")
-                       else "sound_ceased")
-        if p.data.get("soundscape"):
-            return render_sound_shape(p.data.get("soundscape"))
-        if p.data.get("distant"):
-            return render_distant_sound(p.data["distant"])
-        desc = str(p.data.get("desc") or "").strip()
-        if desc and desc[-1:] not in ".!?":
-            desc += "."
-        return desc
+        return _render_ambient(p)
     if p.kind == "scent":
         return _render_scent(p)
     return ""
@@ -4439,6 +4462,21 @@ def carried_voices(prev_standing):
     standing key that persists without being re-earned each beat."""
     return {str(k) for k in (prev_standing or ())
             if str(k).startswith(VOICE_KEY_PREFIX)}
+
+
+def _render_ambient(p):
+    """An ambient percept's sentence, standing or ordered alike."""
+    if p.data.get("ceased"):
+        return _en("sound_subsided" if p.data.get("subsided")
+                   else "sound_ceased")
+    if p.data.get("soundscape"):
+        return render_sound_shape(p.data.get("soundscape"))
+    if p.data.get("distant"):
+        return render_distant_sound(p.data["distant"])
+    desc = str(p.data.get("desc") or "").strip()
+    if desc and desc[-1:] not in ".!?":
+        desc += "."
+    return desc
 
 
 def _render_event(p):
@@ -4501,6 +4539,15 @@ def _render_event(p):
     if p.kind == "substance":
         clause = str(p.data.get("clause") or "").strip()
         return _cap(clause) + "." if clause else ""
+    # AN AMBIENT PERCEPT WITH AN ORDER IS A THING THAT HAPPENED THIS BEAT --
+    # a beat's own sound event (`ambient_percepts(order_key=...)`), what a
+    # look at the horizon found (`vista_percepts`). This renderer had no
+    # branch for it, so in English every one rendered to nothing and was
+    # dropped, while the Japanese adapter rendered it: measured 2026-10-04,
+    # chat 117's siphon-vent hiss (the case the ordered key was minted for)
+    # composed to '' in both the player's and a character's view.
+    if p.kind == "ambient":
+        return _render_ambient(p)
     return ""
 
 

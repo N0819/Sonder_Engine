@@ -193,3 +193,40 @@ def test_dark_is_what_the_day_cycle_calls_dark():
             assert seen == ["the valley town"], phase
         else:
             assert "the Kurogane range" in seen, phase
+
+
+def test_what_a_look_at_the_horizon_finds_is_an_event_and_fog_says_so():
+    """Live, Larch Hill (2026-10-04): Ren looked at the range; it sat in the
+    standing description and the page never said what she saw."""
+    from agents.composer import vista_percepts
+    from world.vistas import looked_vistas, what_a_look_finds
+    sc = _yard()
+    looked = looked_vistas(sc, ["the_kurogane_range"])
+    assert [v["name"] for v in looked] == ["the Kurogane range"]
+    percepts = vista_percepts(visible_vistas(sc, "Ren"),
+                              looked=[(v, what_a_look_finds(sc, "Ren", v)) for v in looked])
+    first = [p for p in percepts if p.order_key is not None]
+    assert len(first) == 1 and first[0].order_key == -1
+    assert first[0].data["desc"].startswith("To the north, the Kurogane range")
+    assert len(percepts) == 2                       # the town stays standing
+    fog = _yard(weather={"air": "thick"})
+    (event,) = vista_percepts([], looked=[(v, what_a_look_finds(fog, "Ren", v))
+                                          for v in looked_vistas(fog, ["The Kurogane Range"])])
+    assert "nothing can be made out" in event.data["desc"]
+
+
+def test_a_walk_the_beat_did_not_finish_is_the_walkers_to_know():
+    """Live, Larch Hill turn 3 (2026-10-04): the events said Ren climbed all
+    the way to the top; the paces left her a floor short; the page followed
+    the events."""
+    from agents.composer import walk_underway_percepts
+    from agents.perception import _walk_underway
+    sc = {"rooms": {"cabin": {"name": "the watch cabin"}, "bunks": {"name": "the sleeping room"}}}
+    res = {"travel": {"advanced": [{"subject": "Ren", "to": "bunks", "destination": "cabin",
+                                    "underway": True, "paces": 18}]}}
+    walk = _walk_underway(sc, res, "Ren")
+    assert walk == {"to": "the watch cabin", "at": "the sleeping room"}
+    assert _walk_underway(sc, res, "Someone Else") is None
+    (percept,) = walk_underway_percepts(walk)
+    assert percept.data["desc"] == ("You are still on your way to the watch cabin: "
+                                    "the sleeping room is as far as you have come.")

@@ -418,6 +418,8 @@
     "thing_carried_by_you": "You are carrying {desc}.",
     "thing_reads_touch": "Under your hands, {label}: {readings}.",
     "thing_reads_sight": "{label} shows: {readings}.",
+    "walk_underway": "You are still on your way to {to}: {at} is as far as you have come.",
+    "vista_unseen": "To the {compass}, where {name} should stand, nothing can be made out.",
     "vista_seen": "To the {compass}, {name}{desc}.",
     "vista_silhouette": "To the {compass}, {name}, a dark shape against the night sky.",
     "vista_desc_join": ": {desc}",
