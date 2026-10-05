@@ -1698,36 +1698,20 @@ work.
 
 <a id="unbuilt-1-173"></a>
 
-### 1.173 What the Larch Hill test story found in the narrator and the Director (2026-10-04)
+### 1.173 An event's text can still claim an arrival the walk did not make (2026-10-04)
 
-A fresh test story (scratch chat 165: a three-storey fire lookout, the
-Writers' Room planning the opening, the room designer building it, the
-owner's live routing) was read stage by stage over seven beats. The site
-plan and vista defects it found are fixed (`a294d725`, `46cbe17b`,
-`6d07af5d`, `df184bc4`, `1dbea654`). Three classes outside that work are
-open, each a proposal awaiting the owner:
-
-* **The page drops what the player's own act revealed.** The narrator
-  treats the player's sentence as already narrated and picks up after it
-  (its reasoning, turn 4583: "Current narration already covers: ... look
-  out at the range"). Ren's sentence said she LOOKED; what she saw -- the
-  range's snow, delivered in her view -- never reached the page. Proposed
-  narrator clause: the player's words narrate what they did; what the act
-  found is the page's.
-* **The page asserts what the view does not hold.** Turn 4582: the view
-  said "You are in The Sleeping Room" (the climb under way, the engine's
-  walk note says so) and the page wrote "The top floor opens around me".
-  Turn 4579 said "No one inside" of a room whose far side the doorway cone
-  withheld; chat 164 turn 0 wrote the counter "bare" with a man standing at
-  it out of view. An absence or an arrival the view does not state is not
-  the narrator's to write.
-* **A wait that names its end, not its length, is not honoured.** Turn
-  4584: "we stay up in the cabin talking while the light goes. When it is
-  fully dark..." -- the Director's account never let night fall, the
-  encoder wrote 3633 s, the clock read 16:48 afternoon while the page said
-  dark. Turn 4585's "for the next three hours" was honoured exactly
-  (10854 s). Proposed Director clause: a declared wait lasts until what it
-  waits for, and the account says how long that took.
+The three classes the Larch Hill test story found in the narrator and the
+Director were repaired on the owner's word ("Those sound like they need
+repair"): a look's finding is an event (`43946e73`), a walk the beat did not
+finish is the walker's own line and the narrator's rule 1 names absences and
+arrivals (`43946e73`), and a wait that names its end is priced by the engine
+(`58f00ce4`). What is left is upstream of the page: the Director's account
+and the encoder's event text still say "climbs all the way to the top floor"
+when the paces leave the body a floor short (chat 165 turn 4582), and on a
+rerun the Director invented an outside stair the designed tower does not
+have. The walker's line now wins on the page; the event text that disagrees
+with the committed position is still produced, and nothing tells the
+Director its account outran the walk.
 
 ## 2. Roadmap
 
