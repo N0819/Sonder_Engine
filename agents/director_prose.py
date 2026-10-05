@@ -1683,7 +1683,35 @@ _ROW_FIELDS =("source_entity_id", "source_event_id", "event", "act",
                "ability", "difficulty")
 
 
-def ledger_from_events(events, known_channels=None):
+def _spans_until(events, start_hour, day_length):
+    """Each event's `seconds`, with a step named by its end -- `until_light`
+    or `until_hour` -- priced from the clock as it stands when that step
+    begins: the beat's start hour plus every earlier step's seconds. A step
+    with neither keeps what it wrote. Returns a list parallel to `events`."""
+    from world.day_cycle import seconds_until
+    out = []
+    running = 0.0
+    for event in events or ():
+        seconds = event.get("seconds") if isinstance(event, dict) else None
+        if isinstance(event, dict) and start_hour is not None and (
+                str(event.get("until_light") or "").strip()
+                or event.get("until_hour") is not None):
+            here = (float(start_hour) + running / 3600.0) % max(1e-9, day_length)
+            until = seconds_until(here, light=event.get("until_light"),
+                                  hour=event.get("until_hour"), day_length=day_length)
+            if until is not None:
+                seconds = until
+        try:
+            running += max(0.0, float(seconds)) if seconds is not None and \
+                not isinstance(seconds, bool) else 0.0
+        except (TypeError, ValueError):
+            pass
+        out.append(seconds)
+    return out
+
+
+def ledger_from_events(events, known_channels=None, *, start_hour=None,
+                       day_length=24.0):
     """`(rows, transforms)`: the encoder's ordered events as ledger rows, and
     each row's transforms keyed by its chrono id.
 
@@ -1698,6 +1726,7 @@ def ledger_from_events(events, known_channels=None):
         channel for spec in SPECIALISTS.values() for channel in spec["channels"]}
     handles = {}
     rows, transforms = [], {}
+    spans = _spans_until(list(events or []), start_hour, day_length)
     for index, event in enumerate(events or []):
         if not isinstance(event, dict):
             continue
@@ -1743,6 +1772,8 @@ def ledger_from_events(events, known_channels=None):
             categories.append("attention")
         row = {field: event.get(field) for field in _ROW_FIELDS
                if event.get(field) not in (None, "", [])}
+        if spans[index] is not None:
+            row["seconds"] = spans[index]
         row.update(
             chrono_id=chrono,
             item_ids=ids,
@@ -1945,7 +1976,22 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     quoting = quotation_authority(ctx, stage, prose)
     events = quoted_lines_keep_their_words(events, quoting)
     events = spoken_words_are_the_quotation(events, quoting, warn=ctx.add_warning)
-    rows, transforms = ledger_from_events(events)
+    # WHERE THE CLOCK STANDS WHEN THIS STAGE'S FIRST STEP BEGINS, for a step
+    # named by its end ("until it is fully dark"): the beat's start hour,
+    # and at resolve every step the interpret stage already priced.
+    from story.scene import simulation_clock
+    _clock = simulation_clock(ctx.chat["id"]) if getattr(ctx, "chat", None) else {}
+    _start_hour = _clock.get("hour_of_day") if isinstance(_clock, dict) else None
+    if _start_hour is not None and stage == "resolve":
+        _before = sum(float(r.get("seconds") or 0.0)
+                      for r in ((getattr(ctx, "director_interpret", None) or {})
+                                .get("causal_ledger") or [])
+                      if isinstance(r, dict) and isinstance(r.get("seconds"), (int, float))
+                      and str(r.get("commitment") or "").casefold() != "contestable")
+        _start_hour = float(_start_hour) + _before / 3600.0
+    rows, transforms = ledger_from_events(
+        events, start_hour=_start_hour,
+        day_length=float((_clock or {}).get("day_length_hours") or 24.0))
     record = {
         "stage": stage,
         "prose": prose,

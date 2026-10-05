@@ -403,3 +403,50 @@ def charter_hour(charter, at_hours):
     if not math.isfinite(length) or length <= 0.0:
         length = DAY_LENGTH_HOURS_DEFAULT
     return (anchor + float(at_hours or 0.0)) % length
+
+
+#: The light a span may run until: the values of `SUN_LIGHT`, the ladder
+#: the outdoor light already reads.
+UNTIL_LIGHTS = ("dark", "dim", "lit")
+
+
+def seconds_until(hour_now, *, light=None, hour=None,
+                  day_length=DAY_LENGTH_HOURS_DEFAULT):
+    """How many story seconds until the sky's light next becomes `light`
+    (one of `UNTIL_LIGHTS`) or the clock next reads `hour`, from `hour_now`
+    -- or None when neither names something this reader knows.
+
+    A SPAN NAMED BY ITS END IS ARITHMETIC THE ENGINE OWNS. "We stay up
+    talking until it is fully dark" names where the day gets to, not how
+    long that takes, and only the clock and this module's own table know
+    the answer: live, Larch Hill (2026-10-04), the encoder priced that wait
+    at an hour, the clock stood at 16:48 in the afternoon, and the page
+    said full dark. A light already reached is reached now (0); an hour is
+    the next time the clock reads it, so `hour` equal to now is a full day
+    away only when the caller says it is not now -- here, 0."""
+    length = max(1e-9, float(day_length))
+    now = float(hour_now) % length
+    if hour is not None and not isinstance(hour, bool):
+        try:
+            target = float(hour) % length
+        except (TypeError, ValueError):
+            target = None
+        if target is not None:
+            return round(((target - now) % length) * 3600.0, 1)
+    word = str(light or "").strip().casefold()
+    if word not in UNTIL_LIGHTS:
+        return None
+    if SUN_LIGHT.get(phase_of_hour(now, length)) == word:
+        return 0.0
+    starts = sorted((start % 1.0) * length for _name, start, _end in PHASES)
+    best = None
+    for day in (0, 1, 2):
+        for start in starts:
+            at = start + day * length
+            if at <= now:
+                continue
+            if SUN_LIGHT.get(phase_of_hour(at % length, length)) == word:
+                best = at if best is None else min(best, at)
+        if best is not None:
+            break
+    return None if best is None else round((best - now) * 3600.0, 1)

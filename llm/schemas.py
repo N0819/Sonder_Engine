@@ -3119,6 +3119,12 @@ class UnifiedEvent(LenientModel):
     movement: Optional[dict] = None
     look: str = ""
     seconds: Optional[float] = None
+    # A STEP NAMED BY ITS END (`day_cycle.seconds_until`): the light the
+    # sky next reaches (dark | dim | lit) or the clock hour it runs to.
+    # Code turns either into `seconds` from the story clock; a model can
+    # write "until dark" and never has to know what time it is.
+    until_light: str = ""
+    until_hour: Optional[float] = None
     ability: str = ""
     difficulty: str = ""
     item_names: list[str] = Field(default_factory=list)
