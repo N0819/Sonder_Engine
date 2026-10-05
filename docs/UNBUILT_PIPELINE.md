@@ -1724,25 +1724,6 @@ What is left is the price of `passing`: a body that crosses rooms to plant
 itself in a doorway no longer bars a walker in the same beat. A body that
 keeps its room still does.
 
-<a id="unbuilt-1-174"></a>
-
-### 1.174 An outdoor room's declared light can hold the hour it was written in (2026-10-04)
-
-On open ground a room's own `light` meets the sky as the darker of the two
-(`spatial_light.room_light`), so a declaration can only darken a day. That is
-right for what a PLACE does to light -- a cedar canopy, an overhang, a street
-of shuttered lamps -- and wrong for WHEN it was written: chat 44's
-`city_rooftop` ("Sloped rooftops of the city at night...") is declared `dark`
-and chat 58's `northern_plaza` ("A rain-slicked urban plaza at night...")
-`dim`, so both stay night at noon. Measured on the corpus copy 2026-10-04: 54
-of 172 open rooms declare `dim` or `dark` (49 and 5), and two more
-`moonlight`. The room author's card reads "how the light falls" in the prose
-as a requirement for the place, and the encoder's rooms chunk may write
-`light` too. Under the ruling in §1.173 the sky's light is the engine's -- the
-day cycle and the weather -- so the repair is on the authoring side: a
-declared light says what the place does to the light it is given, never the
-hour or the weather. Not built: a clause every story reads, the owner's call.
-
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>
