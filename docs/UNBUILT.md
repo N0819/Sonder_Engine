@@ -246,7 +246,6 @@ Not scheduled and not committed to a phase. See the
 - [§1.158 — A sense can be masked by nothing, so the gas the plan was for was modelled as a noise](UNBUILT_PERCEPTION.md#unbuilt-1-158)
 - [§1.159 — The sound model is half real: the ladders are decibels and the losses are still compressed](UNBUILT_PERCEPTION.md#unbuilt-1-159)
 - [§1.167 — Ordinary speech was gated four ways too hard](UNBUILT_PERCEPTION.md#unbuilt-1-167)
-- [§1.177 — Two sightlines cross what sight cannot, and Japanese hears no distant sound (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-177)
 
 **2. Roadmap**
 

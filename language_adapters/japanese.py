@@ -196,6 +196,20 @@ class JapaneseRenderer:
             parts.append(self._text("light_self_" + shape["self"]))
         return "".join(parts)
 
+    def _distant_sound(self, distant):
+        """One sound from beyond the near field: how loud, which way, what it
+        sounded like (`composer.render_distant_sound`)."""
+        from agents.composer import DISTANT_SOUND_LEVELS
+        distant = distant if isinstance(distant, dict) else {}
+        level = str(distant.get("level") or "")
+        where = str(distant.get("where") or "")
+        if level not in DISTANT_SOUND_LEVELS or not where:
+            return ""
+        character = (str(distant.get("character") or "").strip()
+                     or self._text("sound_distant_character_none"))
+        return self._text("sound_distant_" + level, where=where,
+                          character=character)
+
     def _sound_shape(self, shape):
         """Where the sound is (`composer.render_sound_shape`)."""
         from agents.composer import SOUND_SHAPE_LEVELS, _clean_shape
@@ -486,6 +500,12 @@ class JapaneseRenderer:
                               else "sound_ceased")
         if p.kind == "ambient" and data.get("soundscape") and not prefix:
             return self._sound_shape(data.get("soundscape"))
+        if p.kind == "ambient" and data.get("distant") and not prefix:
+            # A SOUND FROM BEYOND THE NEAR FIELD carries no clause -- a level,
+            # a bearing and a character (`composer.distant_sound_percepts`)
+            # -- so the general branch below rendered it as nothing, and a
+            # bell five rooms off was heard in English and not here.
+            return self._distant_sound(data.get("distant"))
         if p.kind in ("sensation", "substance", "ambient"):
             return _full_stop(data.get("clause") or data.get("text")
                               or data.get("desc") or "")

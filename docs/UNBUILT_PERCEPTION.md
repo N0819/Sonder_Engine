@@ -1622,35 +1622,6 @@ the practice room" moved the player to the rehearsal room while she was on
 the stage in a bubble of her own; the two spoke through a shut door for two
 beats while the narrator sat them on one bench and blamed the acoustics.
 
-<a id="unbuilt-1-177"></a>
-### 1.177 Two sightlines cross what sight cannot, and Japanese hears no distant sound (2026-10-05)
-
-Found by the landscape survey (2026-10-05), each reproduced twice, none
-registered before:
-
-- `spatial_routing.corridor_sightlines` follows a one-way window from its
-  BLIND side. `effective_adjacent` gives the far room an implicit reverse
-  edge carrying the same `one_way_window` barrier, and the corridor walk
-  never asks `sight_direction`: a sighted character in the cell behind the
-  mirror is handed "Observation Room" and "Back Corridor" by name in the
-  payload's `corridor_sight`, while `visible_adjacent_rooms(cell)` is `[]`,
-  `spatial_rel` says `wall` and the body behind the glass is `none` -- with
-  `sight_from` declared on the edge too.
-- `sprint_reach`'s `on_sightline` is a heading test over
-  `_PASSABLE_BARRIERS`, which include `membrane`, so `sprint_offers` names
-  the room at the end of a run three curtains away ("Tent 3") to a character
-  with no memory of it, while both sight readers say nothing.
-
-Both reach only the character payload, and each wants the sight readers' own
-test (`sight_direction`, the sight-passing barrier set) where its walk
-crosses an edge. A firewall leak is an engine failure.
-
-In Japanese, the outcome view's distant sounds render as nothing:
-`composer.distant_sound_percepts` carries `{"distant": {...}}` and no
-`desc`, and the Japanese ambient branch has no `distant` case, so a loud
-machine five rooms off is heard in English and not in Japanese. (The
-features-and-openings half is §2.34's.)
-
 ## 2. Roadmap
 
 <a id="unbuilt-2-11"></a>

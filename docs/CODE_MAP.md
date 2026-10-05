@@ -227,7 +227,7 @@
 | `world/spatial_merge.py` | 2696 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 432 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
-| `world/spatial_routing.py` | 1271 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
+| `world/spatial_routing.py` | 1301 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
 | `world/spatial_senses.py` | 1915 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_sound_field.py` | 3294 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
@@ -2802,14 +2802,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `sprint_reach()` | 869 | 174 lines |
-| `visible_adjacent_rooms()` | 1113 | 159 lines |
-| `spatial_rel()` | 266 | 109 lines |
-| `corridor_sightlines()` | 709 | 101 lines |
-| `_onward_exits()` | 1045 | 66 lines |
-| `stamp_sight_direction()` | 178 | 45 lines |
-| `_body_enclosure_rooms()` | 443 | 45 lines |
-| `passable_route_exists()` | 551 | 45 lines |
+| `sprint_reach()` | 897 | 180 lines |
+| `visible_adjacent_rooms()` | 1147 | 155 lines |
+| `spatial_rel()` | 289 | 109 lines |
+| `corridor_sightlines()` | 732 | 106 lines |
+| `_onward_exits()` | 1079 | 66 lines |
+| `stamp_sight_direction()` | 201 | 45 lines |
+| `_body_enclosure_rooms()` | 466 | 45 lines |
+| `passable_route_exists()` | 574 | 45 lines |
 
 ### `world/spatial_scent_field.py`
 

@@ -131,6 +131,29 @@ def sight_direction(rooms: dict, a_room, b_room):
     return watcher if watcher in (a_room, b_room) else None
 
 
+def sees_across(rooms: dict, from_room, to_room, barrier) -> bool:
+    """Does sight pass FROM `from_room` INTO `to_room` across this barrier?
+
+    The sight readers' one test, for a walk that crosses edges on its own:
+    a barrier sight passes (`_SIGHT_BARRIERS`), and a one-way window only
+    from the side it looks from -- `sight_direction` where an edge names the
+    watcher, else the edge looks the way it was declared and the room it
+    looks into stands behind glass, which is how `spatial_rel` and
+    `visible_adjacent_rooms` read it too. Two walks crossed edges without it:
+    the corridor sightline followed a mirror from its blind side, and the
+    run offer held its sightline open through curtains (UNBUILT_PERCEPTION
+    §1.177)."""
+    barrier = normalize_barrier(barrier)
+    if barrier not in _SIGHT_BARRIERS:
+        return False
+    if barrier == "one_way_window":
+        watcher = sight_direction(rooms, from_room, to_room)
+        if watcher is not None:
+            return watcher == from_room
+        return not _declares_one_way(rooms, to_room, from_room)
+    return True
+
+
 def mutual_one_way_window(scene: dict, a_room, b_room) -> bool:
     """Do BOTH rooms declare a one-way window into each other? Then neither
     sees, and the contradiction is reported.
@@ -732,7 +755,7 @@ def corridor_sightlines(scene, room_id):
         if not edge.get("dir"):
             continue
         heading = str(edge["dir"]).lower()
-        if normalize_barrier(edge.get("barrier")) not in _SIGHT_BARRIERS:
+        if not sees_across(rooms, room_id, edge.get("to"), edge.get("barrier")):
             continue
         cur, prev, dist, terminus = edge.get("to"), room_id, 1, None
         # What is made out ALONG the line, not merely where it ends. Detail
@@ -759,10 +782,15 @@ def corridor_sightlines(scene, room_id):
             # declared only from the far side is not a dead end, and
             # `_onward_exits` was already repaired for exactly this error
             # ("Inventing a dead end is the worse error of the two").
+            # The blind side of a one-way window is a wall, as every sight
+            # reader has it (`sees_across`).
             onward = [
                 e for e in effective_adjacent(scene, cur)
                 if str(e.get("to")) != str(prev)
                 and normalize_barrier(e.get("barrier")) not in ("wall",)
+                and not (normalize_barrier(e.get("barrier")) == "one_way_window"
+                         and not sees_across(rooms, cur, e.get("to"),
+                                             e.get("barrier")))
             ]
             if not onward:
                 terminus = "dead_end"
@@ -774,7 +802,7 @@ def corridor_sightlines(scene, room_id):
                 })
             straight = [e for e in onward
                         if str(e.get("dir") or "").lower() == heading
-                        and normalize_barrier(e.get("barrier")) in _SIGHT_BARRIERS]
+                        and sees_across(rooms, cur, e.get("to"), e.get("barrier"))]
             if len(onward) > 1:
                 terminus = "opening"      # a junction: the line stops being one line
                 break
@@ -971,10 +999,14 @@ def sprint_reach(scene, room_id, known_rooms=None):
         heading = normalize_bearing(edge.get("dir"))
         cur, prev, spent, path, stops = edge.get("to"), room_id, 0, [], None
         # Whether `cur` is still on the straight line of sight from where the
-        # body stands. The first room always is (you see it through the
-        # doorway); a bend ends the line for good, even if the passage later
-        # resumes the original heading.
-        on_sightline = True
+        # body stands. The first room is, when the doorway is one sight
+        # crosses -- a curtain is a way through and not a view, and holding
+        # the line open through one named the tent three curtains on to a
+        # mind that had seen none of them (UNBUILT_PERCEPTION §1.177). A
+        # bend ends the line for good, even if the passage later resumes the
+        # original heading.
+        on_sightline = sees_across(rooms, room_id, edge.get("to"),
+                                   edge.get("barrier"))
         while cur:
             cur = str(cur)
             room = rooms.get(cur)
@@ -1030,7 +1062,9 @@ def sprint_reach(scene, room_id, known_rooms=None):
             # walk the offer through ground the character never earned.
             if on_sightline and (heading is None
                                  or normalize_bearing(nxt.get("dir"))
-                                 != heading):
+                                 != heading
+                                 or not sees_across(rooms, cur, nxt.get("to"),
+                                                    nxt.get("barrier"))):
                 on_sightline = False
             prev, cur = cur, nxt.get("to")
         if path:
@@ -1160,13 +1194,9 @@ def visible_adjacent_rooms(
 
         # The room record and the sightline have to agree, or the blind side
         # is refused a view and handed the neighbour's whole room anyway.
-        if barrier == "one_way_window":
-            _watcher = sight_direction(all_rooms, room_id, adjacent_id)
-            if _watcher is not None:
-                if _watcher != room_id:
-                    continue
-            elif _declares_one_way(all_rooms, adjacent_id, room_id):
-                continue
+        if barrier == "one_way_window" and not sees_across(
+                all_rooms, room_id, adjacent_id, barrier):
+            continue
 
         # This list is delivered as literal sight -- a perceiver's
         # `visible_rooms` admits the whole room record into their payload --
