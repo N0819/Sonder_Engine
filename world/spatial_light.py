@@ -484,10 +484,12 @@ def light_blocks_sight(level) -> bool:
 #
 #   * `none` -- no visual channel at all. Not even a figure.
 #   * `shapes` -- a body is there and moving, and nothing about what it is
-#     doing. This is what a BARRIER leaves: a silhouette in a doorway, a
-#     figure across a courtyard, a shape through a curtained opening. It is
-#     reached by the view-cone caps, by an authored far edge and by a
-#     crossing, and it is exactly what it always was.
+#     doing. This is what a BOUNDARY leaves for a beat: a body still going
+#     through a door sight does not cross, or into the dark. It is reached by
+#     the crossing grace alone since 2026-10-05 -- the doorway cone's
+#     large-room fallback became `conduct`, and the far-edge and 25 m
+#     distance caps were removed (the owner: "an overzealous feature
+#     overall"); distance takes nothing one doorway away.
 #   * `conduct` -- what a body DOES, without what it IS. Where it moved,
 #     whether it sat, what it took up and set down: the gross conduct a
 #     silhouette genuinely carries. What it does not carry is the face, the

@@ -79,7 +79,9 @@ the upper room's wall inside the window -- between `SILL_M` and `LINTEL_M`
 above that floor -- and pass through no building slab on the cells between
 (each enclosed room a slab floor to ceiling, the two rooms of the line
 excepted). Reaching the top but not `CHEST_BELOW_TOP_M` lower is
-`hidden_below: "waist"`. Past `FACE_READ_M` (25 m) a body is a shape.
+`hidden_below: "waist"`. (Past `FACE_READ_M`, 25 m, a body was a shape
+until 2026-10-05, when the owner ruled distance caps one doorway away
+"an overzealous feature overall" and it was removed.)
 `visual_level_between` trusts this line in place of the room-grain opening
 cone, the field never lays such a room flat beside the other
 (`_placed_neighbours`), and from below `visible_adjacent_rooms` shows the

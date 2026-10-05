@@ -1656,7 +1656,8 @@ def region_visibility(sc, observer, body, entry=None):
       - `vantage` -- the observer's own position is what fails: the body is in
         their rear arc (`entity_arc`, the `behind_sources` rule -- no NEW
         visual detail from a blind spot), or `visual_level_between` answers
-        `none`/`shapes` for darkness, barriers, or distance. At `shapes` a
+        `none` for darkness or barriers, or `shapes` for a body still going
+        through one (distance takes nothing one doorway away). At `shapes` a
         silhouette shows presence and outline, not what is worn or bare, so
         every region is concealed -- the same reading `_co_present_company`
         gives an unrecognised figure.

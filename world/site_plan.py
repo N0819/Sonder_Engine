@@ -183,10 +183,6 @@ CHEST_BELOW_TOP_M = 0.5
 SILL_M = 0.9
 LINTEL_M = 2.1
 
-#: How far a face is read across open air, in metres; beyond it a body
-#: seen through a window a storey away is a shape. An engine number.
-FACE_READ_M = 25.0
-
 #: A floor's difference, in metres, below which two rooms are one level for
 #: sight: a step up into a genkan is not a storey.
 LEVEL_STEP_M = 1.0

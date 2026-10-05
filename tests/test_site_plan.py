@@ -435,3 +435,19 @@ def test_a_building_on_the_ground_it_stands_in_still_gets_a_plan():
         "entities": {}, "positions": {}}
     assert set(derive_site_plans(sc)) == {"landing", "hall", "loft"}
     assert room_site(sc, "hall")["plan"] == room_site(sc, "landing")["plan"]
+
+
+def test_a_face_up_a_storey_is_read_at_any_distance_the_line_reaches():
+    """A line up a storey through a window was capped at `shapes` past 25 m
+    (`FACE_READ_M`, "an engine number") -- a visitor a long garden away read
+    as "an indistinct figure" to the woman at the window, and her to him.
+    Removed 2026-10-05 with the far-edge cap, the owner on the class:
+    "Maybe that bit is just an overzealous feature overall"."""
+    from world.spatial import visual_level_between
+    sc = _window_over_the_garden(visitor_cell=(50, 4))
+    garden = sc["rooms"]["garden"]
+    garden["extent"] = {"w": 60, "d": 9}
+    garden["parts"] = [{"w": 60, "d": 3, "at": [0, 0]}, {"w": 3, "d": 3, "at": [0, 3]},
+                       {"w": 53, "d": 3, "at": [7, 3]}, {"w": 60, "d": 3, "at": [0, 6]}]
+    assert visual_level_between(sc, "Hinami", "Visitor") == "full"     # ~33 m off
+    assert visual_level_between(sc, "Visitor", "Hinami") == "full"

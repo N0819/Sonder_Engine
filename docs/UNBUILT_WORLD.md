@@ -1867,14 +1867,20 @@ face withheld -- a stranger is still a figure, never a descriptor) and 92
 `shapes`. A dulled eye now sees those bodies' doing as motion where it saw
 nothing (`tests/test_view_cone.py`).
 
-**Open, the owner's: the 92 left are an authored far edge.** A `far` or
-`remote` edge caps sight across it at `shapes` (`_visual_level_between`;
-`far` is 20-75 m by `normalize_edge_distance`), written with the same intent
-("a figure across a courtyard is `shapes`, not a readable face") and with the
-same effect: a wave thirty metres off across a far edge is "moves, too little
-of it to make out", one doorway away. The interaction micro-round does not
-collapse a shape to motion (`agents/loops.py`), so it does not take that
-subtraction on before the question is answered.
+**The 92 left were an authored far edge, and the cap is gone (owner,
+2026-10-05).** A `far` or `remote` edge capped sight across it at `shapes`
+(`far` is 20-75 m by `normalize_edge_distance`), written with the same intent
+("a figure across a courtyard is `shapes`, not a readable face") and the same
+effect: a wave thirty metres off across a far edge was "moves, too little of
+it to make out", one doorway away. Asked whether it too should become
+"what they do, not their face", the owner: "Maybe that bit is just an
+overzealous feature overall." It was removed, and with it `FACE_READ_M` (a
+line up a storey through a window capped at `shapes` past 25 m, "an engine
+number"). The same 1,296 pairs now grade 622 `full`, 674 `conduct`, 0
+`shapes`; the shape left one doorway away is a body still going through a
+shut door, and the interaction micro-round gives its act as motion again,
+as the composed view does (it was handing the whole act through a locked
+door -- the Long Gallery leak, PC1).
 
 <a id="unbuilt-1-168"></a>
 

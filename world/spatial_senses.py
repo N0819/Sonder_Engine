@@ -932,10 +932,20 @@ def _visual_level_between(scene: dict, observer: str, target: str,
     carried light is for.
 
     Cross-room sight through an opening is additionally capped by the
-    opening's view-cone (`_opening_view_cap`, S2a) on BOTH sides, and by an
-    authored far/remote edge distance (a figure across a courtyard is
-    `shapes`, not a readable face). Both caps default to today's behaviour
-    exactly where the data is absent.
+    opening's view-cone (`_opening_view_cap`, S2a) on BOTH sides, which
+    defaults to today's behaviour exactly where the data is absent.
+
+    DISTANCE TAKES NOTHING ONE DOORWAY AWAY. An authored `far` or `remote`
+    edge capped a body across it at `shapes` ("a figure across a courtyard
+    is not a readable face"), and so did a line up a storey through a
+    window past 25 m (`FACE_READ_M`); the act channel gives a shape's act as
+    motion, so a wave across a yard read "moves, too little of it to make
+    out". The owner, 2026-10-05, ruling a level of detail for distance OUT
+    of ordinary range ("all I wanted it for was distant landscapes. like 5 or
+    so rooms of distance or more"), then of this cap: "Maybe that bit is just
+    an overzealous feature overall." Both are gone; what is far off past the
+    next room is the landscape's (`world/landscape.py`), and it reads places,
+    never people.
     """
     o_room = room_of(scene, observer)
     t_room = room_of(scene, target)
@@ -955,8 +965,8 @@ def _visual_level_between(scene: dict, observer: str, target: str,
     # it -- so the only `none` that can stand here is the one the LIGHT
     # caused, and for a perceiver whose sight does not need light it lifts to
     # what the barrier alone allowed. Every cap below still applies: a
-    # view-cone, an authored far edge and an opaque anchor take from
-    # night vision exactly what they take from eyes.
+    # view-cone and an opaque anchor take from night vision exactly what
+    # they take from eyes.
     lightless = not sense_needs_light(senses)
     if lightless and level == "none":
         level = SIGHT_LEVELS[-1]
@@ -990,8 +1000,6 @@ def _visual_level_between(scene: dict, observer: str, target: str,
             _opening_view_cap(scene, t_room, target, o_room),
             _opening_view_cap(scene, o_room, observer, t_room),
         )
-        if rel.get("distance") in ("far", "remote"):
-            cap = _weaker_sight(cap, "shapes")
         level = _weaker_sight(level, cap)
     # WHAT THE LINE MEETS. The within-room geometry (`world.spatial_fov`)
     # is asked HERE, in the one function every sight decision goes through,
@@ -1006,11 +1014,6 @@ def _visual_level_between(scene: dict, observer: str, target: str,
         line = body_visibility(scene, observer, target)
         if line.get("basis") in ("line", "plan") and not line.get("visible"):
             level = "none"
-        # Up a storey and across a garden, a face is read only so far.
-        if line.get("basis") == "plan" and level != "none":
-            from world.site_plan import FACE_READ_M
-            if (line.get("distance_m") or 0) > FACE_READ_M:
-                level = _weaker_sight(level, "shapes")
     if crossing and level == "none":
         return "shapes"
     return level

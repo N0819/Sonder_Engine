@@ -413,7 +413,7 @@ def _earned_labels(ctx, seat="player"):
     """name -> the label one seat's own composed view earned for each body
     it was composed about (`perception._composer_company`, from the same
     gated percepts the view was rendered from): a descriptor in full sight,
-    "an indistinct figure" in the dim or across a far edge. `seat` is the
+    "an indistinct figure" in the dim or through a large room's doorway. `seat` is the
     perceiver id: "player" for the primary, "extra:<persona id>" for a
     second human (`narrator_extra`).
 

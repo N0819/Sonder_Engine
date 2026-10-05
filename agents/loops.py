@@ -202,7 +202,7 @@ def _base_loop_observations(ctx):
 
 def _micro_observation(observer_id, sentence, *, event_prefix, event_index,
                        kind, channel, actor="", fidelity="rendered",
-                       directed_at_self=False):
+                       directed_at_self=False, ambiguity=None):
     """Wrap one admitted delivery without consulting its raw declaration."""
     from .composer import compact_observation
 
@@ -217,7 +217,8 @@ def _micro_observation(observer_id, sentence, *, event_prefix, event_index,
         "phase": "event",
         "order": event_index,
         "standing": False,
-        "ambiguity": 0.15 if fidelity == "rendered" else 0.65,
+        "ambiguity": (ambiguity if ambiguity is not None
+                      else 0.15 if fidelity == "rendered" else 0.65),
         "directed_at_self": directed_at_self,
     })
 
@@ -481,25 +482,26 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                                     "action", awareness=observer_awareness,
                                     senses=observer_senses):
                     continue
-                # A BODY THE OBSERVER CANNOT SEE SHOWS IT NO ACT, by the
-                # function the composed view grades acts with
-                # (`perception._sight_detail`): across a doorway its admission
-                # is the room-to-room edge, and the body-level grade -- the
-                # doorway's cone, a dulled eye -- is the answer. Asked before
-                # the surface is admitted, so the log never says "delivered"
-                # of an act this observer then never receives, and recorded
-                # as `composer.act_percept` records the same refusal.
+                # THE ACT CHANNEL'S RULE, by the function the composed view
+                # grades acts with (`perception._sight_detail`). A body the
+                # observer cannot see shows it no act: across a doorway its
+                # admission is the room-to-room edge, and the body-level
+                # grade -- the doorway's cone, a dulled eye -- is the answer.
+                # Asked before the surface is admitted, so the log never says
+                # "delivered" of an act this observer then never receives,
+                # and recorded as `composer.act_percept` records it.
                 #
-                # Only the refusal. The composed view also gives a `shapes`
-                # body's act as "moves, too little of it to make out". Since
-                # the doorway cone's size fallback became `conduct` (owner,
-                # 2026-10-05) the shapes left one doorway away are an
-                # authored far edge -- the same ordinary-range subtraction,
-                # an open question of the owner's (UNBUILT_WORLD §1.162) --
-                # and not one to spread to a second channel before it is
-                # answered.
-                if _sight_detail(scene, observer_name, actor_name, relation,
-                                 senses=observer_senses) == "none":
+                # And a body seen only as a shape is seen MOVING. Held back
+                # while a shape one doorway away was mostly an ordinary-range
+                # cap (the doorway cone's size fallback, an authored far
+                # edge); both are gone (owner, 2026-10-05), and the shape left
+                # is a body still going through a shut door -- for which this
+                # round handed the whole act through a locked door, "Ada
+                # opens a black notebook on her knee", the Long Gallery leak
+                # (PC1) the composed view had closed.
+                _detail = _sight_detail(scene, observer_name, actor_name, relation,
+                                        senses=observer_senses)
+                if _detail == "none":
                     note_step_decision(
                         "act_percept", "%s -> %s" % (actor_name, observer_name),
                         "refused", "observer cannot see (sight gate)")
@@ -522,19 +524,40 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                     perceived=_micro_seen_bodies(
                         scene, observer_name, observer_senses),
                     who="%s -> %s" % (actor_name, observer_name))
-                sentence = _observable_predicate(display, surface) if surface else None
+                fidelity = "rendered"
+                if surface and _detail == "shapes":
+                    fidelity = "ambiguous"
+                    _where = (composer._visible_room_label(scene, actor_name)
+                              if room_of(scene, actor_name) != observer_room
+                              else "")
+                    sentence = (compositor_text(
+                        "act_shapes_placed", label=_cap_label(display),
+                        where=compositor_text("presence_in_room", room=_where))
+                        if _where else
+                        compositor_text("act_shapes", label=_cap_label(display)))
+                else:
+                    sentence = _observable_predicate(display, surface) if surface else None
                 if sentence:
                     additions.append(sentence)
                     observations.append(_micro_observation(
                         observer_id, sentence, event_prefix=event_prefix,
                         event_index=event_index, kind="action", channel="sight",
-                        actor=display))
+                        actor=display, fidelity=fidelity,
+                        # A body moving is filed as the composed view files
+                        # the same percept (`composer._FIDELITY_AMBIGUITY`).
+                        ambiguity=(composer._FIDELITY_AMBIGUITY["shapes"]
+                                   if fidelity == "ambiguous" else None)))
                     perceived_by.add(observer_id)
         if additions:
             views[observer_id] = additions
             if observation_out is not None:
                 observation_out[observer_id] = observations
     return views, perceived_by
+
+
+def _cap_label(label):
+    text = str(label or "")
+    return text[:1].upper() + text[1:]
 
 def _drop_non_awake(ctx, reactor_ids):
     """Remove unconscious/asleep/sedated cast from a reactor list -- a non-awake

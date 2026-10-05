@@ -131,9 +131,14 @@ def test_the_observers_side_is_gated_symmetrically():
     assert visual_level_between(sc, "O", "T") == "none"
 
 
-def test_a_far_edge_degrades_cross_room_bodies_to_shapes():
-    sc = _scene(distance="50m", stations={"T": {"at": "far_wall"}})
-    assert visual_level_between(sc, "O", "T") == "shapes"
+def test_a_far_edge_takes_nothing_one_doorway_away():
+    """It capped a body across an authored `far` or `remote` edge at
+    `shapes`, and the act channel made every act across it a body moving.
+    Owner, 2026-10-05: "Maybe that bit is just an overzealous feature
+    overall." Far places past the next room are the landscape's."""
+    for distance in ("50m", "far", "remote", "2 km"):
+        sc = _scene(distance=distance, stations={"T": {"at": "far_wall"}})
+        assert visual_level_between(sc, "O", "T") == "full", distance
 
 
 def test_the_cone_never_outranks_darkness():

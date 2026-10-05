@@ -1906,14 +1906,15 @@ can drift apart. Consolidating them is the cheap insurance.
 They had drifted, and part of it is now one reader (2026-10-05,
 `tests/test_every_view_reads_a_body_alike.py`): the micro-round names its
 actor through `composer.observer_display_map`, so a disguise that hides who a
-body is, a stranger heard in the dark and a figure across a far edge are
+body is, a stranger heard in the dark and a figure through a large room's
+doorway are
 called what the composed view of the same beat calls them; and it refuses an
 act from a body the composed view cannot see (`perception._sight_detail`).
-It does NOT give a `shapes` body's act as motion, which the composed view
-does -- deliberately: since the doorway cone's size fallback became
-`conduct` (2026-10-05) the shapes left one doorway away are an authored far
-edge, whose subtraction is an open question of the owner's (UNBUILT_WORLD
-§1.162). ADMISSION is
+It gives a `shapes` body's act as motion, as the composed view does -- held
+back while most shapes one doorway away were ordinary-range caps, restored
+once those were gone (2026-10-05, UNBUILT_WORLD §1.162): the shape left is a
+body still going through a shut door, and the round was reading the whole act
+through a locked door (PC1). ADMISSION is
 still the two families, and still drifts: `_delivery_ok`'s room-level light
 test drops a co-present act in an unlit room that the composed view
 delivers, and the micro-round labels one actor at a time, so two strangers

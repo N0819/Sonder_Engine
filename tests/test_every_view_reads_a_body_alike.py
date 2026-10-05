@@ -65,14 +65,16 @@ def _yard_and_dark_barn():
             "entities": {}}
 
 
-def _far_field():
-    """Two lit rooms joined by an open edge authored `far`: a figure across
-    it is `shapes` (`spatial_senses._visual_level_between`)."""
+def _yard_and_large_field():
+    """A lit yard and a lit field through an opening, nobody's place in them
+    recorded; the field is large by its name, so a figure in it is `conduct`
+    seen from the yard (the doorway cone's size fallback on the field's side,
+    UNBUILT_WORLD §1.162) -- seen doing what it does, its face not read."""
     return {"rooms": {
         "yard": {"name": "the yard", "desc": ".", "light": "lit", "adjacent": [
-            {"to": "field", "barrier": "open", "dir": "n", "distance": "far"}]},
+            {"to": "field", "barrier": "open", "dir": "n"}]},
         "field": {"name": "the field", "desc": ".", "light": "lit", "adjacent": [
-            {"to": "yard", "barrier": "open", "dir": "s", "distance": "far"}]}},
+            {"to": "yard", "barrier": "open", "dir": "s"}]}},
         "positions": {}, "stations": {}, "entities": {}}
 
 
@@ -135,13 +137,20 @@ def test_keen_eyes_never_read_an_act_through_a_door():
 
 
 def test_a_dulled_eye_is_shown_no_act_from_a_body_it_cannot_see():
-    """A figure across a far edge is a shape to ordinary eyes and nothing to
-    dulled ones -- the presence line says so (`composer._sense_graded`), and
-    the act from that body must not arrive without it."""
+    """A body still going through a shut door is a shape for a beat to
+    ordinary eyes and nothing to dulled ones -- the presence line says so
+    (`composer._sense_graded`), and the act from that body must not arrive
+    without it."""
     from agents.composer import _sense_graded
     from agents.perception import _sight_detail
-    sc = _far_field()
-    sc["positions"].update({"Ada": "yard", "Ben": "field"})
+    sc = {"rooms": {
+        "hall": {"name": "hall", "desc": ".", "adjacent": [
+            {"to": "study", "barrier": "closed_door", "dir": "n"}]},
+        "study": {"name": "study", "desc": ".", "adjacent": [
+            {"to": "hall", "barrier": "closed_door", "dir": "s"}]}},
+        "positions": {"Ada": "hall", "Ben": "study"}, "stations": {},
+        "crossings": {"Ben": {"from": "hall", "to": "study", "beats": 2}},
+        "entities": {}}
     dulled = [{"channel": "sight", "acuity": "dulled"}]
     rel = spatial_rel_between(sc, "Ada", "Ben")
     assert visual_level_between(sc, "Ada", "Ben") == "shapes"
@@ -222,19 +231,18 @@ def test_the_micro_round_describes_no_face_nobody_saw(temp_db):
     assert "fox" not in views[2][0] and "green coat" not in views[2][0]
 
 
-def test_the_micro_round_names_a_far_stranger_as_the_composed_view_does(temp_db):
-    """Across an authored far edge the composed view calls her "an
-    indistinct figure"; the round described her by the face the distance
-    withheld. What she does still arrives whole here -- see the comment at
-    the act branch for why the shape's collapse to motion is not spread."""
+def test_the_micro_round_names_a_stranger_through_a_doorway_as_the_composed_view_does(temp_db):
+    """Through an opening into a large field the composed view calls her
+    "an indistinct figure"; the round described her by the face the
+    doorway withheld. What she does arrives whole in both."""
     from agents.loops import deterministic_micro_perception
-    sc = _far_field()
+    sc = _yard_and_large_field()
     sc["positions"].update({"Alice": "field", "Bob": "yard", "Cara": "field"})
     ctx = _micro_ctx(temp_db, sc, APPEARANCES, {})
     views, _ = deterministic_micro_perception(
         ctx, 1, {"sequence": [{"type": "action",
                                "observable": "raises a silver key"}]}, sc)
-    assert visual_level_between(sc, "Bob", "Alice") == "shapes"
+    assert visual_level_between(sc, "Bob", "Alice") == "conduct"
     assert views[2][0].startswith("an indistinct figure")
     assert "silver key" in views[2][0] and "fox" not in views[2][0]
     assert "fox-eared" in views[3][0]         # Cara is beside her
@@ -537,3 +545,29 @@ def test_a_motion_only_act_is_filed_as_ambiguous():
     rows = observations_from_render("2", render_view([act], mode="character",
                                                      full_render=True))
     assert rows and rows[0]["fidelity"] == "ambiguous"
+
+
+def test_the_micro_round_reads_no_act_through_a_locked_door(temp_db):
+    """The Long Gallery (PC1) in the second delivery family: a body still
+    going through a locked door is a shape for a beat, and the composed view
+    gives its act as a body moving -- the micro-round handed over the whole
+    act, "Ada opens a black notebook on her knee". Restored 2026-10-05, once
+    no ordinary-range cap was left for the collapse to spread."""
+    from agents.loops import deterministic_micro_perception
+    sc = {"rooms": {
+        "hall": {"name": "the hall", "desc": ".", "adjacent": [
+            {"to": "study", "barrier": "closed_door", "locked": True, "dir": "n"}]},
+        "study": {"name": "the study", "desc": ".", "adjacent": [
+            {"to": "hall", "barrier": "closed_door", "locked": True, "dir": "s"}]}},
+        "positions": {"Alice": "study", "Bob": "hall"}, "stations": {},
+        "crossings": {"Alice": {"from": "hall", "to": "study", "beats": 2}},
+        "entities": {}}
+    ctx = _micro_ctx(temp_db, sc, {k: APPEARANCES[k] for k in ("Alice", "Bob")},
+                     {"Bob": ["Alice"]}, reactors=(2,))
+    observations = {}
+    views, _ = deterministic_micro_perception(
+        ctx, 1, {"sequence": [{"type": "action",
+                               "observable": "opens a black notebook on her knee"}]},
+        sc, observation_out=observations)
+    assert views[2] == ["Alice moves in the study, too little of it to make out."]
+    assert observations[2][0]["fidelity"] == "ambiguous"

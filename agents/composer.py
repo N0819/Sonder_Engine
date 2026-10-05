@@ -1305,8 +1305,8 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             # observation glass received the cell and not the woman in it.
             #
             # `visual_level_between` above has already decided this is visible
-            # and already applies the cross-room caps (the opening's view cone,
-            # an authored far edge), so the only thing missing was somewhere to
+            # and already applies the cross-room cap (the opening's view
+            # cone), so the only thing missing was somewhere to
             # put the distance. It goes in as the room they are in, which is
             # the true answer and the one that stays true whatever the barrier
             # is made of.
@@ -5520,9 +5520,9 @@ _FIDELITY_AMBIGUITY = {"full": 0.15, "degraded": 0.5, "fragment": 0.7,
                        "trace": 0.8,
                        # A body moving, too little of it to make out: as
                        # ambiguous as a degraded presence, never "rendered"
-                       # (it had no entry, and every motion-only act -- an
-                       # authored far edge, a cone's edge, a crossing -- was
-                       # filed into memory at the 0.15 of a full sighting).
+                       # (it had no entry, and every motion-only act -- a
+                       # body still crossing a shut door -- was filed into
+                       # memory at the 0.15 of a full sighting).
                        "shapes": 0.5}
 
 # What an observation says when it has nothing to say: the advisory axes'
