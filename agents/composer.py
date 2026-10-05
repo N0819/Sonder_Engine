@@ -5097,7 +5097,13 @@ def render_episode(percepts, *, prev_standing=frozenset(),
 # --------------------------------------------------------------------------
 
 _FIDELITY_AMBIGUITY = {"full": 0.15, "degraded": 0.5, "fragment": 0.7,
-                       "trace": 0.8}
+                       "trace": 0.8,
+                       # A body moving, too little of it to make out: as
+                       # ambiguous as a degraded presence, never "rendered"
+                       # (it had no entry, and every motion-only act -- an
+                       # authored far edge, a cone's edge, a crossing -- was
+                       # filed into memory at the 0.15 of a full sighting).
+                       "shapes": 0.5}
 
 # What an observation says when it has nothing to say: the advisory axes'
 # resting values, and the two identity fields that repeat what the payload

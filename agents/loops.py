@@ -10,9 +10,11 @@ from story.character_schema import (character_appearance, character_name,
                               normalized_character_from_text,
                               normalized_character_of_row)
 from core.db import wget
+from core.pipeline_context import note_step_decision
 from language_runtime import compositor_text
 from story.scene import (
     NON_AWAKE_GATED,
+    appearance_of,
     awareness_map,
     awareness_of,
     cast_state,
@@ -24,6 +26,7 @@ from world.spatial import (hear_level, proximity_rel, room_of, sense_adjusted,
                      sound_bearing, spatial_rel, spatial_rel_between,
                      visual_level_between)
 
+from . import composer
 from .character import _unanswered_question_note, character_step
 from .common import (
     player_speech_lines,
@@ -36,11 +39,9 @@ from .common import (
     cut_short_speech,
     _character_by_id,
     _character_display_name,
-    _recognizes,
     character_scene_keys,
     _conceal_from_targets_observer,
     _delivery_ok,
-    _unknown_actor_label,
     character_room,
     _dict,
     _dict_list,
@@ -339,6 +340,21 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
     # re-queries when given one, which inside this per-observer/per-event loop
     # is a query per event per observer.
     amap = awareness_map(ctx.chat.id)
+    # THE ACTOR AS THE COMPOSED VIEW KNOWS THEM: the outward form a disguise
+    # leaves every observer, and who may see through it -- the record
+    # `composer.observer_display_map` labels a body from. This round labelled
+    # from the card's TRUE appearance and bare name recognition, so it named
+    # a disguised actor to anyone who knew the name, and described an unseen
+    # stranger by a face nobody saw (review 2026-10-04).
+    from .perception import (_appearance_as_prose, _sight_detail,
+                             _subject_disguise_context)
+    _visible, _active, _known_to, _conceals = _subject_disguise_context(
+        ctx, actor_name, _appearance_as_prose(
+            appearance_of(actor_name, actor_appearance, scene)), known)
+    actor_record = {"name": actor_name, "appearance": _visible,
+                    "aliases": character_scene_keys(actor_sheet)[1:],
+                    "disguise_known_to": _known_to,
+                    "disguise_conceals_identity": _conceals}
     views = {}
     perceived_by = set()
     for row in ctx.cast:
@@ -347,17 +363,20 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
             continue
         observer_sheet = normalized_character_from_text(row["sheet"])
         observer_name = character_name(observer_sheet)
-        # THE SAME PREDICATE AS EVERY OTHER LABEL SITE (`_recognizes`): bare
-        # membership is string equality, so a rank or title variant of a
-        # body this observer knows was a stranger here and a person in the
-        # composed view a stage later; and the aliases the actor answers to
-        # go into the label's scrub as they do at every other site.
-        if _recognizes(actor_name, set(known.get(observer_name) or [])):
-            display = actor_name
-        else:
-            display = _unknown_actor_label(
-                actor_name, actor_appearance,
-                character_scene_keys(actor_sheet)[1:])
+        # G4: the observer's card senses gate what the channels carry. An
+        # ordinary card is byte-identical to before; only explicitly authored
+        # acuity shifts anything.
+        observer_senses = character_senses(observer_sheet)
+        # THE DISPLAY MAP'S RULE, not a second copy of it
+        # (`composer.observer_display_map`): a known body by name -- through
+        # `_recognizes`, so a rank or title variant is still the person --
+        # unless a disguise hides who it is; a stranger seen in full by the
+        # outward form; a stranger seen short of full as a figure; an unseen
+        # one as the unfamiliar person. The composed view of the same beat
+        # says the same (the two delivery families, UNBUILT §3.8).
+        display = composer.observer_display_map(
+            scene, observer_name, [actor_record], known,
+            observer_senses).get(actor_name) or composer._unfamiliar_person()
         observer_room = character_room(scene, observer_sheet)
         # THE body-to-body relation builder: it carries concealment, the
         # crossing grace, and the enclosure directions the bare room-level
@@ -373,10 +392,6 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
         # F4: the micro-loop used to read bare hear_level with no proximity, so
         # a muttered aside landed full-volume on an arbitrarily large room.
         proximity = proximity_rel(scene, observer_name, actor_name)
-        # G4: the observer's card senses gate what the channels carry. An
-        # ordinary card is byte-identical to before; only explicitly authored
-        # acuity shifts anything.
-        observer_senses = character_senses(observer_sheet)
         additions = []
         observations = []
         for event_index, event in enumerate(actor_result.get("sequence") or []):
@@ -465,6 +480,29 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                 if not _delivery_ok(relation, scene, observer_name, actor_name,
                                     "action", awareness=observer_awareness,
                                     senses=observer_senses):
+                    continue
+                # A BODY THE OBSERVER CANNOT SEE SHOWS IT NO ACT, by the
+                # function the composed view grades acts with
+                # (`perception._sight_detail`): across a doorway its admission
+                # is the room-to-room edge, and the body-level grade -- the
+                # doorway's cone, a dulled eye -- is the answer. Asked before
+                # the surface is admitted, so the log never says "delivered"
+                # of an act this observer then never receives, and recorded
+                # as `composer.act_percept` records the same refusal.
+                #
+                # Only the refusal. The composed view also gives a `shapes`
+                # body's act as "moves, too little of it to make out", and in
+                # the owner's chats that collapse fires mostly on the doorway
+                # cone's guess for a body with no station in a large room
+                # (659 of 1,296 next-room sightings, 2026-10-05) -- an
+                # ordinary-range subtraction of the kind the owner ruled out
+                # that day for distance, awaiting a ruling of its own, and not
+                # one to spread to a second channel meanwhile.
+                if _sight_detail(scene, observer_name, actor_name, relation,
+                                 senses=observer_senses) == "none":
+                    note_step_decision(
+                        "act_percept", "%s -> %s" % (actor_name, observer_name),
+                        "refused", "observer cannot see (sight gate)")
                     continue
                 # Intent-free `observable` surface only -- never the raw
                 # attempt (which carries the actor's purpose/intent). A mental

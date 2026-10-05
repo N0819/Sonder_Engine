@@ -194,6 +194,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.163 — The opening is still one call with its own sheet](UNBUILT_PIPELINE.md#unbuilt-1-163)
 - [§1.164 — The Director's doctrine moved to the hands and what did not move was dropped](UNBUILT_PIPELINE.md#unbuilt-1-164)
 - [§1.173 — A body that crosses rooms to bar a doorway no longer bars it that beat (2026-10-04)](UNBUILT_PIPELINE.md#unbuilt-1-173)
+- [§1.176 — A body the view never showed is still named by the identity floor (2026-10-05)](UNBUILT_PIPELINE.md#unbuilt-1-176)
 
 **2. Roadmap**
 
@@ -245,6 +246,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.158 — A sense can be masked by nothing, so the gas the plan was for was modelled as a noise](UNBUILT_PERCEPTION.md#unbuilt-1-158)
 - [§1.159 — The sound model is half real: the ladders are decibels and the losses are still compressed](UNBUILT_PERCEPTION.md#unbuilt-1-159)
 - [§1.167 — Ordinary speech was gated four ways too hard](UNBUILT_PERCEPTION.md#unbuilt-1-167)
+- [§1.177 — Two sightlines cross what sight cannot, and Japanese hears no distant sound (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-177)
 
 **2. Roadmap**
 
@@ -320,6 +322,7 @@ Not scheduled and not committed to a phase. See the
 - [§2.37 — Room fidelity — what the 2026-09-04 prototype left](UNBUILT_WORLD.md#unbuilt-2-37)
 - [§2.38 — The room designer's shortcuts: what they leave (2026-09-27)](UNBUILT_WORLD.md#unbuilt-2-38)
 - [§2.39 — The site plan: sight with height, drops, flight, terrain](UNBUILT_WORLD.md#unbuilt-2-39)
+- [§2.40 — A level of detail for distant landscapes: what it needs decided (2026-10-05)](UNBUILT_WORLD.md#unbuilt-2-40)
 
 **4. Architecture gaps**
 
@@ -382,6 +385,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.99g — Memories the player owns, and the one thing that must be true first](UNBUILT_CHARACTERS.md#unbuilt-1-99g)
 - [§1.107 — `generalization_tags` promises a mechanism that does not exist](UNBUILT_CHARACTERS.md#unbuilt-1-107)
 - [§1.170 — An absorbed mind cannot reach the middle of its recent window](UNBUILT_CHARACTERS.md#unbuilt-1-170)
+- [§1.178 — English memory never files what was seen far off or heard this beat (2026-10-05)](UNBUILT_CHARACTERS.md#unbuilt-1-178)
 
 **2. Roadmap**
 

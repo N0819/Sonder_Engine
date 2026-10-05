@@ -1153,20 +1153,6 @@ itself makes).
   pronoun mismatch and the adverb tell are judgments about prose, and the
   standing rule for this stage -- detect and report, never rewrite -- was
   measured and should not be reversed piecemeal.
-* **PX2's floor is `_speaker_display`, not `composer.observer_display_map`,
-  and that is a choice with a residual.** `cast_pronouns` is now keyed by the
-  same floor `co_present_positions` and `event_order` already use, which is
-  the coherence PX2 asks for -- one answer to "what may this page call that
-  body" across every body-keyed narrator field. The composer's map is
-  STRICTLY finer: it gates a stranger's appearance descriptor on
-  `visual_level_between`, so a body seen only as shapes is a bare figure
-  rather than an epithet. Three narrator fields therefore still hand the
-  model an appearance descriptor for a body the view rendered as a
-  silhouette. It is a naming mismatch across the whole payload rather than
-  anything `cast_pronouns` introduced, and closing it means giving
-  `agents/narration.py` the scene and sight data on the establish path,
-  where it currently has neither.
-
 * **PM4's floor is a guess worth re-measuring.** The check declines unless a
   declared act adds at least `_PLAYER_ACT_MIN_DISTINCT_TOKENS` (two) words of
   its own beyond the view. Two was chosen because one shared word is a
@@ -1723,6 +1709,42 @@ the account while the walker's own line is what the page shows.
 What is left is the price of `passing`: a body that crosses rooms to plant
 itself in a doorway no longer bars a walker in the same beat. A body that
 keeps its room still does.
+
+<a id="unbuilt-1-176"></a>
+### 1.176 A body the view never showed is still named by the identity floor (2026-10-05)
+
+The narrator's labels and pronoun roster, and a character's orientation
+frame, now read what the observer's own view called a body
+(`narration._earned_labels` over `perception._composer_company`,
+`common.observer_view_label_fn`; `tests/test_every_view_reads_a_body_alike.py`).
+That record holds the bodies the view SHOWED -- presence percepts -- so a body
+that reached a mind by another channel falls back to the identity floor
+(`narration._speaker_display`, `common.observer_label_fn`), and the floor
+mints an appearance descriptor for a stranger whether or not anybody ever
+saw them. Reproduced end to end by the review of the re-applied fixes
+(2026-10-05), every case byte-identical at HEAD 594e4f67:
+
+- A dark cellar, a stranger's hand on the player's shoulder: the view says
+  "the unfamiliar person's hand"; the narrator's
+  `sensory_channels.touch.standing` says "the tall fox-eared woman's hand", a
+  disguised acquaintance's says her real name, and a disguised stranger's
+  her true appearance. A character's `self.standing_contacts` description
+  does the same.
+- A focus on a stranger nobody can see: `spatial_frame.ahead_entity` is "the
+  tall fox-eared woman", for characters and the narrator alike.
+  `observer_view_label_fn` hands a body out of view to the identity floor on
+  purpose -- a descriptor learned at an earlier sighting is identity
+  knowledge a mind keeps -- and the floor cannot tell that descriptor from
+  one minted for a body never seen.
+- A persona whose card says sight is absent: `co_present_positions` holds a
+  body in a lit hall, because `narration._player_sees_character` reads
+  `visual_level_between` with no sense card -- an admission gap, not a label.
+
+One class: the floor needs to know whether THIS observer has ever seen THIS
+stranger (perception's `seen` ledger knows only the last beat), and a
+present-tense field needs the view's own answer for a body the view did not
+show. The pronoun roster's half closed (`narration._roster_label`); these
+did not.
 
 ## 2. Roadmap
 

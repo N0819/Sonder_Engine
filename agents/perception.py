@@ -1691,7 +1691,7 @@ def _in_plain_view(rel, vis):
     return bool(rel.get("same_room")) or bool(vis)
 
 
-def _sight_detail(sc, observer_name, actor_name, rel):
+def _sight_detail(sc, observer_name, actor_name, rel, senses=None):
     """How much CONDUCT sight admits: "full", "shapes" or "none".
 
     SIGHT IS GRADED AND THE ACT CHANNEL WAS NOT. Every grader here answers
@@ -1722,14 +1722,34 @@ def _sight_detail(sc, observer_name, actor_name, rel):
 
     Only an explicit `shapes` downgrades. This is deliberately not a second
     admission gate -- `_in_plain_view` still decides whether anything is seen
-    at all -- so nothing this returns can refuse what today delivers; it can
-    only say that what is seen is a body moving rather than a body acting.
+    at all -- so nothing this returns can refuse what today delivers in the
+    observer's own room; it can only say that what is seen is a body moving
+    rather than a body acting.
+
+    ACROSS A DOORWAY A `none` STAYS `none`. There the admission is the
+    room-to-room edge (`_sight_reaches` with a relation) and this is the only
+    body-level reader, so the carve-out below -- written for a body in the
+    observer's own room -- turned the doorway cone's refusal into the act's
+    whole surface (probed 2026-10-04: a lit yard, a body at a post on the
+    doorway's own wall, `visual_level_between` none, the act delivered in
+    full while no presence line placed him). The observer's card is spent
+    exactly as `visual_level_between` spends it, on whether this sight needs
+    light, so a card that sees in the dark keeps the act it sees the body in
+    and acuity never lifts this channel -- PC1 again, through a keener eye.
+    The one thing acuity does here is the presence line's own subtraction:
+    a body a dulled eye cannot make out at all shows that eye no act.
     """
     level = ""
-    if room_of(sc, observer_name) is not None:
-        level = visual_level_between(sc, observer_name, actor_name) or ""
+    measured = room_of(sc, observer_name) is not None
+    if measured:
+        level = visual_level_between(sc, observer_name, actor_name,
+                                     senses) or ""
     if not level:
         level = sight_level(rel) or ""
+    if measured and isinstance(rel, dict) and not rel.get("same_room") and (
+            level == "none"
+            or composer._sense_graded(level, "sight", senses) == "none"):
+        return "none"
     if level == "none":
         # THE SAME QUESTION, ASKED INSIDE THE ROOM TOO (PE9, "Two Rooms and a
         # Kettle"): `_in_plain_view` short-circuits on `same_room`, so an
@@ -6315,7 +6335,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     percept = composer.act_percept(
                         event_scene, event, name, event_actor, act_rel, display=event_display,
                         can_see=act_seen,
-                        sight=_sight_detail(event_scene, name, event_actor, act_rel),
+                        sight=_sight_detail(event_scene, name, event_actor, act_rel,
+                                            senses=p.get("sense_card")),
                         self_forms=self_forms,
                         self_pronouns=p.get("pronouns"),
                         other_forms=tuple(
@@ -7420,7 +7441,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 percept = composer.act_percept(
                     event_scene, act.get("event") or {}, name, actor, rel,
                     display=display, can_see=can_see,
-                    sight=_sight_detail(event_scene, name, actor, rel),
+                    sight=_sight_detail(event_scene, name, actor, rel,
+                                        senses=p.get("sense_card")),
                     self_forms=self_forms,
                     self_pronouns=p.get("pronouns"),
                     other_forms=tuple(

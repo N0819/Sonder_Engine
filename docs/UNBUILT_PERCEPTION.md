@@ -1622,6 +1622,35 @@ the practice room" moved the player to the rehearsal room while she was on
 the stage in a bubble of her own; the two spoke through a shut door for two
 beats while the narrator sat them on one bench and blamed the acoustics.
 
+<a id="unbuilt-1-177"></a>
+### 1.177 Two sightlines cross what sight cannot, and Japanese hears no distant sound (2026-10-05)
+
+Found by the landscape survey (2026-10-05), each reproduced twice, none
+registered before:
+
+- `spatial_routing.corridor_sightlines` follows a one-way window from its
+  BLIND side. `effective_adjacent` gives the far room an implicit reverse
+  edge carrying the same `one_way_window` barrier, and the corridor walk
+  never asks `sight_direction`: a sighted character in the cell behind the
+  mirror is handed "Observation Room" and "Back Corridor" by name in the
+  payload's `corridor_sight`, while `visible_adjacent_rooms(cell)` is `[]`,
+  `spatial_rel` says `wall` and the body behind the glass is `none` -- with
+  `sight_from` declared on the edge too.
+- `sprint_reach`'s `on_sightline` is a heading test over
+  `_PASSABLE_BARRIERS`, which include `membrane`, so `sprint_offers` names
+  the room at the end of a run three curtains away ("Tent 3") to a character
+  with no memory of it, while both sight readers say nothing.
+
+Both reach only the character payload, and each wants the sight readers' own
+test (`sight_direction`, the sight-passing barrier set) where its walk
+crosses an edge. A firewall leak is an engine failure.
+
+In Japanese, the outcome view's distant sounds render as nothing:
+`composer.distant_sound_percepts` carries `{"distant": {...}}` and no
+`desc`, and the Japanese ambient branch has no `distant` case, so a loud
+machine five rooms off is heard in English and not in Japanese. (The
+features-and-openings half is §2.34's.)
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-11"></a>
@@ -1889,6 +1918,20 @@ production caller; see §1.45's dead family.)*
 `hear_level` and `_in_plain_view` directly, while `agents/loops.py` routes
 everything through `_delivery_ok`. Two families of delivery gate now exist and
 can drift apart. Consolidating them is the cheap insurance.
+
+They had drifted, and part of it is now one reader (2026-10-05,
+`tests/test_every_view_reads_a_body_alike.py`): the micro-round names its
+actor through `composer.observer_display_map`, so a disguise that hides who a
+body is, a stranger heard in the dark and a figure across a far edge are
+called what the composed view of the same beat calls them; and it refuses an
+act from a body the composed view cannot see (`perception._sight_detail`).
+It does NOT give a `shapes` body's act as motion, which the composed view
+does -- deliberately, while the doorway cone's size fallback that produces
+most of those shapes waits on the owner (UNBUILT_WORLD §1.162). ADMISSION is
+still the two families, and still drifts: `_delivery_ok`'s room-level light
+test drops a co-present act in an unlit room that the composed view
+delivers, and the micro-round labels one actor at a time, so two strangers
+of one description do not get the composed view's joint "the second ...".
 
 ## 4. Architecture gaps
 

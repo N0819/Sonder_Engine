@@ -1851,6 +1851,32 @@ door's own cell, which its stations chunk already asks for). Until both land,
 a cell-placed body in a large room is graded by the size fallback, which
 withholds and never grants.
 
+**The fallback is the ordinary case, not the cell-placed one (measured
+2026-10-05, owner's question).** Across every distinct scene in the owner's
+checkpoints (3,473 scenes, 133 chats), 1,296 next-room body pairs had sight
+admitted by the edge; 766 of them graded `shapes`, and 659 of those were this
+size fallback on one side or both (344 both sides, 164 the target's, 151 the
+observer's own doorframe), with no crossing involved and the edge itself
+passing `full`. 748 of the 751 targets had no station at all -- "placement
+unknown" is what most bodies are. The act channel then collapses the shape to
+motion (`perception._sight_detail`), so in 26 chats a body standing in a lit
+room through an open door was "an indistinct figure" that "moves, too little
+of it to make out". The fallback was written to withhold a FACE ("through a
+door you can tell a big room is occupied, not read a face across it") before
+the ladder had a `conduct` rung for exactly that -- a body's doing plain, its
+face not. It is the same ordinary-range subtraction the owner ruled out for
+distance the same day (level of detail is for landscapes five or more rooms
+off), so the decision is theirs: the fallback to `conduct` (identity still
+withheld, conduct delivered), to `full`, or kept. The interaction micro-round
+does not collapse a shape to motion meanwhile (`agents/loops.py`), so as not
+to spread the subtraction to a second channel before the ruling. One
+subtraction does reach the act channel through it, deliberately: for an eye
+whose card is dulled the fallback's shape is `none`, which the presence line
+already gave, and the act from that body is now refused with it in both
+channels (one card of 67 in the owner's db, "failing" sight) -- an act from
+a body the eye cannot make out at all is the leak direction. The same ruling
+would restore both.
+
 <a id="unbuilt-1-168"></a>
 
 ### 1.168 A crossing written at the resolve was refused at every shut door — FIXED 2026-09-26, residuals open
@@ -2224,6 +2250,78 @@ leaves, in the order the owner agreed:
   box is the plan's and a beat can no longer re-measure it.
 * **A window between storeys is an anchor, not an edge**: an edge is one per
   pair of rooms, and the ground-floor door already holds it.
+
+<a id="unbuilt-2-40"></a>
+### 2.40 A level of detail for distant landscapes -- the owner's ask, and what it needs decided (2026-10-05)
+
+The ask: "for distant objects we might need something like the text
+equivalent of an LOD" (2026-10-04); and after a build that graded detail by
+metres inside ordinary range (dab39f66) was reverted (594e4f67): "all I
+wanted it for was distant landscapes. like 5 or so rooms of distance or
+more." The room and one doorway keep their full detail.
+
+What the engine sees beyond one doorway (surveyed 2026-10-05 by five readers
+and a critic; every load-bearing claim spot-checked):
+
+- No body, act, fixture or room description two or more rooms away, for any
+  observer at any height. `spatial_rel` answers `separated` for a
+  non-adjacent pair and sight refuses it; `room_field` lays one ring. A
+  flier 200 m up sees the next field as `shapes` and the one after nothing.
+- What does cross: `corridor_sightlines` (characters only; a straight lit
+  line, at most 6 rooms, names 2), the run end in `sprint_offers`, vistas
+  (`world/vistas.py`: horizon records, not rooms), the non-speech sound far
+  field (no hop cap), scent (a room a beat), and a Director event targeted
+  at a room, delivered at full detail wherever it happened.
+- `SWEEP_REACH_PACES` has been read by nothing since it was added
+  (aeecf008); a sweep lifts the cone and never extends reach.
+
+What the owner's worlds hold at that scale (engine.db, read-only):
+
+- No open-air chain of five rooms: the longest is four (the Kansai shrine
+  path, chats 38/59/63/64), then three (the beach in 122/123, the shrine in
+  163, the market lane in 65). Minase (150-159) is one only by hand: its
+  empty-desc harbour rooms read `enclosed` through the keyword fallback.
+- Five hops is not far. The Larch Hill tower foot is five hops from the
+  balcony and about 8 m away; across the corpus a five-hop path is a median
+  of about 30 m.
+- None of the 75 rooms five or more hops from a player can be given a
+  direction: 36% of live edges carry `dir`, planned rooms none, and no scene
+  in engine.db has a site plan or a vista (scratch chat 165 has both).
+- Far places live in prose (a desc's "dark rooftops show over it", a
+  scenario), in planned registry rows outside the scene (chat 114's 31-room
+  district), in another locale (chat 10's colony seen from orbit), or are
+  minted as an adjacent room the moment they are seen (chat 46's distant
+  building, `distance: "short"`).
+
+What a design has to decide, and whose it is (the owner's):
+
+1. The unit: room hops; metres where a plan or an edge measures them; or the
+   kind of far thing (open ground, a structure, a vista, a district).
+2. What shows two to four rooms off. A strict five-room gate leaves them as
+   dark as today, so a body walking in would show far off, vanish, and
+   reappear at the door.
+3. Places only, or people too. People bring causality bubbles (a major
+   character more than one hop off lives in her own frame and is absent from
+   the player's), the beat aperture (`rooms_in_view` is "sight plus
+   earshot", owner 2026-09-23 -- far sight inside it puts far townsfolk on
+   screen and model-voiced), the `seen` ledger (which licenses attire
+   deltas and prunes appearance), and hailing what is seen.
+4. Names: whether a far place is named to a mind that has never been there
+   (vistas and the corridor name; the sound far field never does).
+5. The substrate -- vistas, far scene rooms, planned rooms -- and for rooms,
+   where a bearing and a distance come from.
+
+Found on the way, in the vista path, each probed: `outlooks` reads the raw
+`exposure` field where weather derives it (116 rooms in 129 owner scenes are
+open to the weather and look out nowhere); `obstructed` skips the whole
+footprint of the observer's own room, so a building standing in an open
+field never hides the ridge behind it; a lit vista renders its daytime
+`desc` at night; a card whose sight is absent still sees both vista lines;
+after a look the next beat repeats the vista once as standing state; the
+"below" test hides any top under the eye, not only one past the horizon (a
+village's 20 m roof 1 km off, from a 60 m eye); a negative `height_m` is
+clamped to 0, so a town down the valley cannot sit below the ridge; and a
+look by compass word ("south", chat 165) never becomes the look event.
 
 ## 4. Architecture gaps
 

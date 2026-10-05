@@ -94,6 +94,7 @@ from .common import (
     self_name_forms,
     declared_goal,
     observer_label_fn,
+    observer_view_label_fn,
     observer_name_scrub,
     scrub_names_deep,
     _recognizes,
@@ -4318,9 +4319,9 @@ def character_step(ctx, cid, nonce):
             # deliberately withholding.
             "spatial_frame": _annotate_known_exits(
                 spatial_digest(sc, character_name(sh),
-                               label_for=observer_label_fn(
+                               label_for=observer_view_label_fn(
                                    chat, character_name(sh), ctx.cast,
-                                   scene=sc)), sc,
+                                   sc, senses=character_senses(sh))), sc,
                 stored_state.get("visited_rooms") or [],
                 known_exits=stored_state.get("known_exits") or {},
                 here_rid=char_room,
@@ -4399,7 +4400,11 @@ def character_step(ctx, cid, nonce):
                 sc, chat, sh, _p_spoke,
                 quiet_beats=(0 if _p_spoke else _player_quiet_beats(
                     chat.id, ctx.turn.idx, ctx.turn.frame_id, cache=shared)),
-                label=_contact_label),
+                # What the player is called in a note about THIS beat is the
+                # view's word for them now (`observer_view_label_fn`).
+                label=observer_view_label_fn(
+                    chat, character_name(sh), ctx.cast, sc,
+                    senses=character_senses(sh))),
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_debt,

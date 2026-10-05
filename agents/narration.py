@@ -397,7 +397,10 @@ def _cast_pronouns(cast, label=None):
                  if isinstance(pronouns, dict) and pronouns.get(k)}
         if not (name and clean):
             continue
-        key = str(label(name) if label else name).strip() or name
+        shown = label(name) if label else name
+        if shown is None:
+            continue                # a body the view never named or showed
+        key = str(shown).strip() or name
         if key in out and out[key] != clean:
             collided.add(key)
         out[key] = clean
@@ -406,12 +409,54 @@ def _cast_pronouns(cast, label=None):
     return out
 
 
-def _speaker_display(name, recognized, appearance=None, aliases=None):
-    """How the narrator payload refers to one speaker: the canonical name when
-    the player recognizes them (rank/title variants included -- same
-    _recognizes rule perception used to build the view), else the same
-    appearance-derived anonymous label perception injects, so the binding
-    never leaks an identity past the view's own gate."""
+def _earned_labels(ctx, seat="player"):
+    """name -> the label one seat's own composed view earned for each body
+    it was composed about (`perception._composer_company`, from the same
+    gated percepts the view was rendered from): a descriptor in full sight,
+    "an indistinct figure" in the dim or across a far edge. `seat` is the
+    perceiver id: "player" for the primary, "extra:<persona id>" for a
+    second human (`narrator_extra`).
+
+    The narrator payload's label floor read appearance whatever the player
+    could see of the body, so a field of the payload named "the fox-eared
+    woman" while the view the page is written from said "an indistinct
+    figure" -- two representations of one body, and the page free to pick
+    the one that says more.
+    """
+    for step in ("perception_outcome", "perception_establish"):
+        out = (ctx.get(step) or {}) if hasattr(ctx, "get") else {}
+        rows = ((out.get("company") or {}).get(seat)
+                if isinstance(out, dict) else None)
+        if isinstance(rows, list):
+            return {str(r.get("name")): str(r.get("label")) for r in rows
+                    if isinstance(r, dict) and r.get("name") and r.get("label")}
+    return {}
+
+
+def _roster_label(view_label, earned, recognized):
+    """The `cast_pronouns` key for each body, or None to leave it out: only
+    a body the player's view SHOWED (`earned`) or knows by NAME is keyed. An
+    unperceived stranger keyed by its appearance handed the page a roster of
+    faces the player never saw (review 2026-10-04); the narrator card already
+    says a character absent from `cast_pronouns` keeps what the view set."""
+    def label(name):
+        if str(name) in earned or _recognizes(name, recognized):
+            return view_label(name)
+        return None
+    return label
+
+
+def _speaker_display(name, recognized, appearance=None, aliases=None,
+                     earned=None):
+    """How the narrator payload refers to one speaker: the label the player's
+    own view earned for them when it was composed about them (`earned`,
+    `_earned_labels`), else the canonical name when the player recognizes
+    them (rank/title variants included -- same _recognizes rule perception
+    used to build the view), else the same appearance-derived anonymous
+    label perception injects, so the binding never leaks an identity past
+    the view's own gate."""
+    if earned and str(name) in earned:
+        return earned[str(name)]
     if _recognizes(name, recognized):
         return name
     stripped = _strip_identity_tokens(appearance, [name, *(aliases or [])]) \
@@ -587,7 +632,8 @@ def _player_long_established(ctx, turn_idx, depth, pid="player"):
 
 def _sensory_channels_manifest(scene, player_name, view, observations,
                                recognized, cast_info, p_room,
-                               standing_verdicts=None, *, include_delivery_text=True):
+                               standing_verdicts=None, *, include_delivery_text=True,
+                               earned=None):
     """Per-sense delivery manifest for the narrator payload, or {}.
 
     THE DEFECT: percepts carry a real channel from every builder through
@@ -663,7 +709,7 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         if info is not None:
             return _speaker_display(other, recognized,
                                     info.get("appearance"),
-                                    info.get("aliases"))
+                                    info.get("aliases"), earned=earned)
         if _recognizes(other, recognized or ()):
             return other
         # A CONTACT PARTY IS NOT NECESSARILY A BODY, and "someone" asserts one.
@@ -850,10 +896,11 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
     # floor used for the actor label rather than leaking a name inside the
     # action surface while anonymising its speaker one field away.
     referent_labels = {str(p_name): "you"}
+    earned = _earned_labels(ctx)
     for canonical, info in (cast_info or {}).items():
         display = _speaker_display(
             canonical, recognized, info.get("appearance"),
-            info.get("aliases"))
+            info.get("aliases"), earned=earned)
         referent_labels[str(canonical)] = display
         for alias in info.get("aliases") or []:
             referent_labels[str(alias)] = display
@@ -1017,7 +1064,8 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                 continue  # the player never received this line
         info = cast_info.get(name) or {}
         display = name if name == p_name else _speaker_display(
-            name, recognized, info.get("appearance"), info.get("aliases"))
+            name, recognized, info.get("appearance"), info.get("aliases"),
+            earned=earned)
         ev = {"n": len(events) + 1, "actor": display, "kind": kind}
         if kind == "speech":
             if name == p_name:
@@ -1114,6 +1162,7 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
         for rid, r in rooms.items() if isinstance(r, dict) or r is None
     }
     payload, facts = {}, []
+    earned = _earned_labels(ctx)
     for name, info in cast_info.items():
         prev_room = cast_room(prev_sc, name, ctx.cast)
         now_room = cast_room(sc, name, ctx.cast)
@@ -1146,7 +1195,8 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
                 spatial_rel(sc, p_room, prev_room)):
             prev_display = room_names.get(prev_room, prev_room)
         display = _speaker_display(
-            name, recognized, info.get("appearance"), info.get("aliases"))
+            name, recognized, info.get("appearance"), info.get("aliases"),
+            earned=earned)
         # HOW FAR OFF, when the geometry actually measured it (D4, review
         # 2026-09-07). The payload named the ROOM and said nothing about the
         # distance inside it, so a body at the far door and a body at the
@@ -1158,12 +1208,22 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
         # rather than told wrong. Adds no admission -- every body here has
         # already passed `_player_sees_character` above.
         depth = measured_proximity_rel(sc, p_name, name)
-        payload[display] = {
-            "room": room_names.get(now_room, now_room),
-            "prev_room": prev_display,
-            "moved": moved,
-            **({"depth": depth} if depth else {}),
-        }
+        # TWO BODIES THE VIEW CANNOT TELL APART SHARE ONE ENTRY, as they share
+        # one label in the view -- "an indistinct figure", two strangers of
+        # one description. Keyed by it, whichever came second in cast order
+        # overwrote the first, and an arrival's `moved` could go with it; an
+        # arrival is the entry's news, so a body that moved this beat is never
+        # overwritten by one that stood still. Not numbered: "(2)" is a handle
+        # the view withholds and a string the page can copy. The facts below
+        # keep every body, under the label prose can actually say.
+        held = payload.get(display)
+        if held is None or (moved and not held.get("moved")):
+            payload[display] = {
+                "room": room_names.get(now_room, now_room),
+                "prev_room": prev_display,
+                "moved": moved,
+                **({"depth": depth} if depth else {}),
+            }
         # The display is what prose says; the key is what the ledger is filed
         # under, and the attire screen needs both.
         facts.append({"name": display, "key": name, "room_id": now_room,
@@ -2046,12 +2106,15 @@ def narrator(ctx, nonce):
             "aliases": character_scene_keys(_sh)[1:],
         }
 
+    _earned = _earned_labels(ctx)
+
     def _view_label(name):
         info = cast_info.get(str(name)) or {}
         return _speaker_display(name, recognized, info.get("appearance"),
-                                info.get("aliases"))
+                                info.get("aliases"), earned=_earned)
 
-    cast_pronouns = _cast_pronouns(ctx.cast, label=_view_label)
+    cast_pronouns = _cast_pronouns(ctx.cast, label=_roster_label(
+        _view_label, _earned, recognized))
 
     # Consciousness gate: when the player is non-awake, their `player_view` is
     # already the deterministic residue (perception_outcome). Do NOT also hand
@@ -2133,7 +2196,7 @@ def narrator(ctx, nonce):
             if isinstance(pers, dict) else []
         _other_displays = [
             _speaker_display(_n, recognized, _i.get("appearance"),
-                             _i.get("aliases"))
+                             _i.get("aliases"), earned=_earned)
             for _n, _i in cast_info.items() if _n != player_name
         ]
         player_forms = self_name_forms(
@@ -2258,7 +2321,8 @@ def narrator(ctx, nonce):
         _senses = _sensory_channels_manifest(
             _scene_for_frame, player_name, view,
             player_observations, recognized, cast_info, p_room,
-            standing_verdicts=_verdicts, include_delivery_text=False)
+            standing_verdicts=_verdicts, include_delivery_text=False,
+            earned=_earned)
         if _senses:
             _world_fields["sensory_channels"] = _senses
         # STILL TRUE, AND NOT SAID SINCE BEFORE THE PAGE'S OWN MEMORY (D7).
@@ -2283,7 +2347,7 @@ def narrator(ctx, nonce):
                 str(f.get("name") or "") for f in pos_facts
                 if isinstance(f, dict) and f.get("name")} | {
                 _speaker_display(_n, recognized, _i.get("appearance"),
-                                 _i.get("aliases"))
+                                 _i.get("aliases"), earned=_earned)
                 for _n, _i in cast_info.items() if _n != player_name}),
         }
 
@@ -2522,10 +2586,14 @@ def _report_prose_guards(prose, view, p_lines, raw_input, warnings):
     return text
 
 
-def _extra_view_label(chat_id, extra, cast):
+def _extra_view_label(chat_id, extra, cast, earned=None, roster=False):
     """One extra seat's identity floor: `name -> what THIS player may call
     them`, the same `_speaker_display` gate `narrator` builds for the
-    primary. A second human sits behind their own `known` row."""
+    primary -- the labels this seat's own view earned first
+    (`_earned_labels`), then its own `known` row. A second human sits behind
+    their own `known` row. With `roster`, the `cast_pronouns` rule
+    (`_roster_label`): only a body this seat's view showed or knows by
+    name."""
     recognized = set(
         (wget(chat_id, "known", {}) or {}).get(extra.get("name")) or [])
     info = {}
@@ -2539,9 +2607,10 @@ def _extra_view_label(chat_id, extra, cast):
 
     def label(name):
         appearance, aliases = info.get(str(name), (None, None))
-        return _speaker_display(name, recognized, appearance, aliases)
+        return _speaker_display(name, recognized, appearance, aliases,
+                                earned=earned)
 
-    return label
+    return _roster_label(label, earned or {}, recognized) if roster else label
 
 
 def narrator_extra(ctx, nonce):
@@ -2595,6 +2664,7 @@ def narrator_extra(ctx, nonce):
         observations = (perception_stage.get("observations") or {}).get(
             f"extra:{pid_key}") or []
         perception_fields = _narrator_perception_fields(observations, view)
+        earned = _earned_labels(ctx, seat=f"extra:{pid_key}")
 
         past_narration, prev = _past_narration_extra_block(
             chat["id"], ctx.turn["idx"], ctx.turn["frame_id"], pid, _depth)
@@ -2655,7 +2725,8 @@ def narrator_extra(ctx, nonce):
             # second human is a second observer, not a second reader of the
             # primary's gate.
             "cast_pronouns": _cast_pronouns(
-                ctx.cast, label=_extra_view_label(chat["id"], extra, ctx.cast)),
+                ctx.cast, label=_extra_view_label(chat["id"], extra, ctx.cast,
+                                                  earned=earned, roster=True)),
             "scene_opening": bool(est),
             **({"authored_body_parts": _abp2} if _abp2 else {}),
             "player_declared": player_declared,
@@ -2669,7 +2740,8 @@ def narrator_extra(ctx, nonce):
             "spatial_frame": spatial_digest(
                 ctx.get("outcome_scene") or get_scene(chat["id"], chat),
                 extra.get("name") or "",
-                label_for=_extra_view_label(chat["id"], extra, ctx.cast)),
+                label_for=_extra_view_label(chat["id"], extra, ctx.cast,
+                                            earned=earned)),
 
             # A SECOND HUMAN IS A SECOND OBSERVER (D7), so the record is read
             # under this seat's own ledger key -- their view suppressed its

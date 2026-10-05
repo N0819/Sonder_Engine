@@ -5112,6 +5112,72 @@ def _uncarded_person(scene, name):
     return appearance, [a for a in (ent.get("aliases") or []) if a]
 
 
+def observer_view_label_fn(chat, observer_name, cast, scene, senses=None):
+    """`observer_label_fn` for a field about what is in view RIGHT NOW --
+    the orientation frame's `ahead_entity`, the note that the player said
+    nothing -- where a stranger seen short of full detail is the view's own
+    word for them, "an indistinct figure" (`composer.observer_display_map`'s
+    rule, graded the same way: `sense_adjusted` over the body-level sight).
+    `ahead_entity` named "the tall fox-eared woman" in a dim room while the
+    view beside it said "an indistinct figure" (review 2026-10-04).
+
+    A STRUCTURED SURFACE EARNS ITS SILHOUETTE, as it does in the display map
+    (`composer._silhouette_labels`): a townsperson the charter dealt a
+    surface is "the squat reedy figure in a scorched leather apron" in a dim
+    hall, read off the same rows perception lays presence bodies from
+    (`presence_figures_for_room`). The fixed figure is for a body with nothing
+    structured to show -- and is the label the view gives every such body, so
+    handing it to a surfaced one named somebody else (review 2026-10-05). Two
+    silhouettes that read alike collapse to the fixed figure in the view; one
+    name at a time cannot see that, and keeps the silhouette.
+
+    Never the identity labeller itself: that one names a body for every
+    reference -- an address the Director resolves, the teller of an old
+    report, a name in lore -- and a reference is not a sighting. Put there,
+    this rule made "the indistinct figure" resolve to a fountain and the
+    descriptor a character knew a stranger by resolve to nobody. A known
+    name, a thing, and a body out of view or in full view keep the identity
+    label here too.
+    """
+    base = observer_label_fn(chat, observer_name, cast, scene=scene)
+
+    def label(name):
+        out = base(name)
+        text = str(name or "").strip()
+        if not text or out == text or not isinstance(scene, dict):
+            return out              # a known name, or a thing left as it is
+        if not room_of(scene, observer_name) or not room_of(scene, text):
+            return out
+        level = sense_adjusted(
+            visual_level_between(scene, observer_name, text, senses),
+            "sight", senses)
+        if level in ("full", "none"):
+            return out
+        from world.charter_surface import surface_label
+        surface = _presence_surface(chat, scene, text)
+        described = surface_label(surface, level) if surface else ""
+        if described:
+            return str(compositor_text("unknown_actor", description=described))
+        return str(compositor_value("dim_figure"))
+
+    return label
+
+
+def _presence_surface(chat, scene, name):
+    """The structured surface the charter dealt `name`, read off the rows
+    perception lays presence bodies from (`presence_figures_for_room`, the
+    body's own room), or None -- a carded body has none."""
+    room = room_of(scene, name)
+    if not room:
+        return None
+    folded = str(name).casefold()
+    for row in presence_figures_for_room(chat["id"], scene, room) or ():
+        if str(row.get("name") or "").casefold() == folded:
+            surface = row.get("surface")
+            return surface if isinstance(surface, dict) else None
+    return None
+
+
 def observer_label_fn(chat, observer_name, cast, scene=None):
     """`name -> what THIS observer may call them`, for any payload that names
     a body outside perception's own scrubbing.
