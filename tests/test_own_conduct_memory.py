@@ -325,6 +325,13 @@ class TestOneMemoryPerTurn:
             cast = temp_db.q(
                 "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
                 "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (chat_id,))
+        # Wren and Ostra stand where Sarel can see them: a memory is tagged
+        # only with bodies its mind saw in full that beat
+        # (`world.spatial.sighted_level`, 2026-10-06) -- a speaker heard and
+        # never seen is not a face the mind can tie to a name it learns.
+        temp_db.wset(chat_id, "scene", {"rooms": {"well": {"name": "The well"}},
+                                        "positions": {"Sarel": "well", "Wren": "well",
+                                                      "Ostra": "well"}})
         captured = _capture_batch(monkeypatch)
         ctx = _ctx(chat_id, char_id, cast, {
             "salience": 0.5, "sequence": [{"type": "speech", "text": "Then go."}],
@@ -340,7 +347,8 @@ class TestOneMemoryPerTurn:
         assert [m["category"] for m in rows] == ["episode"]
         assert "the well is fouled" in rows[0]["content"] and "What I did: I said 'Then go.'" in rows[0]["content"]
         # the speaker and the one spoken to stay on the row, as the dialogue
-        # row it replaces kept them (the mind itself never is: `_memory_about`)
+        # row it replaces kept them -- seen, as they are here (the mind itself
+        # never is: `_memory_about`)
         assert {"Wren", "Ostra"} <= set(rows[0]["about"])
 
     def test_a_promise_keeps_its_own_row(self, temp_db, monkeypatch):
