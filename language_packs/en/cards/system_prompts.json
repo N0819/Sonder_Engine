@@ -1314,7 +1314,16 @@
     "no_such_lookup": "there is no lookup by that name",
     "could_not_be_made": "that lookup could not be made",
     "no_lookups_left": "no lookups left this turn",
-    "unreadable_arguments": "the arguments could not be read"
+    "unreadable_arguments": "the arguments could not be read",
+    "where_can_i": "The places you know of that answer a need, nearest and best known first -- only places you have a walked way to.",
+    "need": "What you need.",
+    "route_to": "The way from where you stand to a place you know, room by room, over ways you have walked.",
+    "place": "The place, by the name you know it by.",
+    "why_do_i_think": "What one note in your notebook rests on: what you saw or heard or remember that made you think it.",
+    "note_id": "The note's id, as your notebook shows it.",
+    "no_such_need": "that is not a need this can answer",
+    "no_such_place": "you know no place by that name",
+    "no_such_note": "your notebook holds no note with that id"
   },
   "character_thinking": {
     "kept": "Your thinking from your last {turns} turns stays beside the memory of each, as `what_you_were_thinking`; older thinking is gone, so put what you mean to keep in your notebook or your `note`.",

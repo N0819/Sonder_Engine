@@ -58,7 +58,12 @@ TOOL_WALL_SECONDS = 60
 #: owner's banks, 2026-10-05). Named to the owner.
 RESULT_CHARS = 16000
 
-TOOL_NAMES = ("ponder", "notebook", "expand", "continue")
+TOOL_NAMES = ("ponder", "notebook", "expand", "continue", "where_can_i", "route_to",
+              "why_do_i_think")
+#: Places one `where_can_i` names, best first: lived before heard before
+#: guessed, then nearest. Mine, named to the owner, unruled -- the packet's own
+#: felt-need recall names two at most (`agents.character`, place purpose).
+WHERE_LIMIT = 6
 
 
 def tools_enabled(role) -> bool:
@@ -84,6 +89,7 @@ def tool_specs(language=None):
     """The four lookups as OpenAI-style functions: names and parameters are
     protocol, the descriptions the story's pack (`character_tools`)."""
     from llm.prompts import character_tools_text
+    from world.place_purpose import AFFORDANCES
 
     def say(key):
         return character_tools_text(key, language)
@@ -109,6 +115,21 @@ def tool_specs(language=None):
                 "direction": {"type": "string", "enum": ["before", "after"],
                               "description": say("direction")}},
                 "required": ["memory_ref", "direction"]}}},
+        {"type": "function", "function": {
+            "name": "where_can_i", "description": say("where_can_i"),
+            "parameters": {"type": "object", "properties": {
+                "need": {"type": "string", "enum": list(AFFORDANCES), "description": say("need")}},
+                "required": ["need"]}}},
+        {"type": "function", "function": {
+            "name": "route_to", "description": say("route_to"),
+            "parameters": {"type": "object", "properties": {
+                "place": {"type": "string", "description": say("place")}},
+                "required": ["place"]}}},
+        {"type": "function", "function": {
+            "name": "why_do_i_think", "description": say("why_do_i_think"),
+            "parameters": {"type": "object", "properties": {
+                "note_id": {"type": "string", "description": say("note_id")}},
+                "required": ["note_id"]}}},
     ]
 
 
@@ -128,7 +149,8 @@ class Lookups:
     memories and notebook, so a dispute or a note change can name it."""
 
     def __init__(self, *, chat_id, char_id, turn_idx, bank, handles, memory_context,
-                 memory_internal, holding, notebook_inputs, ponder_inputs, language=None):
+                 memory_internal, holding, notebook_inputs, ponder_inputs, language=None,
+                 place_inputs=None):
         self.chat_id, self.char_id, self.turn_idx = chat_id, char_id, turn_idx
         self.bank = bank
         self.handles = handles if isinstance(handles, dict) else {}
@@ -137,6 +159,7 @@ class Lookups:
         self.holding = holding
         self.notebook_inputs = dict(notebook_inputs or {})
         self.ponder_inputs = dict(ponder_inputs or {})
+        self.place_inputs = dict(place_inputs or {})   # {"graph": its place graph, "room": where it stands}
         self.language = language
         self._key_to_handle = {v: k for k, v in self.handles.items() if str(k)[:1] == "m"}
         self._next = 1 + max((int(k[1:]) for k in self.handles
@@ -376,6 +399,113 @@ class Lookups:
         return (self._read([], [], pick, members) if pick
                 else {"memories": [], "nothing_further": True})
 
+    # -- where it knows to go, and why it believes what it does -----------------
+    def _graph(self):
+        graph = self.place_inputs.get("graph")
+        return graph if isinstance(graph, dict) else {}
+
+    def where_can_i(self, need):
+        """Its own remembered places that answer `need` -- its own place graph,
+        reached over doorways it has walked (`place_purpose.place_options`)."""
+        from agents.character import _taken_adjacency
+        from world.place_purpose import AFFORDANCES, affords_here, place_options
+        need = str(need or "").strip().lower()
+        if need not in AFFORDANCES:
+            return {"refused": self._say("no_such_need")}
+        graph, room = self._graph(), self.place_inputs.get("room")
+        if not room or not isinstance(graph.get("nodes"), dict):
+            return {"nowhere_you_know": True}
+        options = place_options(graph, room, need, _taken_adjacency(graph.get("edges") or {}))
+        places = []
+        for o in options[:WHERE_LIMIT]:
+            item = {"place": o["name"], "basis": o["basis"], "doorways_away": int(o["hops"])}
+            if o.get("sureness") is not None:
+                item["confidence"] = o["sureness"]
+            if o.get("note"):
+                item["note"] = o["note"]
+            places.append(item)
+        here = need in (affords_here(graph, room) or ())
+        if not places and not here:
+            return {"nowhere_you_know": True}
+        return {**({"right_here": True} if here else {}), "places": places,
+                **({"more_than_these": True} if len(options) > WHERE_LIMIT else {})}
+
+    def route_to(self, place):
+        """The rooms in order from where it stands to a place of its own graph,
+        over doorways it has WALKED; a place it knows with no walked way there
+        says so, and is never routed through ground its feet did not earn."""
+        from collections import deque
+        from agents.character import _taken_adjacency
+        graph, room = self._graph(), self.place_inputs.get("room")
+        nodes = graph.get("nodes") if isinstance(graph.get("nodes"), dict) else {}
+        wanted = " ".join(str(place or "").split()).casefold()
+        if not wanted:
+            return {"refused": self._say("no_such_place")}
+        named = {rid: str((n or {}).get("name") or "").strip() for rid, n in nodes.items()}
+        exact = [rid for rid, name in named.items() if name.casefold() == wanted]
+        loose = exact or [rid for rid, name in named.items() if name and wanted in name.casefold()]
+        if not loose:
+            return {"refused": self._say("no_such_place")}
+        if len(loose) > 1:
+            return {"which_one": sorted(named[rid] for rid in loose)[:WHERE_LIMIT]}
+        target = str(loose[0])
+        if not room:
+            return {"no_way_you_have_walked": True}
+        if target == str(room):
+            return {"you_are_there": True}
+        walked = _taken_adjacency(graph.get("edges") or {})
+        back, queue = {str(room): None}, deque([str(room)])
+        while queue:
+            cur = queue.popleft()
+            if cur == target:
+                break
+            for nxt in sorted(walked.get(cur, ())):
+                if nxt not in back:
+                    back[nxt] = cur
+                    queue.append(nxt)
+        if target not in back:
+            return {"no_way_you_have_walked": True}
+        path, cur = [], target
+        while cur is not None:
+            path.append(cur)
+            cur = back[cur]
+        path.reverse()
+        return {"route": [named.get(rid) or rid for rid in path], "doorways": len(path) - 1}
+
+    def why_do_i_think(self, note_id):
+        """What a note in its notebook rests on: the facts it was formed from,
+        each a memory of its own named by handle where it is one."""
+        from mind import notebook as nb
+        from mind import theory_of_mind as tom
+        state = self.notebook_inputs.get("state") or {}
+        wanted = str(note_id or "").strip()
+        for subject, model in (state.get("mind_models") or {}).items():
+            for hyp in (model or {}).get("hypotheses") or []:
+                if not isinstance(hyp, dict) or tom.note_id(subject, hyp) != wanted:
+                    continue
+                because = []
+                for e in hyp.get("evidence") or []:
+                    if not isinstance(e, dict):
+                        continue
+                    item = {"fact": " ".join(str(e.get("fact") or "").split())[:400]}
+                    key = self._resolve(str(e.get("event_id") or ""))
+                    if key:
+                        item["memory_ref"] = self._handle(key)
+                    if item["fact"] or item.get("memory_ref"):
+                        because.append(item)
+                live = tom._live_confidence(hyp, self.turn_idx,
+                                            self.notebook_inputs.get("elapsed_seconds"))
+                return {"note": " ".join(str(hyp.get("claim") or "").split()), "about": str(subject),
+                        "sure": nb.sure_word(live),
+                        **({"because": because} if because else {"nothing_written_beneath_it": True})}
+        for text in self.notebook_inputs.get("concerns") or ():
+            if nb.concern_id(nb.concern_text(text)) == wanted:
+                return {"note": nb.concern_text(text), "nothing_written_beneath_it": True}
+        for r in state.get("notebook") or []:
+            if isinstance(r, dict) and str(r.get("id") or "") == wanted:
+                return {"note": str(r.get("note") or ""), "nothing_written_beneath_it": True}
+        return {"refused": self._say("no_such_note")}
+
     def run(self, tool, args):
         """One lookup's result, JSON-able; never raises."""
         args = args if isinstance(args, dict) else {}
@@ -389,6 +519,12 @@ class Lookups:
                 result = self.expand(args.get("memory_ref"))
             elif tool == "continue":
                 result = self.continue_(args.get("memory_ref"), str(args.get("direction") or ""))
+            elif tool == "where_can_i":
+                result = self.where_can_i(args.get("need"))
+            elif tool == "route_to":
+                result = self.route_to(args.get("place"))
+            elif tool == "why_do_i_think":
+                result = self.why_do_i_think(args.get("note_id"))
             else:
                 result = {"refused": self._say("no_such_lookup")}
         except Exception as exc:  # noqa: BLE001 -- a failed lookup is an answer, not a lost beat

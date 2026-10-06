@@ -1320,14 +1320,24 @@ reach it: the experiment's §6.)
   ([`experiments/KEPT_THINKING_2026_10_06.md`](experiments/KEPT_THINKING_2026_10_06.md)
   §1). What it buys over a replayed stretch is measured there, §2; the owner
   sets the turns.
-- **More lookups.** `about` (everything this mind holds about one person or
-  thing), `my_aims`, `promises`, `why_do_i_think` (the evidence under a
-  note), `retrace`/`what_happened` (one turn whole), `route_to`/`where_can_i`
-  (finding the way through what it knows of the place), keep-in-mind pins.
+- **More lookups -- three BUILT 2026-10-06** (`tests/test_place_and_evidence_lookups.py`):
+  `where_can_i(need)` names the mind's own remembered places that answer one
+  of the engine's needs (`place_purpose.AFFORDANCES`), best known and nearest
+  first, only where a WALKED way runs there (`place_options`, the en_route
+  firewall), up to `WHERE_LIMIT` (6, mine, unruled; the packet's felt-need
+  recall names two); `route_to(place)` traces the rooms in order to a place of
+  its own map over walked doorways, and says "no way you have walked" for a
+  place it only saw or was told of; `why_do_i_think(note_id)` shows what a
+  notebook note rests on, each fact that is a memory of its own named by
+  handle so `expand` can open it. Still open: `about` (everything this mind
+  holds about one person or thing), `my_aims`, `promises`,
+  `retrace`/`what_happened` (one turn whole), keep-in-mind pins.
 - **Disputes made precise.** The owner: "with the tool calls... disputes could
   potentially become surgically precise". A looked-up row joins the
-  read-back's memories, so a dispute can already name it; nothing yet invites
-  a mind to re-read before it disputes.
+  read-back's memories, so a dispute can already name it, and
+  `why_do_i_think` hands back the memories a note rests on by name (built
+  2026-10-06); nothing yet invites a mind to re-read before it disputes, and
+  no replay has measured whether disputes now cite what they re-read.
 - **Absorption and the budget.** Absorption narrows recall only (the owner,
   2026-10-05); whether it should also narrow the lookups is unruled, and the
   budget is flat until it is.

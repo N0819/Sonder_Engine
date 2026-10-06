@@ -4667,7 +4667,10 @@ def character_step(ctx, cid, nonce):
                 "elapsed_seconds": (_sim_clock or {}).get("elapsed_seconds")},
             ponder_inputs={**(memory_internal.get("ponder_inputs") or {}),
                            "person": _memory_person(sh), "view": view or "",
-                           "active_state": _memory_active, "here": _here_name})
+                           "active_state": _memory_active, "here": _here_name},
+            # Its OWN map (`place_graph`, written only from where it stood and
+            # what it saw) and where it stands -- never the scene.
+            place_inputs={"graph": stored_state.get("place_graph") or {}, "room": char_room})
         _loop = look_then_answer(role, _cprompt, _wire_payload, _lookups, budget=_tools_left,
                                  temperature=character_temperature(sh),
                                  sampler=character_sampler(sh) or None,
