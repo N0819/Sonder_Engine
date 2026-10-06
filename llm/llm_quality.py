@@ -13,6 +13,7 @@ from llm.providers import (
     role_candidate_count,
     LLMError,
     Aborted,
+    ToolsUnsupported,
 )
 from llm.schemas import (
     output_example,
@@ -751,6 +752,12 @@ def complete_validated_json(
     sampler=None,
     repair_attempts: int = 1,
     response_format=None,
+    history=None,
+    tools=None,
+    folded_payload=None,
+    first_raw=None,
+    first_started=None,
+    rung_system=None,
 ) -> dict:
     # None means "the configured ceiling" (providers._clamp_max_tokens). This
     # used to be a hardcoded 16000, which made max_output_tokens a one-way
@@ -797,8 +804,36 @@ def complete_validated_json(
     # what the rebuild owes is a valid one.
     json_schema = _step_json_schema(step_key)
 
-    try:
-        raw = chat_complete(
+    # A CLOSING ROUND after native tool rounds (`agents/character_tools.py`):
+    # the first attempt carries the rounds -- the assistant turns with their
+    # calls and reasoning, the tools' results -- with the tools offered and
+    # none chosen, so the model answers from where its thinking stopped, on
+    # the grammar. Every later rung resends `folded_payload` instead: the
+    # payload with what the tools returned folded in, so no rung can answer
+    # without what this mind looked up.
+    #
+    # `first_raw` is an answer the model already gave in a tool round that
+    # called nothing: it is validated -- and repaired -- as the first
+    # attempt's would be, rather than paid for twice. `history` beside it
+    # (no `tools`) is only what that round was sent, for the capture.
+    #
+    # The capture records what the first attempt was SENT -- the packet and
+    # the rounds before it (`tool_history`) -- never the folded packet, which
+    # only the later rungs send (one row per call, review 2026-09-07 A84).
+    #
+    # `rung_system` is the card every request after the first is sent -- the
+    # one without a section promising lookups, since no later rung offers
+    # tools; `first_started` is when the round that gave `first_raw` began,
+    # so its capture row carries the round's time and not the validation's.
+    _closing = ({"history": history, "tools": tools, "tool_choice": "none"}
+                if history and tools else {})
+    _sent = {**payload, "tool_history": list(history)} if history else payload
+    _sent_system = system
+    if first_raw is not None and first_started:
+        _capture_t0 = float(first_started)
+
+    def _first_call(**closing):
+        return chat_complete(
             role,
             system,
             user,
@@ -808,7 +843,36 @@ def complete_validated_json(
             candidate_offset=0,
             json_schema=json_schema,
             response_format=response_format,
+            **closing,
         )
+
+    try:
+        if first_raw is not None:
+            raw = str(first_raw)
+        else:
+            try:
+                raw = _first_call(**_closing)
+            except ToolsUnsupported as exc:
+                if not _closing:
+                    raise
+                # The route served the tool rounds and refused the closing
+                # one (the grammar beside the tools, or the history itself).
+                # Asked again as a plain request, with what the lookups
+                # brought folded into the packet -- a beat a single call
+                # would have survived is not lost to the rounds.
+                note_provider_exchange(
+                    role=role, system=system, payload=_sent, response="",
+                    ok=False, started=_capture_t0, error=str(exc))
+                note_step_warning(
+                    f"{step_key}: the closing round was refused ({str(exc)[:160]}); "
+                    "asked again without the rounds, what they found folded in")
+                if folded_payload is not None:
+                    payload = folded_payload
+                    user = json.dumps(payload, ensure_ascii=False)
+                if rung_system is not None:
+                    system = rung_system
+                _sent, _sent_system, _capture_t0 = payload, system, time.time()
+                raw = _first_call()
     except Aborted:
         raise
     except LLMError as exc:
@@ -819,8 +883,13 @@ def complete_validated_json(
         provider_errored = True
         last_provider_error = exc
         note_provider_exchange(
-            role=role, system=system, payload=payload, response="",
+            role=role, system=_sent_system, payload=_sent, response="",
             ok=False, started=_capture_t0, error=str(exc))
+    if folded_payload is not None:
+        payload = folded_payload
+        user = json.dumps(payload, ensure_ascii=False)
+    if rung_system is not None:
+        system = rung_system
 
     parse_error = None
 
@@ -848,7 +917,7 @@ def complete_validated_json(
 
     if not provider_errored:
         note_provider_exchange(
-            role=role, system=system, payload=payload, response=raw,
+            role=role, system=_sent_system, payload=_sent, response=raw,
             ok=bool(report.valid), started=_capture_t0,
             error="" if report.valid else "; ".join(report.errors[:3]))
 

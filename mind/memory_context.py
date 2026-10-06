@@ -781,6 +781,16 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     return {
         # Host-only registry. character.py removes it before serialization.
         "_internal": {
+            # What a ponder asks with, for a lookup made mid-call
+            # (`agents/character_tools.Lookups.ponder`): the names this mind
+            # knows, what is unsettled for it, and how many a ponder keeps
+            # at this mind's attention -- the lane's own values, never
+            # recomputed.
+            "ponder_inputs": {
+                "known_names": list(known_names), "known": sorted(known),
+                "unsettled": list(unresolved_items),
+                "limit": min(PONDER_LIMIT, max(4, int(recall_limit))),
+            },
             "row_ids": row_ids,
             "retrieved_ids": [
                 m.get("id") for m in (*recent, *recalled, *pondered)

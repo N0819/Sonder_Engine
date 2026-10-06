@@ -1165,7 +1165,7 @@ def _concat_dedup(*value_lists):
 #: and again in round 1 came back twice, which is what `access_count` counted
 #: while `search_memories` still made the write itself. Deduping it here
 #: would quietly change the number the replay tools read.
-_MERGE_APPEND_FIELDS = ("sequence", "recalled_memory_ids")
+_MERGE_APPEND_FIELDS = ("sequence", "recalled_memory_ids", "tool_calls")
 
 #: Unioned, order-preserving, exact duplicates dropped (a re-emitted identical
 #: update across rounds). Each entry is an independent piece of work, so no
@@ -1274,7 +1274,7 @@ _MERGE_LATEST_WINS_FIELDS = (
 _MERGE_NON_SCHEMA_KEYS = frozenset({
     "stance_updates", "inference_updates", "ponder", "speech_volume",
     "name", "char_id", "unbidden_probe", "recalled_memory_ids",
-    "_barren_beat", "_affect_pass",
+    "_barren_beat", "_affect_pass", "tool_calls",
 })
 
 
@@ -3854,6 +3854,7 @@ def _agent_json(
     max_tokens=None,   # the configured ceiling; see complete_validated_json
     sampler=None,
     response_format=None,  # this call's own; see providers._role_json_mode
+    **tool_closing,
 ):
     """The STRICT validated-JSON path every state-mutating pipeline stage
     must use for its primary LLM call. complete_validated_json parses
@@ -3866,6 +3867,12 @@ def _agent_json(
     return value are warning-only re-normalization of already-validated
     output, NOT the guard -- do not downgrade a stage to jparse or a bare
     chat_complete for output that reaches commit.py.
+
+    `tool_closing` (`history`, `tools`, `folded_payload`, `first_raw`,
+    `first_started`, `rung_system`) is a character's closing round after it
+    looked things up (`agents/character_tools.py`):
+    passed on only when a tool loop ran, so every other caller -- and every
+    test stub of this seam -- sees exactly the call it always did.
     """
     return complete_validated_json(
         role=role,
@@ -3877,6 +3884,9 @@ def _agent_json(
         sampler=sampler,
         repair_attempts=1,
         response_format=response_format,
+        **{k: v for k, v in tool_closing.items()
+           if k in ("history", "tools", "folded_payload", "first_raw", "first_started",
+                    "rung_system") and v is not None},
     )
 
 def jparse(text, fallback_key="text", required=False):

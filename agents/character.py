@@ -3884,6 +3884,13 @@ def character_step(ctx, cid, nonce):
     # the optional unbidden lane need the finished, byte-identical context.
     memory_context = memory_context_future.result()
     memory_internal = memory_context.get("_internal") or {}
+    # WHAT A MIND LOOKED UP EARLIER THIS BEAT STAYS WITH IT for the rest of
+    # the beat (`agents/character_tools.py`): its own past, already read, in
+    # front of it again on its next micro-round -- the budget is the beat's,
+    # and so is what it bought.
+    _carried_lookups = (ctx._extra.get("_looked_up") or {}).get(str(cid)) or []
+    if _carried_lookups:
+        memory_context["looked_up"] = [dict(r) for r in _carried_lookups]
     _unbidden_mem_id = None
     _unbidden_mem_ref = None
     if _unbidden_fire:
@@ -4578,6 +4585,13 @@ def character_step(ctx, cid, nonce):
     _holding = character_bare.holding_from(
         character_name(sh), sh, payload, observations, memory_context, active,
         language=ctx.language, rupture_open=_window_open, notebook_view=_nb_view)
+    # What the notebook lookup reads besides the store -- the concerns and
+    # projects the page was chosen from -- taken before `with_notebook`
+    # replaces them in the payload with the page itself.
+    _nb_self = payload.get("self") if isinstance(payload.get("self"), dict) else {}
+    _nb_active = _nb_self.get("active_state") if isinstance(_nb_self.get("active_state"), dict) else {}
+    _nb_kept = {"concerns": list(_nb_active.get("active_concerns") or []),
+                "projects": list(_nb_self.get("projects") or [])}
     payload = character_bare.with_notebook(payload, _nb_view)
     # Kept for the read-back: the notes in play are checked before the call,
     # against what reached this mind, before its own reply can restate them.
@@ -4593,11 +4607,32 @@ def character_step(ctx, cid, nonce):
         # A copy: `memory_context` itself is what grounding reads.
         payload["memory"] = {**(payload.get("memory") or {}),
                              "may_mean_otherwise": [m["text"] for m in _disputed]}
+    # LOOKING BACK MID-THOUGHT (`agents/character_tools.py`, the owner,
+    # 2026-10-05): a role the `character_tools` setting names, on a route that
+    # carries tool rounds, with lookups left this beat, may search its own
+    # memory and notebook while it decides. The card says so in a section of
+    # its own, in the one system prompt every round sends -- the prefix the
+    # provider caches across rounds.
+    from .character_tools import TOOL_BUDGET, route_takes_tools, tools_enabled
+    _tools_on, _tools_left, _tool_spend = False, 0, None
+    if tools_enabled(role):
+        _tool_spend = ctx._extra.setdefault("_tool_spend", {})
+        _tools_left = TOOL_BUDGET - int(_tool_spend.get(str(cid), 0) or 0)
+        if _tools_left > 0:
+            _tools_on = route_takes_tools(role)
+            if not _tools_on:
+                ctx.add_warning(f"character {character_name(sh)}: lookups are on for {role}, "
+                                "but its route takes no tool rounds; one call as before")
+    _cmodules = character_bare.modules_for(payload, disputed=_disputed, rupture_open=_window_open,
+                                           rupture_forced=_rupture_forced)
     _cprompt = character_bare.prompt(
-        character_name(sh),
-        character_bare.modules_for(payload, disputed=_disputed, rupture_open=_window_open,
-                                   rupture_forced=_rupture_forced),
-        language=ctx.language)
+        character_name(sh), _cmodules + (["lookups"] if _tools_on else []),
+        language=ctx.language,
+        fill={"lookups_left": _tools_left} if _tools_on else None)
+    # The card without the lookups section, for every request that offers no
+    # tools: a fallback single call, a plain closing call, every repair rung.
+    _cprompt_plain = (character_bare.prompt(character_name(sh), _cmodules, language=ctx.language)
+                      if _tools_on else _cprompt)
 
     # The model needs the evidence rows and their provenance, not database- or
     # observer-sized identifiers. The bare reply cites nothing -- the decision
@@ -4609,20 +4644,82 @@ def character_step(ctx, cid, nonce):
     # order, judgements as words, the rest dropped.
     _wire_payload = character_bare.without_engine_numbers(_wire_payload)
 
+    _lookups, _loop, _loop_record = None, None, {}
+    if _tools_on:
+        from .character_tools import Lookups, look_then_answer
+        _lookups = Lookups(
+            chat_id=chat.id, char_id=cid, turn_idx=ctx.turn.idx, bank=_memory_bank,
+            handles=_handles, memory_context=memory_context, memory_internal=memory_internal,
+            holding=_holding, language=ctx.language,
+            notebook_inputs={
+                "state": _recognized_state,
+                "concerns": _nb_kept["concerns"], "projects": _nb_kept["projects"],
+                "elapsed_seconds": (_sim_clock or {}).get("elapsed_seconds")},
+            ponder_inputs={**(memory_internal.get("ponder_inputs") or {}),
+                           "person": _memory_person(sh), "view": view or "",
+                           "active_state": _memory_active, "here": _here_name})
+        _loop = look_then_answer(role, _cprompt, _wire_payload, _lookups, budget=_tools_left,
+                                 temperature=character_temperature(sh),
+                                 sampler=character_sampler(sh) or None,
+                                 language=ctx.language, record=_loop_record)
+        _tool_spend[str(cid)] = int(_tool_spend.get(str(cid), 0) or 0) + int(_loop_record.get("calls") or 0)
+        if _loop is None:
+            ctx.add_warning(f"character {character_name(sh)}: no lookups this beat "
+                            f"({_loop_record.get('fallback') or 'the route refused'}); one call as before")
+        elif _loop_record.get("fallback"):
+            ctx.add_warning(f"character {character_name(sh)}: the lookups stopped after "
+                            f"{_loop_record.get('calls', 0)} ({_loop_record['fallback']}); "
+                            "answered in one call, what they found folded in")
+    # ONE call site, as before the lookups: each path below only chooses the
+    # card, the packet and the closing it is made with (`test_no_quality_redo`).
+    _send_system, _send_payload, _closing = _cprompt_plain, _wire_payload, {}
+    if _loop is not None:
+        # What the lookups delivered is this mind's from here on: walked for
+        # citations, offered to the read-back, counted as reached -- and
+        # folded into the packet any repair rung resends.
+        _lookups.register(_holding)
+        _folded = _lookups.folded(_wire_payload)
+        _looked = ctx._extra.setdefault("_looked_up", {}).setdefault(str(cid), [])
+        _have = {str(r.get("memory_ref") or "") for r in _looked}
+        _looked.extend(dict(r) for r in _lookups.delivered
+                       if str(r.get("memory_ref") or "") not in _have)
+        if _loop.get("answer"):
+            # `history` here is only what the answering round was sent, for
+            # the capture; with no `tools` beside it nothing is re-asked.
+            _closing = {"first_raw": _loop["answer"], "folded_payload": _folded,
+                        "history": _loop.get("history") or None,
+                        "first_started": _loop.get("answer_started"),
+                        "rung_system": _cprompt_plain}
+        elif _loop.get("history"):
+            _closing = {"history": _loop["history"], "tools": _loop["tools"],
+                        "folded_payload": _folded, "rung_system": _cprompt_plain}
+        else:
+            _closing = {}
+        _send_system = _cprompt if _closing else _cprompt_plain
+        _send_payload = _wire_payload if _closing else (_folded or _wire_payload)
     out = _agent_json(
         role,
         "character_bare",
-        _cprompt,
-        _wire_payload,
+        _send_system,
+        _send_payload,
         temperature=character_temperature(sh),
         sampler=character_sampler(sh) or None,
+        **_closing,
     )
     from llm.providers import last_reasoning
     # The model's own thinking, when its provider returned it, is read by this
     # mind's decision-model request and by nothing else: it never reaches
     # another mind or the page, and only typed answers -- choices among rows
     # this mind was given, and grades -- leave it.
-    _holding.reasoning = str(last_reasoning.get() or "")
+    _trace = str(last_reasoning.get() or "")
+    if _loop is not None:
+        # Every round's thinking, the closing round's first: the read-back
+        # keeps a trace's head, and the variant stores the whole of it.
+        _rounds_trace = str(_loop.get("reasoning") or "")
+        _trace = _rounds_trace if _loop.get("answer") else "\n\n".join(
+            t for t in (_trace, _rounds_trace) if t)
+        last_reasoning.set(_trace or None)
+    _holding.reasoning = _trace
     _answers = None
     _read_back_error = ""
     for _attempt in range(character_bare.READ_BACK_ATTEMPTS):
@@ -4814,6 +4911,10 @@ def character_step(ctx, cid, nonce):
     out["recalled_memory_ids"] = [
         i for i in (memory_internal.get("memory_access_ids") or [])
         if i is not None]
+    if _lookups is not None:
+        # What this mind looked up, and how the rounds went: kept with the
+        # step, so a reroll, a replay and the trace read it back.
+        out["tool_calls"] = list(_lookups.calls) + [{"rounds": _loop_record}]
     if _asked:
         # What the heard-question check sent to the ponder lane this beat.
         out["asked_ponder"] = dict(_asked)

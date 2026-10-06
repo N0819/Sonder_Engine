@@ -1139,6 +1139,14 @@ PERCEPTION_STEP_KEYS = (
 #:   "in-stage" or "diagnostic" -- it never has to cross a stage boundary, or
 #:                its absence is a legible "this beat did not run it".
 SIDE_CHANNELS = {
+    "_looked_up": "in-stage: what each mind looked up this beat "
+                  "(`character_tools`), its own past, carried into its next "
+                  "call of the beat. A resume starts it empty -- the rows are "
+                  "still the mind's, recall may bring them again",
+    "_tool_spend": "in-stage: the lookups each mind spent this beat "
+                   "(`character_tools`). A resume starts it at zero, so a "
+                   "resumed stage may spend its five again -- a bound on cost, "
+                   "never on what a mind may know",
     "_player_room": "rebuilt: the room each perception stage resolved, on its "
                     "own step content (`perception._stage_player_room`)",
     "_composer_turn_ledger": "rebuilt: the perception step's own "

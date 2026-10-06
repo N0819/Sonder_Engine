@@ -373,13 +373,17 @@ def modules_for(payload, *, disputed=(), rupture_open=False, rupture_forced=Fals
     return out
 
 
-def prompt(name, modules, language=None):
-    """The bare card for one mind: its core, then each gated section."""
+def prompt(name, modules, language=None, fill=None):
+    """The bare card for one mind: its core, then each gated section. `fill`
+    names the values a section states from the engine's own count (the
+    lookups left this beat), never a number written into the pack."""
     text = bare_character_prompt(language)
     extra = [character_bare_module(m, language) for m in modules]
     if extra:
         head, sep, tail = text.partition("\n" + _output_line(text))
         text = (head + "\n\n" + "\n\n".join(extra) + sep + tail) if sep else text + "\n\n" + "\n\n".join(extra)
+    for key, value in (fill or {}).items():
+        text = text.replace("{" + key + "}", str(value))
     return text.replace("{name}", name)
 
 

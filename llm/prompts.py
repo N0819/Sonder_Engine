@@ -393,6 +393,13 @@ def character_jev_options(option_set, language=None):
             _prompt_card(language)["character_jev"]["options"][option_set].items()}
 
 
+def character_tools_text(name, language=None):
+    """One description of the lookups a character may make mid-thought
+    (`character_tools.<name>`, `agents/character_tools.tool_specs`): the
+    tools' names and parameters are protocol, what they say the pack's."""
+    return str(_prompt_card(language)["character_tools"][name])
+
+
 def character_bare_module(name, language=None):
     """One gated section of the bare character card (`character_bare.<name>`):
     shipped only when a detector says the moment calls for it."""

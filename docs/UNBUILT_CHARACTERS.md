@@ -1257,6 +1257,79 @@ instrument and it has no conduct arm -- the same standard that let the
 `_RECALL_LIMIT` change through. Cheap to revisit: `search_memories` already
 accepts `aspects`, so this is a caller-side change with no plumbing.
 
+<a id="unbuilt-2-26"></a>
+
+### 2.26 A mind looks back while it decides -- step 1 built, off by default
+
+The owner, 2026-10-05: "making ponder and notebook reading a tool call that
+retrieves immediate results with a budget, writing being part of the output"
+-- "I want the characters to be more capable as agents" -- and "We can have
+tool calls in the reasoning block right? That could give us a lot of room we
+haven't had before". Then: "Memory expansion, in which a character can choose
+to expand a memory of interest ... so it can choose to recall
+conversations", "5 before 5 with a budget of 5 tool calls per character
+beat", and a partner tool "to remember 5 before or after a memory span".
+
+**Built (`agents/character_tools.py`, `tests/test_character_tools.py`,
+`tests/test_native_tool_rounds.py`).** Native tool calls in the provider
+layer, and four read-only lookups a mind may call mid-thought: `ponder`,
+`notebook`, `expand`, `continue`. Every lookup reads through
+`visible_memory_rows`; what comes back is delivered as recall's own rows are;
+writes stay in the answer. Behind the setting `character_tools` (a comma list
+of roles; unset on every install, so nothing changes until a role is named)
+and `providers.tools_supported`. The evidence is
+[`experiments/CHARACTER_LOOKUPS_2026_10_05.md`](experiments/CHARACTER_LOOKUPS_2026_10_05.md).
+
+**The caps, all named to the owner and all the owner's to move:**
+`TOOL_BUDGET` 5 lookups per mind per beat, counted across an interaction
+loop's micro-rounds (the owner's five); `SPAN_TURNS` 5 turns each side of an
+expansion and per `continue` (the owner's five); `TOOL_WALL_SECONDS` 60 --
+mine, unruled: the closing round always runs after it, and on the owner's
+route a round that only calls took 6 s and an answering round 18-43 s, so the
+wall allows two or three rounds; `RESULT_CHARS` 16,000 characters of one
+lookup's result -- mine, unruled: 3,188 of 5,489 eleven-turn spans on the
+owner's banks run past it, so an expansion keeps the memory asked about and
+the turns nearest it, and says which side holds more.
+
+**Measured** ([the experiment](experiments/CHARACTER_LOOKUPS_2026_10_05.md)):
+nine real calls where recall had already done its work -- no lookup made, no
+cost (23 s a call against 27 s under the grammar); and two beats where recall
+was made to miss -- the mind with no lookups invented its answers, the mind
+with them answered one question right from two `ponder`s and stalled honestly
+on the other. Two behaviours to watch, both the model's choice: it may act
+out searching in the fiction instead of calling `ponder` (1 of 2 beats), and
+it read the earliest memory a ponder returned as the earliest there is. The
+one wrong answer was a row the ponder could not reach: written before the mind
+knew her name, on a bank whose rows predate `memories.about` (§6.17's untagged
+rows) -- a backfill would reach it for the lookups and the next-beat ponder
+alike.
+
+**Not built, in the order the owner agreed:**
+
+- **Preserved reasoning.** "preserving the reasoning block in context for
+  about 5 turns ... chronologically ordered with recent episodes". The card's
+  context sentences say today's truth -- "Your reasoning does not carry over"
+  -- and must change in the same commit as the behaviour.
+- **More lookups.** `about` (everything this mind holds about one person or
+  thing), `my_aims`, `promises`, `why_do_i_think` (the evidence under a
+  note), `retrace`/`what_happened` (one turn whole), `route_to`/`where_can_i`
+  (finding the way through what it knows of the place), keep-in-mind pins.
+- **Disputes made precise.** The owner: "with the tool calls... disputes could
+  potentially become surgically precise". A looked-up row joins the
+  read-back's memories, so a dispute can already name it; nothing yet invites
+  a mind to re-read before it disputes.
+- **Absorption and the budget.** Absorption narrows recall only (the owner,
+  2026-10-05); whether it should also narrow the lookups is unruled, and the
+  budget is flat until it is.
+- **Other tiers and routes.** Only roles the setting names; `character_mid`
+  and `character_bg` were never measured. The reasoning passback key
+  (`reasoning`) was probed on NanoGPT alone; the async provider twin has no
+  tool path.
+- **Caching needs the owner's opt-in.** Every round after the first resends
+  the ~20,000-token packet; the replica hint (`cache_affinity_allow`) is what
+  lets the provider read it from cache, and it is unset on the owner's
+  install.
+
 ## 6. Design-note residuals
 
 <a id="unbuilt-6-6"></a>

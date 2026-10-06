@@ -399,6 +399,7 @@ Not scheduled and not committed to a phase. See the
 - [§2.23 — Four of the seven memory kinds cannot be minted](UNBUILT_CHARACTERS.md#unbuilt-2-23)
 - [§2.24 — A superseded belief is read before its correction](UNBUILT_CHARACTERS.md#unbuilt-2-24)
 - [§2.25 — Two retrieval ideas measured, one rejected, one parked](UNBUILT_CHARACTERS.md#unbuilt-2-25)
+- [§2.26 — A mind looks back while it decides -- step 1 built, off by default](UNBUILT_CHARACTERS.md#unbuilt-2-26)
 
 **6. Design-note residuals**
 

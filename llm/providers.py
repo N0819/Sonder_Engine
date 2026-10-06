@@ -510,6 +510,42 @@ class LLMError(RuntimeError):
         self.retryable = retryable
 
 
+class ToolsUnsupported(LLMError):
+    """This route cannot carry native tool calls -- an Anthropic or CLI
+    backend, or a host whose 400 to a `tools` request named the tools
+    (`_names_tools`). Never retried: a caller with a single-call path falls
+    back to it, visibly."""
+
+    def __init__(self, message: str):
+        super().__init__(message, 0, False)
+
+
+#: (provider id, model) pairs whose 400 to a `tools` request named the tools,
+#: in this process: asked again they would only refuse again, and each
+#: refusal costs the beat a round trip before its fallback. A 400 about
+#: anything else is that beat's failure and is never remembered.
+_NO_TOOLS = set()
+
+
+def _names_tools(text):
+    """Whether a provider's refusal says it was the tools it refused -- the
+    request's own field names (`tools`, `tool_choice`, `functions`), as an
+    OpenAI-compatible host reports a field it does not take."""
+    lowered = str(text or "").lower()
+    return "tool" in lowered or "function" in lowered
+
+
+def tools_supported(prov, model) -> bool:
+    """Whether a native tool round can go to this provider and model: an
+    OpenAI-style kind that has not refused `tools` in this process. The
+    Anthropic dialect (tool_use blocks, signed thinking) and the CLI
+    backend (which disables tools and implements its own schema as one)
+    take no tool rounds here."""
+    if _prov_field(prov, "kind") in ("anthropic", CLAUDE_CLI_KIND):
+        return False
+    return (_prov_field(prov, "id"), str(model or "")) not in _NO_TOOLS
+
+
 #: How many reasoning-only replies from one model before the role's next
 #: candidate is tried instead. Two, because the first one buys the retry that
 #: turns thinking off and the second proves that lever was not the one -- and
@@ -1383,13 +1419,15 @@ def _disabled_reasoning_refused(exc, body):
                  or body.get("reasoning_effort") == "none"))
 
 
-def _sse_with_reasoning_fallback(url, headers, body, guarded, prov, role, model):
+def _sse_with_reasoning_fallback(url, headers, body, guarded, prov, role, model, turn=None):
     """The streaming send, retried ONCE at `low` when the provider refuses a
     request with reasoning disabled; the pair is remembered so later calls
     ask for `low` directly. Any other failure is re-raised unchanged into the
-    caller's own recovery ladder."""
+    caller's own recovery ladder. `turn` is a tool round's out-dict
+    (`_sse_openai`), passed only when set."""
+    _turn = {"turn": turn} if turn is not None else {}
     try:
-        return _sse_openai(url, headers, dict(body), guarded(), role=role, model=model)
+        return _sse_openai(url, headers, dict(body), guarded(), role=role, model=model, **_turn)
     except LLMError as exc:
         if not _disabled_reasoning_refused(exc, body):
             raise
@@ -1397,7 +1435,7 @@ def _sse_with_reasoning_fallback(url, headers, body, guarded, prov, role, model)
         body.pop("reasoning", None)
         body.pop("reasoning_effort", None)
         _apply_reasoning_effort(body, prov, role, effort_override="low")
-        return _sse_openai(url, headers, dict(body), guarded(), role=role, model=model)
+        return _sse_openai(url, headers, dict(body), guarded(), role=role, model=model, **_turn)
 
 
 def _apply_reasoning_effort(body, prov, role, effort_override=None):
@@ -2843,7 +2881,57 @@ class _ActivityClock:
                 "provider silent for %.0fs (%s)" % (idle, seen), 0, True)
 
 
-def _sse_openai(url, headers, body, sink, role=None, model=None):
+def _merge_tool_call_deltas(calls, pieces):
+    """Fold one delta's `tool_calls` into `calls` ({id, name, arguments}
+    slots) by index -- whole on NanoGPT (one delta a call, probed
+    2026-10-05), in argument chunks on hosts that stream them -- and return
+    the argument text the delta carried, which is activity to the silence
+    clock."""
+    seen = ""
+    for piece in pieces or ():
+        if not isinstance(piece, dict):
+            continue
+        idx = piece.get("index")
+        pid = str(piece.get("id") or "")
+        fn = piece.get("function") if isinstance(piece.get("function"), dict) else {}
+        # By id first: some hosts number every whole call `index: 0`, so an
+        # index whose slot already holds a DIFFERENT call is a new call, not
+        # a continuation. A piece with neither id nor index continues the
+        # last call unless it names a function of its own.
+        slot = next((c for c in calls if pid and c["id"] == pid), None)
+        if slot is None and isinstance(idx, int) and idx >= 0:
+            if idx < len(calls):
+                if not (pid and calls[idx]["id"] and calls[idx]["id"] != pid):
+                    slot = calls[idx]
+            else:
+                while len(calls) <= idx:
+                    calls.append({"id": "", "name": "", "arguments": ""})
+                slot = calls[idx]
+        if slot is None:
+            if pid or fn.get("name") or not calls or isinstance(idx, int):
+                calls.append({"id": "", "name": "", "arguments": ""})
+            slot = calls[-1]
+        if pid and not slot["id"]:
+            slot["id"] = pid
+        if fn.get("name") and not slot["name"]:
+            slot["name"] = str(fn["name"])
+        args = fn.get("arguments")
+        if isinstance(args, (dict, list)):
+            args = json.dumps(args, ensure_ascii=False)
+        if args:
+            slot["arguments"] += str(args)
+            seen += str(args)
+    return seen
+
+
+def _sse_openai(url, headers, body, sink, role=None, model=None, turn=None):
+    """`turn`, when given, is filled with the round: its content, reasoning,
+    tool calls, finish reason, usage and served model -- and a round that
+    called tools returns its (often empty) content instead of raising the
+    reasoning-only failure, which is the normal shape of a tool round."""
+    if turn is not None:
+        turn.clear()
+    calls = []
     body["stream"] = True
     _note_request_shape(body)
     # Ask for a final usage-bearing chunk -- without this, streamed
@@ -2927,7 +3015,8 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
             if d:
                 text += d
                 sink(d)
-            clock.tick(reasoning=_r, content=d or "")
+            _args = _merge_tool_call_deltas(calls, _delta.get("tool_calls"))
+            clock.tick(reasoning=_r, content=(d or "") + _args)
             if between is not None and clock.begun:
                 _narrow_read_deadline(r, between)
                 between = None
@@ -2938,6 +3027,15 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
         last_reasoning.set(reasoning or None)
     except Exception:
         pass
+    if turn is not None:
+        turn.update(content=text, reasoning=reasoning,
+                    tool_calls=[c for c in calls if c["name"]],
+                    finish_reason=last_finish_reason.get(), usage=usage or {})
+        # The round's own record of who answered it -- not a logging path
+        # (`_log_usage` is, and `test_served_model_visibility` counts those).
+        turn["served"] = served
+    if any(c["name"] for c in calls):
+        return text
     return _stream_answer(text, reasoning, url, model, body)
 
 def _sse_anthropic(base, headers, body, sink, role=None, model=None):
@@ -3309,6 +3407,10 @@ def chat_complete(
     json_schema=None,
     reasoning_effort=None,
     response_format=None,
+    history=None,
+    tools=None,
+    tool_choice=None,
+    turn=None,
 ):
     """``reasoning_effort`` is a per-CALL override of the role's configured
     effort (`reasoning_effort_for`): "off" for a JSON-shaped utility call
@@ -3318,8 +3420,19 @@ def chat_complete(
     in charge, exactly as before the parameter existed.
 
     ``response_format`` is the same for the role's format
-    (`response_format_for`); see `_role_json_mode` for who passes one."""
+    (`response_format_for`); see `_role_json_mode` for who passes one.
+
+    ``history``, ``tools``, ``tool_choice`` and ``turn`` are a native tool
+    round's (`agents/character_tools.py`): the messages after the user's
+    (assistant turns with their tool calls and reasoning, the tools'
+    results), the tools offered, and an out-dict the stream fills with the
+    round's content, reasoning and tool calls. Passed on only when set, so a
+    caller that sends none reaches `_chat_complete_once` exactly as before.
+    A route that cannot carry them raises `ToolsUnsupported`."""
     _check_cancel()
+    _tool_kwargs = {k: v for k, v in (("history", history), ("tools", tools),
+                                       ("tool_choice", tool_choice), ("turn", turn))
+                    if v is not None}
     # Final, universal boundary: even repair prompts and utility calls that do
     # not originate in prompts.py must know that free text is localized while
     # JSON/schema protocol remains canonical English.
@@ -3380,6 +3493,7 @@ def chat_complete(
                 json_schema=json_schema,
                 reasoning_effort_override=reasoning_effort_override,
                 response_format=response_format,
+                **_tool_kwargs,
             )
         except Aborted:
             raise
@@ -3397,6 +3511,13 @@ def chat_complete(
             error = _classify_error(exc)
             last_error = error
 
+            if isinstance(error, ReasoningBudgetExhausted) and tools:
+                # A TOOL ROUND THAT THOUGHT AND SAID NOTHING ends the lookups,
+                # not the beat (`agents/character_tools.py`): the caller falls
+                # back to the single call, which has this whole remedy. Retried
+                # here, its reasoning-off resend is a request some routes 400
+                # -- NanoGPT's GLM takes only high or max (d4b5dabb).
+                raise error
             if isinstance(error, ReasoningBudgetExhausted):
                 reasoning_only += 1
                 reasoning_effort_override = "off"
@@ -3599,6 +3720,10 @@ def _chat_complete_once(
     json_schema=None,
     reasoning_effort_override=None,
     response_format=None,
+    history=None,
+    tools=None,
+    tool_choice=None,
+    turn=None,
 ):
     _check_cancel()
     # Clear before the request, not after: every path below either records a
@@ -3609,6 +3734,14 @@ def _chat_complete_once(
     last_request_shape.set(None)
 
     prov, model, cfg = resolved or resolve_role(role)
+    # A TOOL ROUND NEVER REACHES A BACKEND THAT WOULD DROP IT: the two
+    # branches below return before the OpenAI-style body exists, and
+    # without this a round's history and tools would vanish and the model
+    # answer as though no tool had ever run.
+    if (tools or history) and not tools_supported(prov, model):
+        raise ToolsUnsupported(
+            f"{_prov_field(prov, 'name') or _prov_field(prov, 'kind')}: "
+            f"{model} takes no tool rounds here")
     json_mode, json_schema = _role_json_mode(role, json_mode, json_schema, response_format)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
@@ -3709,8 +3842,11 @@ def _chat_complete_once(
                 "role": "user",
                 "content": user,
             },
-        ],
+        ] + list(history or ()),
     }
+    if tools:
+        body["tools"] = tools
+        body["tool_choice"] = tool_choice or "auto"
     body.update(merged)
     _apply_provider_routing(body, prov)
     _apply_cache_affinity(body, prov, role)
@@ -3725,8 +3861,27 @@ def _chat_complete_once(
     if streaming:
         try:
             out = _sse_with_reasoning_fallback(
-                url, headers, body, guarded, prov, role, model)
+                url, headers, body, guarded, prov, role, model,
+                **({"turn": turn} if turn is not None else {}))
         except (LLMError,) + _RETRYABLE_NETWORK as exc:
+            # A TOOLS-BEARING BODY NEVER CLIMBS THE FORMAT LADDER. A 400 here
+            # may be the tools, and the ladder would read it as the grammar's
+            # fault and blacklist json_schema for this model in EVERY role --
+            # and a stall on a closing round's long transcript would suspend
+            # it. Refused, the route is remembered and the caller falls back;
+            # anything else is the outer retry loop's.
+            if "tools" in body:
+                # Remembered for the process only when the refusal names what
+                # it refused: a 400 about anything else -- an effort this
+                # model will not take, a malformed message -- is this beat's
+                # failure, and the next beat may look things up again.
+                if isinstance(exc, LLMError) and exc.status_code == 400 \
+                        and _names_tools(str(exc)):
+                    _NO_TOOLS.add((_prov_field(prov, "id"), str(model or "")))
+                    raise ToolsUnsupported(
+                        f"{_prov_field(prov, 'name') or _prov_field(prov, 'kind')}: "
+                        f"{model} refused tools ({str(exc)[:160]})") from exc
+                raise
             # A SCHEMA THAT IS NEVER ANSWERED IS A SCHEMA THAT WAS REJECTED.
             #
             # This ladder existed for a provider that says 400. Some do not:

@@ -326,6 +326,10 @@ modes each one documents.
   wording, how many older memories to ask about, the question replayed on two
   real banks, and how often recall brings a successor in; scripts in
   `tools/concept_lab/links_*.py`.
+- [`CHARACTER_LOOKUPS_2026_10_05.md`](experiments/CHARACTER_LOOKUPS_2026_10_05.md)
+  — a mind looking back while it decides, measured before anyone plays on it:
+  the route probed raw, three stored beats replayed with the lookups off and
+  on, and new turns that ask a long-running mind about its distant past.
 
 ## `archive/` — superseded
 

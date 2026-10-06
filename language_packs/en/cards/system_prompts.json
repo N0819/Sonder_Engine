@@ -889,6 +889,9 @@
     },
     "ways_on": {
       "$text": "character_bare/ways_on.txt"
+    },
+    "lookups": {
+      "$text": "character_bare/lookups.txt"
     }
   },
   "character_jev": {
@@ -1296,5 +1299,21 @@
         "separate": "It is a different thought."
       }
     }
+  },
+  "character_tools": {
+    "ponder": "Search your own long-term memory. What comes back is yours, from before this moment.",
+    "ponder_query": "What you are trying to remember, in your own words.",
+    "notebook": "Everything you keep: what is on your mind, what you are about, what you make of people and things, your reminders.",
+    "expand": "Open one of your memories into the turns around it, in the order they happened.",
+    "continue": "Read on from one of your memories, or further back before it.",
+    "memory_ref": "The memory's memory_ref, as you were given it.",
+    "direction": "before: what came before it; after: what came after it.",
+    "no_such_memory": "no memory of yours goes by that name",
+    "needs_a_query": "a ponder needs something to look for",
+    "before_or_after": "continue reads before or after",
+    "no_such_lookup": "there is no lookup by that name",
+    "could_not_be_made": "that lookup could not be made",
+    "no_lookups_left": "no lookups left this turn",
+    "unreadable_arguments": "the arguments could not be read"
   }
 }

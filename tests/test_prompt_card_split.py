@@ -49,7 +49,10 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 262   # +1 (2026-10-05): `character_jev.memory_supersedes`,
+PART_COUNT = 263   # +1 (2026-10-05): `character_bare.lookups`, the section a mind
+                   # that may look things up mid-thought is shown
+                   # (`agents/character_tools.py`).
+                   # +1 (2026-10-05): `character_jev.memory_supersedes`,
                    # "does the newer memory change something the older one
                    # states as true?" (`mind/memory_links.py`).
                    # +2 (2026-10-03): `jev_questions.entities__link` and

@@ -175,6 +175,49 @@ def view(state, turn_idx, *, present=(), texts=(), absorption=0.0, elapsed_secon
     return out
 
 
+def full_view(state, turn_idx, *, elapsed_seconds=None, concerns=(), projects=()):
+    """Everything this mind keeps, uncapped: the notebook it looks through on
+    purpose (`agents/character_tools.py`, the `notebook` lookup), where `view`
+    is the bounded page the moment shows it unasked -- every concern, every
+    project, every note about people and things it still holds at all (by
+    subject, surest first), every reminder however old. Same sections, same
+    ids, so what it strikes or changes from here routes as from the view."""
+    state = state or {}
+    out = {}
+    held = [t for t in (concern_text(c) for c in concerns or []) if t]
+    if held:
+        out["on_your_mind"] = [{"id": concern_id(t), "note": _text(t)} for t in held]
+    about = [{"id": str(p.get("id") or ""), "note": _text(p.get("project")),
+              **({"until": _text(p["satisfied_when"])} if str(p.get("satisfied_when") or "").strip() else {}),
+              **({"on_trial": True} if p.get("probation") else {})}
+             for p in projects or [] if isinstance(p, dict) and str(p.get("project") or "").strip()]
+    if about:
+        out["what_you_are_about"] = about
+    notes = []
+    for subject, model in sorted((state.get("mind_models") or {}).items(), key=lambda kv: str(kv[0])):
+        held_notes = []
+        for hyp in (model or {}).get("hypotheses") or []:
+            if not isinstance(hyp, dict) or not str(hyp.get("claim") or "").strip():
+                continue
+            live = tom._live_confidence(hyp, turn_idx, elapsed_seconds)
+            if live <= 0.0:
+                continue
+            held_notes.append((live, hyp))
+        for live, hyp in sorted(held_notes, key=lambda lh: -lh[0]):
+            notes.append({"id": tom.note_id(subject, hyp), "about": str(subject),
+                          "note": _text(hyp.get("claim")), "sure": sure_word(live),
+                          "kind": tom._kind_or_default(hyp.get("kind"))})
+    if notes:
+        out["people_and_things"] = notes
+    keep = [{"id": r["id"], **({"about": r["about"]} if r.get("about") else {}),
+             "note": _text(r["note"])}
+            for r in state.get("notebook") or []
+            if isinstance(r, dict) and r.get("id") and str(r.get("note") or "").strip()]
+    if keep:
+        out["to_keep"] = keep
+    return out
+
+
 def entries(notebook_view):
     """`{id: (section, entry)}` over a view -- how a reply's ids are routed."""
     return {e["id"]: (section, e) for section, rows in (notebook_view or {}).items()

@@ -889,6 +889,9 @@
     },
     "ways_on": {
       "$text": "character_bare/ways_on.txt"
+    },
+    "lookups": {
+      "$text": "character_bare/lookups.txt"
     }
   },
   "character_jev": {
@@ -1296,5 +1299,21 @@
         "separate": "別の考え。"
       }
     }
+  },
+  "character_tools": {
+    "ponder": "あなた自身の長期記憶を探します。戻ってくるのは、この瞬間より前のあなたの記憶です。",
+    "ponder_query": "思い出そうとしていることを、あなた自身の言葉で。",
+    "notebook": "あなたが書き留めているすべて：気がかり、取り組んでいること、人や物について思うこと、覚え書き。",
+    "expand": "あなたの記憶の一つを、前後のターンごと、起きた順に開きます。",
+    "continue": "あなたの記憶の一つから先へ、あるいはそれより前へと読み進めます。",
+    "memory_ref": "その記憶のmemory_ref（渡されたとおりに）。",
+    "direction": "before：それより前のこと。after：それより後のこと。",
+    "no_such_memory": "その名前の記憶はあなたにはありません",
+    "needs_a_query": "ponderには探すものが必要です",
+    "before_or_after": "continueはbeforeかafterで読み進めます",
+    "no_such_lookup": "その名前の調べ方はありません",
+    "could_not_be_made": "その調べはできませんでした",
+    "no_lookups_left": "このターンに調べられる回数は残っていません",
+    "unreadable_arguments": "引数を読み取れませんでした"
   }
 }

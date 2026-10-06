@@ -8,10 +8,11 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4834 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/character_bare.py` | 944 |  | `llm.prompts`, `mind` |
+| `agents/character.py` | 4935 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character_bare.py` | 948 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
-| `agents/common.py` | 11983 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/character_tools.py` | 576 |  | `core.db` |
+| `agents/common.py` | 11993 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5857 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 7317 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
@@ -33,7 +34,7 @@
 | `agents/narration.py` | 2959 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
 | `agents/perception.py` | 7923 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
-| `agents/runtime.py` | 1846 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
+| `agents/runtime.py` | 1854 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1754 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -51,10 +52,10 @@
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 248 |  | `core.db` |
 | `llm/json_mend.py` | 285 |  | — |
-| `llm/llm_quality.py` | 1394 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 1463 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 645 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 5021 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/prompts.py` | 652 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/providers.py` | 5176 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 6735 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -67,7 +68,7 @@
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 150 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_jev`, `mind.memory_links`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 293 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
-| `mind/memory_context.py` | 861 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_jev`, `mind.memory_links`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_write` |
+| `mind/memory_context.py` | 871 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_jev`, `mind.memory_links`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_write` |
 | `mind/memory_inference.py` | 159 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_jev.py` | 480 |  | `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_judge.py` | 430 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers` |
@@ -82,7 +83,7 @@
 | `mind/memory_time.py` | 350 |  | `core.db` |
 | `mind/memory_vectors.py` | 789 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_write.py` | 989 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
-| `mind/notebook.py` | 278 |  | `mind` |
+| `mind/notebook.py` | 321 |  | `mind` |
 | `mind/psychology_runtime.py` | 873 |  | — |
 | `mind/theory_of_mind.py` | 861 |  | — |
 | `persist/__init__.py` | 6 |  | — |
@@ -262,7 +263,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 3468 | 1367 lines |
+| `character_step()` | 3468 | 1468 lines |
 | `_annotate_known_exits()` | 2693 | 469 lines |
 | `_ground_observation_citations()` | 1697 | 293 lines |
 | `_unanswered_question_note()` | 597 | 252 lines |
@@ -275,9 +276,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compile_bare()` | 587 | 303 lines |
-| `_compile_notebook()` | 419 | 101 lines |
-| `_appraisal()` | 892 | 53 lines |
+| `compile_bare()` | 591 | 303 lines |
+| `_compile_notebook()` | 423 | 101 lines |
+| `_appraisal()` | 896 | 53 lines |
 | `holding_from()` | 213 | 49 lines |
 | `modules_for()` | 326 | 48 lines |
 | `without_engine_numbers()` | 125 | 47 lines |
@@ -292,18 +293,30 @@
 | `bind_current_evidence_to_memory()` | 109 | 38 lines |
 | `_rewrite_evidence_container()` | 75 | 32 lines |
 
+### `agents/character_tools.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `look_then_answer()` | 463 | 106 lines |
+| `tool_specs()` | 83 | 30 lines |
+| `route_takes_tools()` | 71 | 10 lines |
+| `_call_args()` | 449 | 6 lines |
+| `_joined()` | 571 | 6 lines |
+| `tools_enabled()` | 64 | 5 lines |
+| `_order()` | 115 | 4 lines |
+
 ### `agents/common.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 4491 | 299 lines |
-| `_unknown_actor_label()` | 5485 | 269 lines |
+| `norm_sequence()` | 4501 | 299 lines |
+| `_unknown_actor_label()` | 5495 | 269 lines |
 | `presence_figures_for_room()` | 2241 | 268 lines |
-| `_check_narrator_fidelity()` | 11151 | 259 lines |
-| `_scrub_unknown_identities()` | 5977 | 207 lines |
-| `_scrub_invented_dialogue()` | 9662 | 151 lines |
+| `_check_narrator_fidelity()` | 11161 | 259 lines |
+| `_scrub_unknown_identities()` | 5987 | 207 lines |
+| `_scrub_invented_dialogue()` | 9672 | 151 lines |
 | `observer_body_regions()` | 1735 | 140 lines |
-| `_check_quote_attribution()` | 10714 | 139 lines |
+| `_check_quote_attribution()` | 10724 | 139 lines |
 
 ### `agents/composer.py`
 
@@ -572,14 +585,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 1348 | 391 lines |
+| `_run_pipeline()` | 1356 | 391 lines |
 | `build_plan()` | 839 | 180 lines |
 | `_load_extra_players()` | 53 | 101 lines |
 | `resume_key_for_turn()` | 743 | 95 lines |
 | `_stream_one()` | 504 | 68 lines |
 | `_stream_parallel()` | 573 | 60 lines |
-| `run_pipeline()` | 1790 | 57 lines |
-| `_rehydrate_side_channels()` | 1227 | 53 lines |
+| `run_pipeline()` | 1798 | 57 lines |
+| `_rehydrate_side_channels()` | 1235 | 53 lines |
 
 ### `agents/storage.py`
 
@@ -739,14 +752,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 743 | 652 lines |
-| `_targeted_field_patch()` | 327 | 98 lines |
-| `note_provider_exchange()` | 533 | 59 lines |
-| `output_ran_out_of_room()` | 146 | 47 lines |
-| `json_failure_diagnosis()` | 195 | 39 lines |
-| `_extract_balanced_object()` | 59 | 37 lines |
-| `_without_trailing_commas()` | 23 | 34 lines |
-| `_unshrunk()` | 710 | 31 lines |
+| `complete_validated_json()` | 744 | 720 lines |
+| `_targeted_field_patch()` | 328 | 98 lines |
+| `note_provider_exchange()` | 534 | 59 lines |
+| `output_ran_out_of_room()` | 147 | 47 lines |
+| `json_failure_diagnosis()` | 196 | 39 lines |
+| `_extract_balanced_object()` | 60 | 37 lines |
+| `_without_trailing_commas()` | 24 | 34 lines |
+| `_unshrunk()` | 711 | 31 lines |
 
 ### `llm/prompt_cache.py`
 
@@ -760,12 +773,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `unified_specialist_prompt()` | 432 | 57 lines |
+| `unified_specialist_prompt()` | 439 | 57 lines |
 | `preset_import_document()` | 269 | 51 lines |
-| `_relocate_character_identity()` | 551 | 28 lines |
+| `_relocate_character_identity()` | 558 | 28 lines |
 | `normalize_preset()` | 116 | 26 lines |
 | `_preset_override()` | 213 | 22 lines |
-| `narrator_sections()` | 605 | 18 lines |
+| `narrator_sections()` | 612 | 18 lines |
 | `_director_sheets()` | 77 | 17 lines |
 | `prose_director_prompt()` | 333 | 17 lines |
 
@@ -773,14 +786,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 3590 | 313 lines |
-| `chat_complete()` | 3298 | 144 lines |
-| `_claude_cli_complete()` | 3166 | 130 lines |
-| `async _chat_complete_async_once()` | 4116 | 128 lines |
-| `_sse_openai()` | 2846 | 96 lines |
-| `async chat_complete_async()` | 4023 | 92 lines |
-| `_json_mode_recovery_stages()` | 2481 | 83 lines |
-| `async _sse_openai_async()` | 4245 | 71 lines |
+| `_chat_complete_once()` | 3711 | 347 lines |
+| `chat_complete()` | 3396 | 167 lines |
+| `_claude_cli_complete()` | 3264 | 130 lines |
+| `async _chat_complete_async_once()` | 4271 | 128 lines |
+| `_sse_openai()` | 2927 | 113 lines |
+| `async chat_complete_async()` | 4178 | 92 lines |
+| `_json_mode_recovery_stages()` | 2519 | 83 lines |
+| `async _sse_openai_async()` | 4400 | 71 lines |
 
 ### `llm/research_providers.py`
 
@@ -914,7 +927,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 274 | 576 lines |
+| `build_character_memory_context()` | 274 | 586 lines |
 | `_with_reading()` | 30 | 115 lines |
 | `_origin_on_drift()` | 171 | 94 lines |
 | `_summary_id()` | 158 | 3 lines |
@@ -1097,14 +1110,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `full_view()` | 178 | 41 lines |
 | `view()` | 138 | 38 lines |
-| `_people_and_things()` | 184 | 32 lines |
-| `apply_notebook_ops()` | 244 | 30 lines |
-| `_reminders_shown()` | 229 | 13 lines |
+| `_people_and_things()` | 227 | 32 lines |
+| `apply_notebook_ops()` | 287 | 30 lines |
+| `_reminders_shown()` | 272 | 13 lines |
 | `concern_text()` | 125 | 11 lines |
 | `_named_in()` | 99 | 10 lines |
 | `shown_count()` | 91 | 6 lines |
-| `concern_id()` | 118 | 5 lines |
 
 ### `mind/psychology_runtime.py`
 
