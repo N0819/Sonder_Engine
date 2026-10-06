@@ -832,7 +832,11 @@ def test_a_doorways_name_material_and_width_are_one_object_from_either_room(
     assert ("PATCH", "/api/chats/1/doorways/kitchen/hallway", {"name": "the arch"}) in writes
     fields = card.locator(".wb-doorway-fields[data-doorway=hallway]")
     fields.locator("input").nth(2).fill("2")
-    fields.locator("input").nth(2).press("Enter")
+    # Waited on its own response, as the region rename is: "Saved." is still
+    # up from the name above, and a write is recorded once the route runs.
+    with page.expect_response(lambda r: r.request.method == "PATCH"
+                              and r.url.endswith("/api/chats/1/doorways/kitchen/hallway")):
+        fields.locator("input").nth(2).press("Enter")
     assert ("PATCH", "/api/chats/1/doorways/kitchen/hallway", {"width": 2}) in writes
     # From the hallway the same doorway carries the same name.
     card.locator(".wb-exit .wb-link", has_text="Hallway").click()
@@ -1351,7 +1355,11 @@ def test_a_side_handle_resizes_the_room_and_the_shape_is_chosen_on_the_map(
     page.mouse.move(handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2)
     page.mouse.down()
     page.mouse.move(handle["x"] + handle["width"] / 2 + px, handle["y"] + handle["height"] / 2, steps=4)
-    page.mouse.move(handle["x"] + handle["width"] / 2 + 2 * px, handle["y"] + handle["height"] / 2, steps=4)
+    # 1.6 cells, not 2: the handle's centre sits ~0.42 of a cell past the
+    # wall and the drop is rounded, so two measured cells landed near 8.5 --
+    # and a cell's box includes its stroke, which tipped CI to 9 (2026-10-06).
+    # Aimed at ~8.0, the drop has half a cell of margin either way.
+    page.mouse.move(handle["x"] + handle["width"] / 2 + 1.6 * px, handle["y"] + handle["height"] / 2, steps=4)
     page.mouse.up()
     expect(page.locator("#toasts")).to_contain_text("Resized the room to 8 × 6 paces")
     patches = [w for w in writes if w[0] == "PATCH" and "extent" in w[2]]
