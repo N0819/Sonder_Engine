@@ -939,7 +939,12 @@ def test_a_region_is_created_from_the_card_and_renamed(page: Page, ui_base_url: 
     # Renamed: the regions PATCH with `name`; the room's field untouched.
     rename = card.locator(".wb-region-rename")
     rename.fill("The West Wing")
-    rename.press("Enter")
+    # Waited on the PATCH's own response: the earlier "Saved." toast may still
+    # be up, and a write is recorded only once the route handler runs (CI,
+    # 2026-10-06: the assertion read `writes` before it had).
+    with page.expect_response(lambda r: r.request.method == "PATCH"
+                              and r.url.endswith("/api/chats/1/regions/west_wing")):
+        rename.press("Enter")
     assert ("PATCH", "/api/chats/1/regions/west_wing", {"name": "The West Wing"}) in writes
     assert not [w for w in writes if w[1].startswith("/api/chats/1/rooms/") and "name" in w[2]]
     expect(card.locator(".wb-look")).to_contain_text("The West Wing")
