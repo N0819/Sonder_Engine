@@ -14,7 +14,7 @@ from mind.memory import form_memory_links, prepare_memories_batch, _is_empty_vie
 from mind import affect
 from mind import affect_pass
 from mind import psychology_runtime
-from story.character_schema import (character_name, character_name_from_text,
+from story.character_schema import (character_name, character_name_from_text, character_senses,
                               character_psychology, character_interoception,
                               character_initial_active_state, effective_drive,
                               character_standing_intentions,
@@ -656,18 +656,30 @@ def _names_spoken_by(dlog, scene, roster, known_before, learned, *,
     return learned
 
 
-def _memory_about(scene, observer, room, known_map, disguises, transformations, extra=()):
+def _memory_about(scene, observer, room, known_map, disguises, transformations, extra=(),
+                  senses=None):
     """Who a memory `observer` mints this beat had in it, by the ENGINE's
     names (`memories.about`) -- who was there, not what the row is about:
     every body standing in its room, and `extra` -- a line's speaker and
-    addressee -- less the mind itself, and less any body
-    whose disguise keeps this mind from recognising it: the same rule
-    perception names a body by (`scene.disguise_breaks_recognition`), with a
+    addressee -- less the mind itself, less any body whose disguise keeps
+    this mind from recognising it (`scene.disguise_breaks_recognition`, a
     transformation, which conceals nothing, winning over a disguise as it
-    does there. A tag is host-only and counts for a mind only once it knows
-    the name, so a stranger seen and later named is linked in code -- and a
-    masked stranger is never linked to the face under the mask."""
+    does there), and less any body this mind did not SEE IN FULL this beat
+    (`world.spatial.sighted_level`, the rule the view names a body by; its
+    `senses` are the observer's card's).
+
+    A tag is host-only and counts for a mind only once it knows the name, so
+    a stranger seen and later named is linked in code. What it may never do
+    is link a moment to a body the mind could not see: the `about` lane
+    surfaces exactly the rows whose text never says a name, so a tag on a
+    body shut in a wardrobe, standing in the dark, behind the mind's back or
+    speaking unrecognised from another room would hand back the beats where
+    that person was SECRETLY there, to a question about them -- knowledge
+    reaching the mind through no channel (found 2026-10-06; the mint had done
+    it since v43). The masked stranger is the same rule: never linked to the
+    face under the mask."""
     from story.scene import disguise_breaks_recognition, disguise_known_to
+    from world.spatial import sighted_level
 
     positions = (scene or {}).get("positions") or {}
     present = [name for name in positions if room and _room_of(scene, name) == room]
@@ -681,6 +693,8 @@ def _memory_about(scene, observer, room, known_map, disguises, transformations, 
         if disguise and disguise_breaks_recognition(
                 disguise_known_to(disguise, name, known_map), observer,
                 disguise.get("conceals_identity")):
+            continue
+        if sighted_level(scene or {}, observer, name, senses) != "full":
             continue
         out.append(name)
     return out
@@ -2294,7 +2308,8 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # names -- host-only, live for the mind once it knows a name.
                 _memory["about"] = _memory_about(
                     sc, cname, char_room, _about_known, _about_disguises,
-                    _about_transformations, extra=_memory.get("about") or ())
+                    _about_transformations, extra=_memory.get("about") or (),
+                    senses=character_senses(sh))
         # Recalled memories this mind read afresh this beat -- they kept
         # nothing, or it re-read them since -- keep that reading from now on
         # (`record_memory_look`, in the write phase with the disputes).

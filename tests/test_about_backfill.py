@@ -81,9 +81,11 @@ def test_rows_are_tagged_by_the_mint_rule_from_what_the_turn_left(temp_db, story
     t1 = _turn(temp_db, s, 1, {"Mara": "hall", "Oren": "yard", "Hinami": "yard"})
     _row(temp_db, s, t1, 1, "episodic", "I sat alone in the hall.", "e1")
     counts = backfill_chat(s["chat"])
-    # Who stood in her room, and -- for what she heard -- who spoke and to whom.
-    assert _about(temp_db, "e0") == ["Oren", "Hinami"]
-    assert _about(temp_db, "d0") == ["Oren", "Hinami"]
+    # Who stood in her room and was seen. The voice from the yard is heard and
+    # not seen: never a face the mind can tie to the name it learns (the
+    # mint's rule since 2026-10-06, `world.spatial.sighted_level`).
+    assert _about(temp_db, "e0") == ["Oren"]
+    assert _about(temp_db, "d0") == ["Oren"]
     assert _about(temp_db, "i0") == ["Oren"]
     # Nobody else there is an answer too, written once.
     assert _about(temp_db, "e1") == []
@@ -152,3 +154,20 @@ def test_the_whole_database_in_one_pass(temp_db, story):
     done = backfill_all()
     assert done["chats"] == 1 and done["tagged"] == 1
     assert backfill_all()["chats"] == 0
+
+
+def test_a_body_shut_in_a_wardrobe_is_never_tagged_for_a_mind_that_did_not_see_it(temp_db, story):
+    from persist.about_backfill import backfill_chat
+    from persist.checkpoints import ensure_checkpoint, snapshot_blob
+    from agents.storage import save_step
+    s = story
+    temp_db.wset(s["chat"], "scene", {"rooms": {"hall": {"name": "Hall"}},
+                                      "positions": {"Mara": "hall", "Oren": "hall", "wardrobe": "hall"},
+                                      "contained": {"Oren": {"in": "wardrobe", "mode": "inside"}}})
+    ensure_checkpoint(s["chat"], 0, blob=snapshot_blob(s["chat"]))
+    t0 = temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+                    (s["chat"], 0, "", time.time()))
+    save_step(t0, "director_resolve", "resolve", 1, {"dialogue_log": []})
+    _row(temp_db, s, t0, 0, "episodic", "I undressed and went to bed.", "e0")
+    backfill_chat(s["chat"])
+    assert _about(temp_db, "e0") == ["wardrobe"], "the wardrobe was seen; the man in it was not"

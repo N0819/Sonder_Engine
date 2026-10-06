@@ -78,6 +78,7 @@ from world.spatial import (
     effective_light,
     room_has_geometry,
     sense_adjusted,
+    sighted_level,
     sight_verdict,
     visual_level_between,
     hear_level,
@@ -7897,15 +7898,13 @@ def present_label_fn(ctx, observer_key, observer_name, scene, senses=None):
             # A body in no room of this scene: a reference, not a sighting --
             # the floor's stranger, never a name this observer does not hold.
             return out
-        level = sense_adjusted(visual_level_between(scene, observer_name, text, senses),
-                               "sight", senses)
-        if level != "none" and entity_arc(scene, observer_name, text) == "rear":
-            # IN THE BLIND SPOT: no NEW visual detail of a body behind you
-            # (`entity_arc`, the cut the view's own presence lines make) --
-            # what this mind learned of it before, or nobody. A character was
-            # handed how the player creeping up behind it looked (review
-            # round 4, 2026-10-05; the same at HEAD).
-            level = "none"
+        # IN THE BLIND SPOT a body is unseen: no NEW visual detail of a body
+        # behind you (`entity_arc`, the cut the view's own presence lines
+        # make) -- what this mind learned of it before, or nobody. A character
+        # was handed how the player creeping up behind it looked (review
+        # round 4, 2026-10-05). One rule with the memory's who-was-there tag
+        # (`world.spatial.sighted_level`).
+        level = sighted_level(scene, observer_name, text, senses)
         if level == "full":
             return disguised_label or out
         if level == "none":

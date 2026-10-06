@@ -7,9 +7,12 @@ multiple characters?". Measured first: in a 657-row bank, "where did I first mee
 reached the rows of the meeting, which call her "the young woman" and "the player".
 
 Pinned here: a beat's memories are tagged with every body in the mind's room and a heard line's
-speaker and addressee, never the mind itself, and never a body whose disguise keeps this mind
+speaker and addressee, never the mind itself, never a body whose disguise keeps this mind
 from recognising it (a glamour that leaves the face does not, a mask does, and a transformation
-conceals nothing); a tag counts for a mind only once the name is in its `known` list -- before,
+conceals nothing), and never a body the mind did not SEE IN FULL that beat -- shut in a wardrobe,
+standing in the dark, behind its back, a voice from another room (2026-10-06: the `about` lane
+surfaces the rows whose text never says a name, so such a tag handed back the beats where a person
+was secretly there, to a question about them); a tag counts for a mind only once the name is in its `known` list -- before,
 asking by the name reaches nothing, after, the rows that never say it come back, are graded as
 the moments WITH that person they are and are handed over as `with_whom`; several tags resolve
 each on its own; a beat's recall pick is told who was in each row but keeps no ABOUT lane; the
@@ -35,8 +38,25 @@ ROOMS = {"positions": {"Mara": "hall", "Ilse": "hall", "Bram": "hall", "Otto": "
 def test_a_beats_memory_has_in_it_everybody_in_the_room_but_the_mind():
     about = _memory_about(ROOMS, "Mara", "hall", {}, {}, {})
     assert about == ["Ilse", "Bram"]
-    # a heard line's speaker and addressee, wherever they stood
-    assert _memory_about(ROOMS, "Mara", "hall", {}, {}, {}, extra=("Otto", "Mara")) == ["Ilse", "Bram", "Otto"]
+    # a heard line's speaker counts only if seen: a voice from the cellar is
+    # not a face the mind can tie to a name it learns later
+    assert _memory_about(ROOMS, "Mara", "hall", {}, {}, {}, extra=("Otto", "Mara")) == ["Ilse", "Bram"]
+    assert _memory_about(ROOMS, "Mara", "hall", {}, {}, {}, extra=("Ilse",)) == ["Ilse", "Bram"]
+
+
+def test_a_body_the_mind_did_not_see_is_never_who_the_moment_had_in_it():
+    """The leak this closes: a tag goes live when the name is known, and the
+    `about` lane hands back the rows whose text never says it -- here, the
+    beats a person spent hidden from the mind."""
+    hidden = {"rooms": {"bedroom": {"name": "Bedroom"}},
+              "positions": {"Mara": "bedroom", "Oren": "bedroom", "wardrobe": "bedroom"},
+              "contained": {"Oren": {"in": "wardrobe", "mode": "inside"}}}
+    assert "Oren" not in _memory_about(hidden, "Mara", "bedroom", {}, {}, {})
+    dark = {"rooms": {"hall": {"name": "Hall", "light": "dark"}},
+            "positions": {"Mara": "hall", "Ilse": "hall"}}
+    assert "Ilse" not in _memory_about(dark, "Mara", "hall", {}, {}, {})
+    from world.spatial import sighted_level
+    assert sighted_level(hidden, "Mara", "Oren") == "none" and sighted_level(ROOMS, "Mara", "Ilse") == "full"
 
 
 def test_a_disguise_that_hides_who_you_are_is_never_tagged_with_who_you_are():

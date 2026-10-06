@@ -198,8 +198,10 @@ def _heard(steps, speakers, observer, view):
     return out
 
 
-def _observer_name(chat_id, char_id):
-    from story.character_schema import character_name
+def _observer_card(chat_id, char_id):
+    """`(name, senses)` of the mind as this story knows it: the per-story card
+    over the reusable one, as `active_cast` reads it."""
+    from story.character_schema import character_name, character_senses
     from story.scene import chat_character_sheet
     sheet = chat_character_sheet(chat_id, char_id)
     if sheet is None:
@@ -208,7 +210,11 @@ def _observer_name(chat_id, char_id):
             sheet = json.loads(row["sheet"] or "{}") if row else {}
         except (TypeError, ValueError):
             sheet = {}
-    return character_name(sheet or {})
+    return character_name(sheet or {}), character_senses(sheet or {})
+
+
+def _observer_name(chat_id, char_id):
+    return _observer_card(chat_id, char_id)[0]
 
 
 def backfill_chat(chat_id):
@@ -259,8 +265,8 @@ def _backfill_chat(chat_id, counts):
                  or (steps.get("perception_establish") or {}).get("views") or {})
         for char_id in sorted({r["char_id"] for r in rows}):
             if char_id not in names:
-                names[char_id] = _observer_name(chat_id, char_id)
-            observer = names[char_id]
+                names[char_id] = _observer_card(chat_id, char_id)
+            observer, senses = names[char_id]
             room = _room_of(scene, observer)
             heard = _heard(steps, speakers, observer, str(views.get(str(char_id)) or ""))
             for row in (r for r in rows if r["char_id"] == char_id):
@@ -272,7 +278,7 @@ def _backfill_chat(chat_id, counts):
                 else:
                     extra = []
                 about = _memory_about(scene, observer, room, known, disguises,
-                                      transformations, extra=extra)
+                                      transformations, extra=extra, senses=senses)
                 writes.append((_storage_json(about) if about else "[]", row["id"]))
                 counts["tagged" if about else "nobody"] += 1
     if writes:

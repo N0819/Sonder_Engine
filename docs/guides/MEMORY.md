@@ -479,12 +479,22 @@ not in front of the mind keeps its thought at its turn's place on its own.
 Nothing else reads it: not recall, not a ponder, not a lookup, not another
 mind.
 
+**A tag is only ever someone the mind saw** (2026-10-06): the bodies it saw IN
+FULL that beat, by the rule the view names a body by
+(`world.spatial.sighted_level`: sight after the mind's own senses, none in its
+rear blind spot). Before, the tag took every body standing in the room and
+every heard speaker, so a body shut in a wardrobe was tagged for a mind that
+never saw it -- and the ABOUT lane, which surfaces exactly the rows whose text
+never says a name, would have handed back the beats a person spent secretly
+there, to a question about them. Fewer tags is safe (those rows stay
+reachable by their words); a wrong one leaks.
+
 **Rows older than the tag are tagged too** (`persist/about_backfill.py`,
 2026-10-06): by the mint's own rule, from the checkpoint written as their
 turn began -- the people it puts there match the mint's in 106 of 106 rows
 it tagged itself -- at startup and after every checkpoint restore. On the
-owner's database it took the rows a mind can reach by a known name their text
-never says from 8 to 2,197 of 17,121. A tag still does nothing for a mind
+owner's database it takes the rows a mind can reach by a known name their
+text never says from 8 to 1,983 of 17,121 (2,197 before the sight floor). A tag still does nothing for a mind
 whose `known` list holds no entry: 65 of the 149 minds with memories there,
 the Doctor of chat 64 among them, who says Hinami's name in his own lines
 (`UNBUILT_CHARACTERS.md` §6.17).

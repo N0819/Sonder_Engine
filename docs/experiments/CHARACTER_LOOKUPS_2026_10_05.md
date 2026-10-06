@@ -189,8 +189,12 @@ behind.
   so they are inert, and the backfill keeps the mint's behaviour rather than
   correcting it in one place.
 - **Reach.** Rows a mind can now reach by a name it knows that their text
-  never says: 8 before, 2,197 after, of 17,121 (chat 22 gains 223, chat 44
-  140, chat 111 112).
+  never says: 8 before, 1,983 after, of 17,121 (chat 22 gains 223, chat 44
+  115, chat 111 112). The first count, 2,197, was under the first rule, which
+  tagged every body standing in the room and every heard speaker, seen or
+  not; the 214 it lost to the sight floor (2026-10-06) were moments linked to
+  someone the mind never saw -- a leak the prior-art review surfaced, fixed
+  before the backfill ran anywhere but on copies.
 - **It does not reach §4's miss**, for the reason §4 now gives: that row says
   the name. And it does not reach any row of a mind the known-names map holds
   no entry for -- 65 of the 149 minds with memories, the Doctor of chat 64

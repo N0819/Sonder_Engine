@@ -1497,8 +1497,16 @@ it LANDED the same day (`memories.about`, v43; `docs/guides/MEMORY.md` §1 and
 §3): a ponder by a known name reaches the rows with that person that never say
 it. Rows minted before v43 are tagged since 2026-10-06
 (`persist/about_backfill.py`: the mint's rule, from the checkpoint the turn
-began with; 8 -> 2,197 of the owner's 17,121 rows reachable by a known name
-they never say). Still open from it: 65 of the 149 minds with memories on the
+began with; 8 -> 1,983 of the owner's 17,121 rows reachable by a known name
+they never say, under the sight floor below -- 2,197 under the first rule,
+whose extra 214 were moments linked to someone the mind never saw).
+FIXED THE SAME DAY: the tag took every body standing in the room and every
+heard speaker, seen or not, so a body shut in a wardrobe was linked to a
+moment its mind never saw it in, and the ABOUT lane would surface those
+beats to a question about that person; a tag is now only a body seen in
+full that beat (`world.spatial.sighted_level`, one rule with the view's
+naming). Rows the old rule already tagged are not re-derived: on the owner's
+database those are 110 rows, all in the engine's own test stories. Still open from it: 65 of the 149 minds with memories on the
 owner's database have NO entry in the `known` list the lane reads -- the
 Doctor of chat 64, who says Hinami's name in his own lines, among them -- so
 no tag can turn on for them, and whether the list lost those entries or never

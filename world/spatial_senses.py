@@ -28,6 +28,7 @@ from world.spatial_geometry import (
     effective_facing,
     effective_room_size,
     effective_station,
+    entity_arc,
     proximity_rel,
 )
 from world.spatial_identity import _ci_get, room_of, same_subject
@@ -921,6 +922,23 @@ def visual_level_between(scene: dict, observer: str, target: str,
         scene,
         ("visual_level_between", str(observer), str(target), lightless),
         lambda: _visual_level_between(scene, observer, target, senses))
+
+
+def sighted_level(scene: dict, observer: str, target: str, senses=None) -> str:
+    """What THIS observer makes of `target` by sight now: the pair's graded
+    sight (`visual_level_between`), after the observer's own senses
+    (`sense_adjusted`), and `none` for a body in its rear blind spot
+    (`entity_arc`) -- no new visual detail of what is behind you.
+
+    ONE RULE FOR EVERY READER THAT ASKS WHETHER A MIND SAW A BODY: the view's
+    naming (`perception.present_label_fn` -- a name only at `full`) and the
+    memory's who-was-there tag (`commit_memory._memory_about`), which tagged a
+    body shut in a wardrobe for a mind that never saw it until it asked this
+    (2026-10-06). Two copies of this policy would drift; there is one."""
+    level = sense_adjusted(visual_level_between(scene, observer, target, senses), "sight", senses)
+    if level != "none" and entity_arc(scene, observer, target) == "rear":
+        return "none"
+    return level
 
 
 def _visual_level_between(scene: dict, observer: str, target: str,

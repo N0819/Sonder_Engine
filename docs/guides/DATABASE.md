@@ -112,7 +112,11 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   moment stirred. Since **v43**, `memories.about` keeps who the moment had in
   it by the engine's names (a JSON list, `docs/guides/MEMORY.md` §1): minted
   at commit from the mind's room, a line's speaker and addressee and the
-  disguises in force (`commit_memory._memory_about`), read only through the
+  disguises in force (`commit_memory._memory_about`), and -- since
+  2026-10-06 -- only bodies the mind SAW IN FULL that beat
+  (`world.spatial.sighted_level`, the rule the view names a body by: never
+  one shut in a wardrobe, in the dark, behind its back, or a voice from
+  another room), read only through the
   mind's `known` list, so learning a name is what turns a tag on and a
   rollback of `known` turns it off again. Carried verbatim by checkpoint,
   branch and archive; a character bank imported into another story drops it,
