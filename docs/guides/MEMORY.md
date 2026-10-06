@@ -468,6 +468,16 @@ and no ABOUT lane: a beat's view names everybody present, so there the lane
 would only be a second similarity ranking over the rows that do not say their
 names.
 
+**Rows older than the tag are tagged too** (`persist/about_backfill.py`,
+2026-10-06): by the mint's own rule, from the checkpoint written as their
+turn began -- the people it puts there match the mint's in 106 of 106 rows
+it tagged itself -- at startup and after every checkpoint restore. On the
+owner's database it took the rows a mind can reach by a known name their text
+never says from 8 to 2,197 of 17,121. A tag still does nothing for a mind
+whose `known` list holds no entry: 65 of the 149 minds with memories there,
+the Doctor of chat 64 among them, who says Hinami's name in his own lines
+(`UNBUILT_CHARACTERS.md` §6.17).
+
 Until then the lane was `search_memories(query)` at the SAME budget passive
 recall used -- `recall_limit` after absorption had narrowed it, so 16 for a
 relaxed mind, 8 part-absorbed, and a floor of 4 -- rather than a fixed four.

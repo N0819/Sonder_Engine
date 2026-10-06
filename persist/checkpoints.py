@@ -1073,6 +1073,16 @@ def _restore_checkpoint_body(chat_id, r):
         start_rebuild_if_needed(chat_id)
     except Exception:
         pass    # a maintenance task must never fail a restore
+    # The same restore puts back each row's `about` as the snapshot held it
+    # -- empty, for a snapshot older than the tag -- and a rerun recalls the
+    # moment this returns, so the tags are put back HERE, synchronously, not
+    # by a background pass that would land after the step had recalled
+    # (`persist/about_backfill.py`; about 1.5 s for a 1,000-row story).
+    try:
+        from persist.about_backfill import backfill_chat
+        backfill_chat(chat_id)
+    except Exception:
+        pass    # a maintenance task must never fail a restore
     # The DELETE FROM world above bypassed wset, so a world row the snapshot
     # did not carry kept its per-row read token while losing its row. After
     # the commit (an exception above never reaches here on the rollback

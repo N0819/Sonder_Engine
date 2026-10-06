@@ -116,8 +116,13 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   mind's `known` list, so learning a name is what turns a tag on and a
   rollback of `known` turns it off again. Carried verbatim by checkpoint,
   branch and archive; a character bank imported into another story drops it,
-  as those names belong to this story. Existing rows stay `''`: nothing
-  backfills them. Since **v44**, `memories.supersedes` names the older
+  as those names belong to this story. Rows minted before v43 are tagged by
+  `persist/about_backfill.py` (2026-10-06): the mint's own `_memory_about`,
+  fed the scene, `known` and conditions of the checkpoint written as the
+  turn began and the lines the turn's stored steps say the mind heard; `[]`
+  where nobody else was there, so a row is computed once. It runs in the
+  background at startup and synchronously after `restore_checkpoint`, since
+  a restore puts back rows as an older snapshot held them. No schema change. Since **v44**, `memories.supersedes` names the older
   memories of the same mind that a memory changes, by their `event_key`s (a
   JSON list, `docs/guides/MEMORY.md` §1): formed at commit by the decision
   model, before the write lock, and written by the INSERT that mints the

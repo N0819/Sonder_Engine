@@ -218,6 +218,19 @@ def _reconcile_embedding_bank():
         except Exception as exc:                     # never fail startup
             print("Sonder Engine: embedding reconcile skipped (%s)." % exc,
                   flush=True)
+        try:
+            # Who an older memory had in it (`persist/about_backfill.py`):
+            # rows minted before the tag existed get it by the mint's own
+            # rule, once; a pass with nothing to do is one query.
+            from persist.about_backfill import backfill_all
+            done = backfill_all()
+            if done.get("tagged") or done.get("nobody"):
+                print("Sonder Engine: tagged %d older memories with who was "
+                      "there (%.0fs)." % (done["tagged"] + done["nobody"],
+                                          done["seconds"]), flush=True)
+        except Exception as exc:                     # never fail startup
+            print("Sonder Engine: memory tag backfill skipped (%s)." % exc,
+                  flush=True)
     _RECONCILE_THREAD = threading.Thread(
         target=_go, name="startup-embedding-reconcile", daemon=True)
     _RECONCILE_THREAD.start()

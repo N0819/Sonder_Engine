@@ -704,12 +704,20 @@ def active_disguises(chat_id):
     stop, because a different row won. Ordering makes the winner the most
     recently started one, which is the only answer that matches what a reader
     just watched happen."""
-    out = {}
-    for row in q(
+    return disguises_from_rows(q(
         "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
         "AND kind='physical_disguise' AND active=1 "
         f"{_CONDITION_ORDER}", (chat_id,),
-    ):
+    ))
+
+
+def disguises_from_rows(rows):
+    """`active_disguises`' shape from condition rows already chosen and
+    ordered (`subject_id`, `payload`; active `physical_disguise` rows, oldest
+    first) -- the live table's, or a checkpoint's (`persist/about_backfill.py`
+    reads the disguises a turn was committed under). One rule, two sources."""
+    out = {}
+    for row in rows:
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
@@ -860,12 +868,19 @@ def active_transformations(chat_id):
     can drop -- and a fiction that wants a one-way door has to say so, because
     trapping somebody by omission is the failure nobody can undo.
     """
-    out = {}
-    for row in q(
+    return transformations_from_rows(q(
         "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
         "AND kind='physical_transformation' AND active=1 "
         "ORDER BY started_at ASC, rowid ASC", (chat_id,),
-    ):
+    ))
+
+
+def transformations_from_rows(rows):
+    """`active_transformations`' shape from condition rows already chosen and
+    ordered (active `physical_transformation` rows, oldest first) -- the live
+    table's or a checkpoint's. One rule, two sources."""
+    out = {}
+    for row in rows:
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):

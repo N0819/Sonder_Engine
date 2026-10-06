@@ -134,12 +134,14 @@ something up there".
     first words to me: 'You've been to the stars! C-Can I come mister!?'" is
     Hinami at turn 15. The ponder returned turns 15, 22, 56, 57 and 63 and
     never turn 1, and the model took the earliest line it was given for the
-    first one. Turn 1 calls her "the young woman": it was written before he
-    knew her name, and 186 of the bank's 190 rows carry no `memories.about`
-    tag (minted before v43, never backfilled -- `UNBUILT_CHARACTERS.md`
-    §6.17), so the ponder's ABOUT lane, built for exactly this row, could not
-    reach it. Ordinary recall did, in §3. He also filed a re-reading on the
-    turn-15 row on the strength of the mistake.
+    first one. **A ranking miss** -- the row was not among the fifty the
+    ponder graded for that question -- and not, as this section first said,
+    a missing name tag: turn 1 calls her "the young woman", but the old engine
+    also wrote her name into the same row's position clause ("I was kneeling
+    beside Hinami"), before he knew it, so the row says the name and was never
+    one the ABOUT lane is for. Measured after the backfill of §6: tagged, the
+    row still does not reach the net. Ordinary recall did reach it, in §3. He
+    also filed a re-reading on the turn-15 row on the strength of the mistake.
   - **The packet stayed in the cache.** The answering round read 13,187 of
     its 14,618 prompt tokens from cache (90%; the first round 3,096 of
     13,188) -- the whole packet, in the engine's own path, with the replica
@@ -160,10 +162,41 @@ something up there".
   second call, the closing ladder unused, the packet cached across rounds.
 - Offered and not needed, it costs nothing measurable (§2, §3).
 - Where recall missed, it turned two confabulations into one right answer and
-  one honest stall, and its one wrong claim was a retrieval miss the engine
-  already registers (§6.17's untagged rows), taken on trust.
+  one honest stall, and its one wrong claim was a ponder that ranked the
+  first meeting out of its net, taken on trust: a `continue` back from the
+  earliest row it got would have found it.
 - Two behaviours to watch, both the model's choice and neither a defect:
   it may act out searching instead of calling `ponder` (1 of 2 beats here),
   and it reads the earliest memory a ponder returns as the earliest there is,
   without the `continue` that would check.
 - Sample sizes are one story's two beats for §4; nothing here is a rate.
+
+## 6. The name-tag backfill this led to, and what it does and does not reach
+
+The probe sent me to `memories.about` -- the host-only list of who a memory
+had in it, by which a ponder by a name the mind has since learned reaches rows
+that never say it -- and 17,011 of the owner's 17,121 turn rows carried none
+(minted before v43). `persist/about_backfill.py` (2026-10-06) tags them by the
+mint's own rule, `commit_memory._memory_about`, fed from what each turn left
+behind.
+
+- **Which world the mint read was measured, not assumed.** Against the 110
+  rows the mint itself tagged, the people standing in the checkpoint written
+  as the turn began match the mint's people in 106 of 106 rows; the
+  checkpoint after the turn in 104 of 110 (it misses the bodies that moved
+  during the beat). The tags also carry the room's objects, as the mint's
+  do (the scene's `positions` holds them); no mind knows an object by name,
+  so they are inert, and the backfill keeps the mint's behaviour rather than
+  correcting it in one place.
+- **Reach.** Rows a mind can now reach by a name it knows that their text
+  never says: 8 before, 2,197 after, of 17,121 (chat 22 gains 223, chat 44
+  140, chat 111 112).
+- **It does not reach §4's miss**, for the reason §4 now gives: that row says
+  the name. And it does not reach any row of a mind the known-names map holds
+  no entry for -- 65 of the 149 minds with memories, the Doctor of chat 64
+  among them, who says Hinami's name in his own lines.
+- **Cost.** The first pass over the owner's whole database: 181 s, in the
+  background at startup; a pass with nothing to do: 0.4 s. A checkpoint
+  restore puts untagged rows back from an older snapshot, as it puts back
+  stale vectors, so the restore re-tags its chat synchronously: about 1.5 s
+  for a 1,000-row story once the modules are loaded.

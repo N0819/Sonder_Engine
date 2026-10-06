@@ -1299,10 +1299,12 @@ with them answered one question right from two `ponder`s and stalled honestly
 on the other. Two behaviours to watch, both the model's choice: it may act
 out searching in the fiction instead of calling `ponder` (1 of 2 beats), and
 it read the earliest memory a ponder returned as the earliest there is. The
-one wrong answer was a row the ponder could not reach: written before the mind
-knew her name, on a bank whose rows predate `memories.about` (§6.17's untagged
-rows) -- a backfill would reach it for the lookups and the next-beat ponder
-alike.
+one wrong answer was a ranking miss: the first meeting was not among the
+fifty the ponder graded for "her very first words", and a `continue` back
+from the earliest row it did get would have found it. (First recorded here as
+an untagged row; it is not -- its text says her name, written by the old
+engine before he knew it -- and the name-tag backfill this prompted does not
+reach it: the experiment's §6.)
 
 **Not built, in the order the owner agreed:**
 
@@ -1471,8 +1473,14 @@ sections; a ponder over the whole bank (a ponder is graded since 2026-09-29, but
 the owner's net of 50, not the bank); same-beat recall. Who a memory had in
 it LANDED the same day (`memories.about`, v43; `docs/guides/MEMORY.md` §1 and
 §3): a ponder by a known name reaches the rows with that person that never say
-it. Still open from it: rows minted before v43 carry no tag and nothing
-backfills them; a row that calls the person "the stranger" is still missed
+it. Rows minted before v43 are tagged since 2026-10-06
+(`persist/about_backfill.py`: the mint's rule, from the checkpoint the turn
+began with; 8 -> 2,197 of the owner's 17,121 rows reachable by a known name
+they never say). Still open from it: 65 of the 149 minds with memories on the
+owner's database have NO entry in the `known` list the lane reads -- the
+Doctor of chat 64, who says Hinami's name in his own lines, among them -- so
+no tag can turn on for them, and whether the list lost those entries or never
+wrote them is unmeasured; a row that calls the person "the stranger" is still missed
 (a grader told a known name was there reads it as somebody else, under
 every wording tried); a broad "what do I know about X?" keeps one or two
 rows, the "directly answers" grade sitting near the floor; the recall pick
