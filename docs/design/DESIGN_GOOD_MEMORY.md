@@ -1,6 +1,7 @@
 # Good memory: what people do that characters could
 
-**Status: PROPOSAL, 2026-09-26, branch `worktree-jev-character-tracking`.**
+**Status: PROPOSAL, 2026-09-26, branch `worktree-jev-character-tracking`;
+feature 12 built 2026-10-05.**
 What is unbuilt is registered in [`UNBUILT_CHARACTERS.md`](../UNBUILT_CHARACTERS.md)
 §6.16, not here. Evidence: [`JEV_MEMORY_PROBE_2026_09_26.md`](../experiments/JEV_MEMORY_PROBE_2026_09_26.md).
 Companion: [`DESIGN_JEV_CHARACTER_PASS.md`](DESIGN_JEV_CHARACTER_PASS.md).
@@ -189,7 +190,9 @@ ABOUT something, not whether it is still true ("Where is the TARDIS right
 now?" returned where it WAS). Good memory hands over the current state first.
 That is [`UNBUILT_CHARACTERS.md`](../UNBUILT_CHARACTERS.md) §2.24 (a superseded
 belief is read before its correction), and a larger packet makes it more
-urgent.
+urgent. **Built 2026-10-05** as the concept lab's superseded links
+(`mind/memory_links.py`): a recalled row brings in the memories that changed
+it.
 
 ## Set aside by the goal
 

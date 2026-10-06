@@ -253,7 +253,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 43
+SCHEMA_VERSION = 44
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -802,7 +802,9 @@ CREATE TABLE IF NOT EXISTS memories(
     -- Deliberately a column on the row rather than an edge to another memory
     -- id: checkpoint restore is delete-and-reinsert, so every row id changes,
     -- and an id-keyed edge would be shredded by the first rollback. Stored
-    -- here it rides the existing dump/restore round-trip verbatim.
+    -- here it rides the existing dump/restore round-trip verbatim. (The one
+    -- memory-to-memory relation, `supersedes`, is keyed by event_key for the
+    -- same reason.)
     disputed TEXT NOT NULL DEFAULT '',
     -- The simulation-clock reading, in seconds of fiction time, at the moment
     -- this row was written. STORED rather than derived, and that is the whole
@@ -842,7 +844,17 @@ CREATE TABLE IF NOT EXISTS memories(
     -- only once the name is in its `known` list -- so the rows with "the
     -- young woman" in them become moments with Hinami when the mind learns
     -- her name, in code, with no rewrite (`mind/memory_context.py`).
-    about TEXT NOT NULL DEFAULT ''
+    about TEXT NOT NULL DEFAULT '',
+    -- The OLDER memories of this mind that this one changes -- a figure, a
+    -- state, where something is, who has it, whether it still holds -- by
+    -- their `event_key`s, as the decision model judged at commit
+    -- (`mind/memory_links.py`). JSON list, '' when it changes none. On the
+    -- NEWER row, written by the INSERT that mints it, so it rolls back with
+    -- its turn and a re-commit forms it again; keyed by event_key rather than
+    -- row id for the reason `disputed` is a column. HOST-ONLY: recall brings
+    -- the newest successor in beside a recalled row, and no mind is ever told
+    -- the two are linked.
+    supersedes TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_memories_chat_char ON memories(chat_id, char_id);
 
@@ -2123,6 +2135,14 @@ END""",
         # stood in a mind's room on a beat long past is not recorded anywhere
         # a migration could read it back from.
         "ALTER TABLE memories ADD COLUMN about TEXT NOT NULL DEFAULT ''",
+    ],
+    # v43 -> v44
+    [
+        # Which older memories a memory changes (see the column in SCHEMA).
+        # EXISTING ROWS ARE LEFT '': a link is the decision model's answer to
+        # a question asked when the newer row was minted, and a migration
+        # has no model to ask.
+        "ALTER TABLE memories ADD COLUMN supersedes TEXT NOT NULL DEFAULT ''",
     ],
 ]
 

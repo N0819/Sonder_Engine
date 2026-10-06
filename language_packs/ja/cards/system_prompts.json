@@ -970,6 +970,9 @@
     "memory_ponder": {
       "$text": "character_jev/memory_ponder.txt"
     },
+    "memory_supersedes": {
+      "$text": "character_jev/memory_supersedes.txt"
+    },
     "heard_question": {
       "$text": "character_jev/heard_question.txt"
     },

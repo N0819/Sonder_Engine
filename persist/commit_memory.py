@@ -10,7 +10,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 
 import json, re
 from core.db import wget, get_setting
-from mind.memory import prepare_memories_batch, _is_empty_view
+from mind.memory import form_memory_links, prepare_memories_batch, _is_empty_view
 from mind import affect
 from mind import affect_pass
 from mind import psychology_runtime
@@ -2331,8 +2331,26 @@ def prepare_memory_commit(ctx, *, scene=None):
             f"({getattr(_embedded, 'error', '') or 'no embeddings provider'});"
             " semantic recall is degraded until an embeddings provider is "
             "configured")
+    # WHICH OLDER MEMORY EACH NEW ONE CHANGES (`mind/memory_links.py`): asked
+    # once the batch is embedded and before the write lock, so the link is
+    # written by the INSERT that mints the row and rolls back with it.
+    # Fail-open -- a beat is never lost to a link.
+    _link_names = {}
+    for _row_of_cast in ctx.cast:
+        try:
+            _link_names[_row_of_cast["id"]] = character_name(json.loads(_row_of_cast["sheet"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+    try:
+        _links = form_memory_links(cid, memory_batch, turn_idx=turn.idx, names=_link_names,
+                                   language=getattr(ctx, "language", None))
+    except Exception as exc:  # the last floor: a beat is never lost to a link
+        _links = {"failed": {"*": f"{type(exc).__name__}: {str(exc)[:160]}"}}
+    for _cid, _why in (_links.get("failed") or {}).items():
+        ctx.add_warning(f"memory links not formed for character {_cid}: {_why}")
     return {
         "memory_batch": memory_batch,
+        "memory_links": _links,
         "names_learned": _names_learned,
         "state_updates": state_updates,
         "relationship_ops": relationship_ops,

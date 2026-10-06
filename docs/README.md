@@ -321,6 +321,11 @@ modes each one documents.
   check runs itself, and Jev says when a design is finished: the yard and
   five recorded cases from three stories, old loop against new, with the
   question probes and the rooms' detail compared.
+- [`SUPERSEDED_LINKS_2026_10_05.md`](experiments/SUPERSEDED_LINKS_2026_10_05.md)
+  — what was measured before superseded links shipped: the link question's
+  wording, how many older memories to ask about, the question replayed on two
+  real banks, and how often recall brings a successor in; scripts in
+  `tools/concept_lab/links_*.py`.
 
 ## `archive/` — superseded
 

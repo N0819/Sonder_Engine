@@ -331,6 +331,22 @@ def _about_of(raw):
     return list(dict.fromkeys(str(x).strip() for x in out if str(x or "").strip()))
 
 
+def _supersedes_of(raw):
+    """The older memories this one changes (`memories.supersedes`), by their
+    `event_key`s: a list, [] when it changes none. Never raises on a
+    malformed blob."""
+    if not raw:
+        return []
+    try:
+        out = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(out, list):
+        return []
+    return list(dict.fromkeys(str(x).strip() for x in out
+                              if isinstance(x, str) and x.strip()))
+
+
 def effective_importance(mem) -> float:
     """How much this memory matters NOW: its revised importance if it has one,
     else the salience it was minted with. The single place that fallback is
@@ -386,6 +402,9 @@ def _row_memory(row) -> dict:
         "feelings": _feelings_of(row["feelings"]),
         # Who it had in it, by the engine's names -- host-only (`_about_of`).
         "about": _about_of(row["about"]),
+        # The older memories it changes, by event_key -- host-only
+        # (`_supersedes_of`, `mind/memory_links.py`).
+        "supersedes": _supersedes_of(row["supersedes"]),
         "archived": bool(row["archived"]),
         "event_key": row["event_key"] or "",
         "embedding_model": row["embedding_model"] or "",
@@ -398,7 +417,8 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
                    valence=0.0, arousal=0.0, confidence=1.0, event_key="",
                    encoding_valence=0.0, encoding_arousal=0.0,
                    frame_id=_UNSET, importance=None, disputed="",
-                   encoded_at_seconds=None, feelings="", about=None) -> dict:
+                   encoded_at_seconds=None, feelings="", about=None,
+                   supersedes=None) -> dict:
     content = re.sub(r"\s+", " ", str(content or "")).strip()
     entities = list(dict.fromkeys(entities if entities is not None else _extract_entities(content)))
     key_phrases = list(dict.fromkeys(key_phrases if key_phrases is not None else _extract_key_phrases(content, entities)))
@@ -472,6 +492,11 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
         # Who it had in it, by the engine's names (`memories.about`); '' when
         # untagged. A list is stored as JSON, a stored blob kept verbatim.
         "about": _storage_json(_about_of(about)) if _about_of(about) else "",
+        # The older memories it changes (`memories.supersedes`): formed at
+        # commit, once the batch is embedded (`memory_links`); a restore
+        # hands back the stored blob.
+        "supersedes": _storage_json(_supersedes_of(supersedes))
+                      if _supersedes_of(supersedes) else "",
     }
 
 def _embed_memory(data: dict):
@@ -740,6 +765,7 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
         embedded.model_key, embedded.dimensions, data.get("frame_id"),
         data.get("importance"), data.get("disputed") or "",
         data.get("encoded_at_seconds"), data.get("feelings") or "", data.get("about") or "",
+        data.get("supersedes") or "",
     )
     if existing:
         mid = existing["id"]
@@ -748,7 +774,8 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
             emotional_context=?,valence=?,arousal=?,encoding_valence=?,
             encoding_arousal=?,confidence=?,embedding=?,cue_embedding=?,
             embedding_model=?,embedding_dim=?,frame_id=?,
-            importance=?,disputed=?,encoded_at_seconds=?,feelings=?,about=?,archived=0 WHERE id=?""",
+            importance=?,disputed=?,encoded_at_seconds=?,feelings=?,about=?,supersedes=?,
+            archived=0 WHERE id=?""",
            values + (mid,))
     else:
         mid = qi("""INSERT INTO memories(chat_id,char_id,turn_id,turn_idx,kind,category,
@@ -756,8 +783,8 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
             emotional_context,valence,arousal,encoding_valence,encoding_arousal,
             confidence,embedding,cue_embedding,
             embedding_model,embedding_dim,frame_id,importance,disputed,
-            encoded_at_seconds,feelings,about,event_key)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            encoded_at_seconds,feelings,about,supersedes,event_key)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
            (data["chat_id"], data["char_id"]) + values + (data["event_key"],))
     _replace_memory_fts(mid, data)
     # Filed at mint (see `memory_snapshot.file_memory_vector`): the

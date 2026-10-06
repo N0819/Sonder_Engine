@@ -58,6 +58,7 @@ One row in `memories` (`core/db.py`). The fields that do work:
 | `encoding_valence`, `encoding_arousal` | Resolved affect *after* appraisal — how the event left the character. |
 | `feelings` | What the moment made the character FEEL, kept with the memory (v42): JSON `{moment: {felt, strength, coords, at, turn, key}, looks: [...]}` — `moment` from the beat's own affect passes when the row was minted (what perception stirred, or, on the row of its own acts, what those acts made it feel), `looks` any one-time later reading (a row that kept nothing, or one re-read since); `coords` is its place on the mood's spectrums and standalone moods, for the engine's arithmetic. Brought back on recall, faded by age toward a floor (`affect_mix.recalled`). A mind is handed only its name — `how_it_feels` on the delivered row, the strongest kept feeling in the pack's words — never the numbers. `''` = nothing kept yet. |
 | `about` | Who the moment had in it, by the engine's names (v43): JSON list -- every body in the mind's room when the row was minted, and a heard line's speaker and addressee; never the mind itself, and never a body whose disguise kept this mind from recognising it (`commit_memory._memory_about`, the rule perception names a body by; a transformation hides nothing). Host-only: a name counts for a mind only once it is in the mind's `known` list, and then a row whose text never says it goes over as `with_whom` -- "the woman in the grey coat" of beat 3 is the moment with Ilse from the beat the mind learns her name, and a ponder asking by the name reaches it (§3). A list: several people resolve each on their own. It says who was THERE, not what the row is about -- rendered "with", because a grader told "about" believes it (§3). `''` = minted before v43, or nobody else there. |
+| `supersedes` | The older memories of this mind that this one CHANGES -- a figure, a state, where something is, who has it, whether it still holds -- by their `event_key`s (v44): JSON list, formed at commit by the decision model (§2) and written by the INSERT that mints this row. Host-only: a recalled row brings in the memories that changed it (§3), and nothing a mind reads names the link. `''` = changes none, or minted before v44. |
 | `embedding`, `cue_embedding` | Two float32 blobs (§4). |
 | `embedding_model`, `embedding_dim` | Which model made them. A mismatch scores 0.0 forever (§9). |
 | `archived` | Folded into a summary and retired from RECENT-buffer and consolidation reads. Still retrievable: `search_memories` passes `include_archived=True`, so archiving removes a row from the rolling window, never from recall. |
@@ -207,10 +208,32 @@ rows migrate to neutral zeros rather than having an emotional arc invented;
 new non-psychology rows default the after-pair to the before-pair. Both pairs
 survive checkpoints, archives, portable character banks, and editor updates.
 
+### Which older memory a new one changes
+
+`mind/memory_links.form_memory_links`, the concept lab's superseded links
+(`docs/experiments/CONCEPT_LAB_2026_09_30.md` §10-13; what was measured before
+they shipped: `docs/experiments/SUPERSEDED_LINKS_2026_10_05.md`). Each new
+turn memory -- the episode, a beat's own acts where nothing else was perceived,
+a self record -- is compared with this mind's `LINK_CANDIDATES` (10) most alike
+older ones of the same kinds, by the stored content vectors and the firewall's
+own read at the beat committed, and the decision model is asked of each pair,
+as the mind ("YOU ARE <name>."), whether the newer memory changes something
+the older one states as true; p(yes) >= `LINK_THRESHOLD` (0.5) writes the
+older row's `event_key` into the new row's `supersedes`. One request a mind,
+the minds side by side. Fail-open: hashed vectors, no decision model, a
+refused request or an answer off its shape form no link and fail nothing, and
+a refusal is a turn warning. The question names its causes ("a figure, a
+state, where something is, who has it, whether something still holds")
+because Jev reads a yes/no question better with them: on the lab's 30
+labelled pairs it linked 25, the same list marked "for instance" 19, the class
+alone 11.
+
 ### Ordering, and why
 
 `prepare_memories_batch` normalizes and **embeds** outside the write lock —
-embedding is a network round trip and must never hold SQLite's writer. Then
+embedding is a network round trip and must never hold SQLite's writer. The
+link question (above) is asked there too, once the batch is embedded, so each
+link is written by the INSERT that mints its row. Then
 `commit_memories` opens one transaction: `delete_turn_memories(turn.id)` (so a
 rerun replaces rather than duplicates), the batch insert, relationship ops,
 character state, then `reconcile_inference_confidence` — deliberately *after*
@@ -318,6 +341,28 @@ assertion still carries received information; it does not make their assertion
 directly experienced truth. A conclusion formed during a witnessed episode is
 still inferred. The character prompt states this explicitly so episodic
 vividness cannot launder testimony or interpretation into knowledge.
+
+### A later memory that changes a recalled one comes with it
+
+`memory_links.pull_successors`, right after the pick. Each recalled row brings
+in the memories that changed it (`successors_of`): every row whose
+`supersedes` names it, newest first, then the newest row its links reach on
+any branch (`CHAIN_HOPS`, 6) -- among the rows this mind may see, the net's own
+read, a memo hit -- unless the payload carries them already; at most
+`PULL_CAP` (6) a beat, the rest counted on the picker record. The rows that
+changed it come first because a link says a newer memory changes something
+the older one states, never WHICH thing: following the chain to its end alone
+handed a mind the fare from turn 3 and a walk to the inn from turn 8, and the
+turn-7 row that changed the fare by no lane at all. Each pulled row scores a
+hair above the row it changes, so an unbidden swap gives up the outdated row,
+never its correction; the payload then reads in time order like every recalled
+row. Unlabelled, and projected exactly as any recalled row: a mind handed both
+versions reads both and dates both (UNBUILT_CHARACTERS §2.24), where a mind
+told the two disagree noticed less. It also undoes the near-duplicate drop for
+the pair it is wrong about -- a successor that changes only a figure can sit at
+cosine 0.90 to the row it corrects. On a long real bank most older rows have a
+successor (chat 64: about 6 in 10 of those past the recent window), so a full
+recall reaches the cap on nearly every beat.
 
 ### Psychology bandwidth and memory modulation
 
@@ -1518,7 +1563,9 @@ either erase the experience or hide the correction.
 **A column, not an edge to the superseding memory.** Checkpoint restore is
 delete-and-reinsert, so every row id changes; an id-keyed edge would be
 shredded by the first rollback. Stored on the row it rides the existing
-dump/restore round-trip verbatim.
+dump/restore round-trip verbatim. The one relation between memories,
+`supersedes` (§1), has the same shape for the same reason: a value on the
+NEWER row naming older ones by `event_key`.
 
 Disputes address an exact delivered stable `memory_ref` and require current
 evidence for the new reading. Gist matching remains only as a compatibility

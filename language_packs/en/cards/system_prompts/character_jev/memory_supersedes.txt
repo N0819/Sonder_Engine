@@ -1,0 +1,5 @@
+OLDER MEMORY: {older}
+
+NEWER MEMORY: {newer}
+
+Does the newer memory change something the older one states as true -- a figure, a state, where something is, who has it, whether something still holds?

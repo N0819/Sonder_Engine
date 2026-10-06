@@ -360,4 +360,8 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
     committed = [f"memory:{mid}" for mid in memory_ids]
     if consolidate:
         committed.extend(_consolidate_committed_memories(ctx))
-    return {"committed": committed}
+    out = {"committed": committed}
+    # Host telemetry: what the link question did this beat, when it was asked.
+    if (prepared.get("memory_links") or {}).get("asked"):
+        out["links"] = prepared["memory_links"]
+    return out

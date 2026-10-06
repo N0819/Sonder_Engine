@@ -14,6 +14,7 @@ from mind.memory_common import (
 )
 from mind.memory_read import memory_bank_cache
 from mind.memory_write import _clamp
+from mind.memory_links import pull_successors
 from mind.memory_jev import (PONDER_LIMIT, jev_memory_packet, jev_ponder_packet, named_in,
                              unnamed_about)
 from mind.memory_retrieval import (
@@ -458,6 +459,15 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         limit=recall_limit, person=person, view=current_view,
         active_state=active_state, unsettled=unresolved_items, language=language,
         bank=bank, record=picker, known=known)
+    # A LATER MEMORY THAT CHANGES A RECALLED ONE COMES WITH IT
+    # (`memory_links.pull_successors`): the newest row a chain of
+    # `supersedes` links reaches, set in right after the row it changes and
+    # scored as it, where the payload does not carry it already. Unlabelled
+    # -- a mind handed both reads both and dates both (UNBUILT_CHARACTERS
+    # §2.24) -- and through the same firewall read as the net's.
+    recalled = pull_successors(
+        chat_id, char_id, recalled, current_turn_idx=current_turn_idx,
+        delivered=recent, bank=bank, record=picker)
     access_ids = [m.get("id") for m in recalled if m.get("id") is not None]
     # Best first, for the readers that take a head of the list (the affect
     # pass); the payload itself is chronological, below.

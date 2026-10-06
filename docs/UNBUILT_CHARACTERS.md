@@ -1166,6 +1166,43 @@ is that it is no longer zero.
   is noise, and it changes what gets minted. It is the same shape as the
   rumination watch on disputes, which chose legibility over prohibition.
 
+**BUILT 2026-10-05: a later memory that changes a recalled one comes with
+it** (Design.md; `mind/memory_links.py`). The concept lab's superseded links
+(`experiments/CONCEPT_LAB_2026_09_30.md` §10-13) make the co-presence above a
+property of recall instead of an occasion that has to arrive: a new turn
+memory is linked at commit to the older ones the decision model says it
+changes, and a recalled row brings in the memories that changed it,
+unlabelled. It aims at the class the tension reviewer misses -- "the world
+simply changed", 1 of 5 above -- and leaves the reviewer for the belief that
+turned out unfounded. What was measured before it shipped:
+[`experiments/SUPERSEDED_LINKS_2026_10_05.md`](experiments/SUPERSEDED_LINKS_2026_10_05.md).
+What it leaves:
+
+- **Seeded pasts form no links.** A planted past (charter history, a journey,
+  a greeting, an imported bank) never passes through commit, and the lab's
+  superseded probes all lie inside one; a link pass beside
+  `affect_pass.feel_seeded` is the second increment. Seeded rows tie at turn
+  -1, so "older" has to come from `encoded_at_seconds`.
+- **The question says yes often on real banks, and recall pulls a lot.** 24%
+  of 3,258 on chat 64's long scene rows, 10% on chat 161's short ones -- a
+  later scene changes "where something is" almost by definition -- and about
+  6 in 10 of a long bank's older rows have a successor, so a full recall
+  reaches the cap of 6 on nearly every beat. The benefit at production shape
+  (30 recalled beside 8 whole turns, against the lab's 10 beside 8) and the
+  false-link cost (19 of 30 links held up in the lab) are unmeasured. The
+  Japanese question takes the form that won in that pack ("if any one of these
+  holds, answer yes", the prose contract's ledger check) rather than the
+  English sentence translated, and is unprobed on Japanese passages: Jev
+  scores a translated question differently (measured 2026-09-28).
+- **Owner's calls, named:** the candidate count (10), the pull cap (6 a beat,
+  on top of an absorbed mind's narrowed recall), the quote length (1,500
+  characters a memory), and that a pulled row counts as reached
+  (`last_accessed_turn`, which primes the next beat's net).
+- **A host edit keeps a link judged against the old text** (`update_memory`
+  rewrites content and leaves the column), and a deleted older row leaves a
+  key that names nothing -- harmless, since keys are only resolved through
+  the visible rows.
+
 **The original reading, kept because it was the reasoning at the time:**
 
 **The engine already has the right shape and never reaches it.**
@@ -1579,4 +1616,4 @@ forgetting: sifting within the moment, larger packets organized by why each
 row is there, activation from use, open intentions, unbidden cues, mood-aware
 recall, surprise, self-defining memories, person dossiers, who else would
 remember, consolidation that organizes, and the current state first (which is
-§2.24). The note says where to start.
+§2.24, built 2026-10-05 as superseded links). The note says where to start.
