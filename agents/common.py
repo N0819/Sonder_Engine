@@ -1165,7 +1165,7 @@ def _concat_dedup(*value_lists):
 #: and again in round 1 came back twice, which is what `access_count` counted
 #: while `search_memories` still made the write itself. Deduping it here
 #: would quietly change the number the replay tools read.
-_MERGE_APPEND_FIELDS = ("sequence", "recalled_memory_ids", "tool_calls")
+_MERGE_APPEND_FIELDS = ("sequence", "recalled_memory_ids", "tool_calls", "_thought")
 
 #: Unioned, order-preserving, exact duplicates dropped (a re-emitted identical
 #: update across rounds). Each entry is an independent piece of work, so no
@@ -1274,7 +1274,7 @@ _MERGE_LATEST_WINS_FIELDS = (
 _MERGE_NON_SCHEMA_KEYS = frozenset({
     "stance_updates", "inference_updates", "ponder", "speech_volume",
     "name", "char_id", "unbidden_probe", "recalled_memory_ids",
-    "_barren_beat", "_affect_pass", "tool_calls",
+    "_barren_beat", "_affect_pass", "tool_calls", "_thought",
 })
 
 

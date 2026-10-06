@@ -1315,5 +1315,9 @@
     "could_not_be_made": "that lookup could not be made",
     "no_lookups_left": "no lookups left this turn",
     "unreadable_arguments": "the arguments could not be read"
+  },
+  "character_thinking": {
+    "kept": "Your thinking from your last {turns} turns stays beside the memory of each, as `what_you_were_thinking`; older thinking is gone, so put what you mean to keep in your notebook or your `note`.",
+    "not_kept": "Your reasoning does not carry over, so put what you mean to keep in your notebook or your `note`."
   }
 }

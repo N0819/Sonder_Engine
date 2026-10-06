@@ -330,6 +330,10 @@ modes each one documents.
   — a mind looking back while it decides, measured before anyone plays on it:
   the route probed raw, three stored beats replayed with the lookups off and
   on, and new turns that ask a long-running mind about its distant past.
+- [`KEPT_THINKING_2026_10_06.md`](experiments/KEPT_THINKING_2026_10_06.md)
+  — a mind keeping its thinking for a few turns: why it rides the packet and not
+  a multi-turn history (the card changes beat to beat; NanoGPT's cache across a
+  beat-sized gap held once in five), and off against on over a replayed stretch.
 
 ## `archive/` — superseded
 

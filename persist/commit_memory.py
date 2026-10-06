@@ -1865,6 +1865,12 @@ def prepare_memory_commit(ctx, *, scene=None):
                     else:
                         _notes[-1] = {"turn": turn.idx, "note": _own_note[:NOTE_CHARS]}
                     st["my_notes"] = _notes[-NOTES_KEPT:]
+                # What this mind was thinking this beat, kept a few turns
+                # (`mind/thoughts.py`): every call of the beat, in order, by
+                # the key of the turn's memory it is shown beside.
+                from mind.thoughts import keep_thought
+                keep_thought(st, turn.idx, _stable_event_key(turn.id, ccid, "episode"),
+                             own_result.get("_thought") or [])
                 # The notebook's reminders (mind/notebook.py): what this mind
                 # wants to keep track of, kept until it strikes them. What it
                 # thinks of people and things is merged below with the

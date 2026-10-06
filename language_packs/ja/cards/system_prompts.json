@@ -1315,5 +1315,9 @@
     "could_not_be_made": "その調べはできませんでした",
     "no_lookups_left": "このターンに調べられる回数は残っていません",
     "unreadable_arguments": "引数を読み取れませんでした"
+  },
+  "character_thinking": {
+    "kept": "直近{turns}ターンのあなたの思考は、それぞれの記憶のそばに`what_you_were_thinking`として残ります。それより古い思考は消えるので、残しておきたいことはノートか`note`に書いてください。",
+    "not_kept": "あなたの思考は次のターンに持ち越されないので、残しておきたいことはノートか`note`に書いてください。"
   }
 }

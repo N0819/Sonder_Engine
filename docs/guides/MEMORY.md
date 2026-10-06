@@ -468,6 +468,17 @@ and no ABOUT lane: a beat's view names everybody present, so there the lane
 would only be a second similarity ranking over the rows that do not say their
 names.
 
+**What a mind was thinking stands beside what happened** (`mind/thoughts.py`,
+2026-10-06; off unless `character_thoughts_kept` names a number of turns): the
+reasoning of a mind's calls on a beat, in order, cut to its last 6,000
+characters, kept in its own state for that many turns of the story -- not of
+its own beats, so a mind quiet for twenty turns holds nothing from before --
+and delivered as `what_you_were_thinking` on the row of the turn it was had in,
+in the recent lane, which is the recent past in order. A turn whose memory is
+not in front of the mind keeps its thought at its turn's place on its own.
+Nothing else reads it: not recall, not a ponder, not a lookup, not another
+mind.
+
 **Rows older than the tag are tagged too** (`persist/about_backfill.py`,
 2026-10-06): by the mint's own rule, from the checkpoint written as their
 turn began -- the people it puts there match the mint's in 106 of 106 rows

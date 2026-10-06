@@ -1308,10 +1308,18 @@ reach it: the experiment's §6.)
 
 **Not built, in the order the owner agreed:**
 
-- **Preserved reasoning.** "preserving the reasoning block in context for
-  about 5 turns ... chronologically ordered with recent episodes". The card's
-  context sentences say today's truth -- "Your reasoning does not carry over"
-  -- and must change in the same commit as the behaviour.
+- **Preserved reasoning -- BUILT 2026-10-06, off by default** (`mind/thoughts.py`,
+  `tests/test_kept_thoughts.py`). With `character_thoughts_kept` naming a number
+  of turns, a beat's reasoning -- every call of it, in order, its last
+  `THOUGHT_CHARS` (6,000, mine, unruled) -- is kept in the mind's own state for
+  that many turns of the STORY and delivered as `what_you_were_thinking` on the
+  row of the turn it was had in, in the recent lane. The card's sentence is the
+  setting's (`{thinking_carry}`). In the packet, not the multi-turn history
+  first proposed: the card's gated sections change from beat to beat, and
+  NanoGPT kept a cached prefix across a beat-sized gap once in five tries
+  ([`experiments/KEPT_THINKING_2026_10_06.md`](experiments/KEPT_THINKING_2026_10_06.md)
+  §1). What it buys over a replayed stretch is measured there, §2; the owner
+  sets the turns.
 - **More lookups.** `about` (everything this mind holds about one person or
   thing), `my_aims`, `promises`, `why_do_i_think` (the evidence under a
   note), `retrace`/`what_happened` (one turn whole), `route_to`/`where_can_i`

@@ -3891,6 +3891,16 @@ def character_step(ctx, cid, nonce):
     _carried_lookups = (ctx._extra.get("_looked_up") or {}).get(str(cid)) or []
     if _carried_lookups:
         memory_context["looked_up"] = [dict(r) for r in _carried_lookups]
+    # WHAT IT WAS THINKING, beside what happened (`mind/thoughts.py`, the
+    # owner, 2026-10-05: "preserving the reasoning block in context for about
+    # 5 turns ... chronologically ordered with recent episodes"): this mind's
+    # own kept thinking, each beside its turn's memory in the recent past.
+    from mind.thoughts import beside_their_turns, recent_thoughts
+    _kept_thoughts = recent_thoughts(stored_state, ctx.turn.idx)
+    if _kept_thoughts:
+        memory_context["recent_memories"] = beside_their_turns(
+            chat.id, cid, memory_context.get("recent_memories") or [], _kept_thoughts,
+            clock=MemoryClock(chat.id, cid, ctx.turn.idx))
     _unbidden_mem_id = None
     _unbidden_mem_ref = None
     if _unbidden_fire:
@@ -4712,7 +4722,11 @@ def character_step(ctx, cid, nonce):
     # another mind or the page, and only typed answers -- choices among rows
     # this mind was given, and grades -- leave it.
     _trace = str(last_reasoning.get() or "")
+    _thought_in_order = _trace
     if _loop is not None:
+        _thought_in_order = "\n\n".join(
+            t for t in (*(_loop.get("reasonings") or ()),
+                        "" if _loop.get("answer") else _trace) if str(t or "").strip())
         # Every round's thinking, the closing round's first: the read-back
         # keeps a trace's head, and the variant stores the whole of it.
         _rounds_trace = str(_loop.get("reasoning") or "")
@@ -4915,6 +4929,13 @@ def character_step(ctx, cid, nonce):
         # What this mind looked up, and how the rounds went: kept with the
         # step, so a reroll, a replay and the trace read it back.
         out["tool_calls"] = list(_lookups.calls) + [{"rounds": _loop_record}]
+    from mind.thoughts import thoughts_kept
+    if thoughts_kept() > 0 and _thought_in_order.strip():
+        # This call's thinking, in the order it was had, for the commit to
+        # keep in this mind's own state (`mind/thoughts.keep_thought`). A
+        # host field: the Director and the narrator read named fields of a
+        # character's result, never this one.
+        out["_thought"] = [_thought_in_order]
     if _asked:
         # What the heard-question check sent to the ponder lane this beat.
         out["asked_ponder"] = dict(_asked)

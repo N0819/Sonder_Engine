@@ -565,7 +565,8 @@ def look_then_answer(role, system, wire_payload, lookups, *, budget=TOOL_BUDGET,
                   seconds=round(time.time() - t0, 3))
     return {"answer": answer if stopped == "answered" and answer else None,
             "answer_started": answer_started,
-            "history": history, "reasoning": _joined(reasonings), "tools": specs}
+            "history": history, "reasoning": _joined(reasonings),
+            "reasonings": [r for r in reasonings if r.strip()], "tools": specs}
 
 
 def _joined(reasonings):

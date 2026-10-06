@@ -393,6 +393,12 @@ def character_jev_options(option_set, language=None):
             _prompt_card(language)["character_jev"]["options"][option_set].items()}
 
 
+def character_thinking_text(name, language=None):
+    """The card's sentence on whether a mind's thinking carries over
+    (`character_thinking.kept` / `.not_kept`, `mind/thoughts.py`)."""
+    return str(_prompt_card(language)["character_thinking"][name])
+
+
 def character_tools_text(name, language=None):
     """One description of the lookups a character may make mid-thought
     (`character_tools.<name>`, `agents/character_tools.tool_specs`): the

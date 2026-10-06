@@ -384,6 +384,16 @@ def prompt(name, modules, language=None, fill=None):
         text = (head + "\n\n" + "\n\n".join(extra) + sep + tail) if sep else text + "\n\n" + "\n\n".join(extra)
     for key, value in (fill or {}).items():
         text = text.replace("{" + key + "}", str(value))
+    # Whether this mind's thinking carries over is the setting's to say
+    # (`mind/thoughts.py`): the card is never allowed to promise what the
+    # packet does not hold, either way.
+    if "{thinking_carry}" in text:
+        from llm.prompts import character_thinking_text
+        from mind.thoughts import thoughts_kept
+        kept = thoughts_kept()
+        carry = (character_thinking_text("kept", language).replace("{turns}", str(kept))
+                 if kept > 0 else character_thinking_text("not_kept", language))
+        text = text.replace("{thinking_carry}", carry)
     return text.replace("{name}", name)
 
 
