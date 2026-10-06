@@ -1102,6 +1102,30 @@
     "belief_replaces": {
       "$text": "character_jev/belief_replaces.txt"
     },
+    "route_order": {
+      "$text": "character_jev/route_order.txt"
+    },
+    "route_kind": {
+      "$text": "character_jev/route_kind.txt"
+    },
+    "route_who": {
+      "$text": "character_jev/route_who.txt"
+    },
+    "route_past": {
+      "$text": "character_jev/route_past.txt"
+    },
+    "memory_met": {
+      "$text": "character_jev/memory_met.txt"
+    },
+    "memory_moment": {
+      "$text": "character_jev/memory_moment.txt"
+    },
+    "memory_heard": {
+      "$text": "character_jev/memory_heard.txt"
+    },
+    "memory_anchor": {
+      "$text": "character_jev/memory_anchor.txt"
+    },
     "options": {
       "volume": {
         "whisper": "In a whisper, for one listener.",
@@ -1297,6 +1321,23 @@
       "belief_replaces": {
         "changes": "It is that belief, changed.",
         "separate": "It is a different thought."
+      },
+      "route_order": {
+        "content": "Something it knows: a fact, a person, what was said, what to do, why or how.",
+        "earliest": "The first time something happened -- the earliest moment of it.",
+        "latest": "The last time something happened -- the most recent moment of it.",
+        "before": "What happened just before a particular moment.",
+        "after": "What happened just after a particular moment."
+      },
+      "route_kind": {
+        "met": "Seeing or meeting a particular person.",
+        "heard_of": "Hearing of someone or something, or being told of it.",
+        "place": "Being in a particular place.",
+        "act": "Something done, said or happening."
+      },
+      "route_who": {
+        "none": "No one in particular -- a thing, a place or an event.",
+        "asker": "{name} (asking you)"
       }
     }
   },
@@ -1323,7 +1364,17 @@
     "note_id": "The note's id, as your notebook shows it.",
     "no_such_need": "that is not a need this can answer",
     "no_such_place": "you know no place by that name",
-    "no_such_note": "your notebook holds no note with that id"
+    "no_such_note": "your notebook holds no note with that id",
+    "in_time_first_with": "the earliest moment I remember with {subject}",
+    "in_time_last_with": "the most recent moment I remember with {subject}",
+    "in_time_first_named": "the earliest I remember hearing of {subject}",
+    "in_time_last_named": "the most recent I remember hearing of {subject}",
+    "in_time_first_at": "the earliest I remember being at {subject}",
+    "in_time_last_at": "the last time I remember being at {subject}",
+    "in_time_first_it": "the earliest I remember it",
+    "in_time_last_it": "the most recent I remember it",
+    "in_time_before": "the moment the question is about; what came just before it is beside it",
+    "in_time_after": "the moment the question is about; what came just after it is beside it"
   },
   "character_thinking": {
     "kept": "Your thinking from your last {turns} turns stays beside the memory of each, as `what_you_were_thinking`; older thinking is gone, so put what you mean to keep in your notebook or your `note`.",

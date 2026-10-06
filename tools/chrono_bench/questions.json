@@ -1,0 +1,335 @@
+{
+  "asked_at": {
+    "turn": 311,
+    "by": "Wren",
+    "where": "Boathouse",
+    "note": "Wren asks Mara each question aloud; one question per character call, every call from the same bank state"
+  },
+  "questions": [
+    {
+      "id": "Q01",
+      "en": "Mara, do you remember when we first met?",
+      "ja": "マーラ、私たちが初めて会った時のこと、覚えてる？",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "Wren",
+      "answer_turns": [
+        1
+      ],
+      "answer": "Turn 1: Wren came aboard Mara's last evening ferry from the West Landing, soaked by rain, with a surveyor's chain and a satchel of maps, asking if the ferry still ran."
+    },
+    {
+      "id": "Q02",
+      "en": "When did you first meet Oren?",
+      "ja": "オレンに初めて会ったのはいつ？",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        22
+      ],
+      "answer": "Turn 22, at the East Landing at dusk, when her lamp smashed and he held up a green lantern."
+    },
+    {
+      "id": "Q03",
+      "en": "What were Oren's very first words to you?",
+      "ja": "オレンがあなたに最初に言った言葉は何だった？",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        22
+      ],
+      "answer": "\"You'll be wanting the green one, then.\""
+    },
+    {
+      "id": "Q04",
+      "en": "When did you first hear the name Oren Dask?",
+      "ja": "オレン・ダスクという名前を初めて聞いたのはいつ？",
+      "order": "earliest",
+      "kind": "heard_of",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        9
+      ],
+      "answer": "Turn 9, at the dock office: Aldous Toller, talking about the curfew, mentioned whoever was buying Oren Dask's green lanterns."
+    },
+    {
+      "id": "Q05",
+      "en": "When did you first see Bram?",
+      "ja": "ブラムを初めて見かけたのはいつ？",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "Bram Toller",
+      "answer_turns": [
+        30
+      ],
+      "answer": "Turn 30, in the market square: a tall lad with a burn-scarred left hand haggling over rope, before she knew his name (he was introduced at 61)."
+    },
+    {
+      "id": "Q06",
+      "en": "When did you first meet Tobin?",
+      "ja": "トビンに初めて会ったのはいつ？",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        80
+      ],
+      "answer": "Turn 80: she climbed to the boathouse loft with a lamp and found him behind the net-bales (the earlier noises were him, unseen)."
+    },
+    {
+      "id": "Q07",
+      "en": "When did you last see Oren?",
+      "ja": "最後にオレンを見たのはいつ？",
+      "order": "latest",
+      "kind": "met",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        296
+      ],
+      "answer": "Turn 296, at dawn, boarding the grain barge the Moth downriver, lifting a hand from the stern."
+    },
+    {
+      "id": "Q08",
+      "en": "When did you first hear about Councillor Hesk?",
+      "ja": "ヘスク議員のことを初めて聞いたのはいつ？",
+      "order": "earliest",
+      "kind": "heard_of",
+      "subject": "Councillor Hesk",
+      "answer_turns": [
+        101
+      ],
+      "answer": "Turn 101: Ilse showed her the mill's eviction notice, signed by Councillor Hesk."
+    },
+    {
+      "id": "Q09",
+      "en": "Have you ever actually met Councillor Hesk in person?",
+      "ja": "ヘスク議員に実際に会ったことはある？",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "Councillor Hesk",
+      "answer_turns": [],
+      "answer": "No: she has only ever heard of Hesk, never met or seen him."
+    },
+    {
+      "id": "Q10",
+      "en": "When did you first light the green lantern?",
+      "ja": "緑のランタンに初めて火を灯したのはいつ？",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "",
+      "answer_turns": [
+        33
+      ],
+      "answer": "Turn 33, the first crossing after curfew with it hung at the bow."
+    },
+    {
+      "id": "Q11",
+      "en": "When was the first time you lied to Ilse?",
+      "ja": "イルゼに初めて嘘をついたのはいつ？",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        96
+      ],
+      "answer": "Turn 96: Ilse asked about a stranger in a blue coat and Mara said she hadn't seen anyone around the boathouse."
+    },
+    {
+      "id": "Q12",
+      "en": "What happened right after the mill fire?",
+      "ja": "水車小屋の火事のすぐ後、何があった？",
+      "order": "after",
+      "kind": "event",
+      "subject": "",
+      "answer_turns": [
+        141,
+        142,
+        143
+      ],
+      "answer": "She poled the smoke-sick Ilse across to the chapel; Bram burned his hands on a beam; at dawn the town gathered at the landing and the sexton said the fire was set.",
+      "moment_turn": 140
+    },
+    {
+      "id": "Q13",
+      "en": "What were you doing just before the mill fire?",
+      "ja": "水車小屋の火事の直前、何をしていた？",
+      "order": "before",
+      "kind": "event",
+      "subject": "",
+      "answer_turns": [
+        135,
+        136,
+        137,
+        138,
+        139
+      ],
+      "answer": "Repairing the Heron's cracked rudder oar at the boathouse with Tobin.",
+      "moment_turn": 140
+    },
+    {
+      "id": "Q14",
+      "en": "What did you do right after Tobin told you about the grain?",
+      "ja": "トビンから穀物の話を聞いた直後、何をした？",
+      "order": "after",
+      "kind": "event",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        201,
+        202,
+        203
+      ],
+      "answer": "Walked straight to the Lantern Inn and confronted Oren in his workshop; he told her to keep poling and keep quiet.",
+      "moment_turn": 200
+    },
+    {
+      "id": "Q15",
+      "en": "What happened your first night at the Lantern Inn?",
+      "ja": "ランタン亭で初めて過ごした夜、何があった？",
+      "order": "earliest",
+      "kind": "place",
+      "subject": "Lantern Inn",
+      "answer_turns": [
+        70,
+        71,
+        72
+      ],
+      "answer": "Caught by the curfew, she took a room there for the night (turns 70-72)."
+    },
+    {
+      "id": "Q16",
+      "en": "When were you last at the old mill?",
+      "ja": "最後に古い水車小屋へ行ったのはいつ？",
+      "order": "latest",
+      "kind": "place",
+      "subject": "Old Mill",
+      "answer_turns": [
+        262
+      ],
+      "answer": "Turn 262: into the burned shell to fetch Ilse's ledger from under the hearthstone."
+    },
+    {
+      "id": "Q17",
+      "en": "When did you last fix the Heron's rudder?",
+      "ja": "最後にヘロン号の舵を直したのはいつ？",
+      "order": "latest",
+      "kind": "said_or_did",
+      "subject": "",
+      "answer_turns": [
+        290
+      ],
+      "answer": "Turn 290: a new pin for the rudder oar."
+    },
+    {
+      "id": "Q18",
+      "en": "How long have you known Ilse?",
+      "ja": "イルゼとはどのくらいの付き合い？",
+      "order": "content",
+      "kind": "",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        "past"
+      ],
+      "answer": "Since they were children: the winter Mara was seven she pulled Ilse out of the river ice."
+    },
+    {
+      "id": "Q19",
+      "en": "What was the name of the barge Oren left on?",
+      "ja": "オレンが乗って行った荷船の名前は？",
+      "order": "content",
+      "kind": "",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        296
+      ],
+      "answer": "The Moth."
+    },
+    {
+      "id": "Q20",
+      "en": "What did Tobin say Oren's crossings were carrying?",
+      "ja": "トビンはオレンの渡しが何を運んでいると言っていた？",
+      "order": "content",
+      "kind": "",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        200
+      ],
+      "answer": "Stolen grain from the council's own stores."
+    },
+    {
+      "id": "Q21",
+      "en": "When did you first see the river serpent?",
+      "ja": "川の大蛇を初めて見たのはいつ？",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "",
+      "answer_turns": [],
+      "answer": "Never: there is no river serpent in her memories."
+    },
+    {
+      "id": "Q22",
+      "en": "What happened right before you found Tobin in the loft?",
+      "ja": "屋根裏でトビンを見つける直前、何があった？",
+      "order": "before",
+      "kind": "event",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        76,
+        77,
+        78,
+        79
+      ],
+      "answer": "She heard the noise in the loft again in daylight (76); that night she set bread on the top rung as bait, then carried Oren's three sacks across after curfew under the lit green lantern (77); back late, the bread was gone (78), so she took the lamp up the loft ladder and heard breathing behind the net-bales (79).",
+      "moment_turn": 80
+    },
+    {
+      "id": "Q23",
+      "en": "When did you last see Tobin?",
+      "ja": "最後にトビンを見たのはいつ？",
+      "order": "latest",
+      "kind": "met",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        310
+      ],
+      "answer": "Just now / this morning (turn 310): he is still with them."
+    },
+    {
+      "id": "Q24",
+      "en": "Who gave you the green lantern?",
+      "ja": "緑のランタンをくれたのは誰？",
+      "order": "content",
+      "kind": "",
+      "subject": "",
+      "answer_turns": [
+        22
+      ],
+      "answer": "Oren Dask, at the East Landing."
+    },
+    {
+      "id": "Q25",
+      "en": "When did you first hear the noises in the loft?",
+      "ja": "屋根裏の物音を初めて聞いたのはいつ？",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "",
+      "answer_turns": [
+        45
+      ],
+      "answer": "Turn 45, the storm night."
+    },
+    {
+      "id": "Q26",
+      "en": "What happened the last time you were at the old mill?",
+      "ja": "最後に古い水車小屋へ行った時、何があった？",
+      "order": "latest",
+      "kind": "place",
+      "subject": "Old Mill",
+      "answer_turns": [
+        262
+      ],
+      "answer": "She went into the burned shell and fetched Ilse's ledger from under the hearthstone."
+    }
+  ]
+}

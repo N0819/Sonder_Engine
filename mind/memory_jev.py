@@ -107,18 +107,54 @@ PONDER_FLOOR = 0.6
 PONDER_ABOUT_RESERVE = 20
 
 
+#: A script written without spaces between its words (kana, CJK ideographs,
+#: half-width katakana): in it a name cannot be found as a word, only in place.
+_UNSPACED = re.compile(r"[぀-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]")
+
+
 def named_in(text, names):
     """Which of `names` the text names: a name is named when one of its words
     of three letters or more, other than "the", stands in the text as a word
     -- "Picard" names "Jean-Luc Picard", and a question need not spell out a
-    whole name to ask about someone."""
-    words = set(re.findall(r"\w+", str(text or "").casefold()))
+    whole name to ask about someone. A word in a script written without
+    spaces stands in the text where it occurs at all ("オレン" names
+    "オレン・ダスク" in "オレンに初めて会ったのはいつ？"): the whole run between
+    two spaces is one `\\w+` there, so a word test never matched a Japanese
+    name and the ABOUT lane never fired for one (found 2026-10-06)."""
+    folded = str(text or "").casefold()
+    words = set(re.findall(r"\w+", folded))
     out = []
     for name in names or ():
-        tokens = [t for t in re.findall(r"\w+", str(name or "").casefold()) if len(t) >= 3 and t != "the"]
-        if tokens and any(t in words for t in tokens):
+        parts = re.findall(r"\w+", str(name or "").casefold())
+        tokens = [t for t in parts if len(t) >= 3 and t != "the"]
+        tokens += [t for t in parts if len(t) >= 2 and _UNSPACED.search(t) and t not in tokens]
+        whole = "".join(parts)
+        if len(parts) > 1 and _UNSPACED.search(whole):
+            tokens.append(whole)          # "オレンダスク", the name written without its dot
+        if tokens and any(_stands_in(t, folded, words) for t in tokens):
             out.append(name)
     return out
+
+
+#: Katakana letters, the prolonged-sound mark and half-width katakana -- never
+#: the middle dot that separates a name's parts.
+_KATAKANA = "ァ-ヺーｦ-ﾟ"
+_ALL_KATAKANA = re.compile(f"[{_KATAKANA}]+")
+
+
+def _stands_in(token, folded, words):
+    """Whether one word of a name stands in the text: as a word; or, in a
+    script without spaces, in place -- a katakana word only where the
+    katakana around it ends, since inside a longer run it is part of another
+    word ("オレン" in "オレンジ", an orange); kanji and kana words wherever they
+    stand, since particles and honorifics attach to them ("田中先生")."""
+    if token in words:
+        return True
+    if not _UNSPACED.search(token):
+        return False
+    if _ALL_KATAKANA.fullmatch(token):
+        return re.search(f"(?<![{_KATAKANA}]){re.escape(token)}(?![{_KATAKANA}])", folded) is not None
+    return token in folded
 
 
 def without_names(text, names):
@@ -288,7 +324,7 @@ def memory_net(chat_id, char_id, query_text, *, current_turn_idx, embedded, aspe
     return memories, net, lanes, vectors
 
 
-def memory_line(mem, current_turn_idx, known=()):
+def memory_line(mem, current_turn_idx, known=(), chars=None):
     """One remembered row as a question carries it -- with who was in it
     where the mind knows a name its text never says (`unnamed_about`), so a
     row reading "the young woman" is graded as the moment with Hinami it is.
@@ -304,7 +340,11 @@ def memory_line(mem, current_turn_idx, known=()):
     0.77, and over all 30 questions handed on an answer for 20 of 23, against
     19 for "about" and 17 with no tags, none of the 7 unanswerable ones
     leaking."""
-    body = " ".join(str(mem.get("content") or mem.get("gist") or "").split())[:MEMORY_CHARS]
+    # `chars` is a caller's own length (a routed ponder's check reads more of a
+    # row, `memory_routes.VERIFY_CHARS`); the module's is read here, at call
+    # time, so a caller that sets it -- the concept lab's scripts -- still can.
+    body = " ".join(str(mem.get("content") or mem.get("gist") or "").split())[
+        :MEMORY_CHARS if chars is None else int(chars)]
     when = mem.get("turn_idx")
     if isinstance(when, int) and when < 0:
         ago = "before this story"  # a seeded past (`memory_time.PRESTORY_TURN_IDX`)
@@ -380,14 +420,16 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
                       aspects=(), here=None, exclude_ids=(), limit=24, person=None,
                       view="", active_state=None, unsettled=(), language=None,
                       bank=None, record=None, net_size=NET_SIZE, questions=QUESTIONS,
-                      state=None, about=(), known=(), about_reserve=0):
+                      state=None, about=(), known=(), about_reserve=0, net_out=None):
     """The rows this mind recalls this beat, best first, each carrying its
     `score` (its grade, or its net score when no grade came back). `person`
     (`{name, drive, values}`) names the mind the decision model grades for;
     without one -- the author's preview, which must not pay for a model call
     -- the packet is the net's own order. `record` receives what happened.
     `net_size`, `questions` and a ready `state` are a ponder's
-    (`jev_ponder_packet`); the defaults are recall's."""
+    (`jev_ponder_packet`); the defaults are recall's. `net_out` receives the
+    net's own reading (`memories`, `lanes`, `vectors`), for a routed ponder's
+    search to read the same rows rather than the bank again."""
     record = record if record is not None else {}
     t0 = time.time()
     active_state = active_state or {}
@@ -398,6 +440,8 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
         aspects=aspects, here=here, exclude_ids=exclude_ids,
         feeling_valence=surface.get("valence") if isinstance(surface, dict) else None,
         bank=bank, size=net_size, about=about, known=known, about_reserve=about_reserve)
+    if net_out is not None:
+        net_out.update(memories=memories, lanes=lanes, vectors=vectors)
     record.update(bank=len(memories), net=len(net),
                   lanes=sorted(name for name, ranking in lanes.items() if ranking))
     grades = {}
@@ -448,8 +492,87 @@ def jev_memory_packet(chat_id, char_id, query_text, *, current_turn_idx, embedde
 def jev_ponder_packet(chat_id, char_id, query, *, why="", current_turn_idx, embedded,
                       here=None, limit=PONDER_LIMIT, person=None, view="",
                       active_state=None, unsettled=(), language=None, bank=None,
-                      record=None, about=(), known=()):
-    """What a ponder brings up (the owner, 2026-09-29: "Ponder pulls up 50
+                      record=None, about=(), known=(), asked_by=None):
+    """What a ponder brings up: the graded ponder (`_graded_ponder`), and --
+    when the question asks for a first time, a last time, or what came just
+    before or after something -- the moment the search built for that
+    question finds, and the turns around it (`mind.memory_routes`, the owner
+    2026-10-06: "we can have alt search engines specialized for different
+    lookups"). The router reads the question alone, beside the grade; its
+    rows come first, the moment marked (`in_time`), then the graded picks it
+    did not already bring. Routing adds and never removes: a question read as
+    asking for anything, a router or a search that cannot answer, and the
+    ponder is the graded one alone. `asked_by` is who asked, when somebody
+    did: a candidate for who the question is about ("when did we first
+    meet?"), where this mind knows the name."""
+    from llm import decisions
+    from mind import memory_routes
+    record = record if record is not None else {}
+    known_set = {str(n).casefold() for n in known or ()}
+    people = list(about or ())
+    if asked_by and str(asked_by).casefold() in known_set and asked_by not in people:
+        people.append(str(asked_by))
+    job = None
+    try:
+        if person is not None and memory_routes.routing_on() and decisions.configured():
+            job = memory_routes.route_soon(query, asker=asked_by, people=people, language=language)
+    except Exception as exc:  # noqa: BLE001 -- the floor: the graded ponder
+        record["route"] = {"unasked": f"{type(exc).__name__}: {str(exc)[:200]}"}
+    net = {}
+    kept = _graded_ponder(chat_id, char_id, query, why=why, current_turn_idx=current_turn_idx,
+                          embedded=embedded, here=here, limit=limit, person=person, view=view,
+                          active_state=active_state, unsettled=unsettled, language=language,
+                          bank=bank, record=record, about=about, known=known, net_out=net)
+    if job is None:
+        return kept
+    routed_record = record.setdefault("route", {})
+    t0 = time.time()
+    try:
+        route = job.result()
+    except Exception as exc:  # noqa: BLE001 -- the floor: the graded ponder
+        routed_record["unasked"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+        return kept
+    routed_record.update(route)
+    memories = net.get("memories") or {}
+    places = list(dict.fromkeys(str(m.get("location") or "").strip() for m in memories.values()
+                                if str(m.get("location") or "").strip()))
+    try:
+        routed = memory_routes.answer(
+            route, query, memories=memories, vectors=net.get("vectors") or {},
+            lanes=net.get("lanes") or {}, embedded=embedded, known=known_set, places=places,
+            current_turn_idx=current_turn_idx, language=language, asker=asked_by,
+            record=routed_record)
+    except Exception as exc:  # noqa: BLE001 -- a search that cannot finish adds nothing
+        routed_record["failed"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+        routed = []
+    routed_record["seconds"] = round(time.time() - t0, 3)
+    if not routed:
+        return kept
+    graded = {m.get("id"): m for m in kept}
+    out = []
+    for i, mem in enumerate(routed):
+        mem = dict(mem)
+        # The moment found is what the mind went looking for: its grade if
+        # the ponder graded it too, else how surely it was verified, else
+        # certain (found by its tag or its place); the turns around it keep
+        # the grade they earned, or none.
+        own = graded.get(mem.get("id"))
+        if own is not None:
+            mem["score"], mem["picked_by"] = own.get("score"), own.get("picked_by")
+        elif i == 0:
+            mem["score"] = float(routed_record.get("anchor_p") or 1.0)
+        else:
+            mem["score"] = 0.0
+        out.append(mem)
+    have = {m.get("id") for m in out}
+    return out + [m for m in kept if m.get("id") not in have]
+
+
+def _graded_ponder(chat_id, char_id, query, *, why="", current_turn_idx, embedded,
+                   here=None, limit=PONDER_LIMIT, person=None, view="",
+                   active_state=None, unsettled=(), language=None, bank=None,
+                   record=None, about=(), known=(), net_out=None):
+    """The graded ponder (the owner, 2026-09-29: "Ponder pulls up 50
     candidates using rrf for jev to sort on how well it answers the ponder"):
     a net of `PONDER_NET` by the picker's equal-weight RRF over the question
     the mind asked its own memory (`embedded` carries that question alone),
@@ -469,7 +592,7 @@ def jev_ponder_packet(chat_id, char_id, query, *, why="", current_turn_idx, embe
         here=here, limit=limit, person=person, view=view, active_state=active_state,
         unsettled=unsettled, language=language, bank=bank, record=record,
         net_size=PONDER_NET, questions=PONDER_QUESTIONS, about=about, known=known,
-        about_reserve=PONDER_ABOUT_RESERVE,
+        about_reserve=PONDER_ABOUT_RESERVE, net_out=net_out,
         state=(ponder_state(person, view, active_state, unsettled, query, why)
                if person is not None else None))
     if not any(m.get("picked_by") == "decision model" for m in picks):

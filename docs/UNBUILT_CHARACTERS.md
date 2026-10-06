@@ -1336,13 +1336,36 @@ reach it: the experiment's §6.)
   handle so `expand` can open it. Still open: `about` (everything this mind
   holds about one person or thing), `my_aims`, `promises`,
   `retrace`/`what_happened` (one turn whole), keep-in-mind pins.
-- **Chronological recall.** "Her very first words", "the last time I saw X",
-  "right before the fight": the ponder ranks by relevance and has no notion of
-  order, and the earliest match can fall outside its fifty (the first-words
-  miss). Proposed, not built: the question's type chooses which lists the
-  fusion takes and which get reserved places, code decides the order, and
-  nothing scans the bank
-  ([`design/DESIGN_CHRONOLOGICAL_RECALL.md`](design/DESIGN_CHRONOLOGICAL_RECALL.md)).
+- **Chronological recall: the rest.** Built 2026-10-06 (branch
+  `chrono-recall`, `mind/memory_routes.py`): a ponder's question is routed
+  by the decision model, and a search built for a first or last time, a
+  meeting, hearing of, being somewhere, or what came just before or after
+  runs beside the graded ponder, the moment marked (`in_time`)
+  ([`experiments/CHRONO_RECALL_2026_10_06.md`](experiments/CHRONO_RECALL_2026_10_06.md)).
+  Still open:
+  - **One discovery among many like scenes** ("what happened right before you
+    found Tobin in the loft?"): every wording tried ranked a later night scene
+    of him in the boathouse above the finding itself; the walk takes the
+    surest, so it marks the wrong night.
+  - **A meeting asked without "first"** ("how did you and Captain Harrow
+    meet?") stays a content question, as does "the morning of" an event in
+    Japanese -- safe, the graded ponder still answers by relevance, but
+    unrouted.
+  - **A first sight of a place from elsewhere that names it** ("I saw the
+    Lantern Inn's windows from the river"): a walk for a place the router
+    read as an act prefers the place's own moment over a row that merely
+    names it, which is how "your first night at the Lantern Inn" stopped
+    taking Wren's look inside for it -- and a first sight from the river that
+    says the inn's full name is such a row too.
+  - **Two nights told as one**: all four arms dated finding Tobin to "the
+    storm night" when he slipped in, 35 turns earlier, with the right moment
+    marked in front of them -- a telling error routing does not reach.
+  - **Comparison questions** ("did I meet Oren before or after the fire?"):
+    two anchors, ordered by code; not asked for yet.
+  - **The typed-act search and the summary timeline**
+    ([`design/DESIGN_CHRONOLOGICAL_RECALL.md`](design/DESIGN_CHRONOLOGICAL_RECALL.md)).
+  - **The known-names gap** (§6.17): a person a mind has no `known` entry for
+    has no live tag, so "when did I first meet X" falls to the walk.
 - **Disputes made precise.** The owner: "with the tool calls... disputes could
   potentially become surgically precise". A looked-up row joins the
   read-back's memories, so a dispute can already name it, and

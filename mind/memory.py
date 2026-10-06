@@ -104,6 +104,9 @@ from mind.memory_links import (  # noqa: F401
     CHAIN_HOPS, LINK_CANDIDATES, LINK_QUOTE_CHARS, LINK_THRESHOLD, PULL_CAP,
     form_memory_links, pull_successors,
 )
+from mind.memory_routes import (  # noqa: F401
+    names_place, read_route, route_question, route_questions, routing_on, says_name,
+)
 from mind.memory_time import (  # noqa: F401
     JUST_NOW, MemoryClock, PRESTORY_TURN_IDX, UNIT_LADDER, WHEN_BEFORE_RECORD, WHEN_UNPLACEABLE,
     current_clock_reading, elapsed_phrase, time_ago_phrase, time_ago_span,

@@ -830,8 +830,10 @@ def heard_question(heard, language=None):
 
     `heard` is `character_bare._heard_lines` -- the spoken percepts that
     reached this mind, never its own -- and the state is those lines alone.
-    Returns `{query, why, probability}` for the line most surely a question
-    (at least `HEARD_QUESTION_FLOOR`; the later on a tie), or None."""
+    Returns `{query, why, probability, speaker}` for the line most surely a
+    question (at least `HEARD_QUESTION_FLOOR`; the later on a tie), or None
+    -- `speaker` as this mind's perception labels them, which a routed
+    ponder may read as who "we" or "you" means (`mind.memory_routes`)."""
     heard = [x for x in heard or () if str(x.get("text") or "").strip()]
     if not heard:
         return None
@@ -855,7 +857,7 @@ def heard_question(heard, language=None):
     return {"query": _text(words, 240),
             "why": _fill(character_jev_text("heard_question_why", language),
                          {"speaker": speaker, "line": _text(words, 200)}),
-            "probability": round(p, 3)}
+            "probability": round(p, 3), "speaker": speaker}
 
 
 def _spoken_words(text):

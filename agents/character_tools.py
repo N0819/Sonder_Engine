@@ -231,12 +231,18 @@ class Lookups:
             self._clock_now = self._clock()
         key = str(row.get("event_key") or "")
         if key not in self._projected:
-            self._projected[key] = _with_reading(
-                row, self._clock_now, set(self.ponder_inputs.get("known") or ()))
-        projected = self._projected[key]
+            reading = _with_reading(row, self._clock_now, set(self.ponder_inputs.get("known") or ()))
+            reading.pop("in_time", None)          # the cache holds the unmarked reading
+            self._projected[key] = reading
+        # A routed ponder's mark (`mind.memory_routes`) belongs to the lookup
+        # that found it: this row's own, never one an earlier lookup left on
+        # the cache -- "the earliest I remember it" means that question's "it".
+        mark = str(row.get("in_time") or "").strip()
+        projected = dict(self._projected[key], in_time=mark) if mark else self._projected[key]
         held = key in self._in_packet or key in self._delivered_keys
         ref = self._key_to_handle.get(key) or "m0"
         item = ({"memory_ref": ref, "when": projected.get("when", ""),
+                 **({"in_time": mark} if mark else {}),
                  "already_in_front_of_you": True} if held else dict(projected, memory_ref=ref))
         return key, projected, item
 
@@ -257,20 +263,33 @@ class Lookups:
             out.append(item)
             if not held:
                 self._delivered_keys.add(key)
-                self.delivered.append(projected)
+                self.delivered.append(dict(projected))
                 if row.get("id") is not None:
                     self.reached_ids.append(row["id"])
+            elif projected.get("in_time"):
+                # A moment found in a row this call already delivered: the
+                # delivery the read-back and every later rung read gains it.
+                for done in self.delivered:
+                    if str(done.get("memory_ref") or "") == key:
+                        done["in_time"] = projected["in_time"]
         return out
 
     def _deliver(self, rows):
-        """A ponder's rows, best first, as many as fit in `RESULT_CHARS`."""
-        keep, size = [], 0
+        """A ponder's rows chosen in the order given -- a routed moment first,
+        then its turns, then the graded picks best first -- while they fit in
+        `RESULT_CHARS`, and handed back in time order: a cut by time would drop
+        the latest rows first, and a last time is the latest of its span."""
+        keep, size, more = [], 0, False
         for row in rows:
             size += self._size([row])
             if size > RESULT_CHARS and keep:
-                return {"memories": self._returned(keep), "more_than_fits": True}
+                more = True
+                break
             keep.append(row)
-        return {"memories": self._returned(keep)}
+        out = {"memories": self._returned(sorted(keep, key=_order))}
+        if more:
+            out["more_than_fits"] = True
+        return out
 
     # -- the lookups -----------------------------------------------------------
     def ponder(self, query):
@@ -292,7 +311,7 @@ class Lookups:
                                 current_turn_idx=self.turn_idx, bank=self.bank)
         if not picks:
             return {"memories": [], "nothing_comes_back": True}
-        return self._deliver(sorted(picks, key=_order))
+        return self._deliver(picks)   # chosen best first, handed back in time order
 
     def notebook(self):
         from mind import notebook as nb

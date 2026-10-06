@@ -3740,6 +3740,7 @@ def character_step(ctx, cid, nonce):
         ponder_why=_ponder_why,
         asked_query=(_asked or {}).get("query", ""),
         asked_why=(_asked or {}).get("why", ""),
+        asked_by=(_asked or {}).get("speaker"),
         resurfaced_subject=_resurfaced,
         bank=_memory_bank,
         # The mind the decision model picks recalled memories FOR: who it

@@ -1102,6 +1102,30 @@
     "belief_replaces": {
       "$text": "character_jev/belief_replaces.txt"
     },
+    "route_order": {
+      "$text": "character_jev/route_order.txt"
+    },
+    "route_kind": {
+      "$text": "character_jev/route_kind.txt"
+    },
+    "route_who": {
+      "$text": "character_jev/route_who.txt"
+    },
+    "route_past": {
+      "$text": "character_jev/route_past.txt"
+    },
+    "memory_met": {
+      "$text": "character_jev/memory_met.txt"
+    },
+    "memory_moment": {
+      "$text": "character_jev/memory_moment.txt"
+    },
+    "memory_heard": {
+      "$text": "character_jev/memory_heard.txt"
+    },
+    "memory_anchor": {
+      "$text": "character_jev/memory_anchor.txt"
+    },
     "options": {
       "volume": {
         "whisper": "ささやき声で、一人にだけ。",
@@ -1297,6 +1321,23 @@
       "belief_replaces": {
         "changes": "その信念が変わったもの。",
         "separate": "別の考え。"
+      },
+      "route_order": {
+        "content": "知っていること——事実、人、言われたこと、これからすること、なぜ、どのように。",
+        "earliest": "何かが初めて起きた時——そのいちばん初めの時。",
+        "latest": "何かが最後に起きた時——そのいちばん最近の時。",
+        "before": "ある時のすぐ前に起きたこと。",
+        "after": "ある時のすぐ後に起きたこと。"
+      },
+      "route_kind": {
+        "met": "特定の誰かを見かけたり、その人に会ったりすること。",
+        "heard_of": "誰かや何かのことを耳にしたり、聞かされたりすること。",
+        "place": "特定の場所にいること。",
+        "act": "何かをしたり、言ったり、何かが起きたりすること。"
+      },
+      "route_who": {
+        "none": "特に誰でもない——物、場所、出来事についての問い。",
+        "asker": "{name}（尋ねている人）"
       }
     }
   },
@@ -1323,7 +1364,17 @@
     "note_id": "ノートに示されているとおりの、その書き留めのid。",
     "no_such_need": "それはこれで答えられる必要ではありません",
     "no_such_place": "その名前の場所をあなたは知りません",
-    "no_such_note": "そのidの書き留めはノートにありません"
+    "no_such_note": "そのidの書き留めはノートにありません",
+    "in_time_first_with": "{subject}と一緒だった、覚えている限りいちばん初めの時",
+    "in_time_last_with": "{subject}と一緒だった、覚えている限りいちばん最近の時",
+    "in_time_first_named": "{subject}のことを耳にした、覚えている限りいちばん初めの時",
+    "in_time_last_named": "{subject}のことを耳にした、覚えている限りいちばん最近の時",
+    "in_time_first_at": "{subject}にいた、覚えている限りいちばん初めの時",
+    "in_time_last_at": "{subject}にいた、覚えている限り最後の時",
+    "in_time_first_it": "覚えている限りいちばん初めの時",
+    "in_time_last_it": "覚えている限りいちばん最近の時",
+    "in_time_before": "問いが指しているその時。そのすぐ前にあったことが隣に並んでいる",
+    "in_time_after": "問いが指しているその時。そのすぐ後にあったことが隣に並んでいる"
   },
   "character_thinking": {
     "kept": "直近{turns}ターンのあなたの思考は、それぞれの記憶のそばに`what_you_were_thinking`として残ります。それより古い思考は消えるので、残しておきたいことはノートか`note`に書いてください。",

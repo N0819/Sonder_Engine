@@ -1,10 +1,19 @@
 # Chronological recall: first, last, before, after
 
-Status: PROPOSED, 2026-10-06. Nothing here is built. The question is the
-owner's ("what would we need for chronological?", "a complete scan is too
+Status: PARTLY BUILT, 2026-10-06 (branch `chrono-recall`). The question is
+the owner's ("what would we need for chronological?", "a complete scan is too
 expensive", "could we have RRF change itself depending on the type of question
 asked?"); the evidence is a verified literature sweep (§2) and one measured
-miss (§1).
+miss (§1). What was built is not §3's shape: the owner moved it the same day
+("we can have alt search engines specialized for different lookups"; "With
+jev we don't even need the llm to think about the question type or field"),
+so the decision model reads the question and a SEARCH built for its type runs
+beside the graded ponder -- rather than the question choosing lanes inside
+one fusion. Built: the router, the met / heard-of / place searches, the
+verified walk, just-before / just-after (`mind/memory_routes.py`); measured in
+`docs/experiments/CHRONO_RECALL_2026_10_06.md`. Not built: the typed-act
+search, the summary timeline, comparison questions ("was it before or after
+X?"), and §5's known-names gap.
 
 ## 1. The miss
 

@@ -499,6 +499,32 @@ whose `known` list holds no entry: 65 of the 149 minds with memories there,
 the Doctor of chat 64 among them, who says Hinami's name in his own lines
 (`UNBUILT_CHARACTERS.md` §6.17).
 
+**A question about WHEN gets its own search** (`mind/memory_routes.py`,
+2026-10-06; on unless the `ponder_routes` setting is "off"). A ponder ranks by
+relevance, and "first" is a memory's place among the ones that match, not
+anything in its content -- asked for her very first words, the Doctor's
+ponder came back without the turn they were said in. Every ponder now runs
+through `jev_ponder_packet`, which asks the decision model, against the
+question alone and beside the ponder's own grade: what does it ask the memory
+for (anything / the first time / the last time / just before / just after),
+what is a first or last time OF (meeting someone / hearing of / being
+somewhere / something done), does it ask about the past at all, and whom it is
+about. A first or last meeting is read off the who-was-there tag (rows that
+name the person before their first tag are asked about, a meeting may be
+heard), a first hearing off the name, a place off `location`, each confirmed
+once against the question; anything else is WALKED -- the rows nearest the
+question in time order, a named person's or an asked-about place's own
+earliest (latest) rows held beside them, the first the model is sure of taken
+(`WALK_FLOOR` 0.8); just before / just after take the moment the model is
+surest of (a near tie to the earlier) and read the turns on the side asked.
+The moment comes back marked in the story's words (`in_time`) with
+`SPAN_TURNS` around it, before the graded picks, which always still come
+back. Measured on a planted 310-turn bank and the owner's character route
+(`docs/experiments/CHRONO_RECALL_2026_10_06.md`): the planted answer reached
+the mind's packet for 23 of 24 questions against 18, the marked moment was
+right for 19 of 21, and blind-graded answers went from 18 to 23 right of 26
+with lookups off (19 to 22 with them on), invented details from 6 to 1.
+
 Until then the lane was `search_memories(query)` at the SAME budget passive
 recall used -- `recall_limit` after absorption had narrowed it, so 16 for a
 relaxed mind, 8 part-absorbed, and a floor of 4 -- rather than a fixed four.

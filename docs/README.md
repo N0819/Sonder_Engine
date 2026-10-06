@@ -338,6 +338,12 @@ modes each one documents.
   — a mind keeping its thinking for a few turns: why it rides the packet and not
   a multi-turn history (the card changes beat to beat; NanoGPT's cache across a
   beat-sized gap held once in five), and off against on over a replayed stretch.
+- [`CHRONO_RECALL_2026_10_06.md`](experiments/CHRONO_RECALL_2026_10_06.md)
+  — the question chooses its search: the router probed in English and
+  Japanese (and on held-out questions), a planted 310-turn bank checked by
+  code and adversarial readers (`tools/chrono_bench/`), retrieval in four
+  rounds, the Doctor's first-words miss on chat 74, and the character in four
+  arms graded blind.
 
 ## `archive/` — superseded
 

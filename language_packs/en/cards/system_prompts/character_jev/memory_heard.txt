@@ -1,0 +1,3 @@
+Do you hear of, or are you told about, what the question asks about in this memory?
+
+{memory}

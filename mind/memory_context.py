@@ -120,6 +120,12 @@ def _with_reading(mem, clock, known=()):
                "memory_ref", "temporal_status", "memory_form",
                "epistemic_origin", "confidence", "felt_importance"}}
     out["when"] = clock.of_memory(mem)
+    # WHERE IT STANDS IN TIME, on the one row a routed ponder found
+    # (`mind.memory_routes`): "the earliest moment I remember with Oren Dask".
+    # The search decided the order; the mind is told what it found, in the
+    # story's words, at the point of use.
+    if str(mem.get("in_time") or "").strip():
+        out["in_time"] = str(mem["in_time"])
     # WHO WAS IN IT, where the mind knows a name its text never says: the
     # row minted before it learned the name, or written as a description,
     # read now as the moment with that person it always was. "With", not
@@ -275,12 +281,14 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                    recent_turns=RECENT_TURNS, recall_limit=_RECALL_LIMIT, here=None,
                                    in_sight=None, absorption=0.0,
                                    ponder_query="", ponder_why="", asked_query="", asked_why="",
-                                   resurfaced_subject="", bank=None,
+                                   asked_by=None, resurfaced_subject="", bank=None,
                                    person=None, language=None):
     """What this mind brings to the beat from its past. `person`
     (`{name, drive, values}`) is the mind the decision model picks recalled
     memories for (`mind/memory_jev.py`); a caller naming none -- the author's
-    preview -- gets the picker's net order and pays for no model call."""
+    preview -- gets the picker's net order and pays for no model call.
+    `asked_by` is who asked the question this mind heard, as this mind names
+    them (`character_jev.heard_question`)."""
     active_state = active_state or {}
     # ONE READ OF THIS MIND'S BANK, HOWEVER MANY LANES ASK FOR IT. Ordinary
     # recall, a ponder and an unbidden resurfacing are three retrievals over
@@ -570,7 +578,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             limit=min(PONDER_LIMIT, max(4, int(recall_limit))),
             person=person, view=current_view, active_state=active_state,
             unsettled=unresolved_items, language=language, bank=bank,
-            record=asked_record, about=named_in(asked_query, known_names), known=known)
+            record=asked_record, about=named_in(asked_query, known_names), known=known,
+            asked_by=asked_by)
         access_ids.extend(m.get("id") for m in asked_rows if m.get("id") is not None)
         asked_rows = sorted(asked_rows, key=lambda m: (m.get("turn_idx") is None,
                                                        m.get("turn_idx") if m.get("turn_idx") is not None else 10**12,
@@ -691,12 +700,30 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             # head, and repeating it there would be paying for it twice.
             if ponder_why:
                 item["why_i_went_looking"] = ponder_why
+    # A MOMENT A ROUTED PONDER FOUND keeps its mark where the mind reads it
+    # (`mind.memory_routes`): the ponder and asked lanes below skip a row that
+    # recall or the recent buffer already delivered (and the asked lane one
+    # the mind's own ponder brought), and that copy has no mark -- so "the
+    # earliest moment I remember with Oren Dask" would come back as just
+    # another of the beat's rows.
+    found_in_time = {str(m.get("event_key") or ""): str(m["in_time"])
+                     for m in (*pondered, *asked_rows) if str(m.get("in_time") or "").strip()}
+    if found_in_time:
+        for item in (*recent_projected, *recalled_projected):
+            ref = str(item.get("memory_ref") or "")
+            if ref in found_in_time:
+                item["in_time"] = found_in_time[ref]
     ponder_additional = []
     for mem in pondered:
         ref = str(mem.get("event_key") or "")
         if ref in normal_refs:
             continue
         item = _with_reading(mem, clock, known)
+        # The asked lane skips a row the mind's own ponder already brought,
+        # so a mark the asked question's route found goes on this copy (the
+        # ponder's own mark, where it has one, stays).
+        if ref in found_in_time:
+            item.setdefault("in_time", found_in_time[ref])
         item["retrieval_origin"] = ["deliberate_ponder"]
         ponder_additional.append(item)
     ponder_payload = ({"deliberate_recall": {

@@ -1,0 +1,1199 @@
+[
+ {
+  "lang": "en",
+  "question": "How did you and Captain Harrow meet?",
+  "asker": "Harriet Ashby",
+  "people": [
+   "Harriet Ashby",
+   "Captain Harrow"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Captain Harrow",
+  "note": "'how did you meet' = the first meeting, with no 'first' word"
+ },
+ {
+  "lang": "en",
+  "question": "the night I first saw the lighthouse lit",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act",
+   "place"
+  ],
+  "who": "",
+  "note": "the lamp being lit is a happening (act); place is arguable, though the viewer may have seen it from a distance and not been there"
+ },
+ {
+  "lang": "en",
+  "question": "Since when have you known Nicky Fontaine was on the take?",
+  "asker": "Gus Brennan",
+  "people": [
+   "Gus Brennan",
+   "Nicky Fontaine"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of",
+   "act"
+  ],
+  "who": "Nicky Fontaine",
+  "note": "'since when' = when the knowledge began; it was learned either by being told (heard_of) or by seeing it happen (act)"
+ },
+ {
+  "lang": "en",
+  "question": "the first time I heard anyone say the name Corvin Hale",
+  "asker": "",
+  "people": [
+   "Corvin Hale"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "Corvin Hale",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "How long have you known Mia Castell?",
+  "asker": "Petra Vos",
+  "people": [
+   "Petra Vos",
+   "Mia Castell"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Mia Castell",
+  "note": "a length of time counted from the first meeting; no 'first' word"
+ },
+ {
+  "lang": "en",
+  "question": "When did you first set foot on the Meridian?",
+  "asker": "Ines Reyes",
+  "people": [
+   "Ines Reyes"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": "",
+  "note": "the Meridian is the ship, which counts as a place"
+ },
+ {
+  "lang": "en",
+  "question": "the day Marthe first carried a message for the cell",
+  "asker": "",
+  "people": [
+   "Marthe"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "Marthe",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you first hear about the wreck of the Albatross?",
+  "asker": "Nell Thorne",
+  "people": [
+   "Nell Thorne"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "",
+  "note": "the Albatross is a ship, not a person"
+ },
+ {
+  "lang": "en",
+  "question": "When's the last time you saw Vera Lark alive?",
+  "asker": "Gus Brennan",
+  "people": [
+   "Gus Brennan",
+   "Vera Lark"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Vera Lark",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "the last I saw of Father Girard",
+  "asker": "",
+  "people": [
+   "Father Girard"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Father Girard",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When were you last in the east wing, miss?",
+  "asker": "Mrs. Penrose",
+  "people": [
+   "Mrs. Penrose"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": "",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you last hear from your sister Ama?",
+  "asker": "Pell Okonkwo",
+  "people": [
+   "Pell Okonkwo",
+   "Ama"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "heard_of",
+   "act"
+  ],
+  "who": "Ama",
+  "note": "hearing FROM her (a letter or a call), not seeing her: receiving word is heard_of, and her sending it is an act; met is wrong"
+ },
+ {
+  "lang": "en",
+  "question": "the last time the beacon failed",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What's the last you heard of the Grey Pilgrim?",
+  "asker": "Fenwick",
+  "people": [
+   "Fenwick",
+   "the Grey Pilgrim"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "the Grey Pilgrim",
+  "note": "the person is named by an epithet"
+ },
+ {
+  "lang": "en",
+  "question": "When was the last time Principal Hughes came by the art room?",
+  "asker": "Danny Okafor",
+  "people": [
+   "Danny Okafor",
+   "Principal Hughes"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "act",
+   "met"
+  ],
+  "who": "Principal Hughes",
+  "note": "his visit is an act, and it is also the last time he was seen there (met)"
+ },
+ {
+  "lang": "en",
+  "question": "How long ago did you leave Calloway?",
+  "asker": "Oshra",
+  "people": [
+   "Oshra"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "place",
+   "act"
+  ],
+  "who": "",
+  "note": "leaving is the last time spent in Calloway (place), and the departure is also an act; 'how long ago' asks when, not how long"
+ },
+ {
+  "lang": "en",
+  "question": "When did Mr. Finch last take his medication?",
+  "asker": "Lin Zhou",
+  "people": [
+   "Lin Zhou",
+   "Mr. Finch"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "Mr. Finch",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What happened right before the shot?",
+  "asker": "Dot Malone",
+  "people": [
+   "Dot Malone"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "what led up to the quarrel with Edmund in the conservatory",
+  "asker": "",
+  "people": [
+   "Edmund"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": "Edmund",
+  "note": "'led up to' = the run-up to a past moment"
+ },
+ {
+  "lang": "en",
+  "question": "What were you doing the morning of the hull breach?",
+  "asker": "Ines Reyes",
+  "people": [
+   "Ines Reyes"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'the morning of' X = the hours leading up to X"
+ },
+ {
+  "lang": "en",
+  "question": "what I was doing just before Jory's boat came in that evening",
+  "asker": "",
+  "people": [
+   "Jory"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": "Jory",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Where did Fontaine go after he left the Blue Lantern?",
+  "asker": "Gus Brennan",
+  "people": [
+   "Gus Brennan",
+   "Fontaine"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": "Fontaine",
+  "note": "it asks for a place, but the answer is fixed by what came after a past moment"
+ },
+ {
+  "lang": "en",
+  "question": "what happened after the Germans took Father Girard",
+  "asker": "",
+  "people": [
+   "Father Girard"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": "Father Girard",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Where did we make camp after the sandstorm?",
+  "asker": "Ysolde",
+  "people": [
+   "Ysolde"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "After the ball, did Mr. Fairleigh call on you?",
+  "asker": "Clara Vane",
+  "people": [
+   "Clara Vane",
+   "Mr. Fairleigh"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": "Mr. Fairleigh",
+  "note": "a yes/no question that still asks what followed the ball"
+ },
+ {
+  "lang": "en",
+  "question": "What's the latest from the coast?",
+  "asker": "Lucien Morel",
+  "people": [
+   "Lucien Morel"
+  ],
+  "ok_order": [
+   "latest",
+   "content"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "",
+  "note": "an idiom for 'what is the news': the most recent report heard; reading it as content (the news itself) is also fair"
+ },
+ {
+  "lang": "en",
+  "question": "What was the first thing you noticed about the body?",
+  "asker": "Hal Ruiz",
+  "people": [
+   "Hal Ruiz"
+  ],
+  "ok_order": [
+   "content",
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "",
+  "note": "'first' falls within a single scene and the question asks what was noticed, so content comes first; earliest is defensible"
+ },
+ {
+  "lang": "en",
+  "question": "Since when have you been drinking again, Sam?",
+  "asker": "Dot Malone",
+  "people": [
+   "Dot Malone"
+  ],
+  "ok_order": [
+   "earliest",
+   "latest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "",
+  "note": "it asks when the current relapse started, which is the first drink of the latest spell; 'Sam' is the character itself, so it is not in people"
+ },
+ {
+  "lang": "en",
+  "question": "What do you always do before a jump?",
+  "asker": "Tomas Kade",
+  "people": [
+   "Tomas Kade"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a habit, not a particular past moment"
+ },
+ {
+  "lang": "en",
+  "question": "What will you do before we dock at Kepler Station?",
+  "asker": "Ines Reyes",
+  "people": [
+   "Ines Reyes"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a future plan"
+ },
+ {
+  "lang": "en",
+  "question": "the last person aboard I'd trust with the launch codes",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'last' is a ranking"
+ },
+ {
+  "lang": "en",
+  "question": "What did First Officer Kade say about the coolant leak?",
+  "asker": "Pell Okonkwo",
+  "people": [
+   "Pell Okonkwo",
+   "First Officer Kade"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "First Officer Kade",
+  "note": "'First' is part of a rank"
+ },
+ {
+  "lang": "en",
+  "question": "What's the light named after?",
+  "asker": "Inspector Quill",
+  "people": [
+   "Inspector Quill"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'named after' means in honour of"
+ },
+ {
+  "lang": "en",
+  "question": "Is Mrs. Gale's the cottage after the second bridge?",
+  "asker": "Mrs. Penrose",
+  "people": [
+   "Mrs. Penrose",
+   "Mrs. Gale"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "Mrs. Gale",
+  "note": "'after' and 'second' describe position along a road"
+ },
+ {
+  "lang": "en",
+  "question": "what was on the first two pages of the ledger from the safe",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'first two' is a quantity"
+ },
+ {
+  "lang": "en",
+  "question": "If we had to turn back before the pass, where would we shelter?",
+  "asker": "Bram",
+  "people": [
+   "Bram"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a hypothetical; 'before the pass' is a position"
+ },
+ {
+  "lang": "en",
+  "question": "Since you've worked with Dr. Rao for years, what's she like under pressure?",
+  "asker": "Kev Doyle",
+  "people": [
+   "Kev Doyle",
+   "Dr. Rao"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "Dr. Rao",
+  "note": "'since' is causal"
+ },
+ {
+  "lang": "en",
+  "question": "After the war, what will you do?",
+  "asker": "Lucien Morel",
+  "people": [
+   "Lucien Morel"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'after' points to the future, so this is a plan"
+ },
+ {
+  "lang": "en",
+  "question": "the last man in England I would ever marry",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'last' is a ranking"
+ },
+ {
+  "lang": "en",
+  "question": "the earliest we could make Port Venn if the pass is open",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a travel plan, not a past event"
+ },
+ {
+  "lang": "en",
+  "question": "Would you ever go back to Calloway again?",
+  "asker": "Ysolde",
+  "people": [
+   "Ysolde"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a hypothetical about the future"
+ },
+ {
+  "lang": "en",
+  "question": "what Dr. Rao told me to do until the consultant arrives",
+  "asker": "",
+  "people": [
+   "Dr. Rao"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "Dr. Rao",
+  "note": "asks what was said; 'until' only bounds the instruction"
+ },
+ {
+  "lang": "en",
+  "question": "where Hans Keller keeps the duty roster",
+  "asker": "",
+  "people": [
+   "Hans Keller"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "Hans Keller",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Ever since Pont-Neuf you've been jumpy. What's wrong?",
+  "asker": "Marthe",
+  "people": [
+   "Marthe"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "asks about a present state and its cause, not when it began or what followed"
+ },
+ {
+  "lang": "en",
+  "question": "After all these years, do you still think of Captain Harrow?",
+  "asker": "Harriet Ashby",
+  "people": [
+   "Harriet Ashby",
+   "Captain Harrow"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "Captain Harrow",
+  "note": "'after all these years' is an idiom"
+ },
+ {
+  "lang": "en",
+  "question": "How many times has Mr. Finch been readmitted?",
+  "asker": "Anita Rao",
+  "people": [
+   "Anita Rao",
+   "Mr. Finch"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "Mr. Finch",
+  "note": "asks for a count, not a time"
+ },
+ {
+  "lang": "en",
+  "question": "what Ysolde saw in the cards about the road ahead",
+  "asker": "",
+  "people": [
+   "Ysolde"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "Ysolde",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "have I ever set foot in the Blue Lantern",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "asks whether it happened, not when"
+ },
+ {
+  "lang": "en",
+  "question": "What did Mr. Thorne say the storm signal looks like?",
+  "asker": "Jory",
+  "people": [
+   "Jory",
+   "Mr. Thorne"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "Mr. Thorne",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Before you answer -- were you on the gallery when the lamp went out?",
+  "asker": "Nell Thorne",
+  "people": [
+   "Nell Thorne"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'Before you answer' is a turn of speech; the question asks where you were at a single moment, not first, last, before or after"
+ },
+ {
+  "lang": "ja",
+  "question": "桐生艦長とは、どうやって知り合ったんですか?",
+  "asker": "早瀬",
+  "people": [
+   "早瀬",
+   "桐生艦長"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "桐生艦長",
+  "note": "'how did you get acquainted' = the first meeting"
+ },
+ {
+  "lang": "ja",
+  "question": "初めてこの島に渡ってきた日",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": "",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "坂本という名前を最初に耳にしたのはいつだ?",
+  "asker": "大河内警部",
+  "people": [
+   "大河内警部",
+   "坂本"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "坂本",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "カイトくんと最初に話したのはいつ?",
+  "asker": "志村先生",
+  "people": [
+   "志村先生",
+   "カイト"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met",
+   "act"
+  ],
+  "who": "カイト",
+  "note": "the first conversation is in effect the first meeting, and the talk itself is an act"
+ },
+ {
+  "lang": "ja",
+  "question": "マルトが初めて伝令を運んだ日",
+  "asker": "",
+  "people": [
+   "マルト"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "マルト",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "佐伯を最後に見たのはいつだ?",
+  "asker": "大河内警部",
+  "people": [
+   "大河内警部",
+   "佐伯"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "佐伯",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "ベルナール神父を最後に見た朝",
+  "asker": "",
+  "people": [
+   "ベルナール神父"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "ベルナール神父",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "最後に蔵へ入ったのはいつだい?",
+  "asker": "お梅",
+  "people": [
+   "お梅"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": "",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "田辺さんが最後に発作を起こしたとき",
+  "asker": "",
+  "people": [
+   "田辺"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "田辺",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "ザハルの噂を最後に聞いたのはいつ?",
+  "asker": "イリス",
+  "people": [
+   "イリス",
+   "ザハル"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "ザハル",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "銃声がする直前、何があったんですか?",
+  "asker": "ユキ",
+  "people": [
+   "ユキ"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "佐久間様と言い争いになる前に何があったか",
+  "asker": "",
+  "people": [
+   "佐久間"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": "佐久間",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "船体に穴が開いた日の朝、君は何をしていた?",
+  "asker": "桐生艦長",
+  "people": [
+   "桐生艦長"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'the morning of the day' = the run-up to the event"
+ },
+ {
+  "lang": "ja",
+  "question": "佐伯は店を出たあと、どこへ向かった?",
+  "asker": "大河内警部",
+  "people": [
+   "大河内警部",
+   "佐伯"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": "佐伯",
+  "note": "it asks for a place, but the answer is fixed by what came after a past moment"
+ },
+ {
+  "lang": "ja",
+  "question": "ケラーが村に来てから起きたこと",
+  "asker": "",
+  "people": [
+   "ケラー"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": "ケラー",
+  "note": "'〜てから' means after X, not 'since when'"
+ },
+ {
+  "lang": "ja",
+  "question": "文化祭のあと、カイトくんと何かあった?",
+  "asker": "春香",
+  "people": [
+   "春香",
+   "カイト"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": "カイト",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "いつからまた眠れなくなったの?",
+  "asker": "森下",
+  "people": [
+   "森下"
+  ],
+  "ok_order": [
+   "earliest",
+   "latest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "",
+  "note": "'since when, again' asks when the current spell began: the earliest moment of the latest episode"
+ },
+ {
+  "lang": "ja",
+  "question": "ワープの前って、いつも何してる?",
+  "asker": "ミナト",
+  "people": [
+   "ミナト"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a habit"
+ },
+ {
+  "lang": "ja",
+  "question": "着陸する前に、何を済ませておくつもりだ?",
+  "asker": "桐生艦長",
+  "people": [
+   "桐生艦長"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a future plan"
+ },
+ {
+  "lang": "ja",
+  "question": "この街で最後まで信じられる人って、誰ですか?",
+  "asker": "ユキ",
+  "people": [
+   "ユキ"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'最後まで' means 'to the very end': a question of trust, not of time"
+ },
+ {
+  "lang": "ja",
+  "question": "二つ目の橋を渡って最初の家が、おたえさんの家かい?",
+  "asker": "お梅",
+  "people": [
+   "お梅",
+   "おたえ"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "おたえ",
+  "note": "'渡って' and '最初の' describe position along a road"
+ },
+ {
+  "lang": "ja",
+  "question": "前任の灯台守って、どんな人だったの?",
+  "asker": "小夜",
+  "people": [
+   "小夜"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'前任' means predecessor; this asks what someone was like, and that someone is not named"
+ },
+ {
+  "lang": "ja",
+  "question": "次の満月までにオアシスに着けるかどうか",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a plan with a deadline"
+ },
+ {
+  "lang": "ja",
+  "question": "戦争が終わったあと、何をするつもりだ?",
+  "asker": "ジャン",
+  "people": [
+   "ジャン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'あと' points to the future"
+ },
+ {
+  "lang": "ja",
+  "question": "佐久間様の刀の銘",
+  "asker": "",
+  "people": [
+   "佐久間"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "佐久間",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "田辺さんは今までに何回再入院してる?",
+  "asker": "森下",
+  "people": [
+   "森下",
+   "田辺"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "田辺",
+  "note": "asks for a count; '今までに' (until now) does not make it a when question"
+ },
+ {
+  "lang": "ja",
+  "question": "あの夜、お前はどこにいた?",
+  "asker": "ケラー",
+  "people": [
+   "ケラー"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "asks where you were at a single moment, not first or last"
+ },
+ {
+  "lang": "ja",
+  "question": "もしまた砂漠を渡るとしたら、誰を連れていく?",
+  "asker": "イリス",
+  "people": [
+   "イリス"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "a hypothetical 'again'"
+ },
+ {
+  "lang": "ja",
+  "question": "一等航海士のハヤミが冷却漏れについて言っていたこと",
+  "asker": "",
+  "people": [
+   "ハヤミ"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "ハヤミ",
+  "note": "'一等' is part of a rank"
+ },
+ {
+  "lang": "ja",
+  "question": "金庫の帳簿の最初の二ページに書いてあったこと",
+  "asker": "",
+  "people": [],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": "",
+  "note": "'最初の二ページ' is a quantity"
+ }
+]
