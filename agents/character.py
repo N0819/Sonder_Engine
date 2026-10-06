@@ -70,7 +70,8 @@ from story.scene import (
     sheet_state,
 )
 from llm.schemas import validate_llm_output
-from world.spatial import (contact_phrase, contacts_of, corridor_sightlines, room_of,
+from world.spatial import (contact_phrase, contacts_of, corridor_sightlines, entity_arc,
+                           room_of,
                      sense_adjusted, spatial_digest,
                      speech_articulation_impediment, sprint_reach,
                      visible_adjacent_rooms, visual_level_between)
@@ -94,7 +95,6 @@ from .common import (
     self_name_forms,
     declared_goal,
     observer_label_fn,
-    observer_view_label_fn,
     observer_name_scrub,
     scrub_names_deep,
     _recognizes,
@@ -557,6 +557,35 @@ def _lines_delivered_to(char_id, rows):
     return {idx: "\n".join(parts) for idx, parts in heard.items()}
 
 
+def _heard_as(rows, char_id, idx, line):
+    """The label THIS mind's view gave the speaker of `line` on beat `idx`:
+    the `actor` of its own speech observation that carries the line, or "".
+
+    A note about a question owed reports a line delivered beats ago, and the
+    asker is who the view said spoke it then. Named by the identity floor it
+    was a disguised acquaintance's real name, a disguised stranger's real
+    look, a voice in the dark described by a face; named by the present-tense
+    rule it was a disguise donned since (review rounds 2-3, 2026-10-05)."""
+    key, text = str(char_id), str(line or "").strip()
+    if not text:
+        return ""
+    for row in rows or ():
+        if row["step_key"] not in ("perception_act", "perception_outcome"):
+            continue
+        try:
+            if int(row["idx"]) != int(idx):
+                continue
+            content = json.loads(row["content"]) or {}
+        except (TypeError, ValueError):
+            continue
+        for obs in (content.get("observations") or {}).get(key) or ():
+            if not isinstance(obs, dict) or obs.get("kind") not in ("speech", "communication"):
+                continue
+            if text in str((obs.get("observed") or {}).get("text") or "") and obs.get("actor"):
+                return str(obs["actor"])
+    return ""
+
+
 def _player_persona_name(chat_id):
     """The name the player's persona goes by in this chat -- `persona_of`'s
     default stranger when the chat has none -- for a field that names the
@@ -741,6 +770,9 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             # something.
             asked = {"from": _player_persona_name(chat_id), "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
+            _as = _heard_as(rows, char_id, row["idx"], reached[-1])
+            if _as:
+                asked["heard_as"] = _as
             continue
         if str(row["step_key"]).startswith("character:"):
             # A bare character step stores the one result whole.
@@ -802,6 +834,9 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             asked = {"from": speaker,
                      "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
+            _as = _heard_as(rows, char_id, row["idx"], reached[-1])
+            if _as:
+                asked["heard_as"] = _as
             # No default label is built here, unlike the silence note beside
             # it: this function takes a chat_id rather than the chat row
             # `observer_label_fn` needs, and inventing a second lookup to
@@ -822,8 +857,11 @@ def _labelled_debt(result, label):
     if not isinstance(debt, dict):
         return {}
     debt = dict(debt)
+    heard = debt.pop("heard_as", "")
     if label and debt.get("from") not in (None, ""):
-        debt["from"] = label(debt["from"])
+        # Who the view said asked it, on that beat (`_heard_as`); the
+        # caller's label only where no observation recorded one.
+        debt["from"] = heard or label(debt["from"])
     return {"awaiting_your_answer": debt}
     return result
 
@@ -1044,11 +1082,16 @@ def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0, label=None):
     # the first half. Co-location alone handed the fact over. Sight is the
     # channel that places a silent body (a silent one makes no sound); the
     # observer's own card grades it, as the composed view's does.
-    if sense_adjusted(
-            visual_level_between(sc, _positions_key(sc, character_scene_keys(sh)),
-                                 _positions_key(sc, [player]),
-                                 character_senses(sh)),
-            "sight", character_senses(sh)) == "none":
+    _me = _positions_key(sc, character_scene_keys(sh))
+    _them = _positions_key(sc, [player])
+    if sense_adjusted(visual_level_between(sc, _me, _them, character_senses(sh)),
+                      "sight", character_senses(sh)) == "none":
+        return {}
+    # Nor a body in the blind spot: one behind this mind gives no visual
+    # detail (`entity_arc`), so the note placed a player creeping up at its
+    # back whom its view called "something moves behind you" (review round
+    # 4, 2026-10-05).
+    if entity_arc(sc, _me, _them) == "rear":
         return {}
     # THE NAME PASSES THE SAME GATE THE VIEW DID. `observer_label_fn` exists
     # so a structured field cannot hand over an identity the prose beside it is
@@ -4082,7 +4125,30 @@ def character_step(ctx, cid, nonce):
     # to recreate the ledger's part spelling.  Names in the description pass
     # through the same recognition gate as every other structured character
     # payload field.
-    _contact_label = observer_label_fn(chat, character_name(sh), ctx.cast)
+    # Who is touching this body is named as its own view would name them: a
+    # hand in the dark is the unfamiliar person's unless this mind once saw
+    # them, and a disguise that hides who they are hides it here too
+    # (`perception.present_label_fn`, formerly UNBUILT_PIPELINE §1.176). It was the
+    # identity floor, which described a stranger nobody ever saw.
+    from .perception import present_label_fn
+    _present_label = present_label_fn(
+        ctx, cid, character_name(sh), sc, senses=character_senses(sh))
+    # What THIS mind's own act-stage view called each body it was composed
+    # about comes first -- a presence's own look, the one look-alike told
+    # from the other -- as the narrator's `_earned` does; the present-tense
+    # rule answers for the rest (review round 4, 2026-10-05).
+    _company = (((ctx.get("perception_act") or {}).get("company") or {})
+                .get(str(cid)) or [])
+    _view_named = {str(r.get("name")): str(r.get("label")) for r in _company
+                   if isinstance(r, dict) and r.get("name") and r.get("label")}
+
+    def _contact_label(name):
+        return _view_named.get(str(name)) or _present_label(name)
+    # A note about a line delivered beats ago names its asker as this mind
+    # knew them, never by how they look now: the present-tense rule put a
+    # disguise donned since on the question, and dropped the face seen when
+    # it was asked (review, 2026-10-05).
+    _identity_label = observer_label_fn(chat, character_name(sh), ctx.cast)
     _standing_contacts = []
     for _index, _contact in enumerate(contacts_of(sc, character_name(sh))):
         _visible_contact = dict(_contact)
@@ -4277,7 +4343,7 @@ def character_step(ctx, cid, nonce):
     _debt = _unanswered_question_note(
         chat.id, character_name(sh), cid, ctx.turn.idx, ctx.turn.frame_id,
         cache=shared.setdefault("unanswered_question_notes", {}),
-        label=_contact_label, rows_cache=shared)
+        label=_identity_label, rows_cache=shared)
     # A want this mind is sitting on, from ITS OWN stored state -- exactly
     # one is marked, by `affect.normalize_wants`, and never the enacted one.
     _withholding = any(
@@ -4319,9 +4385,7 @@ def character_step(ctx, cid, nonce):
             # deliberately withholding.
             "spatial_frame": _annotate_known_exits(
                 spatial_digest(sc, character_name(sh),
-                               label_for=observer_view_label_fn(
-                                   chat, character_name(sh), ctx.cast,
-                                   sc, senses=character_senses(sh))), sc,
+                               label_for=_contact_label), sc,
                 stored_state.get("visited_rooms") or [],
                 known_exits=stored_state.get("known_exits") or {},
                 here_rid=char_room,
@@ -4401,10 +4465,8 @@ def character_step(ctx, cid, nonce):
                 quiet_beats=(0 if _p_spoke else _player_quiet_beats(
                     chat.id, ctx.turn.idx, ctx.turn.frame_id, cache=shared)),
                 # What the player is called in a note about THIS beat is the
-                # view's word for them now (`observer_view_label_fn`).
-                label=observer_view_label_fn(
-                    chat, character_name(sh), ctx.cast, sc,
-                    senses=character_senses(sh))),
+                # view's word for them now (`perception.present_label_fn`).
+                label=_contact_label),
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_debt,
@@ -4703,8 +4765,11 @@ def character_step(ctx, cid, nonce):
     # The owner's chat 126 idx 9 (round 8, 2026-09-23): Mirelle's only line
     # to Hinami was concealed from Hinami and reached nobody.
     from .director_floors import strip_addressee_concealment
-    from .director_views import _cast_match_forms
-    _by_id, _by_name = _cast_match_forms(ctx.cast)
+    from .director_views import _scene_match_forms
+    # The player and every co-player among the bodies a line can be spoken
+    # to: a whisper to the player named by her alias was not stripped here,
+    # and the resolve then hid it from her (review, 2026-10-05).
+    _by_id, _by_name = _scene_match_forms(ctx)
     strip_addressee_concealment(
         out.get("sequence"), _by_id, _by_name,
         addressees=(out.get("interaction") or {}).get("addresses") or (),

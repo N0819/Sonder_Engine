@@ -64,6 +64,11 @@ def normalize_bearing8(value) -> Optional[str]:
     return word if word in BEARINGS else None
 
 
+#: Where a vista whose distance nobody gave is placed, for the curve and the
+#: haze (`normalize_vista`).
+_DEFAULT_DISTANCE_KM = 10.0
+
+
 def normalize_vista(value) -> Optional[dict]:
     """A readable vista, or None: it needs a name and a bearing; distance
     and height default to a far, low skyline (10 km, 0 m) rather than being
@@ -88,8 +93,21 @@ def normalize_vista(value) -> Optional[dict]:
         return out if (signed or out >= 0) else default
 
     vid = str(value.get("id") or "").strip() or name.casefold().replace(" ", "_")
+    distance = number("distance_km", None)
+    # Whether the author SAID how far: the default places a vista for the
+    # curve and the haze, and says nothing about which of two is the farther
+    # (`composer.vista_percepts`). A stored vista keeps its flag through
+    # every later read (review, 2026-10-05: re-derived from the stored
+    # default, it read as given after the first write); one stored before the
+    # flag existed holds the default as if it were authored, and is read as
+    # given only where its distance is not that default.
+    if "distance_given" in value:
+        given = bool(value.get("distance_given")) and bool(distance)
+    else:
+        given = bool(distance) and distance != _DEFAULT_DISTANCE_KM
     return {"id": vid, "name": name, "desc": str(value.get("desc") or "").strip(),
-            "bearing": bearing, "distance_km": number("distance_km", 10.0) or 10.0,
+            "bearing": bearing, "distance_km": distance or _DEFAULT_DISTANCE_KM,
+            "distance_given": given,
             "height_m": number("height_m", 0.0, signed=True), "lit": bool(value.get("lit"))}
 
 

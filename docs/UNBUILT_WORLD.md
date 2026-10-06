@@ -2293,7 +2293,25 @@ critic and a panel of three designs and three judges. Left:
   room and a compass and a measured distance on the ways that cover ground,
   and a plan keeps both (Design.md, "A plan keeps where a place is and how
   far"); older worlds stay as they are, and whether a model writes them is
-  for the next live run to show.
+  for the next live run to show. **The next live run showed** (Kirinoura,
+  scratch chat 167, 2026-10-05, a fresh planner-built hill village): exposure
+  declared on all seven rooms, a compass on every way, and no measured
+  distance on any -- the planner set the rooms on a site plan instead
+  (`site.x/y/elev_m` and extents), which measures them as well. The plan was
+  rough: the stair's footprint ran over the square and the lane, and the
+  hill fell 6 m from the shrine to the river. The far scenery it wanted
+  seen (the river, the fields across it, the hills) it made vistas.
+- **A far place nobody has been to reads as its ground and nothing else.**
+  Named only once known, an unvisited place is "open ground", "a sheltered
+  place" or "a building", and a run of open places "open ground stretching
+  on" (Kirinoura: the stair, the square with its stalls, the lane and the
+  landing, seen from the terrace). It has nothing better to say: a planned
+  room carries no `desc` until someone goes there, and its `purpose` is the
+  planner's brief to the designer -- intent and proper names ("Kirinoura's
+  square ... lamps are lit here after dark"), never what an eye sees. What
+  it would take, the owner's call: the planner writing, for an outdoor
+  place, how it looks from a distance -- a field of its own, read by the far
+  layer, never a desc.
 - **Off a site plan a height is inferred from the graph**: an eye a storey up
   looks over the open ground its own building fronts, and nothing between is
   tested -- on a plan the line over every building is. Ground is flat

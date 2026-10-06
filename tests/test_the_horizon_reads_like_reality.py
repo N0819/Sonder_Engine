@@ -211,3 +211,34 @@ def test_the_sky_on_the_skin_is_said_with_one_stop():
     view = composer.render_view(percepts, mode="character", language="en").text
     memory = composer.render_episode(percepts, language="en")[0]
     assert view == "The air is mild." and memory == "The air is mild."
+
+
+def test_vistas_on_one_bearing_read_nearest_first_and_beyond_each_other():
+    """Kirinoura (scratch chat 167, 2026-10-05): the river, the fields across
+    it and the hills closing the valley were three standing lines in a row,
+    each opening "To the south,". One bearing, nearest first, each one after
+    the first beyond the one before it."""
+    from agents import composer
+    sc = _yard(vistas=[
+        {"name": "the wooded hills", "bearing": "s", "distance_km": 5, "height_m": 300},
+        {"name": "the slow river", "bearing": "s", "distance_km": 0.8, "height_m": 0},
+        dict(RANGE),
+        {"name": "the rice fields", "bearing": "s", "distance_km": 1.5, "height_m": 0}])
+    lines = [p.data["desc"] for p in composer.vista_percepts(visible_vistas(sc, "Ren"))]
+    assert lines[0].startswith("To the south, the slow river")
+    # Named in the line itself: a standing line is said alone on a later
+    # beat, and "Beyond it" then leaned on nothing (review, 2026-10-05).
+    assert lines[1].startswith("Beyond the slow river, the rice fields")
+    assert lines[2].startswith("Beyond the rice fields, the wooded hills")
+    assert lines[3].startswith("To the north, the Kurogane range")
+    # A vista whose distance nobody gave is beyond nothing -- and stays so
+    # once stored, read back through every later normalization (review
+    # round 2, 2026-10-05: the stored 10 km default read as given).
+    sc["vistas"].append({"name": "a cairn", "bearing": "s", "height_m": 2})
+    lines = [p.data["desc"] for p in composer.vista_percepts(visible_vistas(sc, "Ren"))]
+    assert "To the south, a cairn." in lines
+    stored = normalize_vista({"name": "a cairn", "bearing": "s", "height_m": 2})
+    assert normalize_vista(stored)["distance_given"] is False
+    # A vista stored before the flag holds the default as if authored.
+    assert normalize_vista({"name": "x", "bearing": "s", "distance_km": 10.0})["distance_given"] is False
+    assert normalize_vista({"name": "x", "bearing": "s", "distance_km": 3.0})["distance_given"] is True

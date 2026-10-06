@@ -110,12 +110,16 @@ class TestBothCallSitesPassTheGate:
         assert "_unanswered_question_note(" in src
         # Both calls sit inside the decision block and must carry a gating
         # label. The silence note is about THIS beat, so it carries the
-        # present-tense view labeller (`observer_view_label_fn`, which wraps
-        # the same identity floor and names a stranger in the dim as the
-        # view does, 2026-10-05); the owed-question note keeps the identity
-        # labeller.
-        for marker, gate in (("_player_silence_note(", "label=observer_view_label_fn("),
-                             ("_unanswered_question_note(", "label=_contact_label")):
+        # present-tense labeller (`_contact_label`,
+        # `perception.present_label_fn`: a stranger in the dim as a figure,
+        # one nobody ever saw as the unfamiliar person, a disguised
+        # acquaintance by no name the disguise hides; formerly
+        # UNBUILT_PIPELINE §1.176). The owed-question note is about a line
+        # delivered beats ago, so it keeps the identity labeller
+        # (`_identity_label`): the present-tense rule put a disguise donned
+        # since on the question (review, 2026-10-05).
+        for marker, gate in (("_player_silence_note(", "label=_contact_label"),
+                             ("_unanswered_question_note(", "label=_identity_label")):
             start = src.index(marker)
             window = src[start:start + 560]
             assert gate in window, marker

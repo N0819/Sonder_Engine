@@ -626,6 +626,135 @@ def test_npc_can_stop_following_before_target_moves(temp_db, monkeypatch):
     assert merged["positions"]["Mara"] == "trail_a"
 
 
+def test_a_follower_set_down_where_they_are_is_not_carried(temp_db, monkeypatch):
+    """Live, Kirinoura (scratch chat 167 turn 3, 2026-10-05): the Doctor had
+    started following the surveyor two beats before; told "Stay here a
+    minute", he declared crouching over the terrace slabs with his
+    screwdriver while she walked down the stair -- and the carry moved him
+    onto the stair beside her, crouched "within arm's reach" in the view,
+    his pose still on the terrace. A follower whose own beat ends with the
+    body resting where it began has not walked anywhere; the relation
+    stands, and following is theirs to take up next beat."""
+    import agents.director as director
+    from world.spatial import merge_scene_with_diff
+
+    following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
+    scene = _following_scene(following)
+    ctx = _make_ctx(temp_db, "trail_b")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    mara_id = ctx.cast[0]["id"]
+    ctx.character_results[mara_id] = _quiet_character_result(
+        attempt="kneels by the cairn and starts digging at its base")
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
+        "state_diff": {"positions": {"The Stranger": "trail_b"},
+                       "poses": {"Mara": {"posture": "kneeling", "support": "trail_a"}}},
+    }))
+
+    resolved = director.director_resolve(ctx, nonce=0)
+    merged = merge_scene_with_diff(scene, resolved["state_diff"])
+
+    assert "Mara" not in resolved["state_diff"]["positions"]
+    assert merged["positions"]["Mara"] == "trail_a"
+    assert merged["following"]["Mara"]["target"] == "The Stranger"
+
+
+def _carry(temp_db, monkeypatch, pose, stations=None, anchors=None):
+    """One beat: the Stranger walks from trail_a to trail_b, Mara (following
+    him) posed as `pose`; returns the resolved diff. `anchors` is
+    `{room: [anchor ids]}` added to the scene."""
+    import agents.director as director
+
+    following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
+    scene = _following_scene(following)
+    for room, ids in (anchors or {}).items():
+        scene["rooms"][room]["anchors"] = {a: {"desc": a} for a in ids}
+    ctx = _make_ctx(temp_db, "trail_b")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    mara_id = ctx.cast[0]["id"]
+    ctx.character_results[mara_id] = _quiet_character_result(attempt="stays busy")
+    diff = {"positions": {"The Stranger": "trail_b"}, "poses": {"Mara": pose}}
+    if stations:
+        diff["stations"] = stations
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({"state_diff": diff}))
+    return director.director_resolve(ctx, nonce=0)["state_diff"]
+
+
+def test_a_follower_left_behind_never_drags_the_walker_back(temp_db, monkeypatch):
+    """Review (2026-10-05): a follower set down with a fresh near link to the
+    one who walked off made the near-group repair read a split group and move
+    the WALKER back to the follower's room."""
+    diff = _carry(temp_db, monkeypatch, {"posture": "kneeling", "support": "trail_a"},
+                  stations={"Mara": {"near": ["The Stranger "]},
+                            "The Stranger": {"near": ["Mara"]}})
+    assert diff["positions"]["The Stranger"] == "trail_b"
+    assert "Mara" not in diff["positions"]
+
+
+def test_a_follower_resting_on_what_travels_goes_with_it(temp_db, monkeypatch):
+    """A support that travels -- the one followed -- is no evidence the
+    follower stays."""
+    diff = _carry(temp_db, monkeypatch, {"posture": "leaning", "support": "The Stranger"})
+    assert diff["positions"]["Mara"] == "trail_b"
+
+
+def test_standing_on_a_floor_anchor_is_not_being_set_down(temp_db, monkeypatch):
+    diff = _carry(temp_db, monkeypatch, {"posture": "standing", "support": "path_ground"})
+    assert diff["positions"]["Mara"] == "trail_b"
+
+
+@pytest.mark.parametrize("posture", ["walking", "hurrying beside him"])
+def test_a_posture_this_layer_does_not_know_is_no_evidence_of_rest(temp_db, monkeypatch, posture):
+    """Round 2 of the review (2026-10-05): "walking", "following" and
+    "hurrying" on origin ground stranded a follower walking alongside. A
+    posture the closed table does not know says nothing either way, and the
+    relation carries her as it always did."""
+    diff = _carry(temp_db, monkeypatch, {"posture": posture, "support": "trail_a"})
+    assert diff["positions"]["Mara"] == "trail_b"
+
+
+@pytest.mark.parametrize("pose, anchors", [
+    ({"posture": "sitting", "support": "bench"}, {"trail_b": ["bench"]}),
+    ({"posture": "lying", "support": "The Stranger.palm"}, None),
+    ({"posture": "sitting", "support": "gate"}, {"trail_a": ["gate"], "trail_b": ["gate"]}),
+])
+def test_a_follower_resting_where_she_went_is_not_stranded(temp_db, monkeypatch, pose, anchors):
+    """Round 2 of the review (2026-10-05): a resting posture is evidence she
+    stayed only on a support that is in the room she began in. A bench only
+    the destination has, the palm of the one followed, or an anchor id both
+    sides of a doorway own is not."""
+    diff = _carry(temp_db, monkeypatch, pose, anchors=anchors)
+    assert diff["positions"]["Mara"] == "trail_b"
+
+
+def test_an_anchor_only_the_room_she_began_in_owns_keeps_her(temp_db, monkeypatch):
+    diff = _carry(temp_db, monkeypatch, {"posture": "sitting", "support": "gate"},
+                  anchors={"trail_a": ["gate"]})
+    assert "Mara" not in diff["positions"]
+
+
+def test_a_follower_who_only_stood_up_still_travels_with_the_target(temp_db, monkeypatch):
+    """The other side of the rule: standing on the floor is not being set
+    down anywhere, and the carry is for exactly that follower."""
+    import agents.director as director
+
+    following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
+    scene = _following_scene(following)
+    ctx = _make_ctx(temp_db, "trail_b")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    mara_id = ctx.cast[0]["id"]
+    ctx.character_results[mara_id] = _quiet_character_result(attempt="gets to her feet")
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({
+        "state_diff": {"positions": {"The Stranger": "trail_b"},
+                       "poses": {"Mara": {"posture": "standing", "support": "trail_a"}}},
+    }))
+
+    resolved = director.director_resolve(ctx, nonce=0)
+    assert resolved["state_diff"]["positions"]["Mara"] == "trail_b"
+
+
 def test_following_does_not_grant_speed_when_target_runs(temp_db, monkeypatch):
     """A sprint breaks automatic group travel. The follower is left behind,
     but the durable relation remains so they can choose whether to chase."""
@@ -747,3 +876,56 @@ def test_player_incompatible_movement_stops_following(temp_db, monkeypatch):
                for op in resolved["state_diff"]["following_ops"])
     assert "The Stranger" not in merged["following"]
     assert merged["positions"]["The Stranger"] == "side_path"
+
+
+def test_a_rider_on_a_fellow_follower_goes_with_her():
+    """Review round 3 (2026-10-05): Tom riding on Mara's back -- both
+    following the Stranger -- was held where he began while the carry took
+    Mara on, because his support still stood in the origin when he was
+    judged. A fellow follower travels, and what she carries with her."""
+    from agents.director import _set_down_where_they_are
+    merged = {"rooms": {"trail_a": {"name": "Trail A"}, "trail_b": {"name": "Trail B"}},
+              "positions": {"Tom": "trail_a", "Mara": "trail_a", "The Stranger": "trail_a",
+                            "litter": "trail_a"},
+              "contained": {"litter": {"in": "Mara"}}, "entities": {}}
+    for support in ("Mara", "litter"):
+        diff = {"poses": {"Tom": {"posture": "lying", "support": support}}}
+        assert not _set_down_where_they_are(merged, diff, "Tom", "trail_a", "The Stranger",
+                                            "trail_b", travelling=["Mara"]), support
+    diff = {"poses": {"Tom": {"posture": "lying", "support": "trail_a"}}}
+    assert _set_down_where_they_are(merged, diff, "Tom", "trail_a", "The Stranger",
+                                    "trail_b", travelling=["Mara"])
+
+
+@pytest.mark.parametrize("support", ["Mara", "Mara.lap", "Mara's lap"])
+def test_a_rider_stays_with_a_fellow_follower_set_down_herself(temp_db, monkeypatch, support):
+    """Review round 4 (2026-10-05): Tom on Mara's lap, both following the
+    Stranger, and Mara's own beat seats her on a bench only her trail has. A
+    fellow follower travels only if she does, so Tom -- judged first --
+    stays with her rather than being carried off her lap."""
+    import agents.director as director
+    from story.character_schema import default_character_data
+    scene = _following_scene({"Tom": {"target": "The Stranger", "since_turn": 1},
+                              "Mara": {"target": "The Stranger", "since_turn": 1}})
+    scene["positions"]["Tom"] = "trail_a"
+    scene["rooms"]["trail_a"]["anchors"] = {"bench": {"desc": "a bench"}}
+    ctx = _make_ctx(temp_db, "trail_b")
+    tom = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) VALUES(?,?,?,?,?)",
+        ("Tom", json.dumps(default_character_data("Tom")), "{}", time.time(), "char_tom"))
+    temp_db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+               (ctx.chat.id, tom, "active", "{}"))
+    ctx.cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (ctx.chat.id,))
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    for row in ctx.cast:
+        ctx.character_results[row["id"]] = _quiet_character_result(attempt="stays busy")
+    diff = {"positions": {"The Stranger": "trail_b"},
+            "poses": {"Mara": {"posture": "sitting", "support": "bench"},
+                      "Tom": {"posture": "sitting", "support": support}}}
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent({"state_diff": diff}))
+    out = director.director_resolve(ctx, nonce=0)["state_diff"]
+    assert out["positions"]["The Stranger"] == "trail_b"
+    assert "Mara" not in out["positions"] and "Tom" not in out["positions"]

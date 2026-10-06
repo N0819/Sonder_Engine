@@ -20,8 +20,10 @@ the bug was a field's ABSENCE.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -110,7 +112,12 @@ console.log(JSON.stringify({ withCarry, withoutCarry }));
 
 def _editor_payload() -> dict:
     """Evaluate charEditor's save payload against STORED, under node."""
-    script = ROOT / "tests" / "_carry_harness.js"
+    # One file per run, never a fixed path: two runs at once (xdist workers,
+    # or two suites on one checkout) unlinked each other's harness mid-run --
+    # "Cannot find module .../tests/_carry_harness.js" (2026-10-05).
+    fd, name = tempfile.mkstemp(prefix="_carry_harness_", suffix=".js")
+    os.close(fd)
+    script = Path(name)
     script.write_text(_HARNESS, encoding="utf-8")
     try:
         out = subprocess.run(

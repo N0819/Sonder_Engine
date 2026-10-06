@@ -3204,7 +3204,7 @@ def causal_world_index(sc, here=None, *, room_ids=None,
     # of a view, a storm rolling off the peaks or a fire on the far ridge
     # names the same thing perception shows.
     from world.vistas import scene_vistas
-    _vistas = [{k: v for k, v in vista.items() if k != "desc"}
+    _vistas = [{k: v for k, v in vista.items() if k not in ("desc", "distance_given")}
                for vista in scene_vistas(sc)]
     if _vistas:
         out["vistas"] = _vistas

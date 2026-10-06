@@ -1635,6 +1635,105 @@ view). The class is any Layer-A builder that renders text itself instead of
 handing the pack structured data or rendering through `compositor_text` in
 the story's language scope.
 
+<a id="unbuilt-1-180"></a>
+### 1.180 A wait inside the beat: who answers what comes after it sees the world from before it (2026-10-05)
+
+Live, Kirinoura (scratch chat 167 turn 4, the copy at
+`tmp/live/live.db`): "we stay at the terrace wall while the sun goes down
+behind the peaks. When it is fully dark I look down the hill again. 'Are
+those the lamps in the square?'" The encoder wrote the wait (`until_light:
+"dark"`), the resolve priced it (43 minutes, `day_cycle.seconds_until`), and
+the clock committed dark -- but the Doctor, answering the question asked
+after it, was composed his view once at the start of the beat: "The light is
+dim", the stair he stood on before the walk back up, and the lamps not yet
+lit. He said "Bit early for lamps, mind -- there's a good hour of light
+left." His view held the wait as an event and the standing state from before
+it, and the standing state won.
+
+The class: a beat is perceived as one moment, and a player's declaration can
+hold a stretch of time (a wait, a walk, "until dark") before the act a
+character answers. The act stage composes every view from the scene at the
+beat's start. What it would take: the act stage advancing a copy of the
+scene through the declaration's own time (`until_light` / `until_hour` /
+`seconds` on the events before the last one a character reacts to -- the
+same pricing the resolve does) and composing the standing state -- light,
+sky, vistas, positions -- at the end of that time, with the waited stretch
+itself as the events it already is. Owner's call: whether a beat that long
+should instead be cut in two at the wait.
+
+<a id="unbuilt-1-181"></a>
+### 1.181 What the Kirinoura wording fixes left on purpose (2026-10-05)
+
+Three review rounds on the fixes the Kirinoura test story found
+(Design.md: "A voice that is a clause is said as its own sentence", "A way
+named for a room it joins is not said twice", "What stands on the horizon is
+seen when it can be") narrowed each to its live defect. What they leave:
+
+- **A line's own long tone stays in the manner slot.** Only a card's voice
+  register is said apart; a model-written tone that is a clause ("barely a
+  whisper, dropping to nothing at the end of it") still reads "says in a ...
+  voice". Classifying tones as conduct or voice in two scripts misread
+  Japanese registers naming 表情 or 微笑 and broke a conduct slot the
+  Japanese adapter has no template for.
+- **A way named for a room it joins, unlit or impassable.** The onward
+  wording ("From here the way goes on to ...") is used only where the way is
+  SEEN; in the dark, blind or bare branches a way named for a room still
+  reads "There is a way out through the terrace." from the terrace, and the
+  opening rows carry no barrier, so a window or bars named for the room
+  beyond would read as a way that goes on (none in the owner's scenes).
+- **A vista stored before `distance_given` existed** reads as given only off
+  the 10 km default -- a pre-flag vista authored at exactly 10 km is "not
+  given" (vistas were one day old when the flag landed).
+- **A voice is described only to a listener who sees its speaker.** The
+  manner slot is sight-gated (`_inject_dialogue`), and a register said apart
+  follows it; a voice heard round a corner or in the dark carries no quality
+  at all. Owner's call whether hearing a voice should say how it sounds.
+
+<a id="unbuilt-1-182"></a>
+### 1.182 What the review of the present-tense rule found that predates it (2026-10-05)
+
+Four adversarial rounds on `perception.present_label_fn` (Design.md: "A body
+the view never showed is never described") reproduced these on the working
+tree and found each byte-identical at HEAD. The ones in its own class were
+fixed with it -- a stranger's authored parts, the blind spot, a co-player on
+the touch line, a character's fields reading its own view's labels first.
+These remain:
+
+- **A voice register that names its own body reaches a sighted stranger.**
+  Registers are authored card text and are never scrubbed of identity the
+  way `_unknown_actor_label` scrubs an appearance: a stored card's "Current
+  default is Dr. Kellerman's voice, replicated perfectly" is said in the
+  manner slot to anybody who sees her speak. Others carry private history
+  ("he hasn't spoken to anyone in two days"). A leak, so engine work: strip
+  the speaker's own name forms from a register for an observer who does not
+  recognise them.
+- **An acquaintance seen only through a disguise is named in the dark once it
+  ends.** The recognition rule names a known body the observer cannot see;
+  the disguise, gone out of sight, no longer hides it. Documented behaviour,
+  arguably right (a known voice, a known touch); the owner's call.
+- **Less light can give more description.** In the dim a body is the view's
+  silhouette ("an indistinct figure"); in full dark it is the form this mind
+  learned at its last full sighting. The dim reading is what the eye gets
+  now, the dark one is memory -- both defensible, but a reader sees the
+  description return as the light goes.
+- **A transformation is read only through the view.** `present_label_fn`'s own
+  outward form reads disguises; a transformed body is "a large silver wolf"
+  only where the observer's view composed a line about it, which every
+  full-sight case found does. A body asked about at full sight that the view
+  did not compose a line for would still carry its card's look.
+- **Two look-alike strangers** are told apart by the view's own labels and by
+  nothing else: where neither was composed this beat, both are "the tall
+  fox-eared woman".
+- **A disguised body's pronouns are its own.** `cast_pronouns` keys a body
+  by the view's label for it, so "the bearded monk in brown robes" can carry
+  she/her -- the body's true pronouns under its disguise. A disguise has no
+  presented pronouns to give instead.
+- **Two label shapes still lose words.** Adjectives joined by "and" lose
+  their noun past the five-word cap ("A tall, thin, pale and nervous young
+  clerk" is "the tall thin pale"), and a one-word sentence that opens a
+  description keeps its stop ("Tall. Square-shouldered, ..." is "the tall.
+  square-shouldered"). Neither occurs in the 81 stored appearances.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-11"></a>

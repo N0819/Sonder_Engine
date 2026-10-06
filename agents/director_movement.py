@@ -304,7 +304,7 @@ def _ci_mapping_key(mapping, name):
     return None
 
 
-def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
+def _reconcile_near_group_positions(ctx, scene, state_diff, player_name, held=()):
     """Make one fresh, explicit within-room group physically possible.
 
     ``stations.near`` means two bodies are in the same room, and ``at`` names
@@ -349,16 +349,21 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
     graph = {}
     declared_near = {}
     station_by_body = {}
+    # A follower the carry held where they are this beat (`held`) is in no
+    # group: a fresh near link -- theirs, the walker's, or a third body's --
+    # must neither carry them off nor drag the walker back (review,
+    # 2026-10-05).
+    held_keys = {str(_ci_mapping_key(all_positions, h) or h).casefold() for h in held or ()}
     for raw_name, station in stations.items():
         if not isinstance(station, dict):
             continue
         body = _ci_mapping_key(all_positions, raw_name)
-        if body is None:
+        if body is None or str(body).casefold() in held_keys:
             continue
         station_by_body[body] = station
         for raw_other in station.get("near") or []:
             other = _ci_mapping_key(all_positions, raw_other)
-            if other is None or other == body:
+            if other is None or other == body or str(other).casefold() in held_keys:
                 continue
             declared_near.setdefault(body, set()).add(other)
             graph.setdefault(body, set()).add(other)
@@ -679,8 +684,89 @@ def _following_record(following, name):
     return None, None
 
 
+#: The postures nobody walks in (`spatial_fov.posture_word_class`'s classes):
+#: the one half of the evidence a follower stayed where they were.
+_RESTING_POSTURES = frozenset({"sitting", "kneeling", "crouching", "lying"})
+
+
+def _set_down_where_they_are(merged, state_diff, body, origin, target, destination,
+                             travelling=()):
+    """Whether this beat's own evidence leaves `body` resting in `origin`
+    while `target` walks off to `destination`: a pose written this beat in a
+    posture nobody walks in, on a support that is THERE -- the origin room
+    itself, an anchor only the origin owns, or a thing the beat's merged
+    scene (`merged`) still has in the origin. Anything else -- no pose,
+    standing, a posture this layer does not know, a support at the
+    destination, on the one followed or a part of them, or carried by either
+    -- is no such evidence, and the relation carries them as before.
+
+    THE BODY'S OWN BEAT OUTRANKS ITS STANDING INTENT. Following is durable
+    intent the carry acts on for a follower who is otherwise free to go. Live,
+    Kirinoura (scratch chat 167 turn 3, 2026-10-05): the Doctor had started
+    following the surveyor two beats before, and told "Stay here a minute"
+    he declared crouching over the terrace slabs with his screwdriver while
+    she walked down the stair. The diff posed him crouching on the terrace,
+    and the carry moved him onto the stair beside her anyway -- two answers
+    to where he was, and the view and the page told the second ("within
+    arm's reach", "a step and a half below me"). The test is strict on
+    purpose: two review rounds found a looser one stranding followers who sat
+    down at the destination, walked on origin ground, or rode a support that
+    moved (2026-10-05)."""
+    from world.spatial import carrier_chain, posture_word_class, same_subject
+
+    poses = state_diff.get("poses") or {}
+    if not isinstance(poses, dict):
+        return False
+    pose = None
+    for key, value in poses.items():
+        if isinstance(value, dict) and same_subject(merged, key, body):
+            pose = value
+            break
+    if pose is None or posture_word_class(pose.get("posture")) not in _RESTING_POSTURES:
+        return False
+    support = str(pose.get("support") or "").strip()
+    if not support or not origin:
+        return False
+    # A part is its owner's ("<owner>.<part>", "<owner>'s <part>").
+    owner = support.partition(".")[0].strip() if "." in support else support
+    for mark in ("'s ", "\u2019s "):
+        if mark in owner:
+            owner = owner.split(mark, 1)[0].strip()
+    # Bodies that go this beat whatever happens to this one: the one followed
+    # and every fellow follower of theirs (`travelling`) -- a rider on a
+    # fellow follower's back, or on the litter she carries, goes with her
+    # (review round 3, 2026-10-05).
+    goers = [target, body, *travelling]
+    for spelling in {support, owner}:
+        if any(same_subject(merged, spelling, g) for g in goers):
+            return False
+        if any(same_subject(merged, c, g) for c in carrier_chain(merged, spelling)
+               for g in goers):
+            return False
+    rooms = merged.get("rooms") or {}
+    room = rooms.get(origin) or {}
+    folded = support.casefold()
+    if folded in (str(origin).casefold(), str(room.get("name") or "").casefold()):
+        return True
+
+    def _owns(room_record):
+        anchors = (room_record or {}).get("anchors") or {}
+        return isinstance(anchors, dict) and any(
+            str(a).casefold() == folded for a in anchors)
+
+    # Anchor ids are room-scoped and repeat across a doorway: only one the
+    # destination does not also own says the body is in the origin.
+    if _owns(room):
+        return not _owns(rooms.get(destination) if destination else None)
+    # A part is where its owner is: "Mara.lap" names no room of its own, and
+    # a rider on a fellow follower set down herself was carried off her lap
+    # (review round 5, 2026-10-05).
+    return room_of(merged, support) == origin or (
+        owner != support and room_of(merged, owner) == origin)
+
+
 def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
-                              out=None):
+                              out=None, held=None):
     """Carry willing followers through ordinary travel, never pursuit.
 
     The relation is durable intent, not a tether. A follower is moved only
@@ -748,6 +834,46 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             following = relation_scene.get("following") or {}
             state_diff["following_ops"] = ops
 
+    def _carried(raw_follower, record, all_positions):
+        """`(follower, target, origin, destination)` when this beat's carry
+        would take the follower along, else None."""
+        follower = _ci_mapping_key(all_positions, raw_follower)
+        target = _ci_mapping_key(all_positions, (record or {}).get("target"))
+        if follower is None or target is None:
+            return None
+        origin = room_of(scene, follower)
+        target_origin = room_of(scene, target)
+        target_dest = positions.get(target)
+        if not origin or origin != target_origin or not target_dest \
+                or target_dest == target_origin or target.casefold() in rapid:
+            return None
+        return follower, target, origin, target_dest
+
+    # WHO STAYS SET DOWN, decided before anybody is carried: a fellow
+    # follower travels only if she does, so a rider on her lap stays with
+    # her when her own beat sets her down on a bench (review round 4,
+    # 2026-10-05). Starts from everybody travelling and only ever adds a
+    # hold, so it settles within one pass a follower.
+    _set_down = set()
+    for _ in range(max(1, len(following))):
+        grew = False
+        _all = {**(scene.get("positions") or {}), **positions}
+        for raw_follower, record in following.items():
+            got = _carried(raw_follower, record, _all)
+            if got is None or got[0] in _set_down or positions.get(got[0]):
+                continue
+            follower, target, origin, target_dest = got
+            fellows = [f for f, rec in following.items()
+                       if f != raw_follower and isinstance(rec, dict)
+                       and str(rec.get("target") or "").casefold() == str(target).casefold()
+                       and (_ci_mapping_key(_all, f) or f) not in _set_down]
+            if _set_down_where_they_are(route_scene, state_diff, follower, origin,
+                                        target, target_dest, travelling=fellows):
+                _set_down.add(follower)
+                grew = True
+        if not grew:
+            break
+
     changed = False
     # A short fixed-point handles A follows B follows C without making cycles
     # possible (the ledger rejects those at application).
@@ -767,6 +893,23 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
                     or target_dest == target_origin:
                 continue
             if target.casefold() in rapid:
+                continue
+            fellows = [f for f, rec in following.items()
+                       if f != raw_follower and isinstance(rec, dict)
+                       and str(rec.get("target") or "").casefold() == str(target).casefold()
+                       and (_ci_mapping_key(all_positions, f) or f) not in _set_down]
+            # Decided first for everybody the carry can see now (`_set_down`);
+            # asked again here for a follower whose target only moved in an
+            # earlier pass of this loop (A follows B follows C).
+            if follower in _set_down or (not positions.get(follower) and _set_down_where_they_are(
+                    route_scene, state_diff, follower, origin, target, target_dest,
+                    travelling=fellows)):
+                _set_down.add(follower)
+                # Held where they are: the near-group repair below is told,
+                # so no fresh near link can carry them off after all, nor
+                # drag the one who walked back to them (`held`).
+                if held is not None:
+                    held.add(follower)
                 continue
             if origin != target_dest and not passable_route_exists(
                     route_scene, origin, target_dest, body=follower):
@@ -820,6 +963,12 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
         origin = room_of(scene, follower)
         target_room = positions.get(target) or room_of(scene, target)
         if not origin or not target_room or origin == target_room:
+            continue
+        # A follower the relation loop above set down where they are is not
+        # walked after the target by their own start op either (review,
+        # 2026-10-05). Only those: a start the relation loop never decided --
+        # a chain through an approach, a start refused as a cycle -- walks.
+        if held is not None and follower in held:
             continue
         if positions.get(follower) and positions[follower] != origin:
             continue

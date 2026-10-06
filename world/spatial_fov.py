@@ -248,6 +248,17 @@ def _tokens(text):
     return [t for t in re.split(r"[^a-z]+", str(text or "").casefold()) if t]
 
 
+def posture_word_class(text):
+    """standing | sitting | kneeling | crouching | lying for a posture as
+    written, or None when no word of it is one this layer knows -- the
+    question `posture_class` cannot answer, because it reads an unknown
+    posture as standing (the direction that subtracts least from sight)."""
+    for token in _tokens(text):
+        if token in _POSTURE_TOKENS:
+            return _POSTURE_TOKENS[token]
+    return None
+
+
 def posture_class(scene: dict, name: str) -> str:
     """standing | sitting | kneeling | crouching | lying, from the body's
     own pose record, then its entity state -- exact tokens, never prose."""

@@ -117,5 +117,9 @@ def test_the_character_payload_passes_the_gate_in():
     import inspect
     import agents.character as character
     src = inspect.getsource(character.character_step)
-    assert "observer_label_fn" in src and "label_for=" in src, \
+    # Gated by the present-tense labeller since 2026-10-05
+    # (`perception.present_label_fn`, which wraps `observer_label_fn`'s
+    # identity floor with the view's sight, disguise and first-sighting
+    # rules).
+    assert "present_label_fn(" in src and "label_for=_contact_label" in src, \
         "the character payload must gate spatial_digest's ahead_entity"

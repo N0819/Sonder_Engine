@@ -510,10 +510,18 @@ def test_the_orientation_frame_gives_a_townsperson_the_views_own_silhouette(temp
 
 
 def test_the_character_step_hands_its_present_tense_fields_the_view_labeller():
+    """The frame, the contact list and the note about the player all read
+    one present-tense labeller -- the label this mind's own view gave a body
+    first, then the view's rule, asked of the bodies the view did not show
+    (`perception.present_label_fn`, formerly UNBUILT_PIPELINE §1.176;
+    `tests/test_a_body_never_seen_is_never_described.py`)."""
     from agents import character
     src = inspect.getsource(character.character_step)
+    assert "_present_label = present_label_fn(" in src
+    assert "return _view_named.get(str(name)) or _present_label(name)" in src
     assert "spatial_digest(sc, character_name(sh),\n" \
-           "                               label_for=observer_view_label_fn(" in src
+           "                               label_for=_contact_label)" in src
+    assert "label=_contact_label)" in src
 
 
 def test_an_extra_seat_keys_its_roster_by_its_own_view():
@@ -531,7 +539,10 @@ def test_an_extra_seat_keys_its_roster_by_its_own_view():
     from agents import narration
     src = inspect.getsource(narration.narrator_extra)
     assert 'earned = _earned_labels(ctx, seat=f"extra:{pid_key}")' in src
-    assert "earned=earned, roster=True)" in src
+    assert "earned=earned, roster=True," in src
+    # ...and the seat's own present-tense rule, under its own ledger key
+    # (formerly UNBUILT_PIPELINE §1.176; review round 2, 2026-10-05).
+    assert 'present_label_fn(\n            ctx, f"extra:{pid_key}"' in src
 
 
 def test_a_motion_only_act_is_filed_as_ambiguous():

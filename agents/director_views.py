@@ -21,6 +21,7 @@ from story.character_schema import (
     character_name,
     normalized_character_from_text,
     persona_appearance,
+    persona_name,
 )
 from story.scene import persona_of
 # One lexicon of forms of address, not two. `world.background_claims` already
@@ -61,6 +62,53 @@ def _cast_match_forms(cast):
         by_name[name] = forms
     return by_id, by_name
 
+
+
+def _scene_match_forms(ctx):
+    """`_cast_match_forms` with the player in it, and every extra player.
+
+    A character conceals from the player as often as from anybody, and the
+    cast's cards do not name the player: every `conceal_from` a character
+    aimed at the persona was reported as naming "no body in this scene" --
+    four times a beat on Kirinoura turn 3 (scratch chat 167, 2026-10-05),
+    when the surveyor stood one doorway off -- and any spelling of the player
+    but the exact name had nothing to resolve against."""
+    by_id, by_name = _cast_match_forms(ctx.cast)
+    names = []
+    chat = getattr(ctx, "chat", None)
+    pers = persona_of(chat) if chat is not None else None
+    def _aliases(sheet):
+        # A normalized card keeps them under `identity` (`persona_of` always
+        # normalizes; the first version read a top-level key nothing writes).
+        if not isinstance(sheet, dict):
+            return []
+        ident = sheet.get("identity") if isinstance(sheet.get("identity"), dict) else {}
+        return list(ident.get("aliases") or sheet.get("aliases") or [])
+
+    if isinstance(pers, dict):
+        names.append((pers.get("name") or persona_name(pers), _aliases(pers)))
+    for extra in getattr(ctx, "extra_players", None) or []:
+        if isinstance(extra, dict):
+            names.append((extra.get("name"), _aliases(extra.get("persona"))))
+    cast_forms = {f for forms in by_name.values() for f in forms}
+    player_names = {str(n or "").strip().casefold() for n, _a in names if str(n or "").strip()}
+    for name, aliases in names:
+        text = str(name or "").strip()
+        if not text or text.casefold() in cast_forms:
+            continue
+        # A cast member's form, or another player's NAME, is theirs and names
+        # neither player here (review, 2026-10-05). An alias two players
+        # share stays on both: the concealment floors compare BODIES
+        # (`director_floors._bodies_of`), so an exclusion naming it covers
+        # each holder but an addressee, and the strip never takes one
+        # sibling for the other (review rounds 3-4).
+        forms = [text.casefold()] + [
+            str(a).strip().casefold() for a in aliases
+            if str(a or "").strip()
+            and str(a).strip().casefold() not in cast_forms
+            and str(a).strip().casefold() not in player_names]
+        by_name[text] = list(dict.fromkeys(forms))
+    return by_id, by_name
 
 
 def _route_authorial_npc_beat(ctx, out, actor_forms=()):

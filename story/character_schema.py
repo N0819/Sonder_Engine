@@ -1038,6 +1038,33 @@ def _legacy_private_history(value: Any) -> list[dict]:
             result.append({"content": text, "about": "", "known_by": []})
     return result
 
+def _with_normalized_outfit(value: Any) -> Any:
+    """Read an `initial_outfit` written as words into the attire shape before
+    the defaults merge, as `_with_normalized_pronouns` does for pronouns.
+
+    `_deep_defaults` keeps the default where a scalar stands in a mapping's
+    place, so "a red coat, black boots" -- the most natural thing anyone
+    writes -- came out of every schema card as nothing to wear, without a
+    word; only the flat legacy persona reader parsed it (found 2026-10-05,
+    reading the Kirinoura player card). `_normalize_initial_outfit` reads a
+    string or a list, so the authored fact survives.
+    """
+    if not isinstance(value, dict):
+        return value
+    outfit = value.get("initial_outfit")
+    # Words only: a list of garment records is not a list of names, and read
+    # as one it became a garment called "{'name'" (review, 2026-10-05).
+    if not (isinstance(outfit, str)
+            or (isinstance(outfit, list) and outfit
+                and all(isinstance(item, str) for item in outfit))):
+        return value
+    out = dict(value)
+    embodiment = value.get("embodiment")
+    out["initial_outfit"] = _normalize_initial_outfit(
+        outfit, embodiment.get("extra_parts") if isinstance(embodiment, dict) else None)
+    return out
+
+
 def _with_normalized_pronouns(value: Any) -> Any:
     """Read `identity.pronouns` into a paradigm before the defaults merge.
 
@@ -1494,6 +1521,7 @@ def _normalize_native_shape(value: dict) -> dict:
     """
     value = repair_character_shape(value)
     value = _with_normalized_pronouns(value)
+    value = _with_normalized_outfit(value)
     name = (value.get("identity") or {}).get("name") or value.get("name") or "Unnamed"
     result = _deep_defaults(default_character_data(name), value)
     _coerce_latent(result)
@@ -1682,6 +1710,7 @@ def normalize_persona_data(value: dict) -> dict:
         value = value["sheet"]
     if "identity" in value or "narration" in value:
         value = _with_normalized_pronouns(value)
+        value = _with_normalized_outfit(value)
         name = (value.get("identity") or {}).get("name") or value.get("name") or "Player"
         result = _deep_defaults(default_persona_data(name), value)
         _coerce_latent(result)
@@ -1694,6 +1723,15 @@ def normalize_persona_data(value: dict) -> dict:
         result["knowledge"]["private_history"] = _legacy_private_history(
             result["knowledge"].get("private_history"))
         return result
+    # A FLAT CARD MAY STILL CARRY ITS BODY WHERE THE SCHEMA KEEPS ONE. Named
+    # at the top with its body in `embodiment`, a card fell to this reader,
+    # which took a body from a flat `appearance` alone: the body was dropped
+    # without a word, and every observer saw "a person of unremarkable
+    # appearance" (Kirinoura, scratch chat 167, 2026-10-05; the Larch Hill
+    # card had the same shape). `persona_create` hands any sheet it is given
+    # straight here. The flat fields keep their place first.
+    embodied = value.get("embodiment") if isinstance(value.get("embodiment"), dict) else {}
+    embodied_visible = embodied.get("visible") if isinstance(embodied.get("visible"), dict) else {}
     return {
         "identity": {
             "uid": str(value.get("uid") or new_uid("persona")),
@@ -1706,12 +1744,14 @@ def normalize_persona_data(value: dict) -> dict:
             or value.get("outfit")
             or value.get("clothing")
             or value.get("attire"),
-            value.get("extra_parts"),
+            value.get("extra_parts") or embodied.get("extra_parts"),
         ),
         "embodiment": {
-            "senses": _legacy_senses(value.get("senses")),
+            "senses": _legacy_senses(value.get("senses") if value.get("senses") is not None
+                                     else embodied.get("senses")),
             "visible": {
-                "summary": str(value.get("appearance") or "A person of unremarkable appearance."),
+                "summary": str(value.get("appearance") or embodied_visible.get("summary")
+                               or "A person of unremarkable appearance."),
                 "build": "", "face": "", "hair": "", "eyes": "",
                 "distinctive_features": [],
                 # DERIVED, never authored: `_coerce_appearance` projects the
@@ -1721,7 +1761,8 @@ def normalize_persona_data(value: dict) -> dict:
                 "regions": {},
             },
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
-            "extra_parts": _normalize_extra_parts(value.get("extra_parts")),
+            "extra_parts": _normalize_extra_parts(value.get("extra_parts")
+                                                  or embodied.get("extra_parts")),
         },
         "competence": {"abilities": _legacy_abilities(value.get("abilities"))},
         "knowledge": {

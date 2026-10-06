@@ -453,7 +453,15 @@ class JapaneseRenderer:
         data = p.data or {}
         prefix = "episode_" if episode else ""
         if p.kind == "speech":
-            return self._speech(p, data, label, prefix)
+            line = self._speech(p, data, label, prefix)
+            # A voice too long for the manner slot is said once after the
+            # line (`composer._voice_fields`), in the view as the English
+            # view says it -- and, as there, never into memory.
+            if line and not prefix and p.fidelity not in ("fragment", "silence") \
+                    and data.get("said_apart"):
+                line = line + self._text("voice_register",
+                                         register=data["said_apart"])
+            return line
         if p.kind == "environment":
             return self._environment(data, prefix)
         if p.kind == "presence":
@@ -660,9 +668,11 @@ class JapaneseRenderer:
             sentence = _full_stop(self._sentence(p, brief=brief))
             if not sentence:
                 continue
-            # A voice heard is a voice established for this observer -- the
-            # same ledger entry the reference renderer files (D2).
-            if (p.data or {}).get("voice_key"):
+            # A voice said is a voice established for this observer -- the
+            # same ledger entry, on the same test, the reference renderer
+            # files (D2; review round 5).
+            from agents.composer import _can_say_the_voice
+            if (p.data or {}).get("voice_key") and _can_say_the_voice(p):
                 standing_keys.add(str(p.data["voice_key"]))
             # ...and a look at a standing thing files the thing.
             if (p.data or {}).get("files_standing"):

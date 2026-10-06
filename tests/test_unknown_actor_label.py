@@ -93,6 +93,26 @@ def test_a_comma_between_adjectives_is_not_the_head_clause():
         "Vrenak", "A tall, powerfully built reptilian-adjacent humanoid in a "
         "dark-grey military uniform with crimson piping.")
     assert tall != "the tall" and "humanoid" in tall
+    # A series of single adjectives runs on to its noun (Kirinoura, scratch
+    # chat 167, 2026-10-05: "the tall slim").
+    slim = _unknown_actor_label(
+        "The Doctor", "A tall, slim, youthful-looking man with an intense, "
+        "restless presence.")
+    assert slim == "the tall slim youthful-looking man", slim
+    # ...but only where an article promised a noun: a bare list run on took a
+    # feature for one, "the tall square-shouldered short black hair", and
+    # through a possessive reached the body's own name (review, 2026-10-05).
+    assert _unknown_actor_label(
+        "Mika Oda", "Tall, square-shouldered, short black hair, wire-rimmed "
+        "glasses.") == "the tall square-shouldered"
+    assert "sarah" not in _unknown_actor_label(
+        "Sarah Moon", "A tall, slim, Sarah's red hair tied back.").casefold()
+    assert "sulmirath" not in _unknown_actor_label(
+        "Mirelle Sulmirath", "A pale, slender, Sulmirath-house silks.").casefold()
+    # A capital that OPENS the description is sentence case: "Black-haired"
+    # is how Mira Black looks (review round 3, 2026-10-05).
+    assert "black-haired" in _unknown_actor_label(
+        "Mira Black", "Black-haired and slight, a scar across one cheek.").casefold()
     # A real head clause still ends where it did.
     assert _unknown_actor_label(
         "Nobody", "a county surveyor of thirty, small and brisk, ink on her "
@@ -139,3 +159,38 @@ def test_a_short_phrase_that_was_never_capped_keeps_its_preposition():
     assert _unknown_actor_label("Nobody", "a small woman with ink-stained "
                                 "fingers") == \
         "the small woman with ink-stained fingers"
+
+
+
+def test_a_name_compound_after_the_article_is_the_name():
+    """Review round 4 (2026-10-05): the opening word's capital is sentence
+    case only where no article stands before it, and every piece of a
+    compound counts -- "A Sulmirath-blooded heir", "half-Sulmirath"."""
+    for appearance in ("A Sulmirath-blooded succubus in red silk.",
+                       "A tall half-Sulmirath woman in red silk."):
+        assert "sulmirath" not in _unknown_actor_label(
+            "Mirelle Sulmirath", appearance).casefold(), appearance
+    assert "black-haired" in _unknown_actor_label(
+        "Mira Black", "Black-haired and slight, a scar across one cheek.").casefold()
+
+
+def test_a_long_run_of_adjectives_keeps_its_noun():
+    """Review round 4: the run-on reaches the noun, and past the five-word
+    cap the earliest adjectives give way -- never the noun."""
+    label = _unknown_actor_label(
+        "Pell Varro", "A tall, thin, pale, nervous young clerk with ink on his cuffs.")
+    assert label.endswith("clerk"), label
+
+
+def test_a_label_stays_in_its_first_sentence():
+    """Review round 5 (2026-10-05): the run reached past the sentence that
+    holds the descriptor -- "the nervous man. he wears wire"."""
+    from agents.common import _SENTENCE_END
+    assert _unknown_actor_label(
+        "Pell Varro", "A tall, thin, pale, nervous man. He wears wire glasses and a frayed coat."
+    ) == "the tall thin pale nervous man"
+    assert "she" not in _unknown_actor_label(
+        "Pell Varro", "A small, wiry, sharp-eyed girl. She is perhaps twelve.").split()
+    # An abbreviation never ends one.
+    assert _SENTENCE_END.split("Dr. Moon and Mrs. Hale are tall.", 1)[0] == \
+        "Dr. Moon and Mrs. Hale are tall."

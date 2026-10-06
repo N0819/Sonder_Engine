@@ -1666,6 +1666,16 @@ def _spliced_fragment(text):
     return text
 
 
+def _bare_words(text):
+    """`text` folded for comparing two names of one thing: its leading
+    article off, its case and spacing ignored."""
+    words = str(text or "").split()
+    articles = {str(a).casefold() for a in _compositor("articles")}
+    if words and words[0].casefold() in articles:
+        words = words[1:]
+    return " ".join(words).casefold()
+
+
 def _noun_phrase(text):
     """One authored description, made fit to SPLICE into a sentence.
 
@@ -2695,16 +2705,24 @@ def vista_percepts(seen, looked=()):
     looked_ids = {v["id"] for v, _how in looked}
     out = []
 
-    def line(vista, clarity):
+    def line(vista, clarity, nearer=""):
         where = compass.get(vista["bearing"], vista["bearing"])
         if clarity == "unseen":
             return compositor_text("vista_unseen", compass=where, name=vista["name"])
+        # Past a nearer one on the same bearing, a vista is "beyond" it, named
+        # in the line itself -- a standing line is said alone on a later
+        # beat, so it cannot lean on the line before it
+        # (`_beside_on_one_bearing`).
+        more = "_beyond" if nearer else ""
         if clarity == "silhouette":
-            return compositor_text("vista_silhouette", compass=where, name=vista["name"])
+            return compositor_text("vista_silhouette" + more, compass=where,
+                                   name=vista["name"], nearer=nearer)
         if clarity == "lights":
-            return compositor_text("vista_lit_night", compass=where, name=vista["name"])
+            return compositor_text("vista_lit_night" + more, compass=where,
+                                   name=vista["name"], nearer=nearer)
         desc = compositor_text("vista_desc_join", desc=vista["desc"]) if vista["desc"] else ""
-        return compositor_text("vista_seen", compass=where, name=vista["name"], desc=desc)
+        return compositor_text("vista_seen" + more, compass=where, name=vista["name"],
+                               desc=desc, nearer=nearer)
 
     for vista, clarity in looked:
         # A LOOK IS THE VIEW'S NEWS, AND IT FILES WHAT IT SAW: the standing
@@ -2718,16 +2736,36 @@ def vista_percepts(seen, looked=()):
             kind="ambient", channel="sight", source_label=vista["name"],
             data=data, order_key=-1, salience=0.6,
             dedupe_key=standing_key("vista_look", (vista["id"],), (clarity,))))
-    for vista, clarity in seen or ():
-        if vista["id"] in looked_ids:
-            continue
+    previous = None
+    for vista, clarity in _beside_on_one_bearing(
+            [(v, c) for v, c in (seen or ()) if v["id"] not in looked_ids]):
+        nearer = ""
+        if previous is not None and previous[0]["bearing"] == vista["bearing"] \
+                and previous[1] != "unseen" and clarity != "unseen" \
+                and previous[0].get("distance_given") and vista.get("distance_given") \
+                and float(previous[0]["distance_km"]) < float(vista["distance_km"]):
+            nearer = previous[0]["name"]
+        previous = (vista, clarity)
         # Under the room's own salience, as far places are: the horizon is
         # never a memory's gist over where the body stood.
         out.append(Percept(
             kind="ambient", channel="sight", source_label=vista["name"],
-            data={"desc": line(vista, clarity)}, salience=0.15,
+            data={"desc": line(vista, clarity, nearer)}, salience=0.15,
             dedupe_key=standing_key("vista", (vista["id"],), (clarity,))))
     return out
+
+
+def _beside_on_one_bearing(seen):
+    """`seen` with the vistas on one bearing side by side, nearest first, the
+    bearings in the order they first appear. Three standing lines in a row
+    each opened "To the south," (Kirinoura, scratch chat 167, 2026-10-05):
+    the river, the fields across it, the hills that close the valley."""
+    order = []
+    for vista, _clarity in seen:
+        if vista["bearing"] not in order:
+            order.append(vista["bearing"])
+    return sorted(seen, key=lambda vc: (order.index(vc[0]["bearing"]),
+                                        float(vc[0].get("distance_km") or 0.0)))
 
 
 #: FAR SIGHT: the standing lines about what is seen past the near field --
@@ -3468,6 +3506,100 @@ def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
 # Layer A -- event percepts
 # --------------------------------------------------------------------------
 
+#: How much one comma-separated part of a manner may hold and still sit inside
+#: the manner slot ("in a {tone} voice", 「{tone}を声ににじませ」): an
+#: adjective with its adverb and a conjunction ("and highly articulate") --
+#: three words in a spaced script, ten characters in an unspaced one -- never
+#: a clause.
+_MANNER_PART_WORDS = 3
+_MANNER_PART_CHARS_UNSPACED = 10
+
+
+def _fits_the_manner_slot(manner):
+    from story.character_schema import _UNSPACED_SCRIPT
+    for part in re.split(r"[,、，;；]", str(manner or "")):
+        part = part.strip()
+        if not part:
+            continue
+        if " " not in part and _UNSPACED_SCRIPT.search(part):
+            if len(part) > _MANNER_PART_CHARS_UNSPACED:
+                return False
+        elif len(part.split()) > _MANNER_PART_WORDS:
+            return False
+    return True
+
+
+def _voice_fields(register, tone, established, can_say=True):
+    """The manner a line renders, and what is said of the voice apart from it.
+
+    A VOICE THAT IS A CLAUSE IS ITS OWN SENTENCE. The slot is "in a {tone}
+    voice", and a sheet's register -- or a line's own tone -- can be a
+    clause: "says in a bright, informal, theatrical, and highly articulate,
+    shifting into grave authority without warning voice" (Kirinoura, scratch
+    chat 167, 2026-10-05). A register that does not fit
+    (`_fits_the_manner_slot`) is `said_apart`, after the line, whole, by
+    every pack's `voice_register`."""
+    first = bool(register and not established)
+    out = {"manner": register if first else tone}
+    if first:
+        out["voice_first"] = True
+        # A REGISTER describes a voice, always; a line's own tone stays in
+        # its slot, as it always has -- classifying tones as conduct or voice
+        # in two scripts cost more than the one sentence it fixed (review
+        # rounds 1-3, 2026-10-05).
+        # Said apart only where the slot itself would say it -- a line SEEN
+        # and not conducted (`_inject_dialogue` drops the manner otherwise):
+        # an unseen line carried no register, and a long one said apart
+        # reached a listener in the dark (review round 4, 2026-10-05).
+        if not _fits_the_manner_slot(register) and can_say:
+            out["said_apart"] = _lower_lead(_strip_sentence_ends(register))
+            out["manner"] = ""
+    return out
+
+
+def _can_say_the_voice(p):
+    """Whether this line's render says the voice: a full line, said apart
+    after it, or in the manner slot of a line seen and not conducted. A
+    fragment, an unseen line and a conducted one carry no manner -- a voice
+    established on one of them was never said and filed as known all the
+    same (review, 2026-10-05)."""
+    d = p.data or {}
+    if p.fidelity != "full":
+        return False
+    if d.get("said_apart"):
+        return True
+    return bool(d.get("can_see")) and not d.get("conducted")
+
+
+def _one_voice_each(percepts):
+    """`percepts` with each voice established once, in their own order: the
+    earliest line a speaker says among them establishes it, and every later
+    line from them renders only its own tone. `speech_percept` asks the
+    ledger of earlier BEATS, so three lines in one beat each said the voice
+    again."""
+    percepts = list(percepts or ())
+    first = {}
+    for i, p in enumerate(percepts):
+        d = p.data or {}
+        if p.kind == "speech" and d.get("voice_first") and d.get("voice_key") \
+                and _can_say_the_voice(p):
+            rank = (p.order_key is None, p.order_key or 0, i)
+            if d["voice_key"] not in first or rank < first[d["voice_key"]][0]:
+                first[d["voice_key"]] = (rank, i)
+    keep = {i for _rank, i in first.values()}
+    out = []
+    for i, p in enumerate(percepts):
+        d = p.data or {}
+        if p.kind == "speech" and d.get("voice_first") and d.get("voice_key") \
+                and d["voice_key"] in first and i not in keep:
+            data = {k: v for k, v in d.items()
+                    if k not in ("voice_first", "said_apart", "manner")}
+            data.update(_voice_fields("", data.get("tone", ""), True))
+            p = dataclasses.replace(p, data=data)
+        out.append(p)
+    return out
+
+
 def speech_percept(entry, rel, observer_name, *, display, can_see,
                    proximity=None, order_key=0, observer_id=None,
                    senses=None, voice="", prev_standing=None):
@@ -3584,14 +3716,14 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         "voice", (body_key(str(entry.get("speaker") or "")),),
         (str(voice or "").strip(),)) if register else ""
     established = bool(voice_key) and voice_key in (prev_standing or ())
-    manner = register if (register and not established) else tone
     data = {
         "level": level,
         "volume": volume,
         "can_see": bool(can_see),
         "conducted": bool(rel.get("inside_source")),
         "tone": tone,
-        "manner": manner,
+        **_voice_fields(register, tone, established,
+                        can_say=bool(can_see) and not rel.get("inside_source")),
         **({"voice_key": voice_key} if voice_key else {}),
         "articulation": str(entry.get("articulation") or ""),
         "directed_at_self": _addresses(
@@ -4576,7 +4708,7 @@ def _render_features(rows):
     return _en("features", items=_join_clauses(items))
 
 
-def _render_openings(openings):
+def _render_openings(openings, here=""):
     """Every boundary of this room the observer can see, and what sight
     reaches past it.
 
@@ -4638,6 +4770,18 @@ def _render_openings(openings):
         if opening.get("way") == "overlook" and opening.get("vertical") in ("up", "down"):
             parts.append(_cap(_en("opening_seen_above" if opening["vertical"] == "up"
                                   else "opening_seen_below", opening=desc, room=room)))
+        elif _bare_words(desc) in (_bare_words(room), _bare_words(here)) and desc:
+            # A way named for a room it joins identifies no boundary: "Through
+            # the long stone stair is the long stone stair" (Kirinoura, scratch
+            # chat 167, 2026-10-05), and from the stair's far side "Through
+            # the terrace is the long stone stair". The way goes on from HERE
+            # to the room -- worded true of any destination, a place as much
+            # as a passage (review, 2026-10-05: 97 of 398 named edges in the
+            # owner's scenes carry their destination's name, most of them
+            # places).
+            parts.append(_cap(_en(
+                {"up": "opening_onward_up", "down": "opening_onward_down"}.get(
+                    opening.get("vertical"), "opening_onward"), room=room)))
         else:
             parts.append(_cap(_en("opening_seen", opening=desc, room=room)))
         notes = str(opening.get("room_notes") or "").strip()
@@ -4671,7 +4815,7 @@ def _render_standing(p):
         sentence = _render_features(p.data.get("features"))
         if sentence:
             parts.append(sentence)
-        ways = _render_openings(p.data.get("openings"))
+        ways = _render_openings(p.data.get("openings"), here=p.data.get("room_name") or "")
         if ways:
             parts.append(ways)
         # WHERE THE LIGHT FALLS, when the field found the room uneven; else
@@ -4831,6 +4975,12 @@ def _render_event(p):
         # the whole channel reads as somebody standing in the room.
         if via and line:
             line = _en("speech_via", sentence=line.rstrip("."), via=via)
+        # A voice too long for the manner slot, said once after the line
+        # (`_voice_fields`).
+        if line and p.fidelity != "fragment" and p.data.get("said_apart"):
+            # A route clause ends without a stop; a line ends on its quote.
+            line = (_end_sentence(line) if via else line.rstrip()) + " " + _en(
+                "voice_register", register=p.data["said_apart"])
         return line
     if p.kind == "communication":
         line = _observable_predicate(
@@ -5095,8 +5245,10 @@ def _render_view_english(percepts, *, mode="character",
         sentence = _render_event(p)
         if sentence:
             event_spans.append((p, _cap(sentence)))
-            # A voice heard is a voice established for this observer.
-            if p.data.get("voice_key"):
+            # A voice SAID is a voice established for this observer -- never
+            # one only heard round a corner, whose register no line has said
+            # yet (review round 5, 2026-10-05).
+            if p.data.get("voice_key") and _can_say_the_voice(p):
                 standing_keys.add(str(p.data["voice_key"]))
             # A look at a standing thing files the thing (`vista_percepts`).
             if p.data.get("files_standing"):
@@ -5168,6 +5320,7 @@ def render_view(percepts, *, mode="character", prev_standing=frozenset(),
                 prev_standing, prev_described)
         return out
 
+    percepts = _one_voice_each(percepts)
     selected = renderer if renderer is not None else _safe_renderer(language)
     if selected is not None:
         try:
@@ -5499,6 +5652,7 @@ def episode_signature(p):
 def render_episode(percepts, *, prev_standing=frozenset(),
                    prev_described=frozenset(), language=None, renderer=None):
     """Mint a memory episode through the selected deterministic adapter."""
+    percepts = _one_voice_each(percepts)
     selected = renderer if renderer is not None else _safe_renderer(language)
     if selected is not None:
         try:

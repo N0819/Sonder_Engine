@@ -194,7 +194,6 @@ Not scheduled and not committed to a phase. See the
 - [§1.163 — The opening is still one call with its own sheet](UNBUILT_PIPELINE.md#unbuilt-1-163)
 - [§1.164 — The Director's doctrine moved to the hands and what did not move was dropped](UNBUILT_PIPELINE.md#unbuilt-1-164)
 - [§1.173 — A body that crosses rooms to bar a doorway no longer bars it that beat (2026-10-04)](UNBUILT_PIPELINE.md#unbuilt-1-173)
-- [§1.176 — A body the view never showed is still named by the identity floor (2026-10-05)](UNBUILT_PIPELINE.md#unbuilt-1-176)
 
 **2. Roadmap**
 
@@ -247,6 +246,9 @@ Not scheduled and not committed to a phase. See the
 - [§1.159 — The sound model is half real: the ladders are decibels and the losses are still compressed](UNBUILT_PERCEPTION.md#unbuilt-1-159)
 - [§1.167 — Ordinary speech was gated four ways too hard](UNBUILT_PERCEPTION.md#unbuilt-1-167)
 - [§1.179 — The sky on a body's skin is said in English in every language (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-179)
+- [§1.180 — A wait inside the beat: who answers what comes after it sees the world from before it (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-180)
+- [§1.181 — What the Kirinoura wording fixes left on purpose (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-181)
+- [§1.182 — What the review of the present-tense rule found that predates it (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-182)
 
 **2. Roadmap**
 

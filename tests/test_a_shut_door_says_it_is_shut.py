@@ -51,3 +51,25 @@ def test_the_two_boundaries_stay_tellable_apart():
     assert "the open doorway" in prose
     assert "shut door" in prose
     assert "second" not in prose
+
+
+def test_a_way_named_for_where_it_goes_is_not_said_twice():
+    """Kirinoura (scratch chat 167, 2026-10-05): the room author named the
+    stair's edge after the stair, and the view read "Through the long stone
+    stair is the long stone stair." A way named for a room it joins -- where
+    it goes, or where the observer stands -- names no boundary: the way goes
+    on from HERE to the room, worded true of a place as much as a passage
+    (review, 2026-10-05: "leads on from here" called an inn a passage); one
+    with a name of its own keeps it."""
+    from agents.composer import _render_openings
+    prose = _render_openings([
+        {"desc": "the torii gate", "state": "seen", "room_name": "the shrine forecourt"},
+        {"desc": "the long stone stair", "state": "seen", "room_name": "The long stone stair",
+         "vertical": "down"},
+        {"desc": "the inn", "state": "seen", "room_name": "the inn"},
+        {"desc": "the terrace", "state": "seen", "room_name": "the long gallery"}],
+        here="the terrace")
+    assert prose == ("Through the torii gate is the shrine forecourt. "
+                     "Down from here is The long stone stair. "
+                     "From here the way goes on to the inn. "
+                     "From here the way goes on to the long gallery.")

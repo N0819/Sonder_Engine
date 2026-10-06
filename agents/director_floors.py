@@ -2023,6 +2023,41 @@ def _concealment_forms(ref, by_id, by_name):
     return {low}
 
 
+def _body_key(cid, forms, by_name):
+    """One body's key across both maps: a cast row's id and display name
+    share one forms list (`_cast_match_forms`), so the name keys both."""
+    for name, other in (by_name or {}).items():
+        if other is forms:
+            return str(name).casefold()
+    return "character:%s" % str(cid).casefold()
+
+
+def _bodies_of(ref, by_id, by_name):
+    """EVERY body a spelling names, by key -- a cast id and its display name
+    are one body, and two bodies that share an alias stay two. Comparing
+    spelling SETS instead made siblings who share a surname one person: a
+    line kept from one, said to the other, was stripped as "concealed from
+    its own addressee" and reached her (review round 4, 2026-10-05).
+
+    A spelling no map holds is its own key, as `_concealment_forms` answers
+    with the text: the player is in no cast map and is still matched by her
+    own name, and an addressee nobody can place still counts as one."""
+    text = str(ref or "").strip()
+    if not text:
+        return set()
+    low = text.casefold()
+    if low.startswith("character:"):
+        low = low[len("character:"):].strip()
+    out = set()
+    for cid, forms in (by_id or {}).items():
+        if low == str(cid).casefold() or low in forms:
+            out.add(_body_key(cid, forms, by_name))
+    for name, forms in (by_name or {}).items():
+        if low == str(name).casefold() or low in forms:
+            out.add(str(name).casefold())
+    return out or {low}
+
+
 def _resolves_to_a_body(ref, by_id, by_name) -> bool:
     """Does the scene hold a body under this spelling at all?
 
@@ -2049,7 +2084,7 @@ def _resolves_to_a_body(ref, by_id, by_name) -> bool:
     return False
 
 
-def resolve_concealment_refs(sequence, by_id, by_name, warn=None):
+def resolve_concealment_refs(sequence, by_id, by_name, warn=None, addressees=()):
     """A concealment NAMES A BODY; a name the scene cannot resolve is a
     failure to be reported, never a permission.
 
@@ -2093,11 +2128,21 @@ def resolve_concealment_refs(sequence, by_id, by_name, warn=None):
         if not listed:
             continue
         addressed = set()
-        for ref in (list(event.get("targets") or [])
-                    + [event.get("intended_target")]):
-            addressed |= _concealment_forms(ref, by_id, by_name)
+        own = [r for r in (list(event.get("targets") or [])
+                           + [event.get("intended_target")]) if str(r or "").strip()]
+        spoken = str(event.get("type") or "") == "speech"
+        # The declaration's addressees stand in for a SPOKEN line that names
+        # none of its own (as `strip_addressee_concealment` reads them): the
+        # fail-closed branch below must not hide it from the person it is
+        # said to. Never for an act or an aside with its own targets -- the
+        # pocket picked mid-conversation stays hidden from its owner (review,
+        # 2026-10-05).
+        if not own and spoken:
+            own = list(addressees or ())
+        for ref in own:
+            addressed |= _bodies_of(ref, by_id, by_name)
         resolved, engine_form, absent = [], [], []
-        actor_forms = _concealment_forms(
+        actor_bodies = _bodies_of(
             event.get("actor") or event.get("speaker"), by_id, by_name)
         for value in listed:
             text = str(value).strip()
@@ -2117,7 +2162,12 @@ def resolve_concealment_refs(sequence, by_id, by_name, warn=None):
                 (engine_form if text.casefold().startswith("character:")
                  else absent).append(text)
                 continue
-            resolved.extend(_canonical_conceal_forms(text, by_id, by_name))
+            # A spoken line is never kept from the person it is said to: a
+            # form an addressee shares with somebody else names only the
+            # somebody else here. An act keeps its target in the list -- the
+            # pocket picked stays hidden from its owner.
+            resolved.extend(_canonical_conceal_forms(
+                text, by_id, by_name, skip=addressed if spoken else ()))
         if absent:
             # Left exactly as written, and reported: an exclusion naming
             # nobody present excludes nobody, which is correct when the body
@@ -2129,13 +2179,15 @@ def resolve_concealment_refs(sequence, by_id, by_name, warn=None):
                 "to; if they are not present it excludes nobody, and if they "
                 "are it is misspelled" % ", ".join(repr(u) for u in absent))
         if engine_form:
-            spared = set(addressed) | set(actor_forms)
+            # A spoken line's addressees, never an act's targets: the pocket
+            # picked stays hidden from its owner (review round 5).
+            spared = (set(addressed) if spoken else set()) | set(actor_bodies)
             for cid, forms in (by_id or {}).items():
-                if set(forms) & spared:
+                if _body_key(cid, forms, by_name) in spared:
                     continue
                 resolved.append("character:%s" % str(cid).casefold())
             for name, forms in (by_name or {}).items():
-                if set(forms) & spared or str(name).casefold() in spared:
+                if str(name).casefold() in spared:
                     continue
                 resolved.append(str(name))
             notes.append(
@@ -2155,24 +2207,30 @@ def resolve_concealment_refs(sequence, by_id, by_name, warn=None):
     return notes
 
 
-def _canonical_conceal_forms(ref, by_id, by_name):
+def _canonical_conceal_forms(ref, by_id, by_name, skip=()):
     """The spellings `composer.concealed_from_observer` can match, for a
     body the scene DOES hold: its `character:<id>` form when it is cast, and
-    its display name either way."""
+    its display name either way -- for EVERY body the spelling names, not
+    the first: an exclusion is the conservative reading, and a form two
+    players answer to hid the line from one of them and published it to the
+    other (review round 3, 2026-10-05). `skip` are bodies (`_bodies_of`
+    keys) the exclusion must not reach: a spoken line's addressees."""
     text = str(ref or "").strip()
     low = text.casefold()
     if low.startswith("character:"):
         low = low[len("character:"):].strip()
-    out = []
+    out, named = [], False
     for cid, forms in (by_id or {}).items():
         if low == str(cid).casefold() or low in forms:
-            out.append("character:%s" % str(cid).casefold())
-            break
+            named = True
+            if _body_key(cid, forms, by_name) not in skip:
+                out.append("character:%s" % str(cid).casefold())
     for name, forms in (by_name or {}).items():
         if low == str(name).casefold() or low in forms:
-            out.append(str(name))
-            break
-    return out or [text]
+            named = True
+            if str(name).casefold() not in skip:
+                out.append(str(name))
+    return out if named else [text]
 
 
 def strip_addressee_concealment(sequence, by_id, by_name, warn=None,
@@ -2226,15 +2284,19 @@ def strip_addressee_concealment(sequence, by_id, by_name, warn=None,
         addressed = set()
         for ref in (list(event.get("targets") or [])
                     + [event.get("intended_target")]):
-            addressed |= _concealment_forms(ref, by_id, by_name)
+            addressed |= _bodies_of(ref, by_id, by_name)
         if not addressed:
             for ref in addressees or ():
-                addressed |= _concealment_forms(ref, by_id, by_name)
+                addressed |= _bodies_of(ref, by_id, by_name)
         if not addressed:
             continue
         kept, dropped = [], []
         for value in listed:
-            if _concealment_forms(value, by_id, by_name) & addressed:
+            # Dropped only when EVERY body it names is an addressee: a form
+            # an addressee shares with somebody else still names the
+            # somebody else (`resolve_concealment_refs` narrows it).
+            named = _bodies_of(value, by_id, by_name)
+            if named and named <= addressed:
                 dropped.append(str(value))
             else:
                 kept.append(value)
@@ -2254,12 +2316,16 @@ def strip_addressee_concealment(sequence, by_id, by_name, warn=None,
         remaining = event.get("conceal_from") or []
         if (str(event.get("visibility") or "").lower() == "concealed"
                 and remaining and by_name):
+            # By BODY, and past the addressees a spoken line's exclusion is
+            # narrowed beyond (`resolve_concealment_refs`): spellings made
+            # siblings who share a surname one person, and a line said to
+            # one and kept from the other was reported as reaching nobody
+            # (review round 5, 2026-10-05).
             excluded = set()
             for value in remaining:
-                excluded |= _concealment_forms(value, by_id, by_name)
+                excluded |= _bodies_of(value, by_id, by_name) - addressed
             everyone = all(
-                _concealment_forms(name, by_id, by_name) & excluded
-                for name in by_name)
+                _bodies_of(name, by_id, by_name) <= excluded for name in by_name)
             if everyone:
                 notes.append(
                     "speech concealed from every body in the scene; the "

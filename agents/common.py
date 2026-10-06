@@ -5477,6 +5477,11 @@ def scene_figures(chat, cast, scene, recognized=None):
     return out
 
 
+#: Where a description's first sentence ends: a stop after three lowercase
+#: letters (so "Dr." and "Mrs." never end one), or a full-width stop.
+_SENTENCE_END = re.compile(r"(?<=[a-z]{3}[.!?])\s+|(?<=[\u3002\uff01\uff1f])")
+
+
 def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
                          role="", surface=None, sight="full", head_noun=None):
     # Every unrecognized actor used to render as the exact same generic
@@ -5548,14 +5553,53 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
         # Aldermill round 9, 2026-09-23); "A tall, powerfully built ...
         # humanoid" read "the tall". A part with one content word is joined
         # to the next until the head holds two, so the noun it describes
-        # comes with it.
+        # comes with it -- and where the head OPENED WITH AN ARTICLE, which
+        # promises a noun, a series of one-word parts runs on until a part
+        # carries more: "A tall, slim, youthful-looking man ..." stopped at
+        # two words and read "the tall slim" in every view of him
+        # (Kirinoura, scratch chat 167, 2026-10-05). A bare list ("Tall,
+        # square-shouldered, short black hair, ...") promises no noun, and run
+        # on it took a feature for one: "the tall square-shouldered short
+        # black hair" (review, 2026-10-05).
+        promised = bool(re.match(
+            r"^(?:" + "|".join(map(re.escape, articles)) + r")\s", head, re.I))
+        # THE DESCRIPTOR IS IN THE FIRST SENTENCE: "A tall, thin, pale,
+        # nervous man. He wears wire glasses" ran on into "he wears wire"
+        # (review round 5, 2026-10-05). Cut there when that sentence holds a
+        # descriptor of its own; a fragment ("Tall.") keeps the run.
+        first = _SENTENCE_END.split(head, 1)[0]
+        if first != head and len(_content(first)) >= 2:
+            head = first.strip()
         for mark in (";", ","):
             parts = head.split(mark)
-            taken = parts[0]
+            taken = last = parts[0]
+            joined = [parts[0]]
             for part in parts[1:]:
-                if len(_content(taken)) >= 2:
+                if len(_content(taken if not promised else last)) >= 2:
                     break
-                taken = taken + mark + part
+                taken, last = taken + mark + part, part
+                joined.append(part)
+            # PAST THE CAP THE ADJECTIVES YIELD, NOT THE NOUN. The run-on
+            # reaches its noun; the five-word cap below would cut it off
+            # again ("A tall, thin, pale, nervous young clerk"), so the
+            # earliest one-word parts give way first (review round 4).
+            if promised and len(joined) > 2:
+                # The noun phrase is the last part up to its first
+                # preposition or linking participle -- what follows is
+                # trimmed by the cap's own phrase rules below anyway.
+                stops = frozenset(compositor_value("label_dangling")) | frozenset(
+                    compositor_value("linking_participles"))
+                noun = []
+                for w in _content(last):
+                    if re.sub(r"[^\w]", "", w).casefold() in stops:
+                        break
+                    noun.append(w)
+                lead = joined[0].split()
+                singles = [s for s in [" ".join(lead[1:])]
+                           + [p.strip() for p in joined[1:-1]] if s]
+                if len(singles) + len(noun) > 5:
+                    singles = singles[len(singles) + len(noun) - 5:] if len(noun) < 5 else []
+                    taken = " ".join([lead[0], (mark + " ").join(singles + [last.strip()])])
             if len(_content(taken)) >= 2:
                 head = taken.strip()
         cleaned = re.sub(
@@ -5574,8 +5618,36 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
                       if str(f or "").strip()
                       and not (role and _identity_token_set(str(f))
                                <= _identity_token_set(role))])
-        words = [w for w in cleaned.split()
-                 if re.sub(r"[^\w]", "", w).casefold() not in name_tokens]
+        # A word that holds the body's OWN name in a possessive or a compound
+        # ("Sarah's", "Sulmirath-house") is the name. Only a personal-name
+        # token, two letters or more and written as a name: an alias's words
+        # took "nine-tailed" from Tamamo-no-Mae, the "T" of William T. Riker
+        # took "T-shirt", and "Gray" took "gray-eyed" (review, 2026-10-05).
+        personal = {t for t in _identity_token_set(actor_name) if len(t) >= 2}
+        if role:
+            personal -= _identity_token_set(role)
+
+        def _holds_the_name(i, w):
+            pieces = [piece for piece in re.split(r"[^\w]+", w) if piece]
+            named = [k for k, piece in enumerate(pieces)
+                     if piece[:1].isupper() and piece.casefold() in personal]
+            if not named:
+                return False
+            # A possessive is the name wherever it stands ("Sarah's"). So is
+            # any piece of a compound -- "half-Sulmirath" -- except the first
+            # piece of the word that OPENS a description with no article,
+            # whose capital is sentence case: "Black-haired and slight" (Mira
+            # Black) is a description, "A Sulmirath-blooded heir" names the
+            # house (review rounds 3-4, 2026-10-05).
+            if len(pieces) == 2 and pieces[1].casefold() == "s" and "-" not in w:
+                return True
+            if i == 0 and not promised:
+                return any(k > 0 for k in named)
+            return True
+
+        words = [w for i, w in enumerate(cleaned.split())
+                 if re.sub(r"[^\w]", "", w).casefold() not in name_tokens
+                 and not _holds_the_name(i, w)]
         # Dropping a leading name can expose the article that followed it
         # ("Hinami, a fox-eared..." -> "a fox-eared..."); re-strip it.
         while words and words[0].lower() in articles:

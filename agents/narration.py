@@ -27,6 +27,7 @@ import re
 
 from world.spatial import (
     containment_conceals,
+    sense_adjusted,
     room_display_name,
     contact_sensation,
     effective_light,
@@ -83,6 +84,7 @@ from story.character_schema import (
     character_name,
     normalized_character_of_row,
     persona_appearance,
+    persona_name,
     persona_voice_setting,
 )
 
@@ -332,7 +334,7 @@ def _craft_tells(prose: str) -> list:
             found.append(label)
     return list(dict.fromkeys(found))
 
-def _authored_body_parts(ctx, persona, player_name):
+def _authored_body_parts(ctx, persona, player_name, label=None, primary_name=None):
     """{name: part lines} for every present body that AUTHORED extra parts.
 
     The same fact as `_cast_pronouns`, and the same failure it was built
@@ -346,13 +348,57 @@ def _authored_body_parts(ctx, persona, player_name):
     Read live from the cards, like every other user of scene_extra_parts,
     and ABSENT when nobody declared any -- so an ordinary cast leaves the
     payload shape, and the provider's prefix cache, unchanged.
+
+    KEYED AS THE PAGE MAY CALL EACH BODY, and only a body whose parts could
+    be seen: `label` is the roster rule with `seen` (`_roster_label`) -- the
+    player's own body always, a body it knows by name, a stranger shown in
+    full under the view's label for them. A stranger nobody had seen, in a
+    dark cellar or a tower far away, went to the page by real name with her
+    nine tails (review round 4, 2026-10-05: the class of the former
+    UNBUILT_PIPELINE §1.176, in the field `_cast_pronouns` was fixed beside).
+    Two bodies the view cannot tell apart collapse to one label and are
+    dropped, as there.
+
+    WHAT EACH BODY HAS AS THE VIEW WAS RENDERED: every other body from the
+    map perception composes from (`perception._composer_extra_parts`: a
+    transformation's parts, then a disguise's concealment), and this seat's
+    own from its own card through its own transformation, never its own
+    disguise. Read raw from the cards, a disguised body's nine tails went to
+    the page under "the hooded pilgrim" while the view hid them (review round
+    5, 2026-10-05: the label rule above had removed only the name).
+    `primary_name` is the primary player's, whose name keys the composer's
+    map; this seat's is `player_name`.
     """
+    from .perception import _composer_extra_parts, _turn_transformations
+    from story.scene import transformed_parts
     try:
-        parts = scene_extra_parts(ctx.cast, persona, player_name)
+        parts = dict(_composer_extra_parts(ctx, primary_name or player_name) or {})
+        own = (scene_extra_parts([], persona, player_name) or {}).get(player_name)
+        shift = (_turn_transformations(ctx) or {}).get(str(player_name or "").casefold())
+        own = transformed_parts(own, shift) if shift else own
     except Exception:
         return {}
-    return {name: extra_parts_lines(p) for name, p in (parts or {}).items()
-            if p}
+    parts = {name: p for name, p in parts.items()
+             if str(name).casefold() != str(player_name or "").casefold()}
+    if own:
+        parts[player_name] = own
+    out, collided = {}, set()
+    for name, p in (parts or {}).items():
+        lines = extra_parts_lines(p)
+        if not lines:
+            continue
+        key = name
+        if label is not None and str(name) != str(player_name):
+            shown = label(name)
+            if shown is None:
+                continue            # a body whose parts this page cannot see
+            key = str(shown).strip() or name
+        if key in out and out[key] != lines:
+            collided.add(key)
+        out[key] = lines
+    for key in collided:
+        out.pop(key, None)
+    return out
 
 
 def _cast_pronouns(cast, label=None):
@@ -433,15 +479,41 @@ def _earned_labels(ctx, seat="player"):
     return {}
 
 
-def _roster_label(view_label, earned, recognized):
+def _seen_in_full(ctx, seat="player"):
+    """The bodies one seat's own view composed a presence line about at FULL
+    sight this beat (`perception._composer_company`'s `full`)."""
+    for step in ("perception_outcome", "perception_establish"):
+        out = (ctx.get(step) or {}) if hasattr(ctx, "get") else {}
+        rows = ((out.get("company") or {}).get(seat)
+                if isinstance(out, dict) else None)
+        if isinstance(rows, list):
+            return {str(r.get("name")) for r in rows
+                    if isinstance(r, dict) and r.get("name") and r.get("full")}
+    return set()
+
+
+def _roster_label(view_label, earned, recognized, seen=None, ever=None):
     """The `cast_pronouns` key for each body, or None to leave it out: only
     a body the player's view SHOWED (`earned`) or knows by NAME is keyed. An
     unperceived stranger keyed by its appearance handed the page a roster of
     faces the player never saw (review 2026-10-04); the narrator card already
-    says a character absent from `cast_pronouns` keeps what the view set."""
+    says a character absent from `cast_pronouns` keeps what the view set.
+    `seen` narrows SHOWED to shown in full (`_seen_in_full`), for a reader of
+    how a body looks -- and then a body known by name needs to have been seen
+    in full, now or on an earlier beat (`ever`, the observer's described
+    ledger): a name heard in the dark is not a look (review round 5)."""
     def label(name):
-        if str(name) in earned or _recognizes(name, recognized):
+        if str(name) in earned and (seen is None or str(name) in seen):
             return view_label(name)
+        if seen is not None and str(name) not in seen and not (
+                ever and composer.body_key(str(name)) in ever):
+            return None
+        if _recognizes(name, recognized):
+            # Known by name, and still named by the present-tense rule: a
+            # disguise that hides who she is keys nothing, or her pronouns
+            # went under "the unfamiliar person" (review, 2026-10-05).
+            shown = view_label(name)
+            return shown if shown == str(name) else None
         return None
     return label
 
@@ -633,7 +705,7 @@ def _player_long_established(ctx, turn_idx, depth, pid="player"):
 def _sensory_channels_manifest(scene, player_name, view, observations,
                                recognized, cast_info, p_room,
                                standing_verdicts=None, *, include_delivery_text=True,
-                               earned=None):
+                               earned=None, present=None):
     """Per-sense delivery manifest for the narrator payload, or {}.
 
     THE DEFECT: percepts carry a real channel from every builder through
@@ -706,7 +778,28 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     def _partner_label(other):
         other = str(other)
         info = (cast_info or {}).get(other)
+        # EVERY BODY, NOT ONLY THE CAST: a co-player's seat, a presence or a
+        # person without a card is called what the view called them, then
+        # what the present-tense rule says -- a disguised co-player the
+        # player knows was named on the touch line beside a view that said
+        # "the hooded pilgrim's hand" (review round 4, 2026-10-05; the same
+        # at HEAD). A party the rule cannot place keeps the thing-or-someone
+        # floor below.
+        if info is None and (contact_endpoint_is_body(scene, other)
+                             or _recognizes(other, recognized or ())):
+            if earned and other in earned:
+                return earned[other]
+            if present is not None:
+                shown = present(other)
+                if shown != other or _recognizes(other, recognized or ()):
+                    return shown
         if info is not None:
+            # A body the view did not show this beat -- a hand in the dark --
+            # is called what the view would call it (`present`,
+            # `perception.present_label_fn`), never a descriptor minted from
+            # a card for a face nobody saw (formerly UNBUILT_PIPELINE §1.176).
+            if present is not None and not (earned and other in earned):
+                return present(other)
             return _speaker_display(other, recognized,
                                     info.get("appearance"),
                                     info.get("aliases"), earned=earned)
@@ -928,6 +1021,7 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                                         surface, e, referent_labels)))
 
     seen_cache = {}
+    player_card = _player_sense_card(ctx)
 
     def _player_perceives(name, room=None, strict=False):
         """Can the player place this actor's overt physical act this beat.
@@ -958,7 +1052,8 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
         if key not in seen_cache:
             now = room or room_of(scene, name)
             seen_cache[key] = False if (now is None and strict) else \
-                _player_sees_character(scene, p_name, p_room, name, now)
+                _player_sees_character(scene, p_name, p_room, name, now,
+                                       senses=player_card)
         return seen_cache[key]
 
     def _seq_events(name, seq):
@@ -1113,7 +1208,15 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
     return events
 
 
-def _player_sees_character(scene, p_name, p_room, name, now_room):
+def _player_sense_card(ctx):
+    """The player's structured senses (`perception._sense_card`): a card
+    whose sight is absent must not be handed bodies by sight
+    (formerly UNBUILT_PIPELINE §1.176)."""
+    from .perception import _sense_card
+    return _sense_card(persona_of(ctx.chat)) or []
+
+
+def _player_sees_character(scene, p_name, p_room, name, now_room, senses=None):
     """S3-A4: can the player actually SEE this co-present character this beat.
 
     Co-location is not perception. A character standing in the player's
@@ -1140,7 +1243,12 @@ def _player_sees_character(scene, p_name, p_room, name, now_room):
     if entity_arc(scene, p_name, name) == "rear":
         return False
     if room_of(scene, p_name) and room_of(scene, name):
-        return visual_level_between(scene, p_name, name) != "none"
+        # Through the player's own eyes: a card whose sight is absent sees
+        # nobody in a lit hall (formerly UNBUILT_PIPELINE §1.176).
+        return sense_adjusted(visual_level_between(scene, p_name, name, senses),
+                              "sight", senses) != "none"
+    if senses and sense_adjusted("full", "sight", senses) == "none":
+        return False
     return has_visual(spatial_rel(scene, p_room, now_room or p_room))
 
 
@@ -1156,6 +1264,7 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
     guessed."""
     prev_sc = get_scene(chat["id"], chat)
     sc = ctx.get("outcome_scene") or prev_sc
+    player_card = _player_sense_card(ctx)
     rooms = sc.get("rooms") or {}
     room_names = {
         rid: room_display_name(r, rid)
@@ -1182,7 +1291,8 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
         # rule then invites rendering them and _check_narrator_fidelity
         # ENFORCES prose agreement, turning an unperceived body into a
         # required sentence.
-        if not _player_sees_character(sc, p_name, p_room, name, now_room):
+        if not _player_sees_character(sc, p_name, p_room, name, now_room,
+                                      senses=player_card):
             continue
         moved = (prev_room is None) or (prev_room != now_room)
         # Where they came FROM is a separate perception from the fact that
@@ -2107,11 +2217,20 @@ def narrator(ctx, nonce):
         }
 
     _earned = _earned_labels(ctx)
+    # WHAT THE PAGE MAY CALL A BODY THE VIEW DID NOT SHOW THIS BEAT: the
+    # view's own rule, asked of the bodies it was not composed about -- a
+    # name only through no disguise that hides it, an appearance only of an
+    # outward form this player has seen (formerly UNBUILT_PIPELINE §1.176).
+    from .perception import described_by, present_label_fn
+    _player_card = _player_sense_card(ctx)
+    _present = present_label_fn(
+        ctx, "player", player_name,
+        ctx.get("outcome_scene") or get_scene(chat["id"], chat), senses=_player_card)
 
     def _view_label(name):
-        info = cast_info.get(str(name)) or {}
-        return _speaker_display(name, recognized, info.get("appearance"),
-                                info.get("aliases"), earned=_earned)
+        if _earned and str(name) in _earned:
+            return _earned[str(name)]
+        return _present(name)
 
     cast_pronouns = _cast_pronouns(ctx.cast, label=_roster_label(
         _view_label, _earned, recognized))
@@ -2322,7 +2441,7 @@ def narrator(ctx, nonce):
             _scene_for_frame, player_name, view,
             player_observations, recognized, cast_info, p_room,
             standing_verdicts=_verdicts, include_delivery_text=False,
-            earned=_earned)
+            earned=_earned, present=_present)
         if _senses:
             _world_fields["sensory_channels"] = _senses
         # STILL TRUE, AND NOT SAID SINCE BEFORE THE PAGE'S OWN MEMORY (D7).
@@ -2351,7 +2470,9 @@ def narrator(ctx, nonce):
                 for _n, _i in cast_info.items() if _n != player_name}),
         }
 
-    _abp = _authored_body_parts(ctx, pers, player_name)
+    _abp = _authored_body_parts(ctx, pers, player_name, label=_roster_label(
+        _view_label, _earned, recognized, seen=_seen_in_full(ctx),
+        ever=described_by(ctx, "player")[0]))
     # ABSENT WHEN EMPTY, the pattern `authored_body_parts` already set.
     # An empty field is not free: it is a key the model must read and
     # discard, and worse, it ARGUES FOR A RULE WITH NO REFERENT -- the
@@ -2586,7 +2707,8 @@ def _report_prose_guards(prose, view, p_lines, raw_input, warnings):
     return text
 
 
-def _extra_view_label(chat_id, extra, cast, earned=None, roster=False):
+def _extra_view_label(chat_id, extra, cast, earned=None, roster=False, present=None,
+                      seen=None, ever=None):
     """One extra seat's identity floor: `name -> what THIS player may call
     them`, the same `_speaker_display` gate `narrator` builds for the
     primary -- the labels this seat's own view earned first
@@ -2606,11 +2728,17 @@ def _extra_view_label(chat_id, extra, cast, earned=None, roster=False):
             character_appearance(sheet), character_scene_keys(sheet)[1:])
 
     def label(name):
+        if earned and str(name) in earned:
+            return earned[str(name)]
+        # The seat's own present-tense rule, as the primary's (`present`,
+        # `perception.present_label_fn` under "extra:<pid>").
+        if present is not None:
+            return present(name)
         appearance, aliases = info.get(str(name), (None, None))
         return _speaker_display(name, recognized, appearance, aliases,
                                 earned=earned)
 
-    return _roster_label(label, earned or {}, recognized) if roster else label
+    return _roster_label(label, earned or {}, recognized, seen=seen, ever=ever) if roster else label
 
 
 def narrator_extra(ctx, nonce):
@@ -2665,6 +2793,14 @@ def narrator_extra(ctx, nonce):
             f"extra:{pid_key}") or []
         perception_fields = _narrator_perception_fields(observations, view)
         earned = _earned_labels(ctx, seat=f"extra:{pid_key}")
+        # This seat's present-tense rule, under its own composer ledger key
+        # (formerly UNBUILT_PIPELINE §1.176; review, 2026-10-05: the second
+        # seat still described a stranger nobody could see from the card).
+        from .perception import _sense_card, described_by, present_label_fn
+        _extra_present = present_label_fn(
+            ctx, f"extra:{pid_key}", extra.get("name") or "",
+            ctx.get("outcome_scene") or get_scene(chat["id"], chat),
+            senses=_sense_card(extra.get("persona") or {}))
 
         past_narration, prev = _past_narration_extra_block(
             chat["id"], ctx.turn["idx"], ctx.turn["frame_id"], pid, _depth)
@@ -2692,7 +2828,12 @@ def narrator_extra(ctx, nonce):
         # authored anatomy under the extra player's name: the same defect
         # `_authored_body_parts` exists to prevent, one player over.
         _abp2 = _authored_body_parts(
-            ctx, extra.get("persona"), extra.get("name") or "Player")
+            ctx, extra.get("persona"), extra.get("name") or "Player",
+            primary_name=persona_name(persona_of(chat)) if persona_of(chat) else None,
+            label=_extra_view_label(chat["id"], extra, ctx.cast, earned=earned,
+                                    roster=True, present=_extra_present,
+                                    seen=_seen_in_full(ctx, f"extra:{pid_key}"),
+                                    ever=described_by(ctx, f"extra:{pid_key}")[0]))
         # Absent when empty -- see the note in narrator() above.
         # `private_voice_setting` is gone from this seat entirely rather
         # than emitted blank: it was a hardcoded "", which is not "this
@@ -2726,7 +2867,8 @@ def narrator_extra(ctx, nonce):
             # primary's gate.
             "cast_pronouns": _cast_pronouns(
                 ctx.cast, label=_extra_view_label(chat["id"], extra, ctx.cast,
-                                                  earned=earned, roster=True)),
+                                                  earned=earned, roster=True,
+                                                  present=_extra_present)),
             "scene_opening": bool(est),
             **({"authored_body_parts": _abp2} if _abp2 else {}),
             "player_declared": player_declared,
@@ -2741,7 +2883,7 @@ def narrator_extra(ctx, nonce):
                 ctx.get("outcome_scene") or get_scene(chat["id"], chat),
                 extra.get("name") or "",
                 label_for=_extra_view_label(chat["id"], extra, ctx.cast,
-                                            earned=earned)),
+                                            earned=earned, present=_extra_present)),
 
             # A SECOND HUMAN IS A SECOND OBSERVER (D7), so the record is read
             # under this seat's own ledger key -- their view suppressed its

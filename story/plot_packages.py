@@ -1810,7 +1810,12 @@ def _apply_close_need(cid, frame_id, op, turn_idx):
 def _shape_set_vistas(op):
     from world.vistas import normalize_vista
     raw = op.get("vistas")
-    vistas = [v for v in (normalize_vista(item) for item in (raw or ())) if v] \
+    # Authored here, so a distance written is a distance given -- 10 km too
+    # (the "not the default" rule is for vistas stored before the flag;
+    # review round 3, 2026-10-05).
+    vistas = [v for v in (normalize_vista(
+        dict(item, distance_given=item.get("distance_km") is not None)
+        if isinstance(item, dict) else item) for item in (raw or ())) if v] \
         if isinstance(raw, list) else []
     if not vistas:
         raise ValueError("set_vistas lists one or more vistas, each with a name "

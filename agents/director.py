@@ -159,6 +159,7 @@ from .director_contact import (
 )
 from .director_views import (
     _cast_match_forms,
+    _scene_match_forms,
     _route_authorial_npc_beat,
     _opening_pose_snapshots,
     _extension_director_payload,
@@ -187,6 +188,7 @@ from .director_movement import (
     _sightlines_view,
     _ci_mapping_key,
     _reconcile_near_group_positions,
+    _set_down_where_they_are,
     _declares_rapid_movement,
     _follow_op_for_actor,
     _collect_following_ops,
@@ -4863,13 +4865,16 @@ def director_resolve(ctx, nonce, _corrections=None):
     # spellings, so an entry it cannot match fails OPEN and publishes the
     # line. Before the loops below, because `char_speech` copies the list
     # object out of each element and would keep the unresolved one.
-    _by_id, _forms = _cast_match_forms(ctx.cast)
+    _by_id, _forms = _scene_match_forms(ctx)
     for _declaration in list(all_declarations) + [
             ctx.character_results.get(c["id"]) for c in ctx.cast]:
         if not isinstance(_declaration, dict):
             continue
         for _note in resolve_concealment_refs(
-                _declaration.get("sequence"), _by_id, _forms):
+                _declaration.get("sequence"), _by_id, _forms,
+                addressees=((_declaration.get("interaction") or {}).get("addresses")
+                            if isinstance(_declaration.get("interaction"), dict) else None)
+                or ()):
             ctx.add_warning("character concealment: %s: %s"
                             % (_declaration.get("name") or "?", _note))
 
@@ -6379,12 +6384,14 @@ def director_resolve(ctx, nonce, _corrections=None):
     # Durable following supplies ordinary group travel, bounded by pace and
     # route. It runs after the movement backstop has finalized the player's
     # destination, so it follows physical truth rather than interpret intent.
-    _apply_following_movement(ctx, sc, sd, interp, p_name, out=out)
+    _held = set()
+    _apply_following_movement(ctx, sc, sd, interp, p_name, out=out, held=_held)
 
     # A fresh station is structured within-room evidence.  Reconcile the
     # narrow provable case before approach semantics gets final authority over
-    # whether the player's own movement arrived this beat.
-    _reconcile_near_group_positions(ctx, sc, sd, p_name)
+    # whether the player's own movement arrived this beat. A follower the
+    # carry held where they are (`_held`) is in no group.
+    _reconcile_near_group_positions(ctx, sc, sd, p_name, held=_held)
 
     # THE PHYSICAL FLOOR, for the writes nothing above was watching.
     #

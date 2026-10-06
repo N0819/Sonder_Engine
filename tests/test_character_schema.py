@@ -123,6 +123,42 @@ def test_native_persona_defaults_missing_fields():
                                             "regions": {}}
 
 
+def test_a_persona_named_at_the_top_keeps_the_body_its_embodiment_gives():
+    """Kirinoura (scratch chat 167, 2026-10-05): a card naming its player at
+    the top with its body in `embodiment` was read as the flat legacy card,
+    which takes a body from `appearance` alone, and every observer saw "a
+    person of unremarkable appearance"."""
+    persona = normalize_persona_data({
+        "name": "Mika Oda", "pronouns": "she/her", "aliases": ["Oda"],
+        "embodiment": {"visible": {"summary": "Tall, square-shouldered, short black hair."}},
+        "initial_outfit": "Grey work jacket over a white shirt, dark trousers",
+    })
+    assert persona["identity"]["name"] == "Mika Oda"
+    assert persona["embodiment"]["visible"]["summary"].startswith("Tall, square-shouldered")
+    assert persona["initial_outfit"]["wearing"]
+    # ...and a flat card keeps every flat field it already had (review,
+    # 2026-10-05: routed to the schema reader, it lost all but its name).
+    assert persona["identity"]["pronouns"]["subject"] == "she"
+    assert persona["identity"]["aliases"] == ["Oda"]
+    # The flat legacy card still reads as it always did.
+    legacy = normalize_persona_data({"name": "Old", "appearance": "A bent old man."})
+    assert legacy["embodiment"]["visible"]["summary"] == "A bent old man."
+
+
+def test_an_outfit_written_as_words_survives_the_schema_card():
+    """`_deep_defaults` keeps the default where a scalar stands in a mapping's
+    place, so a schema card's "a red coat, black boots" came out as nothing
+    to wear -- only the flat legacy persona reader parsed it."""
+    for normalize in (normalize_character_data, normalize_persona_data):
+        card = normalize({"identity": {"name": "X"},
+                          "initial_outfit": "a red coat, black boots"})
+        assert card["initial_outfit"]["wearing"], normalize.__name__
+        # A list of garment records is not words, and is not made a garment
+        # called "{'name'" (review, 2026-10-05).
+        card = normalize({"identity": {"name": "X"}, "initial_outfit": [{"name": "coat"}]})
+        assert not any("{" in str(w) for w in card["initial_outfit"]["wearing"])
+
+
 def test_native_adjacent_clothing_moves_out_of_body_appearance():
     character = normalize_character_data({
         "identity": {"name": "Dressed"},

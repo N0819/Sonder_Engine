@@ -5592,8 +5592,11 @@ def _composer_company(others, display_map, percepts):
     engine-side, like the other viewers' views beside it; the projection is
     what withholds it from an unrecognising viewer.
     """
-    admitted = {p.data.get("body") for p in percepts
-                if p.kind == "presence" and p.data.get("body")}
+    admitted = {}
+    for p in percepts:
+        if p.kind == "presence" and p.data.get("body"):
+            key = p.data.get("body")
+            admitted[key] = admitted.get(key, False) or p.fidelity == "full"
     out = []
     for body in others or []:
         name = str(body.get("name") or "")
@@ -5602,8 +5605,12 @@ def _composer_company(others, display_map, percepts):
         label = str(display_map.get(name) or "")
         if not label:
             continue
+        # `full`: a presence line composed at FULL sight -- what a reader of
+        # how a body LOOKS (its authored parts) may rely on; a figure in the
+        # dim or a hand in the dark is in the record without it.
         out.append({"key": composer.body_key(name), "name": name,
-                    "label": label, "recognized": label == name})
+                    "label": label, "recognized": label == name,
+                    "full": bool(admitted[composer.body_key(name)])})
     return out
 
 
@@ -5707,7 +5714,7 @@ def _scrub_episode_identities(ctx, stage, name, content, gist, known, roster):
 def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
                               clean_views, observations, ledger, *,
                               spoken_lines=None, seen=None, prev_meta=None,
-                              track_standing_meta=False, labels=None):
+                              track_standing_meta=False, labels=None, percepts=None):
     view = _composer_tripwires(
         ctx, stage, pid, name, rendered.text, known, roster,
         spoken_lines=spoken_lines, labels=labels)
@@ -5733,6 +5740,9 @@ def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
         # means "unknown", and only the first can make the next beat a
         # re-encounter.
         **({"seen": sorted(seen)} if seen is not None else {}),
+        # WHICH FORM each body was described in, carried forward
+        # (`_learned_labels`; read by `present_label_fn`).
+        "described_as": _learned_labels(_prior_ledger_entry(ctx, pid), percepts),
         # WHEN EACH STANDING FACT WAS FIRST AND LAST SAID TO THIS OBSERVER
         # (D7). Player tier only -- it is the only view that suppresses a
         # standing fact it has already delivered, so it is the only one where
@@ -5953,7 +5963,8 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
             # The opening beat is where the standing record STARTS: a full
             # render for every mind, so every sentence in it is a delivery
             # this observer can be referred back to (D7).
-            track_standing_meta=_is_player_view(pid))
+            track_standing_meta=_is_player_view(pid),
+            percepts=percepts)
     ctx["_composer_turn_ledger"] = ledger
     return {
         "views": clean_views,
@@ -6408,7 +6419,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
         _composer_finish_observer(
             ctx, "perception_act", pid, name, rendered, known, roster,
             clean_views, observations, ledger, spoken_lines=spoken,
-            seen=seen_bodies, labels=display_map)
+            seen=seen_bodies, labels=display_map,
+            percepts=percepts)
         # WHAT THIS MIND WITNESSED BEFORE IT ACTED (the owner, 2026-09-30:
         # a turn's memory in order -- witnessed, did, what happened as a
         # result -- "and doesn't have duplicates"). Minted from the same
@@ -7602,7 +7614,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             # no metadata, and reading it here would reset the record every
             # beat.
             prev_meta=_composer_prev_meta(_composer_prev_ledger(ctx), pid),
-            track_standing_meta=is_player_view)
+            track_standing_meta=is_player_view,
+            percepts=percepts)
         if not is_player_view:
             # WHAT HAPPENED, after what this mind witnessed before it acted:
             # every percept the act stage already put in its witnessed
@@ -7708,3 +7721,203 @@ def beat_player_rooms(ctx):
                 ctx._extra.pop("_player_room", None)
     legs = _multi_room_legs(moved, [(p_name, start, end)]).get(p_name) or ()
     return {str(r) for r in (start, end, *legs) if r}
+
+
+def described_by(ctx, observer_key):
+    """`(described, described_as)` for one observer: the bodies this
+    observer's view has ever described in full, as the composer's body keys
+    -- the per-observer first-mention ledger (`RenderedView.described`,
+    carried forward beat to beat and never pruned) -- or None when no ledger
+    is on record; and the label each was LEARNED under (`described_as`, the
+    form the view gave at the last full sighting), {} on a ledger written
+    before that field existed."""
+    entry = (ctx.get("_composer_turn_ledger") or {}).get(str(observer_key))
+    if not isinstance(entry, dict):
+        entry = (_composer_prev_ledger(ctx) or {}).get(str(observer_key))
+    if not isinstance(entry, dict):
+        return None, {}
+    described = entry.get("described")
+    learned = entry.get("described_as")
+    return ({str(k) for k in described} if isinstance(described, list) else None,
+            {str(k): str(v) for k, v in learned.items()} if isinstance(learned, dict) else {})
+
+
+def _prior_ledger_entry(ctx, pid):
+    """The ledger entry this observer carried into this stage -- an earlier
+    stage of this turn's, else the previous turn's -- or {} where the
+    context keeps neither (a bare test context, an author preview)."""
+    getter = getattr(ctx, "get", None)
+    if callable(getter):
+        entry = (getter("_composer_turn_ledger") or {}).get(str(pid))
+        if isinstance(entry, dict):
+            return entry
+    try:
+        entry = (_composer_prev_ledger(ctx) or {}).get(str(pid))
+    except (AttributeError, TypeError):
+        return {}
+    return entry if isinstance(entry, dict) else {}
+
+
+def _learned_labels(ledger_entry, percepts):
+    """`described_as` carried forward with this beat's: for every stranger
+    a presence line of this view showed at FULL sight, the label it was
+    shown under. What the dark later calls a body seen once is THIS, not its
+    present form: a disguise donned since was never seen, and one dropped
+    since leaves the disguise the only form this observer knows.
+
+    Only what the view composed (review rounds 2-3, 2026-10-05): learning
+    from the whole display map learned a body standing behind the observer,
+    whom the view never showed, and a later silhouette overwrote a face."""
+    learned = dict((ledger_entry or {}).get("described_as") or {})
+    generic = {composer._unfamiliar_person(), composer._dim_figure()}
+    for p in percepts or ():
+        if getattr(p, "kind", None) != "presence" or getattr(p, "fidelity", None) != "full":
+            continue
+        data = p.data or {}
+        shown = str(p.source_label or "")
+        if data.get("known") or not data.get("body") or not shown or shown in generic:
+            continue
+        learned[str(data["body"])] = shown
+    return learned
+
+
+def present_label_fn(ctx, observer_key, observer_name, scene, senses=None):
+    """`name -> what a present-tense field may call this body`, for one
+    observer: by the rule the composed view names bodies by, for the bodies
+    the view did not show this beat as much as for those it did
+    (formerly UNBUILT_PIPELINE §1.176).
+
+    A NAME only if this observer knows it AND no disguise hides who the body
+    is (`scene.disguise_breaks_recognition`, as `composer.observer_display_map`
+    asks). An APPEARANCE only of the body's outward form -- a disguise's, not
+    the card's -- and only if the body is seen now, or this observer's view
+    once described it (`described_by`): a descriptor learned at a sighting is
+    knowledge the mind keeps; one minted for a body nobody ever saw is a
+    leak. Otherwise the unfamiliar person. Short of full sight the view's own
+    silhouette (`common.observer_view_label_fn`).
+
+    Live in three fields beside a view that said otherwise (review of the
+    re-applied leak fixes, 2026-10-05): a stranger's hand on a shoulder in a
+    dark cellar was "the tall fox-eared woman's hand" to the narrator's touch
+    line and the character's own contact list, and her real name when she
+    was an acquaintance in a disguise that hides who she is; a focus on a
+    stranger nobody could see named her the same way.
+    """
+    from story.character_schema import character_name, persona_appearance, persona_name
+    from .common import (_recognizes, character_scene_keys, normalized_character_of_row,
+                         observer_view_label_fn)
+
+    chat = {"id": ctx.chat.id, "persona_id": getattr(ctx.chat, "persona_id", None)}
+    view_label = observer_view_label_fn(chat, observer_name, ctx.cast, scene, senses)
+    known_map = wget(ctx.chat.id, "known", {}) or {}
+    described, learned = described_by(ctx, observer_key)
+    bodies = {}
+    for row in ctx.cast or ():
+        sheet = normalized_character_of_row(row)
+        name = character_name(sheet) if sheet else ""
+        if name:
+            bodies[name] = (character_appearance(sheet), character_scene_keys(sheet)[1:])
+    pers = persona_of(ctx.chat)
+    p_name = (pers.get("name") or persona_name(pers)) if isinstance(pers, dict) else ""
+    if p_name:
+        bodies.setdefault(p_name, (pers.get("appearance") or persona_appearance(pers),
+                                   list((pers.get("identity") or {}).get("aliases") or [])))
+    # A second human is a body like any other (review, 2026-10-05: an
+    # unrecognised seat passed through as if it were a thing).
+    for extra in getattr(ctx, "extra_players", None) or ():
+        e_name = str((extra or {}).get("name") or "").strip()
+        sheet = (extra or {}).get("persona") or {}
+        if e_name:
+            bodies.setdefault(e_name, (
+                extra.get("appearance") or (persona_appearance(sheet) if sheet else ""),
+                list(((sheet.get("identity") or {}) if isinstance(sheet, dict) else {}
+                      ).get("aliases") or [])))
+    outward_cache = {}
+
+    def outward(name):
+        """(the label of the body's outward form when a disguise is in force,
+        whether that disguise hides who it is from this observer)"""
+        if name not in outward_cache:
+            label, hides = None, False
+            if name in bodies:
+                true_app, aliases = bodies[name]
+                true_app = _appearance_as_prose(appearance_of(name, true_app, scene))
+                visible, active, known_to, conceals = _subject_disguise_context(
+                    ctx, name, true_app, known_map)
+                if active:
+                    hides = disguise_breaks_recognition(known_to, observer_name, conceals)
+                    label = _unknown_actor_label(name, visible, aliases)
+            outward_cache[name] = (label, hides)
+        return outward_cache[name]
+
+    from .common import _uncarded_person
+    recognized = set(known_map.get(observer_name) or [])
+    presences = {str((rec or {}).get("name") or key).strip().casefold()
+                 for key, rec in ((wget(ctx.chat.id, "background_presences", {}) or {}).items()
+                                  if isinstance(wget(ctx.chat.id, "background_presences", {}), dict)
+                                  else ())
+                 if isinstance(rec, dict)}
+
+    def _is_body(text):
+        return (text in bodies or text.casefold() in presences
+                or (isinstance(scene, dict) and _uncarded_person(scene, text) is not None))
+
+    def _stranger(text, out):
+        """What a stranger is called by sight: the floor's descriptor, or for
+        a body it passes through unchanged (a co-player's seat, a presence
+        with no record) one composed from its own look, else the unfamiliar
+        person."""
+        if out != text:
+            return out
+        look, aliases = bodies.get(text, (None, []))
+        if look:
+            return _unknown_actor_label(text, look, aliases)
+        return composer._unfamiliar_person()
+
+    def label(name):
+        text = str(name or "").strip()
+        out = view_label(name)
+        if not text or text == observer_name or not isinstance(scene, dict):
+            return out
+        if not _is_body(text):
+            return out                      # a thing, left as it is
+        disguised_label, hides = outward(text)
+        in_scene = bool(room_of(scene, observer_name)) and bool(room_of(scene, text))
+        # KNOWN means this observer's own ledger says so -- never "the floor
+        # handed the name back": it hands back a seat or a presence it has
+        # no record for, and a stranger's name went to the page (review
+        # round 3, 2026-10-05). A disguise hides a known body wherever it can
+        # be perceived at all -- seen, heard through a door, felt in the dark
+        # -- and nowhere else: one in no room of this scene is a reference,
+        # not a sighting, and keeps its name (review round 4, 2026-10-05).
+        if _recognizes(text, recognized) and (not hides or not in_scene):
+            return text
+        out = _stranger(text, out) if out == text else out
+        if not in_scene:
+            # A body in no room of this scene: a reference, not a sighting --
+            # the floor's stranger, never a name this observer does not hold.
+            return out
+        level = sense_adjusted(visual_level_between(scene, observer_name, text, senses),
+                               "sight", senses)
+        if level != "none" and entity_arc(scene, observer_name, text) == "rear":
+            # IN THE BLIND SPOT: no NEW visual detail of a body behind you
+            # (`entity_arc`, the cut the view's own presence lines make) --
+            # what this mind learned of it before, or nobody. A character was
+            # handed how the player creeping up behind it looked (review
+            # round 4, 2026-10-05; the same at HEAD).
+            level = "none"
+        if level == "full":
+            return disguised_label or out
+        if level == "none":
+            key = composer.body_key(text)
+            if key in learned:
+                return learned[key]         # the form this mind learned
+            if described is not None and key in described and not disguised_label:
+                return out                  # an older ledger: the form never changed
+            return composer._unfamiliar_person()
+        # Short of full sight: the view's silhouette -- never a name, and
+        # never a face composed for a body the floor passed through.
+        view = view_label(name)
+        return view if view != text else composer._dim_figure()
+
+    return label
