@@ -1318,8 +1318,12 @@ reach it: the experiment's §6.)
   first proposed: the card's gated sections change from beat to beat, and
   NanoGPT kept a cached prefix across a beat-sized gap once in five tries
   ([`experiments/KEPT_THINKING_2026_10_06.md`](experiments/KEPT_THINKING_2026_10_06.md)
-  §1). What it buys over a replayed stretch is measured there, §2; the owner
-  sets the turns.
+  §1). Measured over thirteen replayed turns of chat 74 (§2): three blind
+  readers all preferred the run WITHOUT it -- with it the mind answered the
+  player better (3 of 3) and repeated its own patter more (3 of 3), and the
+  threads it started itself faded. Left off; if it is tried again, fewer
+  turns or only the end of each trace, on a story whose minds carry plans
+  across many beats, reading for refrains first. The owner sets the turns.
 - **More lookups -- three BUILT 2026-10-06** (`tests/test_place_and_evidence_lookups.py`):
   `where_can_i(need)` names the mind's own remembered places that answer one
   of the engine's needs (`place_purpose.AFFORDANCES`), best known and nearest
