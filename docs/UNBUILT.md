@@ -505,6 +505,7 @@ Not scheduled and not committed to a phase. See the
 
 - [§2.5 — Complete automatic canon lock](UNBUILT_PLATFORM.md#unbuilt-2-5)
 - [§2.10 — Session digest](UNBUILT_PLATFORM.md#unbuilt-2-10)
+- [§2.41 — A decision model of Sonder's own](UNBUILT_PLATFORM.md#unbuilt-2-41)
 
 **3. Information-pipeline leaks still open**
 

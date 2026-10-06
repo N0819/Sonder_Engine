@@ -30,6 +30,10 @@ demo/trek_bridge_scene_life/run.db*
 demo/trek_bridge_scene_life/run_out.txt
 engine.test.db*
 backdrops/
+# Captured decision-model requests (`llm/decisions.py`, the `decision_capture`
+# setting): training data for a model of Sonder's own, and every line holds
+# story text from the install's own chats.
+training/
 # Fetched ambience beds, and the host's own sound library if they put it here.
 # Both are media, not source: the cache is reconstructible from the manifests'
 # queries, and a personal library may be licensed material the host bought.

@@ -1,0 +1,745 @@
+{
+ "note": "Blind rulings on every gold label the teacher (typesafe/jev-1.13) disagreed with, 2026-10-06: three independent judges per item, each shown only the state, the question and its options -- never the label or the teacher's answer. keep: two or three judges chose an option the label accepts. relabel: all three chose the same other option. drop: anything else. Keyed by example id (a hash of the state and the question), so a ruling applies only to the exact wording it was made on.",
+ "rulings": {
+  "08b991838d39f131b984": {
+   "ruling": "relabel",
+   "accept": [
+    "p0"
+   ],
+   "votes": {
+    "p0": 3
+   },
+   "gold_was": [
+    "none"
+   ],
+   "teacher": "p1",
+   "task": "character_jev.route_who",
+   "source": "chrono_bench/router_tuning.json#18",
+   "reasons": [
+    "p0 (sure): The question is pinned to the moment \"Tobin told you about the grain\", so it is about the one person it names, Tobin; it is not about Wren, who only asks, and not about \"no one in particular\".",
+    "p0 (leaning): The question names one person, and the moment it turns on is his act ('right after Tobin told you about the grain'), so it is about Tobin; it is not about Wren, who only asks, and it does name someone in particular.",
+    "p0 (leaning): The moment is pinned to 'Tobin told you about the grain', and Tobin is the only person the question names and the one whose telling it turns on; Wren is only asking, and Tobin is someone in particular, so 'no one in part"
+   ]
+  },
+  "0a1436890b2ca9ed37bf": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q17",
+   "reasons": [
+    "no (sure): Mara only uses a rudder that is already mended (\"I lean on the rudder oar and feel it swing clean and stiff on its new pin\"). No fixing is done in this memory.",
+    "no (sure): No repair is done here: she only uses the rudder that was already mended (\"feel it swing clean and stiff on its new pin\").",
+    "no (sure): The rudder is only used, already mended (\"I lean on the rudder oar and feel it swing clean and stiff on its new pin\"), and no fixing is done in this memory."
+   ]
+  },
+  "0aecba84332cbb7e4638": {
+   "ruling": "keep",
+   "votes": {
+    "none": 3
+   },
+   "gold_was": [
+    "none"
+   ],
+   "teacher": "p0",
+   "task": "character_jev.route_who",
+   "source": "chrono_bench/router_tuning.json#30",
+   "reasons": [
+    "none (sure): \"Who gave you the green lantern?\" asks about a thing and a giver it does not know; nothing in it is about Wren, who is only asking.",
+    "none (sure): 'Who gave you the green lantern?' is about a thing and a giver it does not name; nothing in it concerns Wren, who is only asking.",
+    "none (sure): 'Who gave you the green lantern?' names no one; it asks who gave a thing, and nothing in it is about Wren, who is only the one asking."
+   ]
+  },
+  "0e244098a36557445251": {
+   "ruling": "relabel",
+   "accept": [
+    "p0"
+   ],
+   "votes": {
+    "p0": 3
+   },
+   "gold_was": [
+    "none"
+   ],
+   "teacher": "p0",
+   "task": "character_jev.route_who",
+   "source": "chrono_bench/router_tuning.json#28",
+   "reasons": [
+    "p0 (leaning): \"the barge Oren left on\" is picked out by Oren's departure, so the question is about Oren, a particular person it names, even though what it asks for is the barge's name.",
+    "p0 (leaning): 'the barge Oren left on' identifies the barge only through Oren's leaving, so the question concerns Oren Dask; it is not about Wren, and 'No one in particular' does not fit a question that names him.",
+    "p0 (leaning): 'the barge Oren left on' can only be identified through Oren's departure, so the question is about a particular person, Oren Dask, and not about no one in particular."
+   ]
+  },
+  "0e3f4f1a45a8828dbb4f": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q47",
+   "reasons": [
+    "no (sure): Mara says nothing to Oren here (\"I keep both hands on the pole and do not lift one back\"). Her only line, \"Wren. Get aboard.\", is spoken to Wren after the Moth's \"stern is gone\"; the words in this memory are Oren's to he",
+    "no (sure): Mara says nothing to Oren here (\"I keep both hands on the pole and do not lift one back\"). Only Oren speaks, and her one line goes to Wren after he has gone (\"Wren. Get aboard.\"), so no words said to Oren happen in this ",
+    "no (sure): Mara says nothing to Oren here (\"I keep both hands on the pole and do not lift one back\"). Her only words, \"Wren. Get aboard. We have a crossing to make.\", are said to Wren."
+   ]
+  },
+  "106f2921c80cac94b3fd": {
+   "ruling": "keep",
+   "votes": {
+    "yes": 3
+   },
+   "gold_was": [
+    "yes"
+   ],
+   "teacher": "no",
+   "task": "character_jev.memory_anchor",
+   "source": "chrono_bench/questions.json#Q82",
+   "reasons": [
+    "yes (sure): The anchor moment, the first frost, is seen here: \"I saw white frost on the East Landing planks ... the first frost of the year\", and Bram says \"First frost.\"",
+    "yes (sure): The moment itself is seen here: \"I saw white frost on the East Landing planks ... the first frost of the year\", and Bram says \"First frost.\"",
+    "yes (sure): The moment the question hangs on, the first frost, is seen right here: \"I saw white frost on the East Landing planks ... the first frost of the year\", and Bram says \"First frost.\""
+   ]
+  },
+  "1225b18313ae94b9e2be": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q11",
+   "reasons": [
+    "no (sure): Nothing Mara tells Ilse here is shown to be false: \"They are no friends of mine. They came through the dock office yesterday morning and went up the toll road with a hound\" and \"I will come up and help you mend the weir\"",
+    "no (sure): No lie happens here: \"They are no friends of mine. They came through the dock office yesterday morning and went up the toll road with a hound\" is neither shown nor marked as false, and the rest is loading sacks and a pro",
+    "no (sure): Nothing Mara says to Ilse is shown to be false: \"They are no friends of mine. They came through the dock office yesterday morning and went up the toll road with a hound\" and \"I will come up and help you mend the weir\". S"
+   ]
+  },
+  "17ede4f3b86405e03575": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q63",
+   "reasons": [
+    "no (leaning): Mara walks Wren only \"along the reed path to the fork\" while \"the thump of the mill wheel came through them from upstream\", so the mill is only heard from a distance. They never reach it, and \"when we got there\" does not",
+    "no (leaning): The walk goes only \"along the reed path to the fork\" for a survey, and the mill is only heard (\"the thump of the mill wheel came through them from upstream\"), so they never reach the mill and \"what happened when we got t",
+    "no (sure): The walk ends at the fork, not the mill (\"walk Wren in along the reed path to the fork\"), and the mill is only heard from far off (\"the thump of the mill wheel came through them from upstream\"), so they never get there."
+   ]
+  },
+  "1a7aaf6f26d7a3a4d1a1": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q70",
+   "reasons": [
+    "no (sure): Mara talks to Tobin downstairs: \"Tobin was waiting at the foot of the ladder\" and \"I sit on the bench and pull my boots off\". She is never up in the loft herself.",
+    "no (sure): Mara is downstairs, not in the loft: \"Tobin was waiting at the foot of the ladder\" and \"I sit on the bench and pull my boots off.\"",
+    "no (sure): Mara is downstairs, not up in the loft: \"Tobin was waiting at the foot of the ladder\" and \"I sit on the bench and pull my boots off\"."
+   ]
+  },
+  "1c085a474afde54df150": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q15",
+   "reasons": [
+    "no (sure): Mara spends no night at the inn. She only sees Oren go \"in at the side door of the Lantern Inn\" from the landing, then \"walk[s] to the boathouse\" herself.",
+    "no (sure): Only Oren \"went in at the side door of the Lantern Inn\". Mara makes \"the Heron fast for the night and walk[s] to the boathouse\", so no night at the Lantern Inn happens here.",
+    "no (sure): Mara spends no night at the inn here. Only Oren goes in (\"went in at the side door of the Lantern Inn\"), and Mara ends \"standing at the boathouse door\", so the inn is only seen."
+   ]
+  },
+  "2357ded0f8199833baac": {
+   "ruling": "keep",
+   "votes": {
+    "none": 3
+   },
+   "gold_was": [
+    "none"
+   ],
+   "teacher": "p0",
+   "task": "character_jev.route_who",
+   "source": "chrono_bench/router_tuning.json#10",
+   "reasons": [
+    "none (sure): \"When did you first light the green lantern?\" is about a thing and your own act with it; it names no one, and Wren is only the one asking.",
+    "none (sure): 'When did you first light the green lantern?' is about an act done with a thing; nothing in it concerns Wren, who is only asking.",
+    "none (sure): 'When did you first light the green lantern?' is about a thing and Mara's own act with it; it names no person and is not about Wren, who is only asking."
+   ]
+  },
+  "2961960d36989b060373": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q70",
+   "reasons": [
+    "no (sure): Tobin \"come[s] down the loft ladder\" to Mara, and she then crosses the river with the green lantern. She is never up in the loft herself, and nothing is said to Tobin there.",
+    "no (sure): Mara is never up in the loft here: \"Tobin Reyes come down the loft ladder\" to speak to her, and she then crosses the river to fetch Wren.",
+    "no (sure): Mara is never up in the loft: \"I saw Tobin Reyes come down the loft ladder when he heard me take the green lantern off its hook\". She spends the rest of the memory crossing the river for Wren."
+   ]
+  },
+  "2a8c0615b5ae7ac693cf": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q26",
+   "reasons": [
+    "no (sure): Mara is \"standing at the stern of the Heron in mid-river\" and only \"looked back and saw the mill's black chimney standing small over the reeds\"; the find at the mill is only talked about (\"You found it, then\"), so being ",
+    "no (sure): Mara is at the West Landing and then mid-river, and the mill is only seen from a distance (\"Halfway across I looked back and saw the mill's black chimney standing small over the reeds\"); being at the old mill only lies b",
+    "no (sure): The memory starts after the mill visit, at the West Landing and then on the river ('Halfway across I looked back and saw the mill's black chimney standing small over the reeds', 'I was standing at the stern of the Heron "
+   ]
+  },
+  "2ae794a5ecf1f9a2c347": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q54",
+   "reasons": [
+    "no (sure): Bram only reports the council men (\"There's council men in my father's office since first light. Asking after a deserter\"), and they never come asking Mara in this memory.",
+    "no (sure): The council's men are not present and ask Mara nothing; Bram only reports them (\"There's council men in my father's office since first light. Asking after a deserter, they said\"), and Mara answers Bram, not them.",
+    "no (sure): Bram only reports the council's men ('There's council men in my father's office since first light. Asking after a deserter, they said.'); none of them appears in this memory or asks Mara anything."
+   ]
+  },
+  "2b1d7c2a21fd876e9cef": {
+   "ruling": "relabel",
+   "accept": [
+    "p0"
+   ],
+   "votes": {
+    "p0": 3
+   },
+   "gold_was": [
+    "none"
+   ],
+   "teacher": "p0",
+   "task": "character_jev.route_who",
+   "source": "chrono_bench/router_tuning.json#33",
+   "reasons": [
+    "p0 (sure): \"How long have you known Ilse?\" is plainly about Ilse.",
+    "p0 (sure): 'How long have you known Ilse?' asks how long Mara has known Ilse, so Ilse Harrow is who it is about.",
+    "p0 (sure): 'How long have you known Ilse?' is directly about Mara's acquaintance with Ilse, so the person it is about is Ilse Harrow."
+   ]
+  },
+  "343f83d276df4859b192": {
+   "ruling": "keep",
+   "votes": {
+    "yes": 3
+   },
+   "gold_was": [
+    "yes"
+   ],
+   "teacher": "no",
+   "task": "character_jev.memory_anchor",
+   "source": "chrono_bench/questions.json#Q73",
+   "reasons": [
+    "yes (sure): The storm night itself happens here: \"the river was up over the second step of the slip\" and \"A branch as long as the boat came down on the current and struck her quarter.\"",
+    "yes (sure): The storm moment happens here: \"the river was up over the second step of the slip\" and \"A branch as long as the boat came down on the current and struck her quarter.\"",
+    "yes (sure): This memory is the storm night itself: \"the river was up over the second step of the slip\" and \"A branch as long as the boat came down on the current and struck her quarter.\""
+   ]
+  },
+  "3d45cd0fa6a7ba59c1a8": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q70",
+   "reasons": [
+    "no (sure): Tobin \"come[s] down the loft ladder\" while Mara works \"standing on the slip at the Heron's stern\"; Mara is never up in the loft and tells Tobin nothing up there.",
+    "no (sure): Tobin comes down out of the loft (\"I saw Tobin Reyes come down the loft ladder\"), and Mara stays on the slip throughout (\"standing on the slip at the Heron's stern\"), so she is never up in the loft here.",
+    "no (sure): Tobin 'come[s] down the loft ladder' and Mara mends the rudder 'standing on the slip at the Heron's stern', so she is never up in the loft here."
+   ]
+  },
+  "44496558a3c2048e7c6c": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q56",
+   "reasons": [
+    "no (sure): The lantern is \"cold and unlit\" and she hangs it back on its hook \"without lighting it\", so no lighting happens here.",
+    "no (sure): The lantern is \"cold and unlit\" and Mara hangs it \"back on its hook without lighting it\"; the soot she wipes off only points back to an earlier lighting.",
+    "no (sure): The lantern is 'cold and unlit', and Mara wipes it and hangs it 'back on its hook without lighting it.'"
+   ]
+  },
+  "4fc52145ce1057667e49": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q15",
+   "reasons": [
+    "no (sure): Mara is \"sitting at the table with my tea, the green lantern hanging dark on its nail by the door\" at the boathouse; no night at the Lantern Inn happens, and the previous night (\"Last night?\") is only talked about.",
+    "no (sure): The memory is set at the boathouse table the morning after (\"sitting at the table with my tea, the green lantern hanging dark on its nail by the door\"), and nothing in it takes place at the Lantern Inn.",
+    "no (sure): Mara is 'sitting at the table with my tea, the green lantern hanging dark on its nail by the door' in the boathouse the morning after the crossing, so no night at the Lantern Inn happens here."
+   ]
+  },
+  "5f3a2435f6a0879ba769": {
+   "ruling": "keep",
+   "votes": {
+    "place": 3
+   },
+   "gold_was": [
+    "place"
+   ],
+   "teacher": "act",
+   "task": "character_jev.route_kind",
+   "source": "chrono_bench/router_tuning.json#13",
+   "reasons": [
+    "place (leaning): The moment is \"your first night at the Lantern Inn\", which is fixed by being at a particular place (as in \"the last time you were at the old mill\"); \"What happened\" is what is asked about that moment, not what kind of mo",
+    "place (sure): The moment is 'your first night at the Lantern Inn', which is being in a particular place; 'What happened' asks what that moment held, not what kind of moment it is.",
+    "place (leaning): The moment is 'your first night at the Lantern Inn', which is defined by being at a particular place (just as 'the last time you were at the old mill' is); 'What happened' is what the question wants to know about that mo"
+   ]
+  },
+  "634111771c22b3189c07": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q26",
+   "reasons": [
+    "no (sure): The mill is only seen from a distance: \"From mid-river I saw the mill's black chimney\" and \"watching the mill's chimney from the river until the reeds hid it\".",
+    "no (sure): Mara sees the mill only from the river (\"From mid-river I saw the mill's black chimney\" ... \"watching the mill's chimney from the river until the reeds hid it\"), which is seeing it from a distance, not being there.",
+    "no (sure): 'From mid-river I saw the mill's black chimney' and 'watching the mill's chimney from the river until the reeds hid it': the mill is only seen from a distance and never visited in this memory."
+   ]
+  },
+  "673864e2a2e7ed6651e3": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q49",
+   "reasons": [
+    "no (sure): She lights the green lantern and crosses after curfew \"toward the yellow lamp on the far side\" after hearing \"my whistle\", and says \"I do not answer the green light in the reeds\"; she carries no load for Oren.",
+    "no (sure): She crosses after curfew to answer her own whistle (\"That is my whistle\"), heading \"toward the yellow lamp on the far side\"; \"I do not answer the green light in the reeds\" and she carries no load for Oren.",
+    "no (sure): Mara crosses after curfew 'toward the yellow lamp on the far side' after hearing 'my whistle', and 'I do not answer the green light in the reeds', so no load is carried for Oren in this memory."
+   ]
+  },
+  "6cd8425f295365d82148": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q60",
+   "reasons": [
+    "no (sure): The memory shows Oren leaving on the Moth \"at dawn\" while Mara watches \"until her stern is gone\"; no night run for Oren takes place.",
+    "no (sure): This is Oren leaving \"at dawn\" on the Moth while Mara watches from the East Landing; no night run for Oren takes place in it.",
+    "no (sure): This is Oren leaving 'at dawn' on the Moth with 'the roped pack on his back and no crate' while Mara watches, so no night run for him happens here."
+   ]
+  },
+  "7919853b68d11e6360bd": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q47",
+   "reasons": [
+    "no (sure): The only words in this memory are Oren's to Mara (\"Keep the green one, Mara. It's yours now.\"); Mara says nothing to Oren here.",
+    "no (sure): In this conclusion memory only Oren speaks (\"Keep the green one, Mara. It's yours now.\"), and Mara says nothing to Oren at all.",
+    "no (sure): This is a conclusion ('I concluded that...'), and the only words in it are Oren's to Mara ('Keep the green one, Mara. It's yours now.'), so Mara says nothing to Oren in this memory."
+   ]
+  },
+  "85c1e864d71f435b0c95": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q52",
+   "reasons": [
+    "no (sure): The memory is about painting \"the Heron's name on her bow\" before the story; Mara puts her own name to nothing and there is no notice from Hesk.",
+    "no (sure): \"I painted the Heron's name on her bow\" is painting the boat's name before the story began; Mara does not put her own name to anything for Ilse, and Hesk's notice does not appear.",
+    "no (sure): 'I painted the Heron's name on her bow myself' is the boat's name, painted before the story, and nothing is put to Mara's name for Ilse against Hesk's notice."
+   ]
+  },
+  "89b7d1d5284ec467b322": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q57",
+   "reasons": [
+    "no (sure): Ilse is not there; Mara only \"counted it up while I steered\" (\"The third was today, about last night\"), so the lies are only thought back on, and \"Ilse's tired. So am I.\" is said to Bram, not to Ilse.",
+    "no (sure): Ilse is not present; the lie to her only comes back in thought (\"Then I counted it up while I steered ... The third was today, about last night\"), and \"Ilse's tired. So am I.\" is said to Bram, not to Ilse.",
+    "no (sure): Ilse is not there ('Is Ilse worse?'), 'Ilse's tired' is said to Bram, and the lies are only counted up afterwards ('Then I counted it up while I steered... The third was today, about last night'), so no lie is told to Il"
+   ]
+  },
+  "8e2eeae1c483cca2b99e": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q57",
+   "reasons": [
+    "no (sure): The lie is only thought back on: 'today's lie came out of me without a stumble, and I only felt it an hour later, out on the river' is a conclusion reached after the lie, and no lie is told to Ilse in this memory.",
+    "no (sure): No lie is told in this memory; it is only a conclusion that mentions an earlier one: \"I concluded that lying to Ilse comes easier each time ... I based that on: today's lie came out of me without a stumble.\"",
+    "no (sure): This memory is a later reflection, \"I concluded that lying to Ilse comes easier each time... today's lie came out of me without a stumble, and I only felt it an hour later, out on the river\", so the lie itself is only th"
+   ]
+  },
+  "8f50ecc90ffe18ad9169": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q70",
+   "reasons": [
+    "no (sure): Mara never goes up into the loft: Tobin 'come[s] down the loft ladder', and she speaks to him and 'take[s] the poles from him at the slip door'.",
+    "no (sure): Mara is never up in the loft here; Tobin is the one who comes down (\"I saw Tobin Reyes come down the loft ladder\"), and Mara speaks to him at \"the slip door\", ending \"standing in the slip doorway\".",
+    "no (sure): Mara is never up in the loft: she sees \"Tobin Reyes come down the loft ladder\", speaks to him downstairs and takes \"the poles from him at the slip door\", and she ends \"standing in the slip doorway\"."
+   ]
+  },
+  "9191b123f60d1144d525": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q15",
+   "reasons": [
+    "no (sure): Mara is only 'standing on the waterfront below the Lantern Inn ... the inn door shut', before dusk, and she says 'I have never been up there', so she spends no night at the inn here.",
+    "no (sure): Nobody spends a night at the inn: it is daytime (\"The last crossing came in well before dusk\"), Mara only walks past below it (\"standing on the waterfront below the Lantern Inn ... the inn door shut\") and says \"I have ne",
+    "no (sure): Mara only passes below the inn in daylight (\"well before dusk\", \"standing on the waterfront below the Lantern Inn\") and says \"I have never been up there\", so no night at the Lantern Inn happens here."
+   ]
+  },
+  "9a4bd2fd950d4ec14b97": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q11",
+   "reasons": [
+    "no (sure): 'I told Ilse that one day I would have a ferry of my own' is a child's ambition, not a lie, so no lie to Ilse happens in this memory.",
+    "no (sure): No lie to Ilse happens here; \"I told Ilse that one day I would have a ferry of my own\" is a child's hope, and nothing in the memory presents it as a lie.",
+    "no (sure): \"I told Ilse that one day I would have a ferry of my own\" is a ten-year-old's hope, and she now works the Heron, so it is not a lie and no lie to Ilse happens in this memory."
+   ]
+  },
+  "a56d54ebccd2b47d201f": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q15",
+   "reasons": [
+    "no (sure): Only Wren goes into the inn and finds it 'Full. Drovers in every bed'. Mara stays 'standing on the East Landing' and offers her boathouse, so she spends no night at the Lantern Inn here.",
+    "no (sure): Mara spends no night at the Lantern Inn; she only watches Wren go in from a distance and hears Wren report \"Full. Drovers in every bed\", while she stays \"standing on the East Landing ... a few paces from the boathouse do",
+    "no (sure): Mara stays \"on the East Landing\" and only watches Wren go into the inn and hears her report \"Full. Drovers in every bed\", so Mara has no night at the Lantern Inn here, and nobody stays the night there."
+   ]
+  },
+  "a9ea90d8874ce908c757": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q70",
+   "reasons": [
+    "no (sure): Tobin is 'on the bottom rung of the loft ladder' and Mara is 'standing by the door with my bowl', so she is not up in the loft and says nothing to Tobin there.",
+    "no (sure): Mara is not up in the loft: \"Tobin was on the bottom rung of the loft ladder\" and \"I was standing by the door with my bowl.\"",
+    "no (sure): Tobin is \"on the bottom rung of the loft ladder\" and Mara is \"standing by the door with my bowl\" when she speaks to him, so she is not up in the loft."
+   ]
+  },
+  "ae74c5ddc3d9cc70196b": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q70",
+   "reasons": [
+    "no (sure): Mara only hears 'the loft boards creak overhead' and ends 'standing with my back against the barred door'. She never goes up to the loft or speaks to Tobin.",
+    "no (sure): Mara stays below the loft and says nothing to Tobin; she only hears him (\"I heard the loft boards creak overhead\") and ends \"standing with my back against the barred door.\"",
+    "no (sure): Mara only \"heard the loft boards creak overhead\" and ends \"standing with my back against the barred door\", so she never goes up to the loft and says nothing to Tobin."
+   ]
+  },
+  "af6421fe4a77de5ca46c": {
+   "ruling": "keep",
+   "votes": {
+    "yes": 3
+   },
+   "gold_was": [
+    "yes"
+   ],
+   "teacher": "no",
+   "task": "character_jev.memory_anchor",
+   "source": "chrono_bench/questions.json#Q81",
+   "reasons": [
+    "yes (sure): Oren leaving on the Moth happens here: \"I saw him step from the planks aboard the grain barge called the Moth\" and \"I saw the Moth swing out into the current heading downriver.\"",
+    "yes (sure): Oren leaving on the Moth happens here: \"I saw him step from the planks aboard the grain barge called the Moth\" and \"I saw the Moth swing out into the current heading downriver.\"",
+    "yes (sure): Oren leaving on the Moth happens here: \"I saw him step from the planks aboard the grain barge called the Moth\" and \"I saw the Moth swing out into the current heading downriver.\""
+   ]
+  },
+  "bd1ed382423c82fb6291": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q52",
+   "reasons": [
+    "no (sure): Mara only tells Tobin 'The council has ordered Ilse out of her mill ... Councillor Hesk signed it'. That is Hesk's name on the order, and Mara signs nothing for Ilse here.",
+    "no (sure): Mara signs nothing for Ilse; the only signature is Hesk's own (\"Councillor Hesk signed it\"), which she reports to Tobin.",
+    "no (sure): Mara only tells Tobin \"The council has ordered Ilse out of her mill... Councillor Hesk signed it\": the one name put to anything is Hesk's, and Mara signs nothing for Ilse."
+   ]
+  },
+  "bebf2ab21b75e8909113": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q17",
+   "reasons": [
+    "no (sure): The fix is only talked about ('You've done it already?' / 'Before you were out of bed, Bram.'). Mara just leans on the rudder oar and feels it 'swing without a click', which is not fixing it.",
+    "no (sure): The rudder repair is only talked about as already finished (\"You've done it already?\" / \"Before you were out of bed, Bram.\"); here Mara just checks it and \"feel[s] it swing without a click.\"",
+    "no (sure): The repair was done earlier (\"Pin's quiet. You've done it already?\" / \"Before you were out of bed, Bram.\"), and here Mara only leans on the rudder oar and \"feel[s] it swing without a click\", which tests the fix rather th"
+   ]
+  },
+  "cb13b09d0703c132c0b6": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q70",
+   "reasons": [
+    "no (sure): Tobin 'come[s] down the loft ladder' to sit on the bottom rung, and Mara is 'sitting on the upturned bucket with the net across my knees', not up in the loft.",
+    "no (sure): Mara is downstairs, not up in the loft: Tobin \"come[s] down the loft ladder\" and Mara is \"sitting on the upturned bucket with the net across my knees.\"",
+    "no (sure): Tobin comes \"down the loft ladder\" to sit \"on the bottom rung\" while Mara is \"sitting on the upturned bucket\" downstairs, so she is not up in the loft."
+   ]
+  },
+  "d9aa9237a48aa6971645": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q15",
+   "reasons": [
+    "no (sure): This is supper in the boathouse ('drive a nail into the beam beside the boathouse door'), and the lantern-maker is only talked about ('He knew who you were'), so no night at the Lantern Inn happens here.",
+    "no (sure): The scene is a meal at home in the boathouse, not a night at the Lantern Inn: Mara hangs the lantern on a nail \"beside the boathouse door\" and is \"sitting at the table with the bread knife.\"",
+    "no (sure): This is supper in the boathouse (\"drive a nail into the beam beside the boathouse door\"), and the meeting with the lantern-maker is only talked about (\"He knew who you were before you said a word\"), so no night at the La"
+   ]
+  },
+  "df9ea648985e43bde989": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q57",
+   "reasons": [
+    "no (leaning): Mara's only words to Ilse here are \"I'd tell you what I could, Ilse\" and \"Hold on now. There's a barge.\" -- a deliberate dodge and a true warning (Bram had just called the barge), and nothing in the memory says anything ",
+    "no (sure): Mara's reply 'I'd tell you what I could, Ilse' is a true, guarded hedge, and 'Hold on now. There's a barge.' is also true because Bram has just said 'Barge coming down', so she tells Ilse no lie in this memory.",
+    "no (sure): In this memory Mara only says 'I'd tell you what I could, Ilse.' and 'Hold on now. There's a barge.' The first is an evasion that is literally true and even signals she is holding something back, and the second is a real"
+   ]
+  },
+  "f4e8edcc5a858cd06c8d": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q34",
+   "reasons": [
+    "no (sure): Mara sees Ilse (whom she already knows), Wren and Tobin, and nothing names anyone as Tobin's mother; \"Mam had people downriver\" is part of Mara's lie about her own mother's people, not a meeting.",
+    "no (sure): Only Ilse, Tobin and Wren are seen here; 'Mam had people downriver' is Mara's made-up family and is only talked about, so Tobin's mother is never seen or met in this memory.",
+    "no (sure): The only people present are Ilse, Tobin and Wren, and nobody is shown or named as Tobin's mother; 'Mam had people downriver' refers to Mara's own mother and is part of the invented cousin story, not a meeting."
+   ]
+  },
+  "f5723eaf2907b9efb19a": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q26",
+   "reasons": [
+    "no (sure): Mara is \"standing in the Heron's stern at the West Landing\" and only looks \"across the channel at the mill chimney\", so she sees the mill from a distance and is never at it.",
+    "no (sure): Mara is 'standing in the Heron's stern at the West Landing' and only 'look[s] once across the channel at the mill chimney', so she sees the old mill from a distance and is not there.",
+    "no (sure): Mara is 'standing in the Heron's stern at the West Landing' and only looks 'once across the channel at the mill chimney', which is seeing the mill from a distance, not being at the old mill."
+   ]
+  },
+  "fc1384db1ed2a61444fa": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q63",
+   "reasons": [
+    "no (sure): Mara only points the mill out (\"That is the old mill. My oldest friend runs it, Ilse\") while \"standing at the head of the Heron's ramp on the West Landing, looking upstream at the mill\". It is seen from a distance and th",
+    "no (sure): The mill is only seen from a distance from the West Landing (\"Upstream, on its side channel, the old mill's wheel was turning\", \"Then I point up the side channel\"), and nobody walks Wren up to it.",
+    "no (sure): Nobody walks to the mill. It is only seen and named from the landing: \"Then I point up the side channel. I said 'That is the old mill...'\" while \"standing at the head of the Heron's ramp on the West Landing, looking upst"
+   ]
+  },
+  "fe7b1d84637ced09e7a4": {
+   "ruling": "keep",
+   "votes": {
+    "no": 3
+   },
+   "gold_was": [
+    "no"
+   ],
+   "teacher": "yes",
+   "task": "character_jev.memory_moment",
+   "source": "chrono_bench/questions.json#Q57",
+   "reasons": [
+    "no (sure): The lies are only recalled (\"I have told Ilse three lies this autumn -- that I had seen no one round the boathouse, that Tobin was my cousin..., and where I was one night\"); nothing she says here is marked false, and whe",
+    "no (sure): The lies are only thought back on ('I have told Ilse three lies this autumn -- ... and where I was one night'), and what she says here ('No word from him...', 'You put the ledger in their hands') is not a lie.",
+    "no (sure): The lies are only thought back on ('I have told Ilse three lies this autumn -- that I had seen no one round the boathouse, that Tobin was my cousin...'), and nothing she says to Ilse here ('No word from him...', 'You put"
+   ]
+  }
+ }
+}

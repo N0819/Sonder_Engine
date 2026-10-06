@@ -30,6 +30,9 @@ callable lets a test answer without the network.
 from __future__ import annotations
 
 import contextvars
+import json
+import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -152,7 +155,67 @@ def _post(prov, model, state, questions):
         "duration": round(time.time() - t0, 3),
         "kind": "decision",
     })
+    capture(body.get("model") or model, state, questions, body["answers"], time.time() - t0)
     return body["answers"]
+
+
+# --- training data ----------------------------------------------------------------------
+
+#: Every answered request, kept as training data for a decision model of
+#: Sonder's own (the owner, 2026-10-06: "finetune a small decision model maybe
+#: 4 or 9b parameters specifically for sonder" ... "build a training data file
+#: for the day we decide to do a fine tune"). One JSON line a request in
+#: `training/decisions/<database>/<day>.jsonl` beside the database: the state, the
+#: questions with their options, the answers with their probabilities, the
+#: model that answered, the story frame and step that asked, and the story's
+#: language (`tools/decision_data/build.py` turns them into examples). OFF
+#: unless the `decision_capture` setting is "on": every line holds story
+#: text, so the file stays on the machine (`training/` is gitignored), and it
+#: grows with every beat -- about 0.6 MB a character's beat (one Saltmere
+#: beat, 2026-10-06: 11 requests, 474 questions). A capture that fails costs
+#: nothing: the decision is already made.
+CAPTURE_DIR = ("training", "decisions")
+#: Installed by a test: the folder captures go to instead of beside the database.
+CAPTURE_ROOT = None
+_CAPTURE_LOCK = threading.Lock()
+
+
+def capture_on() -> bool:
+    return str(get_setting("decision_capture") or "").strip().lower() in {"on", "1", "true", "yes"}
+
+
+def capture_path(day=None):
+    """Where today's (or `day`'s) captured decisions go: beside the database,
+    in a folder of that database's own name -- a scratch database's requests
+    never mix with the install's (`training/decisions/engine/<day>.jsonl`)."""
+    from core import db
+    path = os.path.abspath(db.DB)
+    stem = os.path.splitext(os.path.basename(path))[0] or "engine"
+    root = CAPTURE_ROOT or os.path.join(os.path.dirname(path), *CAPTURE_DIR)
+    return os.path.join(root, stem, (day or time.strftime("%Y-%m-%d")) + ".jsonl")
+
+
+def capture(model, state, questions, answers, seconds=None):
+    """Append one answered request to the training file, when it is on."""
+    try:
+        if not capture_on():
+            return
+        from core.db import active_frame_id
+        from core.pipeline_context import current_step_key
+        from language_runtime import current_language_id
+        record = {"ts": round(time.time(), 3), "model": model, "frame": active_frame_id.get(),
+                  "step": current_step_key.get(), "language": current_language_id.get(),
+                  "state": state, "questions": questions, "answers": answers}
+        if seconds is not None:
+            record["seconds"] = round(float(seconds), 3)
+        line = json.dumps(record, ensure_ascii=False, default=str)
+        path = capture_path()
+        with _CAPTURE_LOCK:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
+    except Exception:  # noqa: BLE001 -- training data never costs a decision
+        pass
 
 
 def _foregone(questions: dict) -> dict:

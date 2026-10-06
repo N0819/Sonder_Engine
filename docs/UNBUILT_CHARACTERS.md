@@ -1342,11 +1342,32 @@ reach it: the experiment's §6.)
   meeting, hearing of, being somewhere, or what came just before or after
   runs beside the graded ponder, the moment marked (`in_time`)
   ([`experiments/CHRONO_RECALL_2026_10_06.md`](experiments/CHRONO_RECALL_2026_10_06.md)).
-  Still open:
-  - **One discovery among many like scenes** ("what happened right before you
-    found Tobin in the loft?"): every wording tried ranked a later night scene
-    of him in the boathouse above the finding itself; the walk takes the
-    surest, so it marks the wrong night.
+  Still open -- the first four measured on 82 questions, three runs a side
+  (§8: ten questions marked wrong in every run, eight of them with the right
+  row still in the packet, so a mind is pointed away from what it holds):
+  - **The moment a just before / just after hangs on** (5 of 15 such
+    questions): the moment is the row the model is surest of among the 24
+    nearest the question, and a lookalike wins when the moment's own row is
+    not the most distinctive -- a later night scene of Tobin above the night he
+    was found, the first rainy crossing above the storm night, the mill-fire
+    night above the chest carried to the chapel house, turn 166 above Oren's
+    leaving, and the night before the frost above the frost.
+  - **A question that names one person to ask about another, or about a time
+    before the story**: "when did you meet Tobin's mother?" routes to Tobin
+    and marks his first meeting, answering a question nothing answers; "how
+    far back do you and Aldous go?" marks his first scene in the story where
+    the answer is the seeded past.
+  - **Which place**: "the chapel of the Drowned Saint itself, not Ilse's
+    chapel house" marks the wrong chapel; "when were you last up in the loft
+    yourself?" routes as an act with Tobin and marks a night he comes down
+    the ladder.
+  - **A memory that only thinks back on an act, read as the act** -- the
+    decision model's own reading, and the commonest of its errors where gold
+    can tell: 34 of 413 moment checks on the bench, each label upheld by three
+    blind judges (`docs/guides/DECISION_TRAINING_DATA.md`). "The last lie you
+    told Ilse" marks the inference about it, not the lie. A wording to try,
+    or a model of Sonder's own trained on that gold (`UNBUILT_PLATFORM.md`
+    §2.41).
   - **A meeting asked without "first"** ("how did you and Captain Harrow
     meet?") stays a content question, as does "the morning of" an event in
     Japanese -- safe, the graded ponder still answers by relevance, but

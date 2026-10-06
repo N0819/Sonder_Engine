@@ -18,7 +18,7 @@ other stories, for the router alone.
     ENGINE_DB=<a copy> python tools/chrono_bench/run.py retrieval on|off out.jsonl [Q01,...]
     ENGINE_DB=<a copy> python tools/chrono_bench/run.py character A|B|C|D out.jsonl [Q01,...]
     ENGINE_DB=... python tools/chrono_bench/run.py router [router_heldout.json] out.json
-    python tools/chrono_bench/run.py score on.jsonl off.jsonl  # retrieval, by code
+    python tools/chrono_bench/run.py score on.jsonl[,on2.jsonl...] off.jsonl[,off2.jsonl...]
 
 Providers and settings are copied read-only from the install's own database
 (the main checkout's `engine.db`, found from any worktree), the owner's
@@ -27,6 +27,16 @@ A lookups off / routing off, B off / on, C on / off, D on / on. Each question is
 asked at turn 312, after the opening at 311, as Wren's line to Mara: built as
 the Director would interpret it, the engine's deterministic stages run on it,
 then Mara's step -- nothing committed, so no question sees another.
+
+Every arm keeps its decisions: the scratch database's `decision_capture` is on,
+so each request the decision model answers lands in
+`training/decisions/<database>/` beside it -- the bank is synthetic, so the
+answers are training data with no story of the owner's in them
+(`tools/decision_data/build.py` labels the moment checks from the planted
+turns). `score` reads one run a side or several: with several it compares the
+two sides question by question (an exact McNemar test on each question's
+majority across runs) and counts the questions whose runs disagreed with
+each other -- how much of a difference is the decision model's own noise.
 """
 
 from __future__ import annotations
@@ -215,6 +225,7 @@ def _setup_arm(tools, routes):
     db.set_setting("ponder_routes", "on" if routes else "off")
     db.set_setting("cache_affinity_allow", "nanogpt")
     db.set_setting("llm_capture_enabled", "0")
+    db.set_setting("decision_capture", "on")
     st = _load()
     row = db.q("SELECT id FROM turns WHERE chat_id=? AND idx=?", (st["chat"], ASK_AT), one=True)
     turn_id = row["id"] if row else db.qi("INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
@@ -290,6 +301,7 @@ def router(path, out_path):
     from mind import memory_routes as mr
     from core import db
     db.init()
+    db.set_setting("decision_capture", "on")
     items = json.loads(Path(path).read_text(encoding="utf-8"))
     rows, score = [], {}
     for it in items:
@@ -310,33 +322,73 @@ def router(path, out_path):
     print(json.dumps(score))
 
 
-def score(on_path, off_path):
+def _exact_mcnemar(only_a, only_b):
+    """Two-sided exact McNemar: the discordant pairs against a fair coin."""
+    from math import comb
+    n, k = only_a + only_b, min(only_a, only_b)
+    return min(1.0, 2 * sum(comb(n, i) for i in range(k + 1)) / 2 ** n) if n else 1.0
+
+
+def score(on_paths, off_paths):
     """Retrieval by code: the planted answer anywhere in the packet, and the
-    marked moment the planted one (the moment itself for just before/after)."""
+    marked moment the planted one (the moment itself for just before/after).
+    One run a side, or several (`a.jsonl,b.jsonl`): then each question counts
+    by its majority across a side's runs, the two sides are compared question
+    by question, and the questions whose runs disagreed are counted."""
     def load(p):
         return {r["id"]: r for r in (json.loads(x) for x in open(p, encoding="utf-8"))}
 
     def turn(ref):
         m = re.match(r"saltmere:(\d+):", str(ref or ""))
         return int(m.group(1)) if m else ("past" if str(ref or "").startswith("saltmere:past") else None)
-    on, off = load(on_path), load(off_path)
-    tot = {"answerable": 0, "in_packet_on": 0, "in_packet_off": 0, "marked_right": 0, "marked_wrong": 0,
-           "never": 0, "never_unmarked": 0}
-    for qid, q in QUESTIONS.items():
-        want = q["answer_turns"]
-        right = [q["moment_turn"]] if q.get("moment_turn") is not None else want
-        marked = [turn(r) for r, _ in (on.get(qid) or {}).get("marked") or []]
-        if not want:
-            tot["never"] += 1
-            tot["never_unmarked"] += not marked
-            continue
-        tot["answerable"] += 1
-        for arm, key in ((on, "in_packet_on"), (off, "in_packet_off")):
-            got = {turn(x) for refs in ((arm.get(qid) or {}).get("refs") or {}).values() for x in refs}
-            tot[key] += any(w in got for w in want)
-        if marked:
-            tot["marked_right" if any(m in right for m in marked) else "marked_wrong"] += 1
-    print(json.dumps(tot))
+
+    def in_packet(rec, want):
+        got = {turn(x) for refs in ((rec or {}).get("refs") or {}).values() for x in refs}
+        return any(w in got for w in want)
+
+    def marked(rec):
+        return [turn(r) for r, _ in (rec or {}).get("marked") or []]
+
+    on_runs = [load(p) for p in str(on_paths).split(",") if p]
+    off_runs = [load(p) for p in str(off_paths).split(",") if p]
+    asked = set.intersection(*(set(r) for r in on_runs + off_runs))
+    per_run = []
+    for side, runs in (("on", on_runs), ("off", off_runs)):
+        for n, run in enumerate(runs):
+            tot = {"side": side, "run": n + 1, "answerable": 0, "in_packet": 0, "marked_right": 0,
+                   "marked_wrong": 0, "never": 0, "never_unmarked": 0}
+            for qid in sorted(asked):
+                q = QUESTIONS[qid]
+                want = q["answer_turns"]
+                right = [q["moment_turn"]] if q.get("moment_turn") is not None else want
+                if not want:
+                    tot["never"] += 1
+                    tot["never_unmarked"] += not marked(run.get(qid))
+                    continue
+                tot["answerable"] += 1
+                tot["in_packet"] += in_packet(run.get(qid), want)
+                if marked(run.get(qid)):
+                    tot["marked_right" if any(m in right for m in marked(run.get(qid))) else "marked_wrong"] += 1
+            per_run.append(tot)
+    out = {"runs": per_run}
+    answerable = [qid for qid in sorted(asked) if QUESTIONS[qid]["answer_turns"]]
+
+    def majority(runs, qid):
+        hits = sum(in_packet(r.get(qid), QUESTIONS[qid]["answer_turns"]) for r in runs)
+        return hits * 2 > len(runs), 0 < hits < len(runs)
+    only_on = only_off = split_on = split_off = 0
+    for qid in answerable:
+        on, unsure_on = majority(on_runs, qid)
+        off, unsure_off = majority(off_runs, qid)
+        only_on += on and not off
+        only_off += off and not on
+        split_on += unsure_on
+        split_off += unsure_off
+    out["paired"] = {"questions": len(answerable), "only_on": only_on, "only_off": only_off,
+                     "exact_mcnemar_p": round(_exact_mcnemar(only_on, only_off), 4),
+                     "runs_disagree_on": split_on, "runs_disagree_off": split_off}
+    print(json.dumps(out, indent=1))
+    return out
 
 
 if __name__ == "__main__":

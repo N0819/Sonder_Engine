@@ -1910,6 +1910,11 @@ def bootstrap() -> dict:
             get_setting("llm_capture_bodies") or "hash_only").strip().lower(),
         "log_level": (str(get_setting("log_level") or "").strip().upper()
                       or "INFO"),
+        # Decision-model training data (`decisions.capture`): every question
+        # the decision model answers, kept beside the database. Off unless
+        # switched on, for the same reason as debug capture: each line holds
+        # story text.
+        "decision_capture": decisions.capture_on(),
         # Image-to-image continuity (backdrops._continuity_enabled). Explicitly
         # off until asked for: it changes how every picture after a room's
         # first one is made.
@@ -2087,7 +2092,8 @@ def put_exemplars(body: dict = Body(...)):
 
 @app.put("/api/debug_capture")
 def put_debug_capture(body: dict = Body(...)):
-    """Debug capture and log level.
+    """Debug capture, log level, and decision-model training data
+    (`decisions`, the `decision_capture` setting).
 
     Absent keys mean unchanged, so a single toggle can send one field. The
     level is applied immediately rather than at next start: an engine you must
@@ -2109,10 +2115,13 @@ def put_debug_capture(body: dict = Body(...)):
             raise HTTPException(
                 400, "log_level must be DEBUG, INFO, WARNING or ERROR.")
         set_setting("log_level", level)
+    if "decisions" in body:
+        set_setting("decision_capture", "on" if body.get("decisions") else "off")
     configure_logging()
     return {
         "enabled": str(get_setting("llm_capture_enabled") or "").strip().lower()
                    in ("1", "on", "true", "yes"),
+        "decisions": decisions.capture_on(),
         "bodies": str(get_setting("llm_capture_bodies")
                       or "hash_only").strip().lower(),
         "log_level": (str(get_setting("log_level") or "").strip().upper()

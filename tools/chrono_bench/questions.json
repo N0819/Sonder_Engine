@@ -330,6 +330,643 @@
         262
       ],
       "answer": "She went into the burned shell and fetched Ilse's ledger from under the hearthstone."
+    },
+    {
+      "id": "Q27",
+      "en": "How did Tobin get up into your loft without you knowing?",
+      "order": "content",
+      "kind": "",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        80,
+        81
+      ],
+      "answer": "On the storm night he crossed the river on a drifting log, climbed in under the boathouse eaves and got in through the gable shutter, whose latch never held."
+    },
+    {
+      "id": "Q28",
+      "en": "Why was the sexton so sure somebody set the mill fire?",
+      "order": "content",
+      "kind": "",
+      "subject": "",
+      "answer_turns": [
+        143,
+        144
+      ],
+      "answer": "He watched it from the chapel step, and it caught at both ends at once, the sack store and the wheel house. A fire doesn't jump across a yard by itself."
+    },
+    {
+      "id": "Q29",
+      "en": "What was stamped on the sacks you carried over from the timber staithe?",
+      "order": "content",
+      "kind": "",
+      "subject": "",
+      "answer_turns": [
+        251,
+        252
+      ],
+      "answer": "The council's stamp, the town tower in black on the hessian, on every one of the forty sacks."
+    },
+    {
+      "id": "Q30",
+      "en": "How many pole strokes is it across, post to post?",
+      "order": "content",
+      "kind": "",
+      "subject": "",
+      "answer_turns": [
+        14
+      ],
+      "answer": "Forty-two going over. Thirty-eight coming back, unless the wind is from the west; then the return takes fifty (and she swears the whole way)."
+    },
+    {
+      "id": "Q31",
+      "en": "Whose name was at the bottom of the orders at Tobin's old watch post?",
+      "order": "content",
+      "kind": "",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        103
+      ],
+      "answer": "Councillor Hesk's. Tobin said Hesk's name was on the orders at the post, at the bottom of every one."
+    },
+    {
+      "id": "Q32",
+      "en": "Where did you hide Tobin while the council's men searched the boathouse?",
+      "order": "content",
+      "kind": "",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        164,
+        167
+      ],
+      "answer": "Out in the reed marsh, in the old reed-cutters' hut with half its roof down, which the council's own map marks as a ruin. He stayed there until she brought him back under the nets."
+    },
+    {
+      "id": "Q33",
+      "en": "What brush did you paint the Heron's name with?",
+      "order": "content",
+      "kind": "",
+      "subject": "",
+      "answer_turns": [
+        "past"
+      ],
+      "answer": "Petra's own brush: the same chipped brush Petra had painted the name with every spring for forty years."
+    },
+    {
+      "id": "Q34",
+      "en": "When did you meet Tobin's mother?",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "",
+      "answer_turns": [],
+      "answer": "Mara never has. Tobin only mentioned her: she lives in a village two days down the river, and the council's men would be watching her door."
+    },
+    {
+      "id": "Q35",
+      "en": "Mara, when were you last up at the council hall?",
+      "order": "latest",
+      "kind": "place",
+      "subject": "",
+      "answer_turns": [],
+      "answer": "Never. Mara has not been to the council hall at all: she does not go to council business, and on the day of Ilse's hearing she kept to the Heron and the waterfront (her crossings, pies at the Lantern Inn) and waited for Ilse at the East Landing."
+    },
+    {
+      "id": "Q36",
+      "en": "When did Oren first come inside the boathouse?",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "Oren Dask",
+      "answer_turns": [],
+      "answer": "He never did. Oren never set foot in the boathouse; Mara only ever met him at the landings, on the Heron, at the market, the dock office and the Lantern Inn."
+    },
+    {
+      "id": "Q37",
+      "en": "Mara, whose orders do you put first: the river's or the council's?",
+      "order": "content",
+      "kind": "",
+      "subject": "",
+      "answer_turns": [
+        49
+      ],
+      "answer": "The river's. She takes the river's orders, and the council can wait its turn."
+    },
+    {
+      "id": "Q38",
+      "en": "Is there anything on the river named after Petra?",
+      "order": "content",
+      "kind": "",
+      "subject": "",
+      "answer_turns": [
+        220
+      ],
+      "answer": "Yes: Petra's Gut, the narrow channel that silts up every spring. Petra named it herself, because she ran aground in it every spring for thirty years."
+    },
+    {
+      "id": "Q39",
+      "en": "Mara, how did you and Ilse meet?",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        "past"
+      ],
+      "answer": "The winter Mara was seven, Ilse went out on the river ice by the reed marsh to free a duck frozen in by its feet and fell through. Mara lay flat, pushed a reed pole out to her and pulled her up onto the thick ice."
+    },
+    {
+      "id": "Q40",
+      "en": "How far back do you and Aldous go?",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "Aldous Toller",
+      "answer_turns": [
+        "past"
+      ],
+      "answer": "As far back as Mara can remember: Aldous had been the tally clerk in the dock office for as long as she could remember, and he was made dockmaster the year she turned twenty-six."
+    },
+    {
+      "id": "Q41",
+      "en": "When was it you took me to meet Ilse?",
+      "order": "earliest",
+      "kind": "met",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        16
+      ],
+      "answer": "On day 3 at midday, at the old mill. Mara walked Wren in along the reed path, and Ilse came out of the mill doorway with flour to her elbows, asked \"And who's this, with the council's chain on?\" and gave Wren a short nod."
+    },
+    {
+      "id": "Q42",
+      "en": "When did you find out Aldous had a son?",
+      "order": "earliest",
+      "kind": "heard_of",
+      "subject": "Bram Toller",
+      "answer_turns": [
+        49
+      ],
+      "answer": "On day 8, in the dock office the morning after the storm, with the river over the third mark. Aldous said his boy was home from upriver, nineteen and too quiet by half, handy with a rope, and that he would bring him round when the water was down."
+    },
+    {
+      "id": "Q43",
+      "en": "How much was the council offering for Tobin when they first put up a notice for him?",
+      "order": "earliest",
+      "kind": "heard_of",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        84
+      ],
+      "answer": "Two silver marks, on the notice pinned beside the tide board in the dock office on day 12. The reward was raised later, to five marks, then ten silver, then fifteen."
+    },
+    {
+      "id": "Q44",
+      "en": "When did you first hear about the Moth?",
+      "order": "earliest",
+      "kind": "heard_of",
+      "subject": "",
+      "answer_turns": [
+        288
+      ],
+      "answer": "On day 41 at curfew in the dock office, Aldous gave her the last iron pin for the rudder oar and said she'd have company at the landing the next night: a grain barge called the Moth, down from upriver, tying up below the crane till first light."
+    },
+    {
+      "id": "Q45",
+      "en": "When were you last with Ilse?",
+      "order": "latest",
+      "kind": "met",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        305
+      ],
+      "answer": "Yesterday (day 44) around midday at the chapel house. Ilse sat at the window with her mending untouched, said the council was still counting and asked whether Oren had sent word; Mara sat beside her, and Ilse thanked her for keeping the ledger dry."
+    },
+    {
+      "id": "Q46",
+      "en": "When did you last see Bram?",
+      "order": "latest",
+      "kind": "met",
+      "subject": "Bram Toller",
+      "answer_turns": [
+        308
+      ],
+      "answer": "Yesterday evening (day 44) in the dock office at curfew. Bram was warming his hands at the stove beside his father while Mara wrote up the day's fares, and she said \"Goodnight, Aldous. Goodnight, Bram.\""
+    },
+    {
+      "id": "Q47",
+      "en": "What were the last words you said to Oren?",
+      "order": "latest",
+      "kind": "said_or_did",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        292
+      ],
+      "answer": "At the Lantern Inn at noon on day 42, the day of the council sitting, Mara saw his roped pack and said 'Going somewhere, Oren'; he answered \"Nowhere you'd need a ferry for.\" When he waved from the Moth the next dawn, she said nothing back."
+    },
+    {
+      "id": "Q48",
+      "en": "What's the last thing you heard about Councillor Hesk?",
+      "order": "latest",
+      "kind": "heard_of",
+      "subject": "Councillor Hesk",
+      "answer_turns": [
+        308
+      ],
+      "answer": "From Aldous in the dock office yesterday evening (day 44): they were still counting at the grain stores, the hall wouldn't answer Ilse until the last sack was tallied, and Hesk wouldn't hurry it."
+    },
+    {
+      "id": "Q49",
+      "en": "Mara, the first time you carried a load across for Oren after the curfew bell -- when was that?",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        77
+      ],
+      "answer": "On day 11, the night after Oren put the job to me in his workshop at noon. Two hooded men brought three sacks down the slip, and I took them over to the West Landing after curfew with the green lantern lit at the bow."
+    },
+    {
+      "id": "Q50",
+      "en": "When did I first see you with a net across your knees, mending it?",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "",
+      "answer_turns": [
+        52
+      ],
+      "answer": "Day 8, the evening after the flood. I sat on the stool by the stove knotting a torn net with the netting needle while Wren inked the flooded channels, and I told her the thump in the loft was only the timbers drying out."
+    },
+    {
+      "id": "Q51",
+      "en": "When did Tobin first come down out of the loft to sit at supper with us?",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        88
+      ],
+      "answer": "Day 12, the evening of the day the council's men came with the hound. Once I had barred the door and closed the shutters he came down slowly and sat at the end of the table nearest the dark, and I ladled out barley and onions: supper first, maps after."
+    },
+    {
+      "id": "Q52",
+      "en": "When did you first put your name to anything for Ilse against Hesk's notice?",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        114
+      ],
+      "answer": "Day 16, on the Heron. Ilse brought the letter she had written to the council and said she needed twenty names, and I wrote my name under hers on my knee while Bram held the boat against the current, then handed him the pencil."
+    },
+    {
+      "id": "Q53",
+      "en": "Do you remember when you first gave me the marsh folk's names for the channels?",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "Wren",
+      "answer_turns": [
+        58
+      ],
+      "answer": "Day 9, at the edge of the reed marsh after the flood, while Wren was pulling her flattened survey stakes out of the mud. I told her that channel was the Eel Cut and the one past it with the leaning willow was Willow Reach, and to put the names on her map."
+    },
+    {
+      "id": "Q54",
+      "en": "When did the council's men first come asking you about the deserter?",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "",
+      "answer_turns": [
+        85
+      ],
+      "answer": "Day 12, the morning after I found Tobin in the loft. Two of the council's men in blue coats came aboard at the East Landing with a hound and asked whether I had carried a thin, dark man alone in a blue coat. I said I'd had no soldier on deck that month but the two of them, and put them ashore on the West Landing."
+    },
+    {
+      "id": "Q55",
+      "en": "When did bread first start going missing off your shelf?",
+      "order": "earliest",
+      "kind": "said_or_did",
+      "subject": "",
+      "answer_turns": [
+        55
+      ],
+      "answer": "Day 9, early in the morning, two days after the storm. The half loaf was gone from the shelf and its cloth lay on the floor with no crumbs and no tooth marks: 'Somebody has had my breakfast.'"
+    },
+    {
+      "id": "Q56",
+      "en": "The green lantern -- when did you last light it?",
+      "order": "latest",
+      "kind": "said_or_did",
+      "subject": "",
+      "answer_turns": [
+        301
+      ],
+      "answer": "Day 43, the evening of the day Oren left on the Moth. Wren was stuck on the West Landing after the bell with her lamp burned out, so I fitted one of Oren's fresh wicks, lit the green lantern, hung it at the bow and crossed after curfew to fetch her."
+    },
+    {
+      "id": "Q57",
+      "en": "Mara, the last lie you told Ilse -- when was that?",
+      "order": "latest",
+      "kind": "said_or_did",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        210
+      ],
+      "answer": "Day 31, at Ilse's table in the chapel house. She had seen someone walking fast toward the Lantern Inn after eleven and asked where I'd been, and I told her it wasn't me, that I was asleep in the boathouse by ten. It was the third lie, after 'no one around the boathouse' and 'my cousin from downriver'."
+    },
+    {
+      "id": "Q58",
+      "en": "When did you last give Tobin something to eat?",
+      "order": "latest",
+      "kind": "said_or_did",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        285
+      ],
+      "answer": "Day 41 at noon in the boathouse. Tobin sat on the bottom rung of the ladder with a bowl of the soup, and I cut the bread three ways and gave him the heel because he likes it."
+    },
+    {
+      "id": "Q59",
+      "en": "When was the last time Tobin talked about leaving?",
+      "order": "latest",
+      "kind": "said_or_did",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        274
+      ],
+      "answer": "Day 40, early in the morning by the cold stove, after the reward had gone up to fifteen silver. With his blue coat folded on his knees he said he would go downriver once the reward was forgotten rather than bring the council's men to my door, and I told him not yet: he goes when I say the river is clear, and I will take him myself."
+    },
+    {
+      "id": "Q60",
+      "en": "And your last night run for Oren -- when was it?",
+      "order": "latest",
+      "kind": "said_or_did",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        250,
+        251
+      ],
+      "answer": "Day 36, the same night Oren gave me the job at the inn. Forty sacks were loaded at the timber staithe at ten and I carried them under the green lantern to the West Landing, where Oren was waiting. Every sack bore the council's stamp, and I refused his purse."
+    },
+    {
+      "id": "Q61",
+      "en": "Mara, what was the talk the last time you stepped into the Lantern Inn?",
+      "order": "latest",
+      "kind": "place",
+      "subject": "Lantern Inn",
+      "answer_turns": [
+        300
+      ],
+      "answer": "Turn 300 (day 43, evening), at the Lantern Inn, the night Wren was late at the toll-road bend: a carter said he had seen a lass with a chain at the bend at sundown, her lamp still lit, and the innkeeper said Oren Dask's rooms were bare: he had paid to the end of the month, taken his glass and tools and gone down on the Moth at first light."
+    },
+    {
+      "id": "Q62",
+      "en": "What did Oren put to you the first time you climbed up to his workshop?",
+      "order": "earliest",
+      "kind": "place",
+      "subject": "Lantern Inn workshop",
+      "answer_turns": [
+        75
+      ],
+      "answer": "Turn 75 (day 11, noon), in Oren's workshop at the top of the Lantern Inn: he asked her to carry three sacks to the West Landing after dark with the green lantern lit at the bow, for three nights' fares. His lads would bring the sacks to her mooring and the watch keeps to the chapel steps after ten, and he would not say what was in the sacks."
+    },
+    {
+      "id": "Q63",
+      "en": "Do you remember the first time you walked me up to Ilse's mill? What happened when we got there?",
+      "order": "earliest",
+      "kind": "place",
+      "subject": "Old Mill",
+      "answer_turns": [
+        16
+      ],
+      "answer": "Turn 16 (day 3, midday), at the old mill at the end of the reed path: Ilse came out floury, teased Mara for being off her boat at midday, and eyed Wren as the one \"with the council's chain on\". She sat them on the mill step with bread and asked Mara to take her flour cart over at first light because of the curfew, which Mara promised."
+    },
+    {
+      "id": "Q64",
+      "en": "When were you last inside the chapel of the Drowned Saint itself, not Ilse's chapel house, and what took you there?",
+      "order": "latest",
+      "kind": "place",
+      "subject": "Chapel of the Drowned Saint",
+      "answer_turns": [
+        265
+      ],
+      "answer": "Turn 265 (day 38, late morning, after the ledger came out of the mill), in the chapel vestry with Ilse and Wren: the sexton locked Ilse's ledger in the iron-bound vestry chest and kept the key on his belt. Ilse said she would put it before the council with a petition, and Wren offered to write it fair."
+    },
+    {
+      "id": "Q65",
+      "en": "The first time you visited Ilse at the chapel house, not the vestry, what did you find?",
+      "order": "earliest",
+      "kind": "place",
+      "subject": "Chapel House",
+      "answer_turns": [
+        173
+      ],
+      "answer": "Turn 173 (day 26, afternoon), at the chapel house: the council's men had searched it that morning and tipped Ilse's bundle out on the floor. Mara found her on her knees in the sexton's kitchen and helped fold her shawl, two shirts and tin of buttons back into the cloth, while Ilse raged that six men hunted one runaway and none asked who set her mill alight."
+    },
+    {
+      "id": "Q66",
+      "en": "What was Aldous saying the last time you were in at the dock office?",
+      "order": "latest",
+      "kind": "place",
+      "subject": "Dock Office",
+      "answer_turns": [
+        308
+      ],
+      "answer": "Turn 308 (day 44, at the curfew bell), in the dock office: Aldous said the council had been counting at the grain stores for two days and the hall would not answer the widow until the last sack was tallied, with Hesk in no hurry. Mara wrote the day's fares on her slate (the sheep, the cooper's barrels, nine crossings) and said goodnight."
+    },
+    {
+      "id": "Q67",
+      "en": "What happened the last time we went to the market square?",
+      "order": "latest",
+      "kind": "place",
+      "subject": "Market Square",
+      "answer_turns": [
+        304
+      ],
+      "answer": "Turn 304 (day 44, mid-morning), in the market square: two council men were going stall to stall with a paper asking after the deserter in a torn blue coat, with silver at the hall. Wren said \"Keep walking, Mara\", and Mara bought salt cod, lamp oil and grey wool socks for Wren and walked past the men at an ordinary pace without looking at their paper."
+    },
+    {
+      "id": "Q68",
+      "en": "When did you last come out into the marsh to hold the chain for me?",
+      "order": "latest",
+      "kind": "place",
+      "subject": "Reed Marsh",
+      "answer_turns": [
+        258
+      ],
+      "answer": "Turn 258 (day 37, mid-afternoon, after Wren missed the noon boat), at the eel weirs in the reed marsh: Mara waded in and held the far end of the chain while Wren read the measure, and gave Petra's names for the channels, the Long Elbow and the Drowned Lane. She asked Wren to come and hold the lamp the next day when she went into the mill for Ilse's ledger."
+    },
+    {
+      "id": "Q69",
+      "en": "Have you ever come up the toll road with me? When was that?",
+      "order": "earliest",
+      "kind": "place",
+      "subject": "Toll Road",
+      "answer_turns": [
+        234
+      ],
+      "answer": "Once, turn 234 (day 34, morning): she left Bram with the Heron at the West Landing and carried Wren's chain up to the milestone for Wren's last bearings (chapel tower eighty-one degrees, mill chimney forty, \"the last of the chain-work\"). She held the chain end on the milestone while a council man at the toll gate made a carter lift every sack."
+    },
+    {
+      "id": "Q70",
+      "en": "When were you last up in the loft yourself, and what did you tell Tobin up there?",
+      "order": "latest",
+      "kind": "place",
+      "subject": "Boathouse loft",
+      "answer_turns": [
+        252
+      ],
+      "answer": "Turn 252 (day 36, just before midnight), back from carrying Oren's forty sacks. At the door she had already answered Wren's \"Was it forty?\" and Tobin's \"Was the stamp on them?\" (called down from the dark of the loft) with \"Forty. The town tower on every sack.\" Then she took the lamp from Wren, climbed the loft ladder, and up there told Tobin: \"A carter on the West Landing said it was easier when the old mill took them. Ilse's mill, Tobin.\" She hung the cold green lantern on the loft nail behind the bales. Tobin said she had carried the council's grain across the council's river, and that before the fire her friend had ground it for them."
+    },
+    {
+      "id": "Q71",
+      "en": "Tell me about the last time you were over on the West Landing.",
+      "order": "latest",
+      "kind": "place",
+      "subject": "West Landing",
+      "answer_turns": [
+        307
+      ],
+      "answer": "Turn 307 (day 44, late afternoon), at the West Landing: Wren took her last sights from the landing post, on the chapel tower and on the old mill's black chimney, and said \"That closes it. Every line on the map meets now\". Mara told her to close the book and get aboard before the bell, because she was not crossing for her twice in two nights."
+    },
+    {
+      "id": "Q72",
+      "en": "Right after Oren handed you the green lantern on the landing, what did you do with it?",
+      "order": "after",
+      "kind": "event",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        23,
+        24
+      ],
+      "answer": "She set it on the landing post, out of the broken glass (this is inside the moment itself, T22; an answer giving only that is partly right). Then, once Oren had gone, she picked it off the post, said it would stay dark and she would buy a plain lamp at the market, and carried it home to the boathouse unlit (T23). There she drove a nail into the beam beside the boathouse door and hung it on it, dark (T24).",
+      "moment_turn": 22
+    },
+    {
+      "id": "Q73",
+      "en": "Mara, what did you find the morning after the storm, the night the river came up over the slip and a branch struck the Heron?",
+      "order": "after",
+      "kind": "event",
+      "subject": "",
+      "answer_turns": [
+        48,
+        49
+      ],
+      "answer": "The river was high and brown to the top step of the East Landing, carrying branches, a hen coop and a cartwheel, and chapel slates lay broken in the lane. The Heron had held with only a scrape of bark on her quarter, and nothing could cross until the water dropped (Aldous put it over the third mark).",
+      "moment_turn": 46
+    },
+    {
+      "id": "Q74",
+      "en": "What happened right after Aldous introduced you to Bram?",
+      "order": "after",
+      "kind": "event",
+      "subject": "Bram Toller",
+      "answer_turns": [
+        62,
+        63
+      ],
+      "answer": "Two things followed. That same dusk, walking home along the East Landing from the dock with Wren, Oren fell into step and invited them into the Lantern Inn to eat on his coin; she refused ('Another night, Oren'), saying she had soup at home and a new deckhand to break in at dawn (T62). At dawn Bram was waiting at her mooring before she had the boathouse door unbarred, and on his first crossing he coiled and stowed the bow line without being told (T63). (Inside the introduction itself, T61, Bram said he had seen her at the rope stall and hid his burned hand, and she took him on for dawn at her mooring; an answer giving only that is partly right.)",
+      "moment_turn": 61
+    },
+    {
+      "id": "Q75",
+      "en": "What held you up, the evening the watch caught you on the water after dusk?",
+      "order": "before",
+      "kind": "event",
+      "subject": "",
+      "answer_turns": [
+        69
+      ],
+      "answer": "She had lingered on the West Landing step with Ilse, who brought eggs as thanks for clearing her sluice. They talked about the crooked letters on the Heron's bow and the winter Mara pulled Ilse from the ice, until the sun was nearly down.",
+      "moment_turn": 70
+    },
+    {
+      "id": "Q76",
+      "en": "What had you gone up to the mill to do, the afternoon Ilse showed you the eviction notice?",
+      "order": "before",
+      "kind": "event",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        100
+      ],
+      "answer": "To help Ilse mend her eel weir, which the council's men had broken. Wren came along to see where the mill race ran.",
+      "moment_turn": 101
+    },
+    {
+      "id": "Q77",
+      "en": "Just before you showed Tobin the old eel-well under the floor, what had happened?",
+      "order": "before",
+      "kind": "event",
+      "subject": "Tobin Reyes",
+      "answer_turns": [
+        108
+      ],
+      "answer": "That afternoon the sergeant, crossing on the Heron without his men, told her ten men had found nothing in the reed in two days, so the deserter must have crossed, and they would go through every boathouse and loft on the East Landing one by one (T108). (Inside the moment itself, T109, at the barred table just before she showed it, Tobin said the loft is the first place they'd look, and Wren's idea of hiding him under the Heron's deck boards was ruled out because the hound would be put aboard to sniff them; an answer giving only that is partly right.)",
+      "moment_turn": 109
+    },
+    {
+      "id": "Q78",
+      "en": "What did you do just before the council's men searched your boathouse?",
+      "order": "before",
+      "kind": "event",
+      "subject": "Boathouse",
+      "answer_turns": [
+        162,
+        163,
+        164
+      ],
+      "answer": "Bram warned her that the council's men were searching every shed and boat from the north quay down. She ran the first crossing early with Tobin hidden in the bow under the nets and a goat hurdle among the goatherd's goats, and left him in the old reed-cutters' hut in the marsh with bread and water until dusk.",
+      "moment_turn": 165
+    },
+    {
+      "id": "Q79",
+      "en": "Right after you dug Ilse's ledger out from under the mill hearthstone, what did you do with it?",
+      "order": "after",
+      "kind": "event",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        263,
+        264,
+        265
+      ],
+      "answer": "She carried it back across buttoned in her coat, telling Bram not a word on the dock, and took it straight to Ilse at the chapel house. Ilse found her night orders of council-stamped sacks (over six hundred), and the ledger was locked in the sexton's iron-bound vestry chest for Ilse's petition.",
+      "moment_turn": 262
+    },
+    {
+      "id": "Q80",
+      "en": "What happened right after you and Bram carried Ilse's chest up to the chapel house?",
+      "order": "after",
+      "kind": "event",
+      "subject": "Ilse Harrow",
+      "answer_turns": [
+        270,
+        271
+      ],
+      "answer": "She went to the market for a heavy lock and hasp for Ilse's door, where a boy from the inn summoned her to Oren's workshop 'about your lamp' (T270). There Oren pushed the crossing money at her again and fished for whether Ilse had saved any papers from the fire; she pushed the purse back and told him to leave Ilse be (T271). (Inside the moment itself, T269, after setting the chest down under the window she carried in the last sack, set Ilse's pots out on the shelf and promised her a better lock; an answer giving only that is partly right.)",
+      "moment_turn": 269
+    },
+    {
+      "id": "Q81",
+      "en": "What happened at the landing the evening before Oren left on the Moth?",
+      "order": "before",
+      "kind": "event",
+      "subject": "Oren Dask",
+      "answer_turns": [
+        294,
+        295
+      ],
+      "answer": "Ilse came down from the council saying they had kept her ledger and sent men to count the grain in the council's stores. Then at the curfew bell the grain barge Moth came down and tied up below the crane, bound downriver at first light, and Mara made her bargemen shift their lines off the goat ramp.",
+      "moment_turn": 296
+    },
+    {
+      "id": "Q82",
+      "en": "Mara, what happened the night before the first frost?",
+      "order": "before",
+      "kind": "event",
+      "subject": "",
+      "answer_turns": [
+        299,
+        300,
+        301
+      ],
+      "answer": "Wren, finishing the map at the toll-road bend, missed the last crossing; Mara waited, then brought the Heron back without her and made fast at the East Landing on the last stroke of the curfew bell (T299). At the Lantern Inn a carter said he had seen a lass with a chain at the bend at sundown, setting stakes by a lamp that was still lit, and the innkeeper said Oren Dask's rooms were bare (T300). Then she fitted a fresh wick in the green lantern, lit it and crossed after curfew to fetch Wren off the bottom step of the West Landing, where Wren sat with the chain in her lap and her own lamp burned out (T301).",
+      "moment_turn": 302
     }
   ]
 }

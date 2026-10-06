@@ -540,6 +540,26 @@ Cheap, and it is what stops long-run lore drift.
 A short end-of-session synthesis that re-anchors on resume. Small, and it
 directly addresses the "coming back after a week" experience.
 
+<a id="unbuilt-2-41"></a>
+
+### 2.41 A decision model of Sonder's own
+
+The owner, 2026-10-06: "The best option would probably be to finetune a small
+decision model maybe 4 or 9b parameters specifically for sonder. but for now
+using jev is fine." Every decision-model call goes to OpenRouter today, so its
+credit bounds how much can be measured, and Jev's own run-to-run noise (about
+±0.03) flips near ties.
+
+Built: the training data (`docs/guides/DECISION_TRAINING_DATA.md`) -- capture
+of every answered request while `decision_capture` is on, and
+`tools/decision_data/build.py`, which turns captures into one example a
+(state, question) with Jev's averaged answer and, where a source checked it,
+the right one. Not built: the model, a serving path for it beside `jev_url`
+(the seam already takes any Jev-compatible URL), and gold beyond the router
+and the moment checks -- most of what the engine asks (the ponder's grades,
+appraisal, the Director's channel questions) has only Jev's answer to learn
+from, so a model trained today learns to be Jev there.
+
 ## 3. Information-pipeline leaks still open
 
 <a id="unbuilt-3-4"></a>

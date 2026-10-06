@@ -62,6 +62,9 @@ at them.
   language, one line each. A catalogue, not an argument.
 - [`RESEARCH.md`](guides/RESEARCH.md) — sourced bibliography: the research the
   code cites and the established work the architecture maps onto.
+- [`DECISION_TRAINING_DATA.md`](guides/DECISION_TRAINING_DATA.md) — what the decision model
+  answered, kept as training data for a decision model of Sonder's own: capture, the
+  gold labels, the example format, and what in it can be trusted.
 - [`../agents/README.md`](../agents/README.md) — pipeline package ownership and
   the stage-addition checklist.
 - [`../tests/README.md`](../tests/README.md) — regression-test placement and

@@ -2393,12 +2393,16 @@ function renderFullApiSettings(b) {
         ...["DEBUG", "INFO", "WARNING", "ERROR"].map(
           v => el("option", { value: v }, v)));
       levelSel.value = S.boot.log_level || "INFO";
+      const decBox = el("input", {
+        type: "checkbox", ...(S.boot.decision_capture ? { checked: "" } : {})
+      });
       b.append(el("h4", {}, "Debug capture"),
         el("div", { class: "small dim" },
           "Records what was sent to each provider and what came back, including reasoning, so a turn can be exported and read in order from the pipeline drawer. Without it an export still lists the steps and what the engine decided, but every provider call is missing — including the Director's encoder and room designer, which have no step of their own."),
         el("div", { class: "row", style: "margin:6px 0" },
           el("label", {}, capBox, " Capture provider calls"),
           bodiesSel, levelSel,
+          el("label", {}, decBox, " Keep decision-model training data"),
           el("button", {
             onclick: async event => {
               const btn = event.currentTarget;
@@ -2408,7 +2412,9 @@ function renderFullApiSettings(b) {
                   enabled: capBox.checked,
                   bodies: bodiesSel.value,
                   log_level: levelSel.value,
+                  decisions: decBox.checked,
                 });
+                S.boot.decision_capture = decBox.checked;
                 S.boot.llm_capture_enabled = capBox.checked;
                 S.boot.llm_capture_bodies = bodiesSel.value;
                 S.boot.log_level = levelSel.value;
@@ -2421,7 +2427,9 @@ function renderFullApiSettings(b) {
             },
           }, "Save")),
         el("div", { class: "small dim" },
-          "Full text stores the story itself — turn it on to chase a defect, not by default. Either way each distinct prompt is stored once, so a long chat costs far less than it looks."));
+          "Full text stores the story itself — turn it on to chase a defect, not by default. Either way each distinct prompt is stored once, so a long chat costs far less than it looks."),
+        el("div", { class: "small dim" },
+          "Decision-model training data keeps every question the decision model answers, with its answer, in training/decisions beside the database — data for a decision model of Sonder's own one day. Each character's turn adds about half a megabyte. It stays on this machine, and like full text it holds the story itself."));
     }
 
     // Scene backdrops. Its own picker rather than a row in Agent models

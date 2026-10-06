@@ -285,7 +285,8 @@ class TestTheSettingsToggle:
         out = host_client.put("/api/debug_capture",
                               json={"enabled": True, "bodies": "full",
                                     "log_level": "DEBUG"}).json()
-        assert out == {"enabled": True, "bodies": "full", "log_level": "DEBUG"}
+        assert out == {"enabled": True, "bodies": "full", "log_level": "DEBUG",
+                       "decisions": False}
         assert db.get_setting("llm_capture_enabled") == "1"
 
         import logging
@@ -314,6 +315,20 @@ class TestTheSettingsToggle:
         out = host_client.put(
             "/api/debug_capture", json={"enabled": True}).json()
         assert out["bodies"] == "full"
+
+    def test_decision_training_data_has_its_own_switch(self, host_client):
+        """`decisions.capture` is off until this is ticked, and the panel's
+        other fields never move it (`llm/decisions.py`, 2026-10-06)."""
+        from core import db
+
+        assert host_client.get("/api/bootstrap").json()["decision_capture"] is False
+        out = host_client.put("/api/debug_capture", json={"decisions": True}).json()
+        assert out["decisions"] is True and db.get_setting("decision_capture") == "on"
+        assert host_client.get("/api/bootstrap").json()["decision_capture"] is True
+        host_client.put("/api/debug_capture", json={"enabled": False})
+        assert db.get_setting("decision_capture") == "on"
+        assert host_client.put("/api/debug_capture",
+                               json={"decisions": False}).json()["decisions"] is False
 
 
 def test_seq_agrees_with_the_order_the_calls_started(temp_db):

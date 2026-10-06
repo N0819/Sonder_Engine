@@ -1,0 +1,1199 @@
+[
+ {
+  "lang": "en",
+  "question": "Mara, do you remember when we first met?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Wren",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you first meet Oren?",
+  "asker": "Wren",
+  "people": [
+   "Oren Dask",
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Oren Dask",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What were Oren's very first words to you?",
+  "asker": "Wren",
+  "people": [
+   "Oren Dask",
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "Oren Dask",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you first hear the name Oren Dask?",
+  "asker": "Wren",
+  "people": [
+   "Oren Dask",
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "Oren Dask",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you first see Bram?",
+  "asker": "Wren",
+  "people": [
+   "Bram Toller",
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Bram Toller",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you last see Oren?",
+  "asker": "Wren",
+  "people": [
+   "Oren Dask",
+   "Wren"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Oren Dask",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When was the last time you spoke with Ilse?",
+  "asker": "Wren",
+  "people": [
+   "Ilse Harrow",
+   "Wren"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "act",
+   "met"
+  ],
+  "who": "Ilse Harrow",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When was the first time you lied to Ilse?",
+  "asker": "Wren",
+  "people": [
+   "Ilse Harrow",
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "Ilse Harrow",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you first hear about Councillor Hesk?",
+  "asker": "Wren",
+  "people": [
+   "Councillor Hesk",
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "Councillor Hesk",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Who first told you about the curfew?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you first light the green lantern?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you last fix the Heron's rudder?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did the noises in the loft start?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act",
+   "heard_of"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What happened your first night at the Lantern Inn?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When were you last at the old mill?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "When did you first set foot in the chapel?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What happened right after the mill fire?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What were you doing just before the mill fire?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What did you do right after Tobin told you about the grain?",
+  "asker": "Wren",
+  "people": [
+   "Tobin Reyes",
+   "Wren"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What led up to you finding Tobin in the loft?",
+  "asker": "Wren",
+  "people": [
+   "Tobin Reyes",
+   "Wren"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What happened after Ilse showed you the eviction notice?",
+  "asker": "Wren",
+  "people": [
+   "Ilse Harrow",
+   "Wren"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "How did that day start, before the storm hit?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "the first time I met Oren",
+  "asker": null,
+  "people": [
+   "Oren Dask"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Oren Dask",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "the last time I saw Tobin",
+  "asker": null,
+  "people": [
+   "Tobin Reyes"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "Tobin Reyes",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "my first night at the Lantern Inn",
+  "asker": null,
+  "people": [],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "what happened just after the fire",
+  "asker": null,
+  "people": [],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Hinami's first words to me",
+  "asker": null,
+  "people": [
+   "Hinami"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "Hinami",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "when I first heard of Hesk",
+  "asker": null,
+  "people": [
+   "Councillor Hesk"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "Councillor Hesk",
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What was the name of the barge Oren left on?",
+  "asker": "Wren",
+  "people": [
+   "Oren Dask",
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Why does Councillor Hesk want the mill?",
+  "asker": "Wren",
+  "people": [
+   "Councillor Hesk",
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Who gave you the green lantern?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What does Ilse think of me?",
+  "asker": "Wren",
+  "people": [
+   "Ilse Harrow",
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Where does Tobin sleep?",
+  "asker": "Wren",
+  "people": [
+   "Tobin Reyes",
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "How long have you known Ilse?",
+  "asker": "Wren",
+  "people": [
+   "Ilse Harrow",
+   "Wren"
+  ],
+  "ok_order": [
+   "content",
+   "earliest"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What did Oren say about the curfew?",
+  "asker": "Wren",
+  "people": [
+   "Oren Dask",
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Is Oren trustworthy?",
+  "asker": "Wren",
+  "people": [
+   "Oren Dask",
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What's in the ledger?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "How do you pole the Heron across in a strong current?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What happened at the mill fire?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Tell me about Tobin.",
+  "asker": "Wren",
+  "people": [
+   "Tobin Reyes",
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Who was the first mate on Petra's boat?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What's the last thing you'd ever do for the council?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What should we do before the curfew tonight?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What comes after the toll road, going west?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Who's the last person in town you'd trust?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "What was the first rule Petra taught you?",
+  "asker": "Wren",
+  "people": [
+   "Wren"
+  ],
+  "ok_order": [
+   "content",
+   "earliest"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "Did you see Oren yesterday?",
+  "asker": "Wren",
+  "people": [
+   "Oren Dask",
+   "Wren"
+  ],
+  "ok_order": [
+   "content",
+   "latest"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "en",
+  "question": "what Oren said about the lanterns",
+  "asker": null,
+  "people": [
+   "Oren Dask"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "私たちが初めて会った時のこと、覚えてる？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "レン",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "オレンに初めて会ったのはいつ？",
+  "asker": "レン",
+  "people": [
+   "オレン・ダスク",
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "オレン・ダスク",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "オレンがあなたに最初に言った言葉は何だった？",
+  "asker": "レン",
+  "people": [
+   "オレン・ダスク",
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "オレン・ダスク",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "オレン・ダスクという名前を初めて聞いたのはいつ？",
+  "asker": "レン",
+  "people": [
+   "オレン・ダスク",
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "オレン・ダスク",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "ブラムを初めて見かけたのはいつ？",
+  "asker": "レン",
+  "people": [
+   "ブラム・トラー",
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "ブラム・トラー",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "最後にオレンを見たのはいつ？",
+  "asker": "レン",
+  "people": [
+   "オレン・ダスク",
+   "レン"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "met"
+  ],
+  "who": "オレン・ダスク",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "イルゼに初めて嘘をついたのはいつ？",
+  "asker": "レン",
+  "people": [
+   "イルゼ・ハロウ",
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": "イルゼ・ハロウ",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "ヘスク議員のことを初めて聞いたのはいつ？",
+  "asker": "レン",
+  "people": [
+   "ヘスク議員",
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "heard_of"
+  ],
+  "who": "ヘスク議員",
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "緑のランタンに初めて火を灯したのはいつ？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "最後にヘロン号の舵を直したのはいつ？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "act"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "屋根裏の物音が始まったのはいつ？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "act",
+   "heard_of"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "ランタン亭で初めて過ごした夜、何があった？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "earliest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "最後に古い水車小屋へ行ったのはいつ？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "latest"
+  ],
+  "ok_kind": [
+   "place"
+  ],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "水車小屋の火事のすぐ後、何があった？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "水車小屋の火事の直前、何をしていた？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "トビンから穀物の話を聞いた直後、何をした？",
+  "asker": "レン",
+  "people": [
+   "トビン・レイエス",
+   "レン"
+  ],
+  "ok_order": [
+   "after"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "屋根裏でトビンを見つける直前、何があった？",
+  "asker": "レン",
+  "people": [
+   "トビン・レイエス",
+   "レン"
+  ],
+  "ok_order": [
+   "before"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "オレンが乗って行った荷船の名前は？",
+  "asker": "レン",
+  "people": [
+   "オレン・ダスク",
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "ヘスク議員はなぜ水車小屋を欲しがっているの？",
+  "asker": "レン",
+  "people": [
+   "ヘスク議員",
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "緑のランタンをくれたのは誰？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "イルゼは私のことをどう思っている？",
+  "asker": "レン",
+  "people": [
+   "イルゼ・ハロウ",
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "トビンはどこで寝ているの？",
+  "asker": "レン",
+  "people": [
+   "トビン・レイエス",
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "オレンは信用できる？",
+  "asker": "レン",
+  "people": [
+   "オレン・ダスク",
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "帳簿には何が書いてあった？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "流れの速い時、ヘロン号をどうやって渡すの？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "ペトラの船の一等航海士は誰だった？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "門限の前に、今夜何をしておくべき？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "西へ向かうと、料金所の道の先には何がある？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "町でいちばん信用できない人は誰？",
+  "asker": "レン",
+  "people": [
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ },
+ {
+  "lang": "ja",
+  "question": "トビンのことを教えて。",
+  "asker": "レン",
+  "people": [
+   "トビン・レイエス",
+   "レン"
+  ],
+  "ok_order": [
+   "content"
+  ],
+  "ok_kind": [],
+  "who": null,
+  "note": ""
+ }
+]

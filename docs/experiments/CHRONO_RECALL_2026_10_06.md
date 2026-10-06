@@ -6,7 +6,11 @@ llm to think about the question type or field", and "build it in a worktree
 and either build a synthetic database or update a database to have
 everything needed and test a character model against it." Built in
 `mind/memory_routes.py` on branch `chrono-recall`; the design and the prior
-art are `docs/design/DESIGN_CHRONOLOGICAL_RECALL.md`.
+art are `docs/design/DESIGN_CHRONOLOGICAL_RECALL.md`. Replicated the same day
+on 82 questions, three runs a side (§8): the planted answer reached the packet
+on 8 questions only with routing and none only without (exact McNemar p =
+0.008), and ten questions are marked wrong in every run -- four classes, now in
+`docs/UNBUILT_CHARACTERS.md`. The runs' decisions are training data (§9).
 
 ## 1. What was built
 
@@ -195,3 +199,108 @@ b824a8a2). Five were refuted, the word-list concern among them. Every rule
 has a test that fails without it: 31 deliberate breaks, 30 caught; the one
 left is equivalent (a marked row is always delivered first, so a later
 lookup sees it as a pointer carrying only its own mark).
+
+## 8. Replicated: 82 questions, three runs a side
+
+The owner, on §6: "22 vs 23 feels like it could be noise, how might we
+strengthen this?" -- and the lookups are "mostly meant as an aditional tool
+incase the character decides it needs more info to make a deciision", so the
+comparison that matters is routing on against off with lookups off (A
+against B). §6 was thinner than its table looks. Question by question, B
+was right where A was not on 5 and A where B was not on none -- an exact
+McNemar p of 0.06 on one run an arm -- and the lookup arms (B against D)
+split 2 to 1, p = 1.0. The graders were not the noise: all three agreed on
+102 of 104 answers (Fleiss κ 0.96). What was missing was questions and
+repeats.
+
+So the measurement was repeated where it is cheap and carries no character
+model's sampling -- retrieval -- on three times the questions:
+
+- **56 new questions** over the same bank, written in five lanes (people,
+  places, acts, just before/after, controls), each lane's questions read
+  against all 310 turns by an adversarial reader who tried to find an earlier
+  first or a later last, then checked by code against the bank's `seen` and
+  `location` (three dropped: one by its reader, two by code -- each a "first
+  met" that was really an act). With the original 26: 54 first/last (20 acts,
+  15 places, 13 meetings, 6 first-heard), 15 just before/after, 13 content
+  (two use "first" in a sense that is not time -- "whose orders do you put
+  first"), 5 with nothing to find, 4 answered by the seeded past ("how did
+  you and Ilse meet?", "how far back do you and Aldous go?").
+- **Three runs a side**, routing on and off, each on a fresh copy of the
+  bank, every question in one fixed order; `tools/chrono_bench/run.py score`
+  compares the sides question by question.
+
+| | routing on | routing off |
+|---|---|---|
+| planted answer in the packet (77 answerable) | 73, 73, 72 | 65, 65, 65 |
+| marked moment right | 47, 47, 45 | -- |
+| marked moment wrong | 9, 10, 12 | -- |
+| nothing to find, left unmarked (5) | 4, 4, 4 | 5, 5, 5 |
+
+- **The packet difference is not noise.** Taking each question's majority
+  across its three runs, 8 questions had the planted answer only with routing
+  and none only without: exact McNemar p = 0.008. The runs agreed with each
+  other on every question but one (Q14, one run in three), so the decision
+  model's own variation (about ±0.03 a memory) barely moves retrieval: the
+  noise in §6 was the character's and the sample's, not Jev's.
+- **The marks are where the harm is.** Ten questions are marked wrong in
+  every run (one more, "the last words you said to Oren", in two of three).
+  Nine of the ten have an answer, and in eight of those the planted row is
+  still in the packet -- so a mind is pointed away from an answer it holds,
+  which is how §6's one harm happened. They fall in four classes:
+  - *just before / just after: the wrong moment* (5 of 15 such questions).
+    The moment is the row the model is surest of among the 24 nearest the
+    question, and a lookalike wins when the moment's own row is not the most
+    distinctive: the morning after the storm anchored on turn 5 (rain on the
+    first crossing), the chest carried to the chapel house on the mill-fire
+    night, "the evening before Oren left on the Moth" on turn 166, the night
+    before the first frost on 299 (inside the answer, not the frost), and §4's
+    loft night (252).
+  - *who the question is about*: "when did you meet Tobin's mother?" routes
+    to Tobin and marks his first meeting -- a question nothing answers,
+    answered; "how far back do you and Aldous go?" marks a story turn where
+    the answer is the seeded past.
+  - *which place*: "the chapel of the Drowned Saint itself, not Ilse's chapel
+    house" marks turn 237; "when were you last up in the loft yourself?"
+    routes as an act with Tobin and marks a night he comes DOWN the ladder.
+  - *the moment told about*: "the last lie you told Ilse" marks 211, the
+    inference that thinks back on it, not 210, the lie (the span still holds
+    210). The decision model reads a memory that only talks about an act as
+    the act -- the same reading §9's disputes show 34 times.
+- **Not yet measured**: whether the wrong marks mislead a character as often
+  as the extra packet hits help one. §6 says they mostly do not (invented
+  details fell from 6 to 1 with routing), on the 26 questions that had two
+  wrong marks; on these 82 the character run is the next measurement -- arms
+  A and B, about $1.10 of the decision model a run of both (§6's calls cost
+  about $0.0067 each) -- and the four classes above are its candidates to fix
+  first.
+- **The cost**: the six retrieval runs and a smoke test took $0.79 of
+  OpenRouter credit (about $0.0016 a routed or unrouted ponder; $0.50 was the
+  estimate), leaving $2.57.
+
+## 9. The runs as training data
+
+The owner, the same day: "The best option would probably be to finetune a
+small decision model maybe 4 or 9b parameters specifically for sonder. but
+for now using jev is fine" -- then "build a training data file for the day we
+decide to do a fine tune". §8's runs were the first to keep their decisions
+(`decisions.capture`, `docs/guides/DECISION_TRAINING_DATA.md`): 76 MB of
+requests, 15,228 distinct (state, question) examples, and -- because the bank
+plants its answers -- gold on every moment check the readers' verification
+covers: 413 `memory_moment`, 37 `memory_heard`, 13 `memory_anchor`.
+
+- **The teacher, where gold can say**: Jev agreed with 379 of 413 moment
+  checks, 37 of 37 first-heard checks and 10 of 13 anchors.
+- **The labels, where the teacher disagreed**: all 43 disagreements (with the
+  router's) went to three blind judges, shown only the state, the question and
+  its options. 40 labels stood; the misses were Jev's -- a memory that only
+  talks about an act read as the act (Bram: "Pin's quiet. You've done it
+  already?" as the rudder being fixed), "lantern" as the Lantern Inn, the mill
+  seen from mid-river as being at it, a thought back on a lie as the lie
+  (which is §8's wrong mark on "the last lie you told Ilse"). 3 were
+  relabelled, all router tuning labels that said "no one in particular" for a
+  question naming someone.
+- **What a character's beat asks**: one Saltmere beat, captured whole, was 11
+  requests and 474 questions (memory grades 124, moods 40, then the act,
+  change, impact and speech checks), 0.6 MB. Gold reaches only the memory and
+  route checks among them.
