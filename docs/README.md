@@ -98,6 +98,10 @@ Minds:
 - [`DESIGN_GOOD_MEMORY.md`](design/DESIGN_GOOD_MEMORY.md) — twelve features
   borrowed from how people remember, for good memory rather than realistic
   forgetting. Proposal.
+- [`DESIGN_CHRONOLOGICAL_RECALL.md`](design/DESIGN_CHRONOLOGICAL_RECALL.md) —
+  first, last, before and after: a verified sweep of what others have done,
+  and a proposal in which the question's type chooses the fusion's lanes and
+  code, never the model, decides the order. Proposal.
 
 World and body:
 

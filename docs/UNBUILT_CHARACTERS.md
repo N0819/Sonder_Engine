@@ -1336,6 +1336,13 @@ reach it: the experiment's §6.)
   handle so `expand` can open it. Still open: `about` (everything this mind
   holds about one person or thing), `my_aims`, `promises`,
   `retrace`/`what_happened` (one turn whole), keep-in-mind pins.
+- **Chronological recall.** "Her very first words", "the last time I saw X",
+  "right before the fight": the ponder ranks by relevance and has no notion of
+  order, and the earliest match can fall outside its fifty (the first-words
+  miss). Proposed, not built: the question's type chooses which lists the
+  fusion takes and which get reserved places, code decides the order, and
+  nothing scans the bank
+  ([`design/DESIGN_CHRONOLOGICAL_RECALL.md`](design/DESIGN_CHRONOLOGICAL_RECALL.md)).
 - **Disputes made precise.** The owner: "with the tool calls... disputes could
   potentially become surgically precise". A looked-up row joins the
   read-back's memories, so a dispute can already name it, and
