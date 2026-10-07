@@ -281,7 +281,7 @@ class TestThePromptTeachesTheDistinction:
         assert ("act: the speaking verb, only when the prose reports speech "
                 "without giving its words.") in sheet
         # The rule that keeps a description out of quotation marks.
-        assert "you never write a line or a decision nobody declared" in (
+        assert "you never write a line, a decision or a step nobody declared" in (
             prose_director_prompt("resolve", "en"))
 
     def test_the_contract_asks_for_neither_kind_nor_authority_on_a_row(self):
@@ -533,7 +533,7 @@ class TestARowBelongsToWhoseConductItIs:
          "actor_only and autonomous: its own conduct and body stand; what it "
          "does to anything beyond its own body is written as attempted, the "
          "outcome left open for the resolve",
-         "Another mind's choices are its own."),
+         "Another mind's choices are its own, the player's included."),
         ("ja", "world_author: その行為と、それが述べる世界の結果は成立し、"
                "済んだこととして書きます。",
          "自分の身体を超えて何かに及ぼすことは試みとして書き、結果は resolve "
