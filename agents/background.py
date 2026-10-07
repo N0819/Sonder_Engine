@@ -688,9 +688,12 @@ def _background_react(ctx, nonce):
 #: Public lore a background voice is handed: at most this many entries,
 #: and this many characters of them in all. A payload large enough to
 #: restate gets restated (`charter_log.scene_ledger`), and a voice answers
-#: one beat.
+#: one beat. 1600 characters admitted two of the Writers' Room's entries
+#: (849-1105 characters each, scratch story 165): the keeper of the Eel and
+#: Lamp was handed the bells and not his own house, nor where Petch keeps
+#: his office, and told the player "Petch is at his table by the hearth".
 COMMON_KNOWLEDGE_ENTRIES = 8
-COMMON_KNOWLEDGE_CHARS = 1600
+COMMON_KNOWLEDGE_CHARS = 4000
 
 
 def _common_knowledge(ctx, room_id):
@@ -703,12 +706,31 @@ def _common_knowledge(ctx, room_id):
     particular): a voice learns the town from it, never a stranger's name.
     """
     from agents.common import _books, observer_name_scrub, scrub_names_deep
+    from core.db import q
     from mind.memory import knowledge_for_character
+    from persist.commit import OPENING_PREMISE_SOURCE_PREFIX
 
+    books = _books(ctx)
+    # THE PREMISE IS THE PLAYER'S BRIEFING, filed "to the cast as public
+    # knowledge" (`commit_mapping.OPENING_PREMISE_SOURCE_PREFIX`) -- written
+    # in the second person to the player, carrying the player's errand. A
+    # townsperson handed it knew the assessor's mission before she said a
+    # word (scratch story 165, turn 4582: the name scrubbed to "the compact
+    # woman", the errand intact). The cast, not the town.
+    premise = []
+    if books:
+        marks = ",".join("?" * len(books))
+        premise = [str(r["title"] or "") for r in q(
+            "SELECT title FROM lore_entries WHERE lorebook_id IN (%s) "
+            "AND source_notes LIKE ?" % marks,
+            (*books, OPENING_PREMISE_SOURCE_PREFIX + "%")) if r["title"]]
     rows = knowledge_for_character(
-        _books(ctx), room_id or None, ["common"], [], circles=(),
+        books, room_id or None, ["common"], premise, circles=(),
         limit=COMMON_KNOWLEDGE_ENTRIES, chat_id=ctx.chat.id,
         frame_id=getattr(ctx.turn, "frame_id", None))
+    # This room's own facts first: what applies HERE is what a voice here
+    # is most likely to be asked.
+    rows = sorted(rows, key=lambda r: 0 if r.get("range") == "local" else 1)
     out, used = [], 0
     for row in rows:
         content = " ".join(str(row.get("content") or "").split())

@@ -87,3 +87,36 @@ def test_only_what_anyone_here_knows_arrives(temp_db):
 def test_a_story_with_no_lore_hands_nothing(temp_db):
     ctx, _cid = _ctx(temp_db)
     assert background._common_knowledge(ctx, "taproom") == []
+
+
+def test_the_players_briefing_is_the_casts_not_the_towns(temp_db):
+    """The premise is filed public "to the cast" -- in the second person, to
+    the player, with the player's errand in it. A townsperson handed it knew
+    the assessor's mission before she said a word (scratch story 165, turn
+    4582). Identified by the engine's own provenance stamp."""
+    from persist.commit import OPENING_PREMISE_SOURCE_PREFIX
+    ctx, cid = _ctx(temp_db)
+    book = ensure_chat_canon_book(cid)
+    add_lore(book, "", "You are the guild's assessor; find out why she sank.",
+             title="The story's premise, as its author wrote it for Nia",
+             knowledge_tag="common", circles=[], embedding=VEC,
+             source_notes=OPENING_PREMISE_SOURCE_PREFIX + ": the scenario")
+    _lore(book, "The search bell", "Three pulls and a pause.",
+          knowledge_tag="common", circles=[])
+    titles = [k["title"] for k in background._common_knowledge(ctx, "taproom")]
+    assert titles == ["The search bell"]
+
+
+def test_the_rooms_writers_entries_fit_and_this_rooms_come_first(temp_db):
+    """The Writers' Room writes 850-1100 characters an entry; a budget that
+    admits two handed a keeper the bells and not his own house."""
+    ctx, cid = _ctx(temp_db)
+    book = ensure_chat_canon_book(cid)
+    for n in range(3):
+        _lore(book, "Town fact %d" % n, "x" * 900, knowledge_tag="common",
+              circles=[])
+    _lore(book, "The taproom", "y" * 900, knowledge_tag="common", circles=[],
+          knowledge_range="local", knowledge_locations=["taproom"])
+    titles = [k["title"] for k in background._common_knowledge(ctx, "taproom")]
+    assert titles[0] == "The taproom"
+    assert len(titles) == 4

@@ -7,7 +7,7 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 2344 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 2366 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4960 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_bare.py` | 958 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
@@ -253,14 +253,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 2141 | 204 lines |
+| `_react_one()` | 2163 | 204 lines |
 | `_background_react()` | 499 | 183 lines |
-| `declare_charter_figures()` | 1897 | 164 lines |
-| `scene_life()` | 1212 | 158 lines |
-| `_demanded_presences()` | 999 | 144 lines |
-| `_present_others()` | 1606 | 135 lines |
+| `declare_charter_figures()` | 1919 | 164 lines |
+| `scene_life()` | 1234 | 158 lines |
+| `_demanded_presences()` | 1021 | 144 lines |
+| `_present_others()` | 1628 | 135 lines |
 | `_beat_for_presence()` | 194 | 84 lines |
-| `managed_presences()` | 854 | 78 lines |
+| `managed_presences()` | 876 | 78 lines |
 
 ### `agents/character.py`
 
