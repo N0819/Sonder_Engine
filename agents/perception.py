@@ -2427,6 +2427,17 @@ def _presence_bodies(ctx, sc, rooms, chatter):
             })
     if placements:
         lay_charter_bodies(sc, placements, keys=keys)
+    # And the people this beat brought in, by the one reader the voices'
+    # figures use (`common.beat_people_rows`): a person the scene stands is a
+    # body in the view, never "There is Abel Gale here."
+    try:
+        from .common import beat_people_rows
+        for row in beat_people_rows(ctx, sc, rooms, seen):
+            rows.append({**row, "role": "", "disguise_known_to": [],
+                         "disguise_conceals_identity": False})
+    except Exception as exc:
+        if hasattr(ctx, "add_warning"):
+            ctx.add_warning(f"the beat's own people not laid as bodies: {exc}")
     return rows
 
 
@@ -5054,6 +5065,20 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
         return []
     stations = (sc or {}).get("stations") or {}
     known = [str(b) for b in bodies if str(b)]
+    # RULE 2b: A PERSON IS NEVER A THING. An entity of an explicitly animate
+    # kind (`schemas._ANIMATE_ENTITY_KINDS`, the allow-list the inert test
+    # already trusts) is a body, said through the presence path and its
+    # recognition gate -- not "There is Abel Gale here.", by name, to a
+    # player who had never met him (scratch story 165, turn 4582). A device
+    # stays a thing; a person the presence path did not admit is better
+    # unsaid than said as furniture.
+    try:
+        from llm.schemas import _ANIMATE_ENTITY_KINDS
+    except Exception:
+        _ANIMATE_ENTITY_KINDS = frozenset()
+    people = {str(eid) for eid, ent in entities.items()
+              if isinstance(ent, dict) and str(ent.get("kind") or "")
+              .strip().casefold() in _ANIMATE_ENTITY_KINDS}
     # Rule 5's evidence, read once: which anchors this observer's eyes reach,
     # and what each is called.
     seen_anchors = {}
@@ -5077,6 +5102,8 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
         if any(same_subject(sc, str(eid), body)
                or same_subject(sc, label, body) for body in known):
             continue                                        # rule 2
+        if str(eid) in people:
+            continue                                        # rule 2b
         if hiding_holders_of(sc, str(eid)):
             continue                                        # rule 3
         # RULE 3b: A THING IN SOMEBODY'S HANDS IS NOT LYING HERE. Held or

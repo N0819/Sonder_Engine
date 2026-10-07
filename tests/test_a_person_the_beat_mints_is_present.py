@@ -67,6 +67,43 @@ def test_a_person_minted_in_view_is_laid_as_a_figure(temp_db):
     assert "ledger" in rows[0]["appearance"]
 
 
+def test_the_minted_person_is_a_body_in_the_view_and_never_a_thing(temp_db):
+    """Perception read its bodies from the presence ledger and the charters
+    alone, so a person the beat brought in reached the player's view through
+    the THING path, by name: "There is Abel Gale here." (scratch story 165,
+    turn 4582). One reader now serves the voices and the view
+    (`common.beat_people_rows`), and the thing path never says a person."""
+    from agents import perception
+    cid = _chat(temp_db)
+    sc = _stage()
+    bodies = perception._presence_bodies(_ctx(cid), sc, ["taproom"], None)
+    assert [b["name"] for b in bodies] == ["Mr Petch"]
+    assert "ledger" in bodies[0]["appearance"]
+    assert bodies[0]["disguise_conceals_identity"] is False
+    things = perception._visible_things(sc, "Tamsin Coyle", "taproom", bodies=["Tamsin Coyle"])
+    said = " ".join(str(t.get("what") or "") for t in things)
+    assert "Petch" not in said, said
+    assert "lantern" in said, "a thing is still a thing"
+
+
+def test_a_minted_device_stays_a_thing(temp_db):
+    """Whether a mint is a PERSON is the presence ledger's verdict, and
+    before a record exists only an explicitly animate kind is laid as a body:
+    a suppression fixture is a thing, not "the unfamiliar person" (chat 82).
+    """
+    from agents import perception
+    cid = _chat(temp_db)
+    sc = _stage()
+    sc["entities"]["anchor"] = {"name": "Reality Anchor", "kind": "device",
+                                "description": "a brass ring bolted to the beam"}
+    sc["positions"]["anchor"] = "taproom"
+    bodies = perception._presence_bodies(_ctx(cid), sc, ["taproom"], None)
+    assert "Reality Anchor" not in [b["name"] for b in bodies]
+    things = perception._visible_things(sc, "Tamsin Coyle", "taproom",
+                                        bodies=["Tamsin Coyle", "Mr Petch"])
+    assert "Reality Anchor" in " ".join(str(t.get("what") or "") for t in things)
+
+
 def test_the_minted_person_is_asked_and_knows_he_was_addressed(
         monkeypatch, temp_db):
     cid = _chat(temp_db)

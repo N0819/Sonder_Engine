@@ -2588,35 +2588,70 @@ def lay_charter_figures(ctx, sc, rooms):
                             and placed.get("body") else {})})
     if placements:
         lay_charter_bodies(sc, placements, keys=keys)
-    # A PERSON THE BEAT MINTED STANDS HERE TOO. The rows above come from the
-    # presence ledger and the charters, both written at commit, so a body
-    # this beat brought in was on the stage and in nobody's list of who could
-    # answer: the man the player walked up to by the fire and called "Mr
-    # Petch" (scratch story 165, turn 4581) heard himself asked for the
-    # guild's books, and the innkeeper answered for him. Read by the rule
-    # commit files a presence by (`scene_person_entities`), off this stage's
-    # own scene, which already holds the beat's assertions. A mint bound to a
-    # charter body is that body's row, laid above.
     try:
-        from persist.commit import _registered_name_roster, scene_person_entities
-        roster = {n.casefold() for n in _registered_name_roster(
-            chat, getattr(ctx, "cast", None) or [])}
-        roster |= {str(e.get("name") or "").casefold()
-                   for e in (getattr(ctx, "extra_players", None) or ())}
-        in_view = {str(r) for r in rooms_in_frame(sc, rooms)}
-        for name, person in sorted(scene_person_entities(sc, roster).items()):
-            if (name.casefold() in seen
-                    or person["entity_id"].casefold() in seen
-                    or person["charter_ref"] or person["room"] not in in_view):
-                continue
-            seen.add(name.casefold())
-            rows.append({"name": name, "room": person["room"], "role": "",
-                         "appearance": person["description"],
-                         "entity_id": person["entity_id"],
-                         "aliases": list(person["aliases"])})
+        rows.extend(dict(row, role="")
+                    for row in beat_people_rows(ctx, sc, rooms, seen))
     except Exception as exc:
         if hasattr(ctx, "add_warning"):
             ctx.add_warning(f"the beat's own people not laid as figures: {exc}")
+    return rows
+
+
+def beat_people_rows(ctx, sc, rooms, seen):
+    """A PERSON THE BEAT MINTED STANDS HERE TOO: ``[{name, room, appearance,
+    entity_id, aliases}]`` for the scene's people in ``rooms`` (and the rooms
+    laid beyond their doorways) that no presence record or charter body
+    covers yet. ``seen`` is the caller's casefolded names, and is extended.
+
+    The presence ledger and the charters are both written at commit, so a
+    body this beat brought in was on the stage and in nobody's list of who
+    was there: the man the player walked up to by the fire and called "Mr
+    Petch" (scratch story 165, turn 4581) heard himself asked for the guild's
+    books and the innkeeper answered for him; and a planned man the floor
+    stood because the player spoke to him reached the player's own view as
+    "There is Abel Gale here." -- a thing, by name (turn 4582). Read by the
+    rule commit files a presence by (`scene_person_entities`), off the
+    stage's own scene, which already holds the beat's assertions; ONE reader
+    for the voices' figures (`lay_charter_figures`) and perception's bodies
+    (`perception._presence_bodies`), so who is present cannot differ between
+    being spoken to and being seen. A mint bound to a charter body is that
+    body's row, laid by the caller."""
+    from llm.schemas import _ANIMATE_ENTITY_KINDS
+    from persist.commit import (_registered_name_roster, presence_record_for,
+                                scene_person_entities)
+    from world.charter_place import rooms_in_frame
+    roster = {n.casefold() for n in _registered_name_roster(
+        ctx.chat, getattr(ctx, "cast", None) or [])}
+    roster |= {str(e.get("name") or "").casefold()
+               for e in (getattr(ctx, "extra_players", None) or ())}
+    in_view = {str(r) for r in rooms_in_frame(sc, rooms)}
+    ledger = wget(ctx.chat.id, "background_presences", {}) or {}
+    entities = (sc or {}).get("entities") or {}
+    rows = []
+    for name, person in sorted(scene_person_entities(sc, roster).items()):
+        if (name.casefold() in seen
+                or person["entity_id"].casefold() in seen
+                or person["charter_ref"] or person["room"] not in in_view):
+            continue
+        # SOMEBODY BY KIND, AND NOT THE LEDGER'S ALREADY. `scene_person_
+        # entities` answers "could this speak?", on purpose broad enough to
+        # keep a sentient robot trackable; whether it is a PERSON is the
+        # presence ledger's verdict (`presence_has_an_identity`), and a body
+        # the ledger already judged is `presence_figures_for_room`'s to admit
+        # or refuse -- a suppression fixture with a record is a thing, not
+        # "the unfamiliar person" (chat 82). Before any record exists, only an
+        # explicitly animate kind is laid as a body.
+        kind = str((entities.get(person["entity_id"]) or {}).get("kind")
+                   or "").strip().casefold()
+        if kind not in _ANIMATE_ENTITY_KINDS:
+            continue
+        if presence_record_for(ledger, name, sc)[1] is not None:
+            continue
+        seen.add(name.casefold())
+        rows.append({"name": name, "room": person["room"],
+                     "appearance": person["description"],
+                     "entity_id": person["entity_id"],
+                     "aliases": list(person["aliases"])})
     return rows
 
 
