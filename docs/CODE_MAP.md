@@ -127,7 +127,7 @@
 | `story/mandates.py` | 626 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/opening_plan.py` | 121 |  | `core.db` |
-| `story/plot_packages.py` | 4023 |  | `world.spatial` |
+| `story/plot_packages.py` | 4030 |  | `world.spatial` |
 | `story/prelude.py` | 188 |  | `core.db` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 445 |  | `core.db` |
@@ -1618,12 +1618,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 3201 | 143 lines |
+| `_package_checks()` | 3208 | 143 lines |
 | `_preview_plan_rooms()` | 1033 | 108 lines |
-| `fire_due_clocks()` | 3774 | 102 lines |
+| `fire_due_clocks()` | 3781 | 102 lines |
 | `_plan_edge()` | 880 | 84 lines |
-| `publish_package()` | 3555 | 84 lines |
-| `_reach_warning()` | 3346 | 79 lines |
+| `publish_package()` | 3562 | 84 lines |
+| `_reach_warning()` | 3353 | 79 lines |
 | `normalize_package()` | 253 | 77 lines |
 | `_preview_plan_entity()` | 1234 | 73 lines |
 

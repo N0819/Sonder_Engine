@@ -1839,10 +1839,17 @@ def _apply_file_lore(cid, frame_id, op, turn_idx, package_uid_=""):
     world = {"chat": _chat_row(cid)}
     book, _attached = _target_book(cid, world, op, mint=True)
     disposition = op.get("disposition") or LORE_DISPOSITION
+    # BEFORE THE OPENING IS TURN -1 (`_latest_turn_idx`: a package published
+    # then is seen by turn 0), and provenance takes no negative turn, so every
+    # lore entry the Room filed before the first beat was refused at publish
+    # -- "record cannot be promoted: base_turn is required and must be a
+    # non-negative int" (scratch story 166, 2026-10-07: the town's public
+    # facts, waiting on a story that had not begun). Lore filed before the
+    # story is canon from its opening; `turn_added` keeps the -1 that says so.
     record = promote({
         "disposition": "provisional",
         "subject": {"kind": op["subject_kind"], "id": op["subject_id"]},
-        "base_turn": int(turn_idx), "basis": "model",
+        "base_turn": max(0, int(turn_idx)), "basis": "model",
     }, disposition, adjudicator="writers_room:%s" % package_uid_)
     provenance = "%s by %s (subject %s)" % (
         record["disposition"], record["adjudicator"], op["subject_id"])

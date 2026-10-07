@@ -474,6 +474,21 @@ class TestOperations:
                 "op": "file_lore", "subject_id": "search_bell",
                 "content": "x", "knowledge_tag": "secret"}])
 
+    def test_lore_files_before_the_first_beat(self, temp_db):
+        """Before the opening the story stands at turn -1, and provenance
+        took no negative turn: every entry the Room filed before the first
+        beat was refused at publish (scratch story 166, 2026-10-07)."""
+        cid = _story(temp_db, turns=0)
+        uid = _ready(temp_db, cid, ops=[{
+            "op": "file_lore", "subject_id": "the_bells",
+            "title": "The bells of Brackwater", "content": "Two patterns.",
+            "knowledge_tag": "common"}])
+        validate_package(cid, uid)
+        out = publish_package(cid, uid, expected_revision=_rev(cid, uid))
+        entry = out["applied"][0]["result"]["entry_id"]
+        assert temp_db.q("SELECT id FROM lore_entries WHERE id=?", (entry,),
+                         one=True)
+
     def test_lore_naming_a_book_that_is_not_attached_is_refused(self, temp_db):
         cid = _story(temp_db)
         uid = _ready(temp_db, cid, ops=[{
