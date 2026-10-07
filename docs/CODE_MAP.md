@@ -33,7 +33,7 @@
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2959 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
-| `agents/perception.py` | 7947 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
+| `agents/perception.py` | 8006 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1854 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1777 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
@@ -575,14 +575,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome_views()` | 6742 | 973 lines |
-| `_composer_act_views()` | 6006 | 480 lines |
-| `_composer_standing_percepts()` | 5244 | 352 lines |
-| `perception_outcome()` | 3496 | 322 lines |
-| `perception_act()` | 3003 | 223 lines |
-| `_outcome_event_stream()` | 852 | 199 lines |
-| `_composer_establish_views()` | 5848 | 149 lines |
-| `_source_channels()` | 1478 | 142 lines |
+| `_composer_outcome_views()` | 6801 | 973 lines |
+| `_composer_act_views()` | 6065 | 480 lines |
+| `_composer_standing_percepts()` | 5303 | 352 lines |
+| `perception_outcome()` | 3555 | 322 lines |
+| `perception_act()` | 3062 | 223 lines |
+| `_outcome_event_stream()` | 911 | 199 lines |
+| `_composer_establish_views()` | 5907 | 149 lines |
+| `_source_channels()` | 1537 | 142 lines |
 
 ### `agents/runtime.py`
 

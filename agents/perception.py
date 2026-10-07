@@ -832,7 +832,66 @@ def _causal_outcome_sequences(ctx, interp, res, player_name, sequences, cast_nam
         event["_causal_resolved"] = stage == "resolve"
         event["event_id"] = f"{stage}:{span}"
         result.append((actor, [event], actor.casefold() in players))
-    return result
+    return _restore_declared_lines(result, sequences, res)
+
+
+def _restore_declared_lines(result, sequences, res):
+    """A line its speaker declared before an act is said before that act.
+
+    The resolved rows replace the declarations here, and a line the author
+    did not carry -- its prose dropped it, so no row cites it -- reached the
+    stream only as unbound dialogue, appended after the whole beat
+    (`_outcome_event_stream`) and graded in the world the beat ENDED in. The
+    rows still cite the speaker's own later elements, so where the line was
+    said is not a guess: it goes back immediately before the first row citing
+    anything its declaration put after it, in that row's before-world.
+
+    Measured (scratch story 165, turn 4581, 2026-10-07): Hester declared three
+    lines and then "crosses the taproom, lifts the door latch, and stands
+    half-turned back toward the fire". The resolve prose dropped the lines and
+    walked her out through the door; appended after that exit, all three were
+    graded from the Main Walk through a shut plank door, and the player got
+    "Hester Gale says something you cannot make out: ...somebody's...
+    Nobody's... changes --". `beat_movement_cuts` could not save them: she
+    went in at interpret and out at resolve, so the two snapshots show no move
+    at all (its docstring's known residual).
+
+    Only a declaration's own lines, and only where a later element of the same
+    declaration was resolved: a line with nothing resolved after it keeps the
+    end of the beat, and a human's lines are the onset rows themselves.
+    """
+    at_citation = {}
+    for index, (_actor, events, _player) in enumerate(result):
+        for event in events:
+            cited = str(event.get("from_declaration") or "").strip()
+            if cited:
+                at_citation.setdefault(cited, index)
+    before = {}
+    for actor, sequence, is_player in sequences:
+        if is_player:
+            continue
+        elements = [e for e in sequence or () if isinstance(e, dict)]
+        ids = [str(e.get("event_id") or "").strip() for e in elements]
+        for position, element in enumerate(elements):
+            own = ids[position]
+            if (element.get("type") != "speech" or not element.get("text")
+                    or not own or own in at_citation):
+                continue
+            later = [at_citation[i] for i in ids[position + 1:]
+                     if i in at_citation]
+            if not later or not sequence_event_allowed(element, res):
+                continue
+            at = min(later)
+            anchor = result[at][1][0]
+            before.setdefault(at, []).append((actor, [dict(
+                element, _causal_span=anchor.get("_causal_span"))], is_player))
+    if not before:
+        return result
+    out = []
+    for index, entry in enumerate(result):
+        out.extend(before.get(index, ()))
+        out.append(entry)
+    return out
 
 
 def _line_words(text):
