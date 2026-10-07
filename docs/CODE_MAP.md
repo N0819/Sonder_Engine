@@ -7,7 +7,7 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 2265 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 2288 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4960 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_bare.py` | 958 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
@@ -95,7 +95,7 @@
 | `persist/checkpoints.py` | 1593 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 842 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1797 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire`, `world.spatial` |
-| `persist/commit_background.py` | 5309 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
+| `persist/commit_background.py` | 5315 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 576 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -253,12 +253,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 2061 | 205 lines |
+| `_react_one()` | 2085 | 204 lines |
 | `_background_react()` | 499 | 183 lines |
-| `declare_charter_figures()` | 1840 | 164 lines |
-| `scene_life()` | 1165 | 157 lines |
+| `declare_charter_figures()` | 1841 | 164 lines |
+| `scene_life()` | 1165 | 158 lines |
 | `_demanded_presences()` | 952 | 144 lines |
-| `_present_others()` | 1558 | 126 lines |
+| `_present_others()` | 1559 | 126 lines |
 | `_beat_for_presence()` | 194 | 84 lines |
 | `managed_presences()` | 807 | 78 lines |
 
@@ -1242,13 +1242,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `track_background_presences()` | 2044 | 870 lines |
-| `pick_voice_demand()` | 3947 | 441 lines |
-| `promote_background_character()` | 4534 | 393 lines |
+| `pick_voice_demand()` | 3953 | 441 lines |
+| `promote_background_character()` | 4540 | 393 lines |
 | `_fold_duplicate_presences()` | 750 | 143 lines |
-| `descriptor_bindings()` | 3518 | 138 lines |
-| `schedule_auto_promotion()` | 5187 | 123 lines |
-| `addressed_rooms()` | 3824 | 121 lines |
-| `select_auto_promotion()` | 4966 | 92 lines |
+| `descriptor_bindings()` | 3524 | 138 lines |
+| `schedule_auto_promotion()` | 5193 | 123 lines |
+| `addressed_rooms()` | 3830 | 121 lines |
+| `select_auto_promotion()` | 4972 | 92 lines |
 
 ### `persist/commit_common.py`
 

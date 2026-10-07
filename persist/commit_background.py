@@ -3016,7 +3016,13 @@ def _append_manager_conduct(br, presences, turn_idx):
         if not parts:
             continue
         tail = rec.setdefault("recent", [])
-        tail.append({"turn": turn_idx, "text": "; ".join(parts)})
+        # The words alone beside the whole row: what a voice is handed back
+        # as its own memory is what was said and heard (`_recent_words`), not
+        # the act -- an act handed back is copied, see agents/background.py.
+        words = "; ".join(p for p in parts if not p.startswith(
+            str(r.get("action") or "\0").strip()))
+        tail.append({"turn": turn_idx, "text": "; ".join(parts),
+                     **({"words": words} if words else {})})
         del tail[:-BACKGROUND_RECENT_TAIL]
 
 def _background_fired_reactions_any(br):

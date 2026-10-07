@@ -1193,7 +1193,8 @@ def scene_life(ctx, nonce, level, cfg):
             "role_hint": (rec.get("sketch") or {}).get("role_hint", ""),
             "room": room or "",
             "present_since_turn": rec.get("first_turn"),
-            "recent": [r.get("text", "") for r in (rec.get("recent") or [])][-3:],
+            "recent": [w for r in (rec.get("recent") or [])[-3:]
+                       if (w := _recent_words(r))],
         })
 
     # The batched call is ONE shared context: whatever enters it reaches the
@@ -2058,6 +2059,29 @@ def _creature_noise(cid, rec, entry, *, frame_id=None):
              "detail": str(voice.get("sound") or "").strip()}]
 
 
+def _recent_words(row):
+    """What a presence SAID and HEARD in one recorded beat, without its act.
+
+    `recent_interaction` exists so a voice remembers the conversation (the
+    Charter captain who forgot Rowan's introduction); its act came along in
+    the same string and was copied back as the next act. Found in play on
+    2026-10-06 (scratch story 165, turns 4581-4582): a house hand "rolling the
+    burned wrist once against his knee" on four reruns running, under two
+    card clauses telling him not to. Where he stands and what he holds come
+    from the scene, not from this field. A row written before `words` existed
+    is the writer's own format -- heard/said parts, then the act -- so the
+    words end at its last closing quote; a row with no quote was an act and
+    nothing else, and gives nothing."""
+    if not isinstance(row, dict):
+        return ""
+    words = str(row.get("words") or "").strip()
+    if words:
+        return words
+    text = str(row.get("text") or "").strip()
+    end = text.rfind('"')
+    return text[:end + 1].strip() if end > 0 else ""
+
+
 def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
                player_addressed=False):
     """One presence's single reactive beat, or None if it stays silent.
@@ -2218,9 +2242,8 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
             # the town playtest forgot Rowan's introduction on the next beat
             # and invented a second surveyor to reconcile the gap.
             "recent_interaction": [
-                str(row.get("text") or "")
-                for row in (rec.get("recent") or [])[-3:]
-                if str((row or {}).get("text") or "").strip()
+                words for row in (rec.get("recent") or [])[-3:]
+                if (words := _recent_words(row))
             ],
         },
         # A bounded earned past for this body only: own condition, duties,
