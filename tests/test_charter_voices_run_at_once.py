@@ -32,9 +32,12 @@ def _declared(monkeypatch, temp_db, react):
     monkeypatch.setattr(background, "_react_one", react)
     monkeypatch.setattr(background, "_player_room", lambda ctx, sc_: "scullery")
     rows = [{"name": n, "room": "scullery"} for n in ("Cole", "Ada", "Bran")]
-    return background.declare_charter_figures(
-        beat._ctx(cid), dict(beat.TestTheDeclaredBeatIsWhatTheVoiceHears.INTERP),
-        sc, rows, [], 0)
+    # ALL THREE ADDRESSED: these tests are about asking several voices at
+    # once, and since 2026-10-07 only one BYSTANDER is asked a beat
+    # (`CHARTER_UNADDRESSED_VOICES`).
+    interp = dict(beat.TestTheDeclaredBeatIsWhatTheVoiceHears.INTERP)
+    interp["flow"] = {"addressed_to_refs": ["Cole", "Ada", "Bran"]}
+    return background.declare_charter_figures(beat._ctx(cid), interp, sc, rows, [], 0)
 
 
 def _nods(name):
@@ -120,3 +123,49 @@ def test_any_other_failure_is_raised_as_the_loop_would_have():
 
     with pytest.raises(ValueError, match="first"):
         background._voices_at_once([broken, lambda: "said", also_broken])
+
+
+# --------------------------------------------------------------------------
+# One unaddressed voice a beat (the owner, 2026-10-07: "Charter may be a little
+# overly chatty")
+# --------------------------------------------------------------------------
+
+def _asked_with(monkeypatch, temp_db, addressed=()):
+    asked = []
+
+    def react(ctx, dr, name, *args, **kwargs):
+        asked.append(name)
+        return {"name": name, "room": "scullery", "action": "",
+                "dialogue_log_entry": {"speaker": name, "exact_quote": '"%s here."' % name},
+                "charter_act": None, "charter_offers": []}
+
+    cid = beat._chat(temp_db)
+    sc = {**beat.SC, "positions": {"Iris Vale": "scullery"}}
+    monkeypatch.setattr(background, "_react_one", react)
+    monkeypatch.setattr(background, "_player_room", lambda ctx, sc_: "scullery")
+    interp = dict(beat.TestTheDeclaredBeatIsWhatTheVoiceHears.INTERP)
+    interp["flow"] = {"addressed_to_refs": list(addressed)}
+    rows = [{"name": n, "room": "scullery"} for n in ("Cole", "Ada", "Bran", "Dell")]
+    out = background.declare_charter_figures(beat._ctx(cid), interp, sc, rows, [], 0)
+    return sorted(asked), out
+
+
+def test_bystanders_share_one_voice_a_beat(monkeypatch, temp_db):
+    asked, out = _asked_with(monkeypatch, temp_db)
+    assert asked == ["Ada"], "the top-ranked bystander alone is asked"
+    assert [d["bystander"] for d in out] == [True]
+    assert background._unaddressed_spent({"charter_declarations": out})
+
+
+def test_every_body_spoken_to_is_still_asked(monkeypatch, temp_db):
+    """The old refusal was addressed bodies declining; nothing here may touch
+    them."""
+    asked, out = _asked_with(monkeypatch, temp_db, addressed=("Cole", "Dell"))
+    assert asked == ["Ada", "Cole", "Dell"]
+    assert {d["name"]: d["bystander"] for d in out} == {
+        "Cole": False, "Dell": False, "Ada": True}
+
+
+def test_a_bystander_who_only_acted_has_not_spent_the_voice():
+    decl = {"bystander": True, "sequence": [{"type": "action", "attempt": "nods"}]}
+    assert not background._unaddressed_spent({"charter_declarations": [decl]})

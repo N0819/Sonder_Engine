@@ -636,6 +636,15 @@ def _background_react(ctx, nonce):
     cap = max(1, min(3, cap))  # hard ceiling; beyond this a crowd is a chorus
     demand = pick_voice_demand(ctx, dr, cap=cap)
     names = demand["picks"]
+    # ONE UNADDRESSED LINE A BEAT, shared with the bodies declared before
+    # resolve (`CHARTER_UNADDRESSED_VOICES`, the owner's number): when a
+    # bystander already spoke this beat, this stage voices no second one. A
+    # pick the beat addressed, or one owed a reply, is never dropped here.
+    if _unaddressed_spent(dr):
+        _need = demand.get("meta") or {}
+        names = [n for n in names
+                 if (_need.get(n) or {}).get("addressed")
+                 or "owed" in ((_need.get(n) or {}).get("why") or ())]
     # A presence the manager already voiced has been spoken for; asking again
     # would give them two lines in one beat and cost a call to do it.
     _voiced = {str(r.get("name") or "").casefold()
@@ -1892,6 +1901,31 @@ def _presence_label_fn(ctx, *presence_names):
 #: then the player's own room, then the rest of the aperture. An owner
 #: number, not a law.
 CHARTER_VOICES_PER_BEAT = 3
+#: Of those, how many may be bodies the beat did NOT address -- the owner's
+#: number, 2026-10-07: "Charter may be a little overly chatty. which is
+#: funny because it started off with a stubborn refusal to talk remedied
+#: through painful development." Asked, a figure almost always speaks (13 of
+#: 15 in scratch story 166, 11 of 12 in 165, 13 of 15 in each of 152-159),
+#: and every beat asked up to three of the bystanders standing in the beat's
+#: rooms whether anything concerned them or not: 10 of 166's 13 figure lines
+#: came from bodies nobody had addressed, and 4 of its 6 beats carried two
+#: or more. A body somebody spoke to, and a creature, is asked as before --
+#: the old refusal was addressed bodies declining, and nothing here touches
+#: them; the rest share this many asks a beat, highest ranked first, and the
+#: post-resolve reactor spends no second unaddressed line on top of it
+#: (`_unaddressed_spent`).
+CHARTER_UNADDRESSED_VOICES = 1
+
+
+def _unaddressed_spent(dr):
+    """Has this beat already spent its unaddressed voices: a body declared
+    before resolve as a bystander that said something."""
+    spoke = sum(
+        1 for d in (dr or {}).get("charter_declarations") or ()
+        if isinstance(d, dict) and d.get("bystander")
+        and any(isinstance(e, dict) and e.get("type") == "speech"
+                for e in d.get("sequence") or ()))
+    return spoke >= CHARTER_UNADDRESSED_VOICES
 
 
 def _provisional_beat(ctx, interp, decls, p_name):
@@ -2049,7 +2083,16 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
                for r in figure_rows if isinstance(r, dict)
                and r.get("charter") and r.get("body")}
     asks = []
-    for name in sorted(names, key=rank)[:CHARTER_VOICES_PER_BEAT]:
+    chosen, bystanders = [], set()
+    for name in sorted(names, key=rank):
+        if len(chosen) >= CHARTER_VOICES_PER_BEAT:
+            break
+        if name.casefold() not in addressed and name not in creatures:
+            if len(bystanders) >= CHARTER_UNADDRESSED_VOICES:
+                continue
+            bystanders.add(name)
+        chosen.append(name)
+    for name in chosen:
         # THE RECORD BY ITS PERMANENT IDENTITY FIRST. A ledger record minted
         # under another spelling (the opening Director's name for the body,
         # chat 5 turns 0-2) is the same body; found by name alone the voice
@@ -2111,6 +2154,10 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
         if not sequence:
             continue
         out.append({**entry, "char_id": None, "is_figure": True,
+                    # Asked as a bystander -- nobody addressed it -- so its
+                    # line spends the beat's unaddressed voice
+                    # (`_unaddressed_spent`).
+                    "bystander": _name in bystanders,
                     "sequence": assign_event_ids(
                         sequence, f"turn:{ctx.turn.id}:figure:{index}"),
                     "sensory_events": _creature_noise(

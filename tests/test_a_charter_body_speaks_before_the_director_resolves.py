@@ -251,14 +251,17 @@ class TestTheCapAsksTheCreature:
                 {"name": "Well Thing", "room": "yard", "creature": {"hunts": ["figure"]}}]
         background.declare_charter_figures(_ctx(cid), dict(
             TestTheDeclaredBeatIsWhatTheVoiceHears.INTERP), sc, rows, [], 0)
-        assert "Well Thing" in asked and len(asked) == background.CHARTER_VOICES_PER_BEAT
+        # The three strangers share one ask a beat since 2026-10-07
+        # (`CHARTER_UNADDRESSED_VOICES`); the creature is asked regardless.
+        assert "Well Thing" in asked
+        assert len(asked) == 1 + background.CHARTER_UNADDRESSED_VOICES
 
 
 class TestAVoiceIsForSomeoneTheBeatReaches:
     """Playerless Aldermill (2026-09-23): the cap filled with figures a room
     or two off, and 24 of their lines reached no view."""
 
-    def _asked(self, monkeypatch, temp_db, volume):
+    def _asked(self, monkeypatch, temp_db, volume, rows=None):
         cid = _chat(temp_db)
         sc = {**SC, "positions": {"Iris Vale": "scullery"}}
         asked = []
@@ -271,7 +274,8 @@ class TestAVoiceIsForSomeoneTheBeatReaches:
             if "speech" in (row.get("categories") or []):
                 row["volume"] = volume
                 row["targets"] = []
-        rows = [{"name": "Ada", "room": "scullery"}, {"name": "Bran", "room": "yard"}]
+        rows = rows or [{"name": "Ada", "room": "scullery"},
+                        {"name": "Bran", "room": "yard"}]
         background.declare_charter_figures(_ctx(cid), interp, sc, rows, [], 0)
         return asked
 
@@ -279,4 +283,9 @@ class TestAVoiceIsForSomeoneTheBeatReaches:
         assert self._asked(monkeypatch, temp_db, "normal") == ["Ada"]
 
     def test_a_shout_reaches_the_next_room(self, monkeypatch, temp_db):
-        assert sorted(self._asked(monkeypatch, temp_db, "shout")) == ["Ada", "Bran"]
+        """With nobody in the speaker's own room to take the beat's one
+        bystander voice (`CHARTER_UNADDRESSED_VOICES`), the man next door is
+        asked when the voice was raised, and not when it was not."""
+        yard = [{"name": "Bran", "room": "yard"}]
+        assert self._asked(monkeypatch, temp_db, "shout", rows=yard) == ["Bran"]
+        assert self._asked(monkeypatch, temp_db, "normal", rows=yard) == []
