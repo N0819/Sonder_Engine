@@ -513,10 +513,14 @@ about. A first or last meeting is read off the who-was-there tag (rows that
 name the person before their first tag are asked about, a meeting may be
 heard), a first hearing off the name, a place off `location`, each confirmed
 once against the question; anything else is WALKED -- the rows nearest the
-question in time order, a named person's or an asked-about place's own
-earliest (latest) rows held beside them, the first the model is sure of taken
-(`WALK_FLOOR` 0.8); just before / just after take the moment the model is
-surest of (a near tie to the earlier) and read the turns on the side asked.
+question in time order (within a story turn the moment itself before what
+the mind concluded about it, whichever way the walk runs), a named person's
+or an asked-about place's own earliest (latest) rows held beside them, the
+first `VERIFY_LIMIT` asked and the first the model is sure of taken
+(`WALK_FLOOR` 0.8) -- never a conclusion row, which is asked and kept with its
+turn; just before / just after take the moment the model is surest of (a
+near tie -- one moment told twice, within `TIE_REACH` turns -- to the
+earlier) and read the turns on the side asked.
 The moment comes back marked in the story's words (`in_time`) with
 `SPAN_TURNS` around it, before the graded picks, which always still come
 back. Measured on a planted 310-turn bank and the owner's character route

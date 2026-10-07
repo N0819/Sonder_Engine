@@ -55,7 +55,10 @@ def mind(temp_db, embeddings):
     return chat_id, char_id
 
 
-def _mint(mind, turn, content, *, about=(), location="", char_id=None, kind="episodic"):
+def _mint(mind, turn, content, *, about=(), location="", char_id=None, kind="episodic", key=None):
+    """One memory row. `key` tells apart rows that share a turn and kind -- a
+    seeded past is many rows at one pseudo-turn, and the event key is what
+    the write upserts on."""
     from mind.memory import add_memories_batch
     chat_id, own = mind
     who = char_id or own
@@ -63,8 +66,8 @@ def _mint(mind, turn, content, *, about=(), location="", char_id=None, kind="epi
         "chat_id": chat_id, "char_id": who, "turn_id": None, "turn_idx": turn, "kind": kind,
         "category": "episode" if kind == "episodic" else "inference",
         "provenance": "witnessed" if kind == "episodic" else "inferred", "salience": 0.6,
-        "content": content, "event_key": f"event:{who}:{turn}:{kind}", "about": list(about),
-        "location": location, "encoded_at_seconds": float(turn) * 600.0}])[0]
+        "content": content, "event_key": f"event:{who}:{turn}:{kind}{':' + key if key else ''}",
+        "about": list(about), "location": location, "encoded_at_seconds": float(turn) * 600.0}])[0]
 
 
 class Jev:
@@ -221,6 +224,130 @@ def test_the_last_time_seen_is_the_last_row_with_them_in_it_not_the_last_mention
     assert _turns(found) == [8], "the later row says his name and has him nowhere in it"
     assert found[0]["in_time"] == "the most recent moment I remember with Oren Dask"
     assert not any("No word from" in q["instructions"] for _s, _k, q in jev.asked("moment:"))
+
+
+def test_a_last_time_is_the_moment_not_what_was_concluded_from_it(mind, monkeypatch):
+    """"When did you last see Oren?" was marked on Mara's conclusion that he
+    meant never to come back -- written the same turn as the sighting, after
+    it -- in all three runs of 2026-10-06: newest first had reversed the turn's
+    own order too, and the conclusion carries the turn's tags."""
+    _mint(mind, 5, "Oren Dask handed me the lantern.", about=[OREN])
+    _mint(mind, 8, "Oren Dask lifted a hand from the stern of the Moth and went downriver.", about=[OREN])
+    _mint(mind, 8, "I concluded that Oren Dask means never to come back up the river.", about=[OREN],
+          kind="inference")
+    monkeypatch.setattr(decisions, "OVERRIDE", Jev({"order": "latest", "kind": "met", "who": OREN},
+                                                   yes=("Oren Dask",)))
+    found = _found(_ponder(mind, "When did you last see Oren?", about=[OREN], known=[OREN, WREN]))
+    assert len(found) == 1 and "stern of the Moth" in found[0]["content"]
+
+
+def test_a_walk_never_takes_a_conclusion_for_the_moment(mind, monkeypatch):
+    """"What were the last words you said to Oren?" walked newest first past
+    his departure (read under the floor) to Mara's conclusion that he was not
+    coming back (over it), and never reached the words themselves (2026-10-06,
+    every run): a conclusion row is asked and kept with its turn, never taken."""
+    _mint(mind, 12, "Oren Dask on the landing; I said keep your purse, Oren, my crossing is not for sale.",
+          about=[OREN])
+    _mint(mind, 20, "Oren Dask lifted a hand from the stern of the Moth and went downriver.", about=[OREN])
+    _mint(mind, 20, "I concluded that Oren Dask means never to come back up the river.", about=[OREN],
+          kind="inference")
+    monkeypatch.setattr(decisions, "OVERRIDE", Jev({"order": "latest", "kind": "act", "who": OREN},
+                                                   yes={"stern of the Moth": 0.75, "I concluded": 0.85,
+                                                        "my crossing is not for sale": 0.98}))
+    found = _found(_ponder(mind, "What were the last words you said to Oren?", about=[OREN], known=[OREN]))
+    assert _turns(found) == [12]
+
+
+def test_the_last_time_at_a_place_asks_about_the_visit_before_its_conclusion(mind, monkeypatch):
+    """"The last time you were inside the chapel" confirmed the conclusion
+    written after the right visit (0.01) and walked on to an older one
+    (2026-10-06): the visit itself is the row asked first."""
+    _mint(mind, 3, "I went up to the chapel to light a candle for Petra.", location="Chapel")
+    _mint(mind, 9, "In the vestry the sexton showed me the painted saint.", location="Chapel")
+    _mint(mind, 9, "I concluded the sexton knows more than he says.", location="Chapel", kind="inference")
+    # The visit reads between the confirmation's floor and the walk's, as the
+    # real one did (0.53-0.67): confirmed, it is found; refused, the walk
+    # passes it by for the older visit.
+    jev = Jev({"order": "latest", "kind": "place"}, yes={"painted saint": 0.7, "light a candle": 0.9})
+    monkeypatch.setattr(decisions, "OVERRIDE", jev)
+    found = _found(_ponder(mind, "When were you last at the Chapel?"))
+    asked = jev.asked("moment:")
+    assert "painted saint" in asked[0][2]["instructions"], "the visit, not the conclusion, is confirmed"
+    assert len(found) == 1 and "painted saint" in found[0]["content"]
+
+
+def test_a_last_time_in_a_seeded_past_is_its_newest_memory(mind, monkeypatch):
+    """A seeded past shares one pseudo-turn, its rows separate moments in the
+    order they were minted: newest first walks them newest-minted first
+    (review, 2026-10-06 -- a beat's own order had walked it oldest first)."""
+    _mint(mind, -1, "As children Ilse Harrow and I set eel traps in the side channels.", key="past:1")
+    _mint(mind, -1, "The winter Petra died, Ilse Harrow sat up with me at the wake.", key="past:2")
+    jev = Jev({"order": "latest", "kind": "met", "who": ILSE}, yes=("Ilse Harrow",))
+    monkeypatch.setattr(decisions, "OVERRIDE", jev)
+    found = _found(_ponder(mind, "When did you last see Ilse?", about=[ILSE], known=[ILSE]))
+    assert len(found) == 1 and "wake" in found[0]["content"]
+
+
+def test_a_seeded_memory_never_ties_a_story_moment(mind, monkeypatch):
+    """A seeded row sits at turn -1, three turns from turn 2 by arithmetic and
+    no moment of the story's at all: it ties nothing but itself."""
+    _mint(mind, -1, "Long ago the old mill burned once before, when I was a girl.")
+    _mint(mind, 2, "In the night the old mill burned and I dragged sacks out of the smoke.")
+    _mint(mind, 3, "At dawn Bram's burned hands were bound.")
+    monkeypatch.setattr(decisions, "OVERRIDE", Jev({"order": "after", "kind": "act"},
+                                                   yes={"burned once before": 0.94, "dragged sacks": 0.97}))
+    assert _turns(_found(_ponder(mind, "What happened right after the mill fire?"))) == [2]
+
+
+def test_a_walk_is_cut_by_time_so_a_plain_first_time_is_kept(temp_db, monkeypatch):
+    """"The first time you lied to Ilse" lost the lie itself -- a plain row,
+    ranked below thirty later rows that say it outright -- when the walk was
+    cut to the nearest 24 instead of the first 24 in time (measured
+    2026-10-06, every run). The cut by time stays; what it costs (a first
+    time late in the story) is in `docs/UNBUILT_CHARACTERS.md`."""
+    from mind.memory import VERIFY_LIMIT, answer
+    mems = {}
+
+    def row(mid, turn, text):
+        mems[mid] = {"id": mid, "turn_idx": turn, "content": text, "kind": "episodic",
+                     "encoded_at_seconds": float(turn) * 600.0, "about": [], "location": ""}
+    for i, t in enumerate(range(1, 10)):
+        row(100 + i, t, f"Rain on the landing, day {t}.")
+    row(200, 20, "The heel of the loaf was gone from the shelf.")
+    for i, t in enumerate(range(30, 60)):
+        row(300 + i, t, f"Bread went missing off the shelf again, day {t}.")
+    nearest = [300 + i for i in range(30)] + [200] + [100 + i for i in range(9)]
+    monkeypatch.setattr(decisions, "OVERRIDE", Jev(yes={"heel of the loaf": 0.9, "Bread went missing": 0.9}))
+    record = {}
+    found = answer({"order": "earliest", "kind": "act", "who": None},
+                      "When did bread first start going missing off your shelf?",
+                      memories=mems, vectors={}, lanes={"semantic": nearest, "cue": nearest, "keyword": nearest},
+                      embedded=None, known=(), places=[], current_turn_idx=70, record=record)
+    assert found and found[0]["turn_idx"] == 20 and found[0].get("in_time")
+    asked = record["asked_turns"][0]
+    assert len(asked) == VERIFY_LIMIT and asked == sorted(asked) and 20 in asked
+
+
+def test_a_last_act_at_a_named_place_keeps_the_turns_own_order(temp_db, monkeypatch):
+    """The place walk's "ahead" compared rows oldest first, so for a last time
+    a row written later in the same turn (here what the mind noted about
+    itself, written after the moment) counted as ahead of the moment and won
+    (review, 2026-10-06): ahead is read in the walk's own order."""
+    from mind.memory import answer
+    mems = {}
+
+    def row(mid, turn, text, kind="episodic"):
+        mems[mid] = {"id": mid, "turn_idx": turn, "content": text, "kind": kind,
+                     "encoded_at_seconds": float(turn) * 600.0, "about": [], "location": "Chapel"}
+    row(1, 3, "I lit a candle for Petra at the Chapel.")
+    row(2, 9, "In the Chapel I knelt and prayed for Ilse.")
+    row(3, 9, "I noted that prayer in the Chapel steadies me.")
+    nearest = [3, 1]    # the walk over everything never meets the moment itself
+    monkeypatch.setattr(decisions, "OVERRIDE", Jev(yes={"knelt and prayed": 0.9, "prayer in the Chapel": 0.9}))
+    found = answer({"order": "latest", "kind": "act", "who": None}, "When did you last pray at the Chapel?",
+                   memories=mems, vectors={}, lanes={"semantic": nearest, "cue": nearest, "keyword": nearest},
+                   embedded=None, known=(), places=["Chapel"], current_turn_idx=20)
+    assert found and found[0]["id"] == 2 and found[0].get("in_time")
 
 
 def test_first_heard_of_is_the_first_row_that_says_the_name(mind, monkeypatch):
@@ -449,6 +576,36 @@ def test_a_near_tie_for_the_moment_goes_to_the_earlier(mind, monkeypatch):
                                                    yes={"mill burned": 0.92, "mill fire": 0.93}))
     rows = _ponder(mind, "What happened right after the mill fire?")
     assert _turns(_found(rows)) == [30] and {31, 32} <= set(_turns(rows))
+
+
+def test_a_near_tie_reaches_the_three_turns_between_the_fire_and_the_dawn(mind, monkeypatch):
+    """The mill fire (turn 140) and the dawn after it (143) stand three turns
+    apart on the Saltmere bank, and the dawn reads a little surer in 8 of 13
+    captured decisions: `TIE_REACH` is 3, its own number, so a smaller packet
+    span cannot move which moment is found (review, 2026-10-06)."""
+    _mint(mind, 30, "In the night the old mill burned and I dragged sacks out of the smoke.")
+    _mint(mind, 33, "At dawn the town gathered at the landing talking of the mill fire.")
+    for t, text in ((34, "Bram's burned hands were bound."), (35, "The sexton said it was set.")):
+        _mint(mind, t, text)
+    monkeypatch.setattr(decisions, "OVERRIDE", Jev({"order": "after", "kind": "act"},
+                                                   yes={"mill burned": 0.92, "talking of the mill fire": 0.93}))
+    rows = _ponder(mind, "What happened right after the mill fire?")
+    assert _turns(_found(rows)) == [30] and {33, 34} <= set(_turns(rows))
+
+
+def test_a_near_tie_is_one_moment_told_twice_never_a_moment_long_before(mind, monkeypatch):
+    """"Right after you and Bram carried Ilse's chest up to the chapel house"
+    read the carrying 0.97 and the mill-fire night, 128 turns earlier, 0.94
+    (2026-10-06, every run): within `NEAR_TIE`, and nothing like one moment.
+    A tie reaches `SPAN_TURNS` turns, so the surest stands."""
+    _mint(mind, 5, "In the night the old mill burned and we carried Ilse across to the chapel.")
+    _mint(mind, 40, "Bram and I carried Ilse's chest up the hill to the chapel house.")
+    for t, text in ((41, "Ilse unpacked her mother's quilt."), (42, "The sexton brought soup.")):
+        _mint(mind, t, text)
+    monkeypatch.setattr(decisions, "OVERRIDE", Jev({"order": "after", "kind": "act"},
+                                                   yes={"old mill burned": 0.94, "carried Ilse's chest": 0.97}))
+    rows = _ponder(mind, "What happened right after you carried Ilse's chest up to the chapel house?")
+    assert _turns(_found(rows)) == [40] and {41, 42} <= set(_turns(rows))
 
 
 def test_the_moment_before_or_after_is_the_surest_not_the_first_likely(mind, monkeypatch):

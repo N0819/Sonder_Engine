@@ -21,9 +21,12 @@ probability (a `noul`) or a position (a `score`).
 
 - **Teacher** -- what the decision model the engine runs today answered, in
   Jev's own answer shape. Every question the engine asks of the same state is
-  averaged over the times it was asked, with the count (`teacher.n`); Jev
-  repeats agree to about ±0.03, so a count above one is a calmer target than
-  any single answer. Teacher answers are only as right as Jev: they teach a
+  averaged over the times it was asked, with the count (`teacher.n`). Jev's
+  repeats of one question about one memory (measured 2026-10-06 over up to
+  four runs: 1,024 moment checks, 312 anchor checks) spread 0.02 and 0.05 at
+  the median, 0.09 and 0.10 for one in ten, and up to 0.26 and 0.32 -- enough
+  to carry an answer across a floor -- so a count above one is a calmer target
+  than any single answer. Teacher answers are only as right as Jev: they teach a
   model to be Jev, mistakes included.
 - **Gold** -- the option that is right, known without any model. Few, and the
   only evidence that a model is *better* than Jev rather than like it.
@@ -108,9 +111,14 @@ question that plainly names someone ("how long have you known Ilse?"). A
 ruling is keyed by example id, so it applies only to the exact wording it was
 made on.
 
-**How good the teacher is, where gold says.** On the moment checks Jev agrees
-with gold on 379 of 413 (`memory_moment`, 92%), 37 of 37 (`memory_heard`), 10
-of 13 (`memory_anchor`); on the router examples it was asked, 59 of 63.
+**How good the teacher is, where gold says.** At its most likely answer Jev
+agrees with gold on 379 of 413 moment checks (`memory_moment`, 92%), 37 of 37
+(`memory_heard`), 10 of 13 (`memory_anchor`); on the router examples it was
+asked, 59 of 63. But the engine never acts at 0.5: at a walk's floor (0.8)
+the 413 moment checks hold 8 false yeses and 4 false noes, at a
+confirmation's (0.6) 22 and 1 -- score a model, or a wording, at the floors
+the engine uses. The 13 `memory_anchor` gold rows are all yes, so they cannot
+see a false yes at all.
 
 ## Building the file
 

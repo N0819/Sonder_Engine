@@ -1342,25 +1342,55 @@ reach it: the experiment's §6.)
   meeting, hearing of, being somewhere, or what came just before or after
   runs beside the graded ponder, the moment marked (`in_time`)
   ([`experiments/CHRONO_RECALL_2026_10_06.md`](experiments/CHRONO_RECALL_2026_10_06.md)).
-  Still open -- the first four measured on 82 questions, three runs a side
-  (§8: ten questions marked wrong in every run, eight of them with the right
-  row still in the packet, so a mind is pointed away from what it holds):
-  - **The moment a just before / just after hangs on** (5 of 15 such
-    questions): the moment is the row the model is surest of among the 24
-    nearest the question, and a lookalike wins when the moment's own row is
-    not the most distinctive -- a later night scene of Tobin above the night he
-    was found, the first rainy crossing above the storm night, the mill-fire
-    night above the chest carried to the chapel house, turn 166 above Oren's
-    leaving, and the night before the frost above the frost.
+  Still open -- measured on 82 questions, three runs a side (§8: ten
+  questions marked wrong in every run, eight of them with the right row still
+  in the packet, so a mind is pointed away from what it holds); §11 fixed two
+  code causes and re-read the rest from the search's own records:
+  - **Just before / just after: the moment the question counts from.** The
+    decision model reads the stretch of time a question asks about ("the
+    morning after the storm", "the night before the first frost", "the
+    evening before Oren left") as the moment, and refuses the event it counts
+    from -- three of the five stable wrong anchors, and all three of
+    `memory_anchor`'s gold misses, each ruled 3-0 by blind judges. A wording
+    to try (English and Japanese), and the mark's label should share its
+    term. A fourth, the night Tobin was found, loses to a later night scene
+    the model is surer of (0.92 against 0.62-0.70). (The fifth, a near tie
+    reaching 128 turns back, is fixed: §11.)
+  - **A first time late in the story** (§11): a walk asks the first
+    `VERIFY_LIMIT` of its candidates in time order, so "when did you first
+    hear about the Moth?" never reaches the rows that name the barge. Asking
+    every candidate found it (0.99, every run) and walked past unsure answers
+    into false ones -- a river serpent there is none of at 0.83-0.87, a night
+    run 180 turns early -- two wrong marks for one right; cutting to the
+    nearest lost a plain first time ranked below later rows that say it
+    outright. Open: a reach that does not walk into the noise at the floor.
+  - **A near tie measured in turns** (§11): one moment told twice may tie
+    within `TIE_REACH` (3) of the STORY's turns. A mind with no rows across
+    beats it was not there for can retell one moment further off than that,
+    and a much later retelling read a little surer than the moment wins
+    outright -- neither yet seen on the bench, both told apart by the story's
+    clock, which wants a window only the owner can name.
+  - **The floors, not the reading.** At the walk's 0.8 the moment check makes
+    8 false yeses and 4 false noes of 413 gold checks; at the confirmation's
+    0.6, 22 and 1 -- and it ranks a planted moment above its question's
+    non-moments almost always, so the headroom is where the line is drawn,
+    not what the model sees. A wording judged by agreement at 0.5 measures
+    neither.
   - **A question that names one person to ask about another, or about a time
     before the story**: "when did you meet Tobin's mother?" routes to Tobin
     and marks his first meeting, answering a question nothing answers; "how
     far back do you and Aldous go?" marks his first scene in the story where
     the answer is the seeded past.
-  - **Which place**: "the chapel of the Drowned Saint itself, not Ilse's
-    chapel house" marks the wrong chapel; "when were you last up in the loft
-    yourself?" routes as an act with Tobin and marks a night he comes down
-    the ladder.
+  - **Which place**: the line a check reads carries who was in a memory but
+    not where, so a visit whose prose never names the place reads low -- "the
+    last time you were inside the chapel of the Drowned Saint" reads the right
+    visit at 0.53-0.67 since §11 (its prose says "vestry"), over the
+    confirmation's floor in 7 of 12 runs. And a place is named only by all its words: "when were you
+    last up in the loft yourself?" never names "Boathouse loft", so it walks
+    as an act with Tobin and marks a night he comes down the ladder. Open:
+    the row's own place on the line for place questions; a place the model
+    chooses the way it chooses a person (rooms inside rooms are not stored --
+    the owner's call).
   - **Not the presentation** (tested 2026-10-06,
     [`experiments/CHRONO_RECALL_2026_10_06.md`](experiments/CHRONO_RECALL_2026_10_06.md)
     §10): the found moment and its turns gathered into one

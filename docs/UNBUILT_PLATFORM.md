@@ -547,8 +547,9 @@ directly addresses the "coming back after a week" experience.
 The owner, 2026-10-06: "The best option would probably be to finetune a small
 decision model maybe 4 or 9b parameters specifically for sonder. but for now
 using jev is fine." Every decision-model call goes to OpenRouter today, so its
-credit bounds how much can be measured, and Jev's own run-to-run noise (about
-±0.03) flips near ties.
+credit bounds how much can be measured, and Jev's own run-to-run noise (a
+spread of 0.02-0.05 at the median for one memory, up to 0.32) flips near
+ties.
 
 Built: the training data (`docs/guides/DECISION_TRAINING_DATA.md`) -- capture
 of every answered request while `decision_capture` is on, and

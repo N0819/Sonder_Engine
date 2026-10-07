@@ -78,7 +78,7 @@
 | `mind/memory_read.py` | 471 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_relationships.py` | 457 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_retrieval.py` | 1248 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
-| `mind/memory_routes.py` | 576 |  | `core.db` |
+| `mind/memory_routes.py` | 670 |  | `core.db` |
 | `mind/memory_snapshot.py` | 1005 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_write` |
 | `mind/memory_summaries.py` | 765 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_time.py` | 350 |  | `core.db` |
@@ -1049,14 +1049,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `answer()` | 365 | 176 lines |
-| `route_questions()` | 155 | 35 lines |
-| `_subject_lane()` | 282 | 24 lines |
-| `routed_ponder()` | 556 | 21 lines |
-| `read_route()` | 197 | 17 lines |
-| `_yes_shares()` | 308 | 17 lines |
-| `names_place()` | 125 | 16 lines |
-| `_span()` | 349 | 14 lines |
+| `answer()` | 433 | 202 lines |
+| `route_questions()` | 166 | 35 lines |
+| `_order_key()` | 254 | 31 lines |
+| `_subject_lane()` | 326 | 24 lines |
+| `_surest()` | 393 | 22 lines |
+| `routed_ponder()` | 650 | 21 lines |
+| `read_route()` | 208 | 17 lines |
+| `_yes_shares()` | 352 | 17 lines |
 
 ### `mind/memory_snapshot.py`
 

@@ -19,6 +19,7 @@ other stories, for the router alone.
     ENGINE_DB=<a copy> python tools/chrono_bench/run.py character A|B|C|D out.jsonl [Q01,...]
     ENGINE_DB=... python tools/chrono_bench/run.py router [router_heldout.json] out.json
     python tools/chrono_bench/run.py score on.jsonl[,on2.jsonl...] off.jsonl[,off2.jsonl...]
+    python tools/chrono_bench/run.py marks before.jsonl[,...] after.jsonl[,...]   # routed vs routed
 
 Providers and settings are copied read-only from the install's own database
 (the main checkout's `engine.db`, found from any worktree), the owner's
@@ -48,6 +49,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -391,10 +393,62 @@ def score(on_paths, off_paths):
     return out
 
 
+def marks(before_paths, after_paths):
+    """Two sets of routed runs (routing on both), question by question: each
+    run's mark -- right, wrong or none -- and whether the planted answer reached
+    the packet, then each question's majority across its runs, before against
+    after. For a change to the search itself, where `score`'s on/off comparison
+    cannot see a mark move. A mark is right when it is the planted turn, or the
+    moment itself for just before / just after."""
+    def load(p):
+        return {r["id"]: r for r in (json.loads(x) for x in open(p, encoding="utf-8"))}
+
+    def turn(ref):
+        m = re.match(r"saltmere:(\d+):", str(ref or ""))
+        return int(m.group(1)) if m else ("past" if str(ref or "").startswith("saltmere:past") else None)
+
+    def mark(rec, q):
+        got = [turn(r) for r, _ in (rec or {}).get("marked") or []]
+        if not got:
+            return "none"
+        right = [q["moment_turn"]] if q.get("moment_turn") is not None else q["answer_turns"]
+        return "right" if any(g in right for g in got) else "wrong"
+
+    def reached(rec, q):
+        got = {turn(x) for refs in ((rec or {}).get("refs") or {}).values() for x in refs}
+        return any(w in got for w in q["answer_turns"])
+
+    sides = {"before": [load(p) for p in str(before_paths).split(",") if p],
+             "after": [load(p) for p in str(after_paths).split(",") if p]}
+    asked = set.intersection(*(set(r) for runs in sides.values() for r in runs))
+    out = {"runs": {}, "majority": {}, "changed": []}
+    for side, runs in sides.items():
+        out["runs"][side] = [dict(Counter(mark(r.get(qid), QUESTIONS[qid]) for qid in asked)) for r in runs]
+    majority = {}
+    for side, runs in sides.items():
+        for qid in asked:
+            q = QUESTIONS[qid]
+            got = Counter(mark(r.get(qid), q) for r in runs).most_common(1)[0][0]
+            hit = sum(reached(r.get(qid), q) for r in runs) * 2 > len(runs) if q["answer_turns"] else None
+            majority[(side, qid)] = (got, hit)
+    for side in sides:
+        out["majority"][side] = dict(Counter(majority[(side, qid)][0] for qid in asked))
+        out["majority"][side]["answer_reached"] = sum(1 for qid in asked if majority[(side, qid)][1])
+    for qid in sorted(asked):
+        if majority[("before", qid)] != majority[("after", qid)]:
+            out["changed"].append({"id": qid, "before": majority[("before", qid)],
+                                   "after": majority[("after", qid)], "question": QUESTIONS[qid]["en"]})
+    print(json.dumps(out, indent=1))
+    return out
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "score":
         score(sys.argv[2], sys.argv[3])
+        sys.exit(0)
+    if cmd == "marks":
+        marks(sys.argv[2], sys.argv[3])
         sys.exit(0)
     from tools.bubble_drive import _require_scratch
     _require_scratch(os.environ.get("ENGINE_DB"))

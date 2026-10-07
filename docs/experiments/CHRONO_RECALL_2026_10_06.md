@@ -99,8 +99,9 @@ noise, not a rule: "what did you do right after Tobin told you about the
 grain?" read the confession 0.97 and an earlier scene of his at the granary
 0.91 on one asking, and close enough on the next to tie -- and a tie goes to
 the earlier (the rule that keeps "right after the mill fire" on the fire,
-0.92 against the dawn after it at 0.93). Its repeats agree to about +-0.03;
-the two rules cannot both hold where the model itself cannot tell.
+0.92 against the dawn after it at 0.93). Its repeats of one anchor check
+spread 0.05 at the median and 0.10 for one in ten (measured later, §11); the
+two rules cannot both hold where the model itself cannot tell.
 
 Each change answered a measured miss: "Oren's very first words" (the meeting
 was not among the 40 Oren rows nearest the question -- every one a later "I
@@ -241,8 +242,9 @@ model's sampling -- retrieval -- on three times the questions:
   across its three runs, 8 questions had the planted answer only with routing
   and none only without: exact McNemar p = 0.008. The runs agreed with each
   other on every question but one (Q14, one run in three), so the decision
-  model's own variation (about ±0.03 a memory) barely moves retrieval: the
-  noise in §6 was the character's and the sample's, not Jev's.
+  model's own variation (a spread of 0.02 at the median for one memory, §11)
+  barely moves which rows reach the packet: the noise in §6 was the
+  character's and the sample's, not Jev's.
 - **The marks are where the harm is.** Ten questions are marked wrong in
   every run (one more, "the last words you said to Oren", in two of three).
   Nine of the ten have an answer, and in eight of those the planted row is
@@ -375,3 +377,84 @@ So the presentation stays as it is, and the work goes upstream, to the
 classes in `docs/UNBUILT_CHARACTERS.md`. The one thing presentation still
 owes is honesty: the label promises "beside it" where the layout does not
 deliver it.
+
+## 11. Upstream: two code causes fixed, one cut kept
+
+A first diagnosis of the misses read only what reached the packet, and three
+independent critics -- the owner's rulings, measurement, code feasibility --
+re-read them from the search's own records (each request's per-row shares,
+in the captured decisions): several "never in the pool" misses had been
+asked and scored just under a floor, and two wrong marks came from code, not
+the model. The owner: "Go ahead" on the three code causes. The changes then
+went to three adversarial reviewers with a skeptic per finding, who found a
+regression of the change's own and three gaps; all are in what follows.
+
+- **A near tie reached any distance.** `_surest` gave a tie (within
+  `NEAR_TIE` 0.05) to the earlier row however far back it was: "what happened
+  right after you and Bram carried Ilse's chest up to the chapel house?" read
+  the carrying 0.96-0.97 and lost to the mill-fire night 128 turns earlier at
+  0.94. A tie is one moment told twice, so it now reaches `TIE_REACH` (3)
+  turns -- its own number, because the fire and the dawn after it stand
+  exactly three apart and the dawn reads a little surer in 8 of 13 decisions,
+  so tying the reach to the packet's span would let a smaller span move the
+  answer. Replayed on all 173 captured anchor decisions: a reach of 3 right
+  on 119, of 1 or 2 on 111, of 4 to 6 on 118; "what did you do right after
+  Tobin told you about the grain?" right in 12 of 13 against 6. What it
+  costs, never yet seen: a much later retelling read a little surer than the
+  moment now wins outright.
+- **Last times landed on what the mind concluded.** A last time walks newest
+  first, and reversing the whole order put a turn's conclusion ahead of the
+  moment it was drawn from: "when did you last see Oren?" was marked on
+  Mara's conclusion that he would not come back (confirmed 0.78) in every
+  run; "the last time you were inside the chapel" confirmed the right visit's
+  conclusion (0.01) and walked on to an older visit. Now the newest TURN comes
+  first and within it the beat's own order, the moment before what was
+  concluded -- a seeded past, many separate moments at one pseudo-turn, still
+  newest-minted first (the reviewers caught the change walking it oldest
+  first) -- the place walk's "ahead" reads the same order, and a walk never
+  takes a conclusion row for the moment: "what were the last words you said
+  to Oren?" walked past his departure (0.72-0.78, under the floor) to the
+  conclusion about it (0.81-0.88) in every run and never reached the words at
+  0.98.
+- **The walk's cut** -- tried three ways, and the old one kept. A walk takes
+  the first `VERIFY_LIMIT` (24) of its candidates in time order, so a first
+  time late in the story is never reached ("when did you first hear about the
+  Moth?": turns 27-208 asked, the barge named from 288). Cut to the nearest
+  instead: the Moth found, and the first lie to Ilse lost -- a plain row
+  ranked below later ones that say it outright -- in every run. Every
+  candidate asked (up to 52, about 7,000 more tokens a walk): the Moth found
+  at 0.99 in all three runs, and two false marks from rows only that
+  version asks -- the river serpent, which never appears, at 0.83-0.87, and
+  "your last night run for Oren" 180 turns early. Two wrong marks for one
+  right, and a wrong mark is the harm (§8), so the time cut stays, with a test
+  that fails under either other cut. The late first is open in
+  `UNBUILT_CHARACTERS.md`.
+
+Three retrieval runs of the code as committed (all but the seeded-order
+correction, which no bench question reaches) against §8's three,
+`tools/chrono_bench/run.py marks`, each question by its majority:
+
+| | right | wrong | none | answer in the packet |
+|---|---|---|---|---|
+| §8 | 46 | 11 | 25 | 73 |
+| committed | 49 | 10 | 23 | 74 |
+
+- **What the fixes did**: the chest carried to the chapel house marked right
+  in 11 of the 12 runs made with the tie's reach (the twelfth read the
+  mill-fire night itself surest); the last words to Oren found in 2 of 3;
+  Oren's last sighting marked on the sighting (0.98) instead of the
+  conclusion (0.78) in every run, a change the turn-level score cannot see.
+  The last chapel visit's confirmation now reads the visit, at 0.53-0.67
+  across twelve identical requests -- over `VERIFY_FLOOR` in 7, so right in 7
+  -- because its prose never says "chapel" (open, "which place").
+- **What moved by itself**: questions whose deciding row sits at the walk's
+  floor -- the first missing bread, "how long have you known Ilse?", the
+  first curfew load for Oren -- gained or lost a mark from run to run, the
+  same rows reading 0.72-0.83 across identical requests. Jev's repeats of one
+  memory spread 0.02 at the median for a moment check, 0.05 for an anchor
+  check, 0.09-0.10 for one in ten and up to 0.32
+  (`docs/guides/DECISION_TRAINING_DATA.md`); a question decided at a floor is
+  decided by that spread.
+- **Cost**: twelve retrieval runs of 82 questions -- three each for the two
+  rejected cuts, the first fixes, and the code as committed -- 3,927 decision
+  requests, about 35M input tokens, about $1.50; the replays nothing.

@@ -35,15 +35,15 @@ THE SEARCHES, each over the rows the ponder's own net already read
   the person asking it), and the question is walked as an ACT.
 - ACT -- the rows nearest the question (by meaning and by words; within the
   person's own rows when it is about one, or the place's when it names one,
-  holding their earliest or latest `RESERVE` beside the nearest), put in time
-  order and asked, in one request of at most `VERIFY_LIMIT`, whether the
-  moment happens in each; the answer is the first row the model is sure of
-  (`WALK_FLOOR`). A place the question names but does not ask about being at
+  holding their earliest or latest `RESERVE` beside the nearest `POOL`), put
+  in time order and asked, in one request of at most `VERIFY_LIMIT`, whether
+  the moment happens in each; the answer is the first row the model is sure
+  of (`WALK_FLOOR`). A place the question names but does not ask about being at
   narrows nothing; one it asks an act at is walked too, and wins when the
   model is about as sure of its own moment.
 - JUST BEFORE / JUST AFTER -- the row the model is surest shows the moment
-  the question names, among the nearest; code reads the turns on the side
-  asked.
+  the question names, among the `VERIFY_LIMIT` nearest (a near tie, one moment
+  told twice, to the earlier); code reads the turns on the side asked.
 
 What comes back is the moment and the turns around it (`SPAN_TURNS`), the
 moment marked (`in_time`, in the story's words: "the earliest moment I
@@ -68,11 +68,12 @@ KINDS = ("met", "heard_of", "place", "act")
 #: the three on the side asked for just before / just after. Mine, named to
 #: the owner, unruled.
 SPAN_TURNS = 3
-#: Rows a verified walk asks about, in one request: its whole reach. Mine,
-#: named, unruled.
+#: Rows a verified search asks about, in one request: its whole reach. A walk
+#: takes the first this many of its candidates in time order. Mine, named,
+#: unruled.
 VERIFY_LIMIT = 24
 #: The rows nearest the question an ACT or JUST BEFORE / AFTER search draws
-#: on. Mine, named, unruled.
+#: its candidates from. Mine, named, unruled.
 POOL = 40
 #: The person's or the place's own earliest (or latest) rows a first- or
 #: last-time walk always holds beside the nearest ones. "Her very first words"
@@ -96,9 +97,19 @@ VERIFY_FLOOR = 0.6
 WALK_FLOOR = 0.8
 #: Moments the model is this nearly as sure of are a tie, and a tie goes to
 #: the earlier: "right after the mill fire" read the dawn after it 0.93 and
-#: the fire 0.92 (its repeats agree to about +-0.03); Tobin's confession 0.97
-#: against an earlier scene of his at the granary 0.91, which stays apart.
+#: the fire 0.92; Tobin's confession 0.97 against an earlier scene of his at
+#: the granary 0.91, which stays apart. A tie is ONE moment told twice, so
+#: only rows within `TIE_REACH` turns of the surest can tie it (`_surest`).
+#: Mine, named, unruled.
 NEAR_TIE = 0.05
+#: How many turns apart two rows can be and still be one moment told twice.
+#: Replayed on 173 captured anchor decisions (2026-10-06): a reach of 3 took
+#: 119 right, 1 or 2 took 111 (the mill fire and the dawn after it stand 3
+#: turns apart, and the dawn reads a little surer in 8 of 13), 4 to 6 took
+#: 118. Its own number, not `SPAN_TURNS` -- that one is how much a packet
+#: brings back, and changing it must not move which moment is found. Mine,
+#: named to the owner.
+TIE_REACH = 3
 #: How much of a memory a verification question carries. The ponder's grade
 #: reads 500 characters (`memory_jev.MEMORY_CHARS`); a one-memory turn runs
 #: ~950 at the median and ~1,800 at p90, and "What I did" comes after "What I
@@ -240,9 +251,42 @@ def route_soon(query, *, asker=None, people=(), language=None):
 
 # --- what a row is -------------------------------------------------------------------------
 
-def _order_key(mem):
+def _order_key(mem, newest_first=False):
+    """A row's place in time: oldest first, or with `newest_first` the newest
+    TURN first. An undated row counts as the oldest -- first oldest-first, last
+    newest-first; a first meeting's check asks an undated row that names the
+    person because it sorts first.
+
+    WITHIN ONE TURN THE BEAT'S OWN ORDER HOLDS, whichever way the search
+    walks: the moment itself, then what the mind concluded about it (a
+    `kind` "inference" row, which the commit writes after the turn's episode).
+    Reversing the whole order put the conclusion first, so a last time landed
+    on it: "when did you last see Oren?" was marked on Mara's conclusion that
+    he was not coming back, not on the sighting it was drawn from, in all three
+    runs of 2026-10-06's replication; and "the last time you were inside the
+    chapel" confirmed the conclusion row of the right visit (0.01) and walked
+    on to the wrong one.
+
+    ONLY A STORY BEAT HAS AN ORDER OF ITS OWN. A seeded past shares one
+    pseudo-turn (`PRESTORY_TURN_IDX`) whose rows are separate moments in the
+    order they were minted -- `_span` reads them so -- and newest first walks
+    them newest-minted first, as any time (review, 2026-10-06: the beat's rule
+    had walked a whole seeded past oldest first for a last time)."""
     turn = mem.get("turn_idx")
-    return (turn if turn is not None else -10 ** 9, mem.get("encoded_at_seconds") or 0.0, mem.get("id") or 0)
+    when = mem.get("encoded_at_seconds") or 0.0
+    written = mem.get("id") or 0
+    if isinstance(turn, int) and turn >= 0:
+        within = (mem.get("kind") == "inference", written)
+    else:
+        within = (False, -written if newest_first else written)
+    if newest_first:
+        return (turn is None, -(turn if turn is not None else 0), -when) + within
+    return (turn if turn is not None else -10 ** 9, when) + within
+
+
+def _in_time(mems, newest_first=False):
+    """`mems` in time order (`_order_key`)."""
+    return sorted(mems, key=lambda m: _order_key(m, newest_first))
 
 
 def _text_of(mem):
@@ -334,14 +378,38 @@ def _first_sure(rows, shares, floor=None):
     return next((row for row, p in zip(rows, shares) if p >= floor), None)
 
 
+def _near(row, other):
+    """Both rows in the story's turns, `TIE_REACH` or fewer apart -- the
+    STORY's turns, not this mind's own as `_span` counts them: a mind with no
+    rows between two moments a month apart must not read them as one (the
+    chest and the mill fire, below). The reverse -- one moment retold after
+    beats the mind was not there for -- is open: story time would tell both
+    apart, with a window the owner has not named (`UNBUILT_CHARACTERS.md`)."""
+    a, b = row.get("turn_idx"), other.get("turn_idx")
+    return (isinstance(a, int) and isinstance(b, int) and a >= 0 and b >= 0
+            and abs(a - b) <= TIE_REACH)
+
+
 def _surest(rows, shares):
     """`(row, share)` for the row the model is surest shows the moment -- the
-    earliest of those within `NEAR_TIE` of the surest; `(None, 0.0)` when it
-    is sure of none."""
+    earliest of those within `NEAR_TIE` of it that stand within `TIE_REACH`
+    turns of it (`_near`); `(None, 0.0)` when it is sure of none.
+
+    A TIE IS ONE MOMENT TOLD TWICE, never two moments. The rule was made for
+    the fire and the dawn after it, three turns apart; with no reach it handed
+    "right after you carried Ilse's chest up to the chapel house" (0.97) to the
+    mill-fire night 128 turns earlier (0.94), in every run of 2026-10-06's
+    replication. Replayed on the 52 captured anchor decisions, the reach took
+    the right moments from 31 to 35 and the wrong from 21 to 17, and moved no
+    right one. A seeded or undated row ties nothing but itself; rows the model
+    reads exactly alike at the top go to the earlier, as before (one or two
+    decimals make that common)."""
     if not rows or max(shares) < VERIFY_FLOOR:
         return None, 0.0
     top = max(shares)
-    tied = [i for i in range(len(rows)) if shares[i] >= top - NEAR_TIE]
+    surest = min((i for i in range(len(rows)) if shares[i] == top), key=lambda i: _order_key(rows[i]))
+    tied = [i for i in range(len(rows))
+            if shares[i] >= top - NEAR_TIE and (i == surest or _near(rows[i], rows[surest]))]
     best = min(tied, key=lambda i: _order_key(rows[i]))
     return rows[best], shares[best]
 
@@ -376,7 +444,7 @@ def answer(route, query, *, memories, vectors, lanes, embedded, known, places,
     place = max(named, key=len) if named else None
     state = question_state(query, asker)
     walk_back = order == "latest"
-    rows = sorted(memories.values(), key=_order_key, reverse=walk_back)
+    rows = _in_time(memories.values(), newest_first=walk_back)
     first_or_last = order in ("earliest", "latest")
     anchor, how = None, ""
 
@@ -469,12 +537,36 @@ def answer(route, query, *, memories, vectors, lanes, embedded, known, places,
             return ranked or sorted(among)
 
         def walk(subject):
+            # THE HELD ROWS AND THE `POOL` NEAREST, IN TIME ORDER, CUT TO THE
+            # FIRST `VERIFY_LIMIT`. Every cut drops a kind of answer, and this
+            # one drops the least that matters (measured 2026-10-06, three runs
+            # each on the Saltmere bench): it never reaches a first time late in
+            # the story ("when did you first hear about the Moth?" asked turns
+            # 27-208 while the rows naming the barge, 288 on, waited outside).
+            # Cutting by nearness instead lost a plain first time that ranks
+            # below later rows saying it outright (the lie to Ilse at 96, every
+            # run); asking every candidate found the Moth but walked on past
+            # unsure answers into false ones -- "when did you first see the river
+            # serpent?" (there is none) marked a row at 0.83-0.87, "your last
+            # night run for Oren" one 180 turns early -- two wrong marks for one
+            # right, and a wrong mark points a mind away from what it holds.
             held = [m["id"] for m in subject[:RESERVE]] if subject else []
-            pool = sorted((memories[mid] for mid in dict.fromkeys(held + ranked_among(subject)[:POOL])),
-                          key=_order_key, reverse=walk_back)[:VERIFY_LIMIT]
+            pool = _in_time((memories[mid] for mid in dict.fromkeys(held + ranked_among(subject)[:POOL])),
+                            newest_first=walk_back)[:VERIFY_LIMIT]
+            record.setdefault("asked_turns", []).append([m.get("turn_idx") for m in pool])
             question = "memory_heard" if kind == "heard_of" else "memory_moment"
             shares = _yes_shares(pool, question, state, current_turn_idx, known, language, record)
-            found = _first_sure(pool, shares)
+            # A CONCLUSION IS NEVER THE MOMENT. A row of `kind` "inference" is
+            # what the mind concluded, not anything done, said or seen, and
+            # the check still says yes to one now and then: "what were the
+            # last words you said to Oren?" walked newest first past his
+            # departure (0.72-0.78) to Mara's conclusion that he was not coming
+            # back (0.81-0.88) in all three runs, never reaching the words at
+            # 0.98 (2026-10-06). Asked, kept with its turn's span, never taken.
+            # Replayed on the captured walks: the words found in 4 of 5, a
+            # wrong mark of the first missing bread gone, no right one lost.
+            found = _first_sure(pool, [0.0 if m.get("kind") == "inference" else p
+                                       for m, p in zip(pool, shares)])
             return found, (shares[pool.index(found)] if found is not None else 0.0)
 
         def made_at(where):
@@ -507,9 +599,11 @@ def answer(route, query, *, memories, vectors, lanes, embedded, known, places,
                     # UNBUILT_CHARACTERS: a first sight of a place from
                     # elsewhere that names it is such a row too.)
                     there, sure_there = walk(made_at(place))
+                    # "Ahead" in the walk's own order -- newest first for a last
+                    # time, so a turn's moment comes before its conclusion
+                    # either way (`_order_key`).
                     ahead = (there is not None and anchor is not None
-                             and (_order_key(there) > _order_key(anchor) if walk_back
-                                  else _order_key(there) < _order_key(anchor)))
+                             and _order_key(there, walk_back) < _order_key(anchor, walk_back))
                     named_only = (anchor is not None and names_place(_text_of(anchor), place)
                                   and str(anchor.get("location") or "").strip().casefold() != place.casefold())
                     if there is not None and (anchor is None or ahead

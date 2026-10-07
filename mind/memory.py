@@ -105,8 +105,8 @@ from mind.memory_links import (  # noqa: F401
     form_memory_links, pull_successors,
 )
 from mind.memory_routes import (  # noqa: F401
-    VERIFY_CHARS, names_place, question_state, read_route, route_question, route_questions,
-    routing_on, says_name,
+    VERIFY_CHARS, VERIFY_LIMIT, answer, names_place, question_state, read_route, route_question,
+    route_questions, routing_on, says_name,
 )
 from mind.memory_time import (  # noqa: F401
     JUST_NOW, MemoryClock, PRESTORY_TURN_IDX, UNIT_LADDER, WHEN_BEFORE_RECORD, WHEN_UNPLACEABLE,
