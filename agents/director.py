@@ -6580,6 +6580,15 @@ def director_resolve(ctx, nonce, _corrections=None):
         if isinstance(_r, dict) and _r.get("charter") and _r.get("body")
         and (str(_r["charter"]), str(_r["body"])) not in _creature_refs
         and not _creature_stance(chat["id"], _r["charter"], ctx.turn.frame_id)]
+    # The bodies the beat ADDRESSED, at interpret and at resolve: a planned
+    # person spoken to in its own room is on screen (`_stand_touching_figures`).
+    _addressed = [str(_t) for _rows in (out.get("ledgers") or [],
+                                        interp.get("sequence") or [])
+                  for _r in _rows if isinstance(_r, dict)
+                  for _t in (_r.get("targets") or []) if str(_t or "").strip()]
+    _planned = {str(_f.get("name") or "").casefold() for _f in _present_figures
+                if isinstance(_f, dict) and _f.get("plan")
+                and not (_f.get("charter") and _f.get("body"))}
     for _stood in _stand_touching_figures(
             sc, sd, list(_present_figures) + _laid_figures,
             declared_rooms={str(_fd.get("name")): str(_fd.get("room"))
@@ -6587,9 +6596,14 @@ def director_resolve(ctx, nonce, _corrections=None):
                             if _fd.get("name") and _fd.get("room")},
             acting=[str(_r.get("source_entity_id") or "")
                     for _r in (out.get("ledgers") or [])
-                    if isinstance(_r, dict)]):
-        ctx.add_warning("charter body %r is in contact on screen; the scene "
-                        "stands it (leased)" % _stood)
+                    if isinstance(_r, dict)],
+            addressed=_addressed):
+        if _stood.casefold() in _planned:
+            ctx.add_warning("planned person %r is reached on screen; the "
+                            "scene stands them (rendered)" % _stood)
+        else:
+            ctx.add_warning("charter body %r is in contact on screen; the "
+                            "scene stands it (leased)" % _stood)
 
     # A THING THAT EXISTS AND IS NOWHERE. `entities` carries no location, and
     # the hand that owns it cannot write `positions` -- so a mint plus a

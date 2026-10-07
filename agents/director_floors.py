@@ -1626,7 +1626,8 @@ def _mint_fallback_room(sd, player_name, player_room_before):
     return arrived or (str(player_room_before or "").strip() or None)
 
 
-def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
+def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=(),
+                            addressed=()):
     """A PRESENT CHARTER BODY THAT TOUCHES OR IS TOUCHED STANDS IN THE SCENE.
 
     A charter figure on screen is laid into the resolve's working scene only;
@@ -1662,11 +1663,27 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
     THAT record, and a spelling the record does not answer to yet becomes one
     of its aliases, so the op that used it resolves.
 
+    AND A PLANNED PERSON THE BEAT REACHES. An authored plan standing in a
+    room in view is offered to the Director and the encoder as a body there
+    (`planned_entities.plans_in_view`; the encoder's card: a person listed
+    present "is a body ... whether or not the scene holds an entity for
+    them"), and perception and the voices read only the scene. So a plan the
+    beat ADDRESSED was a target nobody could see or hear: scratch story 165,
+    turn 4582 (2026-10-07), the player's "One of you had better be Petch"
+    bound to the Room's planned Abel Gale at the inn, and he was never
+    narrated, never answered, never placed. A person is the identity floor's
+    business (`materialize_plans_in_sight` leaves persons to it), so this is
+    where it is answered: a plan the beat touches, sources an event to, or
+    `addressed` is stood the way a charter body is -- a person entity under
+    its name with `plan_ref`, described by its look or else its role so the
+    commit settles the render, in its planned room.
+
     Mutates `sd`; returns the names stood."""
     ops = (sd or {}).get("contact_ops")
     ops = ops if isinstance(ops, list) else []
     acting = [a for a in (acting or ()) if a]
-    if not (ops or acting) or not figures:
+    addressed = [a for a in (addressed or ()) if a]
+    if not (ops or acting or addressed) or not figures:
         return []
 
     def _fold(text):
@@ -1676,7 +1693,11 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
     for fig in figures:
         if not isinstance(fig, dict) or fig.get("reserved") or fig.get("creature"):
             continue
-        if not (fig.get("charter") and fig.get("body") and fig.get("room")):
+        if not fig.get("room"):
+            continue
+        planned = bool(fig.get("plan")) and str(
+            fig.get("kind") or "person") == "person"
+        if not ((fig.get("charter") and fig.get("body")) or planned):
             continue
         for label in [fig.get("name")] + list(fig.get("aliases") or ()):
             if _fold(label):
@@ -1688,6 +1709,9 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
             ref = ent.get("charter_ref") if isinstance(ent, dict) else None
             if isinstance(ref, dict) and ref.get("charter") and ref.get("body"):
                 kept.setdefault((str(ref["charter"]), str(ref["body"])), str(eid))
+            plan = ent.get("plan_ref") if isinstance(ent, dict) else None
+            if isinstance(plan, dict) and plan.get("uid"):
+                kept.setdefault(("plan", str(plan["uid"])), str(eid))
     # HELD MEANS PLACED. An entity record alone is not a body the scene
     # stands: the lease releases a body that leaves the aperture by stripping
     # its rows and keeping its record, and counting the record as held left
@@ -1702,19 +1726,28 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
     stood = []
     ends = [end for op in ops if isinstance(op, dict)
             for end in (op.get("actor"), op.get("target"))]
-    for end in ends + list(acting):
+    for end in ends + list(acting) + list(addressed):
         fig = by_name.get(_fold(end))
         if not fig:
             continue
-        ref = (str(fig["charter"]), str(fig["body"]))
+        ref = ((str(fig["charter"]), str(fig["body"]))
+               if fig.get("charter") and fig.get("body")
+               else ("plan", str(fig["plan"])))
         eid = kept.get(ref) or str(fig.get("name"))
         record = (((sd or {}).get("entities") or {}).get(eid)
                   or ((sc or {}).get("entities") or {}).get(eid))
-        entry = copy.deepcopy(record) if isinstance(record, dict) else {
-            "name": eid, "kind": "person",
-            "aliases": [a for a in (fig.get("aliases") or []) if a],
-            "charter_ref": {"charter": ref[0], "body": ref[1]},
-        }
+        if isinstance(record, dict):
+            entry = copy.deepcopy(record)
+        else:
+            entry = {"name": eid, "kind": "person",
+                     "aliases": [a for a in (fig.get("aliases") or []) if a]}
+            if ref[0] != "plan":
+                entry["charter_ref"] = {"charter": ref[0], "body": ref[1]}
+            if fig.get("plan"):
+                entry["plan_ref"] = {"uid": str(fig["plan"])}
+                described = str(fig.get("look") or fig.get("role") or "").strip()
+                if described:
+                    entry["description"] = described
         known = {_fold(entry.get("name") or eid), _fold(eid)} | {
             _fold(a) for a in (entry.get("aliases") or [])}
         spelled = str(end or "").strip()

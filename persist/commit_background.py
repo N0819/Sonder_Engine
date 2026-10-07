@@ -3608,6 +3608,23 @@ def descriptor_bindings(ctx, dr_output=None):
                             **(_minted if isinstance(_minted, dict) else {})}},
         roster)
     room_ids = {str(r).casefold() for r in (sc.get("rooms") or {})}
+    # AND A PERSON THE STORY HAS PLANNED, rendered or not: a name is not a
+    # description of whoever stands nearby. Scratch story 165 turn 4582
+    # (2026-10-07): the player addressed the Room's planned Abel Gale, nobody
+    # had rendered him, and the seed dealt "Abel Gale" to the innkeeper as a
+    # descriptor -- from then on the name resolved to the keeper by retrieval.
+    planned_names = set()
+    try:
+        from world.planned_entities import planned_entities
+        for _uid, _plan in (planned_entities(
+                cid, getattr(getattr(ctx, "turn", None), "frame_id", None))
+                or {}).items():
+            for _spelled in [_plan.get("name"), _uid,
+                             *(_plan.get("aliases") or ())]:
+                if str(_spelled or "").strip():
+                    planned_names.add(str(_spelled).strip().casefold())
+    except Exception:
+        planned_names = set()
     bindings = {}
     for ref in refs:
         cf = ref.casefold()
@@ -3622,7 +3639,8 @@ def descriptor_bindings(ctx, dr_output=None):
             if matched[0].casefold() != cf:
                 bindings[ref] = matched[0]
             continue
-        if person_entity_named(people, ref) or cf in room_ids:
+        if person_entity_named(people, ref) or cf in room_ids \
+                or cf in planned_names:
             continue
         # Zero matches is a description; two or more is a partial that
         # singles nobody out ("the trader", in a square of traders). A
