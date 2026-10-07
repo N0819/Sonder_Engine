@@ -87,12 +87,17 @@ def normalize_naming_profile(value):
                                     "{given} {family}"),
         "formal_format": _safe_format(value.get("formal_format"),
                                       "{title} {name}"),
+        # Each table only when it IS one: a model that writes the posts as a
+        # list of titles raised here, before the town had closed at all
+        # (reproduced 2026-10-06 on a copy of scratch story 164).
         "titles": {
             "posts": {str(k): str(v).strip()
-                      for k, v in (titles.get("posts") or {}).items()
+                      for k, v in (titles.get("posts") if isinstance(
+                          titles.get("posts"), dict) else {}).items()
                       if str(v or "").strip()},
             "ranks": {str(k): str(v).strip()
-                      for k, v in (titles.get("ranks") or {}).items()
+                      for k, v in (titles.get("ranks") if isinstance(
+                          titles.get("ranks"), dict) else {}).items()
                       if str(v or "").strip()},
         },
     }

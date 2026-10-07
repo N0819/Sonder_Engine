@@ -360,6 +360,12 @@ def test_generated_posts_have_real_shift_crews_and_run_quietly():
 
 def test_closure_accepts_model_shorthand_for_requirements_and_dependencies():
     plan = _plan()
+    # `power` is one of the charter's own upkeeps: a dependency resolves only
+    # there (`supply_factor`), and one naming nothing is dropped as dead
+    # (tests/test_a_plan_is_read_in_the_shape_it_came.py).
+    plan["charters"][0]["upkeeps"]["power"] = {
+        "place": "mill", "floor": 0.25, "level": 1,
+        "fails_untended": "a_week", "one_body_restores_in": "a_shift"}
     upkeep = plan["charters"][0]["upkeeps"]["grain"]
     upkeep["requires"] = ["mechanical", "logistics"]
     upkeep["depends_on"] = "power"
@@ -374,7 +380,9 @@ def test_closure_accepts_model_shorthand_for_requirements_and_dependencies():
         "mechanical": 1, "logistics": 1}
     assert charter["upkeeps"]["grain"]["depends_on"] == ["power"]
     assert charter["posts"]["miller"]["requires"] == {"milling": 1}
-    assert charter["posts"]["miller"]["serves"] == ["grain"]
+    # The shorthand `"grain"` read as a list; the closure also hands the
+    # otherwise-untended `power` to the only post there is.
+    assert sorted(charter["posts"]["miller"]["serves"]) == ["grain", "power"]
     assert all(body["competence"] == {"milling": 1}
                for body in charter["bodies"].values())
 

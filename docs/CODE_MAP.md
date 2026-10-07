@@ -167,10 +167,10 @@
 | `world/charter_enrol.py` | 431 |  | `world.charter_generate`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_feel.py` | 469 |  | `mind.psychology_runtime`, `world.charter_mark`, `world.charter_needs`, `world.charter_temper` |
 | `world/charter_figure.py` | 140 |  | — |
-| `world/charter_generate.py` | 1643 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
+| `world/charter_generate.py` | 1744 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_harm.py` | 264 |  | — |
 | `world/charter_history.py` | 897 |  | — |
-| `world/charter_identity.py` | 1211 |  | — |
+| `world/charter_identity.py` | 1216 |  | — |
 | `world/charter_intervene.py` | 344 |  | `world.charter_model` |
 | `world/charter_log.py` | 521 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
@@ -2066,14 +2066,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `close_plan()` | 885 | 393 lines |
+| `close_plan()` | 955 | 422 lines |
 | `_json_call()` | 268 | 100 lines |
-| `_spread_berths()` | 672 | 84 lines |
-| `_featured_assignments()` | 812 | 71 lines |
-| `_ensure_shift_crews()` | 478 | 62 lines |
-| `ensure_required_rooms()` | 1308 | 60 lines |
-| `narrate_actual_history()` | 1477 | 58 lines |
-| `_scale_populations()` | 594 | 51 lines |
+| `_spread_berths()` | 743 | 84 lines |
+| `_featured_assignments()` | 883 | 70 lines |
+| `_ensure_shift_crews()` | 550 | 62 lines |
+| `ensure_required_rooms()` | 1407 | 60 lines |
+| `narrate_actual_history()` | 1578 | 58 lines |
+| `_scale_populations()` | 666 | 50 lines |
 
 ### `world/charter_harm.py`
 
@@ -2104,14 +2104,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_body_names()` | 950 | 119 lines |
-| `name_is_reserved()` | 581 | 65 lines |
-| `refuse_harvested_material()` | 816 | 62 lines |
-| `derived_name_parts()` | 225 | 43 lines |
-| `_stored_name_components()` | 355 | 43 lines |
-| `title_for()` | 1071 | 41 lines |
-| `identity_aliases()` | 1169 | 38 lines |
-| `_fill_empty_material()` | 777 | 37 lines |
+| `materialize_body_names()` | 955 | 119 lines |
+| `name_is_reserved()` | 586 | 65 lines |
+| `refuse_harvested_material()` | 821 | 62 lines |
+| `derived_name_parts()` | 230 | 43 lines |
+| `_stored_name_components()` | 360 | 43 lines |
+| `title_for()` | 1076 | 41 lines |
+| `identity_aliases()` | 1174 | 38 lines |
+| `_fill_empty_material()` | 782 | 37 lines |
 
 ### `world/charter_intervene.py`
 

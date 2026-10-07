@@ -414,6 +414,78 @@ def _mapping(value):
     return dict(value) if isinstance(value, dict) else {}
 
 
+# A MODEL-AUTHORED CONTAINER IS READ IN THE SHAPE IT CAME IN. The plan prompt
+# names one shape for each table and a model writes another often enough to
+# matter: found in play on 2026-10-06 (scratch story 164) and reproduced on a
+# copy, `needs` came back as `{"rest": {"fed_by": ...}, "sustenance":
+# "inn_board"}` in all ten charters and `close_plan` raised on the bare
+# string, so a Writers' Room package that asked for the town failed whole.
+# The readers below accept the variants a model actually writes and SAY what
+# they could not use, rather than raising or dropping it unseen.
+
+#: The most charters one plan closes. Unchanged; what changed is that the
+#: ones past it are named in the closure's warnings -- a ten-charter plan
+#: once lost its 252 householders here with nothing said, and the survivors
+#: were scaled 7.83x to make up the population.
+PLAN_CHARTERS = 8
+
+
+def _by_key(value):
+    """A model-authored table: a dict as written, or a list of rows that each
+    carry their own `key` (or `id`) -- the two shapes models use for one
+    table -- as that dict. Anything else is empty."""
+    if isinstance(value, dict):
+        return dict(value)
+    out = {}
+    for row in value if isinstance(value, list) else ():
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("key") or row.get("id") or "").strip()
+        if key and key not in out:
+            out[key] = {k: v for k, v in row.items() if k not in ("key", "id")}
+    return out
+
+
+def _plan_charters(plan):
+    """The plan's charters as rows, whichever container the model used: a
+    list as written (the same objects, so an in-place rewrite lands), or a
+    dict keyed by charter id with the id carried into each row."""
+    raw = plan.get("charters")
+    if isinstance(raw, dict):
+        return [dict(row, key=row.get("key") or key)
+                for key, row in raw.items() if isinstance(row, dict)]
+    return [row for row in (raw or ()) if isinstance(row, dict)]
+
+
+def _authored_needs(ckey, value, upkeeps, warnings):
+    """A charter's authored needs, each one `{fed_by, ...}` or gone.
+
+    A need named by a bare string is that string as its hand, which is what
+    the shorthand means. A hand that is not one of this charter's OWN upkeeps
+    is dropped and said: `advance_needs` reads a need's supply from the
+    charter's own upkeeps and scores a missing one 0.0, so keeping it would
+    trade a crash for bodies starving in silence."""
+    if not isinstance(value, dict):
+        return None
+    out = {}
+    for name, spec in value.items():
+        if isinstance(spec, str):
+            spec = {"fed_by": spec}
+        if not isinstance(spec, dict):
+            warnings.append(f"{ckey}: needs.{name} is not a need; dropped")
+            continue
+        spec = dict(spec)
+        hand = str(spec.get("fed_by") or "")
+        if hand and hand not in upkeeps:
+            spec.pop("fed_by", None)
+            warnings.append(
+                f"{ckey}: needs.{name} names {hand!r}, which is not one of "
+                f"its upkeeps; dropped, since a need fed by nothing starves")
+        if spec:
+            out[str(name)] = spec
+    return out or None
+
+
 def _strings(value):
     """Normalize one label or a JSON list without splitting strings to chars."""
     if value in (None, ""):
@@ -603,8 +675,7 @@ def _scale_populations(plan, target, seats_by_charter):
     in it. Rewrites `populations[].count` on the plan in place and returns the
     record; a plan with no target is returned untouched.
     """
-    charters = [raw for raw in (plan.get("charters") or ())[:8]
-                if isinstance(raw, dict)]
+    charters = _plan_charters(plan)[:PLAN_CHARTERS]
     record = {"target": None, "authored": None, "projected": None,
               "factor": 1.0}
     if target is None or not charters:
@@ -823,8 +894,7 @@ def _featured_assignments(plan, residents):
         and str(row.get("seed_id") or "").strip()
     }
     assigned = {}
-    charters = [row for row in (plan.get("charters") or ())[:8]
-                if isinstance(row, dict)]
+    charters = _plan_charters(plan)[:PLAN_CHARTERS]
     for ci, charter in enumerate(charters):
         for row in charter.get("featured_residents") or ():
             if not isinstance(row, dict):
@@ -915,8 +985,17 @@ def close_plan(plan, *, history=None, featured_residents=None,
 
     plan = copy.deepcopy(plan) if isinstance(plan, dict) else {}
     closure_warnings = []
-    raw_charters = [raw for raw in (plan.get("charters") or ())[:8]
-                    if isinstance(raw, dict)]
+    # One container for every reader below (the population scaler rewrites
+    # these rows in place, and the featured-resident pass reads them again).
+    plan["charters"] = _plan_charters(plan)
+    beyond = plan["charters"][PLAN_CHARTERS:]
+    if beyond:
+        closure_warnings.append(
+            f"the plan has {len(plan['charters'])} charters and a town closes "
+            f"at most {PLAN_CHARTERS}; not planted: " + ", ".join(
+                repr(str(raw.get("key") or raw.get("name") or "?"))
+                for raw in beyond))
+    raw_charters = plan["charters"][:PLAN_CHARTERS]
     seats_by_charter = [_post_seats(_mapping(raw.get("posts")))
                         for raw in raw_charters]
     population_record = _scale_populations(
@@ -965,7 +1044,7 @@ def close_plan(plan, *, history=None, featured_residents=None,
     for ci, raw in enumerate(raw_charters):
         ckey = _key(raw.get("key"), f"institution_{ci + 1}")
         upkeeps = {}
-        for uid, upkeep in (raw.get("upkeeps") or {}).items():
+        for uid, upkeep in _by_key(raw.get("upkeeps")).items():
             upkeep = upkeep if isinstance(upkeep, dict) else {}
             floor = max(0.05, min(
                 0.9, _number(upkeep.get("floor"), 0.25)))
@@ -981,6 +1060,26 @@ def close_plan(plan, *, history=None, featured_residents=None,
                 "requires": _competence(upkeep.get("requires")),
                 "depends_on": _strings(upkeep.get("depends_on")),
             }
+        # A SUPPLY CHAIN RUNS INSIDE ITS OWN INSTITUTION. `supply_factor`
+        # reads an upkeep's inputs from this charter's upkeeps and scores a
+        # missing one 0.0, so an input that is not one of them is not a weak
+        # link but a dead one: tending restores nothing, ever. Brackwater
+        # (scratch story 164, 2026-10-06) gave all 12 of its upkeeps
+        # `depends_on: ["chandlery_supply"]`, which existed nowhere, and its
+        # 1,440-hour prehistory stood every one of its 320 bodies down.
+        # Depending on itself is the same death, slower: once low, never back.
+        for uid, upkeep in upkeeps.items():
+            kept = [key for key in upkeep["depends_on"]
+                    if key in upkeeps and key != uid]
+            gone = [key for key in upkeep["depends_on"] if key not in kept]
+            if gone:
+                upkeep["depends_on"] = kept
+                closure_warnings.append(
+                    f"{ckey}: upkeep {uid!r} depends on "
+                    f"{', '.join(repr(key) for key in gone)}, which is not "
+                    f"another of its own upkeeps; dropped, since a missing "
+                    f"input reads as an empty one and it could never be "
+                    f"restored")
         posts = {str(k): dict(v) for k, v in _mapping(raw.get("posts")).items()
                  if isinstance(v, dict)}
         for post in posts.values():
@@ -1163,8 +1262,8 @@ def close_plan(plan, *, history=None, featured_residents=None,
             "economy": economy,
             # The author's per-need overrides, if the plan gave any; folded
             # into the template at seeding (`needs_template`).
-            "needs_authored": raw.get("needs")
-            if isinstance(raw.get("needs"), dict) else None,
+            "needs_authored": _authored_needs(
+                ckey, raw.get("needs"), upkeeps, closure_warnings),
             "decisions": raw.get("decisions") or {},
             "interventions": local_interventions,
             "history": {"architecture": history_record},
@@ -1447,7 +1546,9 @@ def ground_history_output(value, chronicle):
             else:
                 dropped.append({"section": field, "claim": row})
         out[field] = kept if isinstance(raw, list) else (kept[0] if kept else {})
-    for body, resident in list((out.get("residents") or {}).items()):
+    if not isinstance(out.get("residents"), dict):
+        out["residents"] = {}
+    for body, resident in list(out["residents"].items()):
         if not isinstance(resident, dict):
             out["residents"].pop(body, None)
             continue
