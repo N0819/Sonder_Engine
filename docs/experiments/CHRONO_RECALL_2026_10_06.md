@@ -304,3 +304,74 @@ covers: 413 `memory_moment`, 37 `memory_heard`, 13 `memory_anchor`.
   requests and 474 questions (memory grades 124, moods 40, then the act,
   change, impact and speech checks), 0.6 MB. Gold reaches only the memory and
   route checks among them.
+
+## 10. How the found moment is shown: tested, and not the bottleneck
+
+The owner: "Have we tried adjusting how we give the results to the llm? Or I
+mean how we present" -- then, "Maybe it exist in its own section with a
+header 'Potentially answers question'". It had not been tried. The mark was
+one field (`in_time`) on one memory in a payload of about 86,000 characters,
+and where recall had already delivered the found row the mark went on
+recall's copy: of the 173 marks in §8's runs, 82% sat outside the question's
+block -- among the 30 recalled memories (69%) or the recent turns (12%) --
+while the turns around the moment went to the question's block, so the label
+"what came just before it is beside it" was false there. And every row a few
+hours either side of a moment three weeks back read "about 3 weeks ago". Time
+is exact underneath (turn order and `encoded_at_seconds`); `memory_time`
+rounds the gap to NOW on purpose, so the order the search computed was lost
+only in the handoff.
+
+Tested on frozen requests. Each question's real character request (routing
+on, lookups off) was captured once, stopping before the call; three
+presentations were built by code from the same frozen payload and sent to
+the owner's character route (NanoGPT `z-ai/glm-5.3:thinking`, temperature
+0.8) through the engine's own call (`agents.common._agent_json`), with no
+read-back; three blind graders per answer as in §6, unanimous on 385 of 410.
+
+- **A**: as the engine sends it.
+- **B**, the owner's: the found moment and its turns moved into ONE section,
+  `potentially_answers_question`, right after the question's block, in time
+  order, each row's place against the found moment in the clock's coarse
+  words ("about 2 hours before the found moment").
+- **C**: B under an asserting header, `answers_question`.
+
+| run | correct | partly | wrong | invented details |
+|---|---|---|---|---|
+| A1 | 61 | 12 | 9 | 17 |
+| A2 | 58 | 12 | 12 | 20 |
+| B1 | 60 | 12 | 10 | 24 |
+| B2 | 61 | 13 | 8 | 21 |
+| C1 | 56 | 16 | 10 | 22 |
+
+- **No measurable difference**: 121 against 119 correct of 164 (B ahead on
+  10 questions, A on 9; sign test p = 1.0). Two runs of the SAME payload
+  flipped 13 to 15 questions; A and B differed on 16 of the 59 routed
+  questions -- the presentation moved answers no more than re-rolling did.
+  On the 23 questions the router left unrouted, where A and B were the same
+  payload, 3 differed.
+- **Leanings, none significant**: just before / just after, 18 against 14 of
+  30 for the section (4 questions to 1 -- the class where the split was
+  worst); the hedged header 60 against the asserting one's 56; invented
+  details 45 against 37 (more in B on 15 questions, A on 9, p = 0.31), all on
+  routed questions -- a section may invite elaboration around what it holds.
+- **Where the misses are**: 12 questions no run of any presentation got
+  right, and every cause is upstream of presentation. The wrong moment found
+  (the loft night, the chest carried to the chapel house, the evening before
+  the Moth); questions never routed (two just-befores, and "how did you and
+  Ilse meet?"); plain misses (where Tobin was hidden, anything named after
+  Petra, the first curfew load, the first missing bread, the last food given
+  Tobin); and "when did you first meet Tobin?", which all five runs tell as
+  the storm night with the right memories in front of her -- §6's two nights
+  told as one, which no presentation reached.
+- **Cost**: freezing the 82 requests took about 7.7M tokens of
+  decision-model input (about $0.32: a beat asks the decision model eight
+  requests before the character is called, not one), and the 410 character
+  calls about 9-10M input tokens of the owner's subscription. The harness,
+  the frozen requests, the answers and the grading journal are kept outside
+  the repo in the main checkout's ignored output folder
+  (chrono_bench_presentation_2026-10-06).
+
+So the presentation stays as it is, and the work goes upstream, to the
+classes in `docs/UNBUILT_CHARACTERS.md`. The one thing presentation still
+owes is honesty: the label promises "beside it" where the layout does not
+deliver it.

@@ -1361,6 +1361,15 @@ reach it: the experiment's §6.)
     chapel house" marks the wrong chapel; "when were you last up in the loft
     yourself?" routes as an act with Tobin and marks a night he comes down
     the ladder.
+  - **Not the presentation** (tested 2026-10-06,
+    [`experiments/CHRONO_RECALL_2026_10_06.md`](experiments/CHRONO_RECALL_2026_10_06.md)
+    §10): the found moment and its turns gathered into one
+    "potentially answers the question" section, in time order with coarse
+    gaps to the moment, answered 121 of 164 against the current scattered
+    mark's 119 -- inside the run-to-run noise. Re-propose a presentation only
+    with a new measurement. Still owed: the mark's label says the turns
+    around the moment are "beside it", and in 82% of marks they are in
+    another block.
   - **A memory that only thinks back on an act, read as the act** -- the
     decision model's own reading, and the commonest of its errors where gold
     can tell: 34 of 413 moment checks on the bench, each label upheld by three
