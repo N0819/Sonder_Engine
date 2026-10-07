@@ -293,3 +293,27 @@ def test_the_ledger_that_empties_the_crowd_fills_the_view(temp_db):
     assert crowds_for_room(ctx.chat.id, sc, CELL,
                            chatter_inputs(ctx.chat.id, sc, turn_idx=1)) == []
     assert sorted(_company(perception_outcome(ctx, "n0"))) == sorted(derived)
+
+
+def test_a_planned_person_with_a_record_keeps_his_look(temp_db):
+    """Scratch story 166 turn 4593: the bell keeper the Writers' Room planned
+    spoke and acted as "the unfamiliar person" from the beat after his
+    presence record was filed -- the record held his look only as
+    `role_hint`, and the ledger row read `appearance` alone."""
+    look = "an old man in a tarred coat gone soft at the cuffs"
+    sc = _scene()
+    sc["positions"]["Murren"] = CELL
+    sc["entities"]["Murren"] = {"name": "Murren", "kind": "person",
+                                "plan_ref": {"uid": "plan:person:murren:1"},
+                                "description": look}
+    ctx = _ctx(temp_db, scene=sc, presences={
+        "p_murren": {"name": "Murren", "entity_id": "Murren", "first_turn": 0,
+                     "last_turn": 1, "nature": "person", "dialogue_turns": [1],
+                     "mention_turns": [], "addressed_turns": [],
+                     "sketch": {"station_room": CELL, "role_hint": look}},
+    })
+    out = perception_outcome(ctx, "n0")
+    row = next(r for r in (out.get("company") or {}).get("player", [])
+               if r.get("name") == "Murren")
+    assert row.get("label") and "unfamiliar" not in row["label"], row
+    assert "Murren" not in (out["views"]["player"] or "")

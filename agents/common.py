@@ -2453,10 +2453,26 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         seen.add(name.casefold())
         seen_refs |= refs
         surface = _surface_for(refs)
+        sketch = (rec or {}).get("sketch") or {}
+        look = str(sketch.get("appearance") or "") or _noun_for(refs)
+        if not look and not refs:
+            # A PERSON NO CHARTER STANDS BEHIND -- a Writers'-Room plan, a
+            # Director mint -- keeps the look its scene entity carries. The
+            # record filed for it holds that look only as `role_hint`
+            # (`commit_background`), and this row read `appearance` and the
+            # charter's noun alone, so from the beat after the record was
+            # filed the body stood in the view faceless: scratch story 166
+            # turn 4593, the bell keeper the Room planned ("an old man in a
+            # tarred coat ...") spoke and acted as "the unfamiliar person",
+            # while the beat path that knew his look deferred to this row.
+            bound = ((sc or {}).get("entities") or {}).get(
+                str((rec or {}).get("entity_id") or name))
+            look = (str((bound or {}).get("description") or "")
+                    if isinstance(bound, dict) else "") or str(
+                        sketch.get("role_hint") or "")
         row = {
             "name": name, "room": room,
-            "appearance": (str(((rec or {}).get("sketch") or {}).get(
-                "appearance") or "") or _noun_for(refs)),
+            "appearance": look,
             "role": _noun_for(refs),
         }
         creature_noun = _creature_noun_for(refs)
