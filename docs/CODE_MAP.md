@@ -7,7 +7,7 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 2395 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 2402 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4960 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_bare.py` | 971 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
@@ -253,14 +253,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 2192 | 204 lines |
-| `_background_react()` | 525 | 183 lines |
-| `declare_charter_figures()` | 1945 | 167 lines |
-| `scene_life()` | 1260 | 158 lines |
-| `_demanded_presences()` | 1047 | 144 lines |
-| `_present_others()` | 1654 | 135 lines |
+| `_react_one()` | 2199 | 204 lines |
+| `_background_react()` | 532 | 183 lines |
+| `declare_charter_figures()` | 1952 | 167 lines |
+| `scene_life()` | 1267 | 158 lines |
+| `_demanded_presences()` | 1054 | 144 lines |
+| `_present_others()` | 1661 | 135 lines |
 | `_beat_for_presence()` | 194 | 84 lines |
-| `managed_presences()` | 902 | 78 lines |
+| `managed_presences()` | 909 | 78 lines |
 
 ### `agents/character.py`
 

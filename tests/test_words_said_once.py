@@ -55,3 +55,20 @@ def test_silent_entries_pass_through_where_they_stand():
     first = _voice("Dobadum Dykeowley", "Aye.")
     kept, demoted = _first_answer_only([None, first, None])
     assert kept == [None, first, None] and demoted == []
+
+
+def test_one_question_is_one_address_however_it_was_handed_over():
+    """Scratch story 166 turn 4592: the keeper the player named was handed the
+    line; the keeper the gate found addressed was handed the player's whole
+    declaration. Both answered "I rang it." to one question."""
+    line = "\"Who rang the bell just now -- and what's been brought in?\""
+    whole = ("steps in over the threshold, lowers the brass storm lantern "
+             "\"\"Tamsin Coyle, River Underwriters,\"\" \"\"Who rang the bell just now -- "
+             "and what's been brought in?\"\"")
+    first = _voice("Colynon Saltowford", "I rang it. I only just came through.",
+                   answering=line)
+    second = _voice("Lamynum Carromere", "I rang it. Nothing's come in yet.",
+                    answering=whole)
+    kept, demoted = _first_answer_only([first, second])
+    assert kept[1]["dialogue_log_entry"] is None
+    assert demoted[0][0] == "Lamynum Carromere" and demoted[0][3] == "answered"

@@ -442,7 +442,7 @@ def _first_answer_only(reactions):
     answered, said, kept, demoted = {}, {}, [], []
     for reaction in reactions:
         heard = (reaction or {}).get("heard_address") or {}
-        quote = " ".join(str(heard.get("exact_quote") or "").split())
+        quote = _said_key(heard.get("exact_quote"))
         entry = (reaction or {}).get("dialogue_log_entry") or {}
         own = _said_key(entry.get("exact_quote"))
         name = str((reaction or {}).get("name") or "")
@@ -450,7 +450,14 @@ def _first_answer_only(reactions):
         if own and said.get(own) not in (None, name):
             first, how = said[own], "said"
         elif quote and not heard.get("beats_ago") and own:
-            key = quote.casefold()
+            # ONE ADDRESS, HOWEVER IT REACHED EACH VOICE. A body the player
+            # named is handed the line (`_character_address_of`); a body the
+            # demand gate found addressed is handed the player's whole
+            # declaration (`_filtered_player_declaration`), the line inside
+            # it. Compared as strings they were two lines, and both answered:
+            # scratch story 166 turn 4592, "Who rang the bell just now?" put
+            # to two keepers, and each said "I rang it."
+            key = next((k for k in answered if k in quote or quote in k), quote)
             if key in answered:
                 first, how = answered[key], "answered"
             else:
