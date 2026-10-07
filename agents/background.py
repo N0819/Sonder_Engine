@@ -416,32 +416,55 @@ def _voices_at_once(calls):
     return answers
 
 
+def _said_key(text):
+    """A line's words for telling two lines apart: case, spacing and
+    punctuation fold away, the words themselves do not."""
+    return " ".join(re.findall(r"[\w']+", str(text or "").casefold()))
+
+
 def _first_answer_only(reactions):
     """`(kept, demoted)`: `reactions` in their own order and positions, each
-    later answer to a line already answered here stripped of its words
-    (`demoted_line` keeps them), and `[(name, quote, first answerer)]` for
-    every one stripped. `None` entries pass through where they stand."""
-    answered, kept, demoted = {}, [], []
+    later answer to a line already answered here -- or each later line that
+    says, word for word, what a voice before it already said -- stripped of
+    its words (`demoted_line` keeps them), and `[(name, quote, first, how)]`
+    for every one stripped, `how` "answered" or "said". `None` entries pass
+    through where they stand.
+
+    WORDS SAID ONCE ARE SAID ONCE. The voices are asked at once, blind to
+    each other, so two bystanders nobody addressed can volunteer the SAME
+    sentence -- measured, scratch story 166 turn 4588: two staithe hands
+    both declared "I'll mind the stage while you're up.", the narrator
+    rendered it as a duet ("two voices carried over the planking ... "),
+    and the log filed both under one of them. Across every stored beat with
+    two or more figure declarations (42), that identical line is the only
+    one two figures shared: an exact repeat is the blindness, never a
+    choice. A near-copy is left alone; the card asks for new words."""
+    answered, said, kept, demoted = {}, {}, [], []
     for reaction in reactions:
         heard = (reaction or {}).get("heard_address") or {}
         quote = " ".join(str(heard.get("exact_quote") or "").split())
         entry = (reaction or {}).get("dialogue_log_entry") or {}
-        if (not quote or heard.get("beats_ago")
-                or not str(entry.get("exact_quote") or "").strip()):
-            kept.append(reaction)
-            continue
-        key = quote.casefold()
-        if key not in answered:
-            answered[key] = str(reaction.get("name") or "")
+        own = _said_key(entry.get("exact_quote"))
+        name = str((reaction or {}).get("name") or "")
+        first, how = None, ""
+        if own and said.get(own) not in (None, name):
+            first, how = said[own], "said"
+        elif quote and not heard.get("beats_ago") and own:
+            key = quote.casefold()
+            if key in answered:
+                first, how = answered[key], "answered"
+            else:
+                answered[key] = name
+        if first is None:
+            if own:
+                said.setdefault(own, name)
             kept.append(reaction)
             continue
         stripped = dict(reaction)
         stripped["dialogue_log_entry"] = None
         stripped["demoted_line"] = entry.get("exact_quote")
         kept.append(stripped)
-        demoted.append((str(reaction.get("name") or ""),
-                        str(entry.get("exact_quote") or ""),
-                        answered[key]))
+        demoted.append((name, str(entry.get("exact_quote") or ""), first, how))
     return kept, demoted
 
 
@@ -471,13 +494,16 @@ def _one_answer_per_line(ctx, result):
     if not demoted:
         return result
     claims = list(result.get("claims") or [])
-    for name, quote, answerer in demoted:
+    for name, quote, answerer, how in demoted:
         claims.append({"claimant": name, "text": quote, "refs": [],
                        "credence": "ordinary"})
         ctx.add_warning(
-            "background_react: %s also answered the line %s answered; one "
-            "line has one answerer, so %s's words are recorded as a claim "
-            "rather than delivered." % (name, answerer, name))
+            ("background_react: %s also answered the line %s answered; one "
+             "line has one answerer, so %s's words are recorded as a claim "
+             "rather than delivered." if how == "answered" else
+             "background_react: %s said word for word what %s had already "
+             "said; words said once are said once, so %s's are recorded as "
+             "a claim rather than delivered.") % (name, answerer, name))
     out = dict(result)
     out["reactions"] = kept
     # The legacy single-entry keys mirror reactions[0]; rebuild them from
@@ -2046,10 +2072,13 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
     # 2026-09-23, idx 7 and 9). The first in rank keeps the words (the one
     # addressed ranks first); the others' acts stand, their words do not.
     entries, _chorus = _first_answer_only(entries)
-    for _name, _quote, _answerer in _chorus:
+    for _name, _quote, _answerer, _how in _chorus:
         ctx.add_warning(
-            "charter voice: %s also answered the line %s answered; one line "
-            "has one answerer, so %s's words are not delivered: %r"
+            ("charter voice: %s also answered the line %s answered; one line "
+             "has one answerer, so %s's words are not delivered: %r"
+             if _how == "answered" else
+             "charter voice: %s said word for word what %s had already said; "
+             "words said once are said once, so %s's are not delivered: %r")
             % (_name, _answerer, _name, _quote))
     out = []
     for index, ((_name, rec, _others), entry) in enumerate(zip(asks, entries)):
