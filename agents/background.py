@@ -1658,25 +1658,34 @@ def _present_others(ctx, sc, here, recognized=None, asker=None):
     # 4582). A body is never listed as standing beside itself: every figure's
     # own entry came back to it as a stranger's label, because the payload's
     # self-filter compared its NAME with these LABELS. And a charter body
-    # knows the people of its own institution standing with it -- by name and
-    # by post, what working beside them gives anyone: a house hand shown his
-    # own keeper as "the old wiry member of inn" told the player "Keeper's
-    # not here" with the keeper at his elbow.
+    # calls a colleague standing with it by name, and by post, when its own
+    # mind holds a claim about them -- the rule its `institutional_context`
+    # is rendered by (`charter_runtime.known_members`), so the two halves of
+    # one payload cannot name a person differently. Sharing a charter is not
+    # that claim: a households charter holds a whole town of people who have
+    # never met.
     asker_name, asker_rec = (asker if isinstance(asker, tuple) and len(asker) == 2
                              else ("", None))
     asker_name = str(asker_name or "").strip().casefold()
-    asker_charters = {str(r.get("charter")) for r in
-                      ((asker_rec or {}).get("charter_refs") or ())
-                      if isinstance(r, dict) and r.get("charter")}
+    asker_refs = [r for r in ((asker_rec or {}).get("charter_refs") or ())
+                  if isinstance(r, dict) and r.get("charter")]
+    known = set()
+    if asker_refs:
+        from world.charter_runtime import known_members
+        chat = ctx.chat
+        known = known_members(
+            chat.get("id") if isinstance(chat, dict) else chat.id, asker_refs,
+            frame_id=getattr(ctx.turn, "frame_id", None))
     for other, label, record in _room_presences_in(ctx, sc, room):
         if not label or (asker_name and other.casefold() == asker_name):
             continue
         if _recognizes(other, recognized):
             present_others.append(other)
             continue
-        theirs = {str(r.get("charter")) for r in (record.get("charter_refs") or ())
+        theirs = {(str(r.get("charter")), str(r.get("body")))
+                  for r in (record.get("charter_refs") or ())
                   if isinstance(r, dict) and r.get("charter")}
-        if asker_charters & theirs:
+        if known & theirs:
             role = str((record.get("sketch") or {}).get("role_hint") or "").strip()
             present_others.append("%s (%s)" % (other, role) if role else other)
             continue

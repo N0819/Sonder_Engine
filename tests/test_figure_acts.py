@@ -608,7 +608,13 @@ class TestTheCommitAndTheVoice:
         # And the body's own slice shows what it owes.
         later = charter_runtime.presence_view(
             cid, "hall", "Seleton Orrholmeer", figures=["Wren Ashby"])
-        assert later[0]["presence"]["commitments"][0]["id"] == favour["id"]
+        # By what it IS: the voiced slice carries no record id
+        # (`charter_runtime._voiced_presence`), and its parties are named as
+        # the clerk names them -- himself, by his own name.
+        owed = later[0]["presence"]["commitments"][0]
+        assert (owed["terms"], owed["state"]) == (favour["terms"], "accepted")
+        assert owed["promisor"] == "Seleton Orrholmeer"
+        assert "id" not in owed
 
     def test_a_gift_with_no_speech_still_lands_in_one_write(self, temp_db):
         from world import charter_runtime

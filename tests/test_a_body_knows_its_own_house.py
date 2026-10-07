@@ -13,9 +13,10 @@ one taproom, all of them the inn's own people:
   compared its NAME against these appearance LABELS -- so the heavy-armed hand
   was shown "the ... house hand with a burn across the wrist" beside himself.
 
-A charter body's colleagues in the room are named with their post (what
-working beside them gives anyone); a body off watch at its own post's place is
-taken for its post; and nobody is listed beside themself.
+A charter body's colleague in the room is named with their post where its
+own mind holds a claim about them (`charter_runtime.known_members`, the rule
+its `institutional_context` is rendered by); a body off watch at its own
+post's place is taken for its post; and nobody is listed beside themself.
 """
 
 import types
@@ -39,6 +40,10 @@ INN = [{"charter": "inn", "body": "house_hand:0002"}]
 
 def test_a_colleague_is_named_with_his_post_and_nobody_is_beside_himself(
         monkeypatch):
+    import world.charter_runtime as charter_runtime
+    monkeypatch.setattr(charter_runtime, "known_members",
+                        lambda cid, refs, frame_id=None: {
+                            ("inn", "house_hand:0002"), ("inn", "keeper:0001")})
     monkeypatch.setattr(background, "_room_presences_in", lambda ctx, sc, room: [
         ("Niboold Moorelcroft", "the heavy-armed house hand",
          {"charter_refs": INN, "sketch": {"role_hint": "House Hand"}}),
@@ -51,6 +56,22 @@ def test_a_colleague_is_named_with_his_post_and_nobody_is_beside_himself(
     me = ("Niboold Moorelcroft", {"charter_refs": INN})
     others = background._present_others(_ctx(), SCENE, "taproom", asker=me)
     assert others == ["Fetoard Hollelwick (keeper)", "a stoop-shouldered warden"]
+
+
+def test_sharing_a_charter_is_not_knowing_the_name(monkeypatch):
+    """A households charter holds a town of people who have never met; the
+    claim is what names a colleague, not the roof."""
+    import world.charter_runtime as charter_runtime
+    monkeypatch.setattr(charter_runtime, "known_members",
+                        lambda cid, refs, frame_id=None: {
+                            ("inn", "house_hand:0002")})
+    monkeypatch.setattr(background, "_room_presences_in", lambda ctx, sc, room: [
+        ("Fetoard Hollelwick", "the old wiry keeper",
+         {"charter_refs": [{"charter": "inn", "body": "keeper:0001"}],
+          "sketch": {"role_hint": "keeper"}})])
+    me = ("Niboold Moorelcroft", {"charter_refs": INN})
+    assert background._present_others(_ctx(), SCENE, "taproom", asker=me) == [
+        "the old wiry keeper"]
 
 
 def test_without_an_asker_the_list_is_as_it_was(monkeypatch):

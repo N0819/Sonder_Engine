@@ -3988,12 +3988,30 @@ def carrier_entries(cid, frame_id=None):
         anchor = clock_anchor(item)
         names = index.display(charter_key)
         spellings = index.aliases(charter_key)
+        by_post = None
         for body_key, body in sorted(state["bodies"].items()):
             if body_key in (state.get("bindings") or {}):
                 continue
             place = str(body.get("place") or "")
             reports = []
+            person = None
             for claim in (state.get("minds") or {}).get(body_key, {}).values():
+                # THE GIST IS THE HOLDER'S OWN WORDING (`story.carriers`), so
+                # a native happening names its subject as the holder does --
+                # never by key. Every report a town's bodies carried reached
+                # the Director and the encoder as "warden:0001 became unable
+                # to continue at chapel", 204 of them a call (scratch story
+                # 165, 2026-10-06), and a registered character told one would
+                # have kept the key as what it heard. See `_voiced_presence`.
+                if isinstance(claim, dict) and claim.get("kind") == "news" \
+                        and not str(claim.get("claim_text") or "").strip() \
+                        and str(claim.get("about") or "") in state["bodies"]:
+                    if person is None:
+                        if by_post is None:
+                            by_post = _post_words(state, charter_key)
+                        person = _member_namer(state, body_key, charter_key,
+                                               names, by_post)
+                    claim = dict(claim, about=person(claim["about"]))
                 row = report_from_claim(claim, current_location=place,
                                         anchor=anchor)
                 if row is not None:
@@ -4567,6 +4585,216 @@ def _relabel(value, mapping):
     return value
 
 
+def _members_known_to(state, body_key):
+    """The members of its institution ONE body knows: those it holds a claim
+    about, and itself.
+
+    The rule `charter_log.scene_ledger` draws `knows_here` against
+    `strangers_here` by, and the one `charter_promote.acquainted` carries
+    into a promotion: two people do not share a head, and working under one
+    roof is not a claim.
+    """
+    bodies = state.get("bodies") or {}
+    held = (state.get("minds") or {}).get(str(body_key)) or {}
+    return {str(k) for k in held if str(k) in bodies} | {str(body_key)}
+
+
+def known_members(cid, refs, frame_id=None):
+    """``{(charter, body)}`` the charter bodies behind ``refs`` know by name
+    (`_members_known_to`). For a voice deciding what to call a colleague
+    standing with it; empty when there is no registry to ask."""
+    out = set()
+    try:
+        items = registry_for(cid, frame_id).get("items") or {}
+    except Exception:
+        return out
+    for ref in refs or ():
+        if not isinstance(ref, dict):
+            continue
+        charter_key = str(ref.get("charter") or "")
+        body_key = str(ref.get("body") or "")
+        state = ((items.get(charter_key) or {}).get("state") or {})
+        if body_key and body_key in (state.get("bodies") or {}):
+            out |= {(charter_key, other)
+                    for other in _members_known_to(state, body_key)}
+    return out
+
+
+def _post_words(state, charter_key):
+    """A member as anyone in its institution can call it without knowing it:
+    by its post -- "the keeper" where one body ordinarily stands that post,
+    "a house hand" where several do. The same for every holder, so a caller
+    naming for many holders deals it once per charter; lazy, because a
+    300-body town has a holder name a handful of people."""
+    from collections import Counter
+    from .charter_crowd import _role_noun, member_noun
+
+    bodies = state.get("bodies") or {}
+    held = Counter(str((b or {}).get("home_post") or "")
+                   for b in bodies.values())
+    dealt = {}
+
+    def words(key):
+        if key not in dealt:
+            post = str((bodies.get(key) or {}).get("home_post") or "")
+            noun = (member_noun(state, key)
+                    or "member of %s" % _role_noun(charter_key))
+            dealt[key] = "%s %s" % (
+                "the" if post and held[post] == 1 else "a", noun)
+        return dealt[key]
+
+    return words
+
+
+def _member_namer(state, holder, charter_key, display, post_words=None):
+    """What ONE body calls a member of its own institution, as a function
+    of the member's key: its name where the holder knows them
+    (`_members_known_to`), its post where it does not (`_post_words`), and
+    anything that is not a member with its id spelled as words."""
+    bodies = state.get("bodies") or {}
+    known = _members_known_to(state, holder)
+    by_post = post_words or _post_words(state, charter_key)
+
+    def person(key):
+        key = str(key or "")
+        if key not in bodies:
+            return key.replace("_", " ")
+        # Subscripted, never `.get`: an identity index deals a name on first
+        # ASK (`_DealtMap.__missing__`), and `.get` does not ask -- it
+        # answered "" for every body no earlier reader had named.
+        name = str(display[key] or "").strip() if key in known else ""
+        return name or by_post(key)
+
+    return person
+
+
+#: Record ids. Nobody perceives one, and a model handed one can only restate
+#: it or misread it.
+_VOICE_DROPPED_IDS = frozenset({"evidence_id", "source_id", "id", "source"})
+
+
+def _voiced_presence(presence, state, body_key, charter_key, display, rooms):
+    """The presence slice as the mind it voices reads it: no engine key.
+
+    `_relabel` puts the scene's FIGURES under this observer's labels. The
+    institution's own members, posts and happenings went through as the
+    engine spells them, and a voice reads what it is handed. Measured
+    (scratch story 165, 2026-10-06, turns 4581-4582): every voice of an inn
+    was handed three `{"what": "body_recovered", "about": "keeper:0001"}` --
+    the keeper back on his feet after a night's rest, three days running --
+    and in a story of a sunk barge, a search bell and a missing man, each of
+    them read it as corpses. "I've pulled three bodies out of this water in
+    two days" (the keeper, of himself); "Three out of the water, twelve
+    hours gone. Keeper's the one pulled them" (a house hand, of news 12.1
+    hours old); "Keeper's not here. Hasn't been, since before noon." Three,
+    because `NEWS_BRING_UP_CAP` is three. The Writers' Room's canon held no
+    deaths at all.
+
+    So a happening is the sentence the news is retold in
+    (`charter_news._native_news_phrase`; `_event_surface` where it has no
+    place), a member is called what THIS body calls it (`_member_namer`), a
+    post is its title, and a record id is not there. The key set a test
+    allowlists is unchanged; only values are rendered.
+    """
+    from collections import Counter
+    from .charter_news import _native_news_phrase
+
+    person = _member_namer(state, body_key, charter_key, display)
+
+    def room(place):
+        place = str(place or "")
+        name = str(((rooms or {}).get(place) or {}).get("name") or "")
+        return name or place.replace("_", " ")
+
+    def post_words(post):
+        post = str(post or "")
+        return _readable_role(state.get("naming"), [post], charter_key) \
+            if post else post
+
+    def happening(kind, about, place=""):
+        if place:
+            return _native_news_phrase({"event_kind": kind,
+                                        "about": person(about) or "somebody",
+                                        "place": room(place)})
+        return _event_surface({"kind": kind,
+                               "body": person(about) or "somebody"})
+
+    def plain(row):
+        return {k: v for k, v in row.items() if k not in _VOICE_DROPPED_IDS}
+
+    out = dict(presence)
+    news = []
+    for row in presence.get("can_bring_up") or ():
+        row = dict(row)
+        kind = str(row.pop("what", "") or "")
+        if not str(row.get("claim") or "").strip():
+            row["claim"] = happening(kind, row.get("about"), row.get("where"))
+        for field in ("about", "from"):
+            if row.get(field):
+                row[field] = person(row[field])
+        if row.get("where"):
+            row["where"] = room(row["where"])
+        news.append(row)
+    out["can_bring_up"] = news
+    out["knows_here"] = {person(k): v for k, v in
+                         (presence.get("knows_here") or {}).items()}
+    out["strangers_here"] = [person(k) for k in
+                             presence.get("strangers_here") or ()]
+    out["knows_it_is_blamed"] = [person(k) for k in
+                                 presence.get("knows_it_is_blamed") or ()]
+    out["marks"] = [dict(row, by=person(row["by"])) if row.get("by")
+                    else dict(row) for row in presence.get("marks") or ()]
+    if presence.get("standing_post"):
+        out["standing_post"] = post_words(presence["standing_post"])
+    judged = []
+    for row in presence.get("social_judgments") or ():
+        signals = Counter(str(r.get("signal") or "") for r in
+                          row.get("reasons") or () if isinstance(r, dict))
+        judged.append(dict(
+            row, subject=person(row.get("subject")),
+            reasons=[signal.replace("_", " ")
+                     + (" (%d times)" % n if n > 1 else "")
+                     for signal, n in signals.items() if signal]))
+    out["social_judgments"] = judged
+    held = []
+    for row in presence.get("commitments") or ():
+        row = plain(row)
+        for field in ("promisor", "beneficiary"):
+            if row.get(field):
+                row[field] = person(row[field])
+        row["recognized_by"] = [person(k) for k in
+                                row.get("recognized_by") or ()]
+        row["lifecycle"] = [
+            {k: (person(v) if k in ("by", "to") and v else v)
+             for k, v in plain(step).items()}
+            for step in row.get("lifecycle") or () if isinstance(step, dict)]
+        held.append(row)
+    out["commitments"] = held
+    institutional = presence.get("institutional")
+    if isinstance(institutional, dict):
+        out["institutional"] = {
+            "agenda": [
+                {"claim": happening(row.get("event_kind"), row.get("about")),
+                 **({"held_by": person(row["held_by"])}
+                    if row.get("held_by") else {}),
+                 **({"at_post": post_words(row["at_post"])}
+                    if row.get("at_post") else {}),
+                 **({"strength": row["strength"]}
+                    if "strength" in row else {})}
+                for row in institutional.get("agenda") or ()
+                if isinstance(row, dict)],
+            "orders": [
+                dict(plain(row),
+                     **{k: post_words(row[k]) for k in ("from_post", "to_post")
+                        if row.get(k)},
+                     **({"received_by": person(row["received_by"])}
+                        if row.get("received_by") else {}))
+                for row in institutional.get("orders") or ()
+                if isinstance(row, dict)],
+        }
+    return out
+
+
 def live_lease_holders(cid):
     """Every lease holder of this chat still standing: the present, and each
     frame that has not merged back (`charter_place.lease_holder`). A lease
@@ -4829,7 +5057,10 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
         out.append({
             "charter": charter_key,
             "body": body_key,
-            "presence": _relabel(copy.deepcopy(presence), labels),
+            "presence": _voiced_presence(
+                _relabel(copy.deepcopy(presence), labels), state, body_key,
+                charter_key, identity_index(registry).display(charter_key),
+                (scene or {}).get("rooms") or {}),
             "action_instances": rows,
             # Where this body sleeps, and whether it is standing there now:
             # the voice's own half of "a room someone sleeps in is theirs"
