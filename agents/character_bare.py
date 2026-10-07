@@ -614,6 +614,19 @@ def compile_bare(reply, answers, h):
             if any(f"say:{index}:to:{p}" in answers for p in range(len(h.people))):
                 targets = [person for p, person in enumerate(h.people)
                            if jev.yes(answers, f"say:{index}:to:{p}")]
+                # THE SPEAKER'S OWN WORD FOR WHOM IT IS SAID TO LEADS. The
+                # read-back answers one yes/no per person in ROSTER order,
+                # and every reader takes the first target as the addressee,
+                # so a line read back as aimed at two people went to
+                # whichever the roster listed first. Measured (scratch story
+                # 166, turn 4587): the pilot answered the assessor's question
+                # with "to": "Tamsin Coyle" on every line, the read-back also
+                # said yes for the staithe master beside her, and the log
+                # filed both answers as said to him.
+                named = _named_here(row.get("to"), h.people)
+                if named:
+                    targets = [named] + [person for person in targets
+                                         if person != named]
             else:
                 # Not read back: the line's own `to`, matched against the
                 # people here -- a set the engine owns, never a vocabulary.

@@ -466,6 +466,23 @@ def test_an_unread_reply_stands_on_code_alone_and_buys_no_second_call(story, mon
     assert any("was not read back" in w for w in ctx.warnings)
 
 
+def test_the_line_goes_first_to_the_one_its_speaker_named():
+    """Read back as aimed at two people, a line's addressee is the one its
+    own `to` names, not whoever the roster lists first (scratch story 166,
+    turn 4587: the pilot's answers to the assessor filed as said to the
+    staithe master)."""
+    h, reply = _holding(), _reply()
+    reply["sequence"][0]["to"] = "Tomas"
+    answers = _answer([("say:0:to:0", "yes"), ("say:0:to:1", "yes")])(
+        jev.after_questions(h, reply))
+    out, _ = character_bare.compile_bare(reply, answers, h)
+    assert out["sequence"][0]["targets"] == ["Tomas", "Mara"]
+    reply["sequence"][0]["to"] = "the room"
+    out, _ = character_bare.compile_bare(reply, answers, h)
+    assert out["sequence"][0]["targets"] == ["Mara", "Tomas"], (
+        "naming nobody here leaves the read-back's own order")
+
+
 def test_unread_the_addressee_is_the_one_the_line_names_here():
     h, reply = _holding(), _reply()
     out, _ = character_bare.compile_bare(reply, {}, h)

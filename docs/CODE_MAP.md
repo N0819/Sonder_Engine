@@ -9,7 +9,7 @@
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2366 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4960 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/character_bare.py` | 958 |  | `llm.prompts`, `mind` |
+| `agents/character_bare.py` | 971 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/character_tools.py` | 732 |  | `core.db` |
 | `agents/common.py` | 12122 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
@@ -279,9 +279,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compile_bare()` | 601 | 303 lines |
+| `compile_bare()` | 601 | 316 lines |
 | `_compile_notebook()` | 433 | 101 lines |
-| `_appraisal()` | 906 | 53 lines |
+| `_appraisal()` | 919 | 53 lines |
 | `holding_from()` | 213 | 49 lines |
 | `modules_for()` | 326 | 48 lines |
 | `without_engine_numbers()` | 125 | 47 lines |
