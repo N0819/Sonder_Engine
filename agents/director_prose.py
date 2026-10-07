@@ -1053,6 +1053,161 @@ def bodies_stand_in_rooms(events, scene, built=None, warn=None):
     return out
 
 
+#: The identity keys of a mind that declares its own conduct -- the player
+#: and the registered cast (`a_walk_is_its_owners`). A figure is the
+#: world's to move.
+_MIND_KEY = re.compile(r"^(persona|character):\d+$")
+#: The `authority_mode`s of inputs the world sets in motion rather than a
+#: mind declares (`director._causal_event_inputs`).
+WORLD_AUTHORITY = frozenset({"world", "mechanical"})
+
+
+def _linked(scene, events, a, b):
+    """Does a hold, a carry or an inside join bodies `a` and `b` -- standing
+    before the beat, or written at it? Read off the engine's own records
+    (`contacts`, `contained`, `contact_ops`, `containment`), never prose."""
+    pair = {a.casefold(), b.casefold()}
+
+    def joins(record):
+        if not isinstance(record, dict):
+            return False
+        ends = {str(record.get(k) or "").strip().casefold()
+                for k in ("actor", "target")}
+        return ends == pair
+
+    def holds(contained):
+        for body, where in (contained or {}).items() if isinstance(contained, dict) else ():
+            inside = str((where or {}).get("in") or "") if isinstance(where, dict) else str(where or "")
+            if {str(body).strip().casefold(), inside.strip().casefold()} == pair:
+                return True
+        return False
+
+    sc = scene if isinstance(scene, dict) else {}
+    if any(joins(c) for c in sc.get("contacts") or []) or holds(sc.get("contained")):
+        return True
+    for event in events or []:
+        for transform in (event or {}).get("transforms") or [] if isinstance(event, dict) else ():
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if not isinstance(patch, dict):
+                continue
+            if any(joins(op) for op in patch.get("contact_ops") or []):
+                return True
+            if holds(patch.get("containment")) or holds(patch.get("contained")):
+                return True
+    return False
+
+
+def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
+                         warn=None):
+    """A MIND GOES ONLY WHERE ITS OWN DECLARATION TAKES IT -- the player's
+    included (owner ruling, 2026-10-07).
+
+    The Director writes the world's side of a beat, and another mind's walk
+    is not the world's side: measured on scratch story 166, turn 4587, Hester
+    declared "turns up the boards toward the low walk, slowing a step so
+    Coyle falls in beside", the resolve prose walked the PLAYER off the
+    landing stage, and the encoder filed it as Tamsin's own conduct
+    (`source_entity_id` persona:21) carried out from HESTER's declaration
+    (`source_event_id` her act). Story 165 had the mirror (F46): the
+    player's span wrote Hester's room change. The card says so
+    (`prose_contract/director_resolve.txt`); this is the floor under it,
+    because a body's agency must not depend on a model cooperating.
+
+    Read off the engine's own typed fields, never the prose: an event's
+    `source_event_id` names the declaration it carries out, `event_inputs`
+    names whose declaration that is, and a room change is a `movement` or a
+    `positions` entry. A registered mind (`persona:<id>`, `character:<id>`)
+    moved in an event carried out from ANOTHER mind's declaration keeps its
+    room, unless the move is the world's to make: the source is no mind's
+    declaration (a current, a collapse, a pressure), the mind has a
+    declaration of its own at this stage (its agency is in play and the
+    Director resolves it), or a hold, a carry or an inside joins the two.
+    An event recorded as the moved mind's OWN conduct is dropped whole --
+    it is a step, and a decision, nobody declared; otherwise only that
+    mind's position and station leave the event."""
+    owner = {}
+    declarers = set()
+    for entry in event_inputs or []:
+        if not isinstance(entry, dict):
+            continue
+        # The world's own inputs -- a due pressure, a dice outcome, an
+        # authored event -- move whoever they move: they are not a mind's
+        # declaration (`director._causal_event_inputs`).
+        if str(entry.get("authority_mode") or "").casefold() in WORLD_AUTHORITY:
+            continue
+        who = str(entry.get("entity_id") or "").strip()
+        for act in entry.get("events") or []:
+            if isinstance(act, dict) and str(act.get("event_id") or "").strip():
+                owner[str(act["event_id"]).strip()] = who
+                if who:
+                    declarers.add(who)
+    names = {str(key): str(name or "").strip()
+             for key, name in (identity_index or {}).items()}
+    key_of = {name.casefold(): key for key, name in names.items() if name}
+    key_of.update({key.casefold(): key for key in names})
+
+    def mind(label):
+        key = key_of.get(str(label or "").strip().casefold())
+        return key if key and _MIND_KEY.match(key) else None
+
+    out, kept_out = [], []
+    for event in events or []:
+        if not isinstance(event, dict):
+            out.append(event)
+            continue
+        source = owner.get(str(event.get("source_event_id") or "").strip())
+        if not source:
+            out.append(event)
+            continue
+        moved = set()
+        movement = event.get("movement")
+        if isinstance(movement, dict) and str(movement.get("to_room") or "").strip():
+            who = mind(movement.get("mover")) or (
+                mind(event.get("source_entity_id")) if not movement.get("mover") else None)
+            if who:
+                moved.add(who)
+        for transform in event.get("transforms") or []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if isinstance(patch, dict) and isinstance(patch.get("positions"), dict):
+                moved.update(k for k in (mind(n) for n in patch["positions"]) if k)
+        refused = {key for key in moved
+                   if key != source and key not in declarers
+                   and not _linked(scene, events, names.get(key) or key,
+                                   names.get(source) or source)}
+        if not refused:
+            out.append(event)
+            continue
+        kept_out.extend(sorted(names.get(k) or k for k in refused))
+        if mind(event.get("source_entity_id")) in refused:
+            continue
+        forms = {f.casefold() for k in refused for f in (k, names.get(k) or k)}
+        event = dict(event)
+        if isinstance(movement, dict) and (mind(movement.get("mover")) in refused):
+            event["movement"] = None
+        transforms = []
+        for transform in event.get("transforms") or []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if isinstance(patch, dict):
+                patch = dict(patch)
+                for channel in ("positions", "stations"):
+                    if isinstance(patch.get(channel), dict):
+                        patch[channel] = {k: v for k, v in patch[channel].items()
+                                          if str(k).strip().casefold() not in forms}
+                        if not patch[channel]:
+                            patch.pop(channel)
+                if not patch:
+                    continue
+                transform = dict(transform, patch=patch)
+            transforms.append(transform)
+        event["transforms"] = transforms
+        out.append(event)
+    if kept_out and warn:
+        warn("a walk is its owner's: %s kept their room -- moved by another's "
+             "declaration, with no hold, carry or declaration of their own"
+             % ", ".join(sorted(set(kept_out))))
+    return out
+
+
 #: How many characters a copied id may get wrong and still be read as that
 #: id (`entity_keys_name_held_things`). Named per ask-before-limiting.
 ID_COPY_SLIPS = 3
@@ -1970,6 +2125,9 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             room_record["rooms"] = sorted(((rooms_answer or {}).get("rooms") or {}))
     events = bodies_stand_in_rooms(events, sc, ((rooms_answer or {}).get("rooms") or {}),
                                    warn=ctx.add_warning)
+    events = a_walk_is_its_owners(
+        events, model_payload.get("event_inputs") or [],
+        identities_with_figures(model_payload, extras), sc, warn=ctx.add_warning)
     channels = list(encoder_channels) + [
         c for c in ROOM_AUTHOR_CHANNELS
         if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)]
