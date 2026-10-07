@@ -36,7 +36,7 @@
 | `agents/perception.py` | 8033 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1854 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 1782 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 1801 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3076 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -122,7 +122,7 @@
 | `story/history_routing.py` | 215 |  | — |
 | `story/importers.py` | 3155 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 487 |  | — |
-| `story/location_design.py` | 440 |  | `core.db` |
+| `story/location_design.py` | 486 |  | `core.db` |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 626 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
@@ -614,13 +614,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `run_planner()` | 732 | 311 lines |
-| `run_location_plan()` | 1322 | 117 lines |
-| `deliberate()` | 1536 | 91 lines |
+| `run_location_plan()` | 1322 | 136 lines |
+| `deliberate()` | 1555 | 91 lines |
 | `_payload()` | 476 | 78 lines |
 | `_shown_transcript()` | 405 | 69 lines |
 | `run_opening_plan()` | 1121 | 64 lines |
-| `schedule_room_work()` | 1719 | 64 lines |
-| `planner_reply()` | 1462 | 51 lines |
+| `schedule_room_work()` | 1738 | 64 lines |
+| `planner_reply()` | 1481 | 51 lines |
 
 ### `core/db.py`
 
@@ -1557,14 +1557,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check()` | 260 | 90 lines |
-| `set_skeleton()` | 146 | 47 lines |
-| `set_history()` | 231 | 27 lines |
-| `set_charter()` | 195 | 22 lines |
-| `_reservation()` | 352 | 22 lines |
-| `submitted_plan()` | 394 | 17 lines |
-| `submit()` | 376 | 16 lines |
-| `submitted_for()` | 423 | 12 lines |
+| `check()` | 306 | 90 lines |
+| `set_skeleton()` | 192 | 47 lines |
+| `resumable_draft()` | 122 | 28 lines |
+| `set_history()` | 277 | 27 lines |
+| `set_charter()` | 241 | 22 lines |
+| `_reservation()` | 398 | 22 lines |
+| `submitted_plan()` | 440 | 17 lines |
+| `submit()` | 422 | 16 lines |
 
 ### `story/lore_structure.py`
 

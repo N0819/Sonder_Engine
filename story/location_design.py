@@ -104,16 +104,62 @@ def save_draft(cid, row):
     return row
 
 
-def open_draft(cid, task):
+def open_draft(cid, task, digest=None):
     """Start a design. `task` carries what the closure will need when the
     draft is checked -- the featured residents, the reservation, the naming
     law, the population -- so the check the Room runs is the check the
-    pipeline runs."""
+    pipeline runs. `digest` names the request it answers
+    (`agents.story_planner._location_digest`), so a retry of the same ask can
+    resume it (`resumable_draft`)."""
     return save_draft(cid, {"open": True, "task": copy.deepcopy(task or {}),
                             "plan": {"name": "", "structure": {}, "rooms": {},
                                      "charters": []},
                             "history": {},
-                            "submitted": False, "checked": False})
+                            "submitted": False, "checked": False,
+                            **({"digest": str(digest)} if digest else {})})
+
+
+def resumable_draft(cid, digest, task):
+    """An open, unsubmitted draft of THIS request, kept for a retry -- or None.
+
+    ALREADY DESIGNED IS ALREADY DONE, one step earlier. A submitted plan is
+    adopted whole on a retry (owner, chat 150: "you've made it so i have to
+    rerun every single step instead of recovering from what the writers room
+    sucesfully planned"); a pass the wall stopped before it submitted lost
+    everything to `open_draft`'s reset. Measured (scratch story 166,
+    2026-10-07): a launch failed on "the Writers' Room did not submit a
+    location plan (14 calls, 6 steps, stopped: wall); it had 20 room(s) and 2
+    institution(s) drafted", and the retry would have started from nothing
+    against the same wall. A draft for a DIFFERENT request is never resumed:
+    an author who changed the brief asked a different question. The task is
+    refreshed to this call's; the rooms, the institutions and the history
+    stay."""
+    row = draft(cid)
+    if not ((row.get("open") or row.get("paused")) and not row.get("submitted")
+            and digest and row.get("digest") == str(digest)):
+        return None
+    plan = row.get("plan") or {}
+    if not ((plan.get("rooms") or {}) or (plan.get("charters") or [])):
+        return None
+    row["task"] = copy.deepcopy(task or {})
+    row["checked"] = False
+    row["open"] = True
+    row.pop("paused", None)
+    save_draft(cid, row)
+    return row
+
+
+def pause_draft(cid):
+    """A pass stopped without submitting: keep what it drafted for a retry
+    of the same request, and close it to the draft tools -- `is_open` is
+    what lets `draft_location` and its siblings act, and they must not act
+    on a pass that is over."""
+    row = draft(cid)
+    if not row:
+        return row
+    row["open"] = False
+    row["paused"] = True
+    return save_draft(cid, row)
 
 
 def close_draft(cid):

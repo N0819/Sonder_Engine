@@ -1362,7 +1362,21 @@ def run_location_plan(cid, frame_id=None, *, payload, closure=None):
                     len(kept.get("rooms") or {}),
                     len(kept.get("charters") or []))
         return kept
-    location_design.open_draft(cid, closure)
+    resumed = location_design.resumable_draft(cid, digest, closure)
+    if resumed is not None:
+        held = resumed.get("plan") or {}
+        task["resumed_draft"] = {
+            "rooms": sorted(str(r) for r in (held.get("rooms") or {})),
+            "institutions": [str((c or {}).get("key") or "")
+                             for c in held.get("charters") or []
+                             if isinstance(c, dict)],
+            "history": bool(resumed.get("history"))}
+        logger.info("location plan for chat %s: resuming an unsubmitted "
+                    "draft (%d rooms, %d charters)", cid,
+                    len(held.get("rooms") or {}),
+                    len(held.get("charters") or []))
+    else:
+        location_design.open_draft(cid, closure, digest)
     calls = steps = 0
     stopped = None
     started = time.time()
@@ -1430,12 +1444,17 @@ def run_location_plan(cid, frame_id=None, *, payload, closure=None):
             charters=[str(c.get("key") or "") for c in
                       (drafted.get("charters") or [])][:40],
             error="%s: %s" % (type(exc).__name__, str(exc)[:400]))
+        # PAUSED, NOT CLEARED: what the pass drafted is kept for a retry of
+        # THIS request (`location_design.resumable_draft`), and closed to the
+        # draft tools meanwhile. A different request still starts fresh.
+        location_design.pause_draft(cid)
         raise
     finally:
-        # Cleared whatever happened: the plan it produced is the job's
-        # artifact now, and a draft left open would be offered to the next
-        # pass as work in progress.
-        location_design.close_draft(cid)
+        # Cleared on success: the plan it produced is the job's artifact now,
+        # and a draft left open would be offered to the next pass as work in
+        # progress. A failed pass paused its draft above.
+        if not location_design.draft(cid).get("paused"):
+            location_design.close_draft(cid)
 
 
 def room_town_planner(cid, frame_id=None):
