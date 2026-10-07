@@ -187,6 +187,18 @@ def normalize_plan(uid, entry):
     if isinstance(enrolled, dict) and enrolled.get("charter") and enrolled.get("body"):
         out["enrolled"] = {"charter": str(enrolled["charter"]),
                            "body": str(enrolled["body"])}
+    # WHO KNOWS THEM FROM BEFORE THE STORY: the registered characters (or the
+    # player) who know this person by name and sight -- family, old friends.
+    # The Writers' Room states it (`story.plot_packages`, plan_entity
+    # `known_by`); publishing seeds the `known` ledger both ways. Absent when
+    # empty, so every stored plan reads back byte-identical.
+    known_by = []
+    for name in entry.get("known_by") or ():
+        name = _text(name, 120)
+        if name and name not in known_by:
+            known_by.append(name)
+    if known_by:
+        out["known_by"] = known_by[:PLAN_ALIASES_CAP]
     rendered = entry.get("rendered")
     if isinstance(rendered, dict) and str(rendered.get("render") or "").strip():
         out["rendered"] = {

@@ -127,7 +127,7 @@
 | `story/mandates.py` | 626 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/opening_plan.py` | 121 |  | `core.db` |
-| `story/plot_packages.py` | 3963 |  | `world.spatial` |
+| `story/plot_packages.py` | 4023 |  | `world.spatial` |
 | `story/prelude.py` | 188 |  | `core.db` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 445 |  | `core.db` |
@@ -209,7 +209,7 @@
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 554 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
-| `world/planned_entities.py` | 647 |  | `core.db` |
+| `world/planned_entities.py` | 659 |  | `core.db` |
 | `world/planning_needs.py` | 407 |  | — |
 | `world/region_events.py` | 461 |  | — |
 | `world/regions.py` | 587 |  | `world.spatial` |
@@ -1618,14 +1618,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 3141 | 143 lines |
-| `_preview_plan_rooms()` | 1030 | 108 lines |
-| `fire_due_clocks()` | 3714 | 102 lines |
-| `_plan_edge()` | 877 | 84 lines |
-| `publish_package()` | 3495 | 84 lines |
-| `_reach_warning()` | 3286 | 79 lines |
+| `_package_checks()` | 3201 | 143 lines |
+| `_preview_plan_rooms()` | 1033 | 108 lines |
+| `fire_due_clocks()` | 3774 | 102 lines |
+| `_plan_edge()` | 880 | 84 lines |
+| `publish_package()` | 3555 | 84 lines |
+| `_reach_warning()` | 3346 | 79 lines |
 | `normalize_package()` | 253 | 77 lines |
-| `_tick_triggered_clocks()` | 3611 | 73 lines |
+| `_preview_plan_entity()` | 1234 | 73 lines |
 
 ### `story/prelude.py`
 
@@ -2593,14 +2593,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_plans_in_sight()` | 278 | 141 lines |
-| `normalize_plan()` | 123 | 84 lines |
-| `project_planned_emissions()` | 215 | 61 lines |
-| `plan_figure()` | 503 | 43 lines |
+| `materialize_plans_in_sight()` | 290 | 141 lines |
+| `normalize_plan()` | 123 | 96 lines |
+| `project_planned_emissions()` | 227 | 61 lines |
+| `plan_figure()` | 515 | 43 lines |
 | `plan_state()` | 79 | 42 lines |
-| `settle_rendered_plans()` | 585 | 41 lines |
-| `_station_a_thing()` | 421 | 40 lines |
-| `_contradicted_axis()` | 628 | 20 lines |
+| `settle_rendered_plans()` | 597 | 41 lines |
+| `_station_a_thing()` | 433 | 40 lines |
+| `_contradicted_axis()` | 640 | 20 lines |
 
 ### `world/planning_needs.py`
 

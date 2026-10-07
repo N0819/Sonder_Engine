@@ -679,6 +679,9 @@ def _world_snapshot(cid, frame_id=None):
             and str(room.get("desc") or room.get("description") or "").strip()},
         "planned": set(specs),
         "reserved_names": names,
+        # The registered cast and the player, by folded name: who a plan's
+        # `known_by` may name.
+        "cast": {str(n).casefold(): str(n) for n in cast_names},
         "plans": plans,
         "needs": {n["uid"]: n for n in open_planning_needs(cid, frame_id)},
         "registry": registry,
@@ -1221,6 +1224,10 @@ def _shape_plan_entity(op):
         "look": _text(op.get("look"), 600),
         "sources": _plan_sources(op),
         "answers_need": _text(op.get("answers_need"), 60),
+        "known_by": [_text(n, 120) for n in (
+            op.get("known_by") if isinstance(op.get("known_by"), (list, tuple))
+            else [op.get("known_by")] if op.get("known_by") else ())
+            if _text(n, 120)],
     }
 
 
@@ -1232,6 +1239,14 @@ def _preview_plan_entity(cid, frame_id, op, world):
                       % (op["kind"], ", ".join(PLAN_KINDS)))
     uid = plan_uid(op["kind"], op["name"])
     held = world["plans"].get(uid)
+    for name in op.get("known_by") or ():
+        if name.casefold() == TRUTH_AUDIENCE_PLAYER:
+            continue                     # the player, the truths' own word
+        if name.casefold() not in (world.get("cast") or {}):
+            errors.append(
+                "plan_entity says %r knows %r from before the story, and %r "
+                "is not a registered character or the player"
+                % (name, op["name"], name))
     for name in [op["name"]] + list(op["aliases"]):
         if name.casefold() in world["reserved_names"] and not held:
             errors.append(
@@ -1520,6 +1535,43 @@ def _apply_plan_creature(cid, frame_id, op, turn_idx):
     return out
 
 
+def _seed_prior_ties(cid, name, known_by):
+    """A tie that predates the story, written into the one recognition
+    ledger (`known`, keyed by the recognising mind's own name) both ways.
+
+    Owner ruling, 2026-10-07: until now only an in-play introduction wrote
+    `known`, so nothing authored before the story could make two people know
+    each other. Measured (scratch story 165): the pilot Hester Gale called
+    her own brother an impostor -- "That's not Abel ... This man's a
+    stranger to me" -- because the Room had planned him at the inn and
+    nothing said she had known his face since before either of them could
+    walk. Returns the names the planned person now knows."""
+    from core.db import q, wget, wset
+    player = ""
+    if any(str(o).casefold() == TRUTH_AUDIENCE_PLAYER for o in known_by):
+        try:
+            from story.character_schema import persona_name
+            from story.scene import persona_of
+            chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+            player = persona_name(persona_of(dict(chat))) if chat else ""
+        except Exception:
+            player = ""
+    known_by = [player if str(o).casefold() == TRUTH_AUDIENCE_PLAYER else str(o)
+                for o in known_by]
+    known_by = [o for o in known_by if o]
+    known = wget(cid, "known", {}) or {}
+    mine = [str(x) for x in known.get(name) or []]
+    for other in known_by:
+        theirs = [str(x) for x in known.get(other) or []]
+        if name not in theirs:
+            known[other] = theirs + [name]
+        if other not in mine:
+            mine.append(other)
+    known[name] = mine
+    wset(cid, "known", known)
+    return list(known_by)
+
+
 def _apply_plan_entity(cid, frame_id, op, turn_idx):
     from world.planned_entities import add_planned_entity
     from world.planning_needs import fill_planning_need
@@ -1528,9 +1580,12 @@ def _apply_plan_entity(cid, frame_id, op, turn_idx):
         "kind": op["kind"], "name": op["name"], "aliases": op["aliases"],
         "role": op["role"], "brief": op["brief"], "surface": op["surface"],
         "look": op["look"], "sources": op.get("sources") or {},
+        "known_by": op.get("known_by") or [],
         "source": "writers_room"},
         frame_id=frame_id, turn_idx=turn_idx)
     out = {"uid": plan["uid"]}
+    if op.get("known_by"):
+        out["known_by"] = _seed_prior_ties(cid, op["name"], op["known_by"])
     # A PLANTED PERSON IS SOMEBODY, AND SOMEBODY HAS A MIND. A plan alone
     # is a look and a brief the Director renders; nothing simulates it,
     # nothing can be told to it, and a telling to a brewer the Room planted
@@ -2847,6 +2902,11 @@ OPERATION_FIELDS = {
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",
         "role?": "what they are for, in a word or two", "aliases?": "[names]",
+        "known_by?": "[registered characters, or \"player\", who know this "
+                     "person by name and sight from BEFORE the story -- "
+                     "family, old friends, neighbours]. Leave someone out and "
+                     "they meet as strangers, however the prose says they "
+                     "are related; publishing writes the recognition both ways",
         "brief": "{purpose, truths, where, station?, state?} -- `where` is the "
                  "ROOM ID this thing is in, and it is the only field that "
                  "puts it anywhere: a plan with no `where` is a reserved "
