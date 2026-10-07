@@ -36,7 +36,7 @@
 | `agents/perception.py` | 8033 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1854 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 1777 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 1782 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3076 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -122,7 +122,7 @@
 | `story/history_routing.py` | 215 |  | — |
 | `story/importers.py` | 3155 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 487 |  | — |
-| `story/location_design.py` | 439 |  | `core.db` |
+| `story/location_design.py` | 440 |  | `core.db` |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 626 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
@@ -167,7 +167,7 @@
 | `world/charter_enrol.py` | 431 |  | `world.charter_generate`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_feel.py` | 469 |  | `mind.psychology_runtime`, `world.charter_mark`, `world.charter_needs`, `world.charter_temper` |
 | `world/charter_figure.py` | 140 |  | — |
-| `world/charter_generate.py` | 1744 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
+| `world/charter_generate.py` | 1760 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_harm.py` | 264 |  | — |
 | `world/charter_history.py` | 897 |  | — |
 | `world/charter_identity.py` | 1216 |  | — |
@@ -189,7 +189,7 @@
 | `world/charter_promote.py` | 612 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1530 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 5744 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_runtime.py` | 5792 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 865 |  | `world.charter_politics` |
 | `world/charter_space.py` | 337 |  | `world.spatial` |
 | `world/charter_surface.py` | 364 |  | — |
@@ -614,13 +614,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `run_planner()` | 732 | 311 lines |
-| `run_location_plan()` | 1317 | 117 lines |
-| `deliberate()` | 1531 | 91 lines |
+| `run_location_plan()` | 1322 | 117 lines |
+| `deliberate()` | 1536 | 91 lines |
 | `_payload()` | 476 | 78 lines |
 | `_shown_transcript()` | 405 | 69 lines |
 | `run_opening_plan()` | 1121 | 64 lines |
-| `schedule_room_work()` | 1714 | 64 lines |
-| `planner_reply()` | 1457 | 51 lines |
+| `schedule_room_work()` | 1719 | 64 lines |
+| `planner_reply()` | 1462 | 51 lines |
 
 ### `core/db.py`
 
@@ -1557,14 +1557,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check()` | 260 | 89 lines |
+| `check()` | 260 | 90 lines |
 | `set_skeleton()` | 146 | 47 lines |
 | `set_history()` | 231 | 27 lines |
 | `set_charter()` | 195 | 22 lines |
-| `_reservation()` | 351 | 22 lines |
-| `submitted_plan()` | 393 | 17 lines |
-| `submit()` | 375 | 16 lines |
-| `submitted_for()` | 422 | 12 lines |
+| `_reservation()` | 352 | 22 lines |
+| `submitted_plan()` | 394 | 17 lines |
+| `submit()` | 376 | 16 lines |
+| `submitted_for()` | 423 | 12 lines |
 
 ### `story/lore_structure.py`
 
@@ -2066,13 +2066,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `close_plan()` | 955 | 422 lines |
+| `close_plan()` | 970 | 423 lines |
 | `_json_call()` | 268 | 100 lines |
+| `_featured_assignments()` | 883 | 85 lines |
 | `_spread_berths()` | 743 | 84 lines |
-| `_featured_assignments()` | 883 | 70 lines |
 | `_ensure_shift_crews()` | 550 | 62 lines |
-| `ensure_required_rooms()` | 1407 | 60 lines |
-| `narrate_actual_history()` | 1578 | 58 lines |
+| `ensure_required_rooms()` | 1423 | 60 lines |
+| `narrate_actual_history()` | 1594 | 58 lines |
 | `_scale_populations()` | 666 | 50 lines |
 
 ### `world/charter_harm.py`
@@ -2339,14 +2339,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_plan_lived_location()` | 1971 | 248 lines |
-| `registry_warnings()` | 2545 | 233 lines |
-| `advance_snapshot()` | 3017 | 200 lines |
-| `_prepare_cast_histories()` | 1042 | 172 lines |
-| `_generate_lived_location()` | 2279 | 163 lines |
-| `presence_view()` | 4914 | 163 lines |
-| `_remap_generated_town()` | 1697 | 134 lines |
-| `_voiced_presence()` | 4676 | 120 lines |
+| `_plan_lived_location()` | 2013 | 254 lines |
+| `registry_warnings()` | 2593 | 233 lines |
+| `advance_snapshot()` | 3065 | 200 lines |
+| `_prepare_cast_histories()` | 1042 | 199 lines |
+| `_generate_lived_location()` | 2327 | 163 lines |
+| `presence_view()` | 4962 | 163 lines |
+| `_remap_generated_town()` | 1739 | 134 lines |
+| `_voiced_presence()` | 4724 | 120 lines |
 
 ### `world/charter_social.py`
 

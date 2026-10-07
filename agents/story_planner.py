@@ -1280,7 +1280,7 @@ def _location_task(cid, frame_id, payload, spec, closure=None):
             "lore_truncated": len(lore_text) > LOCATION_LORE_CHARS,
             "shape": spec}
     for key in ("scale", "topology", "required_rooms", "featured_residents",
-                "population", "naming_register"):
+                "candidate_residents", "population", "naming_register"):
         if payload.get(key) not in (None, "", []):
             task[key] = payload[key]
     # WHETHER THIS PLACE HAS MONTHS BEHIND IT. The closure carries it
@@ -1309,8 +1309,13 @@ def _location_digest(payload):
     payload = payload if isinstance(payload, dict) else {}
     keys = ("author_brief", "lore", "scale", "topology", "required_rooms",
             "featured_residents", "population", "naming_register")
-    body = json.dumps({k: payload.get(k) for k in keys},
-                      sort_keys=True, ensure_ascii=False, default=str)
+    asked = {k: payload.get(k) for k in keys}
+    # Who MAY live here is part of the question, but only where there is
+    # anyone to ask about: a payload without candidates digests as it always
+    # did, so no design already submitted is orphaned by the new key.
+    if payload.get("candidate_residents"):
+        asked["candidate_residents"] = payload["candidate_residents"]
+    body = json.dumps(asked, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha1(body.encode("utf-8")).hexdigest()[:16]
 
 

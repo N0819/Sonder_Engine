@@ -1205,6 +1205,33 @@ def _prepare_cast_histories(cid, request, *, frame_id=None):
             routes[str(char_id)]["seed_id"] = seed_id
             private[seed_id] = {
                 "habits": featured_resident_private_habits(sheet)}
+        elif not route.get("author_locked") and str(
+                route.get("mode") or "") == "auto":
+            # THE ROOM DECIDES WHAT THE LAUNCH LEFT OPEN (owner ruling,
+            # 2026-10-07). An automatic route that did not read residence is
+            # a CANDIDATE: the Writers' Room, planning the place, places them
+            # at a post if this place is their home, and the closure adopts
+            # only what it placed (`charter_generate._featured_assignments`).
+            # The router's verdict rides along as evidence, not a veto: its
+            # travel test reads the opening too, and an opening that sets the
+            # PLAYER down from a ferry made the pilot waiting on the landing
+            # stage a "visitor" by somebody else's arrival (scratch story 165,
+            # where she then met her own brother as a stranger). A route the
+            # author chose is never a candidate.
+            seed = featured_resident_seed(char_id, sheet)
+            seed_id = str(seed["seed_id"])
+            folded = " ".join(str(seed.get("name") or "").split()).casefold()
+            if seed_id not in featured_ids and not (
+                    folded and featured_by_name.get(folded)):
+                seed["router"] = {
+                    "verdict": str(route.get("summary") or ""),
+                    "reasons": [str((r or {}).get("claim") or "")
+                                for r in route.get("reasons") or ()][:3]}
+                clean.setdefault("candidate_residents", []).append(seed)
+                route["candidate_seed_id"] = seed_id
+                routes[str(char_id)]["candidate_seed_id"] = seed_id
+                private[seed_id] = {
+                    "habits": featured_resident_private_habits(sheet)}
     wset_for_frame(cid, "character_history_routes", routes, frame_id)
     if featured:
         clean["featured_residents"] = featured
@@ -1228,6 +1255,21 @@ def _complete_cast_histories(cid, request, prepared, generated, *,
     opening_row = q(
         "SELECT scenario FROM chats WHERE id=?", (cid,), one=True)
     opening = str(opening_row["scenario"] or "") if opening_row else ""
+    for item in prepared:
+        # A CANDIDATE THE ROOM PLACED LIVES HERE: their route becomes the
+        # resident one, by the router's own constructor, so everything below
+        # integrates them exactly as an author-chosen resident.
+        route = item["route"]
+        candidate = str(route.get("candidate_seed_id") or "")
+        if candidate and bindings.get(candidate):
+            from story.history_routing import _manual_route
+            route.update(_manual_route("resident"))
+            route["seed_id"] = candidate
+            route["reasons"] = list(route.get("reasons") or ()) + [
+                {"source": "writers_room",
+                 "claim": "placed at a post in the place it planned"}]
+            routes.setdefault(str(item["char_id"]), {}).update(
+                copy.deepcopy(route))
     for item in prepared:
         char_id, sheet, route = (
             item["char_id"], item["sheet"], item["route"])
@@ -2082,12 +2124,16 @@ def _plan_lived_location(cid, request, chat, town_planner=None):
         naming_register = sorted(registered_identity_names(cid) or ())[:24]
     except Exception:
         naming_register = []
+    # Candidates are the ROOM's to decide; the one-shot is never asked.
+    candidates = (list(request.get("candidate_residents") or [])
+                  if callable(town_planner) else [])
     constraints = {
         key: copy.deepcopy(value)
         for key, value in (("scale", request.get("scale")),
                            ("topology", request.get("topology")),
                            ("required_rooms", request.get("required_rooms")),
                            ("featured_residents", requested_residents),
+                           ("candidate_residents", candidates),
                            ("population", population),
                            ("naming_register", naming_register))
         if value not in (None, "", [])}
@@ -2103,6 +2149,7 @@ def _plan_lived_location(cid, request, chat, town_planner=None):
     closure_inputs = {
         "chat_id": int(cid),
         "featured_residents": requested_residents,
+        "candidate_residents": candidates,
         "naming_law": naming_law,
         "population": population,
         # THE PREHISTORY IS THE PLANNER'S TOO, when there is one
@@ -2168,6 +2215,7 @@ def _plan_lived_location(cid, request, chat, town_planner=None):
     town = close_plan(
         plan, history=history,
         featured_residents=requested_residents,
+        candidate_residents=candidates,
         reservation=story_identity_reservation(cid, laws),
         naming_law=naming_law, population=population)
     unnamed = [

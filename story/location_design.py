@@ -294,6 +294,7 @@ def check(cid):
                 # answering a different question.
                 history=row.get("history") or {},
                 featured_residents=task.get("featured_residents") or [],
+                candidate_residents=task.get("candidate_residents") or [],
                 reservation=_reservation(task, plan),
                 naming_law=task.get("naming_law"),
                 population=task.get("population"))

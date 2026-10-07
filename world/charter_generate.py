@@ -880,18 +880,31 @@ def normalize_featured_residents(rows):
     return out
 
 
-def _featured_assignments(plan, residents):
+def _featured_assignments(plan, residents, candidates=()):
     """Assign authored residents once, with a deterministic omission repair.
 
     The planner gets first refusal because lore vocabulary is semantic. If it
     omits somebody, lexical overlap with the actual post requirements chooses
     a conservative existing post; closure never drops an authored resident or
     asks a second model call merely to repair a list omission.
+
+    ``candidates`` are cast members the launch did not place, whose
+    residence the PLANNER decides (owner ruling, 2026-10-07: the Writers'
+    Room chooses featured residents when the launch names none). A candidate
+    the plan places in a charter's `featured_residents` becomes a resident
+    exactly as a requested one is; one it leaves out is NOT repaired in --
+    leaving them out is the planner saying they live elsewhere.
     """
     residents = {
         str(row.get("seed_id")): copy.deepcopy(row)
         for row in residents or () if isinstance(row, dict)
         and str(row.get("seed_id") or "").strip()
+    }
+    candidates = {
+        str(row.get("seed_id")): copy.deepcopy(row)
+        for row in candidates or () if isinstance(row, dict)
+        and str(row.get("seed_id") or "").strip()
+        and str(row.get("seed_id")) not in residents
     }
     assigned = {}
     charters = _plan_charters(plan)[:PLAN_CHARTERS]
@@ -900,6 +913,8 @@ def _featured_assignments(plan, residents):
             if not isinstance(row, dict):
                 continue
             seed_id = str(row.get("seed_id") or "")
+            if seed_id in candidates and seed_id not in residents:
+                residents[seed_id] = candidates[seed_id]
             if seed_id in residents and seed_id not in assigned:
                 assigned[seed_id] = (ci, copy.deepcopy(row))
     # THE POST A ROLE NAMES IS THE POST. The brief said "Bragg the
@@ -929,7 +944,7 @@ def _featured_assignments(plan, residents):
         row["post"] = post_key
         assigned[seed_id] = (ci, row)
     for seed_id, resident in residents.items():
-        if seed_id in assigned or not charters:
+        if seed_id in assigned or not charters or seed_id in candidates:
             continue
         resident_words = _words(resident.get("public_history"))
         for ability in resident.get("abilities") or ():
@@ -953,7 +968,8 @@ def _featured_assignments(plan, residents):
 
 
 def close_plan(plan, *, history=None, featured_residents=None,
-               reservation=None, naming_law=None, population=None):
+               reservation=None, naming_law=None, population=None,
+               candidate_residents=None):
     """Convert qualitative model output to bounded executable structures.
 
     ``reservation`` is the story's registered identity forms
@@ -1039,7 +1055,7 @@ def close_plan(plan, *, history=None, featured_residents=None,
     charters = {}
     pending = []
     resident_sources, resident_assignments = _featured_assignments(
-        plan, featured_residents)
+        plan, featured_residents, candidate_residents)
     interventions = list((history or {}).get("interventions") or ())
     for ci, raw in enumerate(raw_charters):
         ckey = _key(raw.get("key"), f"institution_{ci + 1}")
