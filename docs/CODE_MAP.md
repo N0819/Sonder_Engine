@@ -36,7 +36,7 @@
 | `agents/perception.py` | 7922 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1854 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 1754 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 1777 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3076 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -55,7 +55,7 @@
 | `llm/llm_quality.py` | 1463 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 658 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 5176 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 5230 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 6735 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -613,14 +613,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 731 | 311 lines |
-| `run_location_plan()` | 1294 | 117 lines |
-| `deliberate()` | 1508 | 91 lines |
-| `_payload()` | 475 | 78 lines |
-| `_shown_transcript()` | 404 | 69 lines |
-| `run_opening_plan()` | 1120 | 64 lines |
-| `schedule_room_work()` | 1691 | 64 lines |
-| `planner_reply()` | 1434 | 51 lines |
+| `run_planner()` | 732 | 311 lines |
+| `run_location_plan()` | 1317 | 117 lines |
+| `deliberate()` | 1531 | 91 lines |
+| `_payload()` | 476 | 78 lines |
+| `_shown_transcript()` | 405 | 69 lines |
+| `run_opening_plan()` | 1121 | 64 lines |
+| `schedule_room_work()` | 1714 | 64 lines |
+| `planner_reply()` | 1457 | 51 lines |
 
 ### `core/db.py`
 
@@ -789,14 +789,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 3711 | 347 lines |
-| `chat_complete()` | 3396 | 167 lines |
-| `_claude_cli_complete()` | 3264 | 130 lines |
-| `async _chat_complete_async_once()` | 4271 | 128 lines |
-| `_sse_openai()` | 2927 | 113 lines |
-| `async chat_complete_async()` | 4178 | 92 lines |
-| `_json_mode_recovery_stages()` | 2519 | 83 lines |
-| `async _sse_openai_async()` | 4400 | 71 lines |
+| `_chat_complete_once()` | 3749 | 363 lines |
+| `chat_complete()` | 3434 | 167 lines |
+| `_claude_cli_complete()` | 3302 | 130 lines |
+| `async _chat_complete_async_once()` | 4325 | 128 lines |
+| `_sse_openai()` | 2965 | 113 lines |
+| `async chat_complete_async()` | 4232 | 92 lines |
+| `_json_mode_recovery_stages()` | 2548 | 83 lines |
+| `async _sse_openai_async()` | 4454 | 71 lines |
 
 ### `llm/research_providers.py`
 

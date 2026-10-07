@@ -521,6 +521,50 @@ def test_the_opening_task_is_unchanged_when_nobody_said_anything(chat):
     assert "player_said" not in task
 
 
+# -- the prelude hears what the launch screen settled ------------------------
+
+def test_the_prelude_task_carries_what_the_launch_screen_settled(chat):
+    """Found in play (scratch story 164, 2026-10-06). The player's location
+    note read "a stilt town of a few hundred people ... a chandlery ... the
+    River Underwriters' local agent's office", and the prelude's first
+    question was whether the place should be "a hamlet of forty souls ... or
+    a working fen port of a few hundred, with a guild agent's office, a
+    chandlery". The task carried `location_requested`, a bool, and nothing
+    the player had written. Both launches record the request before the
+    prelude runs, so it is there to be read."""
+    from agents import story_planner
+
+    residents = [{"name": "Selwick", "role": "the moneylender"}]
+    prelude.record_setup(chat, "scenario", {"lived_location": {
+        "enabled": True, "brief": "A stilt town of a few hundred people.",
+        "horizon_hours": 720, "featured_residents": residents}})
+    task = story_planner._prelude_task(chat, None, "A shut parlour.", True)
+    assert task["author_brief"] == "A stilt town of a few hundred people."
+    assert task["horizon_hours"] == 720
+    assert task["featured_residents"] == residents
+
+
+def test_a_prelude_that_asked_for_no_place_carries_no_brief(chat):
+    from agents import story_planner
+
+    prelude.record_setup(chat, "scenario", {"lived_location": {
+        "enabled": False, "brief": "Never sent.", "horizon_hours": 720}})
+    task = story_planner._prelude_task(chat, None, "A shut parlour.", False)
+    assert not {"author_brief", "horizon_hours", "featured_residents"} & set(task)
+
+
+def test_both_packs_tell_the_prelude_the_brief_is_settled():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "language_packs"
+    for lang in ("en", "ja"):
+        text = (root / lang / "cards/system_prompts/prompts/story_planner.txt"
+                ).read_text(encoding="utf-8")
+        prelude_paragraph = next(p for p in text.split("\n\n")
+                                 if '"location_requested"' in p)
+        for key in ('"author_brief"', '"horizon_hours"', '"featured_residents"'):
+            assert key in prelude_paragraph, (lang, key)
+
+
 # -- the regimes are budgeted ------------------------------------------------
 
 def test_the_two_new_regimes_have_their_own_budgets():

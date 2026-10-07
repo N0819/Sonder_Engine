@@ -45,6 +45,7 @@ limit when spend stops it.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -1201,13 +1202,35 @@ def _cast_brief(cid):
 
 def _prelude_task(cid, frame_id, passage, location_requested):
     """What the prelude regime is handed. Deliberately the SAME shape the
-    opening gets, minus the plan: the passage, who is present, and the one
-    thing the launch screen already decided -- whether the player asked for
-    a place that was lived in before the story opens."""
+    opening gets, minus the plan: the passage, who is present, and what the
+    launch screen already decided about the place -- whether the player
+    asked for one lived in before the story opens and, when they did, what
+    they asked for, under the location regime's own keys (`_location_task`):
+    `author_brief`, the months it has behind it, the people they named.
+
+    It used to be the bool alone, so the Room asked about what the player
+    had already written: a location note giving "a few hundred people" and a
+    chandlery was answered with "a hamlet of forty souls ... or a working fen
+    port of a few hundred?" (scratch story 164, 2026-10-06). Both launches
+    record the request before the prelude runs."""
     task = _opening_task(cid, frame_id, passage)
     task["kind"] = "prelude"
     task["cast"] = _cast_brief(cid)
     task["location_requested"] = bool(location_requested)
+    if location_requested:
+        from story.prelude import pending_setup
+        args = pending_setup(cid).get("args")
+        lived = args.get("lived_location") if isinstance(args, dict) else None
+        lived = lived if isinstance(lived, dict) else {}
+        brief = str(lived.get("brief") or "").strip()
+        if brief:
+            task["author_brief"] = brief[:4000]
+        hours = lived.get("horizon_hours")
+        if isinstance(hours, (int, float)) and not isinstance(hours, bool) and hours > 0:
+            task["horizon_hours"] = hours
+        residents = lived.get("featured_residents")
+        if isinstance(residents, list) and residents:
+            task["featured_residents"] = copy.deepcopy(residents)
     return task
 
 
