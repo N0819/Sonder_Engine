@@ -3602,7 +3602,7 @@ def _one_voice_each(percepts):
 
 def speech_percept(entry, rel, observer_name, *, display, can_see,
                    proximity=None, order_key=0, observer_id=None,
-                   senses=None, voice="", prev_standing=None):
+                   senses=None, voice="", prev_standing=None, bearing=""):
     """Admit one spoken line for one observer, or None.
 
     A VOICE IS ESTABLISHED ONCE (D2; Wood -- theatre gives a vocal quality
@@ -3775,6 +3775,17 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     if isinstance(channel, dict) and not rel.get("same_room"):
         data["via"] = str(channel.get("name") or channel.get("id") or "")
         data["via_channel"] = str(channel.get("id") or "")
+    # WHERE AN UNSEEN VOICE CAME FROM, in the listener's own frame (the
+    # caller's `sound_bearing` phrase, which names no room and no body). The
+    # same fact a route is: a voice through the doorway on your right and a
+    # voice in the room with you are different things, and a view that drops
+    # it has told the reader the speaker is standing here. Found in play on
+    # 2026-10-06 (scratch story 165, turn 4581): the market's reeve answered a
+    # shout through the inn's door, the view said only "You hear a voice
+    # say", and the narrator put him "on the far side of the room" -- where
+    # the player turned to question nobody.
+    if bearing and "via" not in data:
+        data["bearing"] = str(bearing)
     return Percept(
         kind="speech", channel="hearing", source_label=display,
         fidelity=fidelity, data=data,
@@ -4973,14 +4984,17 @@ def _render_event(p):
         # speaker and a voice at your shoulder are different facts, and the
         # view is where a reader learns which one this was -- drop it here and
         # the whole channel reads as somebody standing in the room.
+        bearing = str(p.data.get("bearing") or "")
         if via and line:
             line = _en("speech_via", sentence=line.rstrip("."), via=via)
+        elif bearing and line:
+            line = _en("speech_from", sentence=line.rstrip("."), where=bearing)
         # A voice too long for the manner slot, said once after the line
         # (`_voice_fields`).
         if line and p.fidelity != "fragment" and p.data.get("said_apart"):
             # A route clause ends without a stop; a line ends on its quote.
-            line = (_end_sentence(line) if via else line.rstrip()) + " " + _en(
-                "voice_register", register=p.data["said_apart"])
+            line = (_end_sentence(line) if via or bearing else line.rstrip()) \
+                + " " + _en("voice_register", register=p.data["said_apart"])
         return line
     if p.kind == "communication":
         line = _observable_predicate(

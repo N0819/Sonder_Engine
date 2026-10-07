@@ -394,6 +394,7 @@
     "scent_source": "{label} smells of {scent}.",
     "side": " on your {side}",
     "speech_via": "{sentence} — over {via}",
+    "speech_from": "{sentence} — {where}",
     "voice_register": "The voice is {register}.",
     "tone_adjective": " in {article} {tone} voice",
     "tone_article": " in {tone} voice",

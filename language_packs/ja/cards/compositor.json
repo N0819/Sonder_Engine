@@ -311,6 +311,7 @@
     "side": "あなたの{side}側、",
     "speech": "「{body}」と{label}が言う。",
     "speech_via": "{sentence}——{via}越しに",
+    "speech_from": "{sentence}——{where}",
     "voice_register": "その声は、{register}。",
     "tone_adjective": "{tone}を声ににじませ、",
     "tone_article": "{tone}を声ににじませ、",

@@ -3957,6 +3957,26 @@ def _composer_prev_seen(ledger, pid):
     return set(seen) if isinstance(seen, list) else None
 
 
+def _speech_bearing(scene, observer, speaker, can_see, rel):
+    """Where an unseen voice from ANOTHER room came from, as the listener's
+    own egocentric phrase ("through the doorway to your right"), or "".
+
+    The phrase is `spatial.sound_bearing`'s, the one an unseen act is placed
+    by (`composer._sound_bearing_phrase`): it names no room and no body, so
+    it discloses nothing an ear did not take in. A speaker in sight, or in
+    the listener's own room, needs none. See `composer.speech_percept`."""
+    if can_see or not isinstance(rel, dict) or rel.get("same_room"):
+        return ""
+    try:
+        from world.spatial import sound_bearing
+        rec = sound_bearing(scene, observer, speaker)
+    except Exception:
+        return ""
+    if not isinstance(rec, dict):
+        return ""
+    return str(rec.get("phrase") or "").strip()
+
+
 def _voice_register_for(ctx, speaker):
     """The speaker's own vocal register from their sheet, or "" -- the voice
     the composer establishes ONCE per observer (D2, `composer.speech_percept`).
@@ -5821,7 +5841,8 @@ def _opening_line_percept(ctx, sc, p, pid, name, entry, order, *, field,
         name, display=display, can_see=can_see,
         proximity=measured_proximity_rel(sc, name, speaker),
         order_key=order, observer_id=pid, senses=senses,
-        voice=_voice_register_for(ctx, speaker))
+        voice=_voice_register_for(ctx, speaker),
+        bearing=_speech_bearing(sc, name, speaker, can_see, rel))
 
 
 def _composer_establish_views(ctx, sc, perceivers, known, p_name,
@@ -6331,7 +6352,9 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         order_key=idx, observer_id=pid,
                         senses=p.get("sense_card"),
                         voice=_voice_register_for(ctx, event_actor),
-                        prev_standing=prev_standing)
+                        prev_standing=prev_standing,
+                        bearing=_speech_bearing(event_scene, name, event_actor,
+                                                said_seen, speech_rel))
                     if percept:
                         percepts.append(percept)
                 elif event.get("type") == "communication":
@@ -7370,7 +7393,9 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         order_key=order, observer_id=pid,
                         senses=p.get("sense_card"),
                         voice=_voice_register_for(ctx, speaker),
-                        prev_standing=prev_standing)
+                        prev_standing=prev_standing,
+                        bearing=_speech_bearing(event_scene, name, speaker,
+                                                can_see, rel))
                     if percept:
                         percepts.append(percept)
                         unheard.discard(
