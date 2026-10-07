@@ -418,6 +418,62 @@ class TestOperations:
                         (result["entry_id"],), one=True)
         assert row["lorebook_id"] == canon and row["title"] == "The search bell"
 
+    def test_lore_the_room_marks_common_reaches_a_mind(self, temp_db):
+        """Without a depth tag every entry the Room filed was Director-only
+        ("an entry with NO depth tag reaches no mind"), so it could tell no
+        character and no townsperson anything (scratch story 165,
+        2026-10-07)."""
+        from mind.memory import chat_lorebook_ids, knowledge_for_character
+        cid = _story(temp_db)
+        uid = _ready(temp_db, cid, ops=[{
+            "op": "file_lore", "subject_id": "search_bell",
+            "subject_kind": "setting", "title": "The search bell",
+            "content": "Three pulls and a pause: someone is out past dark.",
+            "category": "other", "knowledge_tag": "common"}])
+        preview = preview_package(cid, uid)
+        assert preview["errors"] == []
+        assert preview["changes"][0]["known_by"] == "minds with common knowledge"
+        validate_package(cid, uid)
+        publish_package(cid, uid, expected_revision=_rev(cid, uid))
+        known = knowledge_for_character(chat_lorebook_ids(cid), None,
+                                        ["common"], [], chat_id=cid)
+        assert [k["title"] for k in known] == ["The search bell"]
+
+    def test_lore_left_untagged_is_the_directors_alone(self, temp_db):
+        from mind.memory import chat_lorebook_ids, knowledge_for_character
+        cid = _story(temp_db)
+        uid = _ready(temp_db, cid, ops=[{
+            "op": "file_lore", "subject_id": "search_bell",
+            "title": "The search bell", "content": "Three pulls and a pause."}])
+        preview = preview_package(cid, uid)
+        assert preview["changes"][0]["known_by"] == "the Director alone"
+        validate_package(cid, uid)
+        publish_package(cid, uid, expected_revision=_rev(cid, uid))
+        assert knowledge_for_character(chat_lorebook_ids(cid), None,
+                                       ["common"], [], chat_id=cid) == []
+
+    def test_locations_alone_make_lore_local(self, temp_db):
+        from mind.memory import chat_lorebook_ids, knowledge_for_character
+        cid = _story(temp_db)
+        uid = _ready(temp_db, cid, ops=[{
+            "op": "file_lore", "subject_id": "chapel_hours",
+            "title": "Chapel hours", "content": "The sexton locks up at dusk.",
+            "knowledge_tag": "common", "knowledge_locations": ["chapel_nave"]}])
+        validate_package(cid, uid)
+        publish_package(cid, uid, expected_revision=_rev(cid, uid))
+        books = chat_lorebook_ids(cid)
+        assert knowledge_for_character(books, "chapel_nave", ["common"], [],
+                                       chat_id=cid)
+        assert knowledge_for_character(books, "quay", ["common"], [],
+                                       chat_id=cid) == []
+
+    def test_an_unknown_depth_is_refused(self, temp_db):
+        cid = _story(temp_db)
+        with pytest.raises(ValueError, match="knowledge_tag"):
+            _ready(temp_db, cid, ops=[{
+                "op": "file_lore", "subject_id": "search_bell",
+                "content": "x", "knowledge_tag": "secret"}])
+
     def test_lore_naming_a_book_that_is_not_attached_is_refused(self, temp_db):
         cid = _story(temp_db)
         uid = _ready(temp_db, cid, ops=[{

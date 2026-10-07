@@ -1659,11 +1659,36 @@ def _shape_file_lore(op):
     if not subject:
         raise ValueError("file_lore names its subject id (a room id, a plan uid, "
                          "a charter key, or an id-shaped slug for a setting fact)")
-    from mind.memory import LORE_CATEGORIES
+    from mind.memory import KNOWLEDGE_RANGES, KNOWLEDGE_TAGS, LORE_CATEGORIES
     category = _text(op.get("category"), 40) or "other"
     if category not in LORE_CATEGORIES:
         raise ValueError("file_lore category %r is not one of %s"
                          % (category, ", ".join(LORE_CATEGORIES)))
+    # THE GATE FIELDS (`memory.add_lore`): who may KNOW the entry. Without
+    # them every entry the Room filed was Director-only -- "an entry with NO
+    # depth tag reaches no mind" -- so a Room with authority over lore could
+    # tell no character and no townsperson anything (scratch story 165,
+    # 2026-10-07: a reeve called the search bell "the wreck bell").
+    tag = _text(op.get("knowledge_tag"), 20).casefold()
+    if tag and tag not in KNOWLEDGE_TAGS:
+        raise ValueError("file_lore knowledge_tag %r is not one of %s"
+                         % (tag, ", ".join(KNOWLEDGE_TAGS)))
+    locations = [_text(x, 120) for x in op.get("knowledge_locations") or ()
+                 if _text(x, 120)]
+    # Locations name where the entry APPLIES, and were read only under a
+    # `local` range that nothing could set: given alone they meant nothing.
+    reach = _text(op.get("knowledge_range"), 20).casefold() or (
+        "local" if locations else "")
+    if reach and reach not in KNOWLEDGE_RANGES:
+        raise ValueError("file_lore knowledge_range %r is not one of %s"
+                         % (reach, ", ".join(KNOWLEDGE_RANGES)))
+    if reach == "local" and not locations:
+        raise ValueError("a local file_lore names its knowledge_locations")
+    circles = op.get("circles")
+    if circles is not None:
+        circles = [_text(c, 80) for c in (
+            circles if isinstance(circles, (list, tuple)) else [circles])
+            if _text(c, 80)]
     return {
         "subject_id": subject,
         "subject_kind": _text(op.get("subject_kind"), 40) or "place",
@@ -1671,8 +1696,10 @@ def _shape_file_lore(op):
         "title": _text(op.get("title"), 200),
         "content": content,
         "category": category,
-        "knowledge_locations": [_text(x, 120) for x in op.get("knowledge_locations") or ()
-                                if _text(x, 120)],
+        "knowledge_tag": tag,
+        "knowledge_range": reach,
+        "knowledge_locations": locations,
+        "circles": circles,
         "book_id": op.get("book_id"),
         # A result of `story/room_research` files itself under the disposition
         # it came in with, and keeps where and when it was fetched.
@@ -1739,7 +1766,14 @@ def _preview_file_lore(cid, frame_id, op, world):
         errors.append("file_lore: %s" % exc)
     return {"changes": [{"kind": "lore_filed", "book_id": book,
                          "title": op["title"] or op["keys"],
-                         "category": op["category"]}],
+                         "category": op["category"],
+                         "known_by": ("the Director alone"
+                                      if not op.get("knowledge_tag") else
+                                      "minds with %s knowledge%s" % (
+                                          op["knowledge_tag"],
+                                          " at %s" % ", ".join(op["knowledge_locations"])
+                                          if op.get("knowledge_range") == "local"
+                                          else ""))}],
             "errors": errors, "warnings": warnings}
 
 
@@ -1761,10 +1795,16 @@ def _apply_file_lore(cid, frame_id, op, turn_idx, package_uid_=""):
         provenance = "%s %s fetched %s; %s" % (
             record["disposition"], op["source_url"], op.get("fetched_at") or "?",
             provenance)
+    # An entry with no `knowledge_tag` is Director-only, and that is the
+    # Room's choice when it leaves the field out (`add_lore` asks every
+    # writer to say so where it calls).
     entry_id = add_lore(
         book, op["keys"] or op["title"], op["content"], turn_added=turn_idx,
         category=op["category"], title=op["title"] or None,
+        knowledge_tag=op.get("knowledge_tag") or None,
+        knowledge_range=op.get("knowledge_range") or None,
         knowledge_locations=op["knowledge_locations"] or None,
+        circles=op.get("circles"),
         source_notes=provenance)
     return {"entry_id": entry_id, "book_id": book}
 
@@ -2840,7 +2880,15 @@ OPERATION_FIELDS = {
     "file_lore": {"subject_id": "a room id, a plan uid, a charter key, or an id-shaped slug",
                   "content": "the entry", "subject_kind?": "place | person | thing | setting",
                   "category?": "a lore category", "title?": "", "keys?": "comma-separated",
-                  "knowledge_locations?": "[room ids]", "book_id?": "lorebook id"},
+                  "knowledge_tag?": "common | scholarly | esoteric -- who may KNOW it: "
+                                    "common is what anyone here knows; leave it out "
+                                    "and only the Director reads the entry",
+                  "knowledge_range?": "global | local -- local applies only in "
+                                      "knowledge_locations",
+                  "knowledge_locations?": "[room ids]",
+                  "circles?": "[circle names] -- a kept fact only those circles know; "
+                              "[] is public; leave it out to inherit the book's",
+                  "book_id?": "lorebook id"},
     "answer_need": {"need_uid": "an open need", "fill": "{...what fills it}"},
     "close_need": {"need_uid": "an open need", "reason": "why it closes unanswered"},
     "set_vistas": {"vistas": "[{name, bearing: n|ne|e|se|s|sw|w|nw, distance_km, "

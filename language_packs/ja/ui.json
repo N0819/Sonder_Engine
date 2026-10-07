@@ -253,6 +253,7 @@
   "a lived-location start can generate history for at most ${CAST_HISTORY_REQUEST_CAP} full characters at once; Charter residents themselves are not limited by this cognition budget": "生活史のある場所の開始時に一度に経歴を生成できる完全な人物は最大${CAST_HISTORY_REQUEST_CAP}人です。Charterの住民数はこの認知処理上限の対象外です。",
   "A lived-location start can prepare at most 16 full characters at once. Background Charter residents do not share this limit.": "生活史のある場所の開始時に準備できる完全な人物は一度に最大16人です。背景のCharter住民にはこの上限はありません。",
   "A local folder is searched by filename — name files for what they sound like (“rain_on_tin_roof.ogg”), or drop an index.json beside them mapping a file to extra words. Freesound needs a free API key from freesound.org/apiv2/apply; it fetches CC0 and Attribution sounds by default, and whatever is playing is credited in the 🎧 panel.": "ローカルフォルダはファイル名で検索されます — ファイルに「rain_on_tin_roof.ogg」のように聞こえる名前を付けるか、ファイルの横にindex.jsonを置いて追加の単語にマッピングします。Freesoundにはfreesound.org/apiv2/applyから無料のAPIキーが必要です。デフォルトではCC0およびAttributionサウンドを取得し、再生中のものは🎧パネルにクレジットが表示されます。",
+  "a local file_lore names its knowledge_locations": "local の file_lore には knowledge_locations を指定してください",
   "a local pin needs a path inside the library": "ローカルピンにはライブラリ内のパスが必要です",
   "a mandate keeps the sentence the player granted": "権限委任にはプレイヤーが許可した文をそのまま記録します",
   "a mandate permits at least one capability": "権限委任は少なくとも一つの能力を許可します",

@@ -7,7 +7,7 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 2297 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 2344 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4960 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_bare.py` | 958 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
@@ -127,7 +127,7 @@
 | `story/mandates.py` | 626 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/opening_plan.py` | 121 |  | `core.db` |
-| `story/plot_packages.py` | 3915 |  | `world.spatial` |
+| `story/plot_packages.py` | 3963 |  | `world.spatial` |
 | `story/prelude.py` | 188 |  | `core.db` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 445 |  | `core.db` |
@@ -253,14 +253,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 2094 | 204 lines |
+| `_react_one()` | 2141 | 204 lines |
 | `_background_react()` | 499 | 183 lines |
-| `declare_charter_figures()` | 1850 | 164 lines |
-| `scene_life()` | 1165 | 158 lines |
-| `_demanded_presences()` | 952 | 144 lines |
-| `_present_others()` | 1559 | 135 lines |
+| `declare_charter_figures()` | 1897 | 164 lines |
+| `scene_life()` | 1212 | 158 lines |
+| `_demanded_presences()` | 999 | 144 lines |
+| `_present_others()` | 1606 | 135 lines |
 | `_beat_for_presence()` | 194 | 84 lines |
-| `managed_presences()` | 807 | 78 lines |
+| `managed_presences()` | 854 | 78 lines |
 
 ### `agents/character.py`
 
@@ -1618,14 +1618,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 3093 | 143 lines |
+| `_package_checks()` | 3141 | 143 lines |
 | `_preview_plan_rooms()` | 1030 | 108 lines |
-| `fire_due_clocks()` | 3666 | 102 lines |
+| `fire_due_clocks()` | 3714 | 102 lines |
 | `_plan_edge()` | 877 | 84 lines |
-| `publish_package()` | 3447 | 84 lines |
-| `_reach_warning()` | 3238 | 79 lines |
+| `publish_package()` | 3495 | 84 lines |
+| `_reach_warning()` | 3286 | 79 lines |
 | `normalize_package()` | 253 | 77 lines |
-| `_tick_triggered_clocks()` | 3563 | 73 lines |
+| `_tick_triggered_clocks()` | 3611 | 73 lines |
 
 ### `story/prelude.py`
 

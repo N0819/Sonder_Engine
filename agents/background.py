@@ -685,6 +685,42 @@ def _background_react(ctx, nonce):
 # Scene manager (docs/design/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12)
 # ---------------------------------------------------------------------------
 
+#: Public lore a background voice is handed: at most this many entries,
+#: and this many characters of them in all. A payload large enough to
+#: restate gets restated (`charter_log.scene_ledger`), and a voice answers
+#: one beat.
+COMMON_KNOWLEDGE_ENTRIES = 8
+COMMON_KNOWLEDGE_CHARS = 1600
+
+
+def _common_knowledge(ctx, room_id):
+    """What anyone living here knows: the story's lore through the SAME gate
+    a character's `world_knowledge` passes (`knowledge_for_character`), read
+    as an ordinary person reads it -- `common` depth, no circle, so a kept
+    fact and a scholar's never arrive -- with ranges honoured for this room.
+    The registered cast and the player are named in it only where every
+    reader may know them (`observer_name_scrub`, read for nobody in
+    particular): a voice learns the town from it, never a stranger's name.
+    """
+    from agents.common import _books, observer_name_scrub, scrub_names_deep
+    from mind.memory import knowledge_for_character
+
+    rows = knowledge_for_character(
+        _books(ctx), room_id or None, ["common"], [], circles=(),
+        limit=COMMON_KNOWLEDGE_ENTRIES, chat_id=ctx.chat.id,
+        frame_id=getattr(ctx.turn, "frame_id", None))
+    out, used = [], 0
+    for row in rows:
+        content = " ".join(str(row.get("content") or "").split())
+        if not content or used + len(content) > COMMON_KNOWLEDGE_CHARS:
+            continue
+        used += len(content)
+        out.append({"title": str(row.get("title") or ""), "content": content})
+    if not out:
+        return out
+    return scrub_names_deep(out, observer_name_scrub(ctx.chat, "", ctx.cast))
+
+
 def _place_block(ctx, room_id, *, walkable_from=None):
     """Objective self-locating knowledge for the managed location (§3.7). Every
     field is something anyone standing in the room trivially has.
@@ -735,6 +771,17 @@ def _place_block(ctx, room_id, *, walkable_from=None):
             _room_notes_from_lore(room_id, ctx, sc) if room_id else "")[:600]
     except Exception:
         block["world_knowledge"] = ""
+    # AND WHAT EVERYBODY HERE KNOWS, which the paragraph above promised and
+    # `world_knowledge` stopped carrying when lore filing for rooms was
+    # retired (2026-09-03): `_room_notes_from_lore` became the room's own
+    # prose, and no lore reached a background voice at all. Measured
+    # (scratch story 165, turn 4581, 2026-10-07): told the search bell was
+    # ringing, a reeve whose payload held no word of the town's bells called
+    # it "the wreck bell. Something's come up on the Corvina."
+    try:
+        block["common_knowledge"] = _common_knowledge(ctx, room_id)
+    except Exception:
+        block["common_knowledge"] = []
     try:
         from story.scene import fiction_model, style_guide
         block["genre"] = (fiction_model(ctx.chat.id).get("genre") or {}).get("primary") or ""
