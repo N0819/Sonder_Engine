@@ -28,9 +28,21 @@ function el(tag, attrs = {}, ...kids) {
       e.setAttribute(k, value);
     }
   }
+  // A value is never chrome. The walk in i18n-core.js has always left the
+  // text of a textarea or input, and anything opted out, untranslated
+  // (I18N_SKIP_TEXT) -- but this loop runs BEFORE the walk, so that held only
+  // where a caller remembered `txt()`, and 20 textareas built here did not.
+  // Issue #23: the pipeline drawer's ✎ put a step's whole stored JSON through
+  // the template rules, which Firefox abandoned with "too much recursion";
+  // and under a translated catalog any of those textareas whose value was a
+  // catalog key opened translated and saved that way -- the narrator-editor
+  // collision above, wherever a caller forgot. So the element decides, by the
+  // same skip set the walk reads.
+  const verbatim = e.matches(I18N_SKIP_TEXT);
   for (const k of kids.flat()) {
     if (k == null || k === false) continue;
-    e.append(k.nodeType ? k : document.createTextNode(t(String(k))));
+    e.append(k.nodeType ? k
+      : document.createTextNode(verbatim ? String(k) : t(String(k))));
   }
   return e;
 }

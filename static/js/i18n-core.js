@@ -44,17 +44,33 @@ const I18N_ATTR_SELECTOR = I18N_ATTRS.map(name => "[" + name + "]").join(",");
 // its shape. Named because it is a threshold: see the shadowing case below.
 const I18N_MIN_ANCHOR_CHARS = 3;
 
+// The four characters a regex's `.` refuses. No placeholder has ever matched
+// across a line, and the one-pass match below keeps that rule rather than
+// quietly widening what a template accepts.
+const I18N_LINE_BREAK = /[\n\r\u2028\u2029]/;
+
 // Compile the catalog's `${...}` templates into rules that can be matched
 // back from an already-interpolated string. Two rules decide whether that is
 // possible at all, and both were once missing:
 //
-// 1. A key made only of placeholders ("${a} ${b}") compiles to
-//    /^(.+?) (.+?)$/ -- every string with a space. One such rule sat near the
-//    front of the catalog and shadowed 220 of the 226 templates behind it, so
-//    almost every counter and "X of Y" label rendered English despite being
-//    correctly translated.
+// 1. A key made only of placeholders ("${a} ${b}") matches every string with
+//    a space. One such rule sat near the front of the catalog and shadowed
+//    220 of the 226 templates behind it, so almost every counter and "X of Y"
+//    label rendered English despite being correctly translated.
 // 2. Order must be by how much LITERAL text a rule pins down, not by catalog
 //    position, or a vague rule still wins over a precise one.
+//
+// A rule is its key's literal text, split at the placeholders. It used to be
+// a regex, /^L0(.+?)L1…(.+?)Lk$/, and the regex was issue #23: lazy groups
+// backtrack, so a line that keeps offering a rule's literals before failing
+// costs the cube of its length (V8, 2026-10-06: 2,000 characters 13 ms, 4,000
+// characters 102 ms), and Firefox abandons it with "too much recursion" --
+// at about 30,000 characters of one-line JSON, which is what the pipeline
+// drawer's step editor handed it. Every text node the page adds reaches this
+// code, so it must be safe on all of them; `i18nMatchTemplate` answers the
+// regex's question in one pass. A key whose literal text holds a line break
+// keeps its regex, because the one-pass answer is proven only without one.
+// No pack has such a key.
 function i18nCompileTemplates(messages) {
   return Object.entries(messages || {})
     .filter(([key]) => key.includes("${"))
@@ -63,7 +79,9 @@ function i18nCompileTemplates(messages) {
       const parts = literals
         .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
       return {
-        regex: new RegExp(`^${parts.join("(.+?)")}$`),
+        literals,
+        regex: I18N_LINE_BREAK.test(literals.join(""))
+          ? new RegExp(`^${parts.join("(.+?)")}$`) : null,
         value,
         weight: literals.join("").trim().length,
       };
@@ -72,15 +90,50 @@ function i18nCompileTemplates(messages) {
     .sort((a, b) => b.weight - a.weight);
 }
 
+// What each placeholder of `rule` stands for in `source`, or null: the
+// captures /^L0(.+?)L1…(.+?)Lk$/ would return, found in one pass.
+//
+// Taking each literal at its EARLIEST place is exact, not a heuristic. The
+// lazy regex tries the shortest captures first; a later place for any
+// literal only leaves less room for what follows it, so when the earliest
+// places fail every placing fails, and when they succeed they are the match
+// the regex reports. `broken` says `source` holds a line break: a break can
+// sit in no placeholder and in no literal of a regex-free rule, so such a
+// source matches none of them.
+function i18nMatchTemplate(rule, source, broken) {
+  if (rule.regex) {
+    const match = source.match(rule.regex);
+    return match ? match.slice(1) : null;
+  }
+  const parts = rule.literals;
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  if (parts.length === 1) return source === first ? [] : null;
+  if (broken || !source.startsWith(first) || !source.endsWith(last)) return null;
+  const end = source.length - last.length;
+  const captures = [];
+  let at = first.length;
+  for (let i = 1; i < parts.length - 1; i++) {
+    const found = source.indexOf(parts[i], at + 1);
+    if (found < 0) return null;
+    captures.push(source.slice(at, found));
+    at = found + parts[i].length;
+  }
+  if (end - at < 1) return null;
+  captures.push(source.slice(at, end));
+  return captures;
+}
+
 // Exact key first, then the compiled templates in anchor order.
 function i18nTranslate(messages, rules, source) {
   source = String(source ?? "");
   const catalog = messages || {};
   if (catalog[source] !== undefined) return catalog[source];
+  const broken = I18N_LINE_BREAK.test(source);
   for (const rule of rules || []) {
-    const match = source.match(rule.regex);
+    const match = i18nMatchTemplate(rule, source, broken);
     if (!match) continue;
-    let index = 1;
+    let index = 0;
     // Translate each CAPTURE too. The captured span is whatever the caller
     // interpolated, and it is very often another engine string with its own
     // catalog entry -- `${phase} (+2 running alongside)` captures an already

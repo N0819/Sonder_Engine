@@ -37,7 +37,9 @@ SHARED_RULES = (
     "I18N_SKIP_TREE",
     "I18N_SKIP_TEXT",
     "I18N_ATTRS",
+    "I18N_LINE_BREAK",
     "i18nCompileTemplates",
+    "i18nMatchTemplate",
     "i18nTranslate",
     "i18nLocalize",
     "i18nObserve",
@@ -113,6 +115,22 @@ def test_the_spa_still_owns_only_what_is_its_own():
 
     assert "S.uiCatalog" in body
     assert "out.split(`{${key}}`)" in body
+
+
+def test_el_never_translates_a_value():
+    """Issue #23. `el()` translates its string children BEFORE the walk sees
+    them, so the walk's exclusion of a textarea's text held only where a
+    caller wrapped the value in `txt()` -- 20 textareas did not, the pipeline
+    drawer's step editor among them, whose one-line JSON took Firefox into
+    "too much recursion" in the template rules. The element decides now, by
+    the walk's own skip set: a second list here would be the drift B25 took
+    out of the two localizers. Driven in browser_tests/test_ui_translator.py.
+    """
+    components = (STATIC / "js/components.js").read_text(encoding="utf-8")
+    body = components[components.index("function el("):
+                      components.index("// ---- Modal ----")]
+    assert "e.matches(I18N_SKIP_TEXT)" in body
+    assert "verbatim ? String(k) : t(String(k))" in body
 
 
 def test_the_writers_room_translates_its_own_lines_and_nothing_else():
