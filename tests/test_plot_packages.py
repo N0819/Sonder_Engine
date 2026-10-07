@@ -382,13 +382,49 @@ class TestOperations:
         errors = preview_package(cid, uid)["errors"]
         assert any("gospel" in e and "disposition" in e for e in errors)
 
-    def test_lore_with_no_book_or_a_bad_subject_is_refused(self, temp_db):
+    def test_lore_with_a_bad_subject_is_refused(self, temp_db):
         cid = _story(temp_db)
         uid = _ready(temp_db, cid, ops=[{
             "op": "file_lore", "subject_id": "Drowned Bell!", "content": "x"}])
         errors = preview_package(cid, uid)["errors"]
-        assert any("no book" in e for e in errors)
         assert any("not an id" in e for e in errors)
+
+    def test_lore_in_a_chat_with_no_canon_mints_the_chats_own(self, temp_db):
+        """A story launched from a scenario has no lorebook, and the Room
+        granted authority over lore could file none ("No lorebook is
+        attached, so there was nowhere to file them" -- scratch story 165,
+        2026-10-06). Every other writer of canon during play mints the
+        chat's own book (`memory.ensure_chat_canon_book`); so does this one,
+        at publish, never at preview."""
+        cid = _story(temp_db)
+        assert temp_db.q("SELECT lorebook_id FROM chats WHERE id=?", (cid,),
+                         one=True)["lorebook_id"] is None
+        uid = _ready(temp_db, cid, ops=[{
+            "op": "file_lore", "subject_id": "search_bell",
+            "subject_kind": "setting", "title": "The search bell",
+            "content": "Three pulls and a pause: someone is out on the water "
+                       "past dark and has not come in.",
+            "category": "other"}])
+        assert preview_package(cid, uid)["errors"] == []
+        assert temp_db.q("SELECT lorebook_id FROM chats WHERE id=?", (cid,),
+                         one=True)["lorebook_id"] is None, "a preview mints nothing"
+        validate_package(cid, uid)
+        out = publish_package(cid, uid, expected_revision=_rev(cid, uid))
+        result = out["applied"][0]["result"]
+        canon = temp_db.q("SELECT lorebook_id FROM chats WHERE id=?", (cid,),
+                          one=True)["lorebook_id"]
+        assert canon and result["book_id"] == canon
+        row = temp_db.q("SELECT * FROM lore_entries WHERE id=?",
+                        (result["entry_id"],), one=True)
+        assert row["lorebook_id"] == canon and row["title"] == "The search bell"
+
+    def test_lore_naming_a_book_that_is_not_attached_is_refused(self, temp_db):
+        cid = _story(temp_db)
+        uid = _ready(temp_db, cid, ops=[{
+            "op": "file_lore", "subject_id": "search_bell", "content": "x",
+            "book_id": 987654}])
+        errors = preview_package(cid, uid)["errors"]
+        assert any("not attached" in e for e in errors)
 
     def test_long_operations_are_prepared_before_publish(self, temp_db, monkeypatch):
         import story.plot_packages as pp

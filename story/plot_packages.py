@@ -1682,7 +1682,28 @@ def _shape_file_lore(op):
     }
 
 
-def _target_book(cid, world, op):
+#: What `_target_book` answers, at preview, for lore naming no book in a chat
+#: that has no canon yet: the chat's own canon, minted on first filing.
+CANON_ON_FIRST_FILING = "chat canon (minted on first filing)"
+
+
+def _target_book(cid, world, op, *, mint=False):
+    """The book a `file_lore` writes to: the one it names, if attached, or
+    the chat's own canon.
+
+    A CHAT WITH NO CANON YET GETS ONE, the way every other writer of canon
+    during play gets one (`memory.ensure_chat_canon_book`: "one spelling,
+    folded here, rather than a rule each new writer must remember"). The Room
+    was the writer that refused instead: a story launched from a scenario has
+    no lorebook, so a Room granted authority over lore could file none --
+    "No lorebook is attached, so there was nowhere to file them" (scratch
+    story 165, 2026-10-06) -- and the town's public facts, which reach a
+    background voice only as lore scoped to its place, never existed. Its
+    voices then supplied their own: a reeve hearing the search bell called it
+    "the wreck bell. Something's come up on the Corvina" (turn 4581). The
+    preview mints nothing (``mint=False`` answers `CANON_ON_FIRST_FILING`);
+    publishing does. A book NAMED but not attached is still refused.
+    """
     from mind.memory import chat_lorebook_ids
     attached = set(chat_lorebook_ids(cid))
     canon = world["chat"].get("lorebook_id")
@@ -1694,7 +1715,12 @@ def _target_book(cid, world, op):
         except (TypeError, ValueError):
             return None, attached
         return (book if book in attached else None), attached
-    return (int(canon) if canon else None), attached
+    if canon:
+        return int(canon), attached
+    if not mint:
+        return CANON_ON_FIRST_FILING, attached
+    from mind.memory import ensure_chat_canon_book
+    return ensure_chat_canon_book(cid), attached
 
 
 def _preview_file_lore(cid, frame_id, op, world):
@@ -1702,8 +1728,7 @@ def _preview_file_lore(cid, frame_id, op, world):
     errors, warnings = [], []
     book, attached = _target_book(cid, world, op)
     if book is None:
-        errors.append("file_lore has no book: the chat has no canon lorebook "
-                      "and the named book is not attached")
+        errors.append("file_lore names a book that is not attached")
     record = {"disposition": "provisional",
               "subject": {"kind": op["subject_kind"], "id": op["subject_id"]},
               "base_turn": 0, "basis": "model"}
@@ -1723,7 +1748,7 @@ def _apply_file_lore(cid, frame_id, op, turn_idx, package_uid_=""):
     from mind.memory import add_lore
 
     world = {"chat": _chat_row(cid)}
-    book, _attached = _target_book(cid, world, op)
+    book, _attached = _target_book(cid, world, op, mint=True)
     disposition = op.get("disposition") or LORE_DISPOSITION
     record = promote({
         "disposition": "provisional",
