@@ -412,16 +412,46 @@ def _charter_upkeep_rows(state):
     return rows
 
 
+#: A post's own people listed on its row (`_charter_post_rows`); the rest
+#: are counted, with the call that pages them, never silently dropped. A
+#: households post can hold a town.
+POST_MEMBERS_SHOWN = 12
+
+
 def _charter_post_rows(state):
     """Every duty slot: where it is stood, what it is for, what it serves,
-    which fixture of its room it is stood at, and who holds it now."""
+    which fixture of its room it is stood at, who holds it now -- and whose
+    post it IS, standing it or not.
+
+    `held_by` is the watch: who is standing the post this hour. Read alone,
+    a post whose people are all between watches reads as nobody's, and the
+    Room took it so: asked to file who keeps the inn, it answered "the world
+    has not yet said which of them stands behind that bar" while the inn's
+    keeper -- `home_post: keeper`, off watch and resting -- stood in its own
+    taproom (scratch story 165, 2026-10-07). `members` is the bodies whose
+    own post this is: the keeper is still the keeper between watches, the
+    same rule the presence records read (`charter_runtime.
+    background_presence_records`)."""
     watch = state.get("watch") or {}
     bodies = state.get("bodies") or {}
+    members = {}
+    for body_key in sorted(bodies):
+        home = str((bodies[body_key] or {}).get("home_post") or "")
+        if home:
+            members.setdefault(home, []).append(
+                {"body": body_key,
+                 "name": str((bodies[body_key] or {}).get("name") or body_key)})
     rows = []
     for key in sorted(state.get("posts") or {}):
         post = (state["posts"] or {})[key]
         holder = str(watch.get(key) or "")
+        own = members.get(key, [])
         rows.append({
+            "members": own[:POST_MEMBERS_SHOWN],
+            **({"members_withheld": len(own) - POST_MEMBERS_SHOWN,
+                "members_ask": "inspect_charters(charter=%r, section='bodies')"
+                               % str(state.get("key") or "")}
+               if len(own) > POST_MEMBERS_SHOWN else {}),
             "key": key, "place": post.get("place") or "",
             "purpose": post.get("purpose") or "",
             "serves": list(post.get("serves") or ()),
@@ -1469,7 +1499,7 @@ TOOLS = [
      "args": _schema({"kind": _S}), "reads": True,
      "handler": _t_inspect_plans},
     {"name": "inspect_charters",
-     "description": "The institutions the town simulates, as institutions: `upkeeps` (each condition it owes, its level against its floor, whether it is below it, what it drifts and what it depends on, the posts that serve it and who is tending it), `posts` (place, purpose, what it serves, what it requires, who it reports to, the fixture it is stood at, and who holds it), `watch` (who is standing what, right now) with `unfilled_posts`, `bodies` (place, within-room station, berth, home post, the duty being stood now, availability, condition, and any walk or errand under way), and `roster` -- what the institution BELIEVES about its people where that differs from the bodies, because a roster improves by observation and decays otherwise, so a town learns of a death when somebody sees the body. Every section is PAGED, never truncated: `withheld` names how many rows were held back and the exact call that returns them; pass section and cursor to page one. Name a charter for that one institution at a fuller page plus its author-only diagnostics (beliefs, judgments, commitments, economy, refused interventions), and a body within it for that body's life.",
+     "description": "The institutions the town simulates, as institutions: `upkeeps` (each condition it owes, its level against its floor, whether it is below it, what it drifts and what it depends on, the posts that serve it and who is tending it), `posts` (place, purpose, what it serves, what it requires, who it reports to, the fixture it is stood at, who holds it NOW, and `members`: whose post it is, standing it or not -- a keeper between watches is still the keeper), `watch` (who is standing what, right now) with `unfilled_posts`, `bodies` (place, within-room station, berth, home post, the duty being stood now, availability, condition, and any walk or errand under way), and `roster` -- what the institution BELIEVES about its people where that differs from the bodies, because a roster improves by observation and decays otherwise, so a town learns of a death when somebody sees the body. Every section is PAGED, never truncated: `withheld` names how many rows were held back and the exact call that returns them; pass section and cursor to page one. Name a charter for that one institution at a fuller page plus its author-only diagnostics (beliefs, judgments, commitments, economy, refused interventions), and a body within it for that body's life.",
      "args": _schema({"charter": _S, "body": _S, "section": _S, "cursor": _I,
                       "limit": _I}),
      "reads": True,

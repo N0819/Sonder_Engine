@@ -138,7 +138,7 @@
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 376 |  | `core.db` |
 | `story/room_slice.py` | 556 |  | `story.attire` |
-| `story/room_tools.py` | 1757 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
+| `story/room_tools.py` | 1787 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
 | `story/scene.py` | 3054 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 7946 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `persist.steps`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.prelude`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `web.world_routes`, `world`, `world.survival` |
@@ -1754,14 +1754,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_t_inspect_contradictions()` | 766 | 201 lines |
-| `_mind_of()` | 1106 | 148 lines |
-| `_t_inspect_charters()` | 552 | 83 lines |
-| `_t_inspect_config()` | 691 | 68 lines |
-| `fit_result()` | 1687 | 64 lines |
+| `_t_inspect_contradictions()` | 796 | 201 lines |
+| `_mind_of()` | 1136 | 148 lines |
+| `_t_inspect_charters()` | 582 | 83 lines |
+| `_t_inspect_config()` | 721 | 68 lines |
+| `fit_result()` | 1717 | 64 lines |
 | `_t_inspect_route()` | 295 | 53 lines |
 | `_t_inspect_rooms()` | 244 | 49 lines |
-| `_charter_body_rows()` | 460 | 38 lines |
+| `_charter_post_rows()` | 421 | 45 lines |
 
 ### `story/scene.py`
 
