@@ -2202,6 +2202,35 @@ def _note_json_object_rejected(prov, model):
         _prov_field(prov, "name") or "provider", model)
 
 
+#: json_object answers a provider+model held back until whole, so far. The
+#: count a schema stall gets (`_SCHEMA_STALL_LIMIT`) before the flag is
+#: dropped for the pair -- into `_NO_JSON_OBJECT`, the process-local memory a
+#: 400 writes, which a restart clears so a provider that learns to stream JSON
+#: mode is re-asked. Dropping the flag costs little: `json_object` is advisory
+#: (`_apply_json_mode`) and every JSON caller parses what the text holds.
+_JSON_OBJECT_HELD_BACK: dict = {}
+
+
+def _note_json_object_held_back(prov, model):
+    """Count a json_object answer that never began within the first-token
+    clock (see the streaming caller); drop the flag at the schema's limit."""
+    key = _json_object_key(prov, model)
+    with _NO_JSON_OBJECT_LOCK:
+        if key in _NO_JSON_OBJECT:
+            return
+        n = _JSON_OBJECT_HELD_BACK.get(key, 0) + 1
+        _JSON_OBJECT_HELD_BACK[key] = n
+        if n >= _SCHEMA_STALL_LIMIT:
+            _NO_JSON_OBJECT.add(key)
+            _JSON_OBJECT_HELD_BACK.pop(key, None)
+    _logger.info(
+        "providers: %s held a json_object answer for %s back past the "
+        "first-token clock (%d of %d); %s",
+        _prov_field(prov, "name") or "provider", model, n, _SCHEMA_STALL_LIMIT,
+        "sending JSON-mode calls without it for the rest of this process"
+        if n >= _SCHEMA_STALL_LIMIT else "retried without it")
+
+
 #: (role, provider) pairs already told that a request feature they have
 #: configured cannot be sent on this connection. Said once per process: it is
 #: a settings problem, not a per-call event.
@@ -2843,7 +2872,14 @@ class ProviderSilent(LLMError):
 
     Retryable, and distinct from a socket timeout because a provider may keep
     the socket alive with comment lines while producing nothing; the clock
-    below counts only reasoning and content as activity."""
+    below counts only reasoning and content as activity.
+
+    `before_first_token` says which of the two silences it was. They mean
+    different things on a JSON-mode request: a stream that began and stopped
+    has stopped, but one that never began may be a provider holding the whole
+    answer back until it is written (`_note_json_object_held_back`)."""
+
+    before_first_token = False
 
 
 class _ActivityClock:
@@ -2877,8 +2913,10 @@ class _ActivityClock:
             seen = ("after %d chars of reasoning and %d of content"
                     % (self.reasoning_chars, self.content_chars)
                     if self.begun else "before any token")
-            raise ProviderSilent(
+            silent = ProviderSilent(
                 "provider silent for %.0fs (%s)" % (idle, seen), 0, True)
+            silent.before_first_token = not self.begun
+            raise silent
 
 
 def _merge_tool_call_deltas(calls, pieces):
@@ -3913,21 +3951,37 @@ def _chat_complete_once(
             # compile, so a connection death alongside it is far likelier to be
             # an ordinary blip -- and that belongs to the outer retry loop,
             # not to a capability downgrade here.
+            #
+            # ONE EXCEPTION, MEASURED: a json_object answer held back until it
+            # is whole. NanoGPT's z-ai/glm-5.2 (2026-10-06) does not stream
+            # JSON mode -- the same request's first content came at 23.1s with
+            # the flag, the whole answer at once, and at 2.0s without it -- so
+            # any json_object answer that takes longer than the first-token
+            # clock to write is cut before it can begin, on every attempt.
+            # That arrives as a silence BEFORE THE FIRST TOKEN, never as a
+            # connection death, so a dropped connection beside json_object
+            # stays the outer loop's blip exactly as above.
             _rf = body.get("response_format")
-            schema_bearing = (isinstance(_rf, dict)
-                              and _rf.get("type") == "json_schema")
+            _rf_type = _rf.get("type") if isinstance(_rf, dict) else None
+            schema_bearing = _rf_type == "json_schema"
+            held_back = (_rf_type == "json_object"
+                         and isinstance(exc, ProviderSilent)
+                         and exc.before_first_token)
             stalled = False
             silent = isinstance(exc, (ProviderSilent,) + _RETRYABLE_NETWORK)
             if isinstance(exc, LLMError) and not silent:
                 if exc.status_code != 400:
                     raise
-            elif silent and not schema_bearing:
+            elif silent and not (schema_bearing or held_back):
                 # Unresponsive on a plain request: the outer ladder's turn
                 # (retry, then the next candidate), not a format matter.
                 raise
             else:
                 stalled = True
-                _note_json_schema_stalled(prov, model)
+                if held_back:
+                    _note_json_object_held_back(prov, model)
+                else:
+                    _note_json_schema_stalled(prov, model)
 
             # The staged ladder (`_json_mode_recovery_stages`): json_schema
             # -> json_object -> no response_format -> every optional field.
