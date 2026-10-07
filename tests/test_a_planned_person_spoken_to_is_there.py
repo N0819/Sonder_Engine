@@ -12,7 +12,7 @@ then on the name resolved to the keeper by retrieval.
 
 from core.db import wset_for_frame
 
-from agents.director_floors import _stand_touching_figures
+from agents.director import _stand_touching_figures
 from persist.commit import descriptor_bindings
 from tests.test_background_description_address import ROOM, _make_ctx
 
