@@ -6557,17 +6557,12 @@ def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
         # is published at turn -1 so turn 0 sees it. Outside the
         # transaction, because it is model time; never raises.
         if _latest_turn(cid) is None:
-            _plan_opening(cid, frame_id, _player_input(body))
-        pre_version = data_version()
-        pre_blob = snapshot_blob(cid)
-        with transaction():
-            last = _latest_turn(cid)
-            idx = (last["idx"] + 1) if last else 0
-            if data_version() != pre_version:
-                pre_blob = snapshot_blob(cid)
-            ensure_checkpoint(cid, idx, blob=pre_blob)
-            tid = qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-                     (cid, idx, _player_input(body), time.time(), frame_id))
+            first_line = _player_input(body)
+            line_is_a_beat = _first_line_is_a_beat(cid, first_line)
+            _plan_opening(cid, frame_id, first_line, first_beat=line_is_a_beat)
+            if line_is_a_beat:
+                _run_the_opening(cid, frame_id, abort)
+        tid = _insert_turn_row(cid, frame_id, _player_input(body))
     except BaseException:
         # Release the slot we grabbed if row/checkpoint creation failed, so
         # a later request isn't wrongly rejected as "already running".
@@ -6579,17 +6574,82 @@ def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
     return _stream(run_pipeline(cid, tid, abort=abort, frame_id=frame_id))
 
 
-def _plan_opening(cid, frame_id, first_input):
-    """The scenario chat's opening plan: the scenario and the first input
-    are the passage. A quick start plans in `greetings.start_story` with the
-    greeting as the passage and arrives here with its turn 0 already
-    written, so this runs for a scenario chat alone."""
-    from agents.story_planner import run_opening_plan
+def _insert_turn_row(cid, frame_id, player_input):
+    """The next turn row, with the checkpoint of the state it starts from.
+
+    The read-compute-checkpoint-insert is one transaction (see `turn_new`);
+    the snapshot is serialized BEFORE it and rebuilt under the lock only
+    when another connection wrote in the window (`db.data_version`)."""
+    pre_version = data_version()
+    pre_blob = snapshot_blob(cid)
+    with transaction():
+        last = _latest_turn(cid)
+        idx = (last["idx"] + 1) if last else 0
+        if data_version() != pre_version:
+            pre_blob = snapshot_blob(cid)
+        ensure_checkpoint(cid, idx, blob=pre_blob)
+        return qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
+                  (cid, idx, player_input, time.time(), frame_id))
+
+
+def _scenario_of(cid):
     chat = q("SELECT scenario FROM chats WHERE id=?", (cid,), one=True)
-    scenario = str(chat["scenario"] if chat else "").strip()
-    passage = "\n\n".join(part for part in (scenario, str(first_input or "").strip())
-                          if part)
+    return str(chat["scenario"] if chat else "").strip()
+
+
+def _first_line_is_a_beat(cid, first_input):
+    """THE SCENARIO IS THE OPENING; THE PLAYER'S FIRST LINE IS A BEAT.
+
+    The opening turn runs the establishment plan, and no character step
+    runs in it, so a line the player's first submission spoke to someone
+    present could never be answered in its own beat: measured twice on
+    scratch stories 165 and 166 (2026-10-07), the assessor introduced
+    herself to the pilot she had come to meet, asked her a question, and
+    the page closed on "The bell answered nothing. Neither did she." -- the
+    engine's silence, written down as hers. A greeting launch never had the
+    gap: its turn 0 is the authored greeting and the player's first line is
+    turn 1, a beat like any other. A scenario chat now has the same shape
+    wherever it has the same parts -- an authored scenario to open on, and
+    a line to play after it. With no scenario the line is the only passage
+    there is, and it opens the story as it always did."""
+    return bool(_scenario_of(cid) and str(first_input or "").strip())
+
+
+def _plan_opening(cid, frame_id, first_input, first_beat=False):
+    """The scenario chat's opening plan. A quick start plans in
+    `greetings.start_story` with the greeting as the passage and arrives
+    here with its turn 0 already written, so this runs for a scenario chat
+    alone.
+
+    When the first line is a beat (`_first_line_is_a_beat`), the scenario
+    is the passage and the line rides beside it as `first_beat`: it is
+    played next, so the plan places each body where it stands BEFORE it.
+    Otherwise the scenario and the first input together are the passage,
+    as before."""
+    from agents.story_planner import run_opening_plan
+    scenario = _scenario_of(cid)
+    line = str(first_input or "").strip()
+    if first_beat:
+        return run_opening_plan(cid, frame_id, passage=scenario, first_beat=line)
+    passage = "\n\n".join(part for part in (scenario, line) if part)
     return run_opening_plan(cid, frame_id, passage=passage)
+
+
+def _run_the_opening(cid, frame_id, abort):
+    """Turn 0 of a scenario chat whose first line is a beat: the scenario
+    established with no player input -- the greeting launch's turn 0 --
+    run to its commit INSIDE the slot `turn_new` claimed, so nothing enters
+    the frame between the opening and the line that follows it. A stopped
+    or failed opening raises; `turn_new` releases the slot, and the line is
+    not played over an opening that did not happen."""
+    tid = _insert_turn_row(cid, frame_id, "")
+    for event in run_pipeline(cid, tid, abort=abort, frame_id=frame_id,
+                              keep_slot=True):
+        if isinstance(event, dict) and event.get("type") == "aborted":
+            raise HTTPException(
+                409, "The opening was stopped before your first line was "
+                     "played; send it again to begin.")
+    return tid
 
 
 def _truthy(value) -> bool:

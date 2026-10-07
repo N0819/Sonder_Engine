@@ -1079,7 +1079,7 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None):
     return out
 
 
-def _opening_task(cid, frame_id, passage):
+def _opening_task(cid, frame_id, passage, first_beat=""):
     """What the opening regime is handed: the passage the story opens on,
     who is present, what the launch already planted, and -- since the
     prelude (`docs/design/DESIGN_ROOM_PRELUDE.md`) -- whatever the player
@@ -1101,6 +1101,11 @@ def _opening_task(cid, frame_id, passage):
             "player": player,
             "present": present,
             "planted_structures": planted}
+    # The player's first line when it is PLAYED after the opening rather than
+    # being part of it (`web.app._first_line_is_a_beat`): read for where each
+    # body stands before it, never as something that has already happened.
+    if str(first_beat or "").strip():
+        task["first_beat"] = str(first_beat).strip()[:PLANNER_TRANSCRIPT_CHARS]
     # WHAT THE PLAYER ASKED FOR IS READ HERE, NOT PASSED IN
     # (`docs/design/DESIGN_ROOM_PRELUDE.md`). Both launches reach the
     # opening plan by their own route -- the greeting quick start calls it
@@ -1118,7 +1123,7 @@ def _opening_task(cid, frame_id, passage):
     return task
 
 
-def run_opening_plan(cid, frame_id=None, *, passage):
+def run_opening_plan(cid, frame_id=None, *, passage, first_beat=""):
     """Plan the ground the story opens on, before the first turn row exists
     (`docs/design/DESIGN_OPENING_PLAN.md`). Mints the opening mandate, runs
     ONE pass of the planner in the `opening` regime, records the outcome in
@@ -1152,7 +1157,7 @@ def run_opening_plan(cid, frame_id=None, *, passage):
 
     try:
         mint_opening_mandate(cid, frame_id)
-        task = _opening_task(cid, frame_id, passage)
+        task = _opening_task(cid, frame_id, passage, first_beat)
         out = run_planner(cid, frame_id, task=task, regime="opening",
                           base_turn=None, on_event=_watch)
         fields.update({

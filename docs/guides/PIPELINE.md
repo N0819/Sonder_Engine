@@ -30,6 +30,18 @@ this turn sees it. It is not a pipeline step: it writes through the Room's
 own seams, records itself in the `opening_plan` world row, and never fails
 the launch.
 
+**A scenario chat's first line is a beat** (2026-10-07). No character step
+runs on turn 0, so a line the opening turn speaks to someone present can only
+be transcribed, never answered. When the chat has a scenario and the first
+submission is not empty, `web.app.turn_new` therefore writes TWO turns in the
+slot the submission claimed: turn 0 with no input -- the scenario
+established, the greeting launch's shape -- run to its commit
+(`_run_the_opening`, `run_pipeline(keep_slot=True)`), then the player's line
+as turn 1, a normal beat. The opening plan reads the line as `first_beat`
+beside the scenario passage and places bodies where they stand before it.
+With no scenario the line is the only passage and opens the story as turn 0
+(`docs/UNBUILT_PIPELINE.md` § 1.183).
+
 ```text
 [opening plan, before the row]
     ↓

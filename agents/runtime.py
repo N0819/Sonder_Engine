@@ -1802,7 +1802,15 @@ def run_pipeline(
     only_key=None,
     abort=None,
     frame_id=None,
+    keep_slot=False,
 ):
+    # `keep_slot` leaves the (chat, frame) slot claimed when the run ends,
+    # for a caller that runs a SECOND turn straight after this one and must
+    # not let another request into the frame between them -- the scenario
+    # chat's first submission, whose opening establishes before the
+    # player's line plays (`web.app._run_the_opening`). That caller
+    # releases the slot itself if it stops short.
+    #
     # Callers that already registered via begin_pipeline() pass that same
     # event through here so there's exactly one abort Event for this run,
     # visible in ABORTS from before the streaming response was returned.
@@ -1849,6 +1857,7 @@ def run_pipeline(
         cancel_event.set(None)
         active_frame_id.set(None)
 
-        with _ABORTS_LOCK:
-            if ABORTS.get((chat_id, frame_id)) is abort:
-                ABORTS.pop((chat_id, frame_id), None)
+        if not keep_slot:
+            with _ABORTS_LOCK:
+                if ABORTS.get((chat_id, frame_id)) is abort:
+                    ABORTS.pop((chat_id, frame_id), None)

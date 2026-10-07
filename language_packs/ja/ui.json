@@ -2318,6 +2318,7 @@
   "The model ran out of output budget partway through and the result was cut off. Raise 'Max output tokens' in Settings, or point the `utility` role at a non-reasoning model — a reasoning model spends that same budget on its thinking.": "モデルは途中で出力予算を使い果たし、結果は途中で打ち切られました。設定で「最大出力トークン」を増やすか、`utility`ロールを非推論モデルに指定してください。推論モデルは思考に同じ予算を費やします。",
   "The model returned nothing. This usually means the output budget ran out before any JSON was written — a reasoning model spends its thinking on that budget. Raise 'Max output tokens' in Settings, or point the `utility` role at a non-reasoning model.": "モデルは何も返しませんでした。これは通常、JSONが書き込まれる前に出力予算が尽きたことを意味します。推論モデルはその予算を思考に費やします。設定で「最大出力トークン」を増やすか、`utility`ロールを非推論モデルに指定してください。",
   "The new code is on disk, but the running process is still using the old version. Stop the server and start it again (e.g. re-run `make run`), then reload this page.": "新しいコードはディスク上にありますが、実行中のプロセスはまだ古いバージョンを使用しています。サーバーを停止して再起動し（例：`make run`を再実行）、このページを再読み込みしてください。",
+  "The opening was stopped before your first line was played; send it again to begin.": "最初の一行が演じられる前に開幕が止められました。始めるには、もう一度送ってください。",
   "the passage from the station before this one. Blank means membrane — a body passes through, nothing sees through. The first station has none: the way in is derived from the body.": "一つ手前の区画からの通路。空欄はmembrane――身体は通り抜けられ、視線は通りません。最初の区画にはありません：出入り口は身体そのものから導出されます。",
   "The plan here": "ここでの計画",
   "The plan makes no claim on this room.": "計画はこの部屋に何も求めていません。",

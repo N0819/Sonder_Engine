@@ -1710,6 +1710,28 @@ What is left is the price of `passing`: a body that crosses rooms to plant
 itself in a doorway no longer bars a walker in the same beat. A body that
 keeps its room still does.
 
+<a id="unbuilt-1-183"></a>
+### 1.183 A story with no scenario opens on a line nobody can answer (2026-10-07)
+
+Turn 0 runs the establishment plan, and no character step runs in it, so a
+line the opening turn speaks to someone present is transcribed and never
+answered. Measured on scratch stories 165 and 166: the assessor introduced
+herself to the pilot she had come to meet and asked her a question, and the
+page closed on "The bell answered nothing. Neither did she."
+
+**What landed (2026-10-07).** A chat with a scenario plays its first line
+as a beat: `web.app.turn_new` establishes the scenario as turn 0 with no
+input -- the greeting launch's shape -- inside the slot the submission
+claimed, then plays the line as turn 1, and the opening plan reads the line
+as `first_beat` to place bodies where they stand before it
+(`tests/test_the_first_line_is_a_beat.py`).
+
+**What is left.** A chat with NO scenario has no authored opening to
+establish first: its first line is the only passage, it opens the story as
+turn 0, and whatever it says to someone present is still unanswered by
+construction. Splitting it too would mean establishing a world from the
+opening plan's placements alone, which no story has been measured doing.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

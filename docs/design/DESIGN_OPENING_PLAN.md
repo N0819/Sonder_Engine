@@ -38,7 +38,10 @@ One step, `story_planner.run_opening_plan`, before the first turn row exists,
 on both launches:
 
 ```text
-scenario chat:   turn_new(idx 0) -> run_opening_plan -> INSERT turn 0 -> establishment plan
+scenario chat:   turn_new -> run_opening_plan(passage=scenario, first_beat=line)
+                   -> INSERT turn 0 (no input) -> establishment plan
+                   -> INSERT turn 1 (the line) -> beat plan          (2026-10-07)
+  no scenario:   turn_new(idx 0) -> run_opening_plan(passage=line) -> INSERT turn 0 -> establishment plan
 greeting start:  minds -> [lived location] -> run_opening_plan -> INSERT turn 0 -> establishment plan
 ```
 

@@ -164,8 +164,9 @@ def begin_story(cid):
         return {"chat_id": int(chat_id), "turn_id": turn_id,
                 "began": True}
     # A scenario chat: building the place is the whole of what begin does.
-    # Turn 0 runs when the player writes their first line, and the opening
-    # plan runs with it (`web/app.turn_new`), by then over a planted town.
+    # The opening plan and turn 0 run when the player writes their first
+    # line (`web/app.turn_new`), by then over a planted town -- turn 0 the
+    # scenario established, the line played after it as turn 1.
     request = args.get("lived_location")
     built = None
     if isinstance(request, dict) and request.get("enabled", True):
