@@ -62,6 +62,10 @@ PLACES_GRADED_MAX = 32   # far places graded per walk, nearest first
 ROOF_CLEAR_M = 1.0       # an eye this far over a roof sees past the building
 TALL_M = 7.5             # a building taller than this is "tall"
 GROUND_TOP_M = 0.3       # what a line aims at on open ground
+NOMINAL_SPAN_M = 8.0     # a room with no authored extent, along a line of
+                         # sight -- placing what stands between, never said
+SLIVER_M = 0.5           # less of a place than this over what is in front of
+                         # it is not a view of it
 
 OPEN_GROUND = ("open", "sheltered")
 _LOOKS_OUT = ("window", "open", "open_door", "bars", "one_way_window")
@@ -447,9 +451,16 @@ def _plan_slabs(scene, plan):
         slabs = {}
         for levels in site_plans(scene).get(plan, {}).values():
             for rid in levels:
-                if _open_air(scene, rid):
-                    continue
                 floor = room_elevation_m(scene, rid)
+                # OPEN GROUND IS SOLID BELOW ITS SURFACE: a ridge standing
+                # higher than the line hides what lies behind it, as a roof
+                # does (owner, 2026-10-07: "occlusion by both landscape and
+                # buildings"). Flat ground at the datum hides nothing a line
+                # from an eye could pass under.
+                if _open_air(scene, rid):
+                    for cell in site_cells(scene, rid):
+                        slabs.setdefault(cell, []).append((-1.0e9, floor, rid))
+                    continue
                 for cell in site_cells(scene, rid):
                     slabs.setdefault(cell, []).append((floor, floor + STOREY_M, rid))
         top = max((hi for spans in slabs.values() for _lo, hi, _r in spans), default=0.0)
@@ -457,12 +468,14 @@ def _plan_slabs(scene, plan):
     return scene_memo(scene, ("landscape_slabs", str(plan)), build)
 
 
-def _line_clear(p, q, slabs, exclude):
-    """`site_plan._clears_mass` over room-tagged slabs, the rooms in
-    `exclude` being the line's own air. A line that stays over every roof
-    on the plan is clear without walking it."""
+def _line_block(p, q, slabs, exclude):
+    """The room whose mass -- a building's storeys, or the ground under an
+    open place -- first cuts the line from `p` to `q`, or None when the line
+    clears everything: `site_plan._clears_mass` over room-tagged slabs, the
+    rooms in `exclude` being the line's own air. A line that stays over
+    every roof and every rise on the plan is clear without walking it."""
     if min(p[2], q[2]) > slabs["top"]:
-        return True
+        return None
     slabs = slabs["cells"]
     dx, dy = q[0] - p[0], q[1] - p[1]
     steps = max(1, int(math.ceil(max(abs(dx), abs(dy)) * 4)))
@@ -470,10 +483,107 @@ def _line_clear(p, q, slabs, exclude):
         t = i / steps
         cell = (math.floor(p[0] + t * dx), math.floor(p[1] + t * dy))
         z = p[2] + t * (q[2] - p[2])
-        if any(lo <= z <= hi and rid not in exclude
-               for lo, hi, rid in slabs.get(cell, ())):
-            return False
-    return True
+        for lo, hi, rid in slabs.get(cell, ()):
+            if lo <= z <= hi and rid not in exclude:
+                return rid
+    return None
+
+
+def _line_clear(p, q, slabs, exclude):
+    return _line_block(p, q, slabs, exclude) is None
+
+
+def _centres_along(scene, path, dirs, metres):
+    """[metres from the eye to the middle of each room on `path`]: every part
+    the world measured as measured, and `NOMINAL_SPAN_M` for a room with no
+    authored extent -- an estimate for PLACING what stands between the eye
+    and a far place, never a distance anyone is told. A climb covers no
+    ground."""
+    out = [0.0]
+    for j in range(len(path) - 1):
+        d = dirs[j] if j < len(dirs) else None
+        if d == CLIMB:
+            out.append(out[-1])
+            continue
+        spans = [_span_m(scene, path[j], d) if d else None,
+                 _span_m(scene, path[j + 1], d) if d else None]
+        edge = metres[j] if j < len(metres) and metres[j] is not None else 0.0
+        out.append(out[-1] + edge + sum(
+            (NOMINAL_SPAN_M if span is None else span) / 2.0 for span in spans))
+    return out
+
+
+def _cover(scene, rid, kind, known_name):
+    return {"kind": kind, "room": rid, "name": known_name(rid) if rid else ""}
+
+
+def _between(scene, graph, path, dirs, centres, skip, known_name):
+    """[(top m, metres from the eye, cover)] of what stands between the eye
+    and the last room of `path`, off a site plan:
+
+    * GROUND THAT RISES -- every open place the line crosses, at its floor's
+      height (`room_elevation_m`: a declared storey, or a site's elevation);
+      flat ground hides nothing a line from an eye passes over;
+    * THE BUILDINGS ON THE INSIDE OF A CORNER -- where the way turns by an
+      eighth or a quarter of a circle, the line from the eye to what lies
+      past the turn cuts across the buildings that stand in the angle, and
+      it is those the edge's compass places there. A building whose edge
+      carries no compass is placed nowhere and hides nothing: what the world
+      does not say stands between, does not."""
+    from world.site_plan import STOREY_M, room_elevation_m
+    from world.vistas import BEARINGS, bearing_gap
+    out = []
+    for j in range(1, len(path) - 1):
+        rid, dist = path[j], centres[j]
+        if rid in skip or dist <= 0.0:
+            continue
+        if declared_ground(scene, rid) in OPEN_GROUND:
+            out.append((room_elevation_m(scene, rid), dist,
+                        _cover(scene, rid, "ground", known_name)))
+        d_in = dirs[j - 1] if j - 1 < len(dirs) else None
+        d_out = dirs[j] if j < len(dirs) else None
+        if d_in not in BEARINGS or d_out not in BEARINGS:
+            continue
+        back = BEARINGS.index(BEARINGS[(BEARINGS.index(d_in) + 4) % 8])
+        gap = bearing_gap(BEARINGS[back], d_out)
+        if gap not in (2, 3):
+            continue                       # straight on, or doubled back
+        step = 1 if (BEARINGS.index(d_out) - back) % 8 == gap else -1
+        inside = {BEARINGS[(back + step * k) % 8] for k in range(1, gap)}
+        for edge in graph.get(rid) or ():
+            other = str(edge.get("to"))
+            if other in skip or other in path or declared_ground(scene, other) != "building":
+                continue
+            if str(edge.get("dir") or "") not in inside:
+                continue
+            members, rise = building_of(scene, other, graph)
+            if members & skip:
+                continue
+            top = room_elevation_m(scene, other) + max(rise.values() or [0.0]) + STOREY_M
+            out.append((top, dist, _cover(scene, other, "building", known_name)))
+    return out
+
+
+def _seen_part(eye, base, top, dist, between):
+    """("whole" | "top" | None, cover): how much of a far place, from its
+    `base` to its `top`, shows over what stands `between`, and what stands
+    highest in the way. The line from the eye over each thing in the way,
+    carried on to the place's distance, is the height below which the place
+    is hidden; the place shows whole when every such line passes under its
+    foot, its top when some of it still clears the highest, and not at all
+    when less than `SLIVER_M` does."""
+    worst, cover = None, None
+    for c_top, c_dist, what in between or ():
+        if c_dist <= 0.0 or c_dist >= dist:
+            continue
+        h = eye + (c_top - eye) * dist / c_dist
+        if worst is None or h > worst:
+            worst, cover = h, what
+    if worst is None or worst <= base + 0.05:
+        return "whole", None
+    if top - worst < SLIVER_M:
+        return None, cover
+    return "top", cover
 
 
 def _eye_on_plan(scene, observer, here, toward):
@@ -500,7 +610,7 @@ def _eye_on_plan(scene, observer, here, toward):
 # ---------------------------------------------------------------------------
 
 def far_places(scene, observer, *, known=None, senses=None, via_names=None,
-               gate=None):
+               gate=None, hidden=None):
     """The far places one body sees now, nearest first, each a record the
     composer words (`composer.landscape_percepts`). [] when none qualifies,
     which is every body in a closed room and almost every body in the
@@ -512,6 +622,11 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
     rows `perception._visible_openings` filled): a line leaving through any
     other room leads with its compass or nothing. `gate` is the observer's
     authored-prose gate, applied to every desc this hands on.
+
+    `hidden`, when a list, collects every far place the walk reached and
+    sight did not deliver, each with what hid it (`hidden_by`): the window's
+    cone, the weather, the dark, or the roofs or the ground standing between
+    -- what a LOOK at that place finds instead (`looked_far`).
     """
     from world.day_cycle import SUN_LIGHT
     from world.site_plan import (EYE_M, PACE_M, STOREY_M, body_altitude_m,
@@ -670,7 +785,8 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
 
     # ---- grade
     weather = (scene or {}).get("weather") or {}
-    air_m = visibility_km(air_from_weather(weather)) * 1000.0
+    air_word = air_from_weather(weather)
+    air_m = visibility_km(air_word) * 1000.0
     phase = str((scene or {}).get("day_phase") or "").strip().casefold()
     night = SUN_LIGHT.get(phase) == "dark"
     twilight = SUN_LIGHT.get(phase) == "dim"
@@ -693,6 +809,20 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
         top = base + (max(rise.values() or [0.0]) + STOREY_M
                       if ground == "building" else GROUND_TOP_M)
         rise_word = "below" if rec["below"] else ""
+        label = (next((known_name(m) for m in [rid, *rise] if known_name(m)), "")
+                 if ground == "building" else known_name(rid))
+
+        def hide(cover, bearing=None):
+            """A place the walk reached and sight did not deliver, kept for
+            a look aimed at it, with what stands in the way."""
+            if isinstance(hidden, list):
+                hidden.append({"room": rid, "members": sorted(members),
+                               "ground": ground, "hidden_by": cover,
+                               "bearing": bearing, "via": rec["via"],
+                               "via_dir": rec["via_dir"], "hops": rec["hops"],
+                               "name": str(label or "")})
+
+        shows, cover = "whole", None
         site = room_site(scene, rid)
         if obs_site and site and site["plan"] == obs_site["plan"]:
             aims = _plan_aims(scene, rid)
@@ -706,19 +836,52 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
             rise_word = ("below" if base < eye - EYE_M["standing"] - 1.0 else
                          "above" if base > eye + 1.0 else "")
             # THE LINE OVER EVERYTHING BETWEEN: a subtraction where the plan
-            # places what stands between, never a grant of what the walk
-            # did not reach.
+            # places what stands between -- roofs, and since 2026-10-07 the
+            # ground of an open place standing higher -- never a grant of
+            # what the walk did not reach. A line to the place's FOOT says
+            # whether it shows whole; one to its TOP whether any of it does.
             slabs = _plan_slabs(scene, site["plan"])
-            if not any(_line_clear((eye_xy[0], eye_xy[1], eye), (a[0], a[1], top),
-                                   slabs, {here} | members)
-                       for a in aims):
+            eye_at = (eye_xy[0], eye_xy[1], eye)
+            to_top = [_line_block(eye_at, (a[0], a[1], top), slabs, {here} | members)
+                      for a in aims]
+            if all(b is not None for b in to_top):
+                blocker = next(b for b in to_top if b is not None)
+                hide(_cover(scene, blocker, "ground" if declared_ground(
+                    scene, blocker) in OPEN_GROUND else "building", known_name),
+                    bearing)
                 continue
+            foot = min(top, base + GROUND_TOP_M)
+            to_foot = [_line_block(eye_at, (a[0], a[1], foot), slabs, {here} | members)
+                       for a in aims]
+            if all(b is not None for b in to_foot) and top - base >= SLIVER_M:
+                blocker = next(b for b in to_foot if b is not None)
+                shows, cover = "top", _cover(scene, blocker, "ground" if declared_ground(
+                    scene, blocker) in OPEN_GROUND else "building", known_name)
         else:
             metres, measured = _path_metres(scene, rec["path"], rec["metres"], rec["dirs"])
             bearing = _compose_bearing(rec["dirs"], rec["metres"] if measured else None)
+            # OFF A PLAN, WHAT STANDS BETWEEN IS PLACED ALONG THE WAY ITSELF
+            # (`_between`): ground that rises, and the buildings in the angle
+            # of a corner the way turns -- by height, so a tower behind low
+            # roofs shows its top over them (owner, 2026-10-07: "we need to
+            # handle occlusion by both landscape and buildings").
+            centres = _centres_along(scene, rec["path"], rec["dirs"], rec["metres"])
+            reach_m = metres if measured else centres[-1]
+            shows, cover = _seen_part(
+                eye, base, top, reach_m,
+                _between(scene, graph, rec["path"], rec["dirs"], centres,
+                         members | own, known_name))
+            if shows is None:
+                hide(cover, bearing)
+                continue
+            if not measured and reach_m > air_m:
+                hide({"kind": "air", "air": air_word, "room": "", "name": ""}, bearing)
+                continue
         if ways is not None and (bearing is None or bearing not in ways):
+            hide({"kind": "walls", "room": "", "name": ""}, bearing)
             continue                         # the window's cone: unknown is refused
         if measured and metres > air_m:
+            hide({"kind": "air", "air": air_word, "room": "", "name": ""}, bearing)
             continue
         if measured:
             tier = "mid" if metres < OUTLINE_M else "outline"
@@ -736,6 +899,7 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
                           and _openings_toward(scene, m, graph, back)]
                          if dusk else [])
             if not seen_mass and not lit_rooms:
+                hide({"kind": "dark", "room": "", "name": ""}, bearing)
                 continue
             height_m = max(rise.values() or [0.0]) + STOREY_M
             place = {"ground": "building", "lights": len(lit_rooms),
@@ -752,6 +916,7 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
             seen_mass = not (night and light == "dark")
             lights = fixed_lights(scene, rid) if dusk else 0
             if not seen_mass and not lights:
+                hide({"kind": "dark", "room": "", "name": ""}, bearing)
                 continue
             place = {"ground": ground, "lights": lights, "high": False,
                      "breadth": _breadth(scene, rid), "dark": not seen_mass}
@@ -769,6 +934,10 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
             "big": (big_things(scene, rid, gate)
                     if grain == "mid" and ground != "building" else []),
             "bearing": bearing, "rise": rise_word, "via_dir": rec["via_dir"],
+            # HOW MUCH OF IT, and over what: its top over the roofs or the
+            # rise in front of it, or the whole of it.
+            "shows": shows, "over": (cover or {}).get("kind") if shows == "top" else "",
+            "members": sorted(members),
         })
         places.append(place)
 
@@ -790,6 +959,118 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
             place["lead"] = lead
             place["order"] = n
             out.append(place)
+    return out
+
+
+def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=None,
+               gate=None):
+    """What each far place this body's own act LOOKED AT this beat shows it:
+    `[{"room", "label", "place": <far_places record> | None,
+       "hidden_by": <cover> | None}]`.
+
+    ONE MATCHER FOR THE FAR LAYER AS FOR THE HORIZON (`vistas.looked_vistas`,
+    UNBUILT_WORLD 2.40: "one matcher would serve both"): a look names a place
+    by the id of ANY room of its mass -- a look at a bell loft is a look at
+    the building it tops -- or by the name this mind knows it by, or by its
+    own name, which the actor used and so may hear back; a compass word
+    finds only what is in view that way. A place named that the walk never
+    reached stands behind what surrounds the looker: the walls of a closed
+    room, the buildings round open ground. What a look finds is ALWAYS
+    something -- the place, its top over what is nearer, or what stands in
+    the way (owner, 2026-10-07: "nothing can be made out and similar place
+    holders are quite frustrating")."""
+    from world.spatial import room_of
+    from world.vistas import normalize_bearing8
+    rooms = _rooms(scene)
+    words = [str(v or "").strip() for v in looks or () if str(v or "").strip()]
+    if not words:
+        return []
+
+    def fold(value):
+        return " ".join(str(value or "").replace("_", " ").casefold().split())
+
+    wanted = {fold(w) for w in words}
+    bearings = {b for b in (normalize_bearing8(w) for w in words) if b}
+    hidden = []
+    places = far_places(scene, observer, known=known, senses=senses,
+                        via_names=via_names, gate=gate, hidden=hidden)
+
+    def named_in(members):
+        """The member a look named, by id or by its own name, or None."""
+        for m in members:
+            if fold(m) in wanted or fold((rooms.get(m) or {}).get("name")) in wanted:
+                return m
+        return None
+
+    out, answered = [], set()
+    for place in places:
+        members = place.get("members") or [place["room"]]
+        hit = named_in(members)
+        by_name = bool(place.get("name")) and fold(place["name"]) in wanted
+        by_compass = place.get("bearing") in bearings
+        if hit is None and not by_name and not by_compass:
+            continue
+        key = place.get("key_room") or place["room"]
+        if key in answered:
+            continue
+        answered.add(key)
+        label = place.get("name") or (
+            str((rooms.get(hit) or {}).get("name") or "") if hit else "")
+        out.append({"room": key, "label": str(label or ""), "place": place, "hidden_by": None})
+    for rec in hidden:
+        members = rec.get("members") or [rec["room"]]
+        hit = named_in(members)
+        if hit is None and not (rec.get("name") and fold(rec["name"]) in wanted):
+            continue
+        key = min(members)
+        if key in answered:
+            continue
+        answered.add(key)
+        label = rec.get("name") or str((rooms.get(hit) or {}).get("name") or "")
+        out.append({"room": key, "label": str(label or ""), "place": None,
+                    "hidden_by": rec.get("hidden_by") or {}})
+    # NAMED, AND NEVER REACHED. A room that declares no ground is part of
+    # what it opens onto: a loft up a ladder from a chapel is seen where the
+    # chapel is (scratch story 166: the bell loft, planned without an
+    # exposure, sat off every walk) -- so a look at it is answered by the
+    # far place a neighbour of it belongs to. Only past that is what
+    # surrounds the looker what stands in the way: a room's own walls, or
+    # the buildings round open ground.
+    here = room_of(scene, observer)
+    near = near_field(scene, here) if here else set()
+    graph = _graph(scene)
+    for word in words:
+        target = next((rid for rid, room in rooms.items()
+                       if fold(rid) == fold(word)
+                       or fold((room or {}).get("name")) == fold(word)), None)
+        if (not target or target == here or target in near
+                or any(target in ((f["place"] or {}).get("members") or ()) or target == f["room"]
+                       for f in out)):
+            continue
+        if any(target in (r.get("members") or ()) for r in hidden):
+            continue
+        label = str((rooms.get(target) or {}).get("name") or target)
+        neighbours = {str(e.get("to")) for e in graph.get(target) or ()}
+        place = next((p for p in places
+                      if neighbours & set(p.get("members") or [p["room"]])), None)
+        if place is not None:
+            key = place.get("key_room") or place["room"]
+            if key not in answered:
+                answered.add(key)
+                out.append({"room": key, "label": place.get("name") or label,
+                            "place": place, "hidden_by": None})
+            continue
+        cover = next((r for r in hidden
+                      if neighbours & set(r.get("members") or [r["room"]])), None)
+        if cover is not None:
+            out.append({"room": min(cover.get("members") or [cover["room"]]),
+                        "label": cover.get("name") or label, "place": None,
+                        "hidden_by": cover.get("hidden_by") or {}})
+            continue
+        out.append({"room": target, "label": label, "place": None,
+                    "hidden_by": {"kind": ("around" if declared_ground(scene, here)
+                                           in OPEN_GROUND else "walls"),
+                                  "room": "", "name": ""}})
     return out
 
 

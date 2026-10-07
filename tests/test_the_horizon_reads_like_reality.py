@@ -171,7 +171,7 @@ def test_a_look_by_compass_word_never_names_what_is_not_in_view():
     named = looked_vistas(sc, ["the valley town"], name="Ren")
     lines = composer.vista_percepts([], looked=[
         (v, what_a_look_finds(sc, "Ren", v)) for v in named])
-    assert "nothing can be made out" in lines[0].data["desc"]
+    assert lines[0].data["desc"].endswith("the fog closes in well short of the valley town.")
 
 
 # §1.178: English memory keeps what was seen far off and heard this beat -------

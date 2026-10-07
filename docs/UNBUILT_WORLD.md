@@ -2276,9 +2276,10 @@ critic and a panel of three designs and three judges. Left:
   is "sight plus earshot", owner 2026-09-23 -- far sight inside it puts far
   townsfolk on screen and model-voiced), the `seen` ledger (which licenses
   attire deltas and prunes appearance) and hailing what is seen.
-- **A look AT a far place** is not an event yet: a vista looked at is
-  (`vistas.looked_vistas`, by id, name or compass word), a far place is only
-  standing description. One matcher would serve both.
+- ~~**A look AT a far place** is not an event yet~~ -- BUILT 2026-10-07
+  (`landscape.looked_far`, Design.md "A look aimed far off is answered, never
+  with a placeholder"): one matcher beside `vistas.looked_vistas`, answered
+  as an event with the place's line or what stands in the way.
 - **What the far layer cannot read**: planned registry rooms outside the
   scene (chat 114's 31-room district), frontier stubs, another locale (chat
   10's colony seen from orbit), and an event happening far off -- an event
@@ -2312,10 +2313,20 @@ critic and a panel of three designs and three judges. Left:
   it would take, the owner's call: the planner writing, for an outdoor
   place, how it looks from a distance -- a field of its own, read by the far
   layer, never a desc.
-- **Off a site plan a height is inferred from the graph**: an eye a storey up
-  looks over the open ground its own building fronts, and nothing between is
-  tested -- on a plan the line over every building is. Ground is flat
-  (§2.39): a ridge does not hide the valley behind it.
+- **Off a site plan a height is inferred from the graph** -- and since
+  2026-10-07 what stands between is tested there too (Design.md "What stands
+  between hides what is behind it, by height"): the ground of every open
+  place the way crosses, and the buildings in the angle of a corner it turns,
+  placed by the edge's compass. What is left: a building with no compass on
+  its edge stands nowhere and hides nothing; distances off a plan are
+  estimates (`NOMINAL_SPAN_M` a room); the corner rule reads one turn at a
+  time, never a winding street as a whole. On a plan, open ground now hides
+  what is lower behind it; terrain between two cells is still flat (§2.39).
+- **A far place nobody has been to is still described by its ground alone**
+  ("a building", "open ground") -- the owner's 2026-10-07 ruling on
+  placeholders ("nothing can be made out and similar place holders are quite
+  frustrating") reaches this too. The planner-written far look below is
+  the way to retire it.
 - **Messy data, as found**: chat 114's TARDIS console room declares itself
   `sheltered` with no `parent_entity`, so the layer -- reading declared data
   -- has it look out over the beach to the terrace.

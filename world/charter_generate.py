@@ -58,7 +58,7 @@ _PLAN_SYSTEM = """You design one inhabited location from supplied lore.
 Return one JSON object and no prose outside it. Do not invent an institution
 unless the lore or author brief implies one. Output: {name, structure:{key,
 max_planned, grammar:[{kind,names,purposes}]}, rooms:{id:{name,purpose,
-adjacent:[{to,barrier:"open_door"}],frontier:[],
+exposure:"open"|"sheltered"|"enclosed",adjacent:[{to,barrier:"open_door"}],frontier:[],
 anchors:{anchor_id:{desc}}}}, charters:[{key,name,naming,
 priority,commons,upkeeps:{id:{place,floor,level,fails_untended,one_body_restores_in,
 requires,depends_on}},posts:{id:{place,serves,requires,reports_to,authority}},
@@ -69,6 +69,11 @@ in this location PRODUCES a good this one consumes and must be named otherwise,
 health has no derivation and needs naming),
 decisions:{policies}}]}. Use qualitative timescales only; never
 write drift_per_hour or service_per_hour. Planned rooms contain no prose.
+Every room declares its exposure: open under the sky, sheltered under a roof
+with open sides, or enclosed by walls and a roof -- a loft or a tower top
+over another room declares its own. Sight from anywhere else reads only what
+a room declares, so an undeclared room is never seen from outside and adds
+no height to the building it stands on.
 A room's `anchors` are its FIXTURES: the fixed features of the place a body
 can stand at, work at, set something down on, take cover behind or lay a hand
 against. Give a room the ones it is MADE of rather than every object in it --

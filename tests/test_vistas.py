@@ -215,7 +215,7 @@ def test_what_a_look_at_the_horizon_finds_is_an_event_and_fog_says_so():
     fog = _yard(weather={"air": "thick"})
     (event,) = vista_percepts([], looked=[(v, what_a_look_finds(fog, "Ren", v))
                                           for v in looked_vistas(fog, ["The Kurogane Range"])])
-    assert "nothing can be made out" in event.data["desc"]
+    assert event.data["desc"] == "To the north, the fog closes in well short of the Kurogane range."
 
 
 def test_a_walk_the_beat_did_not_finish_is_the_walkers_to_know():

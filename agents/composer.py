@@ -2707,8 +2707,14 @@ def vista_percepts(seen, looked=()):
 
     def line(vista, clarity, nearer=""):
         where = compass.get(vista["bearing"], vista["bearing"])
-        if clarity == "unseen":
-            return compositor_text("vista_unseen", compass=where, name=vista["name"])
+        if str(clarity).startswith("unseen"):
+            # WHAT THE EYE MEETS INSTEAD, never a placeholder (owner,
+            # 2026-10-07): the walls, the weather closing in, the dark, the
+            # curve of the earth, nearer ground standing higher.
+            why, _sep, air = str(clarity).partition(":")
+            why = why[len("unseen_"):] if why.startswith("unseen_") else "nearer"
+            return compositor_text("vista_unseen_" + why, compass=where,
+                                   name=vista["name"], air=air_phrase(air))
         # Past a nearer one on the same bearing, a vista is "beyond" it, named
         # in the line itself -- a standing line is said alone on a later
         # beat, so it cannot lean on the line before it
@@ -2730,7 +2736,7 @@ def vista_percepts(seen, looked=()):
         # next beat announced the same range again as if first seen
         # (`files_standing`, read by every pack's view as a voice key is).
         data = {"desc": line(vista, clarity)}
-        if clarity != "unseen":
+        if not str(clarity).startswith("unseen"):
             data["files_standing"] = standing_key("vista", (vista["id"],), (clarity,))
         out.append(Percept(
             kind="ambient", channel="sight", source_label=vista["name"],
@@ -2741,7 +2747,8 @@ def vista_percepts(seen, looked=()):
             [(v, c) for v, c in (seen or ()) if v["id"] not in looked_ids]):
         nearer = ""
         if previous is not None and previous[0]["bearing"] == vista["bearing"] \
-                and previous[1] != "unseen" and clarity != "unseen" \
+                and not str(previous[1]).startswith("unseen") \
+                and not str(clarity).startswith("unseen") \
                 and previous[0].get("distance_given") and vista.get("distance_given") \
                 and float(previous[0]["distance_km"]) < float(vista["distance_km"]):
             nearer = previous[0]["name"]
@@ -2804,6 +2811,76 @@ def is_landscape(percept):
 LANDSCAPE_GROUNDS = ("open", "sheltered", "building")
 LANDSCAPE_HEIGHTS = ("one", "two", "tall")
 LANDSCAPE_GRAINS = ("mid", "outline")
+LANDSCAPE_COVERS = ("building", "ground")
+
+
+def air_phrase(word):
+    """The pack's word for what the air holds (`vistas.VISIBILITY_KM`'s
+    words: fog, mist, rain...), as it closes a view."""
+    from world.spatial import _phrase_table
+    table = _phrase_table("air_words")
+    return str(table.get(str(word or ""), table.get("fog", word or "")))
+
+
+def _far_line_text(line):
+    """One far line in the ACTIVE pack's words: English's own renderer, or
+    the pack's templates through the layout every pack shares."""
+    from language_runtime import compositor_text, current_language_id
+    from world.spatial import _phrase_table
+    if str(current_language_id.get() or "en").startswith("en"):
+        return render_landscape_line(line)
+    return str(compose_landscape_line(
+        line, compositor_text, compass_words=_phrase_table("compass_words")))
+
+
+def landscape_look_percepts(findings):
+    """What this body's own act LOOKED AT far off this beat
+    (`world.landscape.looked_far`): an EVENT each, ordered first -- right
+    after the body's own words, as a look at the horizon is
+    (`vista_percepts`) -- never standing background a view's delta may
+    suppress.
+
+    A place seen is its own far line, named by the name the look used when
+    the mind knows no other ("a two-storey building where the bell loft
+    is"). A place hidden is what stands in the way: the roofs or the ground
+    nearer in, the weather closing in, the dark, the walls or buildings
+    round the looker. NEVER A PLACEHOLDER (owner, 2026-10-07: "nothing can
+    be made out and similar place holders are quite frustrating"). Live
+    case: scratch story 166 turn 4589, a look up at the bell loft from the
+    low walk reached no view at all."""
+    from language_runtime import compositor_text
+    out = []
+    for found in findings or ():
+        if not isinstance(found, dict) or not found.get("room"):
+            continue
+        label = str(found.get("label") or "")
+        place = found.get("place")
+        if isinstance(place, dict):
+            shown = dict(place, order=0)
+            if label and not shown.get("name"):
+                shown["name"] = label
+            standing = landscape_percepts([shown])
+            lines = landscape_lines(standing)
+            if not lines:
+                continue
+            desc = _cap(_far_line_text(lines[0][1]))
+            kind = "seen:" + str(place.get("shows") or "whole")
+            data = {"desc": desc, "files_standing": standing[0].dedupe_key}
+        else:
+            cover = found.get("hidden_by") if isinstance(found.get("hidden_by"), dict) else {}
+            kind = str(cover.get("kind") or "around")
+            if kind not in ("building", "ground", "air", "dark", "walls", "around"):
+                kind = "around"
+            named = "_named" if kind in ("building", "ground") and cover.get("name") else ""
+            desc = _cap(compositor_text("far_look_hidden_" + kind + named, label=label,
+                                        cover=str(cover.get("name") or ""),
+                                        air=air_phrase(cover.get("air"))))
+            data = {"desc": desc}
+        out.append(Percept(
+            kind="ambient", channel="sight", source_label=label, data=data,
+            order_key=-1, salience=0.6,
+            dedupe_key=standing_key("far_look", (found["room"],), (kind,))))
+    return out
 
 
 def landscape_percepts(places):
@@ -2849,9 +2926,13 @@ def landscape_percepts(places):
             "big": [str(t) for t in (place.get("big") or ()) if str(t).strip()][:BIG_PER_PLACE],
             "tier": "outline" if place.get("tier") == "outline" else "mid",
             "grain": grain,
+            # Only its top shows, over the roofs or the ground nearer in.
+            "over": (place.get("over") if place.get("shows") == "top"
+                     and place.get("over") in LANDSCAPE_COVERS else ""),
         }
         signature = (data["grain"], data["ground"], data["breadth"], data["height"],
-                     data["lights"], data["high"], data["dark"], len(data["big"]))
+                     data["lights"], data["high"], data["dark"], len(data["big"]),
+                     data["over"])
         out.append(Percept(
             kind="ambient", channel="sight", source_label=data["name"],
             data={"landscape": data}, salience=0.15,
@@ -2950,6 +3031,14 @@ def compose_landscape_line(line, text, *, episode=False, thing=None,
         return text("landscape_light_n") if d["lights"] > 1 else text("landscape_light_1")
 
     def building(d):
+        whole = _building_whole(d)
+        if whole and d.get("over"):
+            # ONLY ITS TOP SHOWS, over what stands nearer -- the roofs or the
+            # rise of the ground (`landscape._seen_part`).
+            return text("landscape_top_over_" + d["over"], place=whole)
+        return whole
+
+    def _building_whole(d):
         lights = lights_word(d)
         base = text("landscape_building_" + (d.get("height") or "one"))
         if d.get("name"):
@@ -2966,7 +3055,7 @@ def compose_landscape_line(line, text, *, episode=False, thing=None,
     def buildings(bs):
         named = [b for b in bs if b.get("name")]
         plain = [b for b in bs if not b.get("name") and (b.get("height") or "one") == "one"
-                 and not b.get("lights") and not b.get("dark")]
+                 and not b.get("lights") and not b.get("dark") and not b.get("over")]
         notable = [b for b in bs if b not in named and b not in plain]
         parts = [building(b) for b in named + notable]
         if len(plain) == 1:

@@ -346,6 +346,26 @@ def check(cid):
                 population=task.get("population"))
         except Exception as exc:
             errors.append("%s: %s" % (type(exc).__name__, str(exc)[:600]))
+    # A ROOM SAYS WHAT KIND OF GROUND IT IS. Sight from anywhere else reads
+    # DECLARED exposure only (`world.landscape.declared_ground`: "declared,
+    # never guessed" -- the keyword fallback read staircases and shrines as
+    # open air), so a room that declares none cannot be seen from outside
+    # and adds no height to the building it tops. Measured (scratch story
+    # 166, 2026-10-07): the bell loft over the tide chapel was planned with
+    # no exposure, the chapel read from the walks as one low storey, and a
+    # look up at the loft from the low walk had nothing to find. Refused, not
+    # noted -- unlike a bare room, which may honestly hold nothing, every room
+    # IS some kind of ground -- and after the closure, so one review says
+    # everything.
+    from world.weather import EXPOSURES, _pick
+    undeclared = sorted(
+        rid for rid, room in (plan.get("rooms") or {}).items()
+        if not (isinstance(room, dict) and _pick(room.get("exposure"), EXPOSURES, "")))
+    if undeclared:
+        errors.append(
+            "%d room(s) declare no exposure -- open, sheltered or enclosed -- "
+            "so nothing outside can see them or their height: %s"
+            % (len(undeclared), ", ".join(undeclared[:12])))
     unnamed = []
     if town is not None:
         unnamed = [

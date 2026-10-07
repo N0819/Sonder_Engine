@@ -360,9 +360,32 @@ def looked_vistas(scene, looks, name=None, senses=None) -> list:
 
 def what_a_look_finds(scene, name, vista, senses=None) -> str:
     """"clear" | "lights" | "silhouette" when the vista is seen now, else
-    "unseen": a look aimed at the range in fog finds that it cannot be made
-    out."""
+    WHAT THE EYE MEETS INSTEAD, as "unseen_<why>": "unseen_walls" (the room
+    does not look that way), "unseen_air:<word>" (the weather closes in
+    first; the word is `air_from_weather`'s), "unseen_dark", "unseen_curve"
+    (the earth's curve has its top) or "unseen_nearer" (nearer ground stands
+    higher). Never a bare "unseen": the owner, 2026-10-07, "nothing can be
+    made out and similar place holders are quite frustrating" -- the world
+    always has something to say about why."""
     for seen, how in visible_vistas(scene, name, senses=senses):
         if seen["id"] == vista["id"]:
             return how
-    return "unseen"
+    from world.site_plan import EYE_M, body_altitude_m, room_elevation_m
+    from world.spatial import posture_class, room_of
+    rid = room_of(scene, name)
+    ways = outlooks(scene, rid) if rid else set()
+    if not rid or (ways is not None and vista["bearing"] not in ways):
+        return "unseen_walls"
+    weather = (scene or {}).get("weather") or {}
+    air = air_from_weather(weather)
+    dark, moonlit = _darkness(scene, weather)
+    eye_z = room_elevation_m(scene, rid) + body_altitude_m(scene, name) + \
+        EYE_M.get(posture_class(scene, name), EYE_M["standing"])
+    why = vista_verdict(vista, air=air, dark=dark and not moonlit, eye_m=eye_z)
+    if why == "air":
+        return "unseen_air:" + air
+    if why == "dark":
+        return "unseen_dark"
+    if why == "below":
+        return "unseen_curve"
+    return "unseen_nearer"

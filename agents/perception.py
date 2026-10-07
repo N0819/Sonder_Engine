@@ -1463,11 +1463,20 @@ def _sound_field_for(ctx, sc, name, room, events=None):
 
 
 def _looked_vistas(sc, res, interp, name, player_name, ctx, senses=None):
-    """The vistas `name`'s own act this beat aimed a `look` at, by the
-    looking row's actor: the player's rows (`persona:`/self) and each cast
-    member's (`character:<id>`), read off the interpret and resolve
-    sequences the way `swept_this_beat` reads a sweep."""
+    """The vistas `name`'s own act this beat aimed a `look` at
+    (`_own_looks`)."""
     from world.vistas import looked_vistas
+    return looked_vistas(sc, _own_looks(res, interp, name, player_name, ctx),
+                         name=name, senses=senses)
+
+
+def _own_looks(res, interp, name, player_name, ctx):
+    """Every `look` `name`'s own act aimed this beat, by the looking row's
+    actor: the player's rows (`persona:`/self) and each cast member's
+    (`character:<id>`), read off the interpret and resolve sequences the way
+    `swept_this_beat` reads a sweep. One list for both matchers -- the
+    horizon's (`vistas.looked_vistas`) and the far layer's
+    (`landscape.looked_far`)."""
     by_id = {}
     for row in (getattr(ctx, "cast", None) or ()):
         try:
@@ -1488,7 +1497,7 @@ def _looked_vistas(sc, res, interp, name, player_name, ctx, senses=None):
             who = actor
         if who.strip().casefold() == str(name or "").strip().casefold():
             looks.append(element["look"])
-    return looked_vistas(sc, looks, name=name, senses=senses)
+    return looks
 
 
 def _walk_underway(sc, res, name):
@@ -5460,10 +5469,20 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         # height, at the grain distance leaves them -- places, never people,
         # named only where this mind knows them, and never a room the near
         # field already answers. Near to far: the weather, these, the horizon.
-        from world.landscape import far_places
-        percepts.extend(composer.landscape_percepts(far_places(
-            sc, name, known=p.get("known_places"), senses=p.get("sense_card"),
-            via_names=via_names, gate=gate)))
+        from world.landscape import far_places, looked_far
+        # WHAT A LOOK FOUND FAR OFF is the beat's EVENT (`looked_far`): the
+        # place, its top over what stands nearer, or what is in the way --
+        # and a place a look answered is not said again as standing ground.
+        found = looked_far(sc, name, p.get("own_looks") or (),
+                           known=p.get("known_places"), senses=p.get("sense_card"),
+                           via_names=via_names, gate=gate)
+        percepts.extend(composer.landscape_look_percepts(found))
+        answered = {f["room"] for f in found if f.get("place")}
+        percepts.extend(composer.landscape_percepts([
+            place for place in far_places(
+                sc, name, known=p.get("known_places"), senses=p.get("sense_card"),
+                via_names=via_names, gate=gate)
+            if (place.get("key_room") or place.get("room")) not in answered]))
         # WHAT STANDS ON THE HORIZON (`world/vistas`): from open air or a
         # window facing its way, through the weather, by the light, over what
         # stands nearer -- decided now, for this body.
@@ -7203,6 +7222,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             # (`world.vistas.looked_vistas`): delivered as an event.
             p["looked_vistas"] = _looked_vistas(sc, res, interp, name, p_name, ctx,
                                                 senses=p.get("sense_card"))
+            # ...and every look of its own, for what it found FAR OFF
+            # (`world.landscape.looked_far`, matched where the view is
+            # composed, against the same far walk the view reads).
+            p["own_looks"] = _own_looks(res, interp, name, p_name, ctx)
             display_map = composer.observer_display_map(
                 sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(
