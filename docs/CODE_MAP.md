@@ -3401,7 +3401,7 @@ Declared functions: `appearanceFillButton()`, `interiorFillButton()`, `defaultCh
 
 Sections: Extension host (`:2`); Registration attribution (`:20`); Failure containment (`:56`); ES module entries (`:86`); Registration surface (`:177`); Notices (`:222`); Host services (`:370`); The chat lifecycle, as a declared contract (`:401`); Host-internal accessors (`:483`); Hot load / unload (`:609`).
 
-### `static/js/i18n-core.js` (241 lines)
+### `static/js/i18n-core.js` (250 lines)
 
 Sections: The localization rules, once (`:3`).
 

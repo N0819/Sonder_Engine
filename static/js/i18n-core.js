@@ -80,6 +80,7 @@ function i18nCompileTemplates(messages) {
         .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
       return {
         literals,
+        names: [...key.matchAll(/\$\{([^}]+)\}/g)].map(found => found[1]),
         regex: I18N_LINE_BREAK.test(literals.join(""))
           ? new RegExp(`^${parts.join("(.+?)")}$`) : null,
         value,
@@ -133,14 +134,22 @@ function i18nTranslate(messages, rules, source) {
   for (const rule of rules || []) {
     const match = i18nMatchTemplate(rule, source, broken);
     if (!match) continue;
+    // A translation NAMES its placeholders, and may name them in its own
+    // order -- Japanese often must. They were filled by position, so 18 of
+    // the ja pack's 158 multi-placeholder templates swapped their values:
+    // "Converting — 300 of 1,000 checkpoints" read 300 件中 1,000 件, and
+    // "3 file(s) in Library" read 3 に Library 件のファイル (2026-10-06).
+    // A name the key does not hold keeps the old positional fill.
+    const named = new Map(rule.names.map((name, i) => [name, match[i]]));
     let index = 0;
     // Translate each CAPTURE too. The captured span is whatever the caller
     // interpolated, and it is very often another engine string with its own
     // catalog entry -- `${phase} (+2 running alongside)` captures an already
     // English step label, so the status bar came out half Japanese:
     // 「Writing the scene (他に2が並行して実行中)」.
-    return rule.value.replace(/\$\{[^}]+\}/g, () => {
-      const captured = match[index++] || "";
+    return rule.value.replace(/\$\{([^}]+)\}/g, (_, name) => {
+      const captured = (named.has(name) ? named.get(name) : match[index]) || "";
+      index++;
       const inner = catalog[captured.trim()];
       return inner === undefined ? captured : inner;
     });

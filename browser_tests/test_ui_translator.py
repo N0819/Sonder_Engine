@@ -94,6 +94,55 @@ def test_a_long_line_costs_one_pass(page: Page) -> None:
     assert got["ms"] < 1000, got
 
 
+def test_a_translation_may_name_its_placeholders_in_its_own_order(page: Page) -> None:
+    """A translated value NAMES its placeholders, and Japanese often names
+    them in another order than the English key. They were filled by
+    position, so the values swapped places."""
+    _harness(page, {
+        "${res.files.length} file(s) in ${res.library}": "${res.library} に ${res.files.length} 件のファイル",
+        "${n} of ${m} done": "${m}件中${n}件完了",
+    })
+    got = page.evaluate("""() => [t("3 file(s) in Library"), t("3 of 5 done")]""")
+    assert got == ["Library に 3 件のファイル", "5件中3件完了"]
+
+
+# Every pack entry alone in its catalog, so no sibling rule can answer first:
+# the key filled with one token per placeholder name must translate to the
+# value filled with the same tokens.
+EACH_ENTRY = r"""(packs) => {
+  const wrong = [];
+  let checked = 0;
+  for (const [lang, catalog] of Object.entries(packs)) {
+    for (const [key, value] of Object.entries(catalog)) {
+      if (!key.includes("${")) continue;
+      const one = {[key]: value};
+      const rules = i18nCompileTemplates(one);
+      if (!rules.length) continue;
+      const names = [...key.matchAll(/\$\{([^}]+)\}/g)].map(found => found[1]);
+      const token = new Map(names.map((name, i) => [name, "Q" + (i + 1) + "Z"]));
+      const source = key.split(/\$\{[^}]+\}/g)
+        .map((literal, i) => (i ? token.get(names[i - 1]) : "") + literal).join("");
+      const want = value.replace(/\$\{([^}]+)\}/g, (_, name) => token.get(name));
+      const got = i18nTranslate(one, rules, source);
+      checked++;
+      if (got !== want) wrong.push({lang, key, got, want});
+    }
+  }
+  return {checked, count: wrong.length, wrong: wrong.slice(0, 10)};
+}"""
+
+
+def test_every_pack_entry_fills_its_placeholders_by_name(page: Page) -> None:
+    """Measured 2026-10-06: 18 of the ja pack's 158 multi-placeholder
+    templates name theirs in another order -- "Converting — 300 of 1,000
+    checkpoints" read 300 件中 1,000 件."""
+    packs = {path.parent.name: json.loads(path.read_text(encoding="utf-8")) for path in PACKS}
+    _harness(page, {})
+    got = page.evaluate(EACH_ENTRY, packs)
+    assert got["count"] == 0, got["wrong"]
+    assert got["checked"] > 800, got
+
+
 # The rules this replaced, verbatim from i18n-core.js before issue #23 and
 # renamed, kept as the specification the one-pass match must reproduce: which
 # rule answers first, and what each of its placeholders captured.
