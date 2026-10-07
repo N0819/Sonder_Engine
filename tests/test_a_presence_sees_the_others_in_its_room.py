@@ -40,8 +40,8 @@ SCENE = {"rooms": {"taproom": {}, "yard": {}}, "positions": {}}
 
 def test_a_colleague_in_the_room_is_in_the_payload(monkeypatch):
     monkeypatch.setattr(background, "_room_presences_in", lambda ctx, sc, room: [
-        ("Robanot Appleytonwood", "a rangy man in a stained apron"),
-        ("Host Pennytonwood", "a broad man with a ledger"),
+        ("Robanot Appleytonwood", "a rangy man in a stained apron", {}),
+        ("Host Pennytonwood", "a broad man with a ledger", {}),
     ])
     others = background._present_others(_ctx(), SCENE, "taproom")
     assert "a rangy man in a stained apron" in others, (
@@ -57,14 +57,14 @@ def test_a_colleague_in_another_room_is_not(monkeypatch):
 
 def test_an_unknown_room_still_fails_closed(monkeypatch):
     monkeypatch.setattr(background, "_room_presences_in", lambda ctx, sc, room: [
-        ("Robanot Appleytonwood", "a rangy man")])
+        ("Robanot Appleytonwood", "a rangy man", {})])
     assert background._present_others(_ctx(), SCENE, "") == []
 
 
 def test_a_recognised_colleague_is_named(monkeypatch):
     """Recognition is the presence's OWN, as everywhere else in this file."""
     monkeypatch.setattr(background, "_room_presences_in", lambda ctx, sc, room: [
-        ("Robanot Appleytonwood", "a rangy man in a stained apron")])
+        ("Robanot Appleytonwood", "a rangy man in a stained apron", {})])
     others = background._present_others(
         _ctx(), SCENE, "taproom", recognized={"Robanot Appleytonwood"})
     assert others == ["Robanot Appleytonwood"]

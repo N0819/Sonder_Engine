@@ -4986,9 +4986,23 @@ def background_presence_records(cid, *, places=None, names=None,
         if counts.get(display.casefold(), 0) != 1:
             continue
         state = registry["items"][charter_key]["state"]
+        body = state["bodies"].get(body_key) or {}
+        # OFF WATCH IN HIS OWN WORKPLACE, A KEEPER IS STILL THE KEEPER.
+        # `roles` are the posts a body is standing watch on right now, so a
+        # body between watches fell through to "member of <charter>": the
+        # inn's keeper, behind his own bar in his own taproom, reached his
+        # own house hands' view as "the old wiry member of inn", and one of
+        # them told the player "Keeper's not here" with the keeper beside
+        # him (scratch story 165, turn 4582). The body's own post stands in
+        # when he is where that post works; anywhere else he is only of his
+        # institution, as before.
+        if not roles:
+            home = str(body.get("home_post") or "")
+            post = (state.get("posts") or {}).get(home) or {}
+            if home and str(post.get("place") or "") == place:
+                roles = [home]
         role = _readable_role(state.get("naming"), roles, charter_key)
         sketch = {"role_hint": role, "station_room": place}
-        body = state["bodies"].get(body_key) or {}
         # What this body LOOKS like, dealt from its population's law
         # (`charter_surface`), carried on the sketch so every reader of the
         # record -- the perceiver's stranger label, the Director's figures,

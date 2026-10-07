@@ -656,7 +656,7 @@ def _background_react(ctx, nonce):
         # its OWN recognition (see _present_others).
         present_others = _present_others(
             ctx, sc, presence_room(sc, name, rec),
-            _presence_recognizes(ctx, name))
+            _presence_recognizes(ctx, name), asker=(name, rec))
         asks.append((name, rec, present_others))
     reactions = [entry for entry in _voices_at_once([
         (lambda name=name, rec=rec, others=others: _react_one(
@@ -1555,7 +1555,7 @@ def _all_body_labels(ctx):
     return out
 
 
-def _present_others(ctx, sc, here, recognized=None):
+def _present_others(ctx, sc, here, recognized=None, asker=None):
     """Co-located character names for a background presence's payload, gated
     by what THAT presence recognizes AND by where it is standing.
 
@@ -1652,17 +1652,40 @@ def _present_others(ctx, sc, here, recognized=None):
     # Same gates, because they are the same question: the ROOM admits, and
     # what it may CALL them is its own recognition -- an unmet colleague is
     # an appearance label, never a name.
-    for other, label in _room_presences_in(ctx, sc, room):
-        if not label:
+    # WHO IS ASKING, when one presence is (`asker` = (name, record)). Two
+    # things follow from it, both found on one beat (scratch story 165, turn
+    # 4582). A body is never listed as standing beside itself: every figure's
+    # own entry came back to it as a stranger's label, because the payload's
+    # self-filter compared its NAME with these LABELS. And a charter body
+    # knows the people of its own institution standing with it -- by name and
+    # by post, what working beside them gives anyone: a house hand shown his
+    # own keeper as "the old wiry member of inn" told the player "Keeper's
+    # not here" with the keeper at his elbow.
+    asker_name, asker_rec = (asker if isinstance(asker, tuple) and len(asker) == 2
+                             else ("", None))
+    asker_name = str(asker_name or "").strip().casefold()
+    asker_charters = {str(r.get("charter")) for r in
+                      ((asker_rec or {}).get("charter_refs") or ())
+                      if isinstance(r, dict) and r.get("charter")}
+    for other, label, record in _room_presences_in(ctx, sc, room):
+        if not label or (asker_name and other.casefold() == asker_name):
             continue
-        present_others.append(
-            other if _recognizes(other, recognized) else label)
+        if _recognizes(other, recognized):
+            present_others.append(other)
+            continue
+        theirs = {str(r.get("charter")) for r in (record.get("charter_refs") or ())
+                  if isinstance(r, dict) and r.get("charter")}
+        if asker_charters & theirs:
+            role = str((record.get("sketch") or {}).get("role_hint") or "").strip()
+            present_others.append("%s (%s)" % (other, role) if role else other)
+            continue
+        present_others.append(label)
     return present_others
 
 
 def _room_presences_in(ctx, sc, room):
-    """``[(name, appearance label)]`` for the tracked presences standing in
-    this room -- the ledger overlaid with the charter's derived bodies, which
+    """``[(name, appearance label, record)]`` for the tracked presences
+    standing in this room -- the ledger overlaid with the charter's derived bodies, which
     is the same read `pick_voice_demand` gates on, so who a presence can SEE
     and who it can be picked to answer cannot disagree.
 
@@ -1705,7 +1728,7 @@ def _room_presences_in(ctx, sc, room):
             name, str(sketch.get("appearance") or ""),
             role=str(sketch.get("role_hint") or ""),
             surface=sketch.get("surface"))
-        out.append((name, " ".join(str(label or "").split())))
+        out.append((name, " ".join(str(label or "").split()), record))
     return sorted(out)
 
 
@@ -1928,7 +1951,7 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
             name = str(rec["name"]).strip()
         present_others = _present_others(
             ctx, sc, presence_room(sc, name, rec),
-            _presence_recognizes(ctx, name))
+            _presence_recognizes(ctx, name), asker=(name, rec))
         asks.append((name, rec, present_others))
     entries = _voices_at_once([
         (lambda name=name, rec=rec, others=others: _react_one(
