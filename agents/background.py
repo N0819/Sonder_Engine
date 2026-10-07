@@ -1860,6 +1860,29 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
         wget(cid, "background_presences", {}) or {}, sc)
     presences = with_charter_presences(
         cid, presences, sc, names=names, frame_id=ctx.turn.frame_id)
+    # THE BEAT'S OWN PEOPLE (`common.lay_charter_figures` lays them) have no
+    # ledger record until commit files one. Each gets a provisional record in
+    # the shape commit will file -- its entity id, so `presence_room` finds
+    # where it stands, and its description as the role hint -- and an address
+    # aimed at its entity id or an alias is an address to it: the player's
+    # "Mr Petch?" carried the target `petch` (scratch story 165, turn 4581).
+    for row in figure_rows or ():
+        if not isinstance(row, dict) or not row.get("entity_id"):
+            continue
+        rname = str(row.get("name") or "").strip()
+        forms = {str(row["entity_id"]).casefold()}
+        forms |= {str(a).strip().casefold() for a in row.get("aliases") or ()}
+        if forms & addressed:
+            addressed.add(rname.casefold())
+        if not rname or presence_record_for(presences, rname, sc)[1]:
+            continue
+        desc = str(row.get("appearance") or "").strip()
+        presences = dict(presences)
+        presences["beat:" + str(row["entity_id"])] = {
+            "name": rname, "entity_id": str(row["entity_id"]),
+            "first_turn": ctx.turn.idx,
+            "sketch": {**({"role_hint": desc[:160]} if desc else {}),
+                       "station_room": str(row.get("room") or "")}}
     rooms = {str(r.get("name") or ""): str(r.get("room") or "")
              for r in figure_rows if isinstance(r, dict)}
     creatures = {str(r.get("name") or "") for r in figure_rows

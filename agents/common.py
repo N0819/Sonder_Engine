@@ -2588,6 +2588,35 @@ def lay_charter_figures(ctx, sc, rooms):
                             and placed.get("body") else {})})
     if placements:
         lay_charter_bodies(sc, placements, keys=keys)
+    # A PERSON THE BEAT MINTED STANDS HERE TOO. The rows above come from the
+    # presence ledger and the charters, both written at commit, so a body
+    # this beat brought in was on the stage and in nobody's list of who could
+    # answer: the man the player walked up to by the fire and called "Mr
+    # Petch" (scratch story 165, turn 4581) heard himself asked for the
+    # guild's books, and the innkeeper answered for him. Read by the rule
+    # commit files a presence by (`scene_person_entities`), off this stage's
+    # own scene, which already holds the beat's assertions. A mint bound to a
+    # charter body is that body's row, laid above.
+    try:
+        from persist.commit import _registered_name_roster, scene_person_entities
+        roster = {n.casefold() for n in _registered_name_roster(
+            chat, getattr(ctx, "cast", None) or [])}
+        roster |= {str(e.get("name") or "").casefold()
+                   for e in (getattr(ctx, "extra_players", None) or ())}
+        in_view = {str(r) for r in rooms_in_frame(sc, rooms)}
+        for name, person in sorted(scene_person_entities(sc, roster).items()):
+            if (name.casefold() in seen
+                    or person["entity_id"].casefold() in seen
+                    or person["charter_ref"] or person["room"] not in in_view):
+                continue
+            seen.add(name.casefold())
+            rows.append({"name": name, "room": person["room"], "role": "",
+                         "appearance": person["description"],
+                         "entity_id": person["entity_id"],
+                         "aliases": list(person["aliases"])})
+    except Exception as exc:
+        if hasattr(ctx, "add_warning"):
+            ctx.add_warning(f"the beat's own people not laid as figures: {exc}")
     return rows
 
 

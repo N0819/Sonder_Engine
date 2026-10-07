@@ -157,6 +157,7 @@ from persist.commit_background import (beat_reactions, BACKGROUND_PROMOTION_DIAL
     _presence_surface_words, _bodies_the_description_could_be_true_of,
     _valid_pending_act, _valid_pending_reply, _background_fired_reactions,
     _INERT_ENTITY_KINDS, _is_inert_presence_candidate,
+    _is_person_entity, scene_person_entities, person_entity_named,
     prepare_background_claims, commit_charter_observations,
     _mint_missing_presence_names, track_background_presences,
     BACKGROUND_RECENT_TAIL, _persist_blurbs, _append_manager_conduct,

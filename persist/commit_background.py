@@ -1859,6 +1859,79 @@ def _is_inert_presence_candidate(scene, eid, ent) -> bool:
             and not _is_body_entity(scene, eid, ent))
 
 
+def _is_person_entity(scene, eid, ent, roster, ubiquitous,
+                      is_ubiquitous=lambda e: False):
+    """Whether a scene entity is SOMEBODY a presence could be: named, of some
+    kind, not inert, not a registered name, not a ubiquitous speaker. The one
+    rule `track_background_presences` files a presence by and
+    `scene_person_entities` reads the beat's people by."""
+    if not isinstance(ent, dict):
+        return False
+    kind = str(ent.get("kind") or "").strip().casefold()
+    if not kind or _is_inert_presence_candidate(scene, eid, ent):
+        return False
+    name = str(ent.get("name") or "").strip()
+    if not name or name_in_roster(name, roster):
+        return False
+    return not (is_ubiquitous(ent) or name.casefold() in ubiquitous)
+
+
+def scene_person_entities(scene, roster):
+    """The people a scene's entities hold, by the rule commit files them by:
+    ``{display name: {entity_id, room, description, aliases, charter_ref}}``.
+
+    A PERSON THE BEAT MINTS IS PRESENT ON THE BEAT THAT MINTS THEM. The
+    presence ledger is written at commit, so every reader that runs before it
+    -- the figures voiced ahead of resolve, the descriptor binder -- built
+    "who is here" from a store one beat behind the scene. Found in play on
+    2026-10-06 (scratch story 165, turn 4581): the player walked to "the man
+    by the fire", said "Mr Petch?" and asked him for the guild's books; the
+    encoder minted `petch` as a person at the hearth, and he could not answer
+    -- not a figure, not a candidate, his address seed-bound to the house
+    hand -- while the innkeeper answered for him. `roster` is the casefolded
+    registered names; a scene the beat's diff is already merged into
+    (`beat_scene`, the resolve scene) is what makes the mint visible."""
+    try:
+        from story.scene import ubiquitous_speaker_names, is_ubiquitous_entity
+        ubiquitous = ubiquitous_speaker_names(scene or {})
+    except Exception:
+        ubiquitous, is_ubiquitous_entity = frozenset(), (lambda e: False)
+    positions = (scene or {}).get("positions") or {}
+    out = {}
+    for eid, ent in ((scene or {}).get("entities") or {}).items():
+        if not _is_person_entity(scene, eid, ent, roster, ubiquitous,
+                                 is_ubiquitous_entity):
+            continue
+        name = str(ent.get("name") or "").strip()
+        cref = ent.get("charter_ref")
+        out.setdefault(name, {
+            "entity_id": str(eid),
+            "room": str(positions.get(name) or positions.get(str(eid)) or ""),
+            "description": str(ent.get("description") or "").strip(),
+            "aliases": [str(a).strip() for a in ent.get("aliases") or ()
+                        if str(a or "").strip()],
+            "charter_ref": dict(cref) if isinstance(cref, dict)
+            and cref.get("charter") and cref.get("body") else None,
+        })
+    return out
+
+
+def person_entity_named(people, ref):
+    """The display name of the person in ``people`` (`scene_person_entities`)
+    that ``ref`` denotes -- by entity id, display name or alias -- or "".
+    A target the beat's own scene resolves to somebody is that somebody,
+    never a description to be dealt to whoever else stands near."""
+    cf = str(ref or "").strip().casefold()
+    if not cf:
+        return ""
+    for name, person in (people or {}).items():
+        forms = {name.casefold(), str(person.get("entity_id") or "").casefold()}
+        forms |= {a.casefold() for a in person.get("aliases") or ()}
+        if cf in forms:
+            return name
+    return ""
+
+
 def prepare_background_claims(ctx):
     """Embeddings for the canon rows a ratified background claim will become.
 
@@ -2112,15 +2185,10 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             # a hotel housekeeper. So the exclusion has to actually work on a
             # freeform kind string, which is what _is_inert_presence_candidate
             # adds; the deny-list alone caught one of those four objects.
-            kind = str(entity_def.get("kind") or "").strip().casefold()
-            if not kind or _is_inert_presence_candidate(
-                    _scene_now, entity_id, entity_def):
+            if not _is_person_entity(_scene_now, entity_id, entity_def,
+                                     roster, _ubiquitous, is_ubiquitous_entity):
                 continue
             name = str(entity_def.get("name") or "").strip()
-            if not name or name_in_roster(name, roster):
-                continue
-            if is_ubiquitous_entity(entity_def) or name.casefold() in _ubiquitous:
-                continue
             candidates.add(name)
             candidate_ids.setdefault(name, set()).add(str(entity_id))
             sk = sketches.setdefault(name, {})
@@ -3516,6 +3584,24 @@ def descriptor_bindings(ctx, dr_output=None):
             cid, presences, sc, places=_places,
             frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
     known = presence_name_items(presences)
+    # WHAT THE BEAT'S OWN SCENE NAMES IS LOOKED UP, NEVER DEALT. `sc` holds
+    # this beat's diff, so a person it minted is here under their entity id,
+    # name and aliases before any ledger has a record of them; and a room id
+    # is a place. Both used to fall through to the description path: scratch
+    # story 165 turn 4581 addressed `petch` (minted that beat at the hearth)
+    # and `inn_common`, and the seed dealt the first to the house hand and
+    # the second to the innkeeper, each left owing a reply they were never
+    # asked for.
+    # `beat_scene` lays only the beat's positions; who the beat brought in is
+    # its `state_diff.entities`, laid here for this one question.
+    _minted = (((dr_output if dr_output is not None
+                 else (ctx.get("director_resolve") or {})) or {})
+               .get("state_diff") or {}).get("entities") or {}
+    people = scene_person_entities(
+        {**sc, "entities": {**(sc.get("entities") or {}),
+                            **(_minted if isinstance(_minted, dict) else {})}},
+        roster)
+    room_ids = {str(r).casefold() for r in (sc.get("rooms") or {})}
     bindings = {}
     for ref in refs:
         cf = ref.casefold()
@@ -3529,6 +3615,8 @@ def descriptor_bindings(ctx, dr_output=None):
             # the display name so downstream matching is pure equality.
             if matched[0].casefold() != cf:
                 bindings[ref] = matched[0]
+            continue
+        if person_entity_named(people, ref) or cf in room_ids:
             continue
         # Zero matches is a description; two or more is a partial that
         # singles nobody out ("the trader", in a square of traders). A
@@ -3889,19 +3977,17 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         str(n).strip() for n in (dr_output.get("routed_to_background") or [])
         if str(n).strip() and str(n).strip().casefold() not in roster
     ]
-    diff = dr_output.get("state_diff") or {}
-    for entity_def in (diff.get("entities") or {}).values():
-        if isinstance(entity_def, dict) and entity_def.get("name"):
-            voiced_this_beat.add(str(entity_def["name"]).casefold())
-    # LAST, so the hand-off outranks the entity-mint exclusion. Minting the
-    # presence and giving up its words are the two halves of one design --
-    # the Director owns what EXISTS and the background stage owns what it
-    # SAYS -- so a routed name appearing in `state_diff.entities` is the
-    # Director doing its job, never evidence the line is already handled.
-    # Subtracting before the loop above put the two halves in a race the
-    # mint won: chat 72 turn 45 minted `night_clerk` as a `character`
-    # entity in the same beat its line was routed here, and the mint
-    # re-excluded the presence its own routing had just handed over.
+    # AN ENTITY WRITE IS NOT A LINE. Every name minted in
+    # `state_diff.entities` used to be added to `voiced_this_beat` -- a rule
+    # from when the causal Director wrote every line it minted a speaker for.
+    # It no longer does, so the clause only muted the people a beat brought
+    # in without a line: a man the player walked up to and addressed by name
+    # (scratch story 165, turn 4581) was "voiced" by being minted. Speech is
+    # what `dialogue_log` says was said, above; a figure voiced before resolve
+    # is skipped by `_declared` in agents/background.py.
+    # The routed names are still subtracted: the Director gave their words to
+    # this stage, so whatever the log says of them is the hand-off, not an
+    # answer already given (chat 72 turn 45's night clerk).
     voiced_this_beat -= {n.casefold() for n in forced_routed}
 
     # NOT `ctx.input`, which is the raw text the player typed. See
