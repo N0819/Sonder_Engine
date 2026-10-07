@@ -12,7 +12,7 @@
 | `agents/character_bare.py` | 958 |  | `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/character_tools.py` | 732 |  | `core.db` |
-| `agents/common.py` | 12057 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 12122 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5871 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 7357 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
@@ -313,13 +313,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `norm_sequence()` | 4565 | 299 lines |
-| `_unknown_actor_label()` | 5559 | 269 lines |
+| `_unknown_actor_label()` | 5624 | 269 lines |
 | `presence_figures_for_room()` | 2241 | 268 lines |
-| `_check_narrator_fidelity()` | 11225 | 259 lines |
-| `_scrub_unknown_identities()` | 6051 | 207 lines |
-| `_scrub_invented_dialogue()` | 9736 | 151 lines |
+| `_check_narrator_fidelity()` | 11290 | 259 lines |
+| `_scrub_unknown_identities()` | 6116 | 207 lines |
+| `_scrub_invented_dialogue()` | 9801 | 151 lines |
 | `observer_body_regions()` | 1735 | 140 lines |
-| `_check_quote_attribution()` | 10788 | 139 lines |
+| `_check_quote_attribution()` | 10853 | 139 lines |
 
 ### `agents/composer.py`
 

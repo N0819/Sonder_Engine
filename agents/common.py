@@ -5417,19 +5417,84 @@ def observer_name_scrub(chat, observer_name, cast):
     # Longest first: "The Doctor" must win over a bare "Doctor" alias, or the
     # longer form is left half-rewritten.
     subjects.sort(key=lambda pair: -len(pair[0]))
+    shielded = _other_peoples_names(chat, sheets, subjects)
 
     def scrub(text):
         if not isinstance(text, str) or not text or not subjects:
             return text
+        # ANOTHER PERSON'S NAME IS KEPT WHOLE while the forms run, so a
+        # cast member's surname never matches inside a relative's name.
+        held = {}
+        for i, full in enumerate(shielded):
+            pattern = name_boundary_pattern(full)
+            if re.search(pattern, text):
+                token = "\ue000%d\ue001" % i
+                held[token] = full
+                text = re.sub(pattern, token, text)
         for form, replacement in subjects:
             # Per-edge boundaries, the repaired siblings' rule
             # (`name_boundary_pattern`): `\b` is a property of spaced
             # scripts, so a Japanese name followed by its particle was
             # never scrubbed and this floor failed open in silence.
             text = re.sub(name_boundary_pattern(form), replacement, text)
+        for token, full in held.items():
+            text = text.replace(token, full)
         return text
 
     return scrub
+
+
+def _other_peoples_names(chat, sheets, subjects):
+    """The full names of people a scrub must NOT cut into, longest first.
+
+    `observer_name_scrub` rewrites every form of an unmet cast member --
+    the bare surname among them -- as a whole word, and a family shares a
+    surname. Measured (scratch story 165, turn 4582, 2026-10-07): public lore
+    read "What the town has to go on is Abel Gale's account", the scrub for
+    the unmet pilot Hester GALE rewrote her surname inside her brother's
+    name, and the innkeeper was handed "Abel the broad weather-worn woman's
+    account" -- and told the player "ask Abel, she's standing right there".
+
+    Other people are the registered cast (and the player) this scrub leaves
+    alone, the story's planned people and the scene's animate people -- every
+    multi-word name among them that contains a word of some subject's forms.
+    A name that IS one of the scrubbed subjects' own forms is never shielded:
+    a plan the Writers' Room filed under the player's own name must not carry
+    that name past the floor. Read-only and fail-open to "shield nothing",
+    which is the scrub as it was.
+    """
+    scrubbed = {str(form).casefold() for form, _ in subjects}
+    words = {w for form, _ in subjects for w in str(form).casefold().split()}
+    if not words:
+        return []
+    candidates = set()
+    for sheet in sheets:
+        candidates.add(character_name(sheet))
+    try:
+        from world.planned_entities import planned_entities
+        for plan in (planned_entities(chat["id"]) or {}).values():
+            candidates.add(str(plan.get("name") or ""))
+            candidates.update(str(a or "") for a in plan.get("aliases") or ())
+    except Exception:
+        pass
+    try:
+        from llm.schemas import _ANIMATE_ENTITY_KINDS
+        scene = wget(chat["id"], "scene", {}) or {}
+        for ent in (scene.get("entities") or {}).values():
+            if isinstance(ent, dict) and str(ent.get("kind") or "").strip() \
+                    .casefold() in _ANIMATE_ENTITY_KINDS:
+                candidates.add(str(ent.get("name") or ""))
+    except Exception:
+        pass
+    out = set()
+    for name in candidates:
+        name = " ".join(str(name or "").split())
+        folded = name.casefold()
+        if (not name or " " not in name or folded in scrubbed
+                or not words & set(folded.split())):
+            continue
+        out.add(name)
+    return sorted(out, key=len, reverse=True)
 
 
 def scrub_names_deep(value, scrub):
