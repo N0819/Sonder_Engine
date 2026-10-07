@@ -14,7 +14,7 @@
 | `agents/character_tools.py` | 732 |  | `core.db` |
 | `agents/common.py` | 12022 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5871 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 7317 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 7343 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3811 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1084 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -338,14 +338,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4793 | 2491 lines |
-| `director_interpret()` | 1368 | 916 lines |
-| `_reconcile_resolution()` | 2612 | 521 lines |
-| `_run_specialists()` | 3190 | 425 lines |
+| `director_resolve()` | 4819 | 2491 lines |
+| `director_interpret()` | 1368 | 917 lines |
+| `_reconcile_resolution()` | 2638 | 521 lines |
+| `_run_specialists()` | 3216 | 425 lines |
 | `director_establish()` | 372 | 205 lines |
-| `_reconcile_interpretation()` | 2286 | 172 lines |
-| `_ground_public_evidence()` | 3754 | 116 lines |
-| `_require_complete_entity_interiors()` | 3617 | 95 lines |
+| `_reconcile_interpretation()` | 2312 | 172 lines |
+| `_ground_public_evidence()` | 3780 | 116 lines |
+| `_require_complete_entity_interiors()` | 3643 | 95 lines |
 
 ### `agents/director_contact.py`
 

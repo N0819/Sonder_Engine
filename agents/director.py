@@ -2065,6 +2065,7 @@ def director_interpret(ctx, nonce):
     # mapping triggers so every downstream deterministic pass sees the
     # repaired sequence.
     _reconcile_interpretation(ctx, out, sc)
+    _mover_as_self(out.get("movement"), p_name)
 
     # Any generation request (model-authored, repaired, or synthesized by
     # the seam) names something no plan holds. NOTHING ELABORATES IT NOW: the
@@ -2281,6 +2282,31 @@ def director_interpret(ctx, nonce):
     _span_coherency_report(ctx, out, "interpret", _idispatch, _iview)
 
     return out
+
+
+def _mover_as_self(movement, player_name):
+    """The declaring player's own walk is spelled `mover: "self"`.
+
+    ONE SPELLING, AT INGEST. The encoder names the walker as the beat names
+    them, so the player's own move arrived as `"mover": "Tamsin Coyle"`, and
+    the field's readers split over it: the movement subject resolver accepted
+    "self", "player" or the name; the follow-stop floor
+    (`director_movement`, "player declared movement incompatible with
+    following") and the commit's heard-rooms read accepted only "self"; and
+    perception's own-walk channel (`perception`, `MovementDecl.mover`) read
+    anything else as a VEHICLE. Measured (scratch story 165, turn 4581,
+    2026-10-07): the player walked into the inn while following the pilot who
+    stayed outside, the stop never fired, and the follow survived into the
+    committed scene with the two in different rooms. A vehicle or another
+    body keeps its own name; only the player's own spellings fold.
+    """
+    if not isinstance(movement, dict):
+        return movement
+    mover = str(movement.get("mover") or "").strip().casefold()
+    own = str(player_name or "").strip().casefold()
+    if mover in ("", "self", "player") or (own and mover == own):
+        movement["mover"] = "self"
+    return movement
 
 
 def _reconcile_interpretation(ctx, out, sc):
