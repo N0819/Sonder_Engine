@@ -33,6 +33,7 @@ from .common import (
     widen_reactors_to_enclosure,
     widen_reactors_to_engaged,
     widen_reactors_to_hearers,
+    widen_reactors_to_rejoined,
     _act_surface_admission,
     _append_micro_view,
     _asks_player,
@@ -863,6 +864,14 @@ def interaction_loop(ctx, nonce):
     initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
         int(cid) for cid in widen_reactors_to_enclosure(
             ctx.chat.id, ctx.cast, list(initial_reactors))]))
+    # ...and a cast member a bubble returned this beat, whom the interpret
+    # never saw (`common.widen_reactors_to_rejoined`). The planner gave her
+    # the loop; without this the loop itself stopped on "no reactors"
+    # (scratch story 166 idx 13, the second replay).
+    initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+        int(cid) for cid in widen_reactors_to_rejoined(
+            ctx.chat.id, ctx.cast, list(initial_reactors), ctx.turn.idx,
+            ctx.turn.frame_id)]))
 
     # WHO THE BEAT LANDED ON GOES FIRST, and the beat says who that is in two
     # places: who was spoken to, and who was acted upon. Order is causality

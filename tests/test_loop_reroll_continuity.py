@@ -150,3 +150,28 @@ def test_reaction_reroll_drops_unselected_stale_reactors(monkeypatch):
     assert output["reaction_results"] == {"1": fresh}
     assert ctx.reaction_results[1]["decision_continuity"] is None
     assert ctx.reaction_results[1]["active_state"]["active_concerns"] is None
+
+
+def test_a_cast_member_the_bubble_returned_is_asked_by_the_loop(monkeypatch):
+    """The interpret named no reactor -- it ran before the merge and never saw
+    her -- so the loop's own widening is the only way she is asked. Before
+    it, the plan held the loop and the loop stopped on "no reactors"
+    (scratch story 166 idx 13)."""
+    calls = []
+    _LoopHarness()._install(monkeypatch, calls)
+    ctx = _Ctx(reactors=[7])
+    ctx.director_interpret["flow"]["reactors"] = []
+    monkeypatch.setattr(loops, "widen_reactors_to_rejoined",
+                        lambda chat_id, cast, reactors, idx, frame_id:
+                        list(reactors) + [7])
+
+    def declare(ctx, cid, nonce):
+        calls.append(cid)
+        return model_dict(CharacterOutput(
+            sequence=[{"type": "speech", "text": "Down here, Coyle."}],
+            interaction={"expects_response": False, "urgency": 0.2,
+                         "conversation_complete_for_me": True}))
+
+    monkeypatch.setattr(loops, "character_step", declare)
+    output = loops.interaction_loop(ctx, nonce=0)
+    assert calls and calls[0] == 7, output.get("stop_reason")

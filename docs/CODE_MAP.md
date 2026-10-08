@@ -29,7 +29,7 @@
 | `agents/director_views.py` | 754 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
 | `agents/impossible_knowledge.py` | 232 |  | `agents.common`, `core.db`, `story.character_schema` |
-| `agents/loops.py` | 1609 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents`, `agents.character`, `agents.common`, `core.db`, `core.pipeline_context`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/loops.py` | 1618 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents`, `agents.character`, `agents.common`, `core.db`, `core.pipeline_context`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2959 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
@@ -523,14 +523,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 835 | 698 lines |
-| `deterministic_micro_perception()` | 321 | 235 lines |
-| `rehydrate_loop_views()` | 98 | 82 lines |
-| `reaction_loop()` | 1534 | 76 lines |
-| `self_micro_view()` | 226 | 54 lines |
-| `_drop_absent()` | 576 | 45 lines |
-| `_isolated_wave()` | 792 | 41 lines |
-| `_defer_to_unrun_reactor()` | 653 | 37 lines |
+| `interaction_loop()` | 836 | 706 lines |
+| `deterministic_micro_perception()` | 322 | 235 lines |
+| `rehydrate_loop_views()` | 99 | 82 lines |
+| `reaction_loop()` | 1543 | 76 lines |
+| `self_micro_view()` | 227 | 54 lines |
+| `_drop_absent()` | 577 | 45 lines |
+| `_isolated_wave()` | 793 | 41 lines |
+| `_defer_to_unrun_reactor()` | 654 | 37 lines |
 
 ### `agents/mapping.py`
 

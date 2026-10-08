@@ -1353,3 +1353,17 @@ class TestTheRejoinedAreAsked:
         spatial_frames.perform_merge(chat_id, None, bubble, 7)
         plan = self._plan(chat_id, 8)
         assert "interaction_loop" not in plan and f"character:{hinami}" not in plan
+
+
+def test_the_loop_widens_as_the_planner_does():
+    """The planner and the interaction loop each widen `flow.reactors` by
+    hand. When the rejoined widening reached only the planner, the plan held
+    an interaction loop and the loop stopped on "no reactors" (scratch story
+    166 idx 13): every widening the planner applies, the loop applies too."""
+    import inspect
+    import re
+    from agents import loops, runtime
+    planner = set(re.findall(r"widen_reactors_to_\w+(?=\()", inspect.getsource(runtime.build_plan)))
+    loop = set(re.findall(r"widen_reactors_to_\w+(?=\()", inspect.getsource(loops.interaction_loop)))
+    assert "widen_reactors_to_rejoined" in planner
+    assert planner <= loop, planner - loop
