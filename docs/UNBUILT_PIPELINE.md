@@ -324,6 +324,17 @@ this cluster.
 - (iii) **The two concealment readers disagree on an empty `conceal_from`.** `composer.concealed_from_observer` hides the line from every non-actor; `common._conceal_from_targets_observer`, the micro-round floor, excludes nobody. None of the 12 concealed loop lines on the scratch db had an empty list. Needs a ruling against 'a line cannot be concealed from its own addressee'.
 - (iv) **`allow_npc_to_npc_dialogue: False` still ends a beat after its first wave**, before the summoned cast has run.
 
+<a id="unbuilt-1-11c"></a>
+
+### 1.11c What the restored in-beat reaction left open
+
+**Found:** restoring the in-beat reaction under an owed exit (`loops._reaction_owed`, `decision.not_answered_yet`), 2026-10-08 (Brackwater, scratch story 166).
+
+- (i) **The two silence clauses are unmeasured live.** The lane had no model budget. `character_bare.not_answered_yet` is new, and `character_bare.their_silence` was rescoped beside it, so the two state one rule: a silence is something a person did only in a turn they had. The measured case is chat 166 idx 26 (capture 6911). Abel's second call held a reaction ("She's at the door. I can hear her coat against the wood.") and a repeat ("Ask me what you came to ask."), reasoning "I said ask me plain. She hasn't yet." Reroll it from `interaction_loop` on a db copy and read his second call: the reaction should stay and the repeat should go. Then watch the next few re-called askers, and the next beats where the player opens without a word, for what the two clauses licensed.
+- (ii) **A cast member who has not spoken is still not drawn after an owed exit**, even when a micro-round reached it. The draw before ba783757 drew it; ba783757 and the narrowed draw do not. It never arose in the 3,934 stored loops. This is the owner's call, and it is the loop-side half of §1.11b(i).
+- (iii) **The player exit reads an address by name** (`common._asks_player`), and the `not_answered_yet` record follows the exit's test. So a line put to the player by the speaker's description of her fires both only through the '?' fallback. When the round also names a cast member, not even a question fires them. An imperative or a statement to a player the speaker knows only by look therefore neither ends the beat on her nor is handed back, although the resolve aims it at her (`director._bodies_addressed_as`). Reading the label floor in the exit would end more beats on the player; that is the owner's call.
+- (iv) **The 3,934-loop replay predates the full queue.** It ran while the narrowed draw kept only its first owed speaker. The queue now keeps every owed speaker in the draw's own order. Re-run the replay against it: it should still call what the draw before the stop called on every loop, but that is unmeasured.
+
 <a id="unbuilt-1-13"></a>
 
 ### 1.13 `ActionStage` is classified and the resolve path never reads it

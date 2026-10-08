@@ -3711,19 +3711,29 @@ def _requires_director_resolution(result):
     mislabelled commitment, and covers movement (`leave`/`enter`), which needs
     resolution however confidently it is declared.
     """
-    actions = [
-        e for e in _dict_list(result.get("sequence"))
-        if e.get("type") == "action"
-    ]
-    for action in actions:
+    return bool(acts_awaiting_resolution(result))
+
+
+def acts_awaiting_resolution(result):
+    """The declared actions `_requires_director_resolution` answers for: the
+    acts nobody can answer until the world says what happened, in order.
+
+    One predicate, two projections. The interaction loop needs WHICH acts
+    are waiting -- a speaker it calls again this beat is told what it tried
+    that the world has not answered yet (`decision.not_answered_yet`) -- and
+    a second copy of these three tests would be free to disagree with the
+    exit that ended the stretch.
+    """
+    waiting = []
+    for action in _dict_list(result.get("sequence")):
+        if action.get("type") != "action":
+            continue
         text = str(action.get("attempt") or "").casefold()
-        if action.get("visibility") == "concealed":
-            return True
-        if action.get("commitment") == "contestable":
-            return True
-        if any(term in text for term in _ling("_CONFLICT_VERBS")):
-            return True
-    return False
+        if (action.get("visibility") == "concealed"
+                or action.get("commitment") == "contestable"
+                or any(term in text for term in _ling("_CONFLICT_VERBS"))):
+            waiting.append(action)
+    return waiting
 
 def _classify_action_commitment(raw_text):
     """Classify an action as asserted or contestable.

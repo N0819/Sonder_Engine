@@ -308,9 +308,19 @@ def test_an_act_aimed_at_a_sleeper_does_not_wake_him(temp_db, monkeypatch):
 HER_LINE = "You called me in, so here is the last of what I am carrying."
 
 
-def _speaks_to_the_player(ctx, cid, nonce, *, calls, to_player, heard):
+def _speaks_to_the_player(ctx, cid, nonce, *, calls, to_player, heard,
+                          left_open=None):
     calls.append(cid)
     heard[cid] = str(ctx._extra.get("interaction_views", {}).get(cid) or "")
+    if left_open is not None:
+        # What the loop says this mouth left waiting on the player, as it
+        # stood when the mouth was asked (`loops._note_left_open`): the
+        # declared elements themselves, read for their words.
+        entry = (ctx._extra.get("beat_left_open") or {}).get(cid) or {}
+        left_open.append({key: [str(e.get("text") or e.get("attempt") or "")
+                                if isinstance(e, dict) else e
+                                for e in entry.get(key) or []]
+                          for key in entry})
     if cid in to_player:
         return {"sequence": [
                     {"type": "action",
@@ -337,23 +347,31 @@ def test_the_brother_is_asked_after_his_sister_turns_to_the_player(
     door the player opened, her line turns to the player, and the brother
     the player's act was aimed at -- who never was asked -- has his first
     turn, having heard her whole line, before the beat stops for the
-    player."""
+    player.
+
+    His look reaches her, so she may answer it (`loops._reaction_owed`):
+    once, as the only one called again, and told on the way in that her
+    line to the player is not answered yet (`loops._note_left_open`). This
+    stand-in turns to the player again, which ends the beat."""
     from agents import loops
     ctx, chat_id, ids = _story(temp_db, _at_the_table())
     ctx.director_interpret = _the_last_beat(ids)
     ctx.perception_act = {"views": {}}
-    calls, heard = [], {}
+    calls, heard, left_open = [], {}, []
     monkeypatch.setattr(
         loops, "character_step",
         lambda c, cid, nonce: _speaks_to_the_player(
             c, cid, nonce, calls=calls, to_player={ids["Hester"]},
-            heard=heard))
+            heard=heard, left_open=left_open))
 
     out = loops.interaction_loop(ctx, nonce=0)
 
-    assert calls == [ids["Hester"], ids["Abel"]], (
+    assert calls[:2] == [ids["Hester"], ids["Abel"]], (
         f"asked {calls}, stopped {out.get('stop_reason')!r}: the sister, "
-        "then her brother, each once, and nobody called again")
+        "then her brother")
+    assert calls[2:] == [ids["Hester"]], (
+        f"asked {calls}: only the sister his look reached is called again")
+    assert HER_LINE in left_open[2].get("said", []), left_open
     assert out["stop_reason"] == "awaiting player response"
     assert HER_LINE in heard[ids["Abel"]], (
         f"he heard her through a shut door: {heard[ids['Abel']]!r}")

@@ -1197,6 +1197,9 @@ SIDE_CHANNELS = {
                              "warning",
     "beat_declared": "in-stage: one interaction loop's own ledger of what "
                      "each mouth has already said this beat",
+    "beat_left_open": "in-stage: one interaction loop's own ledger of what "
+                      "each mouth left waiting on the player or the world "
+                      "this beat (`loops._note_left_open`)",
     "_manager_demand_why": "in-stage: the scene manager's gate working, read "
                            "back inside `background_react`",
     "_prose_contract": "in-stage: the prose contract's encoder answer, set at "

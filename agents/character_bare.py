@@ -347,6 +347,10 @@ def modules_for(payload, *, disputed=(), rupture_open=False, rupture_forced=Fals
         out.append("their_silence")
     if decision.get("awaiting_your_answer"):
         out.append("answer_owed")
+    # ...and its mirror: what this mind put to someone, or tried, earlier in
+    # the same beat, that nobody outside the loop has answered yet.
+    if decision.get("not_answered_yet"):
+        out.append("not_answered_yet")
     if decision.get("comes_to_you"):
         out.append("offers")
     if decision.get("speech_budget"):

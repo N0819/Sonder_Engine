@@ -879,6 +879,9 @@
     "answer_owed": {
       "$text": "character_bare/answer_owed.txt"
     },
+    "not_answered_yet": {
+      "$text": "character_bare/not_answered_yet.txt"
+    },
     "offers": {
       "$text": "character_bare/offers.txt"
     },

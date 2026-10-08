@@ -786,13 +786,7 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             if not isinstance(result, dict):
                 continue
             speaker = str(result.get("name") or "").strip()
-            said = [
-                e.get("text") if e.get("type") == "speech"
-                else e.get("content")
-                for e in (result.get("sequence") or [])
-                if isinstance(e, dict)
-                and e.get("type") in ("speech", "communication")
-                and (e.get("text") or e.get("content"))]
+            said = _said_lines(result)
             # THIS character speaking clears the debt, whatever they said. An
             # answer need not be responsive to count as having spoken; whether
             # it was a real answer is the asker's business, not a field's.
@@ -864,6 +858,99 @@ def _labelled_debt(result, label):
         debt["from"] = heard or label(debt["from"])
     return {"awaiting_your_answer": debt}
     return result
+
+
+def _said_lines(result):
+    """Every line one declaration put into the air: the words it spoke and
+    the content it communicated. Speaking at all is what discharges an owed
+    answer (`_unanswered_question_note`: whatever was said), so this is the
+    one reading of "has this mind spoken" for the debt -- across committed
+    beats there, and across the beat's own earlier rounds at the call site
+    in `character_step`."""
+    if not isinstance(result, dict):
+        return []
+    return [
+        e.get("text") if e.get("type") == "speech"
+        else e.get("content")
+        for e in (result.get("sequence") or [])
+        if isinstance(e, dict)
+        and e.get("type") in ("speech", "communication")
+        and (e.get("text") or e.get("content"))]
+
+
+#: Lines a mind is handed back as still before the person it put them to
+#: (`decision.not_answered_yet`): one stretch's words at the speech budget's
+#: default ceiling (`max_lines` 4, `story.scene.dialogue_budget`), so a whole
+#: ask fits. A longer record -- possible only where the player exit is
+#: switched off and the mind keeps turning to them -- keeps its latest. The
+#: same count bounds the acts the world has not answered.
+NOT_ANSWERED_YET_LINES = 4
+#: Characters kept of each line or act: the bound `_this_beat_self_record`
+#: already puts on this mind's own lines this beat -- one bound for one
+#: mind's own words.
+NOT_ANSWERED_YET_CHARS = 320
+
+
+def _not_answered_yet_note(left_open, chat, sh, label=None):
+    """`{"not_answered_yet": {...}}` when this mind's earlier rounds THIS BEAT
+    left something waiting on somebody outside the interaction loop: words
+    put to the player, who has no turn until the beat ends (`said_to`,
+    `you_said`), or an act the world has not answered yet (`you_tried`) --
+    the loop's record of both (`loops._note_left_open`). Absent otherwise,
+    so its presence is the signal, like the silence note beside it.
+
+    THE SIBLING OF `awaiting_your_answer`, the other way round: that one
+    says someone is waiting on THIS mind; this one says what this mind is
+    waiting on, and that the wait is not a silence. Only a mind called again
+    in the same beat can hold one, and a mind is called again to answer
+    something new that reached it (`loops._reaction_owed` while the player
+    is owed; the open draw where the player exit is switched off), so it is
+    the note that keeps the answer from becoming a repeat. Measured,
+    Brackwater chat 166 turn idx 26: called again after his sister crossed
+    to the door, the brother asked the player a second time, reasoning "I
+    said ask me plain. She hasn't yet." -- the player had not had a turn.
+
+    THE NAME PASSES THE SAME GATE THE VIEW DID, default-on as in
+    `_player_silence_note`: the caller passes the label it built for this
+    beat, and absent one it is built here, so a caller that forgets cannot
+    hand over a name the view withholds. Every line the loop records is
+    one whose addressee is the player's body (`loops._lines_left_with_player`),
+    so `said_to` names nobody else, and never somebody a line was not put to.
+
+    WHAT WAS SAID IS READ NOW, not when it was recorded: the loop's record
+    holds the declared elements themselves, and an interruption that cut
+    one since (`loops._cut_into_last_element`) is handed back cut -- what
+    the resolve, the narrator and this mind's own beat record all hold."""
+    if not isinstance(left_open, dict):
+        return {}
+
+    def _words(item):
+        if isinstance(item, dict):
+            item = (item.get("text") if item.get("type") == "speech"
+                    else item.get("content") if item.get("type") == "communication"
+                    else item.get("attempt"))
+        return str(item or "").strip()
+
+    def _kept(items):
+        texts = [_words(item)[:NOT_ANSWERED_YET_CHARS] for item in (items or [])]
+        return [text for text in texts if text][-NOT_ANSWERED_YET_LINES:]
+
+    said, tried = _kept(left_open.get("said")), _kept(left_open.get("tried"))
+    note = {}
+    if said:
+        if label is None:
+            label = observer_label_fn(chat, character_name(sh), [])
+        try:
+            player = character_name(persona_of(chat))
+        except Exception:
+            player = ""
+        said_to = label(player) if player else ""
+        if said_to:
+            note["said_to"] = said_to
+        note["you_said"] = said
+    if tried:
+        note["you_tried"] = tried
+    return {"not_answered_yet": note} if note else {}
 
 
 def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8,
@@ -4362,6 +4449,23 @@ def character_step(ctx, cid, nonce):
         chat.id, character_name(sh), cid, ctx.turn.idx, ctx.turn.frame_id,
         cache=shared.setdefault("unanswered_question_notes", {}),
         label=_identity_label, rows_cache=shared)
+    # THIS MIND'S OWN EARLIER ROUNDS THIS BEAT, which the note above cannot
+    # see: it reads committed beats (`t.idx < current`) and is cached once per
+    # turn, so a mind the loop calls again (`loops._reaction_owed`) that has
+    # already answered in its first round would still be told someone is
+    # waiting on it. Speaking discharges the debt, whatever was said -- the
+    # note's own rule (`_said_lines`). The loop owns `beat_declared` and
+    # resets it at loop start, so a reroll's leftovers cannot discharge one.
+    if _debt and _said_lines(
+            (ctx._extra.get("beat_declared") or {}).get(cid)):
+        _debt = {}
+    # ...and what those rounds left waiting on somebody OUTSIDE the loop:
+    # words to the player, who has no turn until the beat ends, and acts the
+    # world has not answered (`loops._note_left_open`). Labelled as the
+    # silence note is -- by the view's word for them now.
+    _not_answered = _not_answered_yet_note(
+        (ctx._extra.get("beat_left_open") or {}).get(cid), chat, sh,
+        label=_contact_label)
     # A want this mind is sitting on, from ITS OWN stored state -- exactly
     # one is marked, by `affect.normalize_wants`, and never the enacted one.
     _withholding = any(
@@ -4488,6 +4592,10 @@ def character_step(ctx, cid, nonce):
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_debt,
+            # What this character put to someone, or tried, earlier in this
+            # same beat that nobody outside the loop has answered yet -- only
+            # ever on a second call in one beat (`_not_answered_yet_note`).
+            **_not_answered,
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,

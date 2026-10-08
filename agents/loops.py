@@ -32,6 +32,8 @@ from world.spatial import (apply_contact_ops, hear_level, pitched_level_db,
 from . import composer
 from .character import _unanswered_question_note, character_step
 from .common import (
+    acts_awaiting_resolution,
+    cast_spelling_policy,
     player_speech_lines,
     preview_player_state_assertions,
     widen_reactors_to_acted_upon,
@@ -716,14 +718,168 @@ def _defer_to_unrun_reactor(queue_ids, initial_reactors, already_spoke,
 
 #: The early exits that wait on somebody OUTSIDE the loop -- the player's
 #: answer, the Director's resolution -- and so, once deferred for the summoned
-#: cast (`_defer_to_unrun_reactor`), close the beat when that cast has run:
-#: nobody new is drawn in while either is owed. The loop's own `stop_reason`
-#: strings, a closed set. "speaker completed exchange" is not one: a speaker
-#: closing his own exchange waits on nobody, and the cast may go on talking.
+#: cast (`_defer_to_unrun_reactor`), narrow what may follow when that cast has
+#: run: nobody new is drawn in while either is owed, and a speaker is called
+#: again only to answer something that reached it since its own last turn
+#: (`_reaction_owed`). The loop's own `stop_reason` strings, a closed set.
+#: "speaker completed exchange" is not one: a speaker closing his own
+#: exchange waits on nobody, and the cast may go on talking.
 EXITS_THAT_WAIT_OUTSIDE_THE_LOOP = frozenset({
     "awaiting player response",
     "physical resolution required",
 })
+
+
+def _reaction_owed(drawn, unreacted, already_spoke, calls, max_calls,
+                   rounds_run, max_rounds):
+    """Who may be called AGAIN while the player's answer or the Director's
+    resolution is owed (`EXITS_THAT_WAIT_OUTSIDE_THE_LOOP`), best first, or
+    [] to close the beat.
+
+    A SPEAKER SOMETHING NEW REACHED SINCE ITS OWN LAST TURN -- a micro-round
+    delivered to it after it last spoke (`unreacted`) -- and nobody else.
+    Never somebody new: the beat's summoned cast and its focus have had
+    their turns (`_defer_to_unrun_reactor`, `_defer_to_focus`), and a stranger
+    drawn in now would be answering a moment that is waiting on someone
+    else. Never by the next-speaker draw alone: the draw reads who PERCEIVED
+    the last round, and a speaker it names that nothing was delivered to has
+    nothing to answer but what it already said.
+
+    It is the draw NARROWED, never widened: the draw's own queue in the
+    draw's own order -- whoever an earlier round's draw left waiting, then
+    those the last round reached, ranked by `_next_speaker_candidates` (who
+    wants the floor most) -- less anybody new and anybody nothing has
+    reached since they last spoke. One ranking of who speaks next, not two,
+    and EVERY speaker it leaves is kept queued, as the open draw keeps its
+    queue: one the last round did not reach is still owed what an earlier
+    round delivered. Keeping only the first stranded the rest (review of
+    the 2026-10-08 landing: of three, a line put to the first went
+    unanswered while the other two whispered to each other, where the draw
+    before the stop answered it).
+
+    The rule it replaces ran the owed first turns and stopped, which fixed
+    a repeat and cost the reaction: at Brackwater (chat 166) the brother
+    could not answer his sister crossing to the door (idx 26) nor her
+    refusal to leave the walk the beat before (idx 25), and chat 59 t164's
+    host could not answer her guest. Replayed through this loop over the
+    3,934 stored loops of the scratch play db, the narrowing refuses no
+    stored call -- every stored re-call answered a delivery, and none drew
+    anybody new after an owed exit -- so it calls what the loop before the
+    stop called on every one of them. (That replay ran while the queue kept
+    only the first owed speaker; keeping the rest is the open draw's own
+    queue, narrowed, and no stored loop was re-run against it.) The repeat
+    at idx 26 was a re-call that HAD something new: what keeps an answer
+    from becoming a repeat is what the speaker is told on the way in
+    (`decision.not_answered_yet`, from `_note_left_open`).
+
+    Bounded by both budgets, like every deferral: [] once either is spent,
+    so the beat closes on the owed exit rather than on a budget message.
+    """
+    if calls >= max_calls or rounds_run >= max_rounds:
+        return []
+    return [cid for cid in drawn
+            if cid in already_spoke and cid in unreacted]
+
+
+def _lines_left_with_player(ctx, scene, speaker_id, result):
+    """One round's lines that wait on the PLAYER: its spoken and
+    communicated elements whose addressee is the player's body.
+
+    A cast member can answer inside the loop; the player cannot -- their
+    turn comes when the beat ends -- so a line put to them stays unanswered
+    for the rest of the beat, whoever speaks meanwhile.
+
+    WHOM A LINE IS FOR is read the way the resolve reads it, not a second
+    way: each of its `targets` -- a mind writes them in its own words for
+    the people it sees, a description for a stranger -- through the label
+    floor every payload shares (`director._bodies_addressed_as`), and for a
+    spoken line naming nobody, its round's `interaction.addresses`, as
+    `director._take_declaration` aims such a line. Only a line whose
+    addressee is the player's body waits on the player. A line put to
+    anybody else -- a cast member known only by a description, a presence,
+    a second player -- does not, and a line that names nobody carries no
+    addressee at all. Both used to be filed as said to the player: this
+    read ids and exact sheet names only (`normalize_character_refs`), which
+    a description never is, and kept an untargeted line as the round's own,
+    so the note named, as the one a mind had spoken to, a player it could
+    not even place (review of the 2026-10-08 landing; Brackwater chats 165
+    and 166 put six lines to the staithe hands -- by name or by look -- in
+    rounds that also spoke to the player).
+
+    The ELEMENTS, not copies of their words: an interruption can cut a
+    line after this records it (`_cut_into_last_element`), and the note
+    reads each one when it is handed over, as the ledger then holds it."""
+    try:
+        player = persona_name(persona_of(ctx.chat))
+    except Exception:
+        return []
+    if not player:
+        return []
+    from .director import _bodies_addressed_as
+    canonical, _forms = cast_spelling_policy(ctx.cast, player)
+    row = _character_by_id(ctx, speaker_id)
+    speaker = _character_display_name(row) if row is not None else ""
+    addresses = [a for a in _list(_dict(result.get("interaction")).get("addresses"))
+                 if str(a or "").strip()]
+
+    def _the_players(forms):
+        return any(str(canonical(body) or "").casefold() == player.casefold()
+                   for body in _bodies_addressed_as(ctx, scene, speaker, forms))
+
+    lines = []
+    for event in _dict_list(result.get("sequence")):
+        if event.get("type") == "speech":
+            text = str(event.get("text") or "").strip()
+        elif event.get("type") == "communication":
+            text = str(event.get("content") or "").strip()
+        else:
+            continue
+        targets = [t for t in _list(event.get("targets")) if str(t or "").strip()]
+        if not targets and event.get("type") == "speech":
+            targets = addresses
+        if text and targets and _the_players(targets):
+            lines.append(event)
+    return lines
+
+
+def _note_left_open(ctx, speaker_id, result, scene=None):
+    """Record what this round left waiting on somebody OUTSIDE the loop, for
+    the same speaker's later rounds this beat to be told
+    (`character._not_answered_yet_note` -> `decision.not_answered_yet`).
+
+    Two things wait outside, the same two `EXITS_THAT_WAIT_OUTSIDE_THE_LOOP`
+    names: a line turned to the player (`_asks_player`, the loop's own test),
+    and an act the world has not answered yet (`acts_awaiting_resolution`,
+    the one predicate behind `_requires_director_resolution`). Recorded
+    whether or not the exit ends the beat: a speaker called again for any
+    reason is still owed the fact that the player has had no turn.
+
+    WHY A SPEAKER CALLED AGAIN NEEDS IT. Brackwater, chat 166 turn idx 26:
+    the brother asked the player ("Ask me plain and I'll tell you what I
+    know"), his sister crossed to the door, and called again he said "She's
+    at the door. I can hear her coat against the wood." -- the reaction --
+    and then "Ask me what you came to ask. Quick", his reason on the record:
+    "I said ask me plain. She hasn't yet." Every line of his was in his
+    payload, marked `this_beat`; nothing said the player had not had a turn,
+    so the gap read as her silence.
+
+    The loop owns the map and resets it at loop start, as it does
+    `beat_declared`: a reroll's leftovers are never this beat's. It holds
+    the declared elements themselves, which the ledger holds too, so what
+    the speaker is handed back is what the ledger says was said -- cut short
+    where an interruption cut it -- and never a second copy free to
+    disagree with it. `scene` is the one the loop's deliveries are judged
+    against; absent, the resolver reads the stored scene."""
+    said = (_lines_left_with_player(ctx, scene, speaker_id, result)
+            if _asks_player(result, ctx.chat, ctx.cast) else [])
+    tried = [act for act in acts_awaiting_resolution(result)
+             if str(act.get("attempt") or "").strip()]
+    if not (said or tried):
+        return
+    entry = ctx._extra.setdefault("beat_left_open", {}).setdefault(
+        int(speaker_id), {"said": [], "tried": []})
+    entry["said"].extend(said)
+    entry["tried"].extend(tried)
 
 
 def _beat_onset_scene(ctx, scene):
@@ -927,6 +1083,9 @@ def interaction_loop(ctx, nonce):
     # or standalone character steps, never both.
     ctx.character_results = {}
     ctx._extra["beat_declared"] = {}
+    # What each mouth left waiting outside the loop this beat
+    # (`_note_left_open`), owned and reset here for the same reason.
+    ctx._extra["beat_left_open"] = {}
     config = dialogue_config(ctx.chat.id)
 
     interp = _dict(ctx.director_interpret)
@@ -1156,6 +1315,11 @@ def interaction_loop(ctx, nonce):
     # An interruption claim is checked against it: you cannot cut into a
     # line you never heard.
     heard_by = {}
+    # Who something has reached -- a micro-round delivered to them -- since
+    # their own last turn: what a speaker may still answer while the player
+    # or the Director is owed (`_reaction_owed`). A turn of their own clears
+    # it, because a turn answers whatever had reached them before it.
+    unreacted = set()
     no_content_streak = 0
     focus_deferred = False
     stop_reason = "budget exhausted"
@@ -1384,6 +1548,7 @@ def interaction_loop(ctx, nonce):
             result, delivered, perceived_by = _speak(speaker_id, calls)
             calls += 1
             already_spoke.add(speaker_id)
+            unreacted.discard(speaker_id)
             spoke.append((speaker_id, result, delivered, perceived_by))
 
         # Silence is a property of the WAVE, not of whoever happened to be
@@ -1403,6 +1568,8 @@ def interaction_loop(ctx, nonce):
                     local_views.get(observer_id, ""), additions)
                 local_observations.setdefault(observer_id, []).extend(
                     round_data["delivered_observations"].get(str(observer_id), []))
+                if additions:
+                    unreacted.add(observer_id)
             # A body is present at its own conduct. Merged in the same place
             # and at the same moment as everyone else's, so a second round
             # sees the first whoever spoke in it.
@@ -1417,6 +1584,13 @@ def interaction_loop(ctx, nonce):
         perceived_by = set()
         for _, _, _, seen in spoke:
             perceived_by |= set(seen or ())
+
+        # What this wave leaves waiting on somebody outside the loop, kept
+        # for its own mouths' later rounds this beat (`_note_left_open`):
+        # whether or not either exit below ends the beat, a mouth called
+        # again is owed the fact that nobody outside has answered.
+        for _speaker_id, _result, _, _ in spoke:
+            _note_left_open(ctx, _speaker_id, _result, micro_scene)
 
         # Both early exits below end the beat. Neither may end it with the
         # character the beat is ABOUT never simulated -- see _defer_to_focus.
@@ -1480,19 +1654,24 @@ def interaction_loop(ctx, nonce):
 
         # A DEFERRED EXIT IS STILL AN EXIT. The two above defer for the cast
         # the beat summoned -- and for its focus, once -- and were right
-        # about what comes after: nobody new is drawn in, and the beat ends
-        # when that cast has run. Only the speaker who RE-triggered an exit
-        # was held to it; one who did not fell through to the next-speaker
-        # draw below, which brought back whoever had perceived them --
-        # usually the very speaker still waiting on the player. Brackwater,
-        # chat 166 turn idx 26: the brother asked the player, the pilot was
-        # drained in and spoke to nobody, and the brother was called a second
-        # time to ask the player again before the player had said a word (1
-        # of the 2,082 stored loops in which a line asked the player; the
-        # deferral's own tests could not see it, because their stand-ins
-        # perceive nobody or stub the next-speaker draw out). While the
-        # player's answer or the Director's resolution is owed, the loop runs
-        # who it already owes a first turn and then stops.
+        # about what comes after: nobody new is drawn in. Only the speaker who
+        # RE-triggered an exit was held to it; one who did not fell through
+        # to the next-speaker draw below, which brought back whoever had
+        # perceived them -- usually the very speaker still waiting on the
+        # player. Brackwater, chat 166 turn idx 26: the brother asked the
+        # player, the pilot was drained in, and the brother was called a
+        # second time to ask the player again before the player had said a
+        # word (1 of the 2,082 stored loops in which a line asked the player).
+        # While the player's answer or the Director's resolution is owed, the
+        # loop first runs who it already owes a first turn. After that it
+        # does NOT simply stop -- stopping fixed the repeat by taking the
+        # reaction too: replayed through the loop over all 3,934 stored
+        # loops, it cut five (three beats), each a reaction to what had just
+        # reached the speaker, the brother's to his sister at the door among
+        # them. It goes on through the closed-exchange and silence checks
+        # below as before, to a draw narrowed to `_reaction_owed`: a speaker
+        # something new reached since its own last turn, told on the way in
+        # what is still waiting on the player (`_note_left_open`).
         if pending_exit_reason in EXITS_THAT_WAIT_OUTSIDE_THE_LOOP:
             drained = _defer_to_unrun_reactor(
                 queue_ids, initial_set, already_spoke, calls, max_calls)
@@ -1506,8 +1685,6 @@ def interaction_loop(ctx, nonce):
             if deferred is not None:
                 queue_ids, focus_deferred = deferred, True
                 continue
-            stop_reason = pending_exit_reason
-            break
 
         # EVERY member of the wave has to be done, not just the last one to
         # be asked. One character closing their own exchange says nothing
@@ -1599,8 +1776,12 @@ def interaction_loop(ctx, nonce):
             break
 
         if not allow_npc_to_npc:
+            # A reaction to another cast member IS their dialogue, so the
+            # toggle refuses it too; the beat still ends on what it waits on.
             stop_reason = (
-                "NPC-to-NPC dialogue disabled"
+                pending_exit_reason
+                if pending_exit_reason in EXITS_THAT_WAIT_OUTSIDE_THE_LOOP
+                else "NPC-to-NPC dialogue disabled"
             )
             break
 
@@ -1611,6 +1792,24 @@ def interaction_loop(ctx, nonce):
             ):
                 if cid not in next_ids:
                     next_ids.append(cid)
+
+        # WHILE SOMEBODY OUTSIDE THE LOOP IS OWED, THE DRAW IS NARROWED to a
+        # speaker something new reached since its own last turn
+        # (`_reaction_owed`; see A DEFERRED EXIT IS STILL AN EXIT above).
+        # The queue is the draw's, extended as the open draw below extends
+        # it and then narrowed: a speaker an earlier round reached stays
+        # queued until it has answered, and a body drawn in before the exit,
+        # who has not spoken, would be somebody new and drops out.
+        if pending_exit_reason in EXITS_THAT_WAIT_OUTSIDE_THE_LOOP:
+            again = _reaction_owed(
+                queue_ids + [cid for cid in next_ids if cid not in queue_ids],
+                unreacted, already_spoke, calls, max_calls, len(rounds),
+                max_rounds)
+            if not again:
+                stop_reason = pending_exit_reason
+                break
+            queue_ids = again
+            continue
 
         # `_next_speaker_candidates` looks for somebody NEW to bring in. It
         # does not know the queue already holds someone still owed their turn

@@ -15,8 +15,16 @@ player, the pilot was drained in and spoke to nobody, and the brother was
 called a second time to ask the player again before the player had said a
 word -- 1 of the 2,082 stored loops in which a line asked the player. The
 deferral's own suites could not see it: their stand-ins perceive nobody, or
-stub the draw out. These fixtures let everyone hear everyone, as one room
+stub the draw out. These fixtures let everyone perceive everyone, as one room
 does, and keep the real draw.
+
+What may follow the owed turns is narrower since: a speaker is called again
+only when a micro-round DELIVERED something to it since its own last turn
+(`loops._reaction_owed`), never by the draw alone, and never anybody new.
+These stand-ins are perceived by everyone -- the set the draw reads -- and
+deliver nothing, so the draw names the asker and the rule refuses him: they
+pin the drain and the "never by the draw alone" half. The re-call itself is
+pinned in tests/test_a_speaker_is_called_again_only_for_what_reached_it.py.
 """
 
 from __future__ import annotations
@@ -95,9 +103,11 @@ def _install(monkeypatch, calls, *, asks_player=(), physical=()):
     monkeypatch.setattr(loops, "character_step", step)
 
 
-def test_the_asker_is_not_called_again_before_the_player_answers(monkeypatch):
-    """The measured shape: the brother (83) asks the player, the pilot (81)
-    is owed her first turn and takes it, and the beat stops there."""
+def test_the_draw_alone_does_not_call_the_asker_again(monkeypatch):
+    """The measured shape with nothing delivered: the brother (83) asks the
+    player, the pilot (81) is owed her first turn and takes it, and the draw
+    -- which names him, since he perceives her -- cannot call him again on
+    its own. The beat stops there."""
     calls = []
     _install(monkeypatch, calls, asks_player={83})
 

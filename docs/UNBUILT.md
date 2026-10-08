@@ -171,6 +171,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.11 — `ctx.warnings` reaches the pipeline drawer but not the story reader](UNBUILT_PIPELINE.md#unbuilt-1-11)
 - [§1.11a — Pacing still decides who may ANSWER, and that half is unmeasured](UNBUILT_PIPELINE.md#unbuilt-1-11a)
 - [§1.11b — What the acted-upon widening left open](UNBUILT_PIPELINE.md#unbuilt-1-11b)
+- [§1.11c — What the restored in-beat reaction left open](UNBUILT_PIPELINE.md#unbuilt-1-11c)
 - [§1.13 — `ActionStage` is classified and the resolve path never reads it](UNBUILT_PIPELINE.md#unbuilt-1-13)
 - [§1.32 — A region assertion has an owner only by slot position](UNBUILT_PIPELINE.md#unbuilt-1-32)
 - [§1.33 — An interpret that says nothing costs two model calls](UNBUILT_PIPELINE.md#unbuilt-1-33)
