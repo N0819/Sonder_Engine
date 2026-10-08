@@ -189,3 +189,84 @@ the evidence supports one.
   nothing, and every trace attached to it reports zero calls.
 - Turn ids are reused after a delete: a turn id in the findings log refers to
   the run it was logged against.
+
+## Addendum: where the tokens went, and where the prose comes from
+
+After an outside critique of the published story (over-interpreted gestures,
+a "second dialogue track" of white knuckles and held breaths, nautical
+similes homogenising voices, quiet beats as heavy as dramatic ones), an
+eight-agent workflow measured the run and adversarially checked every
+proposal against the code and data. Full results:
+`output/brackwater-2026-10-07/tokens_and_prose_workflow.json` (git-ignored).
+
+**The prose is engine-fed.** Of 55 body-tension motifs on 25 of 30 pages,
+54 trace to a record the engine delivered; one is the narrator's own.
+- Characters declare two tells every beat (33 of 34 replies at
+  `jev.MAX_TELLS=2`).
+- `affect.tell_gate` blocked none: every subtlety fell between 0.397 and
+  0.668, and the observer floor was 0.70.
+- Cue records are ordered after every event, so 16 of 29 pages end on a
+  tell.
+- 25 of the 39 "sign, then its meaning" glosses arrived pre-written in the
+  free-text `how`, `demeanor` ("X seems ...") and cue fields. The observable
+  floor that `do` has does not apply to them.
+- All 34 demeanor strings were distinct, so the ledger re-delivered one
+  every beat.
+- Page length is uncorrelated with what happened (r = 0.02). The card's
+  "Cutting REALLOCATES, it does not shrink" forbids a short page.
+
+**A narrator restraint clause, A/B tested, did not work.** Twelve calls,
+$0.58, on the exact captured requests:
+- no consistent length or motif effect;
+- the "don't gloss" half failed on 4 of 5 turns, because the model renders
+  delivered text as delivered;
+- fidelity was intact in both arms.
+
+The fix belongs where cue, demeanor and manner text is written. A
+deterministic em-dash rewrite would move the glosses, not remove them:
+103 dashes, but only about 14 of the 39 glosses hinge on one.
+
+**Where the money and time went.** All-in cost was about $0.47 per kept
+beat (rerolls, the Room and predevelopment included); the kept pipeline
+alone was about $0.23 per turn.
+- The encoder is 41-52% of USD. None of its 224 calls read a cache; its
+  repair calls are 51% of its input, re-sending the same world sections;
+  and it ships full records for rooms 3+ hops away (67% of room text, named
+  in 14 of 2,834 sends).
+- The Writers' Room is 46% of input and 75% of output tokens, but only
+  about 16% of USD (DeepSeek is cheap and caches well). Its 21 background
+  fill jobs (371 calls) produced nothing that reached a page or a mind; 17
+  of the 21 had no open need.
+- The narrator's output is about 95% reasoning trace, about 30 s per beat.
+- Jev is about 40% of per-beat input tokens, at well under a cent.
+
+**Verified token proposals.** Every one came back "partial" (smaller than
+first claimed) or "refuted". In descending value:
+1. Gate Room fills on a real frontier change: 49-60% fewer Room calls, no
+   page change in this run. The verifier adds a root cause: the frontier
+   measure counts only planned stubs.
+2. Encoder prompt caching: settle Gemini's cache-write price on OpenRouter
+   with one probe first. Then choose among a system-part cache marker
+   (-20% or +1%), repair as a continuation of the main call (-21% to -77%),
+   or a per-stage world block (-20% to -64%).
+3. Scope the encoder's rooms and carried reports: -9% to -16% of encoder
+   input. Needs a replay check; the hop cap is the owner's.
+4. Narrator reasoning off, behind a fiction-quality A/B: up to about
+   -30 s and about $0.02-0.05 per beat. Also drop the grammar's duplicate
+   `text` field: 15 of 40 calls wrote the page twice, and one runaway hit
+   the 50k cap.
+5. Smaller items:
+   - room predevelopment never shortened an in-beat run;
+   - the in-turn room author gets a full rooms ledger it never inspects;
+   - JSON-schema stalls cost about 16 s per beat through the format ladder;
+   - Gemini's flex tier is half price.
+
+Refuted: dropping the room author's raw room records (the rendered
+`surroundings` is not a superset), and queueing fills after acceptance
+(erasure follows the checkpoint, not the queue).
+
+**Found outside the lanes, for the backlog:**
+- Declaration ids collide across interaction-loop rounds. Turn 4610: Abel's
+  loud "Hester - stay on the walk" was logged as a mutter with round 0's
+  tone.
+- The narrator fidelity checker misfires on short-trace pages.
