@@ -2583,7 +2583,10 @@ def _co_present_company(scene, observer_name, bodies, known):
 
 
 def _tell_acuity(sheet):
-    """Numeric visual/auditory acuity for physical-tell delivery."""
+    """Numeric visual/auditory acuity for physical-tell delivery, ranked on
+    the scale a tell's subtlety is graded on: an ordinary eye reaches
+    "noticeable" (0.4), a keen one "subtle" (0.65), an exceptional one
+    "hidden" (0.9) -- see `affect.TELL_ADVANTAGE`."""
     if not isinstance(sheet, dict):
         return 0.4
     senses = (
@@ -2655,8 +2658,12 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
     receive its channel -- sight reaches any tell (same-visual-channel, not in
     the rear blind spot), and a tell `tell_is_audible` recognises also reaches
     a listener who cannot see it happen -- AND (b) affect.tell_gate: subtlety
-    <= acuity + familiarity + attention. MEANING and the character's own labels
-    never cross; only the observable cue text does."""
+    <= acuity + familiarity + attention, where knowing the source and watching
+    it are each worth one grade (`affect.TELL_ADVANTAGE`) and worth nothing
+    when absent. MEANING and the character's own labels never cross; only the
+    observable cue text does -- with, beside it (`cue_at`), the event id of
+    the source's own step the read-back said it shows at, which orders the
+    cue and is never rendered (`_cue_slots`)."""
     out = {}
     focus = _focus_target(scene, observer)
     behind = set(_behind_sources(scene, observer, sources))
@@ -2696,10 +2703,11 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
         # unchanged).
         audible = bool(rel.get("same_room")) \
             and hear_level(rel, "normal") == "full"
-        familiarity = 0.45 if (observer in (known.get(sname) or [])
-                               or sname in (known.get(observer) or [])) else 0.15
-        attention = 0.4 if focus == sname else 0.15
-        cues = []
+        familiarity = affect.TELL_ADVANTAGE if (
+            observer in (known.get(sname) or [])
+            or sname in (known.get(observer) or [])) else 0.0
+        attention = affect.TELL_ADVANTAGE if focus == sname else 0.0
+        cues, cue_at = [], []
         if tells and acuity is None:
             acuity = _tell_acuity(observer_sheet)
         for t in tells:
@@ -2707,11 +2715,14 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
                                     and tell_is_audible(t.get("channel")))
             if reachable and affect.tell_gate(t, acuity, familiarity, attention):
                 cues.append(t.get("cue"))
+                cue_at.append(str(t.get("at_event") or ""))
         entry = {}
         if visible and demeanor:
             entry["surface_demeanor"] = demeanor
         if cues:
             entry["cues"] = cues
+            if any(cue_at):
+                entry["cue_at"] = cue_at
         if entry:
             out[sname] = entry
     return out
@@ -4157,14 +4168,15 @@ def _manifest_percepts(sc, manifest, observer, display_map, recognized,
     same identity scrub an act surface gets. A body this observer was not
     shown (no display label, not recognised) names nothing and its tells
     are dropped: a tell is a thing SEEN OR HEARD on a body, and there is no
-    body here to see it on. Returns (percepts, next order key)."""
+    body here to see it on. Returns (percepts, next order key).
+
+    The outcome stage hands this only the cues `_cue_slots` could not place
+    among the beat's events; the rest were minted where they showed."""
     out = []
     for sname, entry in (manifest or {}).items():
         if not isinstance(entry, dict) or same_subject(sc, sname, observer):
             continue
-        label = display_map.get(sname)
-        if label is None and _recognizes(sname, recognized):
-            label = sname
+        label = _manifest_label(sname, display_map, recognized)
         if not label:
             continue
         can_see = visual_level_between(sc, observer, sname,
@@ -4177,15 +4189,105 @@ def _manifest_percepts(sc, manifest, observer, display_map, recognized,
         if percept:
             out.append(percept)
         for cue in entry.get("cues") or []:
-            text = _composer_scrub_surface(str(cue or ""), observer,
-                                           recognized, unknown,
-                                           labels=display_map)
-            percept = composer.cue_percept(sname, label, text, order_key=order,
-                                           can_see=can_see)
+            percept = _cue_percept(sc, sname, cue, observer, display_map,
+                                   recognized, unknown, order,
+                                   sense_card=sense_card)
             if percept:
                 out.append(percept)
                 order += 1
     return out, order
+
+
+def _manifest_label(sname, display_map, recognized):
+    """This observer's label for a source's body, or None when it was not
+    shown one (`_manifest_percepts`)."""
+    label = display_map.get(sname)
+    if label is None and _recognizes(sname, recognized):
+        label = sname
+    return label
+
+
+def _cue_percept(sc, sname, cue, observer, display_map, recognized, unknown,
+                 order, sense_card=None):
+    """One delivered tell as THIS observer's percept, or None: named through
+    the display map and scrubbed like an act surface, and nothing for a body
+    this observer was not shown."""
+    if same_subject(sc, sname, observer):
+        return None
+    label = _manifest_label(sname, display_map, recognized)
+    if not label:
+        return None
+    can_see = visual_level_between(sc, observer, sname, sense_card) != "none"
+    text = _composer_scrub_surface(str(cue or ""), observer, recognized,
+                                   unknown, labels=display_map)
+    return composer.cue_percept(sname, label, text, order_key=order,
+                                can_see=can_see)
+
+
+def _stream_actor(beat_event):
+    """Whose own line or act one entry of the outcome stream is
+    (`_outcome_event_stream`); "" for an entry that is nobody's conduct --
+    a silence is news to the one who was waiting, not an act of the one
+    who kept it."""
+    kind = beat_event.get("kind") if isinstance(beat_event, dict) else None
+    if kind == "speech":
+        return str((beat_event.get("entry") or {}).get("speaker") or "")
+    if kind in ("action", "communication"):
+        return str(beat_event.get("actor") or "")
+    return ""
+
+
+def _cue_slots(sc, manifest, observer, beat_events):
+    """WHERE IN THE BEAT EACH CUE THIS OBSERVER WAS DELIVERED GOES:
+    `({stream index: [(source, cue)]}, the manifest less the cues placed)`.
+
+    A cue goes just before the stream entry of the source's own step the
+    read-back said it shows at (`cue_at`, that step's event id against the
+    entry's `declared`; the first of them when the resolve cut the step into
+    several spans). With no such entry -- no anchor, a sign that shows all
+    through, a step this beat never resolved -- it goes just before the
+    source's LAST line or act of the beat: inside its giver's conduct, and in
+    the round the tells came from, since a mind's manifest is its latest
+    round's (`_MERGE_LATEST_WINS_FIELDS`) while its lines and acts are every
+    round's. Never after all of it.
+
+    They used to be numbered after every event, so they were always the last
+    records, and the narrator, told the order is absolute, ended the page on
+    them -- 16 of 29 Brackwater pages (chat 166, 2026-10-07; 26 of 26 beats
+    with a cue) -- even when the cue named an earlier moment ("at the coat
+    question", "before the knock lands"). A source with no line or act in
+    the stream keeps that place, as before: there is nothing of its own to
+    stand beside."""
+    slots, rest = {}, {}
+    for sname, entry in (manifest or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        kept = {k: v for k, v in entry.items() if k not in ("cues", "cue_at")}
+        cues = list(entry.get("cues") or [])
+        at = list(entry.get("cue_at") or [])
+        own = []
+        if not same_subject(sc, sname, observer):
+            folded = str(sname or "").strip().casefold()
+            for index, beat_event in enumerate(beat_events or ()):
+                actor = _stream_actor(beat_event)
+                if actor and (actor.strip().casefold() == folded
+                              or same_subject(sc, actor, sname)):
+                    own.append(index)
+        left = []
+        for k, cue in enumerate(cues):
+            anchor = str(at[k] if k < len(at) else "").strip()
+            placed = [i for i in own if anchor and str(
+                (beat_events[i] or {}).get("declared") or "").strip() == anchor]
+            slot = placed[0] if placed else (own[-1] if own else None)
+            if slot is None:
+                left.append(cue)
+            else:
+                slots.setdefault(slot, []).append((sname, cue))
+        if left:
+            kept["cues"] = left
+        if kept:
+            rest[sname] = kept
+    return slots, rest
 
 
 def _composer_prev_state(ledger, pid):
@@ -7392,6 +7494,11 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             recognized, unknown = _composer_unknown_sources(
                 name, known, ident_roster, bodies_by_name)
             order = 0
+            # WHERE EACH DELIVERED TELL SHOWED, among the beat's events
+            # (`_cue_slots`); what no event of its giver can hold is minted
+            # after the loop with the demeanor, as before.
+            cue_slots, unplaced_manifest = _cue_slots(
+                sc, p.get("source_manifest"), name, beat_events)
             # THE RELATION AS IT STOOD WHEN THE EVENT HAPPENED, rather than
             # as it stands once the beat is over. Identical to the precomputed
             # map whenever no mover's cut is still ahead of this event -- which
@@ -7479,6 +7586,13 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     then, _observer, counterparty)
 
             for at_index, beat_event in enumerate(beat_events):
+                for _giver, _cue in cue_slots.get(at_index, ()):
+                    percept = _cue_percept(
+                        sc, _giver, _cue, name, display_map, recognized,
+                        unknown, order, sense_card=p.get("sense_card"))
+                    if percept:
+                        percepts.append(percept)
+                        order += 1
                 if beat_event.get("kind") != "speech" and execution_statuses.get(at_index) == "unresolved":
                     continue
                 event_scene = causal_moments.get(at_index, sc)
@@ -7766,7 +7880,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     percepts.append(percept)
                     order += 1
             minted, order = _manifest_percepts(
-                sc, p.get("source_manifest"), name, display_map, recognized,
+                sc, unplaced_manifest, name, display_map, recognized,
                 unknown, order, sense_card=p.get("sense_card"))
             percepts.extend(minted)
             company[pid] = _composer_company(others, display_map, percepts)

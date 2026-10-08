@@ -941,6 +941,12 @@
     "tell_subtlety": {
       "$text": "character_jev/tell_subtlety.txt"
     },
+    "tell_when": {
+      "$text": "character_jev/tell_when.txt"
+    },
+    "demeanor_changed": {
+      "$text": "character_jev/demeanor_changed.txt"
+    },
     "done_talking": {
       "$text": "character_jev/done_talking.txt"
     },
@@ -1254,7 +1260,10 @@
         "not_stated": "not stated",
         "situational": "Only this moment.",
         "something_else": "Someone or something not listed here.",
-        "look_around": "All around you, taking in the room."
+        "look_around": "All around you, taking in the room.",
+        "all_through": "None of them in particular: it shows all through.",
+        "step_said": "Your line: \"{line}\"",
+        "step_did": "Your act: {act}"
       },
       "aim_labels": {
         "drive": "what drives you: {text}",

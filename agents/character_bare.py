@@ -29,7 +29,12 @@ from llm.prompts import bare_character_prompt, character_bare_module, character_
 from mind import affect, affect_pass, notebook
 from mind import character_jev as jev
 
+from .common import STEP_MARK
+
 NOTE_CHARS = jev.NOTE_CHARS
+#: The step of the reply a tell shows at (`tell:<j>:when`), on the tell until
+#: `anchor_tells` turns it into that step's event id.
+_AT_STEP = "_at_step"
 #: How many times the reply is put to the decision model before the beat
 #: stands on code alone.
 READ_BACK_ATTEMPTS = 2
@@ -211,10 +216,14 @@ def _delivered_memories(memory_context):
 
 
 def holding_from(name, sheet, payload, observations, memory_context, active, *,
-                 language=None, rupture_open=False, reasoning="", notebook_view=None):
+                 language=None, rupture_open=False, reasoning="", notebook_view=None,
+                 carriage=""):
     """`jev.Holding` for one mind, read off its own payload only.
     `notebook_view`: the notebook this call shows it (`mind.notebook.view`),
-    kinds included -- the payload carries it without them (`for_payload`)."""
+    kinds included -- the payload carries it without them (`for_payload`).
+    `carriage`: the demeanor this mind last showed, from its own stored
+    state (`commit_memory` keeps it), which the read-back compares the new
+    one against."""
     self_ = (payload or {}).get("self") or {}
     psy = (sheet or {}).get("psychology") or {}
     drive = psy.get("drive") or {}
@@ -258,6 +267,7 @@ def holding_from(name, sheet, payload, observations, memory_context, active, *,
         crisis=bool(self_.get("crisis")),
         reasoning=str(reasoning or ""),
         notebook=dict(notebook_view or {}),
+        carriage=" ".join(str(carriage or "").split()),
     )
 
 
@@ -687,6 +697,7 @@ def compile_bare(reply, answers, h):
                 "conceal_from": hidden,
                 "targets": targets,
                 "interrupts": cut,
+                STEP_MARK: index,
             })
         elif kind == "do":
             act = str(row["do"]).strip()
@@ -718,6 +729,7 @@ def compile_bare(reply, answers, h):
                 # against who has spoken -- a claim, not an outcome).
                 "look": faced or ("around" if swept else ""),
                 "interrupts": jev.indexed(answers, f"do:{index}:interrupts", "p", speakers) or "",
+                STEP_MARK: index,
             })
         else:
             sequence.append({"type": "ponder", "query": str(row["ponder"]).strip(),
@@ -908,7 +920,16 @@ def compile_bare(reply, answers, h):
     active_state["hedonic"] = {"released": jev.yes(answers, "released")}
 
     # --- presentation and the loop ---
-    manifest = {"surface_demeanor": " ".join(str(reply.get("demeanor") or "").split())[:240], "tells": []}
+    demeanor = " ".join(str(reply.get("demeanor") or "").split())[:240]
+    # A CARRIAGE THAT DID NOT CHANGE IS THE ONE ALREADY SHOWN. The standing
+    # ledger delivers a demeanor on first sight and again only when its
+    # words change, and a mind rewords it every beat -- so the read-back's
+    # "would someone watching see a change?" decides, and a plain no keeps
+    # the words already shown (an unanswered question keeps the new ones).
+    carried = " ".join(str(h.carriage or "").split())[:240]
+    if carried and demeanor and jev.pick(answers, "demeanor:changed") == "no":
+        demeanor = carried
+    manifest = {"surface_demeanor": demeanor, "tells": []}
     for j, tell in enumerate(jev.lines_of(reply, "tells", jev.MAX_TELLS)):
         subtlety = jev.graded(answers, f"tell:{j}:miss", jev.MISS)
         subtlety = 0.5 if subtlety is None else subtlety
@@ -916,11 +937,16 @@ def compile_bare(reply, answers, h):
             # COMPOSURE FAILING SHOWS: the full card asked the model for a
             # tell no subtler than 0.4 under `self.crisis`; held here instead.
             subtlety = min(subtlety, jev.MISS["noticeable"])
-        manifest["tells"].append({
-            "cue": tell, "channel": jev.pick(answers, f"tell:{j}:channel") or "seen",
-            "subtlety": round(subtlety, 3),
-            "betrays": "suppressed_want" if held_index is not None else "undercurrent",
-            "because": ""})
+        row = {"cue": tell, "channel": jev.pick(answers, f"tell:{j}:channel") or "seen",
+               "subtlety": round(subtlety, 3),
+               "betrays": "suppressed_want" if held_index is not None else "undercurrent",
+               "because": ""}
+        # The step it shows at, by the step's index in the reply; turned
+        # into that step's event id once the ids exist (`anchor_tells`).
+        when = jev.pick(answers, f"tell:{j}:when") or ""
+        if when[:1] == "s" and when[1:].isdigit():
+            row[_AT_STEP] = int(when[1:])
+        manifest["tells"].append(row)
     urgency = jev.graded(answers, "urgency", jev.GRADE)
     salience = jev.graded(answers, "salience", jev.GRADE)
     # THE THOUGHT LINE IS NOT CLEARED BY SILENCE. A reply that says nothing of
@@ -950,6 +976,37 @@ def compile_bare(reply, answers, h):
         **out,
     }
     return compiled, warnings
+
+
+def anchor_tells(out):
+    """Each tell the read-back placed at a step of the reply carries that
+    step's event id (`at_event`), which perception orders the cue by
+    (`agents.perception._cue_slots`); and the step marks come off the
+    sequence and its `actions` mirror. Run once the ids are stamped.
+
+    The step is found by its mark, never by its words: normalization may
+    promote a stage direction out of a line (the direction carries the
+    line's mark, and comes first), fuse a line into the one before it, or
+    drop a line already said this beat. A step that left no element of its
+    own goes with the element before it -- the line it was fused into --
+    and one with nothing before it is left unplaced, which perception puts
+    just before the giver's last line or act of the beat."""
+    sequence = [e for e in (out.get("sequence") or []) if isinstance(e, dict)]
+    marked = [e for e in sequence if isinstance(e.get(STEP_MARK), int)]
+    for tell in ((out.get("manifest") or {}).get("tells") or []):
+        if not isinstance(tell, dict):
+            continue
+        step = tell.pop(_AT_STEP, None)
+        if not isinstance(step, int):
+            continue
+        exact = [e for e in marked if e[STEP_MARK] == step]
+        earlier = [e for e in marked if e[STEP_MARK] < step]
+        target = exact[0] if exact else (earlier[-1] if earlier else None)
+        if target is not None and str(target.get("event_id") or "").strip():
+            tell["at_event"] = str(target["event_id"])
+    for element in sequence + [e for e in (out.get("actions") or []) if isinstance(e, dict)]:
+        element.pop(STEP_MARK, None)
+    return out
 
 
 def _appraisal(answers, h, hinge):

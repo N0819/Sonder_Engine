@@ -173,6 +173,11 @@ def test_every_question_reads_only_this_minds_own_holding():
             | {f"{p['what']} ({p['from']})" for p in h.promises}
             | {f"You start following {p}." for p in h.people}
             | {f"You {verb} this: {m['text']}" for m in h.memories for verb in ("acted on", "pushed against")})
+    # ...and what it did itself this beat: a tell is placed at one of the
+    # reply's own lines or acts (`tell:<j>:when`).
+    choices = character_jev_options("choices", "en")
+    held |= {choices["step_said"].replace("{line}", row["say"]) for row in _reply()["sequence"] if row.get("say")}
+    held |= {choices["step_did"].replace("{act}", row["do"]) for row in _reply()["sequence"] if row.get("do")}
     assert offered <= pack | held, sorted(offered - pack - held)
     # Every evidence choice carries a way to say "none".
     for key, q in questions.items():
@@ -254,9 +259,9 @@ def test_the_reply_and_the_answers_compile_into_the_engine_shape():
     assert out["decision_continuity"] == {"chosen": "get the key back", "suppressed": "grab her wrist",
                                           "why": "she lied to me", "uncertainty": "whether Tomas knows"}
     assert out["note"] == "keeping the key from Tomas"
-    # Tells: at most two, whatever the reply wrote.
-    assert [t["cue"] for t in out["manifest"]["tells"]] == ["a tight jaw", "a quick breath"]
-    assert out["manifest"]["tells"][1]["channel"] == "heard"
+    # Tells: at most one (`jev.MAX_TELLS`), whatever the reply wrote -- its first.
+    assert [t["cue"] for t in out["manifest"]["tells"]] == ["a tight jaw"]
+    assert out["manifest"]["tells"][0]["channel"] == "seen"
     # The belief the beat overturned is revised to the character's own words.
     (belief,) = out["belief_updates"]
     assert (belief["operation"], belief["target_belief"], belief["belief"]) == (
@@ -675,14 +680,15 @@ def test_a_remembered_moment_comes_back_in_the_body_with_its_sign():
 def test_composure_failing_shows_in_every_tell():
     """The full card asked for a tell no subtler than 0.4 under
     `self.crisis`; the read-back holds it now."""
-    script = [("tell:0:miss", "hidden"), ("tell:1:miss", "plain")]
     tells = {}
-    for crisis in (False, True):
-        h = _holding(crisis=crisis)
-        out, _ = character_bare.compile_bare(_reply(), _answer(script)(jev.after_questions(h, _reply())), h)
-        tells[crisis] = [t["subtlety"] for t in out["manifest"]["tells"]]
-    assert tells == {False: [jev.MISS["hidden"], jev.MISS["plain"]],
-                     True: [jev.MISS["noticeable"], jev.MISS["plain"]]}
+    for grade in ("hidden", "plain"):
+        for crisis in (False, True):
+            h = _holding(crisis=crisis)
+            script = [("tell:0:miss", grade)]
+            out, _ = character_bare.compile_bare(_reply(), _answer(script)(jev.after_questions(h, _reply())), h)
+            tells[grade, crisis] = [t["subtlety"] for t in out["manifest"]["tells"]]
+    assert tells == {("hidden", False): [jev.MISS["hidden"]], ("hidden", True): [jev.MISS["noticeable"]],
+                     ("plain", False): [jev.MISS["plain"]], ("plain", True): [jev.MISS["plain"]]}
     shaken = character_bare.holding_from("Wren", {}, {"self": {"crisis": True}}, [], {}, {})
     assert shaken.crisis and not character_bare.holding_from("Wren", {}, {"self": {}}, [], {}, {}).crisis
 

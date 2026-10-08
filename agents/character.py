@@ -4595,7 +4595,8 @@ def character_step(ctx, cid, nonce):
         absorption=absorption, elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"))
     _holding = character_bare.holding_from(
         character_name(sh), sh, payload, observations, memory_context, active,
-        language=ctx.language, rupture_open=_window_open, notebook_view=_nb_view)
+        language=ctx.language, rupture_open=_window_open, notebook_view=_nb_view,
+        carriage=stored_state.get(affect.CARRIAGE_KEY) or "")
     # What the notebook lookup reads besides the store -- the concerns and
     # projects the page was chosen from -- taken before `with_notebook`
     # replaces them in the payload with the page itself.
@@ -4921,6 +4922,10 @@ def character_step(ctx, cid, nonce):
         if isinstance(_earlier_round, dict) else None)
     out["name"] = character_name(sh)
     out["char_id"] = cid
+    # A TELL SHOWS AT A STEP, and only now does the step have its event id:
+    # each placed tell takes it (`at_event`), and the step marks the compile
+    # put on the sequence come off before anything else reads it.
+    character_bare.anchor_tells(out)
     # Unbidden-recall telemetry, riding the step output the same way name/
     # char_id do: the stage proposes, commit persists (the cstate.unbidden
     # ledger). No durable write happens here -- the character stage stays

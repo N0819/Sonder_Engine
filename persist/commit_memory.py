@@ -2135,6 +2135,15 @@ def prepare_memory_commit(ctx, *, scene=None):
                     if isinstance(g, dict) and str(g.get("cue") or "").strip()
                 ]
                 st["tell_grounds"] = (_prev_grounds + _grounds)[-RECENT_TELLS_CAP:]
+            # --- The carriage last shown: the beat's surface demeanor, kept so
+            # the next read-back can ask whether the new one is a change
+            # (`character_jev`, `demeanor:changed`) and keep these words when
+            # it is not. A beat that showed none keeps the last; one string,
+            # replaced, never a ledger.
+            _carriage = " ".join(str(
+                (own_result.get("manifest") or {}).get("surface_demeanor") or "").split())
+            if _carriage:
+                st[affect.CARRIAGE_KEY] = _carriage
             stance = st.get("stance") or sh.get("stance") or {"axes": {}}
             for u in own_result.get("stance_updates") or []:
                 ax = u.get("axis")

@@ -1,0 +1,3 @@
+HOW YOU CARRIED YOURSELF BEFORE: {before}
+HOW YOU CARRY YOURSELF NOW: {now}
+Would someone watching you see a change in how you carry yourself?

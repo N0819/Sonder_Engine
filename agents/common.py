@@ -4568,6 +4568,24 @@ def _restore_span_fields(source, clean, before):
         built[field] = value
 
 
+#: WHICH STEP OF A CHARACTER'S REPLY AN ELEMENT CAME FROM: `compile_bare`
+#: marks each line and act with its index in the reply, so a tell the
+#: read-back placed at one of them can be found again once the ids are
+#: stamped (`character_bare.anchor_tells`, which takes the marks off). A
+#: private mark, carried through normalization and read by nothing here.
+STEP_MARK = "_step"
+
+
+def _carry_step_mark(source, clean, before):
+    """Every element built from `source` carries its step mark -- a stage
+    direction promoted out of a line belongs to the step it was written in,
+    which `_restore_span_fields` (the last element only) would not say."""
+    if STEP_MARK not in source:
+        return
+    for built in clean[before:]:
+        built[STEP_MARK] = source[STEP_MARK]
+
+
 def _unnest_spoken(seq, warn=None):
     """`seq` with every speech element whose `text` holds elements rather than
     words flattened into the elements it holds.
@@ -4873,6 +4891,7 @@ def norm_sequence(out, warn=None):
                                   if isinstance(x, dict)],
                 })
         _restore_span_fields(e, clean, _before)
+        _carry_step_mark(e, clean, _before)
     # A promoted stage direction the character also declared as a real action
     # is the same act twice, and the narrator rendered both.
     clean = _dedupe_promoted_actions(clean)

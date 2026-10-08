@@ -238,6 +238,12 @@ archives and branches already carry the whole state, including:
   `self.decision_continuity`; it records what the mind chose and why, without
   proving a world outcome. An explicit empty record clears it; an omission
   preserves it.
+- `carriage`: the surface demeanor this mind last showed, one string,
+  replaced (`persist/commit_memory.py`, key `mind.affect.CARRIAGE_KEY`). The
+  next read-back asks whether a new demeanor is a change from it
+  (`character_jev`, `demeanor:changed`), and a plain no re-emits these words
+  so the composer's standing ledger can suppress them. A beat that showed no
+  demeanor keeps the last.
 - `active_state.wants` with reindexed `enacted_want` and `suppressed_want`:
   commit preserves valid explicit choices through deduplication and trimming,
   protecting the enacted choice first. The existing capacity and one-situational

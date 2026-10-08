@@ -130,9 +130,11 @@ legitimately perceive, learn, remember or infer.
   records, and in their own memory of you.
 - **Disguises** — A concealed appearance is what everyone actually sees; only
   those who legitimately know the truth know it.
-- **Body language you can catch** — Characters produce a surface manner and
-  small physical tells, and which reach you depends on your eyesight, how well
-  you know them, and whether you were paying attention.
+- **Body language you can catch** — Characters carry themselves in a way you
+  can see and, when a moment presses on what they hide, give one small sign
+  away. Which signs reach you depends on your eyesight, how well you know them
+  and whether you were watching them; a sign shows at the moment it happened,
+  and a manner is mentioned when you first see it and again when it changes.
 - **Blind spots** — What is behind you, what is in an unlit corner and what is
   sealed in a container are all handled as things you do not see.
 - **Graded impressions** — Everything perceived is tagged with how intense,

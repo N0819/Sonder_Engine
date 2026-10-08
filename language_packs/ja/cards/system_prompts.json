@@ -941,6 +941,12 @@
     "tell_subtlety": {
       "$text": "character_jev/tell_subtlety.txt"
     },
+    "tell_when": {
+      "$text": "character_jev/tell_when.txt"
+    },
+    "demeanor_changed": {
+      "$text": "character_jev/demeanor_changed.txt"
+    },
     "done_talking": {
       "$text": "character_jev/done_talking.txt"
     },
@@ -1254,7 +1260,10 @@
         "not_stated": "書かれていない",
         "situational": "この瞬間だけのため。",
         "something_else": "ここに挙がっていない誰か・何か。",
-        "look_around": "周り全体を見回し、部屋を見渡す。"
+        "look_around": "周り全体を見回し、部屋を見渡す。",
+        "all_through": "どれか一つではない。ずっと表れている。",
+        "step_said": "あなたの言葉：「{line}」",
+        "step_did": "あなたの行動：{act}"
       },
       "aim_labels": {
         "drive": "あなたを駆り立てるもの: {text}",

@@ -408,6 +408,19 @@ or withdraw the promise the field's NAME makes — is an owner's, and either way
 `static/js/components.js` is the other half of whichever answer wins. Audit
 MIND-F16.
 
+<a id="unbuilt-1-184"></a>
+
+### 1.184 The tell and carriage changes are measured on pressing beats only
+
+Landed 2026-10-08 (one tell a reply, the gate on one scale, cues placed where they showed, the observable floor in the card, an unchanged carriage keeping its words). What is not yet known:
+- Whether the card leaves `tells` empty on a quiet beat. All six A/B beats pressed on what Hester holds back, and both arms wrote a tell on each.
+- How often the decision model answers `demeanor_changed` no on real beats. A no-biased model keeps stale words; an unanswered question keeps the new words.
+- Whether `why` thins. The variant left it empty on 3 of 20 steps, all lines, against 0 of 23.
+- The observable floor on `how`/`demeanor`/`tells` is a card clause, not the deterministic part check `do` has (`jev.act_parts`, which kept 19 of 23 visible parts). Meaning written into those fields still reaches other minds if the model ignores the card. This is an owner decision.
+- `how` renders in the voice slot ('says in a <how> voice') yet carries gaze and posture in both arms ('eyes on her hands not her face').
+- `tell_variety` still pushes 'another part of the body', the rotation that cycled one body vocabulary across both Brackwater characters.
+- A reaction-loop character's demeanor (§6.18, never delivered) is still filed as its `carriage`. The next read-back then compares against words nobody saw; harmless, but not 'shown'.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-2"></a>

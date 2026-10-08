@@ -49,7 +49,12 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 272   # +1 (2026-10-07): `conversation_thread`, people in a room
+PART_COUNT = 274   # +2 (2026-10-08): `character_jev.tell_when` (which of
+                   # its own steps a tell shows at, so the cue is placed
+                   # there and not after the whole beat) and
+                   # `character_jev.demeanor_changed` (would someone
+                   # watching see a change in the carriage?).
+                   # +1 (2026-10-07): `conversation_thread`, people in a room
                    # talking to each other (DESIGN_CONVERSATION_THREADS.md).
                    # +8 (2026-10-06): the routed ponder's questions --
                    # `character_jev.route_order`, `route_kind`, `route_who`,

@@ -2471,12 +2471,33 @@ def leak_scan(spoken_texts, wants, undercurrent, intentions):
 
 # ---- Tells ----
 
+#: WHAT ONE ADVANTAGE OVER A STRANGER GLANCING ELSEWHERE IS WORTH, when an
+#: observer reads a body: one grade of a tell's subtlety
+#: (`character_jev.MISS`: plain 0.15, noticeable 0.4, subtle 0.65, hidden
+#: 0.9). The senses set the base on the same scale -- an ordinary eye is
+#: 0.4, "noticeable"; a keen one 0.65; an exceptional one 0.9
+#: (`perception._tell_acuity`) -- and knowing the person, or watching them,
+#: each reaches one grade further. An advantage the observer LACKS adds
+#: nothing. It used to add 0.15 apiece, so an ordinary, unfamiliar,
+#: inattentive observer stood at 0.70 and caught every "subtle" tell: on the
+#: Brackwater run (chat 166, 2026-10-07) every subtlety fell 0.397-0.668 and
+#: the subtlety half of the gate blocked none of 67.
+TELL_ADVANTAGE = 0.25
+
+#: Where a mind's last shown demeanor is kept in its own state
+#: (`commit_memory`), so the next read-back can ask whether it changed
+#: (`character_jev`, `demeanor:changed`).
+CARRIAGE_KEY = "carriage"
+
+
 def tell_gate(tell, acuity, familiarity, attention):
     """Deliver a nonverbal tell iff the observer can plausibly catch it.
 
     A tell carries a subtlety (~0..1); it lands when subtlety <=
-    acuity + familiarity + attention. Total and safe on junk: a missing
-    subtlety defaults to 0.5, missing observer terms to 0.
+    acuity + familiarity + attention, all on the one scale the subtlety is
+    graded on (`TELL_ADVANTAGE`): an ordinary observer with no advantage
+    catches a "noticeable" tell and misses a "subtle" one. Total and safe on
+    junk: a missing subtlety defaults to 0.5, missing observer terms to 0.
     """
     tell = tell if isinstance(tell, dict) else {}
     subtlety = _float_or(tell.get("subtlety"), 0.5)

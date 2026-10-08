@@ -739,7 +739,13 @@ strikes by. Everything else is read back after the call by the decision model
 this mind was given or items it holds: whom each line is said to and how loud,
 what a watcher could tell of an act, which aim a want serves and how urgent it
 is, what kind of change each `changes` line is, the appraisal, and which held
-beliefs, cues, aims, concerns, promises and relationships the moment moved.
+beliefs, cues, aims, concerns, promises and relationships the moment moved --
+and, of a reply's one tell (`MAX_TELLS`), which of its own lines or acts it
+shows at, and of a new `demeanor`, whether someone watching would see a change
+from the one last shown (kept in its state as `carriage`; a plain no keeps the
+shown words, so the standing ledger can suppress them). Perception places each
+delivered cue just before the step it showed at, or before its giver's last
+line or act of the beat, never after the whole beat (`perception._cue_slots`).
 `compile_bare` then writes the stable `CharacterOutput` lanes that affect,
 memory, theory-of-mind, following, contact and substance already consume. One
 model call a beat: when the reply cannot be read back, the beat stands on code

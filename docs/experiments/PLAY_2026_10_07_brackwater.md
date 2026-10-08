@@ -226,6 +226,13 @@ The fix belongs where cue, demeanor and manner text is written. A
 deterministic em-dash rewrite would move the glosses, not remove them:
 103 dashes, but only about 14 of the 39 glosses hinge on one.
 
+Landed at the source 2026-10-08: one tell a reply, asked for only when the
+moment presses; the tell gate counted on one scale (an absent advantage adds
+nothing); each cue placed at the line or act it showed at; the card's
+observable floor for how/demeanor/tells; an unchanged demeanor keeps its
+words. A/B on six captured Hester calls (12 calls, $0.75): tells 15 -> 10
+written, glosses 9 -> 2, both soft.
+
 **Where the money and time went.** All-in cost was about $0.47 per kept
 beat (rerolls, the Room and predevelopment included); the kept pipeline
 alone was about $0.23 per turn.

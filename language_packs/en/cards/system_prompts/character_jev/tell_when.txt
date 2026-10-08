@@ -1,0 +1,2 @@
+WHAT GIVES YOU AWAY: {tell}
+Which of the things you did does it show just before, or while you do it?

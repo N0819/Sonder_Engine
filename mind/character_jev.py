@@ -15,9 +15,10 @@ reply, the model's own reasoning when the provider returned it, and what this
 mind legitimately holds.
 
 THE FIREWALL HOLDS BY CONSTRUCTION, as it does for `mind/affect_pass.py`:
-`Holding` is built only from this character's own gated payload, the state
-every question reads is built only from `Holding` and this character's own
-reply, and one request serves one character. Every option offered is a row
+`Holding` is built only from this character's own gated payload -- and its
+own last demeanor, its own words kept in its own state (`carriage`) -- the
+state every question reads is built only from `Holding` and this character's
+own reply, and one request serves one character. Every option offered is a row
 this mind was delivered or an item it already holds, so a citation cannot be
 invented: "none" is always an option, and a lane whose citation comes back
 "none" is dropped exactly where commit would have dropped the model's.
@@ -58,9 +59,16 @@ MAX_STEPS = 8
 #: observable floor (`act_parts`); an act of more is asked as this many, the
 #: last carrying the rest, so nothing goes unasked.
 MAX_ACT_PARTS = 6
-#: Tells a reply may carry -- the full card's "at most two", now enforced
-#: here instead of asked of the model.
-MAX_TELLS = 2
+#: Tells a reply may carry: ONE. A tell is the sign that gives a mind away
+#: when the moment presses on what it holds back -- the exception, not a
+#: quota -- and the card now asks for one only then. At the full card's "at
+#: most two" it was a quota: on the Brackwater run (chat 166, 2026-10-07) 33
+#: of 34 replies wrote two, the second most often the first one again in
+#: another part of the body, all 53 that were delivered reached the page,
+#: and 16 of 29 pages ended on one -- the outside reviewer's "second dialogue
+#: track". It bounds the per-beat delivery, never what a mind may feel; the
+#: owner's number.
+MAX_TELLS = 1
 #: How much of the model's reasoning trace the decision model reads.
 REASONING_CHARS = 6000
 #: How long an item may run in a question or an option before it is cut.
@@ -75,6 +83,11 @@ ITEM_CHARS = 300
 #: stays in the full pick's top three (24 of 24) -- the picks are near-ties
 #: (median margin 0.11), which any change to the prompt reorders.
 MEMORY_OPTION_CHARS = 50
+#: How much of one of the reply's own lines or acts the "where does this
+#: tell show" question quotes (`_step_options`) -- the same cut every other
+#: option list takes (`_options`); a step is named to be told apart from its
+#: neighbours, not reread.
+STEP_OPTION_CHARS = 160
 #: The carried charge below which a release is not asked about.
 RELEASE_ASK_FLOOR = 0.3
 #: The yes-share at which a recalled memory is shown as one the moment may
@@ -112,7 +125,10 @@ IMPACT = {"hurts_badly": -1.0, "hurts": -0.5, "none": 0.0, "helps": 0.5, "helps_
 BODY_ECHO = {"hard_bad": -1.0, "bad": -0.5, "none": 0.0, "good": 0.5, "hard_good": 1.0}
 CERTAIN = {"done": 0.9, "may": 0.5, "unclear": 0.3}
 #: How hard a tell is to miss, as the engine's `subtlety` (a tell reaches an
-#: observer whose acuity, familiarity and attention reach this far).
+#: observer whose acuity, familiarity and attention reach this far). One
+#: grade every 0.25, the scale the observer's reach is counted on too: an
+#: ordinary eye reaches "noticeable", and each advantage over a stranger
+#: glancing elsewhere one grade further (`affect.TELL_ADVANTAGE`).
 MISS = {"plain": 0.15, "noticeable": 0.4, "subtle": 0.65, "hidden": 0.9}
 REL_AXES = ("trust", "warmth", "fear", "respect", "suspicion")
 
@@ -141,6 +157,7 @@ class Holding:
     crisis: bool = False                              # its composure is failing (`self.crisis`)
     reasoning: str = ""
     notebook: dict = field(default_factory=dict)      # the view it was shown (mind.notebook.view)
+    carriage: str = ""                                # the demeanor it last showed: its own words, its own state
 
 
 def _text(value, n=ITEM_CHARS):
@@ -389,6 +406,21 @@ def _look_options(people, language):
     return out
 
 
+def _step_options(outward, language):
+    """The reply's own lines and acts, each as its step (`s<index>`, the
+    step's index in the reply -- what `compile_bare` marks the element
+    with), and `all_through` for a sign no one step owns."""
+    choices = _set("choices", language)
+    out = {}
+    for index, kind, row in outward:
+        if kind == "say":
+            out[f"s{index}"] = _fill(choices["step_said"], {"line": _text(row["say"], STEP_OPTION_CHARS)})
+        else:
+            out[f"s{index}"] = _fill(choices["step_did"], {"act": _text(row["do"], STEP_OPTION_CHARS)})
+    out["all_through"] = choices["all_through"]
+    return out
+
+
 #: The memories a moment can dispute: the ones that hold a CLAIM -- what this
 #: mind concluded, or what it was told -- by the delivered row's
 #: `epistemic_origin`. A plain record of what happened holds nothing for the
@@ -584,9 +616,27 @@ def after_questions(h, reply):
         if text:
             qs[f"{key}:serves"] = _choice("want_serves", lang, serve_options, want=text)
             qs[f"{key}:urgency"] = _choice("want_urgency", lang, grade, want=text)
+    outward = [(index, kind, row) for index, kind, row in steps(reply) if kind in ("say", "do")]
     for j, tell in enumerate(lines_of(reply, "tells", MAX_TELLS)):
         qs[f"tell:{j}:channel"] = _choice("tell_channel", lang, _set("channel", lang), tell=tell)
         qs[f"tell:{j}:miss"] = _choice("tell_subtlety", lang, _set("miss", lang), tell=tell)
+        # WHEN IT SHOWS: perception places the cue just before the step
+        # picked (`agents.perception._cue_slots`), where it used to number
+        # every cue after the whole beat -- so a sign named "at the coat
+        # question" closed the page (16 of 29 Brackwater pages ended on one).
+        # Asked only between two steps or more: with one, every answer
+        # places the sign the same way.
+        if len(outward) > 1:
+            qs[f"tell:{j}:when"] = _choice("tell_when", lang, _step_options(outward, lang), tell=tell)
+    # THE CARRIAGE, CHANGED OR NOT: a mind writes a new demeanor every beat
+    # (all 34 Brackwater demeanors were distinct strings), so the standing
+    # ledger that delivers it "on first sight and again only when it
+    # changes" re-delivered one every beat. Whether it changed is asked of
+    # the two, here; the compile keeps the shown one when it did not.
+    demeanor = _text((reply or {}).get("demeanor"))
+    if h.carriage and demeanor and demeanor != _text(h.carriage):
+        qs["demeanor:changed"] = _choice("demeanor_changed", lang, yesno,
+                                         before=_text(h.carriage), now=demeanor)
     if any_say or heard_speakers:
         qs["done_talking"] = _choice("done_talking", lang, yesno)
     qs["urgency"] = _choice("urgency", lang, grade)
