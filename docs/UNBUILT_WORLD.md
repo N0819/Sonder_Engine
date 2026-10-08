@@ -2211,13 +2211,37 @@ dropped from the draft, and Jev says when a design is finished. Left:
   `surroundings`, which removes the loudest invitation; the chunk's clause
   is the owner's to narrow for the designer (a room in view but not entered
   could stay a stub until someone goes in, or be prepared between turns by
-  `schedule_room_predevelopment`, which exists for exactly that).
+  `schedule_room_predevelopment`, which exists for exactly that and is off
+  by default since 2026-10-08).
 - **Predevelopment never gets the stop**: with no prose there is nothing to
   read the room against, so a prepared room still ends on the model's own
-  submit -- out of band, off the turn's clock.
+  submit -- out of band, off the turn's clock. Off by default since
+  2026-10-08 (`prose_contract_room_predevelopment`) for exactly this: on
+  chat 166 every seeded design was held on its first look, and on the one
+  matched pair the seeded runs took 7 and 6 steps where the unseeded took 3.
 - **The route is the owner's.** On the owner's NanoGPT `z-ai/glm-5.2:thinking`
   at `medium`, one loop took 162-174 s and met the 150 s wall; every
   measurement here is plain `z-ai/glm-5.2` with `reasoning_effort` `off`.
+- **A prepared design's effect on a room is unmeasured.** Turning
+  predevelopment off by default changes the rooms on beats a seed would have
+  started. On chat 166 these are the turn-3 low walk, the turn-9 bell loft
+  and the turn-26 Gale house; the seeded bell loft kept `bell_mount` and two
+  loft walkways the prose never named. Replay those beats with and without a
+  seed before turning it back on.
+- **The prepared cache rolls back with a reroll.** `PREPARED_KEY` is a world
+  row, so a checkpoint restore returns it to the checkpoint's copy and drops
+  the designs and brief fingerprints made after it.
+- **The card asks the room author to redraft a standing room's physical
+  change, and the engine discards it.** `room_author.txt` (en and ja) says
+  to redraft only what the prose physically does to a standing room, while
+  `director_prose.keep_new_places` keeps only a standing room's doorways to
+  places built that beat, and warns. Narrowing the clause or keeping the
+  change is the owner's call. Today only the encoder's doorway edits write a
+  standing room's physical change.
+- **A whole record can outrun an inspect result.** `inspect_rooms` returns a
+  room's stored record, and a result past `ROOM_RESULT_CHARS` (6,000) is
+  cut. On chat 166 that is the low walk (11.5k) and the high walk (6.4k), as
+  the low walk's old projection (7.2k) already was.
 
 <a id="unbuilt-2-39"></a>
 

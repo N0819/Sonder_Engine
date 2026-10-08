@@ -506,6 +506,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.161 — The 2026-09-07 review: what landed and what is still open](UNBUILT_PLATFORM.md#unbuilt-1-161)
 - [§1.171 — A failed model attempt leaves no trace in the ledger or the log](UNBUILT_PLATFORM.md#unbuilt-1-171)
 - [§1.172 — Every memory write scans the whole retrieval index](UNBUILT_PLATFORM.md#unbuilt-1-172)
+- [§1.186 — The format ladder after a hold, and service tiers (2026-10-08)](UNBUILT_PLATFORM.md#unbuilt-1-186)
 
 **2. Roadmap**
 

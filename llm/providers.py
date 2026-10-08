@@ -1286,6 +1286,77 @@ def _apply_provider_routing(body, prov, routing=None):
         body["provider"] = routing
     return body
 
+
+# OPENROUTER SERVICE TIERS, PER ROLE. Google's and OpenAI's models are served
+# at a FLEX tier -- half price "in exchange for higher latency and lower
+# availability" -- and at a PRIORITY tier above the standard one. OpenRouter
+# takes the choice as a top-level `service_tier` on the request (a tier is
+# not reached by a base provider slug in `provider.order`); a model with no
+# flex-capable provider "routes normally at standard rates", and flex "never
+# falls back to a default-tier endpoint ... a flex capacity error surfaces
+# instead" (OpenRouter's service-tier docs, read 2026-10-08). Confirmed with
+# one streamed call on google/gemini-3.8-flash under the owner's routing
+# block, 2026-10-08: HTTP 200, first token at 1.6 s, `service_tier: "flex"`
+# on the stream's chunks, served by Google AI Studio at $0.375/$1.875 per M
+# tokens against the standard $0.75/$3.75.
+#
+# OFF UNLESS A ROLE IS NAMED. Which role may trade latency and availability
+# for price is the owner's call: the encoder was 41-52% of the Brackwater
+# run's USD and sits on the turn's critical path, where flex latency under
+# load is unmeasured. So nothing is sent by default; a named role's tier
+# rides only to OpenRouter, the one host this vocabulary was checked
+# against; and the tier a call ASKED for and the one the provider says
+# SERVED it go on the call ledger (`_log_usage`), because a flex request for
+# a model with no flex provider is answered at the standard rate in silence.
+#: The tiers a role may ask for -- OpenRouter's own values for the field.
+#: `default` is no field at all; `fast` is its alias for `priority`, and
+#: `ultrafast` is one provider's own tier, so neither is offered here.
+SERVICE_TIERS = ("flex", "priority")
+
+
+def _coerce_service_tier(value):
+    """A tier OpenRouter takes, or "" for none. Anything else degrades to ""
+    -- this rides on requests, and an unknown value could make one invalid."""
+    v = str(value or "").strip().lower()
+    return v if v in SERVICE_TIERS else ""
+
+
+def service_tiers():
+    """The per-role service-tier map, {role: tier}, from the `service_tier`
+    setting. Read per call so a change applies on the next turn without a
+    restart."""
+    try:
+        data = json.loads(get_setting("service_tier") or "{}")
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    for role, value in data.items():
+        tier = _coerce_service_tier(value)
+        if tier:
+            out[str(role)] = tier
+    return with_renamed_roles(out)
+
+
+def service_tier_for(role):
+    """The tier one role asks for: its own entry, else the 'default' role's,
+    else "" (none -- the standard tier, and no field sent)."""
+    tiers = service_tiers()
+    if role in tiers:
+        return tiers[role]
+    return tiers.get("default", "")
+
+
+def _apply_service_tier(body, prov, role):
+    """Attach the role's service tier to an OpenRouter request only."""
+    if not role or _prov_field(prov, "kind") != "openrouter":
+        return body
+    tier = service_tier_for(role)
+    if tier:
+        body["service_tier"] = tier
+    return body
+
 # Output-token ceiling. Four stages used to request 200000 output tokens, which
 # no model can produce -- but which providers still act on: OpenRouter reserves
 # credit against the requested maximum and rejects a model outright when
@@ -2208,8 +2279,10 @@ def _strip_extended(body):
     # standard OpenAI schema, but it is added by an opt-in and it is purely a
     # performance hint, so on the 400-retry it goes the way of the extended
     # samplers rather than costing the turn on a host that rejects it.
+    # `service_tier` (_apply_service_tier) is the same kind of field: an
+    # opt-in price-for-latency choice, never what the answer depends on.
     for k in ("top_k", "repetition_penalty", "min_p", "top_a",
-              "reasoning_effort", "reasoning", "user"):
+              "reasoning_effort", "reasoning", "user", "service_tier"):
         body.pop(k, None)
     return body
 
@@ -2271,18 +2344,38 @@ def _note_json_object_rejected(prov, model):
         _prov_field(prov, "name") or "provider", model)
 
 
-#: json_object answers a provider+model held back until whole, so far. The
+#: JSON-mode answers a provider+model held back until whole, so far. The
 #: count a schema stall gets (`_SCHEMA_STALL_LIMIT`) before the flag is
 #: dropped for the pair -- into `_NO_JSON_OBJECT`, the process-local memory a
 #: 400 writes, which a restart clears so a provider that learns to stream JSON
 #: mode is re-asked. Dropping the flag costs little: `json_object` is advisory
 #: (`_apply_json_mode`) and every JSON caller parses what the text holds.
+#:
+#: EITHER JSON MODE'S HOLD COUNTS HERE. An upstream that does not stream a
+#: JSON-mode answer holds it back whichever mode asked for it -- every one
+#: measured so far did both. So a grammar's answer held back before its
+#: first token is counted against the flag too, and a grammar suspended for
+#: holding its answers back falls back to NO format rather than to
+#: `json_object`, which the same upstream holds back the same way. Measured
+#: on the Brackwater run (2026-10-07, OpenRouter `z-ai/glm-5.3`,
+#: `character_major`): two json_schema holds (21:52, 21:55 -- each 31-32 s
+#: into its call, the first-token clock) suspended the grammar "sending
+#: json_object instead", and the next beat's call paid two json_object holds
+#: (21:58, 21:59) and 118 s before it went out with no format, where the
+#: beat after took 7 s. NanoGPT's `z-ai/glm-5.2` (2026-10-06) held
+#: json_object back too (whole answer at 23.1 s, 2.0 s without it) and
+#: stalled on json_schema the next day. The complement is kept: a CONNECTION
+#: DEATH on a grammar (gemini-3.6-flash, 2026-09-01: dropped at 60.2 s,
+#: while json_object answered in 2-3 s) and a stream that began and then
+#: stopped are not holds, and leave the flag alone.
 _JSON_OBJECT_HELD_BACK: dict = {}
 
 
-def _note_json_object_held_back(prov, model):
-    """Count a json_object answer that never began within the first-token
-    clock (see the streaming caller); drop the flag at the schema's limit."""
+def _note_json_object_held_back(prov, model, mode="json_object"):
+    """Count a JSON-mode answer that never began within the first-token
+    clock (see the streaming caller) against the advisory flag; drop the
+    flag at the schema's limit. `mode` is the format that was held back --
+    a grammar's hold counts too (`_JSON_OBJECT_HELD_BACK`)."""
     key = _json_object_key(prov, model)
     with _NO_JSON_OBJECT_LOCK:
         if key in _NO_JSON_OBJECT:
@@ -2293,11 +2386,12 @@ def _note_json_object_held_back(prov, model):
             _NO_JSON_OBJECT.add(key)
             _JSON_OBJECT_HELD_BACK.pop(key, None)
     _logger.info(
-        "providers: %s held a json_object answer for %s back past the "
+        "providers: %s held a %s answer for %s back past the "
         "first-token clock (%d of %d); %s",
-        _prov_field(prov, "name") or "provider", model, n, _SCHEMA_STALL_LIMIT,
-        "sending JSON-mode calls without it for the rest of this process"
-        if n >= _SCHEMA_STALL_LIMIT else "retried without it")
+        _prov_field(prov, "name") or "provider", mode, model, n,
+        _SCHEMA_STALL_LIMIT,
+        "sending JSON-mode calls without json_object for the rest of this "
+        "process" if n >= _SCHEMA_STALL_LIMIT else "retried without it")
 
 
 #: (role, provider) pairs already told that a request feature they have
@@ -2607,10 +2701,14 @@ def _note_json_schema_stalled(prov, model):
         _SCHEMA_SUSPENDED[key] = time.time() + _SCHEMA_SUSPEND_SECONDS
         _SCHEMA_STALLS.pop(key, None)
     _persist_schema_suspensions()
+    # Say what the calls fall back to, which is no longer always the flag: a
+    # grammar suspended for holding its answers back has usually taken the
+    # flag with it (`_JSON_OBJECT_HELD_BACK`).
     _logger.info(
         "providers: %s stalled on json_schema for %s %d times; sending "
-        "json_object instead for %dh, then re-testing the grammar",
+        "%s instead for %dh, then re-testing the grammar",
         _prov_field(prov, "name") or "provider", model, _SCHEMA_STALL_LIMIT,
+        "json_object" if _json_object_supported(prov, model) else "no response format",
         _SCHEMA_SUSPEND_SECONDS // 3600)
 
 
@@ -3054,6 +3152,9 @@ def _sse_openai(url, headers, body, sink, role=None, model=None, turn=None):
     _think_sink = reasoning_sink.get()
     usage = None
     served = ""
+    # The tier a role asked for, and the one the provider says served it
+    # (`_apply_service_tier`): read only when one was asked for.
+    tier_asked, tier = str(body.get("service_tier") or ""), ""
     t0 = time.time()
     _check_cancel()
     with _session().post(url, headers=headers, json=body, stream=True,
@@ -3104,6 +3205,8 @@ def _sse_openai(url, headers, body, sink, role=None, model=None, turn=None):
             # path would leave substitution invisible exactly where it counts.
             if not served:
                 served = str(j.get("model") or "").strip()
+            if tier_asked and not tier:
+                tier = str(j.get("service_tier") or "").strip()
             _delta = (j.get("choices") or [{}])[0].get("delta", {})
             # Reasoning arrives on its OWN delta key, never in `content`, and
             # it is the pipeline's real path -- the sink is set for the live
@@ -3129,7 +3232,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None, turn=None):
                 between = None
     if role:
         _log_usage(role, model, t0, usage, served=served,
-                   kind="stream")
+                   kind="stream", **({"tier": (tier_asked, tier)} if tier_asked else {}))
     try:
         last_reasoning.set(reasoning or None)
     except Exception:
@@ -3781,7 +3884,7 @@ def _note_served_model(role, requested, served):
         "about %s, not %s", role, requested, served, served, requested)
 
 
-def _log_usage(role, model, t0, usage, served=None, kind="chat"):
+def _log_usage(role, model, t0, usage, served=None, kind="chat", tier=None):
     """Make caching observable. Without reading `usage` back there is no way to
     confirm that a role's static system prompt -- repeated byte-for-byte on
     every call for that role -- is actually being served from cache instead of
@@ -3795,6 +3898,12 @@ def _log_usage(role, model, t0, usage, served=None, kind="chat"):
     pipeline step can persist its own per-call ledger (see the ContextVar's
     comment). `kind` says which transport carried it ('chat' | 'stream');
     embeddings report through their own batch path with kind 'embedding'.
+
+    `tier`, on a call that asked for a service tier (`_apply_service_tier`),
+    is `(asked, served)`: both go on the ledger entry, the served one as the
+    provider reported it ("unreported" when it said nothing), because a
+    flex request for a model with no flex provider is answered at the
+    standard rate without a word.
     """
     from core.logging_utils import log_llm_call
     counts = _normalize_usage(usage)
@@ -3804,7 +3913,7 @@ def _log_usage(role, model, t0, usage, served=None, kind="chat"):
     except Exception:
         pass
     _note_served_model(role, model, served)
-    record_llm_call({
+    entry = {
         "role": role,
         "requested": model,
         "served": str(served or "").strip() or model,
@@ -3813,7 +3922,12 @@ def _log_usage(role, model, t0, usage, served=None, kind="chat"):
         "cached": counts["cache_read"],
         "duration": round(time.time() - t0, 3),
         "kind": kind,
-    })
+    }
+    if tier:
+        asked, got = tier
+        entry["tier_asked"] = str(asked)
+        entry["tier"] = str(got or "").strip() or "unreported"
+    record_llm_call(entry)
     try:
         log_llm_call(
             role, str(served or "").strip() or model,
@@ -3983,6 +4097,7 @@ def _chat_complete_once(
         body["tool_choice"] = tool_choice or "auto"
     body.update(merged)
     _apply_provider_routing(body, prov)
+    _apply_service_tier(body, prov, role)
     _apply_cache_affinity(body, prov, role)
     _apply_reasoning_effort(
         body, prov, role, effort_override=reasoning_effort_override)
@@ -4057,10 +4172,17 @@ def _chat_complete_once(
             # That arrives as a silence BEFORE THE FIRST TOKEN, never as a
             # connection death, so a dropped connection beside json_object
             # stays the outer loop's blip exactly as above.
+            #
+            # AND A HOLD IS THE UPSTREAM'S, NOT THE MODE'S: a grammar's answer
+            # held back before its first token counts against the flag as
+            # well (`_JSON_OBJECT_HELD_BACK`), so the grammar's suspension
+            # falls back to no format instead of to a flag the same upstream
+            # holds back -- the second 30 s first-token clock the Brackwater
+            # run paid on OpenRouter's glm-5.3 after its grammar went.
             _rf = body.get("response_format")
             _rf_type = _rf.get("type") if isinstance(_rf, dict) else None
             schema_bearing = _rf_type == "json_schema"
-            held_back = (_rf_type == "json_object"
+            held_back = (_rf_type in ("json_schema", "json_object")
                          and isinstance(exc, ProviderSilent)
                          and exc.before_first_token)
             stalled = False
@@ -4074,9 +4196,11 @@ def _chat_complete_once(
                 raise
             else:
                 stalled = True
+                # The flag's count first, so a grammar suspended by this
+                # same hold says what its calls fall back to.
                 if held_back:
-                    _note_json_object_held_back(prov, model)
-                else:
+                    _note_json_object_held_back(prov, model, mode=_rf_type)
+                if schema_bearing:
                     _note_json_schema_stalled(prov, model)
 
             # The staged ladder (`_json_mode_recovery_stages`): json_schema
@@ -4485,6 +4609,7 @@ async def _chat_complete_async_once(
     body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [_openai_system_message(system, prov, model), {"role": "user", "content": user}]}
     body.update(merged)
     _apply_provider_routing(body, prov)
+    _apply_service_tier(body, prov, role)
     _apply_cache_affinity(body, prov, role)
     _apply_reasoning_effort(body, prov, role)
     _apply_json_mode(body, prov, model, json_mode, json_schema)
@@ -4561,6 +4686,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
     _think_sink = reasoning_sink.get()
     usage = None
     served = ""
+    tier_asked, tier = str(body.get("service_tier") or ""), ""
     t0 = time.time()
     _check_cancel()
     async with client.stream("POST", url, headers=headers, json=body) as r:
@@ -4600,6 +4726,8 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
             # path would leave substitution invisible exactly where it counts.
             if not served:
                 served = str(j.get("model") or "").strip()
+            if tier_asked and not tier:
+                tier = str(j.get("service_tier") or "").strip()
             _delta = (j.get("choices") or [{}])[0].get("delta", {})
             _r = _delta_reasoning(_delta)
             if _r:
@@ -4613,7 +4741,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
                     sink(d)
     if role:
         _log_usage(role, model, t0, usage, served=served,
-                   kind="stream")
+                   kind="stream", **({"tier": (tier_asked, tier)} if tier_asked else {}))
     try:
         last_reasoning.set(reasoning or None)
     except Exception:

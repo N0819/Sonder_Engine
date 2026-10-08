@@ -89,11 +89,11 @@ _DONE_QUESTIONS = tuple(ROOM_DONE_BARS)
 ROOM_TOOLS = {
     "inspect_rooms": {
         "args": {"room_ids": "list of room ids"},
-        "does": "The standing geometry of rooms already in the world: name, "
-                "description, size, extent, shape, doorways with their bearing "
-                "and barrier, fixtures, and the cell map. The rooms around "
-                "your place are already in `surroundings`; this is for any "
-                "other room.",
+        "does": "Rooms already in the world, whole: each one's stored record "
+                "exactly as the world holds it -- every field, its doorways "
+                "and fixtures included -- and its cell map. The rooms around "
+                "your place are already in `surroundings`, with their records "
+                "in `rooms`; this is for any other room.",
     },
     "draft_room": {
         "args": {"room_id": "string", "room": "a partial room record in the "
@@ -225,7 +225,11 @@ def render_room(scene, room_id):
     }
 
 
-def _inspect(scene, room_ids):
+def _inspect(scene, room_ids, whole=False):
+    """Standing rooms drawn on the engine's grid. `whole` is the tool's
+    reading: the room's stored record exactly as the world holds it, then
+    the drawing. Without it (`surroundings`) a room is a short projection
+    beside the drawing, its record travelling in the payload's `rooms`."""
     rooms = (scene or {}).get("rooms") or {}
     out = {}
     for rid in list(room_ids or [])[:6]:
@@ -234,6 +238,10 @@ def _inspect(scene, room_ids):
             out[str(rid)] = {"refused": "no such room"}
             continue
         view = render_room(scene, str(rid))
+        if whole:
+            out[str(rid)] = {"record": copy.deepcopy(room),
+                             "map": view.get("map"), "legend": view.get("legend")}
+            continue
         out[str(rid)] = {
             "name": room.get("name"), "desc": str(room.get("desc") or "")[:400],
             "size": room.get("size"), "extent": room.get("extent"),
@@ -602,9 +610,11 @@ def _floor_for_size(size):
 
 def _groundwork(scene, payload, owed, record):
     """What the designer is handed before its first step: `surroundings`,
-    the standing rooms around its places drawn as `inspect_rooms` draws
-    them, and `placing`, for each place the Director invented, the floor
-    area its size word covers and the doorways that fit."""
+    the standing rooms around its places drawn on the engine's grid;
+    `rooms`, when the payload carried the world's whole ledger, cut to the
+    stored records of those rooms and of the owed rooms that already stand;
+    and `placing`, for each place the Director invented, the floor area its
+    size word covers and the doorways that fit."""
     t0 = time.time()
     out = {}
     try:
@@ -619,6 +629,31 @@ def _groundwork(scene, payload, owed, record):
     drawn = [rid for rid in around if not _undesigned_plan(rooms.get(rid))]
     if drawn:
         out["surroundings"] = _inspect(scene, drawn)
+    # THE RECORDS OF THE ROOMS IN QUESTION, NOT THE TOWN. The spatial slice
+    # hands over every room the world holds, and the designer is building
+    # one place. Measured on chat 166's 50 captured in-beat calls: the ledger
+    # was 26.2k chars of a 75.3k payload and `inspect_rooms` was called 0
+    # times in 49 steps; every room id a design wrote was already on
+    # `world_index`, in `surroundings`, owed, or named by a plan's exits; and
+    # of the 91 field values its drafts wrote, 65 are in the records kept
+    # here, 25 are new, and the one found only in a room left out is `dark`,
+    # a word of the engine's own light ladder. So the records kept are
+    # exactly those: each drawn room's (its drawing leaves out the storey,
+    # light, surface, exposure, region and the way and name of each doorway,
+    # which the record holds) and each owed room's that already stands (a
+    # plan's stub holds the plan's own measurements, which the merge keeps
+    # whatever the draft says) -- 7.3k chars on average, against 26.2k.
+    # Every other room stays on `world_index` (`elsewhere`: its name,
+    # storey, exits and ways), and `inspect_rooms` hands any of them over
+    # whole. An unentered stub is left out here as it is from the drawing,
+    # for the same reason; its plan reaches the designer as `planned_rooms`.
+    # The whole ledger is also what one discarded turn-4 step answered,
+    # owing one room, by writing draft_room calls for twenty-seven rooms of
+    # the town at once (15.6k output tokens, 153.5 s, the wall).
+    ledger = payload.get("rooms")
+    if isinstance(ledger, dict):
+        wanted = set(drawn) | {str(rid) for rid in owed or ()}
+        out["rooms"] = {rid: room for rid, room in ledger.items() if str(rid) in wanted}
     reserved = payload.get("reserved_places") if isinstance(payload.get("reserved_places"), dict) else {}
     placing = {}
     deadline = t0 + ROOM_PLACEMENT_SECONDS
@@ -642,6 +677,9 @@ def _groundwork(scene, payload, owed, record):
         "surroundings": around, "drawn": drawn,
         "doorways_that_fit": {rid: len(e.get("doorways_that_fit") or ()) for rid, e in placing.items()},
         "seconds": round(time.time() - t0, 3)}
+    if "rooms" in out:
+        record["groundwork"]["records"] = sorted(out["rooms"])
+        record["groundwork"]["records_left_on_the_map"] = len(ledger) - len(out["rooms"])
     return out
 
 
@@ -853,14 +891,35 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None)
 
     # A PREPARED design may already be the answer: checked and read against
     # this beat's prose before any model step is spent on it.
+    #
+    # When it is not, WHAT THAT FIRST LOOK FOUND IS THE FIRST THING THE
+    # DESIGNER READS -- the check's problems, or what the prose puts in the
+    # room that its record does not hold -- instead of being thrown away and
+    # found again a step later. Measured on chat 166: every seeded design
+    # was judged unfinished on that first look, and seeded runs averaged 5.8
+    # steps against 3.4 for unseeded ones (7 and 6 against 3 on the one
+    # matched pair). A design whose check failed between turns is kept as a
+    # seed too (`schedule_room_predevelopment`), and its check arrives here.
     if seed and prose:
         last_check = checked()
-        if last_check.get("clean") and _finished(prose, scene, draft, owed,
-                                                 language, record)[0]:
-            record.update(steps=0, calls=0, stopped="complete",
-                          seconds=round(time.time() - started, 3),
-                          final_check=_check(scene, draft, owed))
-            return draft
+        if last_check.get("clean"):
+            finished, notes = _finished(prose, scene, draft, owed, language, record)
+            if finished:
+                record.update(steps=0, calls=0, stopped="complete",
+                              seconds=round(time.time() - started, 3),
+                              final_check=_check(scene, draft, owed))
+                return draft
+            if notes:
+                record["still_missing_said"] = 0
+                transcript.append({"step": 0, "tool": "complete", "by": "engine",
+                                   "args": {}, "result": {
+                                       "finished": False, "still_missing": notes,
+                                       "if_not": "if the record already holds it, submit; "
+                                                 "where a person stands is never written "
+                                                 "into a room's text"}})
+        else:
+            transcript.append({"step": 0, "tool": "check", "by": "engine", "args": {},
+                               "result": _fit(last_check, ROOM_RESULT_CHARS)})
     last_check = None
     for step in range(1, MAX_ROOM_STEPS + 1):
         if time.time() - started > MAX_ROOM_SECONDS:
@@ -907,7 +966,8 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None)
             elif tool == "view_room":
                 result = render_room(_merged(scene, draft), str(args.get("room_id") or ""))
             elif tool == "inspect_rooms":
-                result = _inspect(_merged(scene, draft), args.get("room_ids") or [])
+                result = _inspect(_merged(scene, draft), args.get("room_ids") or [],
+                                  whole=True)
             elif tool == "check":
                 result = last_check = checked()
                 unchecked = False
@@ -969,7 +1029,7 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None)
             # same thing every step chases it: the 2026-09-27 yard wrote
             # "this is where Luca stands" into a fixture to satisfy a
             # reading the grave already answered.
-            if notes and not record.get("still_missing_said"):
+            if notes and record.get("still_missing_said") is None:
                 record["still_missing_said"] = step
                 transcript.append({"step": step, "tool": "complete", "by": "engine",
                                    "args": {}, "result": {
@@ -1005,11 +1065,46 @@ PREDEVELOP_PER_TURN = 2
 PREPARE_NOTE = ("No beat is happening. These planned rooms lie next to where the "
                 "player is and have not been entered yet: design each at full "
                 "fidelity from its plan now, so it is ready when someone arrives.")
+#: The host's switch for preparing rooms between turns. OFF unless set to
+#: `1`/`on`/`true` -- and off, no design is prepared and none already cached
+#: seeds a beat. Off by default since 2026-10-08, on the Brackwater run's
+#: measurement (chat 166, 30 beats): 131 out-of-band designer calls -- 1.76M
+#: prompt tokens (0.57M uncached), 51k response, 964 s -- for 25 designs, at
+#: least 19 of which never seeded a beat. Every seeded design was judged
+#: unfinished on first look (it is made with no prose to read the room
+#: against, so `room_done_missing`/`room_done_unlisted` held it), no seeded
+#: run finished without a step, and on the one matched pair (turn 3, the low
+#: walk) the seeded runs took 7 and 6 steps where the unseeded took 3. The
+#: trade -- background spend against a design that might start a beat
+#: further on -- is the owner's to turn back on.
+PREDEVELOP_SETTING = "prose_contract_room_predevelopment"
+
+
+def predevelopment_enabled() -> bool:
+    """Whether the host turned on preparing rooms between turns."""
+    from core.db import get_setting
+    try:
+        raw = get_setting(PREDEVELOP_SETTING)
+    except Exception:
+        return False
+    return str(raw or "").strip().casefold() in ("1", "on", "true")
+
+
+def _brief_signature(brief):
+    """What a prepared design was made FROM, as a short stable fingerprint:
+    the plan's brief for the room. The same brief is the same job."""
+    import hashlib
+    text = json.dumps(brief, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
 
 
 def prepared_rooms(chat_id, room_ids):
-    """`{room_id: room}` for the prepared designs among `room_ids`."""
+    """`{room_id: room}` for the prepared designs among `room_ids` -- none
+    while predevelopment is off, so a cache an earlier run left behind does
+    not go on seeding beats after the host turned the job off."""
     from core.db import wget
+    if not predevelopment_enabled():
+        return {}
     cache = wget(chat_id, PREPARED_KEY) or {}
     if not isinstance(cache, dict):
         return {}
@@ -1024,9 +1119,23 @@ def prepared_rooms(chat_id, room_ids):
 def schedule_room_predevelopment(ctx):
     """After a prose-contract turn commits, design the planned rooms beside
     the player out of band, so a beat that enters one starts from a finished
-    design and only adapts it to its own prose. Deduped per chat by
-    `jobs.submit`; never inside the turn's wall clock; a failure is logged,
-    never raised."""
+    design and only adapts it to its own prose. Only when the host has
+    turned it on (`PREDEVELOP_SETTING`). Deduped per chat by `jobs.submit`;
+    never inside the turn's wall clock; a failure is logged, never raised.
+
+    A BRIEF IS DESIGNED ONCE. Every attempt is filed under the fingerprint
+    of the brief it was made from (`_brief_signature`) -- a design whose
+    final check came back clean, one whose check did not (kept as a seed:
+    the in-turn designer is handed its check and fixes it, rather than
+    building the room again from nothing), and an attempt that drafted
+    nothing -- and a room is designed again only when its plan's brief
+    changes. Measured on chat 166: a design was kept only on a clean final
+    check and a failed attempt left nothing behind, so four design runs
+    opened on the identical 8,558-token first call (14:36, 20:34, 20:39 and
+    20:58), and the cache, read at every checkpoint, only ever held five
+    rooms of about twenty-five designs. A design is kept while its room is
+    still the plan's stub, wherever the player stands; it is dropped when a
+    beat develops the room or the plan stops holding it."""
     from core import jobs
     from core.db import wget
     from language_runtime import story_language
@@ -1035,7 +1144,7 @@ def schedule_room_predevelopment(ctx):
     from world.spatial import room_of
     from agents import director_prose
 
-    if not director_prose.room_agent_enabled():
+    if not (director_prose.room_agent_enabled() and predevelopment_enabled()):
         return None
     chat = ctx.chat
     cid = chat["id"] if isinstance(chat, dict) else chat.id
@@ -1060,11 +1169,16 @@ def schedule_room_predevelopment(ctx):
         language_token = current_language_id.set(language_id)
         try:
             current = _wget(cid, "scene") or {}
-            briefs = planned_room_brief(cid, current, rooms_to_develop(current, room)) or {}
+            near = rooms_to_develop(current, room)
             cache = _wget(cid, PREPARED_KEY) or {}
-            cache = ({rid: entry for rid, entry in cache.items() if rid in briefs}
-                     if isinstance(cache, dict) else {})
-            todo = [rid for rid in briefs if rid not in cache][:PREDEVELOP_PER_TURN]
+            cache = cache if isinstance(cache, dict) else {}
+            briefs = planned_room_brief(
+                cid, current, list(dict.fromkeys(list(near) + list(cache)))) or {}
+            cache = {rid: entry for rid, entry in cache.items()
+                     if rid in briefs and isinstance(entry, dict)}
+            todo = [rid for rid in near if rid in briefs
+                    and (cache.get(rid) or {}).get("brief")
+                    != _brief_signature(briefs[rid])][:PREDEVELOP_PER_TURN]
             sheet = room_author_prompt(language_id)
             done = []
             for rid in todo:
@@ -1082,16 +1196,24 @@ def schedule_room_predevelopment(ctx):
                             temperature=0.4, max_tokens=None),
                         record)
                 except Exception as exc:
+                    # A failed CALL says nothing about the brief: it is not
+                    # filed, and the next commit may try the room again.
                     logger.info("room predevelopment failed: chat=%s room=%s "
                                 "error=%s", cid, rid, str(exc)[:300])
                     continue
                 designed = (draft.get("rooms") or {}).get(rid)
-                if isinstance(designed, dict) and (record.get("final_check") or {}).get("clean"):
-                    cache[rid] = {"room": designed, "turn": turn_idx,
-                                  "steps": record.get("steps")}
-                    done.append(rid)
+                clean = bool((record.get("final_check") or {}).get("clean"))
+                cache[rid] = {"room": designed if isinstance(designed, dict) else None,
+                              "turn": turn_idx, "steps": record.get("steps"),
+                              "brief": _brief_signature(briefs[rid]),
+                              "clean": clean and isinstance(designed, dict)}
+                if isinstance(designed, dict):
+                    done.append(f"prepared {rid}" if clean
+                                else f"prepared {rid} (its check not clean)")
+                else:
+                    done.append(f"drafted nothing for {rid}")
             wset(cid, PREPARED_KEY, cache)
-            return [f"prepared {rid}" for rid in done]
+            return done
         finally:
             current_language_id.reset(language_token)
             active_frame_id.reset(token)

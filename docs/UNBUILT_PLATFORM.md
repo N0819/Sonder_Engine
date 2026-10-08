@@ -520,6 +520,28 @@ The fix is to key each FTS row by rowid = memory id and delete by rowid, which
 needs the existing index rebuilt: migration work, so it waits for §1.58's
 policy.
 
+<a id="unbuilt-1-186"></a>
+
+### 1.186 The format ladder after a hold, and service tiers (2026-10-08)
+
+- **The flag's drop does not survive a restart.** A grammar suspension
+  persists for 24 h (`providers_schema_suspended`), but `_NO_JSON_OBJECT` is
+  process-local. After a restart inside the window, a suspended pair is sent
+  `json_object` again and pays two holds (2 x 30 s) before the flag is
+  dropped.
+- **A formatless rung that is itself silent restarts from the grammar.**
+  After a hold, the ladder retries without a format. When that rung also
+  goes silent it is re-raised, and the outer retry rebuilds the original
+  format. On OpenRouter glm-5.3 (Brackwater beats 27-29), 3 of 4 formatless
+  rungs went silent too, so those silences were the route's; the format-
+  bearing retries answered 2 of 3 times. Continuing down the ladder instead
+  was proposed and not built: stage two strips the reasoning controls and
+  samplers, which is a different request, not a remedy for a slow upstream.
+- **Service tiers have no models-panel column** (raw `service_tier` setting
+  only). A flex capacity error takes the ordinary retry ladder, never a
+  standard-tier retry of the same call. Flex latency on a full-size encoder
+  call is unmeasured.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-5"></a>

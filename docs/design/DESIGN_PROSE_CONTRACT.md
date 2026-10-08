@@ -232,7 +232,9 @@ Rooms are designed by their own agent (`agents/director_rooms.py`), which
 runs beside the encoder. It uses the Writers' Room loop protocol: each step
 returns tool calls, code runs them, and the results come back in the
 transcript. Its tools:
-- `inspect_rooms`: the neighbours' geometry;
+- `inspect_rooms`: any standing room whole -- its stored record and its
+  drawing (the rooms around the place arrive as `surroundings`, their
+  records in `rooms`);
 - `draft_room`: builds the room in pieces;
 - `view_room`: the draft drawn on the engine's own cell grid, north up, with
   what the engine made of every fixture, and collisions shown;
@@ -325,6 +327,38 @@ a model, so code and the decision model take it:
 
 Measured on the yard and five recorded cases from three other stories,
 old loop against new: [`ROOM_DESIGNER_SPEED_2026_09_27.md`](../experiments/ROOM_DESIGNER_SPEED_2026_09_27.md).
+
+### The rooms in question, and rooms prepared between turns (2026-10-08)
+
+Measured on the Brackwater run (chat 166, 30 beats; the record is
+[`PLAY_2026_10_07_brackwater.md`](../experiments/PLAY_2026_10_07_brackwater.md),
+Addendum):
+- **`rooms` is the records of the rooms in question, not the town.** The
+  spatial slice carried every room the world holds: 26.2k chars of a 75.3k
+  in-beat payload, while `inspect_rooms` was called 0 times in 49 steps.
+  Every room id a design wrote was already on `world_index`, in
+  `surroundings`, owed, or named by a plan's exits, and of 91 field values
+  its drafts wrote none came only from a room left out but the light word
+  `dark`. So `_groundwork` keeps the stored records of the drawn rooms in
+  `surroundings` -- the drawing leaves out a room's storey, light, surface,
+  exposure and region and a doorway's way and name, which is why dropping
+  these records was refuted -- and of each owed room that already stands (a
+  plan's stub holds the plan's measurements): 7.3k chars on average, about
+  5.2k tokens fewer a call. Every other room stays on `world_index.elsewhere`
+  (name, storey, exits, ways), and `inspect_rooms` now hands any room over
+  whole. An unentered stub is left out as it is from the drawing.
+- **Rooms prepared between turns are off by default**
+  (`prose_contract_room_predevelopment`; `1` turns them on). 131 out-of-band
+  designer calls (1.76M prompt tokens, 0.57M uncached; 51k response; 964 s)
+  made 25 designs, at least 19 of which never seeded a beat; every seeded
+  design was judged unfinished on first look, and on the one matched pair
+  the seeded runs took 7 and 6 steps where the unseeded took 3. Off, no
+  cached design seeds a beat either. On, a brief is designed once: every
+  attempt is filed under its brief's fingerprint, a design whose check
+  failed is kept as a seed, a design is kept while its room is still the
+  plan's stub wherever the player stands, and what a seed's first look found
+  -- its check, or what the prose puts in the room that its record does not
+  hold -- is the first thing the in-turn designer reads.
 
 
 ## Playerless bubbles (2026-09-23, `tools/two_lives_drive.py`, rounds 2–8)

@@ -685,7 +685,10 @@ def _commit_all_locked(ctx, nonce):
     # The prose contract's room designer, between turns: the planned rooms
     # beside the player are designed now, so a beat that enters one adapts a
     # finished design instead of building it inside the player's wait.
-    # Scheduled only under that contract; a failure is a warning.
+    # Scheduled only under that contract and only when the host has turned
+    # it on (`director_rooms.PREDEVELOP_SETTING`, off by default: on chat
+    # 166 it spent 131 background calls and never shortened a beat); a
+    # failure is a warning.
     try:
         from agents.director_rooms import schedule_room_predevelopment
         job = schedule_room_predevelopment(ctx)

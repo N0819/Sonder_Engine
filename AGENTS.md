@@ -244,7 +244,11 @@ stage that cannot carry it (`CHANNEL_STAGES`) is DROPPED and said to be
 dropped, even when its owner held nothing else that beat. A place the world
 does not hold yet is designed beside the encoder by the room author
 (`agents/director_rooms.py`, the one model call run in a pool; the
-`prose_contract_room_agent` setting), and the encoder names it
+`prose_contract_room_agent` setting), handed the stored records of the rooms
+around its places rather than the town's whole ledger
+(`director_rooms._groundwork`; `inspect_rooms` returns any other room whole);
+preparing planned rooms between turns is off unless the host sets
+`prose_contract_room_predevelopment`, and the encoder names it
 `new:<words>` for the engine to bind. The sentence-by-sentence repair pass
 (`agents/director_repair.py`) is off by default. Raw player text never reaches
 the encoder (`director_prose.without_raw_text`), and the resolve is told what
