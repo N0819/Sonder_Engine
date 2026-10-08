@@ -2,7 +2,8 @@
 
 NOT A PIPELINE STAGE. Nothing here runs inside a turn: the Planner answers
 the player's line in the room panel (`story/room_conversation.PLANNER`) and
-runs the out-of-band jobs the commit tail schedules -- the fill, the
+runs the out-of-band jobs the commit tail schedules -- the fill (planting
+ahead asked first as one compact call, `story/room_sketch.py`), the
 Dramaturge pass, the bible fold. At rest it costs nothing (v2 § 10).
 
 WHAT IT IS. A tool-using loop over the authoring facade
@@ -180,7 +181,8 @@ CHARTER_PLANNER_CALLS_PER_REPLY = 1
 CHARTER_PLANNER_MAX_TOKENS = 40_000
 #: The pseudo-tool the model names to delegate; not in the facade table.
 CHARTER_PLANNER_TOOL = "charter_planner"
-#: Open needs one fill job hands the Planner.
+#: Open needs one pass of a fill job hands the Planner; each pass reads the
+#: open needs afresh (`run_fill`).
 FILL_NEEDS_PER_JOB = 3
 #: The job keys (`core/jobs.py`), deduped per chat.
 FILL_JOB_KEY = "story_planner_fill"
@@ -216,6 +218,11 @@ SILENT_LINE = ("The room finished without a word; what it settled stands, and "
                "its status line says what is in motion.")
 WAITING_LINE = ("The room has open planning needs and no grant to answer "
                 "them. Tell the Story Planner what it may prepare.")
+#: The same ask when no need is open and what waits on the grant is the
+#: frontier the room would plant ahead (`_say_what_waits_on_a_grant`).
+WAITING_TO_PLANT_LINE = ("The room would plan what lies ahead of the story "
+                         "and has no grant to. Tell the Story Planner it may "
+                         "prepare ahead between beats.")
 REWOUND_LINE = "The story rewound under the room's work; nothing landed."
 LOST_ANSWER_LINE = ("The room lost its last answer to the model; what it had "
                     "already settled stands, and its notes say what that was.")
@@ -1042,12 +1049,15 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             "steps": steps, "notes": notes, "stopped": stopped, "regime": regime}
 
 
-def _run_task(cid, frame_id, task, *, base_turn, job=None):
+def _run_task(cid, frame_id, task, *, base_turn, job=None, before_pass=None):
     """A background task: passes of `run_planner` in the task regime until
     the reply is done, a pass ends on a non-resumable stop, the passes cap
     is reached, or the job is cancelled. Spend per hour is checked by each
     pass; the wall is per pass. The passes so far ride the task so the
-    model knows it is continuing."""
+    model knows it is continuing. ``before_pass(carried)``, when given, is
+    handed each pass's copy of the task before that pass runs and may
+    change it: a task whose question can move while it runs reads the
+    question afresh there (the fill's open needs, `run_fill`)."""
     passes, out = 0, None
     while passes < TASK_PASSES_CAP:
         cancelled = getattr(job, "cancelled", None)
@@ -1059,6 +1069,8 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None):
             carried["resumed"] = {"pass": passes,
                                   "last_stopped": out["stopped"] if out else None,
                                   "published_so_far": list(out["published"]) if out else []}
+        if before_pass is not None:
+            before_pass(carried)
         this = run_planner(cid, frame_id, task=carried, base_turn=base_turn,
                            regime="task")
         if out is None:
@@ -1713,10 +1725,13 @@ def _fill_task(cid, frame_id, report):
                 "rooms_short": report.get("rooms_short"),
                 "identities_short": report.get("identities_short"),
                 "rooms_ahead": report.get("rooms_ahead"),
+                # The furnished ground within reach: what a fill short of
+                # rooms plans beyond (the card's THE FILL names it).
+                "rooms_developed": report.get("rooms_developed") or [],
                 "identities_ahead": report.get("identities_ahead"),
                 "bodies_ahead": report.get("bodies_ahead") or {}}
-    # Only when they say something: an exit into nothing is the one room
-    # the frontier is short of, and a room with no way out is why it is not.
+    # Only when they say something: an exit into nothing is a room missing
+    # now, and a room with no way out is why no room is short.
     for key in ("rooms_unheld", "rooms_unmeasured"):
         if report.get(key):
             frontier[key] = report[key]
@@ -1725,7 +1740,12 @@ def _fill_task(cid, frame_id, report):
 
 def _fill_wanted(report):
     """Whether the frontier report leaves a fill anything to answer: an open
-    need, or a real shortfall (`room_frontier.frontier_report`)."""
+    need, or a shortfall -- fewer planned rooms or people ahead than the
+    frontier wants, or an exit into nothing (`room_frontier.frontier_report`).
+    A developed area with nothing open still wants one: planting ahead is
+    the fill's standing work (owner ruling, 2026-10-08), and
+    `room_frontier.fill_due` is what keeps an unchanged question from being
+    asked every beat."""
     return bool(report.get("open_need_uids") or report.get("rooms_short")
                 or report.get("identities_short"))
 
@@ -1735,26 +1755,127 @@ def _mandate_uids(cid, frame_id, turn_idx):
     return [m["uid"] for m in active_mandates(cid, frame_id, turn_idx)]
 
 
+def _player_line_waiting(cid, frame_id):
+    """Whether the newest line in the room's thread is the player's: an ask
+    nobody has answered yet, which only the full loop -- the one that reads
+    the thread -- can answer. A thread that cannot be read is no ask."""
+    from story import room_conversation as room
+    try:
+        rows = room.messages(cid, frame_id, limit=1)
+    except Exception:
+        return False
+    return bool(rows) and rows[-1]["role"] == "player"
+
+
+def _planting_only(cid, frame_id, report):
+    """THE SKETCH'S QUESTION: planting ahead and nothing else -- no need
+    open and no player's line waiting. Everything else is the full loop's
+    (owner, 2026-10-08: the full loop is kept for open needs, the player's
+    asks and accepted directions; a Dramaturge direction is its own job)."""
+    return (not report.get("open_need_uids")
+            and not _player_line_waiting(cid, frame_id))
+
+
+def _needs_answered(cid, frame_id, package_uids):
+    """The planning needs the packages a fill published answered or closed
+    (`plot_packages.operation_needs`) -- what the hour's needs line counts,
+    never what a fill merely carried (review 2026-10-08, R2-2)."""
+    from story.plot_packages import get_package, operation_needs
+    out = []
+    for uid in package_uids or ():
+        try:
+            pkg = get_package(cid, uid, frame_id=frame_id) or {}
+        except Exception:
+            continue
+        for op in pkg.get("operations") or ():
+            for need in sorted(operation_needs(op)):
+                if need not in out:
+                    out.append(need)
+    return out
+
+
+def _restate_status(cid, frame_id, turn_idx):
+    """Rewrite the status row as it stands, so what is in motion counts a
+    package the room just filed outside a reply. The line and the questions
+    are kept as they are; never raises."""
+    from story import room_conversation as room
+    try:
+        current = room.status(cid, frame_id)
+        write_status(cid, frame_id, line=current.get("line"),
+                     questions=[qn["text"] for qn in current.get("questions") or []],
+                     turn_idx=turn_idx)
+    except Exception as exc:
+        logger.info("room status not restated for chat %s: %s", cid, exc)
+
+
 def run_fill(cid, frame_id, *, base_turn, job=None):
     """Answer what the deterministic fill could not, through a package,
     under the identity-fill mandate. Refuses when the story rewound under
-    the job. Runs in passes (`_run_task`) and keeps its reply in the
-    thread as the Planner's own line."""
+    the job.
+
+    TWO TIERS (owner, 2026-10-08). A planting-only question -- no need open,
+    no player's line waiting (`_planting_only`) -- is asked as ONE compact
+    call, the sketch (`story/room_sketch.run_sketch`), which files light
+    plans through one package. Everything else, and every question the
+    sketch hands on -- it said so, its answer could not be read, code
+    refused what it planned, its package did not validate, or the frontier
+    is short of something the grants keep from a sketch -- runs the full
+    loop in passes (`_run_task`) exactly as before, its task carrying the
+    reason under "escalated". Each pass reads the frontier and the open
+    needs afresh, and the reply is kept in the thread as the Planner's own
+    line."""
     from core.jobs import story_rewound_past
     from story import room_conversation as room
     from story.room_frontier import (fill_signature, frame_turn_idx,
                                      frontier_report, record_fill,
-                                     record_fill_asked)
+                                     record_fill_asked, record_spend)
     now = room.current_turn_idx(cid)
     if story_rewound_past(base_turn, now):
         return {"skipped": "rewound", "base_turn": base_turn, "turn": now}
     report = frontier_report(cid, frame_id)
     if not _fill_wanted(report):
         return {"skipped": "nothing short"}
-    task = _fill_task(cid, frame_id, report)
+    mandate_uids = _mandate_uids(cid, frame_id, now)
     # THE QUESTION THIS FILL WAS ASKED, read where the task was built, so the
     # memo files the answer against exactly what the Room was shown.
-    signature = fill_signature(report, _mandate_uids(cid, frame_id, now))
+    signature = fill_signature(report, mandate_uids)
+    # A NEED FILED WHILE THE FILL RUNS JOINS ITS NEXT PASS. The fill holds
+    # the chat's one fill slot (`FILL_JOB_KEY`, deduped per chat), so a
+    # commit that files a need while a planting fill runs JOINS that fill
+    # rather than queueing the need's own -- and every pass used to carry
+    # the task as the fill began, with no needs: the review's probe
+    # (2026-10-08) saw the tasks [[], [need]] across two jobs and the need
+    # first asked a beat late, and a fill as long as the Brackwater run's
+    # longest (29 minutes) holds one about three beats. So each pass reads
+    # the open needs afresh, and every question a pass was asked goes into
+    # the memo with the answer, so the next commit does not ask it again at
+    # once. A pass is walled at `TASK_PASS_SECONDS`, so a fill longer than
+    # one pass reaches its next pass within that; a fill that ends in its
+    # first pass -- a sketch has no second -- has no next one, and a need
+    # filed under it is asked at the first commit after it ends.
+    #
+    # EACH PASS RE-MEASURES THE FRONTIER TOO (review 2026-10-08, R2-3). Its
+    # question was built with the frontier the fill BEGAN with, so a pass-1
+    # publication that moved the shortfall left the memo holding a question
+    # the next commit no longer asked: the need a later pass had just
+    # declined was asked again at once, about seventeen calls for nothing.
+    # And the question the next commit WILL ask -- the frontier as the fill
+    # left it -- is filed with the answer as well, when every need open then
+    # is one a pass carried, so a need filed in the last moments is still
+    # asked at once.
+    asked, carried_needs = [], []
+
+    def _ask(question):
+        if question not in asked:
+            asked.append(question)
+
+    def _each_pass(carried):
+        fresh = frontier_report(cid, frame_id)
+        carried.update(_fill_task(cid, frame_id, fresh))
+        _ask(fill_signature(fresh, mandate_uids))
+        for need in carried["needs"]:
+            if need["uid"] not in carried_needs:
+                carried_needs.append(need["uid"])
 
     def _asked(published):
         # Filed at the beat the answer CAME, not the beat that queued it: a
@@ -1763,12 +1884,63 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
         # timeline it is now in asked. THIS frame's newest beat, never a
         # live bubble's row above it (`room_frontier.frame_turn_idx`).
         end = frame_turn_idx(cid, frame_id)
-        if not story_rewound_past(base_turn, end):
-            record_fill_asked(cid, frame_id, signature, turn_idx=end,
+        if story_rewound_past(base_turn, end):
+            return
+        try:
+            left = frontier_report(cid, frame_id)
+            if set(left.get("open_need_uids") or ()) <= set(carried_needs):
+                _ask(fill_signature(left, mandate_uids))
+        except Exception as exc:
+            logger.info("room fill: the frontier it left was not measured: %s", exc)
+        for question in asked or [signature]:
+            record_fill_asked(cid, frame_id, question, turn_idx=end,
                               published=published)
 
+    escalated = ""
+    if _planting_only(cid, frame_id, report):
+        from story.room_sketch import SKETCH_ESCALATE_CHARS, run_sketch
+        _ask(signature)
+        try:
+            sketch = run_sketch(cid, frame_id, report, role=PLANNER_ROLE,
+                                actor=PLANNER_ACTOR, base_turn=base_turn,
+                                job=job, turn_idx=now)
+        except Exception:
+            _asked(False)
+            raise
+        if sketch["calls"]:
+            record_spend(cid, frame_id, turn_idx=now, calls=sketch["calls"],
+                         who="sketch")
+        if sketch["stopped"] in ("rewound", "cancelled"):
+            return {"tier": "sketch", "published": [], "calls": sketch["calls"],
+                    "steps": sketch["calls"], "stopped": sketch["stopped"],
+                    "passes": 0}
+        if not sketch["escalate"]:
+            published = sketch["published"]
+            _asked(bool(published))
+            if published:
+                # A sketch answers no need -- it runs only when none is open
+                # -- so its fill counts on the planting line alone.
+                record_fill(cid, frame_id, turn_idx=now,
+                            package_uid=published[0], needs=())
+                _restate_status(cid, frame_id, now)
+            try:
+                room.add_message(cid, frame_id, "planner", sketch["reply"],
+                                 turn_idx=now)
+            except ValueError:
+                pass
+            return {"tier": "sketch", "published": published,
+                    "calls": sketch["calls"], "steps": sketch["calls"],
+                    "stopped": None, "passes": 0, "event": sketch["event"],
+                    "notes": sketch["notes"]}
+        escalated = sketch["escalate"][:SKETCH_ESCALATE_CHARS]
+        logger.info("room fill for chat %s: the sketch handed the question "
+                    "to the full planner: %s", cid, escalated)
+    task = _fill_task(cid, frame_id, report)
+    if escalated:
+        task["escalated"] = escalated
     try:
-        out = _run_task(cid, frame_id, task, base_turn=base_turn, job=job)
+        out = _run_task(cid, frame_id, task, base_turn=base_turn, job=job,
+                        before_pass=_each_pass)
     except Exception:
         # A fill that failed (the provider refused, the credit ran out) is an
         # empty answer for the back-off: re-asking on the very next commit is
@@ -1779,14 +1951,59 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
         _asked(bool(out["published"]))
     if out["published"]:
         record_fill(cid, frame_id, turn_idx=now, package_uid=out["published"][0],
-                    needs=[n["uid"] for n in task["needs"]])
+                    needs=_needs_answered(cid, frame_id, out["published"]))
     try:
         room.add_message(cid, frame_id, "planner", out["reply"], turn_idx=now)
     except ValueError:
         pass
-    return {"published": out["published"], "calls": out["calls"],
+    return {"tier": "escalated" if escalated else "loop",
+            **({"escalated": escalated} if escalated else {}),
+            "published": out["published"], "calls": out["calls"],
             "steps": out["steps"], "stopped": out["stopped"],
             "passes": out.get("passes", 1)}
+
+
+#: The lines the commit tail asks for a fill grant with; the status row
+#: carries at most the one that is true (`_say_what_waits_on_a_grant`).
+GRANT_WAITING_LINES = (WAITING_LINE, WAITING_TO_PLANT_LINE)
+
+
+def _say_what_waits_on_a_grant(cid, frame_id, turn_idx, line):
+    """THE STATUS ROW SAYS WHAT WAITS ON A FILL GRANT, AND ONLY WHILE IT DOES.
+    ``line`` is the one true at this commit -- `WAITING_LINE` while a need
+    is open, `WAITING_TO_PLANT_LINE` while only the frontier is short, None
+    while a grant is held or nothing is wanted -- and the row is made to
+    carry exactly it: the other is withdrawn, the true one is said once,
+    AHEAD of every question the Room asked itself, and those stay in their
+    order behind it. Said last, it was cut by the row's own cap
+    (`STATUS_QUESTIONS_CAP`) whenever the Room already had that many
+    questions standing, and with them standing it was never said at all
+    (probe 2026-10-08; the Dramaturge lane's review found the same of
+    `WAITING_LINE`).
+
+    The row used to be given `WAITING_LINE` whenever a fill was wanted with
+    no grant, so once planting ahead was restored it told the player -- and
+    the Room, which reads the row back as its own `status` -- that planning
+    needs were open in every developed area and chartered town that had
+    none (review, 2026-10-08: chat 114 beats 0-4, no need open), and a line
+    once written stood until the Planner next wrote the row, whatever had
+    become true since. Written only when the row changes. Never raises: the
+    row is what the room SAYS, and the commit tail settles it before it
+    queues the fill, which a failed read here must not cost."""
+    from story import room_conversation as room
+    try:
+        current = room.status(cid, frame_id)
+        texts = [qn["text"] for qn in current.get("questions") or []]
+        kept = [line] if line else []
+        for text in texts:
+            if text in GRANT_WAITING_LINES:
+                continue            # said first above, or no longer true
+            kept.append(text)
+        if [row["text"] for row in _question_rows(kept)] != texts:
+            write_status(cid, frame_id, line=current.get("line"),
+                         questions=kept, turn_idx=turn_idx)
+    except Exception as exc:
+        logger.info("room status not settled for chat %s: %s", cid, exc)
 
 
 def schedule_room_work(ctx):
@@ -1794,14 +2011,17 @@ def schedule_room_work(ctx):
     a fill when something is short or a need is open, under an
     identity-fill grant with room in the hour, and only when what it would
     answer has changed since a fill last answered it or the back-off has run
-    (`room_frontier.fill_due`); a Dramaturge pass when a grant carries the
-    dial and the pacing budget says the story is due a turn; a bible fold
-    when a batch of thread lines has aged past the window. With no grant the
-    status row asks. Never raises; returns the first job queued, or None."""
+    (`room_frontier.fill_due`) -- the fill itself picks its tier, a sketch
+    for planting ahead and the full loop for the rest (`run_fill`); a
+    Dramaturge pass when a grant carries the dial and the pacing budget
+    says the story is due a turn; a bible fold when a batch of thread lines
+    has aged past the window. With no grant the status row asks. Never
+    raises; returns the first job queued, or None."""
     from core import jobs
     from persist.llm_capture import room_capture
     from story import room_conversation as room
-    from story.mandates import (beats_per_proposal, fill_limit, spend_limits,
+    from story.mandates import (beats_per_proposal, fill_limit,
+                                fill_limit_stated, spend_limits,
                                 surprise_dial)
     from story.room_bible import schedule_fold
     from story.room_frontier import (fill_due, fill_signature, fills_this_hour,
@@ -1830,21 +2050,35 @@ def schedule_room_work(ctx):
     hour_open = (spend["calls_per_hour"] is None
                  or spend_this_hour(cid, frame_id, turn_idx) < spend["calls_per_hour"])
 
-    if not bubble and _fill_wanted(report):
-        limit = fill_limit(cid, frame_id, turn_idx)
-        if limit is None:
-            current = room.status(cid, frame_id)
-            texts = [q["text"] for q in current.get("questions") or []]
-            if WAITING_LINE not in texts:
-                write_status(cid, frame_id, line=current.get("line"),
-                             questions=texts + [WAITING_LINE], turn_idx=turn_idx)
-        elif hour_open and fills_this_hour(cid, frame_id, turn_idx) < limit:
+    wanted = not bubble and _fill_wanted(report)
+    limit = fill_limit(cid, frame_id, turn_idx) if wanted else None
+    if not bubble:
+        # WITH NO FILL GRANT THE STATUS ROW ASKS FOR ONE, naming what waits
+        # on it: an open need, or the frontier the room would plant.
+        _say_what_waits_on_a_grant(
+            cid, frame_id, turn_idx,
+            None if not wanted or limit is not None
+            else WAITING_LINE if report.get("open_need_uids")
+            else WAITING_TO_PLANT_LINE)
+    if wanted and limit is not None:
+        # A NUMBER THE PLAYER STATES IS THE TOTAL (owner, 2026-10-08):
+        # planting ahead and open needs are held together to it, every
+        # landed fill counted. With the engine's default the hour is held
+        # per kind of question: a question carrying an open need counts
+        # only the fills that answered needs, planting every fill that
+        # landed, so planting never starves a need of the default hour
+        # (`mandates.FILLS_PER_STORY_HOUR`, `room_frontier.fills_this_hour`).
+        per_kind = not fill_limit_stated(cid, frame_id, turn_idx)
+        if hour_open and fills_this_hour(
+                cid, frame_id, turn_idx,
+                needs_only=per_kind and bool(report.get("open_need_uids"))) < limit:
             # ASKED ONCE, THEN BACKED OFF. Measured on the Brackwater run
             # (chat 166): a fill was in flight at every kept commit from turn
             # 6 to 30 and the Room answered the same unchanged question with
             # "nothing to build" again and again. A changed question -- a new
-            # need, a new room, a moved shortfall, a new grant -- is asked at
-            # once; an unchanged one waits out `fill_wait_beats`.
+            # need, a moved shortfall, a new grant, or a new room while a
+            # need is open -- is asked at once; an unchanged one waits out
+            # `fill_wait_beats`.
             due, why = fill_due(cid, frame_id, fill_signature(
                 report, _mandate_uids(cid, frame_id, turn_idx)), turn_idx)
             if not due:

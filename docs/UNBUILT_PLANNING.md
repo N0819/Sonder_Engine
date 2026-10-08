@@ -163,18 +163,31 @@ for what follows. Residuals of this entry rather than a section of their own:
 - **A mandate is per era and never per package.** `authority.mandate_uid`
   is honoured (a named mandate must be active) but nothing ties a grant to
   one package's lifetime; `limits.packages` / `rooms` / `people` are shown to
-  the Planner and cited, not enforced by code -- only `fills_per_hour` is.
+  the Planner and cited, not enforced by code -- only `fills_per_hour` is: a number the player states is the total (owner,
+  2026-10-08), and the engine's default is held per kind of question
+  (planting to it counting every fill that landed, an open need to it
+  counting only the fills that answered or closed a need).
 - **The frontier is a count, not a ranking.** v2 § 3.2's predictive staging
-  (exits, declared destinations, projects that name places) is not read; the
-  measure is every room within `FRONTIER_DEPTH_HOPS` the world holds
-  (furnished or planned; an exit into nothing is the only gap; no way out is
-  no shortfall) and the people ready ahead (unrendered person plans plus
-  off-stage charter bodies, counted frame-wide, not by reach), and the
-  Planner is told what is missing. Since 2026-10-08 `FRONTIER_ROOMS_MIN` and
-  `FRONTIER_IDENTITIES_MIN` count what is held and ready, no longer
-  unfurnished stubs and authored plans alone: whether a developed area
-  should still prompt the Room to plant beyond it, and whether a charter's
-  people should count only within reach, are the owner's to rule.
+  (exits, declared destinations, projects that name places) is not read. The
+  measure is the plan's stubs within `FRONTIER_DEPTH_HOPS` -- planned rooms
+  nobody has furnished; an exit into nothing is short on top; no way out is
+  no shortfall -- and unrendered authored person plans anywhere in the frame.
+  The Planner, or its sketch, is told how short the frontier is and which
+  furnished rooms it plans beyond (`rooms_developed`). Ruled 2026-10-08: a
+  developed area still prompts the Room to plant beyond it, on the back-off,
+  and a charter's people are reported beside the count (`bodies_ahead`),
+  never counted -- so whether they should count only within reach no longer
+  arises. Planting is frontier-wide, so a planting question is the same
+  question wherever the player walks (`fill_signature` names the room only
+  while a need is open): a player who walks from one developed area into
+  another as short waits out the back-off -- at most `FILL_RETRY_BEATS_CAP`
+  beats -- before the Room plants beyond the second. Unmeasured: the count
+  is of UNFURNISHED planned rooms, so a planned room built before anyone
+  enters it (the rooms-in-view build) reads as developed ground and the Room
+  is asked to plan past it sooner. Measure the fill rate in play once both
+  have landed; counting 'planned and never entered' instead would need the
+  durable 'was ever occupied' mark `design/DESIGN_FRONTIER_SPACES.md` § 5
+  lists as not built.
 - **The region tier has the field and the grouping, not yet the index of
   its own.** `world/regions.py` (2026-09-04) gives every room a derived
   `region` and groups `room_index` by it, and `inspect_contradictions`
@@ -284,17 +297,60 @@ for what follows. Residuals of this entry rather than a section of their own:
   character's drive has to wait for their return to read it. Widening the
   read to the away roster is one argument.
 - **The fill job is queued from the commit tail, on a changed question.**
-  Every commit with an open need or a real shortfall and a grant submits one
-  job (deduped per chat, capped per story hour) when what it would answer --
-  open needs, the player's room, the shortfall, the active grants -- changed
-  since a fill last answered it, or when the back-off from that answer has
-  run (`room_frontier.fill_due`, 2026-10-08; `FILL_RETRY_BEATS` = 2 beats, doubling from the second
-  consecutive empty answer to `FILL_RETRY_BEATS_CAP` = 16, `FILL_MEMO_KEPT` = 16
-  questions remembered). Left: the memo rides the `room_frontier` row and
-  rolls back with a reroll like the rest of the Room's state (F31), so a
-  reroll landing between an answer and the next checkpoint re-asks once; and
-  a fill that published something against an unchanged question waits the
-  same first back-off as an empty one, which the owner has not ruled on.
+  Every player-frame commit with an open need or a shortfall and a grant
+  submits one job (deduped per chat) when what it would answer -- open needs,
+  the shortfall, the active grants, and the player's room while a need is
+  open -- changed since a fill last answered it, or when the back-off from
+  that answer has run (`room_frontier.fill_due`, 2026-10-08;
+  `FILL_RETRY_BEATS` = 2 beats, doubling from the second consecutive empty
+  answer to `FILL_RETRY_BEATS_CAP` = 16, `FILL_MEMO_KEPT` = 16 questions
+  remembered). Each pass reads the frontier and the open needs afresh, a need
+  filed while a fill runs joins its next pass, and the memo files every
+  question a pass was asked and the one the frontier was left at when every
+  need then open was carried. The hour's line N (`fills_per_hour`): a number the player states is the
+  total, planting and needs together (owner, 2026-10-08: "Your number is
+  the total"); the engine's default is held per kind of question since
+  planting ahead was restored (2026-10-08): planting to N counting every
+  fill that landed, an open need to N counting only the fills whose
+  packages answered or closed a need
+  (`room_frontier.fills_this_hour(needs_only=True)`,
+  `plot_packages.operation_needs`). Under the default, a need's fill that
+  plants and answers no need is not held by N, and while a need stays open
+  and unanswered what such fills plant is bounded only by what the
+  frontier still wants and the back-off (probe 2026-10-08: a line of one,
+  four landed in seven beats -- the case a stated number now closes); the line is
+  per STORY hour, and Brackwater's clock moved 1,705 s in 30 beats (about 63
+  beats to the story hour), so in a slow-clock story it is the hour, not the
+  back-off, that bounds a Room whose answers land, while an answer that lands
+  nothing counts against no hourly line and is bounded only by its back-off,
+  the one fill in flight and a granted `calls_per_hour` (none by default); a
+  fill that ends in its first pass -- every sketch -- carries no need filed
+  under it, and that need is asked at the first commit after the fill ends;
+  the bound is held where a fill is queued, so a need that closes between the
+  commit and the fill's first pass leaves a job queued on the needs' line to
+  land as planting; and a pass hands the Planner the first
+  `FILL_NEEDS_PER_JOB` = 3 open needs while the question is keyed by all of
+  them, so with more than three open and the first three declined, the rest
+  are not shown until one of those closes (as before this work).
+- **Planting ahead is one sketch call (2026-10-08, `story/room_sketch.py`).**
+  A planting-only question -- no need open, no player's line waiting -- is
+  one compact call that files light plans as one package and hands the
+  question to the full loop, with the reason, whenever it cannot say it,
+  code refuses it or its package does not validate. Left: a LOCAL EVENT
+  rides only a planting question, so an area the plan already holds enough
+  ahead of is offered none however quiet it has been (`LOCAL_EVENT_BEATS` =
+  8 of this frame's beats paces the ones it does file, where the design
+  note's pacing budget was per story hour); a sketched room carries a name,
+  a purpose and the way it joins, never geometry, exposure or level, so it
+  is in no far view until the room author or the Director renders it, and a
+  sketched person has no `brief.station` (the validator warns that it
+  stands at nothing); the sketch's spend records its one model call, not
+  the write tools its package passes through; a sketch whose grants cover
+  rooms but not people (or the reverse) sends the whole question to the
+  loop rather than planting the half it could; errands and summons name a
+  charter body by key, which the payload does not list, so a sketch that
+  reaches for one fails validation and escalates; the escalation rate in
+  play is unmeasured -- live, two beats of chat 166, both published.
 
 - **The story bible is built** (2026-09-04, `story/room_bible.py`, plan § 6
   item 7): seven sections, every entry with a source the code verifies,

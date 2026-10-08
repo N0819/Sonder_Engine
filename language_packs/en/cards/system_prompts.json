@@ -164,6 +164,9 @@
     },
     "bible_fold": {
       "$text": "prompts/bible_fold.txt"
+    },
+    "room_sketch": {
+      "$text": "prompts/room_sketch.txt"
     }
   },
   "specialists": {

@@ -67,7 +67,7 @@ def room_max_tokens(fallback=40_000):
 
 
 def room_call(role, system, payload, *, max_tokens=None, phase="",
-              json_mode=True):
+              json_mode=True, reasoning_effort=None):
     """One JSON-shaped Room call, recorded. Returns the raw provider text.
 
     A drop-in for ``providers.chat_complete(role, system,
@@ -76,6 +76,12 @@ def room_call(role, system, payload, *, max_tokens=None, phase="",
     have serialised, kept as a dict so capture can hash it PER KEY -- which
     is where the dedup lives, because a room reply's `story`, `bible` and
     tool table do not change between the steps of one reply.
+
+    ``reasoning_effort`` is `chat_complete`'s per-call override of the
+    role's configured effort, passed only when a caller names one: the
+    planting sketch (`story/room_sketch.py`) rides the Planner's role and
+    routing at a lighter effort than the Planner's own loop. None leaves the
+    role's setting in charge, exactly as before.
 
     A FAILED call is recorded too, with the error and the time it burned.
     A call that raised is the one a reader most wants and the one a
@@ -90,6 +96,8 @@ def room_call(role, system, payload, *, max_tokens=None, phase="",
     kwargs = {"json_mode": bool(json_mode)}
     if max_tokens is not None:
         kwargs["max_tokens"] = max_tokens
+    if reasoning_effort is not None:
+        kwargs["reasoning_effort"] = reasoning_effort
     try:
         raw = providers.chat_complete(role, system, user, **kwargs)
     except Exception as exc:

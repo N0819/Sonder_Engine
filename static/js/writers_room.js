@@ -69,7 +69,8 @@ const ROOM_UNSEATED_LINE = "The Story Planner is not seated yet. Your note is ke
 const ROOM_PRELUDE_FALLBACK_LINE = "Before we open this one: is there anything in particular you want from this story -- a place, a mood, something you want waiting there? Say so, or just begin and I will work from the page.";
 // The seated Planner's own fixed lines (agents/story_planner.py), spelled
 // here for the same reason: a bounded-out reply, an empty status, the fill
-// job waiting on a grant, and a rewind under the room's work.
+// job waiting on a grant -- for an open need, or to plant ahead -- and a
+// rewind under the room's work.
 // tests/test_story_planner.py holds these spellings and the module's together.
 const ROOM_PLANNER_LINES = [
   "The room stopped at its budget for this reply; what it settled stands, and it can go on when asked.",
@@ -78,6 +79,7 @@ const ROOM_PLANNER_LINES = [
   "The room could not agree on a direction; the proposal and the objection are yours to settle.",
   "The room has nothing in motion.",
   "The room has open planning needs and no grant to answer them. Tell the Story Planner what it may prepare.",
+  "The room would plan what lies ahead of the story and has no grant to. Tell the Story Planner it may prepare ahead between beats.",
   "The story rewound under the room's work; nothing landed.",
   "The room lost its last answer to the model; what it had already settled stands, and its notes say what that was.",
   "The room finished without a word; what it settled stands, and its status line says what is in motion.",

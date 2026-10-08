@@ -1140,6 +1140,32 @@ def _preview_plan_rooms(cid, frame_id, op, world):
     return {"changes": changes, "errors": errors, "warnings": warnings}
 
 
+def _structure_as_held(cid, structure):
+    """THE STRUCTURE A PLAN NAMES, WITH WHAT THE WORLD ALREADY HOLDS OF IT.
+
+    A plan names its structure by key and name -- that is all the field text
+    asks for (`OPERATION_FIELDS["plan_rooms"]["structure"]`) -- and
+    `plant_structure` writes the structure it is handed OVER the stored
+    record. So every plan planted into a town the location pass had laid
+    out wiped that structure's grammar (what its frontier stubs are named
+    from) and its charters (probe 2026-10-08: a `{key, name}` plan into a
+    structure holding one charter and one grammar row left both empty, and
+    validated clean). Planting ahead makes such plans the Room's standing
+    work. What the plan states wins; what it leaves out is kept."""
+    from core.db import wget_for_frame
+    from world.structure import STRUCTURES_KEY, normalize_structures
+    structure = dict(structure or {})
+    held = normalize_structures(
+        wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})["items"].get(
+            str(structure.get("key") or ""))
+    if not held:
+        return structure
+    merged = dict(held)
+    merged.update({k: v for k, v in structure.items()
+                   if v not in (None, "", [], {})})
+    return merged
+
+
 def _apply_plan_rooms(cid, frame_id, op, turn_idx):
     from world.structure import claim_frontier_spaces, plant_structure
 
@@ -1151,7 +1177,7 @@ def _apply_plan_rooms(cid, frame_id, op, turn_idx):
     for key in claim_plan["refused"]:
         rooms.pop(key, None)
     structure, planted = plant_structure(
-        cid, op["structure"], rooms,
+        cid, _structure_as_held(cid, op["structure"]), rooms,
         owning_book_id=op.get("owning_book_id"), claims=claim_plan)
     out = {"structure": structure["key"], "rooms": sorted(planted)}
     if claim_plan["claims"]:
@@ -3081,21 +3107,35 @@ def operation_rooms(op):
     return out
 
 
-def operation_shape_text():
-    """One line per kind for a tool description: `op` names the kind, the
-    other keys are its fields (`?` marks an optional one).
+#: WHICH FIELD OF AN OPERATION NAMES THE PLANNING NEED IT ANSWERS OR CLOSES --
+#: the one declaration, beside `ROOM_FIELDS` and for the same reason: the
+#: hour's ledger asks "which needs did this fill answer" and must not keep
+#: a key list of its own (`operation_needs`).
+NEED_FIELDS = {
+    "answer_need": "need_uid",
+    "close_need": "need_uid",
+    "plan_entity": "answers_need",
+}
 
-    A LIMIT IS SHOWN AS ITS NUMBER. The field texts name this module's
-    numeric caps by their constant (`DIRECTOR_NOTE_CHARS`, `EVENT_DUE_CAP`,
-    ...) so the number lives once; the text the model reads gets the value.
-    It used to get the name: live, the Larch Hill opening (2026-10-04) was
-    told a director_note is "at most DIRECTOR_NOTE_CHARS characters", wrote
-    1249, was refused three times for it, and ran out of time unpublished."""
-    lines = []
-    for kind, fields in OPERATION_FIELDS.items():
-        lines.append("%s: %s" % (kind, ", ".join(
-            "%s=%s" % (k, v) if v else k for k, v in fields.items())))
-    text = "; ".join(lines)
+
+def operation_needs(op):
+    """The planning-need uids one package operation answers or closes, over
+    `NEED_FIELDS`: a need it fills, a need it closes with its reason, a plan
+    filed as the answer to one. Empty for every other kind."""
+    field = NEED_FIELDS.get(_text(op.get("op"), 40))
+    uid = _text(op.get(field), 60) if field else ""
+    return {uid} if uid else set()
+
+
+def _limits_as_numbers(text):
+    """A field text with this module's numeric caps written as their values.
+
+    A LIMIT IS SHOWN AS ITS NUMBER. The field texts name the caps by their
+    constant (`DIRECTOR_NOTE_CHARS`, `EVENT_DUE_CAP`, ...) so the number
+    lives once; the text the model reads gets the value. It used to get the
+    name: live, the Larch Hill opening (2026-10-04) was told a director_note
+    is "at most DIRECTOR_NOTE_CHARS characters", wrote 1249, was refused
+    three times for it, and ran out of time unpublished."""
     # The caps the fields name live here and in the two seams that enforce
     # theirs (a plant's strength, a region event's reach and ramp).
     from world import charter_surgery, region_events
@@ -3107,6 +3147,26 @@ def operation_shape_text():
     return re.sub(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b",
                   lambda m: ("%g" % caps[m.group(0)]) if m.group(0) in caps else m.group(0),
                   text)
+
+
+def operation_shape_line(kind, fields=None):
+    """One kind's line as `operation_shape_text` writes it -- ``fields``
+    when a caller restates the kind for a narrower reader (the planting
+    sketch drops the package clock it cannot name), else the kind's own."""
+    fields = OPERATION_FIELDS.get(kind, {}) if fields is None else fields
+    return _limits_as_numbers(", ".join(
+        "%s=%s" % (k, v) if v else k for k, v in fields.items()))
+
+
+def operation_shape_text():
+    """One line per kind for a tool description: `op` names the kind, the
+    other keys are its fields (`?` marks an optional one), every limit
+    shown as its number (`_limits_as_numbers`)."""
+    lines = []
+    for kind, fields in OPERATION_FIELDS.items():
+        lines.append("%s: %s" % (kind, ", ".join(
+            "%s=%s" % (k, v) if v else k for k, v in fields.items())))
+    return _limits_as_numbers("; ".join(lines))
 
 
 #: Who authored a package decides whether it needs a grant. A package the

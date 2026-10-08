@@ -83,8 +83,10 @@ MANDATE_CAPABILITIES = (
     # Reach the web (`story/room_research.py`): a query leaves the machine,
     # so the player grants it in so many words.
     "research",
-    # Answer open planning needs and keep the prepared frontier out of band
-    # (the fill job), within `limits.fills_per_hour`.
+    # Answer open planning needs and plant the frontier ahead out of band
+    # (the fill job), within `limits.fills_per_hour` -- a number the player
+    # states is the total; the default is held per kind of question
+    # (`FILLS_PER_STORY_HOUR` says what each bounds).
     "identity_fills",
     # Author a SEALED package -- work the player will not read until revealed.
     "surprise",
@@ -180,9 +182,30 @@ MANDATE_TEXT_CHARS = 600
 MANDATE_SCOPE_CHARS = 200
 DEFAULT_SCOPE = "this story"
 
-#: The identity-fill line. A grant that names no `fills_per_hour` gets the
-#: default; a grant may lower it or raise it up to the engine's ceiling,
-#: never above.
+#: THE IDENTITY-FILL LINE, N fills per story hour. A grant that names no
+#: `fills_per_hour` gets the default; a grant may lower N or raise it up to
+#: the engine's ceiling, never above. Only a fill that LANDED counts: an
+#: answer that built nothing is held by its question's back-off
+#: (`room_frontier.fill_due`), the chat's one fill in flight and any
+#: `calls_per_hour` a grant names (`CALLS_PER_STORY_HOUR`), never by N.
+#:
+#: A NUMBER THE PLAYER STATES IS THE TOTAL (owner, 2026-10-08: "Your number
+#: is the total"): when any fill grant names `fills_per_hour`
+#: (`fill_limit_stated`), planting ahead and open needs are held TOGETHER
+#: to that number, every landed fill counted. The player's words bind.
+#:
+#: WITH NO STATED NUMBER, N IS HELD PER KIND OF QUESTION (2026-10-08): a
+#: fill that plants ahead is held to N counting every fill that landed in
+#: the story hour, and a fill asked about an open need to N counting only
+#: the fills that answered needs (`room_frontier.fills_this_hour`), so
+#: planting never starves a need of the engine's default hour. One count
+#: shared by both let four planting fills spend the default four on the
+#: Brackwater replay, and the run's one open need would never have been
+#: asked. While a need stays open and unanswered, what the fills asked
+#: about it plant is held by what the frontier still wants and by the
+#: question's back-off (probe, 2026-10-08: a line of one and a standing
+#: need the Room declined each time landed four fills in seven beats --
+#: the case the owner's ruling now closes whenever the player states N).
 FILLS_PER_STORY_HOUR = 4
 FILLS_PER_STORY_HOUR_CAP = 12
 
@@ -516,9 +539,11 @@ def citation(cid, frame_id, uids):
 
 
 def fill_limit(cid, frame_id, turn_idx=None):
-    """The identity-fill line: fills allowed per story hour under the
-    standing grants, or None when no active mandate permits fills at all.
-    The most permissive grant wins, under the engine's ceiling."""
+    """The identity-fill line N under the standing grants, or None when no
+    active mandate permits fills at all. The most permissive grant wins,
+    under the engine's ceiling. A number the player states is the total
+    (`fill_limit_stated`); the default is held per kind of question
+    (`FILLS_PER_STORY_HOUR`)."""
     limit = None
     for row in active_mandates(cid, frame_id, turn_idx):
         if not permits(row, "identity_fills"):
@@ -528,6 +553,17 @@ def fill_limit(cid, frame_id, turn_idx=None):
         own = min(own, FILLS_PER_STORY_HOUR_CAP)
         limit = own if limit is None else max(limit, own)
     return limit
+
+
+def fill_limit_stated(cid, frame_id, turn_idx=None):
+    """Whether a standing fill grant states its own `fills_per_hour`: the
+    player's number, which holds planting ahead and open needs TOGETHER
+    (owner, 2026-10-08: "Your number is the total"). False when every fill
+    grant takes the engine's default, which is held per kind of question
+    (`FILLS_PER_STORY_HOUR`)."""
+    return any(permits(row, "identity_fills")
+               and row["limits"].get("fills_per_hour") is not None
+               for row in active_mandates(cid, frame_id, turn_idx))
 
 
 def _most_permissive(cid, frame_id, key, default, cap, turn_idx=None,

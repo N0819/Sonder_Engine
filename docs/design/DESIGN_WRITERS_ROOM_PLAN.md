@@ -355,7 +355,7 @@ Every one of these authors a *circumstance that arrives*; the Director
 rules what happens when it does, and no op writes the player's conduct
 or a major character's mind. The Dramaturge's dial governs how much of
 this the room reaches for; a **pacing budget** (pressures per story
-hour, named and per story) keeps it from becoming weather.
+hour, named and per story) keeps it from becoming weather. *Landed 2026-10-08, in part* (owner: "The planner is also supposed to plan events locally to some level to keep things interesting if allowed"): the planting sketch (`story/room_sketch.py`) may file at most one of these kinds, or a `schedule_event`, within two hops of a room the player or a cast member stands in, only under that kind's grant and harm only under `schedule_harm`, paced in this frame's beats (`room_frontier.LOCAL_EVENT_BEATS` = 8) rather than per story hour; it rides a planting question, so a fully planned area is offered none (`UNBUILT_PLANNING.md` § 2.26). The full Planner's own use stays its judgement under the grants.
 
 Then: sealed envelopes and surprise authorization (v2 § 6.3), spoiler-safe
 status (v2 § 5.3), plot packages with truths, evidence, clocks and

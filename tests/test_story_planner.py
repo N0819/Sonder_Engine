@@ -416,11 +416,13 @@ def test_the_frontier_counts_what_stands_ahead(temp_db):
     cid, _ = _story(temp_db)
     report = rf.frontier_report(cid, None)
     assert report["player_room"] == "quay"
-    # The furnished warehouse is a room ready ahead, not a gap: no stub
-    # stands ahead, and the frontier is one room short, not two (a
-    # shortfall is something missing -- `tests/test_room_fill_gate.py`).
+    # The furnished warehouse is ground the story already has, not a room
+    # ahead: no stub stands ahead, and the frontier is two rooms short -- a
+    # developed area is where the Room plans beyond (owner ruling
+    # 2026-10-08, `tests/test_room_fill_gate.py`).
     assert report["rooms_ahead"] == []
-    assert report["rooms_short"] == rf.FRONTIER_ROOMS_MIN - 1
+    assert report["rooms_developed"] == ["warehouse"]
+    assert report["rooms_short"] == rf.FRONTIER_ROOMS_MIN
     assert report["identities_short"] == rf.FRONTIER_IDENTITIES_MIN
     plant_structure(cid, {"key": "port", "name": "Port"}, {
         "custom_house": {"name": "Custom House", "adjacent": [{"to": "quay"}]},
@@ -607,7 +609,8 @@ def test_the_planners_fixed_lines_are_in_both_catalogs():
     en = json.loads((root / "language_packs" / "en" / "ui.json").read_text("utf-8"))
     ja = json.loads((root / "language_packs" / "ja" / "ui.json").read_text("utf-8"))
     script = (root / "static" / "js" / "writers_room.js").read_text("utf-8")
-    for line in (sp.BOUNDED_LINE, sp.NO_STATUS_LINE, sp.WAITING_LINE, sp.REWOUND_LINE,
+    for line in (sp.BOUNDED_LINE, sp.NO_STATUS_LINE, sp.WAITING_LINE,
+                 sp.WAITING_TO_PLANT_LINE, sp.REWOUND_LINE,
                  sp.SPENT_LINE, sp.HOUR_SPENT_LINE, sp.DISAGREEMENT_LINE,
                  sp.LOST_ANSWER_LINE):
         assert line in en and line in script

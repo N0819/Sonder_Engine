@@ -14,38 +14,59 @@ identity-fill mandate and records each fill here so the per-story-hour
 ceiling can be counted. The row rides the frame-scoped `room_frontier`
 world key.
 
-A SHORTFALL IS SOMETHING MISSING, NEVER SOMETHING FINISHED. The measure
-counted only the plan's prose-free stubs as rooms ahead and only unrendered
-person plans as people, so the more of the world the story had made real the
-shorter the frontier read. Measured on the Brackwater run (chat 166,
-2026-10-07): 21 fill jobs, 371 model calls, 9.5M prompt tokens, and 17 of
-the 21 had no open need -- they ran on a "shortfall" of three things, none
-of them missing. At the tide chapel every room within two hops had been
-furnished, so nothing was a stub and the frontier read two rooms short; on
-the Grebe under way the boat's deck was joined to nothing (the vessel stood
-in no room, the run's F92), so no room was in reach at all and it read two
-short again; and
-in a town whose five charters held 45 named people it read one person short
-because only one authored plan was still unmet. The Room answered "nothing
-to build" to the same question again and again, and nothing any of those
-fills made reached a page or a mind. So:
+THE FRONTIER IS WHAT THE PLAN HOLDS AHEAD, SO A DEVELOPED AREA IS SHORT OF
+IT. Rooms ahead are the plan's stubs within reach -- planned rooms nobody
+has furnished yet -- and people ahead are authored person plans nobody has
+rendered yet. As the story furnishes the rooms around the player and meets
+the people planned for it, the frontier reads shorter, and that is the
+Room's prompt to plan what lies beyond: the world keeps moving ahead of the
+player on the Room's own initiative, not only when a beat reaches for
+something no plan holds. Owner ruling, 2026-10-08, on learning how far the
+morning's measure (next paragraph) had narrowed the Room: "I just hope we
+didn't lobotomize it and remove the world's ability to be proactive" --
+restore planting ahead, on the back-off.
 
-* every room within reach that the world HOLDS -- furnished or planned --
-  is ready ahead; only a reachable id nothing holds is a gap;
-* with no way out of the player's room at all there is no "ahead" to
-  prepare, and no room shortfall: what the story reaches next from there is
-  a planning need when it reaches for it (the Grebe's was, need
-  `transit_destination_unplanned`, filed the beat the boat left);
-* a person ready ahead is an unrendered person plan OR a named body on an
-  institution's books that the story has not got on stage -- the charter is
-  the offscreen simulator and holds its people ready by construction.
+For one morning (40586278) the measure read the other way. On the
+Brackwater run (chat 166, 2026-10-07) 17 of 21 fill jobs had no open need,
+and the Room answered "nothing to build" to the same unchanged question
+again and again, so every room the world held was counted as ready and a
+charter's off-stage bodies as people ready ahead. That removed the cost by
+removing the initiative: replayed on the run's checkpoints the frontier read
+short at no beat, and a developed area never asked the Room for anything
+again. The cost is held by asking a question once instead (below), and by
+the Room's card saying that planting ahead is the fill's standing work and
+that building nothing is still a complete answer. What that morning got
+right stays:
+
+* a reachable id that neither the scene nor the plan holds -- an exit into
+  nothing -- is missing NOW, whatever else stands ahead, and the shortfall
+  counts it (`rooms_unheld`);
+* with no way out of the player's room at all there is no "ahead" to plan
+  along and no room shortfall (`rooms_unmeasured`): on the Grebe under way
+  the boat's deck was joined to nothing (the vessel stood in no room, the
+  run's F92), and rooms planted beside a vessel in no room were nonsense.
+  What the story reached next from there was a planning need the beat it
+  reached for it (`transit_destination_unplanned`, filed when the boat
+  left);
+* a charter's named, living, off-stage bodies are REPORTED (`bodies_ahead`)
+  for the Room to weigh -- a town that already holds the people a story
+  would meet may need nobody new -- and never subtracted from the people
+  short: an institution's people are the offscreen simulator's, and a
+  person the Room plans is one the story needs that no institution holds.
 
 THE FILL ASKS A QUESTION ONCE (`fill_signature`, `fill_due`): what a fill
-would answer is the open needs, the player's room, the frontier's real
-shortfall and the grants it may answer under. A fill that ran against an
+would answer is the open needs, the frontier's shortfall, the grants it may
+answer under, and the player's room while a need is open. Planting ahead is
+frontier-wide -- what is short is a count, and a question with no need open
+is the same question wherever the player walks. A fill that ran against an
 unchanged question is not asked it again until a back-off has run, doubling
-for each answer that landed nothing, so an open need keeps being re-asked --
-less often the longer the Room has nothing for it, never not at all.
+for each answer that landed nothing, so an open need -- and a frontier the
+Room could plant -- keeps being re-asked: less often the longer the Room has
+nothing for it, never not at all.
+
+LOCAL EVENTS THE PLANTING SKETCH FILES ARE PACED HERE TOO
+(`LOCAL_EVENT_BEATS`, `record_sketched_event`, `sketched_event_wait`): the
+row remembers the last one, and the next waits this frame's beats out.
 """
 
 from __future__ import annotations
@@ -62,15 +83,22 @@ FRONTIER_KEY = "room_frontier"
 #: How far ahead of the player the frontier is counted, in room hops over
 #: passable edges and the plan's topology.
 FRONTIER_DEPTH_HOPS = 2
-#: Rooms wanted within that depth that the world holds -- furnished or
-#: planned, since a furnished room is the most prepared a room can be. Below
-#: it the frontier is short of rooms, unless the player's room has no way out
-#: at all (see the module docstring).
+#: Planned rooms nobody has furnished yet (the plan's stubs) wanted within
+#: that depth. Below it the frontier is short of rooms and the Room is asked
+#: to plan beyond the developed area -- unless the player's room has no way
+#: out at all -- and an exit into nothing within reach is short on top of it
+#: (`_rooms_short`). Two, the value the measure had from v2 § 3.2 until
+#: 2026-10-08 and restored with it. Replayed on the Brackwater checkpoints
+#: (chat 166) it reads short only where the area around the player had been
+#: furnished -- beats 6-11 at the tide chapel (one stub in reach, then none)
+#: and 13-14 on the Grebe in the down channel -- and never in the planned
+#: town, which held eight to twenty-one stubs within two hops.
 FRONTIER_ROOMS_MIN = 2
-#: People wanted ready ahead: authored person plans nobody has rendered yet,
-#: plus the named, living bodies of the frame's charters that are neither on
-#: stage nor an authored person's own (`_bodies_ahead`). Below it the frontier
-#: is short of people.
+#: Authored person plans nobody has rendered yet, anywhere in the frame,
+#: wanted ready ahead. Below it the frontier is short of people. A charter's
+#: off-stage bodies are reported beside the count (`bodies_ahead`) and never
+#: subtracted from it. Two, the value it always had: the people a story is
+#: about to meet, beside the institutions' own.
 FRONTIER_IDENTITIES_MIN = 2
 #: Fill records kept on the row; older ones fall off.
 FILLS_KEPT = 48
@@ -100,6 +128,18 @@ FILL_RETRY_BEATS_CAP = 16
 #: stub and plan lists included), so the cap trims a long story's tail and
 #: not a live question.
 FILL_MEMO_KEPT = 16
+#: LOCAL EVENTS ARE PACED: at most one local event the planting sketch files
+#: (`story/room_sketch.py`) per this many of this frame's beats. The owner
+#: asked for the Room to plan events locally "to some level to keep things
+#: interesting if allowed" (2026-10-08) and, of the conversation threads the
+#: day before, that chatter not be overdone; eight is two beats slower than
+#: the Dramaturge's own pacing (`mandates.BEATS_PER_PROPOSAL`, 6), so a
+#: sketched circumstance never arrives more often than a story direction is
+#: suggested. On the Brackwater run's pace (about ten minutes a beat) that is
+#: at most one sketched event in some eighty minutes of play. Only events the
+#: sketch files count: the full Planner's own local drama is its judgement
+#: under the grants, as before.
+LOCAL_EVENT_BEATS = 8
 
 
 def _row(cid, frame_id):
@@ -180,9 +220,10 @@ def _rooms_within(cid, scene, start, depth=FRONTIER_DEPTH_HOPS, contained=None):
     """`rooms_ahead`'s walk, with the third answer the shortfall needs:
     ``(reachable, stubs, unheld)``, where ``unheld`` is every reachable id
     that neither the scene nor the plan holds -- an exit into nothing, the
-    one kind of room within reach that is genuinely MISSING. Everything else
-    reachable is ready: a stub is a room the Director furnishes on entry and
-    a furnished room is already there."""
+    one kind of room within reach that is missing now. The rest of reach is
+    the plan's stubs, which stand ahead (the Director furnishes one on
+    entry), and the furnished rooms, which are the area the story has
+    already developed."""
     from story.room_slice import containment, room_graph, room_hops
     from world.structure import is_planned_stub, planned_topology
 
@@ -246,6 +287,18 @@ def _bodies_ahead(cid, frame_id):
     return out
 
 
+def _rooms_short(reachable, stubs, unheld):
+    """How many rooms the frontier is short of: the planned rooms it wants
+    ahead and does not have (`FRONTIER_ROOMS_MIN` less the stubs within
+    reach), or the exits into nothing within reach if those are more -- an
+    exit into nothing is missing now, however much the plan holds beyond
+    the other ways out. No reachable room at all is no shortfall: there is
+    no way out to plan along (the module docstring has the Grebe)."""
+    if not reachable:
+        return 0
+    return max(0, FRONTIER_ROOMS_MIN - len(stubs), len(unheld))
+
+
 def frontier_report(cid, frame_id=None, scene=None):
     """Measure the frontier: what stands ahead, what is short, what is
     open. Pure read; nothing is written."""
@@ -261,12 +314,15 @@ def frontier_report(cid, frame_id=None, scene=None):
     reachable, stubs, unheld = _rooms_within(cid, scene, start,
                                              contained=contained)
     holder = contained.get(start) if start else None
-    # READY IS WHAT THE WORLD HOLDS, not what it has yet to furnish: every
-    # reachable room but an exit into nothing. No reachable room at all is
-    # not a shortfall -- there is no way out to prepare along (the module
-    # docstring has the Grebe), so the count is withheld and says why.
-    ready = len(reachable) - len(unheld)
-    rooms_short = (max(0, FRONTIER_ROOMS_MIN - ready) if reachable else 0)
+    # WHAT STANDS AHEAD IS WHAT THE PLAN HOLDS AND NOBODY HAS FURNISHED: a
+    # furnished room within reach is ground the story already has, and a
+    # developed area is exactly where the Room is asked to plan beyond it
+    # (owner ruling, 2026-10-08). Withheld, and saying why, when there is no
+    # way out of the player's room to plan along.
+    rooms_short = _rooms_short(reachable, stubs, unheld)
+    stub_set, unheld_set = set(stubs), set(unheld)
+    developed = [rid for rid in reachable
+                 if rid not in stub_set and rid not in unheld_set]
     unmeasured = ("" if reachable else
                   "no way out of the player's room" if start else
                   "the player stands in no room")
@@ -276,8 +332,9 @@ def frontier_report(cid, frame_id=None, scene=None):
     bodies = _bodies_ahead(cid, frame_id)
     # THE OTHER TWO THIRDS OF `PLAN_KINDS`. `identities_ahead` measures whether
     # enough PEOPLE stand ahead of the story, and that is the right measure --
-    # `identities_short` counts only persons (plans and charter bodies). But the
-    # report was also the one standing place an unrendered plan surfaced at
+    # `identities_short` counts only authored person plans, with a charter's
+    # bodies beside it as `bodies_ahead`. But the report was also the one
+    # standing place an unrendered plan surfaced at
     # all, so a thing or a creature the Room had filed was in no read it has:
     # not here, not in `inspect_rooms` (which listed bodies only), and not in
     # the reply payload, which carries no scene. Reported beside the count
@@ -299,17 +356,20 @@ def frontier_report(cid, frame_id=None, scene=None):
         "depth_hops": FRONTIER_DEPTH_HOPS,
         "reachable": reachable,
         # The plan's prose-free stubs among them -- what the plan holds open
-        # ahead. Informative; the shortfall counts every room held.
+        # ahead, and what the room shortfall counts.
         "rooms_ahead": stubs,
+        # The furnished rooms among them -- the area the story has already
+        # developed, which a fill short of rooms plans beyond.
+        "rooms_developed": developed,
         "rooms_short": rooms_short,
         **({"rooms_unheld": unheld} if unheld else {}),
         **({"rooms_unmeasured": unmeasured} if unmeasured else {}),
         "identities_ahead": identities,
         # Counts per charter, not names: a town is dozens of people, and
-        # their names are `inspect_reserved_identities`' to list.
+        # their names are `inspect_reserved_identities`' to list. What the
+        # Room weighs when people are short; never subtracted from it.
         "bodies_ahead": bodies,
-        "identities_short": max(0, FRONTIER_IDENTITIES_MIN - len(identities)
-                                - sum(bodies.values())),
+        "identities_short": max(0, FRONTIER_IDENTITIES_MIN - len(identities)),
         "things_ahead": things,
         "open_needs": by_kind,
         # AND WHY EACH ONE IS OPEN. `kind` is three values against five
@@ -343,7 +403,11 @@ def _clock_seconds(cid, frame_id):
 
 
 def record_fill(cid, frame_id, *, turn_idx, package_uid="", needs=()):
-    """One fill landed: counted against the hour's budget."""
+    """One fill landed: counted against the hour's line. ``needs`` are the
+    needs it ANSWERED -- the ones a package it published answers or closes
+    (`plot_packages.operation_needs`, read by
+    `agents/story_planner.run_fill`), never the ones it merely carried -- and
+    a record naming any is one `fills_this_hour(needs_only=True)` counts."""
     entry = {"turn": int(turn_idx or 0),
              "elapsed_seconds": _clock_seconds(cid, frame_id),
              "at": time.time(), "package": str(package_uid or ""),
@@ -393,12 +457,34 @@ def spend_this_hour(cid, frame_id, turn_idx=None):
                if turn - int(s.get("turn") or 0) < HOUR_AS_TURNS_FALLBACK)
 
 
-def fills_this_hour(cid, frame_id, turn_idx=None):
+def fills_this_hour(cid, frame_id, turn_idx=None, *, needs_only=False):
     """How many fills landed within the last story hour -- by the clock's
     elapsed seconds when the story keeps one, else within the last
-    `HOUR_AS_TURNS_FALLBACK` beats."""
+    `HOUR_AS_TURNS_FALLBACK` beats.
+
+    THE TWO COUNTS THE FILL LINE IS HELD TO (`mandates.FILLS_PER_STORY_HOUR`,
+    N). A number the player states is the total: the caller counts every
+    fill that landed for planting and needs alike (owner, 2026-10-08:
+    "Your number is the total"; `mandates.fill_limit_stated`). With the
+    engine's default, a fill that plants ahead is held to N counting every
+    fill that landed, and a fill asked about an open need to N counting
+    only the fills that answered needs (``needs_only``: a fill's record
+    names the needs a package it published answered or closed,
+    `record_fill`). A fill that carried a need and published only planting
+    answered none, and is counted on the planting line alone: counted as a
+    need's fill, four planting fills that each declined a standing need
+    spent the needs' line too, and a need filed after them waited out the
+    whole story hour (review 2026-10-08, R2-2). Replayed on the Brackwater
+    checkpoints with every answer publishing, one count shared by both let
+    four planting fills at beats 6-11 spend the default four, and the run's
+    one need -- open from beat 16 to 23, in a run whose clock never passed
+    1,705 story seconds -- would never have been asked (an unanswered need
+    is a defect, owner 2026-09-19). Only a fill that LANDED is counted: an
+    answer that built nothing is held by its question's back-off
+    (`fill_due`), never by this count."""
     row = _row(cid, frame_id)
-    fills = [f for f in (row.get("fills") or []) if isinstance(f, dict)]
+    fills = [f for f in (row.get("fills") or []) if isinstance(f, dict)
+             and (f.get("needs") or not needs_only)]
     now = _clock_seconds(cid, frame_id)
     if now is not None:
         return sum(1 for f in fills
@@ -414,18 +500,38 @@ def fills_this_hour(cid, frame_id, turn_idx=None):
 # ---------------------------------------------------------------------------
 
 def fill_signature(report, mandate_uids=()):
-    """WHAT A FILL WOULD ANSWER, as one short hash: the open needs, the room
-    the player stands in, the frontier's shortfall, and the grants it would
-    answer under (a new grant is a new question -- the fill that could not
-    build without it can now). Nothing else in the report moves it: which
-    stubs or which plans stand ahead does not change whether anything is
-    MISSING, and a signature that moved with them re-asked a question whose
-    answer had not changed (the plan list moved when Abel Gale was rendered,
-    and nothing the fill could answer had)."""
+    """WHAT A FILL WOULD ANSWER, as one short hash: the open needs, the
+    frontier's shortfall, the grants it would answer under (a new grant is a
+    new question -- the fill that could not build without it can now), and
+    the room the player stands in WHILE A NEED IS OPEN: a need is answered
+    where the story reached for it, so a step moves that answer. Nothing
+    else in the report moves it: which stubs or which plans stand ahead does
+    not change how short the frontier is, and a signature that moved with
+    them re-asked a question whose answer had not changed (the plan list
+    moved when Abel Gale was rendered, and nothing the fill could answer
+    had). A room furnished, a plan met or a plan published moves the
+    shortfall, and that is a new question.
+
+    PLANTING AHEAD IS FRONTIER-WIDE, so a question with no need open is the
+    same question wherever the player walks. Keyed on the room, it was a new
+    question at every step, and the back-off never engaged for a player who
+    kept moving: an answer that lands nothing counts against no hourly line
+    (`fills_this_hour` counts landed fills), so the review's probes
+    (2026-10-08) asked 7 fills in 8 beats on one unchanged people-only
+    question, and -- with the room kept while rooms were short -- 6 in 7
+    beats for a player walking a developed area (R2-1), `fills_this_hour` at
+    0 throughout. Empty answers are held by this back-off and the chat's one
+    fill in flight, and otherwise only by a `calls_per_hour` spend where a
+    grant names one (none by default, `mandates.CALLS_PER_STORY_HOUR`). The
+    cost of the rule: a player who walks from one developed area to another
+    as short waits out the back-off before the Room plants beyond the
+    second (at most `FILL_RETRY_BEATS_CAP` beats)."""
+    needs = sorted(str(u) for u in (report.get("open_need_uids") or ()))
+    rooms_short = int(report.get("rooms_short") or 0)
     parts = {
-        "needs": sorted(str(u) for u in (report.get("open_need_uids") or ())),
-        "room": str(report.get("player_room") or ""),
-        "rooms_short": int(report.get("rooms_short") or 0),
+        "needs": needs,
+        "room": str(report.get("player_room") or "") if needs else "",
+        "rooms_short": rooms_short,
         "identities_short": int(report.get("identities_short") or 0),
         "mandates": sorted(str(u) for u in (mandate_uids or ())),
     }
@@ -514,3 +620,38 @@ def fill_due(cid, frame_id, signature, turn_idx):
     return False, ("answered at beat %d with %d empty in a row; next ask at "
                    "beat %d" % (asked, int(prior.get("misses") or 0),
                                 asked + wait))
+
+
+# ---------------------------------------------------------------------------
+# Local events the planting sketch files: paced
+# ---------------------------------------------------------------------------
+
+def record_sketched_event(cid, frame_id, *, turn_idx, package_uid="", op=""):
+    """The planting sketch filed a local event at beat ``turn_idx``: the
+    next one waits `LOCAL_EVENT_BEATS` of this frame's beats
+    (`sketched_event_wait`). The row rolls back with a reroll like the rest
+    of the Room's state, so a rewound event is not counted."""
+    entry = {"turn": int(turn_idx or 0), "package": str(package_uid or ""),
+             "op": str(op or "")[:40], "at": time.time()}
+
+    def _apply(row):
+        row["sketched_event"] = entry
+    return _update(cid, frame_id, _apply)
+
+
+def sketched_event_wait(cid, frame_id, turn_idx):
+    """Beats left before the planting sketch may file another local event:
+    0 when it may now -- none filed yet, one filed in a timeline the story
+    has since rewound out of, or `LOCAL_EVENT_BEATS` of this frame's beats
+    gone since the last (a live bubble's rows in the chat-wide numbering are
+    not this frame's beats, as for `fill_due`)."""
+    from core.jobs import story_rewound_past
+    last = _row(cid, frame_id).get("sketched_event")
+    if not isinstance(last, dict) or turn_idx is None:
+        return 0
+    filed = int(last.get("turn") or 0)
+    if story_rewound_past(filed, turn_idx):
+        return 0
+    beats = int(turn_idx) - filed - _other_frames_beats(
+        cid, frame_id, filed, turn_idx)
+    return max(0, LOCAL_EVENT_BEATS - beats)

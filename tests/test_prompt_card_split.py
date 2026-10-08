@@ -49,13 +49,17 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 278   # +1 (2026-10-08): `character_bare.not_answered_yet`, what
+PART_COUNT = 279   # +1 (2026-10-08): `character_bare.not_answered_yet`, what
                    # a mind called again in one beat left waiting on the
                    # player or the world (`character._not_answered_yet_note`).
                    # +1 (2026-10-08): `prose_contract.room_prepare_note`,
                    # what the room author is told when it designs a room in
                    # view between turns, in the story's pack rather than in
                    # code (agents/director_rooms.py).
+                   # +1 (2026-10-08): `room_sketch`, the planting sketch --
+                   # the fill's light tier, one compact call that files
+                   # light plans or hands the question to the full
+                   # planner (`story/room_sketch.py`).
                    # +2 (2026-10-08): `character_jev.tell_when` (which of
                    # its own steps a tell shows at, so the cue is placed
                    # there and not after the whole beat) and
@@ -327,10 +331,11 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
 
     pack = installed_language_packs()[language]
     card = pack.card(CARD)
-    # 38 since 2026-10-07: `conversation_thread`. 38 since 2026-09-27:
+    # 39 since 2026-10-08: `room_sketch`, the fill's planting sketch. 38
+    # since 2026-10-07: `conversation_thread`. 38 since 2026-09-27:
     # `character_bare`, the bare character card; 37 the same day,
     # `character`, the full card, deleted with its contract.
-    assert len(card["prompts"]) == 38
+    assert len(card["prompts"]) == 39
     # The five hands survive as channel order (and the spatial hand's room
     # chunks); their cores went with the causal Director on 2026-09-27.
     assert len(card["specialists"]) == 5

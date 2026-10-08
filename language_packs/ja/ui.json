@@ -2334,6 +2334,7 @@
   "The room lost its last answer to the model; what it had already settled stands, and its notes say what that was.": "ルームは最後の回答をモデルから受け取れませんでした。すでに決着した内容はそのまま残っており、それが何であったかはノートが述べます。",
   "The room reached the spend you allowed for this reply; what it settled stands, and it goes on under your next word.": "ルームはこの返答に許された消費に達しました。決着したことはそのまま残り、あなたの次の言葉のもとで続きます。",
   "The room stopped at its budget for this reply; what it settled stands, and it can go on when asked.": "ルームはこの返答の予算で止まりました。決着したことはそのまま残り、求められれば続けられます。",
+  "The room would plan what lies ahead of the story and has no grant to. Tell the Story Planner it may prepare ahead between beats.": "ルームは物語の先にあるものを計画しようとしていますが、そのための権限委任がありません。ビートとビートのあいだに先回りして準備してよいと、ストーリープランナーに伝えてください。",
   "the room's mandate vocabulary has no research capability; nothing can grant the web until it is added": "ルームの権限委任語彙に調査の能力がありません。追加されるまで、ウェブを許可することはできません",
   "The room's shape — a rectangle when unset": "部屋の形状――未設定なら長方形",
   "The rule that matters most:": "最も重要なルール:",
