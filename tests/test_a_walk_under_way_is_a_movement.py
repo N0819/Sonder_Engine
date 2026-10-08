@@ -27,3 +27,19 @@ def test_the_encoder_writes_a_walk_that_has_not_arrived(lang):
     for pin in PINS[lang]:
         assert pin in text
     assert "only when a body changes room" not in text
+
+
+THING_PINS = {"en": ("lives in that field", "rewrites it"),
+              "ja": ("その欄に書きます", "書き直してください")}
+
+
+@pytest.mark.parametrize("lang", sorted(THING_PINS))
+def test_a_typed_fact_is_not_restated_in_a_thing_condition(lang):
+    """Scratch story 166, 2026-10-07: the encoder wrote the player's lantern
+    `lit: false` with `condition: "unlit, swing handle ticking ..."`; the next
+    beat relit it (`lit: true`) and, `condition` unmentioned, kept "unlit" --
+    and the page read "No light came. The wick was dead"."""
+    path = ROOT / "language_packs" / lang / "cards" / "system_prompts" / "encoder" / "entities.txt"
+    text = path.read_text(encoding="utf-8")
+    for pin in THING_PINS[lang]:
+        assert pin in text
