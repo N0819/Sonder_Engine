@@ -43,3 +43,20 @@ def test_a_typed_fact_is_not_restated_in_a_thing_condition(lang):
     text = path.read_text(encoding="utf-8")
     for pin in THING_PINS[lang]:
         assert pin in text
+
+
+READ_PINS = {"en": ("An act that asks the world something is answered by it", "answers nothing"),
+             "ja": ("世界に何かを問う行為には、世界が答えます", "何も答えていません")}
+
+
+@pytest.mark.parametrize("lang", sorted(READ_PINS))
+def test_a_read_is_answered_by_the_world(lang):
+    """Scratch story 166 idx 18: the player unfolded and read a paper from
+    the coat's pocket; the resolve said only that her eyes tracked across
+    the sheet, the encoder may not invent a reading the record does not
+    hold, and the page never said what was written -- an unanswered read
+    (the owner, 2026-09-19: a bug)."""
+    path = ROOT / "language_packs" / lang / "cards" / "system_prompts" / "prose_contract" / "director_resolve.txt"
+    text = path.read_text(encoding="utf-8")
+    for pin in READ_PINS[lang]:
+        assert pin in text
