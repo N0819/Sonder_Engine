@@ -280,3 +280,19 @@ class TestTheSpendIsTheProvidersOwnCount:
             providers._chat_complete_once(
                 "narrator", "sys", "user", None, True, 100, None)
         assert providers.last_output_spend.get() is None
+
+
+def test_a_retry_given_more_room_that_ran_away_says_it_was_given_room(monkeypatch):
+    """The first stop was thinking crowding the answer out, so the re-ask
+    went at 70,000 -- and THAT ran away. The lost beat's message named the
+    re-ask "asked again at the same budget, not given more room", which is
+    the opposite of what happened (review of the 2026-10-08 landing)."""
+    _script(monkeypatch, [(CROWDED_OUT, "length", 50000, 49600),
+                          (RUNAWAY, "length", 70000, 20000)])
+
+    with pytest.raises(RuntimeError) as exc:
+        _narrate(repair_attempts=0)
+
+    msg = str(exc.value)
+    assert "retried at 70000 tokens and the retry ran away" in msg
+    assert "same budget" not in msg

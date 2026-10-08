@@ -678,6 +678,29 @@ def _bare_prose_answer(step_key, raw):
     return {"prose": text}
 
 
+def _parse_or_bare(step_key, raw):
+    """`(parsed, error)`: the answer parsed whole, or -- where it does not
+    parse -- the bare-prose page a prose step may answer with
+    (`_bare_prose_answer`), read exactly as the first attempt reads it.
+
+    EVERY ASKING OF THE SAME REQUEST READS ITS ANSWER THE SAME WAY. The
+    runaway or escalation re-ask, the empty-object stall re-ask and the
+    malformed-answer fresh re-ask each parsed whole only, so a narrator page
+    the first attempt would have taken as bare prose -- which GLM 5.2
+    thinking wrote on 4 of 13 first answers -- failed the beat when it came
+    back on a re-ask (review of the 2026-10-08 landing)."""
+    try:
+        return _parse_whole(raw), None
+    except Exception as exc:
+        bare = _bare_prose_answer(step_key, raw)
+        if bare is not None:
+            note_step_warning(
+                f"{step_key}: the answer came as bare prose without its JSON "
+                "envelope; the prose is the answer")
+            return bare, None
+        return {}, str(exc)
+
+
 #: The response format of a rung that rebuilds a broken answer -- the
 #: temperature-0 repair and every fallback candidate -- whatever the role
 #: or the call chose (see `providers._role_json_mode`). The grammar where
@@ -1191,12 +1214,7 @@ def complete_validated_json(
                        f"once with {token_ceiling} tokens")
                     + f" ({time.monotonic() - _t0:.1f}s)")
                 max_tokens = _budget
-                try:
-                    parsed = _parse_whole(raw)
-                    parse_error = None
-                except Exception as exc:
-                    parsed = {}
-                    parse_error = str(exc)
+                parsed, parse_error = _parse_or_bare(step_key, raw)
 
                 report = validate_llm_output_strict(
                     step_key,
@@ -1270,12 +1288,10 @@ def complete_validated_json(
             note_step_warning(
                 "llm second call: empty-object reply treated as a stall; "
                 f"re-asked the original request ({time.monotonic() - _t0:.1f}s)")
-            try:
-                previous_parsed = _parse_whole(previous_raw)
-                parse_error = None
-            except Exception as exc:
-                previous_parsed = {}
-                parse_error = str(exc)
+            previous_parsed, parse_error = _parse_or_bare(step_key, previous_raw)
+            # The request asked again: whether ITS answer was cut is what the
+            # rungs after this one read (`_original_cut`, the final message).
+            ran_out_of_room = output_ran_out_of_room(previous_raw)
             report = validate_llm_output_strict(
                 step_key, previous_parsed, source_payload=payload)
             if parse_error:
@@ -1328,6 +1344,10 @@ def complete_validated_json(
     # What the rebuild and the fallbacks are repairing, kept for the check
     # that they did not repair it by deleting it (`_unshrunk`).
     _original, _original_errors = previous_parsed, list(report.errors or [])
+    # Whether the request's own last answer was cut. The rungs below reassign
+    # `ran_out_of_room` from THEIR answers, so the fresh re-ask, which must
+    # never repeat a request that ran out of room, reads it from here.
+    _original_cut = ran_out_of_room
 
     # Skip same-provider repair when the primary provider itself errored --
     # repairing against a down provider just wastes attempts; go to fallbacks.
@@ -1523,6 +1543,7 @@ def complete_validated_json(
     # truncation is the re-ask with room above, so a cut answer is not asked
     # again here).
     if (parse_error is not None and not _original and not ran_out_of_room
+            and not _original_cut
             and not provider_errored and last_provider_error is None):
         for _attempt in range(MALFORMED_REASKS):
             _t0 = time.monotonic()
@@ -1548,10 +1569,7 @@ def complete_validated_json(
             note_step_warning(
                 "llm second call: no answer parsed; asked the original "
                 f"request afresh ({time.monotonic() - _t0:.1f}s)")
-            try:
-                fresh_parsed, fresh_error = _parse_whole(fresh), None
-            except Exception as exc:
-                fresh_parsed, fresh_error = {}, str(exc)
+            fresh_parsed, fresh_error = _parse_or_bare(step_key, fresh)
             fresh_report = validate_llm_output_strict(
                 step_key, fresh_parsed, source_payload=payload)
             if fresh_error:
@@ -1625,7 +1643,15 @@ def complete_validated_json(
     # schema instead of at the budget. Say which it was, and say whether the
     # escalation had anywhere left to go.
     if ran_out_of_room:
-        if ran_away:
+        if ran_away and token_ceiling:
+            # The first stop was thinking crowding the answer out, so it was
+            # given more room -- and the retry ran away. Saying "asked again
+            # at the same budget" here sent the reader the wrong way.
+            _why = (f"; retried at {token_ceiling} tokens and the retry ran "
+                    "away -- more of its output was answer than thinking, and "
+                    "longer than any stage writes -- so more room would only "
+                    "have lengthened it")
+        elif ran_away:
             _why = ("; the answer ran away -- more of the output was answer "
                     "than thinking, and longer than any stage writes -- so it "
                     "was asked again at the same budget, not given more room, "

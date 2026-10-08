@@ -184,3 +184,38 @@ class TestTheFreshAsk:
         assert not any("asked the original request afresh" in w
                        for w in warnings), warnings
         assert len(llm.calls) == 2
+
+
+class TestTheReAskReadsLikeTheFirstAsk:
+    def test_a_request_that_ran_out_of_room_is_not_asked_again_afresh(
+            self, monkeypatch, warnings):
+        """Cut, re-asked with more room and cut again, then a rebuild that
+        came back whole but malformed: the rebuild's answer must not make
+        the request look uncut, or the fresh ask repeats the very request
+        that ran out of room (review of the 2026-10-08 landing)."""
+        cut = GOOD[:-60]
+        monkeypatch.setattr(llm_quality, "output_ran_out_of_room",
+                            lambda raw: raw == cut)
+        monkeypatch.setattr(llm_quality, "escalated_max_tokens",
+                            lambda max_tokens: 30000)
+        llm = _ladder(monkeypatch, [cut, cut, UNMENDABLE])
+        with pytest.raises(RuntimeError):
+            _run()
+        assert len(llm.calls) == 3, [c.get("max_tokens") for c in llm.calls]
+        assert not any("asked the original request afresh" in w
+                       for w in warnings), warnings
+
+    def test_a_bare_prose_page_on_the_fresh_ask_is_the_answer(
+            self, monkeypatch, warnings):
+        """The first attempt takes a narrator page that came without its JSON
+        envelope as the answer (`_bare_prose_answer`); the fresh ask of the
+        same request reads its answer the same way."""
+        broken = '{"prose": The door stood open., "new_specifics": []}'
+        page = "The door stood open. Rain came in across the boards."
+        llm = _ladder(monkeypatch, [broken, broken, page])
+        out = llm_quality.complete_validated_json(
+            role="narrator", step_key="narrator", system="sys",
+            payload={"x": 1}, temperature=0.7)
+        assert out["prose"] == page
+        assert len(llm.calls) == 3
+        assert any("bare prose" in w for w in warnings), warnings
