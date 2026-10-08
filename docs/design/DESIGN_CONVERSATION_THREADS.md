@@ -1,6 +1,9 @@
 # Conversation threads: people in a room talking to each other
 
-Status: steps 1-2 being built (2026-10-07); steps 3-4 designed, not built.
+Status: steps 1-2 built (2026-10-07); steps 3-4 designed, not built
+(`docs/UNBUILT_LIVING_WORLD.md` § 2.42). Delegation could not open until the
+same day's repair: the voice's `still_owes` never reached the commit (Design.md,
+"A served thing changes hands, and a promise is owed").
 
 ## 0. The ask
 

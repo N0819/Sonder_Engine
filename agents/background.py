@@ -2630,4 +2630,24 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
             "charter_act": out.get("charter_act"),
             "charter_offers": charter_offers,
             "activity": str(out.get("activity") or "").strip().casefold(),
-            "goes_to": str(out.get("goes_to") or "").strip()}
+            "goes_to": str(out.get("goes_to") or "").strip(),
+            # THE TWO TYPED SERVICE FIELDS. Both were on the schema, the card
+            # and the commit from 2026-09-20 and dropped HERE: the voice
+            # answered them and nothing downstream ever saw one. Measured on
+            # the 2026-10-07 scratch play db: the model set `still_owes` 11
+            # times and `hands_over` 3 times; 0 of 342 stored declarations
+            # carried either, so no promise was ever recorded as owed
+            # (`pending_act`) and no served thing ever changed hands.
+            "hands_over": _typed_service(out.get("hands_over")),
+            "still_owes": _typed_service(out.get("still_owes"))}
+
+
+def _typed_service(value):
+    """`{what, to}` from a voice's `hands_over`/`still_owes`, or None when it
+    names nothing: a service with no thing in it is no service."""
+    if not isinstance(value, dict):
+        return None
+    what = " ".join(str(value.get("what") or "").split())
+    if not what:
+        return None
+    return {"what": what, "to": " ".join(str(value.get("to") or "").split())}

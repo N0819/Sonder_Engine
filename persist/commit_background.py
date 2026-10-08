@@ -2993,8 +2993,18 @@ def advance_conversation_threads(ctx, reactions, scene, presences):
         t["last"] = [{"speaker": str(r.get("name") or ""),
                       "words": str((r.get("dialogue_log_entry") or {}).get("exact_quote") or ""),
                       "act": str(r.get("action") or "")} for r in rows]
-        if (any((r.get("thread") or {}).get("done") for r in rows)
-                or (t.get("origin") == "delegation" and any(r.get("hands_over") for r in rows))
+        delivered = (t.get("origin") == "delegation"
+                     and any(r.get("hands_over") for r in rows))
+        if delivered:
+            # The debt the delegation was opened from is discharged, whoever
+            # of them did the handing: the body that took the task is not
+            # asked again to deliver what its coworker already put in hand.
+            _k, owner = presence_record_for(
+                presences, str((t.get("participants") or [""])[0]), scene)
+            owed = (owner or {}).get("pending_act") or {}
+            if " ".join(str(owed.get("what") or "").split()) == t.get("purpose"):
+                owner.pop("pending_act", None)
+        if (any((r.get("thread") or {}).get("done") for r in rows) or delivered
                 or t["exchanges"] >= THREAD_MAX_EXCHANGES):
             t["status"] = "done"
     for t in threads.values():
@@ -3207,6 +3217,15 @@ def apply_presence_handovers(scene, reactions, presences, warn=None):
 
     for reaction in reactions or ():
         if not isinstance(reaction, dict):
+            continue
+        if reaction.get("is_figure"):
+            # DECLARED BEFORE THE RESOLVE, so the Director resolved the act
+            # and its encoder already wrote whatever moved: scratch story 165
+            # turn 4581, a keeper's declared reach for the premium book came
+            # back as the encoder's own `inventory_ops` transfer. Minting it
+            # again here would put a second book in the room. This applier is
+            # for the voices that speak AFTER the resolve, which nothing else
+            # writes.
             continue
         gift = reaction.get("hands_over")
         if not isinstance(gift, dict):

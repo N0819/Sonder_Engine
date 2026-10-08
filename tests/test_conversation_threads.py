@@ -223,3 +223,29 @@ def test_a_thread_nobody_hears_lapses(temp_db):
     wset_for_frame(cid, background.THREADS_KEY, {"t1": _thread(last_turn=2)}, None)
     assert advance_conversation_threads(
         _ctx(cid, idx=2 + background.THREAD_IDLE_BEATS + 1), [], SCENE, {}) == {}
+
+
+def _owing(what):
+    return {"p_0": {"name": KEEPER, "pending_act": {"what": what, "to": "the stranger"}}}
+
+
+def test_a_delivered_delegation_discharges_the_owners_debt(temp_db):
+    """The keeper took the task and Ned put the thing in hand: the keeper is
+    not asked again to deliver it."""
+    cid = beat._chat(temp_db)
+    wset_for_frame(cid, background.THREADS_KEY, {"t1": _thread()}, None)
+    presences = _owing(_thread()["purpose"])
+    advance_conversation_threads(_ctx(cid), _voiced(
+        "t1", (HAND, '"Here."', False, {"what": "the tally book", "to": "the stranger"})),
+        SCENE, presences)
+    assert "pending_act" not in presences["p_0"]
+
+
+def test_a_different_debt_is_not_discharged(temp_db):
+    cid = beat._chat(temp_db)
+    wset_for_frame(cid, background.THREADS_KEY, {"t1": _thread()}, None)
+    presences = _owing("a bowl of stew")
+    advance_conversation_threads(_ctx(cid), _voiced(
+        "t1", (HAND, '"Here."', False, {"what": "the tally book", "to": "the stranger"})),
+        SCENE, presences)
+    assert presences["p_0"]["pending_act"]["what"] == "a bowl of stew"

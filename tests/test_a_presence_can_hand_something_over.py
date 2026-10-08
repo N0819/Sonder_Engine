@@ -84,3 +84,54 @@ def test_a_nameless_thing_is_refused():
 def test_the_field_is_on_the_reaction_schema():
     from llm.schemas import BackgroundReactOutput
     assert "hands_over" in model_fields_of(BackgroundReactOutput)
+
+
+def test_a_figure_the_director_resolved_is_not_applied_twice():
+    """A charter figure declared BEFORE the resolve had its act resolved by
+    the Director, whose encoder writes what moved: scratch story 165 turn
+    4581, a keeper's declared reach for the premium book came back as the
+    encoder's own `inventory_ops` transfer. Applying its `hands_over` here as
+    well would put a second book in the room."""
+    sc = _scene()
+    reaction = _reaction()
+    reaction[0]["is_figure"] = True
+    assert apply_presence_handovers(sc, reaction, {}) == []
+    assert sorted(sc["entities"]) == ["char_sal"]
+
+
+def _served(temp_db, monkeypatch, answer):
+    from tests.test_background_description_address import (
+        DESCRIPTOR, THREE_TRADERS, _make_ctx)
+
+    monkeypatch.setattr(background, "_agent_json",
+                        lambda role, stage, prompt, payload, **kw: answer)
+    ctx = _make_ctx(temp_db, THREE_TRADERS, addressed_refs=[DESCRIPTOR],
+                    player_input="You. The man with the braided cords. An ale.")
+    ctx["director_interpret"]["sequence"] = [
+        {"type": "speech", "visibility": "overt", "volume": "normal",
+         "text": "You. The man with the braided cords. An ale."}]
+    out = background.background_react(ctx, nonce="seed")
+    assert out["fired"], out
+    return out["reactions"][0]
+
+
+def test_the_voice_hands_its_service_fields_on(temp_db, monkeypatch):
+    """THE PRODUCER SIDE, which nothing tested. From 2026-09-20, when the
+    fields, the card clause and the applier were built, the reactor returned
+    neither: on the 2026-10-07 scratch play db the model had set `still_owes`
+    11 times and `hands_over` 3, and 0 of 342 stored declarations carried
+    one -- so no promise was ever owed and nothing served changed hands."""
+    reaction = _served(temp_db, monkeypatch, {
+        "reacts": True, "action": "draws a mug and sets it down",
+        "dialogue_log_entry": {"speaker": "?", "exact_quote": "There. Stew's coming."},
+        "hands_over": {"what": " a mug of  ale ", "to": "the stranger"},
+        "still_owes": {"what": "a bowl of stew", "to": "the stranger"}})
+    assert reaction["hands_over"] == {"what": "a mug of ale", "to": "the stranger"}
+    assert reaction["still_owes"] == {"what": "a bowl of stew", "to": "the stranger"}
+
+
+def test_a_service_that_names_nothing_is_none(temp_db, monkeypatch):
+    reaction = _served(temp_db, monkeypatch, {
+        "reacts": True, "action": "nods", "dialogue_log_entry": None,
+        "hands_over": {"what": "  ", "to": "the stranger"}, "still_owes": None})
+    assert reaction["hands_over"] is None and reaction["still_owes"] is None
