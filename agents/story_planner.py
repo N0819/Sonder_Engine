@@ -1075,6 +1075,15 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None):
                    "verdicts": this["verdicts"] or out["verdicts"]}
         if this["stopped"] not in RESUMABLE_STOPS:
             break
+    if out is None:
+        # CANCELLED BEFORE ITS FIRST PASS: nothing ran, so nothing was
+        # answered. The loop used to fall out holding None and fail the job
+        # on `out["passes"]` -- a TypeError filed as the job's error where
+        # the truth was a cancellation, and one the fill's back-off would now
+        # read as an empty answer.
+        out = {"reply": "", "published": [], "verdicts": [], "claims": [],
+               "calls": 0, "steps": 0, "notes": [], "stopped": "cancelled",
+               "regime": "task", "ask_dramaturge": None}
     out["passes"] = passes
     return out
 
@@ -1700,15 +1709,30 @@ def run_dramaturge_pass(cid, frame_id, *, base_turn=None, brief=None, job=None):
 def _fill_task(cid, frame_id, report):
     from world.planning_needs import open_planning_needs
     needs = open_planning_needs(cid, frame_id)[:FILL_NEEDS_PER_JOB]
-    return {
-        "kind": "fill",
-        "needs": needs,
-        "frontier": {"player_room": report.get("player_room"),
-                     "rooms_short": report.get("rooms_short"),
-                     "identities_short": report.get("identities_short"),
-                     "rooms_ahead": report.get("rooms_ahead"),
-                     "identities_ahead": report.get("identities_ahead")},
-    }
+    frontier = {"player_room": report.get("player_room"),
+                "rooms_short": report.get("rooms_short"),
+                "identities_short": report.get("identities_short"),
+                "rooms_ahead": report.get("rooms_ahead"),
+                "identities_ahead": report.get("identities_ahead"),
+                "bodies_ahead": report.get("bodies_ahead") or {}}
+    # Only when they say something: an exit into nothing is the one room
+    # the frontier is short of, and a room with no way out is why it is not.
+    for key in ("rooms_unheld", "rooms_unmeasured"):
+        if report.get(key):
+            frontier[key] = report[key]
+    return {"kind": "fill", "needs": needs, "frontier": frontier}
+
+
+def _fill_wanted(report):
+    """Whether the frontier report leaves a fill anything to answer: an open
+    need, or a real shortfall (`room_frontier.frontier_report`)."""
+    return bool(report.get("open_need_uids") or report.get("rooms_short")
+                or report.get("identities_short"))
+
+
+def _mandate_uids(cid, frame_id, turn_idx):
+    from story.mandates import active_mandates
+    return [m["uid"] for m in active_mandates(cid, frame_id, turn_idx)]
 
 
 def run_fill(cid, frame_id, *, base_turn, job=None):
@@ -1718,16 +1742,39 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
     thread as the Planner's own line."""
     from core.jobs import story_rewound_past
     from story import room_conversation as room
-    from story.room_frontier import frontier_report, record_fill
+    from story.room_frontier import (fill_signature, frontier_report,
+                                     record_fill, record_fill_asked)
     now = room.current_turn_idx(cid)
     if story_rewound_past(base_turn, now):
         return {"skipped": "rewound", "base_turn": base_turn, "turn": now}
     report = frontier_report(cid, frame_id)
-    task = _fill_task(cid, frame_id, report)
-    if not task["needs"] and not report.get("rooms_short") \
-            and not report.get("identities_short"):
+    if not _fill_wanted(report):
         return {"skipped": "nothing short"}
-    out = _run_task(cid, frame_id, task, base_turn=base_turn, job=job)
+    task = _fill_task(cid, frame_id, report)
+    # THE QUESTION THIS FILL WAS ASKED, read where the task was built, so the
+    # memo files the answer against exactly what the Room was shown.
+    signature = fill_signature(report, _mandate_uids(cid, frame_id, now))
+
+    def _asked(published):
+        # Filed at the beat the answer CAME, not the beat that queued it: a
+        # fill runs for several beats, and the back-off counts from the
+        # answer. A story that rewound under the job answered nothing the
+        # timeline it is now in asked.
+        end = room.current_turn_idx(cid)
+        if not story_rewound_past(base_turn, end):
+            record_fill_asked(cid, frame_id, signature, turn_idx=end,
+                              published=published)
+
+    try:
+        out = _run_task(cid, frame_id, task, base_turn=base_turn, job=job)
+    except Exception:
+        # A fill that failed (the provider refused, the credit ran out) is an
+        # empty answer for the back-off: re-asking on the very next commit is
+        # what a dead provider makes expensive.
+        _asked(False)
+        raise
+    if out["stopped"] not in ("rewound", "cancelled"):
+        _asked(bool(out["published"]))
     if out["published"]:
         record_fill(cid, frame_id, turn_idx=now, package_uid=out["published"][0],
                     needs=[n["uid"] for n in task["needs"]])
@@ -1743,19 +1790,21 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
 def schedule_room_work(ctx):
     """From the commit tail: measure the frontier and queue what is due --
     a fill when something is short or a need is open, under an
-    identity-fill grant with room in the hour; a Dramaturge pass when a
-    grant carries the dial and the pacing budget says the story is due a
-    turn; a bible fold when a batch of thread lines has aged past the
-    window. With no grant the status row asks. Never raises; returns the
-    first job queued, or None."""
+    identity-fill grant with room in the hour, and only when what it would
+    answer has changed since a fill last answered it or the back-off has run
+    (`room_frontier.fill_due`); a Dramaturge pass when a grant carries the
+    dial and the pacing budget says the story is due a turn; a bible fold
+    when a batch of thread lines has aged past the window. With no grant the
+    status row asks. Never raises; returns the first job queued, or None."""
     from core import jobs
     from persist.llm_capture import room_capture
     from story import room_conversation as room
     from story.mandates import (beats_per_proposal, fill_limit, spend_limits,
                                 surprise_dial)
     from story.room_bible import schedule_fold
-    from story.room_frontier import (fills_this_hour, frontier_report,
-                                     record_measure, spend_this_hour)
+    from story.room_frontier import (fill_due, fill_signature, fills_this_hour,
+                                     frontier_report, record_measure,
+                                     spend_this_hour)
     from story.room_proposals import last_pass_turn
     cid = ctx.chat.id
     frame_id = getattr(ctx.turn, "frame_id", None)
@@ -1767,9 +1816,7 @@ def schedule_room_work(ctx):
     hour_open = (spend["calls_per_hour"] is None
                  or spend_this_hour(cid, frame_id, turn_idx) < spend["calls_per_hour"])
 
-    wanting = bool(report.get("open_need_uids")) or report.get("rooms_short") \
-        or report.get("identities_short")
-    if wanting:
+    if _fill_wanted(report):
         limit = fill_limit(cid, frame_id, turn_idx)
         if limit is None:
             current = room.status(cid, frame_id)
@@ -1778,14 +1825,29 @@ def schedule_room_work(ctx):
                 write_status(cid, frame_id, line=current.get("line"),
                              questions=texts + [WAITING_LINE], turn_idx=turn_idx)
         elif hour_open and fills_this_hour(cid, frame_id, turn_idx) < limit:
-            def _fill(job):
-                # ARMED INSIDE THE JOB, not around the submit. `core/jobs.py`
-                # clears turn-scoped contextvars by design and this body runs
-                # outside any reply, so a scope set here is the only one the
-                # calls below can see (`persist/llm_capture.room_capture`).
-                with room_capture(cid, "fill"):
-                    return run_fill(cid, frame_id, base_turn=turn_idx, job=job)
-            queued.append(jobs.submit(cid, FILL_JOB_KEY, _fill, base_turn=turn_idx))
+            # ASKED ONCE, THEN BACKED OFF. Measured on the Brackwater run
+            # (chat 166): a fill was in flight at every kept commit from turn
+            # 6 to 30 and the Room answered the same unchanged question with
+            # "nothing to build" again and again. A changed question -- a new
+            # need, a new room, a moved shortfall, a new grant -- is asked at
+            # once; an unchanged one waits out `fill_wait_beats`.
+            due, why = fill_due(cid, frame_id, fill_signature(
+                report, _mandate_uids(cid, frame_id, turn_idx)), turn_idx)
+            if not due:
+                logger.info("room fill not queued for chat %s: the question "
+                            "is unchanged (%s)", cid, why)
+            else:
+                def _fill(job):
+                    # ARMED INSIDE THE JOB, not around the submit.
+                    # `core/jobs.py` clears turn-scoped contextvars by design
+                    # and this body runs outside any reply, so a scope set
+                    # here is the only one the calls below can see
+                    # (`persist/llm_capture.room_capture`).
+                    with room_capture(cid, "fill"):
+                        return run_fill(cid, frame_id, base_turn=turn_idx,
+                                        job=job)
+                queued.append(jobs.submit(cid, FILL_JOB_KEY, _fill,
+                                          base_turn=turn_idx))
 
     dial = surprise_dial(cid, frame_id, turn_idx)
     if dial is not None and hour_open and turn_idx is not None:

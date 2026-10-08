@@ -165,9 +165,16 @@ for what follows. Residuals of this entry rather than a section of their own:
   one package's lifetime; `limits.packages` / `rooms` / `people` are shown to
   the Planner and cited, not enforced by code -- only `fills_per_hour` is.
 - **The frontier is a count, not a ranking.** v2 § 3.2's predictive staging
-  (exits, declared destinations, projects that name places) is not read;
-  the measure is planned stubs within `FRONTIER_DEPTH_HOPS` and unrendered
-  person plans anywhere, and the Planner is told what is short.
+  (exits, declared destinations, projects that name places) is not read; the
+  measure is every room within `FRONTIER_DEPTH_HOPS` the world holds
+  (furnished or planned; an exit into nothing is the only gap; no way out is
+  no shortfall) and the people ready ahead (unrendered person plans plus
+  off-stage charter bodies, counted frame-wide, not by reach), and the
+  Planner is told what is missing. Since 2026-10-08 `FRONTIER_ROOMS_MIN` and
+  `FRONTIER_IDENTITIES_MIN` count what is held and ready, no longer
+  unfurnished stubs and authored plans alone: whether a developed area
+  should still prompt the Room to plant beyond it, and whether a charter's
+  people should count only within reach, are the owner's to rule.
 - **The region tier has the field and the grouping, not yet the index of
   its own.** `world/regions.py` (2026-09-04) gives every room a derived
   `region` and groups `room_index` by it, and `inspect_contradictions`
@@ -276,10 +283,18 @@ for what follows. Residuals of this entry rather than a section of their own:
   as legible and is not listed, so a plan that would invite an absent
   character's drive has to wait for their return to read it. Widening the
   read to the away roster is one argument.
-- **The fill job is queued from the commit tail, not from a threshold
-  crossing.** Every commit with an open need or a short frontier and a
-  grant submits one job (deduped per chat, capped per story hour); there
-  is no separate low-water trigger.
+- **The fill job is queued from the commit tail, on a changed question.**
+  Every commit with an open need or a real shortfall and a grant submits one
+  job (deduped per chat, capped per story hour) when what it would answer --
+  open needs, the player's room, the shortfall, the active grants -- changed
+  since a fill last answered it, or when the back-off from that answer has
+  run (`room_frontier.fill_due`, 2026-10-08; `FILL_RETRY_BEATS` = 2 doubling
+  per empty answer to `FILL_RETRY_BEATS_CAP` = 16, `FILL_MEMO_KEPT` = 16
+  questions remembered). Left: the memo rides the `room_frontier` row and
+  rolls back with a reroll like the rest of the Room's state (F31), so a
+  reroll landing between an answer and the next checkpoint re-asks once; and
+  a fill that published something against an unchanged question waits the
+  same first back-off as an empty one, which the owner has not ruled on.
 
 - **The story bible is built** (2026-09-04, `story/room_bible.py`, plan § 6
   item 7): seven sections, every entry with a source the code verifies,

@@ -416,7 +416,11 @@ def test_the_frontier_counts_what_stands_ahead(temp_db):
     cid, _ = _story(temp_db)
     report = rf.frontier_report(cid, None)
     assert report["player_room"] == "quay"
-    assert report["rooms_ahead"] == [] and report["rooms_short"] == rf.FRONTIER_ROOMS_MIN
+    # The furnished warehouse is a room ready ahead, not a gap: no stub
+    # stands ahead, and the frontier is one room short, not two (a
+    # shortfall is something missing -- `tests/test_room_fill_gate.py`).
+    assert report["rooms_ahead"] == []
+    assert report["rooms_short"] == rf.FRONTIER_ROOMS_MIN - 1
     assert report["identities_short"] == rf.FRONTIER_IDENTITIES_MIN
     plant_structure(cid, {"key": "port", "name": "Port"}, {
         "custom_house": {"name": "Custom House", "adjacent": [{"to": "quay"}]},
