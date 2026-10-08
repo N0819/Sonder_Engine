@@ -8,8 +8,8 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2653 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4975 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/character_bare.py` | 1064 |  | `agents.common`, `llm.prompts`, `mind` |
+| `agents/character.py` | 4995 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character_bare.py` | 1077 |  | `agents.common`, `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/character_tools.py` | 732 |  | `core.db` |
 | `agents/common.py` | 12528 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
@@ -17,14 +17,14 @@
 | `agents/director.py` | 7364 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3811 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
-| `agents/director_fanout.py` | 1093 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2450 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 2094 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 2627 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1632 |  | `core.db`, `llm`, `llm.prompts` |
-| `agents/director_rooms.py` | 1221 |  | — |
+| `agents/director_rooms.py` | 1271 |  | — |
 | `agents/director_scopes.py` | 599 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 754 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
@@ -33,10 +33,10 @@
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2959 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
-| `agents/perception.py` | 8241 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
+| `agents/perception.py` | 8261 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1878 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 1868 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 1882 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3076 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -52,7 +52,7 @@
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 311 |  | `core.db` |
 | `llm/json_mend.py` | 302 |  | — |
-| `llm/llm_quality.py` | 1656 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 1682 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 687 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 5552 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
@@ -134,7 +134,7 @@
 | `story/room_calls.py` | 241 |  | — |
 | `story/room_citations.py` | 221 |  | — |
 | `story/room_conversation.py` | 550 |  | `core.db` |
-| `story/room_frontier.py` | 488 |  | `core.db` |
+| `story/room_frontier.py` | 516 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 376 |  | `core.db` |
 | `story/room_slice.py` | 556 |  | `story.attire` |
@@ -266,7 +266,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 3468 | 1508 lines |
+| `character_step()` | 3468 | 1528 lines |
 | `_annotate_known_exits()` | 2693 | 469 lines |
 | `_ground_observation_citations()` | 1697 | 293 lines |
 | `_unanswered_question_note()` | 597 | 252 lines |
@@ -279,14 +279,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compile_bare()` | 644 | 335 lines |
+| `compile_bare()` | 652 | 340 lines |
 | `_compile_notebook()` | 443 | 101 lines |
 | `holding_from()` | 218 | 54 lines |
-| `_appraisal()` | 1012 | 53 lines |
+| `_appraisal()` | 1025 | 53 lines |
 | `modules_for()` | 336 | 48 lines |
 | `without_engine_numbers()` | 130 | 47 lines |
-| `anchor_tells()` | 981 | 29 lines |
-| `notebook_for()` | 276 | 26 lines |
+| `name_concealed_bodies()` | 611 | 39 lines |
+| `anchor_tells()` | 994 | 29 lines |
 
 ### `agents/character_evidence.py`
 
@@ -377,10 +377,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_specialist_payload()` | 577 | 316 lines |
+| `_specialist_payload()` | 577 | 318 lines |
 | `_resolve_beat_view()` | 49 | 142 lines |
 | `_interpret_beat_view()` | 203 | 64 lines |
-| `_resolved_event_verdicts()` | 1003 | 54 lines |
+| `_resolved_event_verdicts()` | 1005 | 54 lines |
 | `_specialist_span_slice()` | 287 | 47 lines |
 | `_beat_rooms()` | 409 | 40 lines |
 | `_grid_view()` | 368 | 39 lines |
@@ -461,14 +461,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `design_rooms()` | 851 | 204 lines |
-| `schedule_room_predevelopment()` | 1119 | 103 lines |
-| `_groundwork()` | 611 | 73 lines |
-| `_doorways_that_fit()` | 496 | 62 lines |
-| `render_room()` | 175 | 51 lines |
-| `_check()` | 256 | 49 lines |
-| `_finished()` | 808 | 41 lines |
-| `_agree_sizes()` | 733 | 40 lines |
+| `design_rooms()` | 886 | 206 lines |
+| `schedule_room_predevelopment()` | 1165 | 107 lines |
+| `_groundwork()` | 646 | 73 lines |
+| `_doorways_that_fit()` | 531 | 62 lines |
+| `render_room()` | 183 | 51 lines |
+| `_check()` | 264 | 49 lines |
+| `_finished()` | 843 | 41 lines |
+| `_agree_sizes()` | 768 | 40 lines |
 
 ### `agents/director_scopes.py`
 
@@ -575,14 +575,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome_views()` | 7017 | 992 lines |
-| `_composer_act_views()` | 6281 | 480 lines |
-| `_composer_standing_percepts()` | 5508 | 363 lines |
-| `perception_outcome()` | 3653 | 322 lines |
-| `perception_act()` | 3121 | 223 lines |
+| `_composer_outcome_views()` | 7024 | 1005 lines |
+| `_composer_act_views()` | 6288 | 480 lines |
+| `_composer_standing_percepts()` | 5515 | 363 lines |
+| `perception_outcome()` | 3657 | 322 lines |
+| `perception_act()` | 3125 | 223 lines |
 | `_outcome_event_stream()` | 939 | 199 lines |
-| `_composer_establish_views()` | 6123 | 149 lines |
-| `_visible_things()` | 5195 | 146 lines |
+| `_composer_establish_views()` | 6130 | 149 lines |
+| `_visible_things()` | 5202 | 146 lines |
 
 ### `agents/runtime.py`
 
@@ -616,11 +616,11 @@
 | `run_planner()` | 732 | 311 lines |
 | `run_location_plan()` | 1336 | 136 lines |
 | `deliberate()` | 1569 | 91 lines |
-| `schedule_room_work()` | 1790 | 79 lines |
+| `schedule_room_work()` | 1792 | 91 lines |
 | `_payload()` | 476 | 78 lines |
 | `_shown_transcript()` | 405 | 69 lines |
 | `run_opening_plan()` | 1135 | 64 lines |
-| `planner_reply()` | 1495 | 51 lines |
+| `run_fill()` | 1738 | 52 lines |
 
 ### `core/db.py`
 
@@ -755,14 +755,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 787 | 870 lines |
+| `complete_validated_json()` | 810 | 873 lines |
 | `_targeted_field_patch()` | 329 | 98 lines |
 | `note_provider_exchange()` | 568 | 59 lines |
 | `output_ran_out_of_room()` | 148 | 47 lines |
 | `json_failure_diagnosis()` | 197 | 39 lines |
 | `_extract_balanced_object()` | 61 | 37 lines |
 | `_without_trailing_commas()` | 25 | 34 lines |
-| `_unshrunk()` | 754 | 31 lines |
+| `_unshrunk()` | 777 | 31 lines |
 
 ### `llm/prompt_cache.py`
 
@@ -1702,14 +1702,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `frontier_report()` | 248 | 76 lines |
-| `_bodies_ahead()` | 207 | 39 lines |
-| `_rooms_within()` | 178 | 27 lines |
-| `_update()` | 113 | 20 lines |
-| `rooms_ahead()` | 156 | 20 lines |
-| `fill_due()` | 469 | 20 lines |
-| `_player_room()` | 135 | 19 lines |
-| `fill_signature()` | 415 | 18 lines |
+| `frontier_report()` | 249 | 76 lines |
+| `_bodies_ahead()` | 208 | 39 lines |
+| `_rooms_within()` | 179 | 27 lines |
+| `fill_due()` | 493 | 24 lines |
+| `_update()` | 114 | 20 lines |
+| `rooms_ahead()` | 157 | 20 lines |
+| `_player_room()` | 136 | 19 lines |
+| `fill_signature()` | 416 | 18 lines |
 
 ### `story/room_proposals.py`
 
