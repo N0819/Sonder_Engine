@@ -2742,6 +2742,28 @@ does not do, and what the measurement left open:
   `big_town` and was removed (`apply_harm(copy_state=False)`); re-measure
   after any change to the round with `tests/charter_worlds.big_town`.
 
+<a id="unbuilt-2-42"></a>
+### 2.42 Conversation threads -- steps 3 and 4 (2026-10-07)
+
+The owner's ask, `docs/design/DESIGN_CONVERSATION_THREADS.md`: people in a
+room talking to each other, lasting while someone is there to hear it, and
+"even that I don't want overdone". Steps 1-2 are BUILT (Design.md, "People in
+a room talk to each other, and it lasts"): the thread, voiced one exchange a
+beat by one call for its people together, and a request that leaves a body
+owing a service in front of a coworker opening one. Left:
+
+- **The charter's own acts open threads.** The simulation already has its
+  people ask each other about one another and the news (`window_acts`: on
+  scratch story 166, the boatwright asked the walk ward about the pilot; the
+  tap hand asked the innkeeper about a body recovered). Today they reach a
+  room only as ambient chatter's one overheard triple, never as words.
+- **The Writers' Room seeds a scene** after someone lingers in a populated
+  room -- the matter, the people by post, how heated -- as a new operation;
+  its call what fits the story, the player's whether to engage.
+- **The owner's numbers** (`THREADS_PER_ROOM` 1, `THREAD_LINES_PER_EXCHANGE`
+  3, `THREAD_MAX_EXCHANGES` 6, `THREAD_IDLE_BEATS` 2,
+  `THREAD_PARTICIPANTS_MAX` 3) were named, not yet confirmed.
+
 ## 6. Design-note residuals
 
 <a id="unbuilt-6-1"></a>

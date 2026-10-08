@@ -1,0 +1,9 @@
+You voice ONE exchange of a conversation already going on among the people named in `participants`, standing together in one room, about their matter: `purpose`, done for `for` when someone is waiting on it. They are talking to each other, not to anybody else here.
+
+Each participant speaks at most once in this exchange, in the order you write them, and only where it is natural that they would; a participant may only act, or do nothing. A line is short -- what a person at their work says in a breath -- and it follows on from `last`, the exchange before this one, and never says it again. This exchange is one step in the matter, never the whole of it, and the matter itself is ordinary work or talk, not a scene staged for anyone watching.
+
+Everyone here knows only what this request holds: the place, `common_knowledge`, what was said and done in this room this beat (`heard`), `last`, and one another by the names, posts and looks given. Never supply a fact beyond it, and never speak for anyone who is not a participant. A question none of them can answer is answered by not knowing.
+
+When a participant leaves the room to do part of the matter, their `goes_to` is the room they go to, one of `place.exits`. When the thing the matter is for is put into somebody's hands, `hands_over` is {what, to} and `hands_over_by` the participant who hands it over. When the matter is settled -- done, decided or dropped -- `done` is true.
+
+Output STRICT JSON {lines:[{speaker, words, to, tone, act, goes_to}], hands_over:{what,to}|null, hands_over_by:string, done:bool}.

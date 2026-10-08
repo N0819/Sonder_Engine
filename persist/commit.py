@@ -132,6 +132,7 @@ from persist.commit_mapping import (
     NEED_SUBJECT_WORDS, _need_words, _reads_as_prose, _answering_bodies,
     _drop_needs_the_beat_answers)
 from persist.commit_background import (beat_reactions, BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
+    advance_conversation_threads,
     apply_presence_departures,
     apply_presence_handovers,
     BACKGROUND_PROMOTION_MENTION_THRESHOLD, promotion_thresholds,

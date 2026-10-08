@@ -2380,6 +2380,30 @@ class BackgroundReactOutput(LenientModel):
     # discharges, expiring so a forgotten promise does not haunt a room.
     still_owes: Optional[PresenceHandover] = None
 
+class ThreadLine(LenientModel):
+    """One participant's turn in a conversation thread's exchange: what they
+    say (`words`), to whom (`to`), how (`tone`), and what they do with it
+    (`act`); `goes_to` when the turn takes them out of the room
+    (docs/design/DESIGN_CONVERSATION_THREADS.md)."""
+    speaker: str = ""
+    words: str = ""
+    to: str = ""
+    tone: str = ""
+    act: str = ""
+    goes_to: str = ""
+
+
+class ConversationThreadOutput(LenientModel):
+    """ONE exchange of a thread among the people in a room: each participant
+    at most once, in order. `hands_over` (with `hands_over_by`, the
+    participant who hands it) when the matter's thing reaches somebody's
+    hands; `done` when the matter is settled."""
+    lines: list[ThreadLine] = Field(default_factory=list)
+    hands_over: Optional[PresenceHandover] = None
+    hands_over_by: str = ""
+    done: bool = False
+
+
 class SceneLifeEntry(LenientModel):
     """One managed presence's conduct for this beat, attributed by name so the
     commit-side append is a ROUTING operation rather than an authoring one
@@ -4548,6 +4572,7 @@ SCHEMA_MAP = {
     "character_bare": CharacterBareOutput,
     "character": CharacterOutput,
     "background_react": BackgroundReactOutput,
+    "conversation_thread": ConversationThreadOutput,
     "scene_life": SceneLifeOutput,
     "blurb_mint": BlurbMintOutput,
     "backdrop_prompt": BackdropPromptOutput,
@@ -5951,6 +5976,17 @@ OUTPUT_EXAMPLES = {
         },
         "action": "wipes down the counter",
         "charter_act": None,
+    },
+    "conversation_thread": {
+        "lines": [
+            {"speaker": "the innkeeper", "words": "Ned, the tally book's on the back shelf. Fetch it down.",
+             "to": "Ned", "tone": "brisk", "act": "", "goes_to": ""},
+            {"speaker": "Ned", "words": "The blue one, or the one with the river dues?",
+             "to": "the innkeeper", "tone": "", "act": "sets down the rag", "goes_to": ""},
+        ],
+        "hands_over": None,
+        "hands_over_by": "",
+        "done": False,
     },
     "scene_life": {
         "entries": [

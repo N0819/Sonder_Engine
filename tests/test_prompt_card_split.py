@@ -49,7 +49,9 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 271   # +8 (2026-10-06): the routed ponder's questions --
+PART_COUNT = 272   # +1 (2026-10-07): `conversation_thread`, people in a room
+                   # talking to each other (DESIGN_CONVERSATION_THREADS.md).
+                   # +8 (2026-10-06): the routed ponder's questions --
                    # `character_jev.route_order`, `route_kind`, `route_who`,
                    # `route_past` (what a question asks the memory for, and
                    # whether it asks about the past at all) and `memory_met`,
@@ -309,9 +311,10 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
 
     pack = installed_language_packs()[language]
     card = pack.card(CARD)
-    # 38 since 2026-09-27: `character_bare`, the bare character card; 37
-    # the same day, `character`, the full card, deleted with its contract.
-    assert len(card["prompts"]) == 37
+    # 38 since 2026-10-07: `conversation_thread`. 38 since 2026-09-27:
+    # `character_bare`, the bare character card; 37 the same day,
+    # `character`, the full card, deleted with its contract.
+    assert len(card["prompts"]) == 38
     # The five hands survive as channel order (and the spatial hand's room
     # chunks); their cores went with the causal Director on 2026-09-27.
     assert len(card["specialists"]) == 5

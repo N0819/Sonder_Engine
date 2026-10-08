@@ -2906,13 +2906,130 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     except Exception as exc:
         ctx.add_warning("abandoned promises not applied: %s" % exc)
     proposed = _propose_promotions(ctx, presences, sc)
+    try:
+        threads = advance_conversation_threads(ctx, _background_fired_reactions_any(br),
+                                               _scene_now, presences)
+    except Exception as exc:
+        threads = None
+        ctx.add_warning("conversation threads not advanced: %s" % exc)
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences),
+            "threads": sorted(threads) if isinstance(threads, dict) else [],
             "promotion_proposed": proposed,
             "named": named,
             "charter_conduct": charter_conduct}
 
 BACKGROUND_RECENT_TAIL = 4
+
+
+def _thread_charters(record):
+    return {str(r.get("charter") or "") for r in (record or {}).get("charter_refs") or ()
+            if isinstance(r, dict) and str(r.get("charter") or "")}
+
+
+def _thread_peers(cid, frame_id, scene, owner, room, presences, limit):
+    """The people standing in `room` who work in the same institution as
+    `owner` -- the coworkers a task taken on in front of them is talked over
+    with. Read off the charter refs the ledger and the registry already hold;
+    a body no charter holds has no peers here."""
+    try:
+        from world.charter_runtime import background_presence_records
+        derived = background_presence_records(cid, places={room}, frame_id=frame_id) or {}
+    except Exception:
+        derived = {}
+    mine = _thread_charters(presence_record_for(presences, owner, scene)[1]
+                            or derived.get(owner) or {})
+    if not mine:
+        return []
+    peers = []
+    for name, record in sorted(derived.items()):
+        if str(name).casefold() != owner.casefold() and _thread_charters(record) & mine:
+            peers.append(str(name))
+    for key, record in sorted((presences or {}).items()):
+        if not isinstance(record, dict):
+            continue
+        name = str(record.get("name") or key)
+        if (name.casefold() == owner.casefold() or name in peers
+                or str(presence_room(scene, name, record) or "") != room):
+            continue
+        if _thread_charters(record) & mine:
+            peers.append(name)
+    return peers[:max(0, limit)]
+
+
+def advance_conversation_threads(ctx, reactions, scene, presences):
+    """Move this frame's conversation threads on by the beat that committed
+    (`docs/design/DESIGN_CONVERSATION_THREADS.md`):
+
+    * a thread voiced this beat counts the exchange and keeps its lines as
+      `last`, so the next follows on;
+    * it closes when its people said it is settled, when the thing a
+      delegation was for was handed over, at `THREAD_MAX_EXCHANGES`, or after
+      `THREAD_IDLE_BEATS` with nobody there to hear it;
+    * a body that answered a request with an unfinished service
+      (`still_owes`) while a coworker stands in the room opens one -- "they
+      imediatley start talking to their peers to get the task done" (the
+      owner, 2026-10-07) -- unless that room already holds
+      `THREADS_PER_ROOM` open ones.
+
+    Deterministic, from the beat's typed reactions only; never from prose."""
+    from agents.background import (THREADS_KEY, THREADS_PER_ROOM,
+                                   THREAD_IDLE_BEATS, THREAD_MAX_EXCHANGES,
+                                   THREAD_PARTICIPANTS_MAX)
+    from core.db import wget_for_frame, wset_for_frame
+    cid, frame_id, turn_idx = ctx.chat.id, ctx.turn.frame_id, int(ctx.turn.idx)
+    stored = wget_for_frame(cid, THREADS_KEY, frame_id, {}) or {}
+    threads = {str(k): dict(v) for k, v in (stored.items() if isinstance(stored, dict) else ())
+               if isinstance(v, dict)}
+    voiced = {}
+    for r in reactions or ():
+        mark = r.get("thread") if isinstance(r, dict) else None
+        if isinstance(mark, dict) and str(mark.get("id") or "") in threads:
+            voiced.setdefault(str(mark["id"]), []).append(r)
+    for tid, rows in voiced.items():
+        t = threads[tid]
+        t["exchanges"] = int(t.get("exchanges") or 0) + 1
+        t["last_turn"] = turn_idx
+        t["last"] = [{"speaker": str(r.get("name") or ""),
+                      "words": str((r.get("dialogue_log_entry") or {}).get("exact_quote") or ""),
+                      "act": str(r.get("action") or "")} for r in rows]
+        if (any((r.get("thread") or {}).get("done") for r in rows)
+                or (t.get("origin") == "delegation" and any(r.get("hands_over") for r in rows))
+                or t["exchanges"] >= THREAD_MAX_EXCHANGES):
+            t["status"] = "done"
+    for t in threads.values():
+        if (str(t.get("status") or "open") == "open"
+                and turn_idx - int(t.get("last_turn", t.get("opened_turn", turn_idx)))
+                > THREAD_IDLE_BEATS):
+            t["status"] = "done"
+    for r in reactions or ():
+        owes = r.get("still_owes") if isinstance(r, dict) else None
+        if not (isinstance(owes, dict) and str(owes.get("what") or "").strip()):
+            continue
+        if r.get("thread"):
+            continue                       # already working it among themselves
+        owner = str(r.get("name") or "").strip()
+        room = str(r.get("room") or room_of(scene, owner) or "")
+        if not owner or not room:
+            continue
+        held = [t for t in threads.values()
+                if str(t.get("status") or "open") == "open" and t.get("room") == room]
+        if len(held) >= THREADS_PER_ROOM or any(owner in (t.get("participants") or ()) for t in held):
+            continue
+        peers = _thread_peers(cid, frame_id, scene, owner, room, presences,
+                              THREAD_PARTICIPANTS_MAX - 1)
+        if not peers:
+            continue
+        threads["thread:%d:%s" % (turn_idx, re.sub(r"\W+", "_", owner.casefold()))] = {
+            "room": room, "participants": [owner] + peers,
+            "purpose": " ".join(str(owes["what"]).split()),
+            "to": " ".join(str(owes.get("to") or "").split()),
+            "origin": "delegation", "opened_turn": turn_idx, "last_turn": turn_idx,
+            "exchanges": 0, "status": "open", "last": []}
+    kept = {tid: t for tid, t in threads.items() if str(t.get("status") or "open") == "open"}
+    if kept or stored:
+        wset_for_frame(cid, THREADS_KEY, kept, frame_id)
+    return kept
 
 
 def commit_charter_observations(ctx, prepared_scene):

@@ -458,6 +458,7 @@ Not scheduled and not committed to a phase. See the
 - [§2.29 — Who the player talks to — residuals](UNBUILT_LIVING_WORLD.md#unbuilt-2-29)
 - [§2.31 — A townsperson's surface — residuals](UNBUILT_LIVING_WORLD.md#unbuilt-2-31)
 - [§2.32 — Creatures as charter — residuals (2026-09-03)](UNBUILT_LIVING_WORLD.md#unbuilt-2-32)
+- [§2.42 — Conversation threads — steps 3 and 4 (2026-10-07)](UNBUILT_LIVING_WORLD.md#unbuilt-2-42)
 
 **6. Design-note residuals**
 

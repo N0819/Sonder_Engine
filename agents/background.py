@@ -1917,6 +1917,182 @@ CHARTER_VOICES_PER_BEAT = 3
 CHARTER_UNADDRESSED_VOICES = 1
 
 
+#: CONVERSATION THREADS (`docs/design/DESIGN_CONVERSATION_THREADS.md`): the
+#: owner, 2026-10-07 -- "you ask a charter npc to do something and they
+#: imediatley start talking to their peers to get the task done so an actualy
+#: conversation runs for as long as you are in that room", and of talk among
+#: themselves, "even that I don't want overdone". The numbers are the
+#: owner's to set.
+THREADS_KEY = "conversation_threads"
+THREADS_PER_ROOM = 1            # open threads in one room at a time
+THREAD_LINES_PER_EXCHANGE = 3   # lines one beat's exchange may hold
+THREAD_MAX_EXCHANGES = 6        # a thread nothing ends sooner ends here
+THREAD_IDLE_BEATS = 2           # unvoiced this long (nobody to hear), it closes
+THREAD_PARTICIPANTS_MAX = 3     # the body that took the task, and two peers
+
+
+def open_threads(cid, frame_id=None):
+    """`{thread_id: thread}` for the threads this frame holds open."""
+    from core.db import wget_for_frame
+    rows = wget_for_frame(cid, THREADS_KEY, frame_id, {}) or {}
+    return {str(tid): dict(t) for tid, t in (rows.items() if isinstance(rows, dict) else ())
+            if isinstance(t, dict) and str(t.get("status") or "open") == "open"}
+
+
+def _post_of(row):
+    """A charter body's post in plain words, read off its body key
+    ("stage_hand:0004" -> "stage hand"); "" for a body no charter holds."""
+    body = str((row or {}).get("body") or "")
+    return body.split(":", 1)[0].replace("_", " ").strip() if body else ""
+
+
+def _thread_heard(ctx, beat, participants):
+    """What was said aloud in the room this beat, as the thread's people may
+    know the speakers: overt lines only, each speaker labelled by what ALL the
+    participants recognise (`_presence_label_fn`'s intersection), so nobody's
+    private acquaintance reaches the shared payload."""
+    label = _presence_label_fn(ctx, *participants)
+    out = []
+    for d in (beat or {}).get("dialogue_log") or ():
+        if not isinstance(d, dict) or d.get("conceal_from"):
+            continue
+        if str(d.get("visibility") or "overt") != "overt":
+            continue
+        words = str(d.get("exact_quote") or "").strip()
+        if not words:
+            continue
+        out.append({"speaker": label(str(d.get("speaker") or "")),
+                    "words": words,
+                    "to": label(str(d.get("intended_target") or ""))})
+    return out
+
+
+def _voice_thread(ctx, beat, thread, rows, nonce):
+    """ONE exchange of a thread, voiced by one call for its people together
+    (`conversation_thread`): what they say to each other, in order, each at
+    most once. The payload is what is COMMON to them (the design note's §3):
+    the place, the room's common knowledge, the beat's overt lines, the
+    thread's last exchange, and each other by name, post and look -- no
+    participant's private news or acquaintances, so one cannot voice
+    another's knowledge."""
+    names = [str(r.get("name") or "") for r in rows]
+    room = str(thread.get("room") or "")
+    label = _presence_label_fn(ctx, *names)
+    payload = {
+        "place": _place_block(ctx, room),
+        "common_knowledge": _common_knowledge(ctx, room),
+        "purpose": str(thread.get("purpose") or ""),
+        "for": label(str(thread.get("to") or "")),
+        "participants": [{"name": n, "post": _post_of(r),
+                          "look": str(r.get("appearance") or "")}
+                         for n, r in zip(names, rows)],
+        "heard": _thread_heard(ctx, beat, names),
+        "last": list(thread.get("last") or [])[-THREAD_LINES_PER_EXCHANGE:],
+        "lines_at_most": THREAD_LINES_PER_EXCHANGE,
+        "variant_seed": nonce,
+    }
+    out = _voice_call(
+        ctx, "conversation_thread", " & ".join(names),
+        lambda: _agent_json("character_bg", "conversation_thread",
+                            get_prompt("conversation_thread", ctx.language),
+                            payload, temperature=0.7))
+    if not isinstance(out, dict):
+        return None
+    out, warnings = validate_llm_output("conversation_thread", out)
+    ctx.warnings.extend(warnings)
+    return out
+
+
+def _exchange_declarations(ctx, tid, index, thread, exchange, names):
+    """The exchange as ordinary figure declarations, one per participant who
+    spoke or acted, in the exchange's own order: a participant at most once
+    (a back-and-forth runs across beats), only the thread's own people, and
+    at most `THREAD_LINES_PER_EXCHANGE` of them. Each carries `thread` so the
+    commit can advance it (`commit_background.advance_conversation_threads`).
+    """
+    from agents.common import assign_event_ids
+    by_fold = {n.casefold(): n for n in names}
+    hand = exchange.get("hands_over") if isinstance(exchange.get("hands_over"), dict) else None
+    hand_by = str(exchange.get("hands_over_by") or "").strip().casefold()
+    out, seen = [], set()
+    for j, line in enumerate(exchange.get("lines") or []):
+        if len(out) >= THREAD_LINES_PER_EXCHANGE:
+            break
+        if not isinstance(line, dict):
+            continue
+        who = by_fold.get(str(line.get("speaker") or "").strip().casefold())
+        if not who or who in seen:
+            continue
+        seen.add(who)
+        words = _quote_body(str(line.get("words") or "").strip()) if str(
+            line.get("words") or "").strip() else ""
+        act = " ".join(str(line.get("act") or "").split())
+        to = str(line.get("to") or "").strip()
+        sequence = []
+        if act:
+            sequence.append({"type": "action", "attempt": act, "observable": act,
+                             "visibility": "overt", "conceal_from": [],
+                             "targets": [], "commitment": "asserted"})
+        if words:
+            sequence.append({"type": "speech", "text": words, "volume": "normal",
+                             "tone": str(line.get("tone") or ""),
+                             "visibility": "overt", "conceal_from": [],
+                             "targets": [to] if to else []})
+        if not sequence:
+            continue
+        entry = {"name": who, "room": str(thread.get("room") or ""),
+                 "action": act,
+                 "dialogue_log_entry": ({"speaker": who, "exact_quote": words,
+                                         "volume": "normal", "intended_target": to,
+                                         "tone": str(line.get("tone") or ""),
+                                         "visibility": "overt", "conceal_from": []}
+                                        if words else None),
+                 "goes_to": str(line.get("goes_to") or "").strip(),
+                 "charter_act": None, "charter_offers": [],
+                 "char_id": None, "is_figure": True, "bystander": False,
+                 "thread": {"id": tid, "done": bool(exchange.get("done"))},
+                 "sequence": assign_event_ids(
+                     sequence, f"turn:{ctx.turn.id}:thread:{index}:{j}")}
+        if hand and str(hand.get("what") or "").strip() and hand_by == who.casefold():
+            entry["hands_over"] = {"what": str(hand.get("what")).strip(),
+                                   "to": str(hand.get("to") or "").strip()}
+        out.append(entry)
+    return out
+
+
+def _thread_declarations(ctx, beat, figure_rows, addressed, own_rooms, nonce):
+    """`(declarations, voiced names)`: one exchange for each open thread held
+    in a room the beat's people stand in -- someone is there to hear it --
+    whose people still stand there together. A thread one of whose people
+    was spoken to this beat waits: that body answers for itself, and the
+    thread goes on after."""
+    try:
+        threads = open_threads(ctx.chat.id, ctx.turn.frame_id)
+    except Exception:
+        return [], set()
+    if not threads:
+        return [], set()
+    rows = {str(r.get("name") or "").strip(): r for r in figure_rows or ()
+            if isinstance(r, dict) and str(r.get("name") or "").strip()}
+    out, voiced = [], set()
+    for index, (tid, thread) in enumerate(sorted(threads.items())):
+        room = str(thread.get("room") or "")
+        if room not in own_rooms:
+            continue
+        here = [n for n in thread.get("participants") or ()
+                if n in rows and str(rows[n].get("room") or "") == room]
+        if len(here) < 2 or any(n.casefold() in addressed for n in here):
+            continue
+        exchange = _voice_thread(ctx, beat, thread, [rows[n] for n in here], nonce)
+        if not exchange:
+            continue
+        decls = _exchange_declarations(ctx, tid, index, thread, exchange, here)
+        if decls:
+            out.extend(decls)
+            voiced.update(here)
+    return out, voiced
+
+
 def _unaddressed_spent(dr):
     """Has this beat already spent its unaddressed voices: a body declared
     before resolve as a bystander that said something."""
@@ -2078,6 +2254,11 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
     names = [n for n in names
              if n.casefold() in addressed or n in creatures
              or rooms.get(n) in own_rooms or raised]
+    # PEOPLE ALREADY TALKING TO EACH OTHER are voiced together, one exchange
+    # a beat (`_thread_declarations`); they are not asked again one by one.
+    thread_decls, threaded = _thread_declarations(
+        ctx, beat, figure_rows, addressed, own_rooms, nonce)
+    names = [n for n in names if n not in threaded]
     refs_of = {str(r.get("name") or ""): (str(r.get("charter") or ""),
                                           str(r.get("body") or ""))
                for r in figure_rows if isinstance(r, dict)
@@ -2162,7 +2343,10 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
                         sequence, f"turn:{ctx.turn.id}:figure:{index}"),
                     "sensory_events": _creature_noise(
                         cid, rec, entry, frame_id=ctx.turn.frame_id)})
-    return out
+    # The thread's exchange after the individual voices: an answer to the
+    # player follows the player's words; talk among themselves is the room
+    # going on around it.
+    return out + thread_decls
 
 
 def _record_by_refs(presences, ref):
