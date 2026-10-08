@@ -260,5 +260,9 @@ def test_narrator_wiring_and_prompt_license():
     # The license is bounded: sensation only, consequent on listed material.
     assert "SENSATION ONLY" in prompt
     assert "CONSEQUENT" in prompt
-    # SCENE CRAFT's compression now says where the saved words go.
-    assert "Cutting REALLOCATES" in prompt
+    # SCENE CRAFT's compression still says where the saved words go -- as
+    # far as the beat has consequences to spend them on; the length floor
+    # it used to state ("Cutting REALLOCATES, it does not shrink") went on
+    # 2026-10-08 (tests/test_a_page_weighs_what_its_beat_weighed.py).
+    assert ("what the cut frees goes to the beat's consequences and to "
+            "licensed sensation") in prompt

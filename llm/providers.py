@@ -163,6 +163,20 @@ def response_truncated():
 # plain global would file one specialist's grammar under another's row.
 last_request_shape = contextvars.ContextVar("last_request_shape", default=None)
 
+# WHAT the last completion on this context SPENT, as the provider reported
+# it: `{"output": <output tokens>, "reasoning": <how many of those were
+# reasoning, or None where the provider does not split them out>}`. Written
+# by `_log_usage`, which every completion path reaches, and cleared at the
+# start of every completion like the request shape, so a call that dies
+# before its usage arrives reads as unmeasured rather than as the previous
+# call's spend. It is what tells a length stop that THINKING crowded the
+# answer out from one where the ANSWER ran away (`answer_ran_away`).
+#
+# A ContextVar for the same reason `last_finish_reason` is one: the pipeline
+# fans out across a thread pool with contextvars.copy_context(), and a plain
+# global would charge one stage's spend to another's stop.
+last_output_spend = contextvars.ContextVar("last_output_spend", default=None)
+
 
 def _note_request_shape(body):
     """Stash the shape of the body about to be posted.
@@ -1549,6 +1563,61 @@ def escalated_max_tokens(requested):
     cap = MAX_OUTPUT_TOKENS_MAX if current >= configured else configured
     raised = min(current + _ESCALATION_HEADROOM, cap)
     return raised if raised > current else 0
+
+
+# MORE ROOM IS FOR AN ANSWER THINKING CROWDED OUT. The escalation above is
+# sized on two premises: a reasoning model bills its thinking as output, and
+# the answer that thinking squeezed out is never more than one stage's worth
+# (`_ESCALATION_HEADROOM`). A length stop whose budget went to the ANSWER
+# breaks both. Measured on the Brackwater run (chat 166, 2026-10-07, capture
+# 6416, turn 4592): the narrator closed a whole page, then wrote it again
+# into the grammar's optional `text` and went on into `<fragment>1</fragment>`
+# ... `<fragment>5521</fragment>` until the 50,000-token cap -- 238.8 s,
+# 138,724 characters of answer against a 33,466-character trace, so about
+# 41.8k of the 50,000 output tokens were answer (the trace priced at the
+# ~4.1 characters per reasoning token the same model reported on the A/B
+# that followed). The escalation re-asked it at 70,000; the re-ask answered
+# in 10,893 output tokens, which the original budget held four times over:
+# what rescued the beat was a fresh sample, never the room.
+#
+#: The share of a length-stopped call's output tokens that must be ANSWER
+#: (output the provider did not count as reasoning) before the stop is read
+#: as a runaway. Half: at that point thinking is no longer the larger part
+#: of the spend, so it cannot be what crowded the answer out. The measured
+#: runaway sat at about 84%; a crowded-out answer sits near 0%.
+RUNAWAY_ANSWER_SHARE = 0.5
+
+
+def answer_ran_away():
+    """Did the last completion on this context stop at its length cap with
+    its budget spent WRITING rather than thinking -- an answer that ran away,
+    which more room would only lengthen?
+
+    True only on the provider's own word on both counts: it said the call
+    stopped for length (`response_truncated`), and it said how many of the
+    output tokens were reasoning (`last_output_spend`). Then the answer --
+    the output that was not reasoning -- must be at least
+    `RUNAWAY_ANSWER_SHARE` of the spend AND longer than one stage's worth
+    (`_ESCALATION_HEADROOM`, widened for the story's language like every
+    other budget), the most any stage's answer is: a long answer the budget
+    was simply too small for -- a deliberately small utility call, a host
+    who lowered the ceiling -- has not written past that, and still
+    escalates. Strictly longer, so a call capped at one stage's worth (the
+    default ceiling) can never be read as a runaway; it escalates exactly as
+    before.
+
+    False whenever the provider did not say, so an unmeasured stop
+    escalates exactly as before.
+    """
+    if not response_truncated():
+        return False
+    spend = last_output_spend.get() or {}
+    output, reasoning = spend.get("output"), spend.get("reasoning")
+    if not output or reasoning is None:
+        return False
+    answer = max(0, int(output) - int(reasoning))
+    return (answer > _scale_for_language(_ESCALATION_HEADROOM)
+            and answer >= RUNAWAY_ANSWER_SHARE * int(output))
 
 ROLES = [
     "default",
@@ -3637,6 +3706,26 @@ def _normalize_usage(usage):
     }
 
 
+def _reasoning_tokens(usage):
+    """How many of a completion's output tokens the provider says were
+    reasoning, or None when it does not say.
+
+    OpenAI-compatible routes (OpenRouter among them) report it under
+    `completion_tokens_details.reasoning_tokens`, the Responses dialect under
+    `output_tokens_details`; Anthropic folds thinking into `output_tokens`
+    and splits nothing out. None is the honest answer for a provider that is
+    silent, and it is NOT zero: a caller must treat it as unmeasured."""
+    usage = usage if isinstance(usage, dict) else {}
+    for key in ("completion_tokens_details", "output_tokens_details"):
+        details = usage.get(key)
+        if isinstance(details, dict) and details.get("reasoning_tokens") is not None:
+            try:
+                return max(0, int(details["reasoning_tokens"]))
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 def _merge_usage(base, extra):
     """Fold a later usage report into an earlier one. Anthropic streams usage
     in two pieces -- input and cache counts on message_start, the final output
@@ -3709,6 +3798,11 @@ def _log_usage(role, model, t0, usage, served=None, kind="chat"):
     """
     from core.logging_utils import log_llm_call
     counts = _normalize_usage(usage)
+    try:
+        last_output_spend.set({"output": counts["output"],
+                               "reasoning": _reasoning_tokens(usage)})
+    except Exception:
+        pass
     _note_served_model(role, model, served)
     record_llm_call({
         "role": role,
@@ -3767,9 +3861,11 @@ def _chat_complete_once(
     # Clear before the request, not after: every path below either records a
     # reason or records nothing, and "nothing" must read as unknown rather
     # than as the previous call's answer. The request shape is cleared for
-    # the same reason: a call that dies resolving its role sent nothing.
+    # the same reason: a call that dies resolving its role sent nothing, and
+    # so is the spend: a call that never reports usage spent nothing known.
     _capture_finish_reason(None)
     last_request_shape.set(None)
+    last_output_spend.set(None)
 
     prov, model, cfg = resolved or resolve_role(role)
     # A TOOL ROUND NEVER REACHES A BACKEND THAT WOULD DROP IT: the two
@@ -4337,6 +4433,7 @@ async def _chat_complete_async_once(
     _check_cancel()
     _capture_finish_reason(None)
     last_request_shape.set(None)
+    last_output_spend.set(None)
     prov, model, cfg = resolved or resolve_role(role)
     json_mode, json_schema = _role_json_mode(role, json_mode, json_schema, response_format)
     t, merged = _merge_samplers(cfg, sampler, temperature)

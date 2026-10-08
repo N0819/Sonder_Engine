@@ -2519,6 +2519,11 @@ BACKGROUND_SAFE_CONTEXTVARS = {
         "an OUTPUT slot, same as last_reasoning: cleared at the start of "
         "every completion and written at its POST, so a job's first call "
         "overwrites whatever it inherited before any recorder reads it",
+    "last_output_spend":
+        "an OUTPUT slot, same as last_request_shape: cleared at the start of "
+        "every completion and written when its usage is logged, so a job's "
+        "first call overwrites whatever it inherited before "
+        "`answer_ran_away` reads it",
     "read_timeout_override":
         "a knob a caller sets around its own call and resets after; it names "
         "no turn, holds no sink, and cancels nothing",

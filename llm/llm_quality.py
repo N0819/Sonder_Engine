@@ -6,6 +6,7 @@ import time
 
 from core.pipeline_context import note_step_warning
 from llm.providers import (
+    answer_ran_away,
     chat_complete,
     escalated_max_tokens,
     generation_notice,
@@ -485,6 +486,38 @@ def _constraint_only_schema(value):
 # still gets that rung's re-ask on an empty object.
 _WIRE_REQUIRED = {"narrator": ("prose",)}
 
+# FIELDS THE STEP'S MODEL DECLARES AND THE MODEL IS NEVER ASKED TO WRITE.
+# `NarratorOutput.text` is the engine's alias of `prose` (written by
+# `agents/narration._generate_narration` after validation, read there as a
+# spelling of `prose` when a model files its page under it) and
+# `paragraph_count` is engine-written by `schemas.preprocess_llm_output`.
+# Both stay declared so they survive validation into the stored variant;
+# only the grammar stops offering them. An optional string field in a grammar
+# is an invitation: measured on the Brackwater run (chat 166, 2026-10-07),
+# 15 of 40 narrator calls wrote the page a second time into `text`, and one
+# (capture 6416, turn 4592) went on from `text` into a 5,521-tag
+# `<fragment>` loop until the 50,000-token cap -- 238.8 s, finish=length,
+# 138,724 characters of answer around a page that had closed whole. A
+# provider that samples without the grammar may still send either field,
+# and the readers above take it as they always did.
+_WIRE_OMITTED = {"narrator": ("text", "paragraph_count")}
+
+
+def _wire_omitted(step_key, schema):
+    """The step's schema without its `_WIRE_OMITTED` fields: declared for
+    validation and storage, never offered to the model to write. A field the
+    schema does not declare is skipped, so a model change cannot make this
+    raise or reshape anything else."""
+    props = (schema.get("properties") or {}) if isinstance(schema, dict) else {}
+    fields = [f for f in _WIRE_OMITTED.get(step_key, ()) if f in props]
+    if not fields:
+        return schema
+    schema = dict(schema)
+    schema["properties"] = {k: v for k, v in props.items() if k not in fields}
+    if schema.get("required"):
+        schema["required"] = [f for f in schema["required"] if f not in fields]
+    return schema
+
 
 def _wire_required(step_key, schema):
     """The step's schema with its `_WIRE_REQUIRED` strings required and
@@ -524,7 +557,8 @@ def _step_json_schema(step_key: str):
             schema_builder = getattr(model_cls, "model_json_schema", None)
             schema = (schema_builder() if schema_builder is not None
                       else model_cls.schema())
-            schema = _wire_required(step_key, _constraint_only_schema(schema))
+            schema = _wire_required(step_key, _wire_omitted(
+                step_key, _constraint_only_schema(schema)))
     except Exception:
         schema = None
     _SCHEMA_CACHE[step_key] = schema
@@ -788,6 +822,9 @@ def complete_validated_json(
     # ordinary configured ceiling.
     token_ceiling = None
     ran_out_of_room = False
+    # Set by the length-escalation below when the stop was a runaway rather
+    # than a crowded-out answer (`providers.answer_ran_away`).
+    ran_away = False
 
     # The step's own Pydantic model, offered to the provider as an enforceable
     # grammar. This function already validates against it on the way back; a
@@ -1027,11 +1064,19 @@ def complete_validated_json(
     # there is none left, and this block is straight-line code that cannot
     # re-enter -- so the worst case is exactly one extra call, at exactly one
     # size above the ceiling, however many times the model truncates.
+    #
+    # MORE ROOM IS FOR AN ANSWER THINKING CROWDED OUT (`providers.
+    # answer_ran_away`). A stop whose budget went to the answer itself -- more
+    # of it answer than thinking, and already longer than any stage writes --
+    # was not short of room: it ran away, and the same request asked again
+    # at the SAME budget is what recovers it, because a runaway is a sampling
+    # accident. Still one extra call, never a larger one.
     if not provider_errored and output_ran_out_of_room(raw):
         ran_out_of_room = True
-        token_ceiling = escalated_max_tokens(max_tokens)
+        ran_away = answer_ran_away()
+        token_ceiling = None if ran_away else escalated_max_tokens(max_tokens)
 
-        if token_ceiling:
+        if ran_away or token_ceiling:
             # Visibly, in the live turn view: `generation_reset` is what the
             # browser already understands, and it also clears the truncated
             # half-sentence still sitting in the stream pane. A silent retry
@@ -1042,6 +1087,8 @@ def complete_validated_json(
                 "attempt": 2,
                 "candidate": 0,
                 "reason": (
+                    "output ran away; retrying at the same budget"
+                    if ran_away else
                     "output truncated; retrying with "
                     f"{token_ceiling} tokens"
                 ),
@@ -1054,13 +1101,14 @@ def complete_validated_json(
             # >=3.5% of character calls, true rate unmeasured).
             _t0 = time.monotonic()
             _wall0 = time.time()
+            _budget = max_tokens if ran_away else token_ceiling
             try:
                 raw = chat_complete(
                     role,
                     system,
                     user,
                     temperature=temperature,
-                    max_tokens=token_ceiling,
+                    max_tokens=_budget,
                     sampler=sampler,
                     candidate_offset=0,
                     token_ceiling=token_ceiling,
@@ -1077,15 +1125,22 @@ def complete_validated_json(
                     role=role, system=system, payload=payload, response="",
                     ok=False, started=_wall0, error=str(exc))
                 note_step_warning(
-                    "llm second call: truncation re-ask at "
-                    f"{token_ceiling} tokens errored after "
-                    f"{time.monotonic() - _t0:.1f}s ({exc})")
+                    "llm second call: "
+                    + ("runaway re-ask at the same budget"
+                       if ran_away else
+                       f"truncation re-ask at {token_ceiling} tokens")
+                    + f" errored after {time.monotonic() - _t0:.1f}s ({exc})")
             else:
                 note_step_warning(
-                    "llm second call: output truncated at the token "
-                    f"ceiling; re-asked once with {token_ceiling} tokens "
-                    f"({time.monotonic() - _t0:.1f}s)")
-                max_tokens = token_ceiling
+                    "llm second call: "
+                    + ("the answer ran away to the token ceiling (more of "
+                       "the output was answer than thinking, and longer than "
+                       "any stage writes); re-asked once at the same budget"
+                       if ran_away else
+                       "output truncated at the token ceiling; re-asked "
+                       f"once with {token_ceiling} tokens")
+                    + f" ({time.monotonic() - _t0:.1f}s)")
+                max_tokens = _budget
                 try:
                     parsed = _parse_whole(raw)
                     parse_error = None
@@ -1113,6 +1168,7 @@ def complete_validated_json(
                     return _accepted(report)
 
                 ran_out_of_room = output_ran_out_of_room(raw)
+                ran_away = ran_out_of_room and answer_ran_away()
                 previous_raw = raw
                 previous_parsed = parsed
 
@@ -1521,7 +1577,12 @@ def complete_validated_json(
     # schema instead of at the budget. Say which it was, and say whether the
     # escalation had anywhere left to go.
     if ran_out_of_room:
-        if token_ceiling:
+        if ran_away:
+            _why = ("; the answer ran away -- more of the output was answer "
+                    "than thinking, and longer than any stage writes -- so it "
+                    "was asked again at the same budget, not given more room, "
+                    "which would only have lengthened it")
+        elif token_ceiling:
             _why = (f"; retried at {token_ceiling} tokens and it truncated "
                     "again. Raise 'Max output tokens' in Settings, or point "
                     "this role at a model that spends less of its budget "

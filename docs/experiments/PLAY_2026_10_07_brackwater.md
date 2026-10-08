@@ -277,3 +277,10 @@ Refuted: dropping the room author's raw room records (the rendered
   loud "Hester - stay on the walk" was logged as a mutter with round 0's
   tone.
 - The narrator fidelity checker misfires on short-trace pages.
+
+**The narrator lane, 2026-10-08.** Patched: the narrator grammar no longer offers `text`/`paragraph_count`; a length stop whose output was mostly answer is asked again at its own budget instead of escalated (`providers.answer_ran_away`); the card's length floor and its 'hits hard' clause gave way to 'a page weighs what its beat weighed'. A VOICE section naming `private_voice_setting`/`register` as how the page sounds was built, measured and withheld (below). A/B on the six captured requests: 24 calls, $0.67, Wafer pinned, all on the new grammar; arms were (a) old card at low, (b) new card at low, (c) new card with reasoning off.
+- Every delivered line was placed exactly once in all 24 answers, and none wrote `text` (5 of 12 had, on the same requests the day before).
+- Length did not move: quiet-beat medians 181.5 words (a) and 201.5 (b), six samples each; dramatic totals 838 and 804. The card is not the length lever.
+- At low effort, 97% of output was trace. Median per call on Wafer: 67 s (a) and 44 s (b). Traces ran from 0.7k to 19.7k tokens.
+- Reasoning off ran a median 3.7 s and $0.0026 a call (against about $0.036), but broke a rule on 4 of 6 beats: the player's walk re-narrated with a mind-read ('Hester plainly could'); a door 'held' against an open portal state; conclusions drawn for the player, with an invented 'dead man's coat' and `{{new_specifics: []}}` printed in the prose; invented history and nautical similes on Abel. Off is not a default; the owner's 'low' stands.
+- New card: 3 of 9 samples slipped. One cue was dropped because its own text said 'without her noticing'; one sampling drift re-rendered the beat and wrote the player's compliance; one gave a smell a source and confirmed a claim, justified in the trace as 'Tamsin's dry voice'. Old card: 0 of 9. Small n, but the voice slip and the traces' 11 voice mentions against 4 are why the VOICE section was not landed.

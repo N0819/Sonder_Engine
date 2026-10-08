@@ -1745,6 +1745,17 @@ turn 0, and whatever it says to someone present is still unanswered by
 construction. Splitting it too would mean establishing a world from the
 opening plan's placements alone, which no story has been measured doing.
 
+<a id="unbuilt-1-185"></a>
+
+### 1.185 A quiet beat still weighs as much as a loud one, and the card is not the lever (2026-10-08)
+
+Measured on Brackwater (chat 166): narration length against what happened, r = 0.02. The narrator card's length floor ('Cutting REALLOCATES, it does not shrink') is gone and SCENE CRAFT states the class (a page weighs what its beat weighed). But two A/Bs on the same six captured requests (2026-10-07, 12 calls; 2026-10-08, 24 calls) moved page length in neither direction (quiet-beat medians 181.5 and 201.5 words). What a page carries is what the beat delivers: the tells and demeanor lines (cut at the source 2026-10-08, `docs/UNBUILT_CHARACTERS.md` §1.184) and the composed `present_scene`. The lever is upstream, like the glosses (Addendum, `docs/experiments/PLAY_2026_10_07_brackwater.md`).
+
+Open:
+1. The narrator's reasoning -- 97% of its output at `low`, 0.7k-19.7k trace tokens for one prompt on one host -- has no cap short of `off`, and `off` broke a rule on 4 of 6 A/B beats. A per-role `reasoning.max_tokens` is unbuilt and unmeasured; five clean pages came from 2.4k-4.9k-token traces.
+2. A `{{...}}` span that is not a line token reaches the page (`{{new_specifics: []}}`, at effort off).
+3. One new-grammar answer of 24 re-rendered its beat a second time inside `prose`. Whether removing `text` from the grammar moved that urge there is unmeasured.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>
