@@ -296,6 +296,7 @@ before entering field/full repair and configured fallbacks. An answer that
 does not parse and did not run out of room is first mended locally
 (`llm/json_mend.py`: brackets, commas and a key's quotes, never a value, and
 never closing a cut-off answer), and a mend is used only if it validates.
+An answer nothing could parse (not the mend, not the rebuild, not a fallback) is asked for afresh, as the original request with its own sheet and sampler, `MALFORMED_REASKS` (1) times before the stage fails. The rebuild is handed the broken text and copies its slips (turn 4601). The mend also closes an object left open before its next sibling.
 
 The Director's world index is the acting bodies' immediate sight aperture, not
 the scene registry. It receives room exits, each room's storey and how each

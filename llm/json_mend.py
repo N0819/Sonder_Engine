@@ -8,7 +8,10 @@ closer too many, two closers written in the wrong order, an inner container
 never closed, the wrong kind of closer -- and two are a KEY'S QUOTES: one
 unquoted, one whose closing quote went missing. The encoder's one failure in
 470 calls was two closers in the wrong order, and the rebuild rung spent a
-model round trip swapping two characters back.
+model round trip swapping two characters back. Another bracket shape
+arrived 2026-10-07 (scratch story 166 turn 4601): an object left open before
+its next sibling, which the bracket count finds only at the far end of the
+list, so it went to a rebuild that copied it and the beat was lost.
 
 WHAT A MEND MAY DO: insert, delete or swap a bracket or a comma, and add the
 quotes a key is missing. It never changes the text inside a string or any
@@ -177,6 +180,20 @@ def _decoder_edits(text):
         if key:
             out.append((text[:pos] + f'"{key.group(0)}"' + text[key.end():],
                         f"quoted the key {key.group(0)}", "bare-key"))
+        elif at and at in "{[":
+            # AN OBJECT LEFT OPEN BEFORE ITS NEXT SIBLING: a container opens
+            # where the object still open wants a key, right after a comma,
+            # so the object should have closed before that comma. The
+            # bracket count finds this fault only at the far end of the
+            # list, where no single closer mends it. Measured, scratch story
+            # 166 turn 4601: the encoder's resolve answer wrote `}}}}` for
+            # `}}}}}` before its next transform at char 2778 of 4,482, the
+            # rebuild copied the slip, and the beat was lost.
+            comma = _previous_significant(text, pos)
+            if comma >= 0 and text[comma] == ",":
+                out.append((text[:comma] + "}" + text[comma:],
+                            "closed an object left open before its next sibling",
+                            "sibling-close"))
     elif msg.startswith("Expecting ',' delimiter") and at and at in '"{[':
         before = _previous_significant(text, pos)
         if before >= 0 and text[before] in '"}]el0123456789':

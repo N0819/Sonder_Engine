@@ -4907,8 +4907,18 @@ def character_step(ctx, cid, nonce):
     # consecutive lines with no conduct between them are one utterance.
     fuse_speech_run(out, warn=lambda _w: ctx.add_warning(
         "character %s: %s" % (character_name(sh), _w)))
+    # Numbered PAST this mouth's earlier rounds of the beat, which carry the
+    # same prefix: a second micro-round numbered from 0 reused round 0's ids
+    # and the resolve bound its lines to round 0's tags (turn 4610; see
+    # `assign_event_ids`). `beat_declared` is the loop's own record of those
+    # rounds, reset at loop start, so a reroll numbers from 0 again.
+    _beat_record = ctx._extra.get("beat_declared") or {}
+    _earlier_round = (_beat_record.get(cid) or _beat_record.get(str(cid))
+                      or {})
     out["sequence"] = assign_event_ids(
-        out.get("sequence"), f"turn:{ctx.turn.id}:character:{cid}")
+        out.get("sequence"), f"turn:{ctx.turn.id}:character:{cid}",
+        earlier=_earlier_round.get("sequence")
+        if isinstance(_earlier_round, dict) else None)
     out["name"] = character_name(sh)
     out["char_id"] = cid
     # Unbidden-recall telemetry, riding the step output the same way name/

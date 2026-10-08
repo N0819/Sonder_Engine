@@ -1818,3 +1818,11 @@ row is there, activation from use, open intentions, unbidden cues, mood-aware
 recall, surprise, self-defining memories, person dossiers, who else would
 remember, consolidation that organizes, and the current state first (which is
 §2.24, built 2026-10-05 as superseded links). The note says where to start.
+
+<a id="unbuilt-6-19"></a>
+
+### 6.19 The read-back asks how loudly, and the engine's volume is reach
+
+**Found:** the Brackwater play run, 2026-10-07 (scratch story 166 turn 4614). **Owner's call.**
+
+The character read-back's volume question asks "How loudly did you say it?" and offers whisper, mutter, normal, loud and shout, while the engine's volume is reach and includes `pitched`. Code now derives `pitched` from the read-back's own volume and kept-from answers (`character_bare.line_volume`). The wording itself, a reach question with a `pitched` option, is unbuilt pending a Jev probe in each language pack (memory: jev-options-read-by-their-words).

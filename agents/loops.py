@@ -22,9 +22,10 @@ from story.scene import (
     get_scene,
     reaction_config,
 )
-from world.spatial import (hear_level, proximity_rel, room_of, sense_adjusted,
-                     sound_bearing, spatial_rel, spatial_rel_between,
-                     visual_level_between)
+from world.spatial import (hear_level, pitched_level_db, proximity_rel,
+                     room_of, sense_adjusted, sound_bearing, spatial_rel,
+                     spatial_rel_between, visual_level_between,
+                     word_for_level)
 
 from . import composer
 from .character import _unanswered_question_note, character_step
@@ -348,8 +349,8 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
     # from the card's TRUE appearance and bare name recognition, so it named
     # a disguised actor to anyone who knew the name, and described an unseen
     # stranger by a face nobody saw (review 2026-10-04).
-    from .perception import (_appearance_as_prose, _sight_detail,
-                             _subject_disguise_context)
+    from .perception import (_addressee_name, _appearance_as_prose,
+                             _sight_detail, _subject_disguise_context)
     _visible, _active, _known_to, _conceals = _subject_disguise_context(
         ctx, actor_name, _appearance_as_prose(
             appearance_of(actor_name, actor_appearance, scene)), known)
@@ -357,6 +358,22 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                     "aliases": character_scene_keys(actor_sheet)[1:],
                     "disguise_known_to": _known_to,
                     "disguise_conceals_identity": _conceals}
+    # A PITCHED LINE IS GRADED AT THE LEVEL ITS ADDRESSEE'S CELL SOLVES, once
+    # per line, as both perception passes grade it (the onset pass and the
+    # outcome dialogue log). Read by its word here, `pitched` is no volume
+    # `hear_level` knows and fell through to an ordinary voice: a line
+    # lowered for one listener reached every bystander in the round whole,
+    # and one raised to reach through a door was graded as if it had not
+    # been. `{event_index: (word, level_db)}`.
+    pitched = {}
+    for event_index, event in enumerate(actor_result.get("sequence") or []):
+        if (isinstance(event, dict)
+                and event.get("type") in ("speech", "communication")
+                and str(event.get("volume") or "").strip().casefold()
+                == "pitched"):
+            level_db = pitched_level_db(scene, actor_name, _addressee_name(
+                ctx, (event.get("targets") or [None])[0]))
+            pitched[event_index] = (word_for_level(level_db), level_db)
     views = {}
     perceived_by = set()
     for row in ctx.cast:
@@ -418,15 +435,18 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                     )
                 ):
                     continue
-                volume = event.get("volume", "normal")
+                volume, level_db = pitched.get(
+                    event_index, (event.get("volume", "normal"), None))
                 if not _delivery_ok(relation, scene, observer_name, actor_name,
                                     "hearing", volume=volume,
                                     proximity=proximity,
                                     awareness=observer_awareness,
-                                    senses=observer_senses):
+                                    senses=observer_senses,
+                                    level_db=level_db):
                     continue
                 level = sense_adjusted(
-                    hear_level(relation, volume, proximity=proximity),
+                    hear_level(relation, volume, proximity=proximity,
+                               level_db=level_db),
                     "hearing", observer_senses)
                 quote = str(event.get("text") or "")
                 if level == "full":

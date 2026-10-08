@@ -598,6 +598,39 @@ def _people_picked(answers, prefix, h, reply_index):
     return [person for p, person in enumerate(h.people) if jev.yes(answers, f"{prefix}:{reply_index}:kept:{p}")]
 
 
+#: The volumes that mean words KEPT FROM somebody present who would otherwise
+#: hear them -- the engine's own definition, stated to the encoder in
+#: `encoder/core.txt` ("mutter and whisper are only for words kept from
+#: somebody present"). A closed set the engine owns (`SpeechVolume`).
+KEPT_VOLUMES = ("whisper", "mutter")
+
+
+def line_volume(answered, targets, kept_from):
+    """The volume a line is booked at, from the read-back's own answers.
+
+    VOLUME IS HOW FAR THE WORDS ARE MEANT TO CARRY, and a quiet register
+    aimed at one listener is not a whisper unless it is kept from somebody.
+    The read-back asks "how loudly", offers no `pitched`, and so files a
+    voice lowered FOR its listener as a whisper -- the volume the engine
+    grades at a fixed breath level, which dies past arm's reach. Measured,
+    scratch story 166 turn 4614: Hester's line to Tamsin through a shut
+    door ("through the shut door, voice pitched low and even") was booked
+    `whisper`, kept from no one, and never reached the person it was said
+    to. Across chats 160-166, 20 of 111 character lines were booked whisper
+    or mutter while the read-back said they were kept from nobody, 18 of
+    them aimed at someone; five of their own `how`s say "pitched".
+
+    Kept from nobody and aimed at someone, the quiet register is the
+    engine's `pitched` -- lowered so only they would catch it, or raised so
+    it reaches them, the level solved from where they stand -- which at
+    arm's length is as quiet as the whisper it replaces. Kept from someone,
+    or aimed at no one (said to oneself), the answer stands.
+    """
+    if answered in KEPT_VOLUMES and targets and not kept_from:
+        return "pitched"
+    return answered
+
+
 def compile_bare(reply, answers, h):
     """`(compiled, warnings)`: the bare reply plus the decision model's
     answers, in the `CharacterOutput` shape every reader downstream
@@ -645,7 +678,10 @@ def compile_bare(reply, answers, h):
                 # "normal volume should be the default unless specified
                 # otherwise"). `pitched` solved at arm's length came out a
                 # mutter, so every unmarked line read "under their breath".
-                "volume": jev.pick(answers, f"say:{index}:volume") or "normal",
+                # A quiet answer kept from nobody is pitched (`line_volume`).
+                "volume": line_volume(
+                    jev.pick(answers, f"say:{index}:volume") or "normal",
+                    targets, hidden),
                 "tone": str(row.get("how") or "").strip(),
                 "visibility": "concealed" if hidden else "overt",
                 "conceal_from": hidden,

@@ -395,6 +395,8 @@ quoted spans pairwise rather than by content length -- `static/js/chat.js`
 already does exactly that (`quotedRegions`) for the speaker tinting, and its
 comment explains why the region rather than the match is the unit.
 
+**Second half FIXED 2026-10-08.** `agents.common.quoted_lines` pairs every quoted span by its marks (`_VIEW_QUOTE_BODY_RE`), then asks the pack's floor (`_QUOTE_BODY_RE`) of each paired span. Every dialogue arm of `_check_narrator_fidelity`, `_check_event_order` and `_dialogue_tokens` reads through it. Scratch story 166 turn 4614: a short "No." opened the view, the narrator was handed no placeholders, and the check raised seven warnings, none true. Replayed over 4,206 stored beats: missing 134 to 129, invented 313 to 306, none added; six real lines on two beats now reach the narrator, none lost. **First half still open:** a line under the floor ("No.") is neither scored nor tokenized, while the narrator card says `dialogue_lines` lists every delivered line.
+
 <a id="unbuilt-1-116"></a>
 
 ### 1.116 The 2026-09-05 play runs: the perception-delivery classes

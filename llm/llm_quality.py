@@ -661,6 +661,15 @@ REBUILD_FORMAT = "json_schema"
 #: rebuilt a parseable answer came back with fewer writes.
 REBUILD_KEEPS_SHEET = frozenset({"director_specialist", "director_repair"})
 
+#: How many times a request whose every answer FAILED TO PARSE is asked
+#: afresh -- the original request, its own sheet and sampler, no broken draft
+#: attached -- before the stage fails. One: the slip it answers is rare
+#: (2 of 386 encoder answers in the Brackwater run, both one beat's) and the
+#: same request asked again parsed, while each re-ask costs a whole first
+#: call (an encoder request there ran ~35k input tokens, ~10 s). Named per
+#: the owner's ask-before-limiting rule.
+MALFORMED_REASKS = 1
+
 
 def _content_size(step_key, obj):
     """`(events or answers, writes)` a transform-writing step's answer
@@ -1369,11 +1378,13 @@ def complete_validated_json(
             )
         except Exception as exc:
             report.errors.append(str(exc))
+            parse_error = str(exc)
             note_provider_exchange(
                 role=role, system=_fallback_system, payload=fallback_payload,
                 response=fallback_raw, ok=False, started=_wall0,
                 error=str(exc))
             continue
+        parse_error = None
 
         fallback_report = validate_llm_output_strict(
             step_key,
@@ -1394,6 +1405,79 @@ def complete_validated_json(
                                        f"fallback candidate {candidate_offset}"))
 
         report = fallback_report
+
+    # AN ANSWER THAT NEVER PARSED IS ASKED FOR AFRESH BEFORE THE STAGE FAILS.
+    # Every rung above that rebuilds a broken answer hands the model its own
+    # broken text, and a model copying a long input copies its slips with it.
+    # Measured, scratch story 166 turn 4601 (the Brackwater run, 2026-10-07):
+    # the encoder's resolve answer left one object open at char 2778, the
+    # temperature-0 rebuild came back with the same fault at the same
+    # character, and the causal stage aborted the beat (the run's only two
+    # unparseable encoder answers of 386). So once nothing the ladder holds
+    # has parsed, the ORIGINAL request is asked again, as itself: the class
+    # is the malformed answer, never a content failure (an answer that
+    # parsed and failed validation is the repair rungs' own case, and a
+    # truncation is the re-ask with room above, so a cut answer is not asked
+    # again here).
+    if (parse_error is not None and not _original and not ran_out_of_room
+            and not provider_errored and last_provider_error is None):
+        for _attempt in range(MALFORMED_REASKS):
+            _t0 = time.monotonic()
+            _wall0 = time.time()
+            try:
+                fresh = chat_complete(
+                    role, system, user, temperature=temperature,
+                    max_tokens=max_tokens, sampler=sampler,
+                    candidate_offset=0, token_ceiling=token_ceiling,
+                    json_schema=json_schema, response_format=response_format)
+            except Aborted:
+                raise
+            except LLMError as exc:
+                last_provider_error = exc
+                note_provider_exchange(
+                    role=role, system=system, payload=payload, response="",
+                    ok=False, started=_wall0, error=str(exc))
+                note_step_warning(
+                    "llm second call: re-ask after every answer failed to "
+                    f"parse errored after {time.monotonic() - _t0:.1f}s ({exc})")
+                break
+            note_step_warning(
+                "llm second call: no answer parsed; asked the original "
+                f"request afresh ({time.monotonic() - _t0:.1f}s)")
+            try:
+                fresh_parsed, fresh_error = _parse_whole(fresh), None
+            except Exception as exc:
+                fresh_parsed, fresh_error = {}, str(exc)
+            fresh_report = validate_llm_output_strict(
+                step_key, fresh_parsed, source_payload=payload)
+            if fresh_error:
+                fresh_report.valid = False
+                fresh_report.errors.insert(0, fresh_error)
+            # A bare `{}` is a stall, not an answer, whatever it validates as
+            # (the empty-object rule above): the malformed answer stands as
+            # the failure.
+            stalled = fresh_error is None and fresh_parsed == {}
+            note_provider_exchange(
+                role=role, system=system, payload=payload, response=fresh,
+                ok=bool(fresh_report.valid) and not stalled, started=_wall0,
+                error="empty object" if stalled
+                else "" if fresh_report.valid
+                else "; ".join(fresh_report.errors[:3]))
+            if stalled:
+                break
+            if fresh_report.valid:
+                return _accepted(fresh_report)
+            ran_out_of_room = output_ran_out_of_room(fresh)
+            if fresh_error and not ran_out_of_room:
+                mended = _mended(step_key, fresh, payload)
+                if mended is not None and mended[1].valid:
+                    note_step_warning(
+                        f"{step_key}: the fresh answer's JSON was mended "
+                        f"locally ({'; '.join(mended[2])}); no further call")
+                    return _accepted(mended[1])
+            previous_raw, report = fresh, fresh_report
+            if not fresh_error or ran_out_of_room:
+                break
 
     # What the model ACTUALLY sent, on the exception. A validation error names
     # the field that was wrong and says nothing about the shape that was sent,

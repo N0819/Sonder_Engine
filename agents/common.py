@@ -5067,11 +5067,49 @@ def fuse_speech_run(out, warn=None):
     return _sync_sequence_mirrors(out) if joined else out
 
 
-def assign_event_ids(sequence, prefix):
+def _next_event_index(earlier, prefix):
+    """The first `<prefix>:<n>` number no element of `earlier` already holds."""
+    head = f"{prefix}:"
+    used = -1
+    for element in earlier or ():
+        if not isinstance(element, dict):
+            continue
+        event_id = str(element.get("event_id") or "")
+        if not event_id.startswith(head):
+            continue
+        number = event_id[len(head):].split(":", 1)[0]
+        if number.isdigit():
+            used = max(used, int(number))
+    return used + 1
+
+
+def assign_event_ids(sequence, prefix, earlier=None):
+    """Stamp each declared element `<prefix>:<n>:<type>`.
+
+    ONE ID NAMES ONE DECLARATION IN THE BEAT. Every join downstream is keyed
+    on it -- the resolve's citation (`from_declaration` through
+    `director_evidence.declared_elements`, first id wins), perception's
+    outcome stream (`seen_events`), the world ledger's order
+    (`beat_ledger.beat_event_order`) -- so two elements under one id are one
+    element to all of them. `earlier` is what the same mouth already declared
+    under the same prefix this beat, and the numbering continues past it.
+
+    A mouth declares more than once in a beat when the interaction loop gives
+    it a second micro-round, and the prefix (turn, mouth) is the same both
+    times. Numbered from 0 each round, the rounds collided: scratch story
+    166, turn 4610, Abel Gale's round-0 and round-2 lines were all
+    `turn:4610:character:83:{0,1,2}:speech`, the resolve bound round 2's
+    lines to round 0's declarations, and his declared LOUD "Hester -- stay
+    on the walk" ("louder, meant to carry down the stair") reached the log
+    and the player's view as a mutter in round 0's tone.
+    """
+    start = _next_event_index(earlier, prefix)
     result = []
-    for index, raw in enumerate(sequence or []):
+    for offset, raw in enumerate(sequence or []):
         event = dict(raw)
-        event.setdefault("event_id", f"{prefix}:{index}:{event.get('type', 'event')}")
+        event.setdefault(
+            "event_id",
+            f"{prefix}:{start + offset}:{event.get('type', 'event')}")
         result.append(event)
     return result
 
@@ -5943,7 +5981,7 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
 
 def _delivery_ok(relation, scene, observer_name, source_name, channel,
                  volume="normal", proximity=None, behind_sources=None,
-                 awareness=None, senses=None):
+                 awareness=None, senses=None, level_db=None):
     """Can this observer receive this source through this channel?
 
     Cross-seam pattern 3: the deterministic delivery paths each grew their own
@@ -5976,7 +6014,9 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
     - **containment** -- a sealed enclosure blocks sight AND sound, in both
       directions (`containment_conceals` is symmetric).
     - **hearing** -- `hear_level` including the `proximity` downgrade, so a
-      muttered aside does not carry to an arbitrarily large room.
+      muttered aside does not carry to an arbitrarily large room. A pitched
+      line passes the `level_db` its addressee's cell solved, as the
+      composer's hearing does (`hear_level(..., level_db=...)`).
     - **sight/action** -- `has_visual` plus the rear-arc blind spot. An action
       is visible or it is nothing.
     - **senses** (optional) -- the observer's card senses (G4). When passed,
@@ -6006,7 +6046,8 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
         return False
 
     if channel == "hearing":
-        level = hear_level(relation, volume, proximity=proximity)
+        level = hear_level(relation, volume, proximity=proximity,
+                           level_db=level_db)
         if senses is not None:
             level = sense_adjusted(level, "hearing", senses)
         return level != "none"
@@ -10223,7 +10264,13 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
       dict values (obj == poss == "her") no longer masquerade as the player
       being narrated in third person.
     """
-    narrative = _narrative_outside_quotes(raw_input)
+    return _person_marker_counts(_narrative_outside_quotes(raw_input),
+                                 player_name, player_pronouns)
+
+
+def _person_marker_counts(narrative, player_name=None, player_pronouns=None):
+    """`_narration_person_counts` over narrative that is ALREADY outside
+    quoted dialogue -- one sentence of it, or all."""
     counts = {
         "first": len(_ling("_FIRST_PERSON_RE").findall(narrative)),
         "second": len(_ling("_SECOND_PERSON_RE").findall(narrative)),
@@ -10468,8 +10515,39 @@ def _check_player_person(prose, player_name, narration_person, player_aliases=No
 #: How far the prose's dominant person must lead the person that was ASKED
 #: for before the mismatch is reported. Same margin as
 #: `_resolve_narration_person`'s hysteresis, for the same reason: one stray
-#: token is not a voice change.
+#: token is not a voice change. Counted in SENTENCES on the page
+#: (`_narration_person_sentences`).
 _PERSON_DRIFT_MARGIN = 2
+
+
+def _narration_person_sentences(prose, player_name=None):
+    """Per person, how many SENTENCES of the narrating voice carry its
+    evidence -- `_person_marker_counts` read one sentence at a time, outside
+    quoted dialogue.
+
+    A voice is a property of the page, and a page in the wrong person says so
+    sentence after sentence; one clause can carry two tokens of it without
+    the page being in that person at all. Counted in tokens, an impersonal
+    "you" in a single simile crossed the margin: scratch story 166 turn 4611,
+    a third-person page with "pushed out one at a time the way you'd shift
+    cargo you weren't sure would hold" read "0 first / 2 second / 0 third"
+    and was reported as second-person narration.
+
+    Replayed over the 4,305 stored drafts of the Brackwater run's database
+    (each read in its chat's person): tokens reported 20, sentences 16 and
+    added none. Of the four no longer reported, two are impersonal-you
+    similes on third-person pages (turns 125 and 4611) and two are pages
+    that named the player once, by a two-word name, under first-person
+    narration (163, 164) -- one mention the token count weighed twice, and a
+    page `_check_player_person` reports by the name itself."""
+    counts = {"first": 0, "second": 0, "third": 0}
+    narrative = _narrative_outside_quotes(prose)
+    for sentence in _SENTENCE_SPLIT.split(narrative):
+        found = _person_marker_counts(sentence, player_name, None)
+        for person, count in found.items():
+            if count:
+                counts[person] += 1
+    return counts
 
 
 def _check_narration_person_match(prose, narration_person, player_name=None):
@@ -10494,7 +10572,9 @@ def _check_narration_person_match(prose, narration_person, player_name=None):
       legitimately "he"/"she"/"they", and the player's own pronouns are
       routinely the same words; counting them would report every beat where
       the cast moved more than the player did.
-    - the dominant person must lead the declared one by `_PERSON_DRIFT_MARGIN`.
+    - the dominant person must lead the declared one by `_PERSON_DRIFT_MARGIN`
+      SENTENCES, not tokens (`_narration_person_sentences`): an impersonal
+      "you" in one simile is two tokens in one sentence.
 
     Measured over the stored corpus (2,303 narrator drafts, per-turn person
     replayed from each turn's own input): 12 warnings, 0.52%, and every one of
@@ -10517,7 +10597,7 @@ def _check_narration_person_match(prose, narration_person, player_name=None):
     text = str(prose or "")
     if not text.strip():
         return []
-    counts = _narration_person_counts(text, player_name, None)
+    counts = _narration_person_sentences(text, player_name)
     dominant = max(counts, key=counts.get)
     if dominant == person or counts[dominant] == 0:
         return []
@@ -10526,7 +10606,7 @@ def _check_narration_person_match(prose, narration_person, player_name=None):
     return [
         f"Narrator prose reads as {dominant} person but narration_person is "
         f"'{person}' ({counts['first']} first / {counts['second']} second / "
-        f"{counts['third']} third-person markers outside quoted dialogue)."
+        f"{counts['third']} third-person sentences outside quoted dialogue)."
     ]
 
 
@@ -10722,6 +10802,35 @@ def _check_action_attribution(prose, observations, player_forms=(),
     return warnings
 
 
+def quoted_lines(text):
+    """`[(start, body)]` for every quoted span of `text` that counts as a
+    LINE (`_QUOTE_BODY_RE`), with every quoted span PAIRED FIRST.
+
+    `_QUOTE_BODY_RE` carries the pack's floor for a line inside its own
+    pattern (four characters in English, two in Japanese), so a shorter line
+    never matched -- and the two marks it skipped did not disappear, they
+    paired with their neighbours, so every span after a short line was the
+    narration BETWEEN two lines (`docs/UNBUILT_PERCEPTION.md` 1.109).
+    Measured, scratch story 166 turn 4614: Abel's "No." opened the view, so
+    the narrator was handed no `dialogue_lines` at all (every span it was
+    offered was an attribution, and `_reads_as_attribution` dropped each),
+    and the fidelity check reported his four real lines missing and four
+    stretches of narration as invented dialogue -- seven warnings, none true.
+
+    So every span is paired by its marks (`_VIEW_QUOTE_BODY_RE`, any
+    length) and the floor is asked of each paired span afterwards: a short
+    line is still not scored, and no longer takes the next one with it."""
+    scored = _ling("_QUOTE_BODY_RE")
+    out = []
+    for span in _ling("_VIEW_QUOTE_BODY_RE").finditer(str(text or "")):
+        line = scored.fullmatch(span.group(0))
+        if line is None:
+            continue
+        out.append((span.start(),
+                    next((g for g in line.groups() if g is not None), "")))
+    return out
+
+
 def _check_event_order(prose, event_order):
     """F1 (A1 ordering half): a quoted line must not render before the event
     it answers. event_order is the pipeline's own numbered causal record of
@@ -10735,12 +10844,11 @@ def _check_event_order(prose, event_order):
     only a strict position inversion between two located quotes fires."""
     if not prose or not event_order:
         return []
-    quote_pattern = _ling("_QUOTE_BODY_RE")
     quote_spans = []
-    for match in quote_pattern.finditer(strip_prose_markup(prose)):
-        span = re.sub(r"\s+", " ", match.group(1).strip())
+    for at, body in quoted_lines(strip_prose_markup(prose)):
+        span = re.sub(r"\s+", " ", body.strip())
         if span:
-            quote_spans.append((match.start(), span))
+            quote_spans.append((at, span))
 
     located = []
     for ev in event_order:
@@ -10938,6 +11046,51 @@ def _merged_span_actors(span, speech_events):
     return actors
 
 
+def _introducing_subject(lead, pat_map):
+    """`(position, actor)` for the body that is the SUBJECT of `lead`, the
+    sentence that introduces a quote, or None when no named body is.
+
+    THE SUBJECT IS NAMED WHERE THE SENTENCE OPENS -- after nothing but the
+    pack's own article ("The unfamiliar woman pulls her hands back"). A body
+    named anywhere further in is an object or a modifier, and so is the
+    possessor of a thing; a sentence whose subject is a description, a
+    pronoun, a possessed thing or nothing at all says nothing this scan can
+    check, and the check declines rather than promote the first other name
+    it meets. It took the first body named ANYWHERE, skipping possessives,
+    and every one of its three firings in the Brackwater run (scratch story
+    166, 2026-10-07) was that promotion:
+
+      turn 4607  "A man Tamsin didn't know leaned against the nearest
+                 mooring post." -- Tamsin, inside the relative clause
+      turn 4609  "Hester's voice came from behind, flat and low, pitched to
+                 carry through the open door without following Tamsin
+                 across the threshold." -- Tamsin, after a possessive
+                 subject that names the speaker
+      turn 4610  "Not to Tamsin." -- a verbless fragment whose subject is
+                 the sentence before it
+
+    Replayed over the 54 firings stored in that run's database, the old scan
+    reproduces 45 and this one none: 38 are one story's pronoun subjects
+    across its branches ("Her gaze returns to the Doctor."), the rest a
+    vocative inside the speaker's own line, a "you" subject, and the three
+    above. A body that opens the sentence by name and did not speak the line
+    is still reported.
+    """
+    refs = sorted((mm.start(), mm.end(), actor)
+                  for actor, pats in pat_map.items() for p in pats
+                  for mm in p.finditer(lead))
+    if not refs:
+        return None
+    start, end, actor = refs[0]
+    opening = " ".join(re.findall(r"\w+", lead[:start])).casefold()
+    if opening and opening not in {
+            str(a).casefold() for a in (compositor_value("articles") or ())}:
+        return None
+    if lead[start:end].endswith(("'s", "’s")):
+        return None
+    return start, actor
+
+
 def _check_quote_attribution(prose, event_order, actor_pronouns=None):
     """F4: a quoted line's nearest preceding actor reference must resolve to
     its actual speaker (prose convention assigns an unattributed quote to the
@@ -11017,25 +11170,17 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
         # exactly where dialogue is hardest to attribute.
         #
         # So: the introducing sentence is the last one before the quote, and
-        # its subject is the FIRST body named in it -- English puts the
-        # subject before its verb, and every oblique position (the object of a
-        # preposition, the possessor of a thing) comes after it. A possessive
-        # is skipped outright: "Vaunt's clerk" names a modifier, and a
-        # modifier is never the sentence's actor.
+        # its subject is the body named where it OPENS (`_introducing_subject`)
+        # -- English puts the subject before its verb, and every oblique
+        # position (the object of a preposition, the possessor of a thing)
+        # comes after it.
         # The last NON-EMPTY piece: the prefix ends where the quote's opening
         # mark was stripped off, so the splitter's final piece is the empty
         # tail after that sentence's full stop.
         _pieces = [s for s in split_sentences(prefix, _SENTENCE_SPLIT)
                    if s.strip()]
         lead = _pieces[-1] if _pieces else prefix
-        best = None  # (pos, actor)
-        for actor, pats in pat_map.items():
-            for p in pats:
-                for mm in p.finditer(lead):
-                    if mm.group(0).endswith(("'s", "’s")):
-                        continue
-                    if best is None or mm.start() < best[0]:
-                        best = (mm.start(), actor)
+        best = _introducing_subject(lead, pat_map)  # (pos, actor)
         if best is None or best[1] == expected:
             continue
         # A gendered pronoun AFTER the subject that does not match that
@@ -11249,21 +11394,20 @@ def _dialogue_tokens(view, p_lines):
         for q in (p_lines or []) if _quote_body(q)
     }
     lines, seen = [], set()
-    for match in _ling("_QUOTE_BODY_RE").finditer(str(view or "")):
-        quote = re.sub(r"\s+", " ", match.group(1).strip())
+    for _at, body in quoted_lines(view):
+        quote = re.sub(r"\s+", " ", body.strip())
         key = quote.casefold().rstrip(".,!?…;:")
         if not quote or key in excluded or key in seen:
             continue
         if _reads_as_attribution(quote):
-            # NOT A LINE, AND WORSE THAN USELESS AS ONE. `_QUOTE_BODY_RE`
-            # requires four characters between the marks, so a spoken line
-            # shorter than that ("No.", "Aye.") is invisible to it -- and the
-            # two quote marks it skipped then pair with their neighbours, so
-            # the ATTRIBUTION between two short lines matches as a quote. The
-            # fidelity check has always had this and merely gets confused by
-            # it; handing it to the narrator as a line to place would put
-            # "Riker says in a quiet voice:" on the page inside quotation
-            # marks. Registered in `docs/UNBUILT.md`; guarded here.
+            # NOT A LINE, AND WORSE THAN USELESS AS ONE. A span is paired by
+            # its marks now (`quoted_lines`), so a short line ("No.") no
+            # longer leaves its marks to pair across the ATTRIBUTION between
+            # two lines -- the shape this guard was written for. It stays
+            # for any mark still unpaired (a stray one inside a delivered
+            # line pairs across its neighbour the same way): handed to the
+            # narrator as a line to place, an attribution would put "Riker
+            # says in a quiet voice:" on the page inside quotation marks.
             continue
         seen.add(key)
         lines.append(quote)
@@ -11493,11 +11637,10 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         re.sub(r"\s+", " ", _quote_body(q).casefold()).rstrip(".,!?…;:")
         for q in (exclude_quotes or []) if _quote_body(q)
     }
-    quote_pattern = _ling("_QUOTE_BODY_RE")
     normalized_prose = re.sub(r"\s+", " ", prose.casefold())
     view_quotes = []
-    for match in quote_pattern.finditer(view_text):
-        quote = re.sub(r"\s+", " ", match.group(1).strip())
+    for _at, body in quoted_lines(view_text):
+        quote = re.sub(r"\s+", " ", body.strip())
         if not quote:
             continue
         view_quotes.append(quote)
@@ -11544,8 +11687,8 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     # chat 137 idx 46, round 9; "Wahh! What's happening?", chat 153 idx 23,
     # round 4). The same exemption the missing-line check above makes.
     player_lines = {_fold_marks(body).rstrip(".,!?;:") for body in excluded_bodies}
-    for match in quote_pattern.finditer(prose):
-        quote = re.sub(r"\s+", " ", match.group(1).strip())
+    for _at, body in quoted_lines(prose):
+        quote = re.sub(r"\s+", " ", body.strip())
         normalized = _fold_marks(quote).rstrip(".,!?;:")
         if (normalized and normalized not in allowed_quotes
                 and normalized not in player_lines
@@ -11592,13 +11735,13 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         spoken = re.sub(r"\s+", " ", _quote_body(event.get("quote"))).casefold()
         if actor and spoken:
             speech_events.append((actor, spoken))
-    for match in _ling("_QUOTE_BODY_RE").finditer(prose):
-        span = re.sub(r"\s+", " ", match.group(1)).casefold()
+    for _at, body in quoted_lines(prose):
+        span = re.sub(r"\s+", " ", body).casefold()
         actors = _merged_span_actors(span, speech_events)
         if len(actors) >= 2:
             warnings.append(
                 "Merged dialogue from different speakers in one quoted span "
-                f"({', '.join(sorted(actors))}): \"{match.group(1)[:80]}\""
+                f"({', '.join(sorted(actors))}): \"{body[:80]}\""
             )
 
     warnings.extend(_check_pronoun_fidelity(prose, cast_pronouns))

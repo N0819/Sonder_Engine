@@ -228,7 +228,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.68 — A barrier's appearance, and knowing how it works, are both in the room note](UNBUILT_PERCEPTION.md#unbuilt-1-68)
 - [§1.80 — Residuals from the change tier](UNBUILT_PERCEPTION.md#unbuilt-1-80)
 - [§1.93 — A contact with an object is narrated as a contact with a person](UNBUILT_PERCEPTION.md#unbuilt-1-93)
-- [§1.109 — A spoken line shorter than four characters is invisible, and takes the next one with it](UNBUILT_PERCEPTION.md#unbuilt-1-109)
+- [§1.109 — A spoken line shorter than four characters is invisible (it no longer takes the next one with it, 2026-10-08)](UNBUILT_PERCEPTION.md#unbuilt-1-109)
 - [§1.116 — The 2026-09-05 play runs: the perception-delivery classes](UNBUILT_PERCEPTION.md#unbuilt-1-116)
 - [§1.117 — A sound that HAPPENS has no channel, and `running` is the only word for it](UNBUILT_PERCEPTION.md#unbuilt-1-117)
 - [§1.118 — Residuals from the addressed-hearing repair (PB1/PB6)](UNBUILT_PERCEPTION.md#unbuilt-1-118)
@@ -411,6 +411,7 @@ Not scheduled and not committed to a phase. See the
 - [§6.16 — Good memory — `DESIGN_GOOD_MEMORY.md`](UNBUILT_CHARACTERS.md#unbuilt-6-16)
 - [§6.17 — The bare character contract — `DESIGN_JEV_CHARACTER_PASS.md`](UNBUILT_CHARACTERS.md#unbuilt-6-17)
 - [§6.18 — What the character-reply survey found that the switch did not fix](UNBUILT_CHARACTERS.md#unbuilt-6-18)
+- [§6.19 — The read-back asks how loudly, and the engine's volume is reach](UNBUILT_CHARACTERS.md#unbuilt-6-19)
 
 ### Living world and institutions
 
