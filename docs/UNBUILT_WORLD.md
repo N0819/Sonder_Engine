@@ -2202,35 +2202,56 @@ dropped from the draft, and Jev says when a design is finished. Left:
 - **One false hold remains**: `room_done_missing` reads 0.50-0.54 on the
   finished osteria (one step). Its bar is the owner's to move.
 - **The rooms chunk still tells the designer to furnish planned rooms "in
-  view".** Written for the spatial hand ("the first time a body enters it
-  or has it in view"), it ships verbatim in the designer's sheet, while the
+  view".** Written for the spatial hand ("the first time a body enters it or
+  has it in view"), it ships verbatim in the designer's sheet, while the
   designer owes only the planned rooms the beat ENTERS (Jev's `enter__`
-  questions). One run on the lighthouse rail developed seven unentered
-  stubs and redrafted the designed harbour wall whole -- 81.7 s for its
-  first step, then the wall, unclean. Stubs are no longer drawn in
-  `surroundings`, which removes the loudest invitation; the chunk's clause
-  is the owner's to narrow for the designer (a room in view but not entered
-  could stay a stub until someone goes in, or be prepared between turns by
-  `schedule_room_predevelopment`, which exists for exactly that and is off
-  by default since 2026-10-08).
-- **Predevelopment never gets the stop**: with no prose there is nothing to
-  read the room against, so a prepared room still ends on the model's own
-  submit -- out of band, off the turn's clock. Off by default since
-  2026-10-08 (`prose_contract_room_predevelopment`) for exactly this: on
-  chat 166 every seeded design was held on its first look, and on the one
-  matched pair the seeded runs took 7 and 6 steps where the unseeded took 3.
+  questions). One run on the lighthouse rail developed seven unentered stubs
+  and redrafted the designed harbour wall whole -- 81.7 s for its first
+  step, then the wall, unclean. Stubs are no longer drawn in `surroundings`,
+  which removes the loudest invitation; the chunk's clause is the owner's to
+  narrow for the designer (rooms in view of any actor are now built between
+  turns and stand when the beat opens -- `install_prepared_rooms`, on by
+  default since the owner's 2026-10-08 rulings -- so the in-beat designer
+  meets a stub in view only in these cases: its design is not made yet, it
+  came back unclean, it was refused with its one continuation spent, it was
+  made for another frame's brief of the same room, or the stub is a frontier
+  space held open for the Writers' Room).
+- **A room built between turns never gets the stop.** With no prose there is
+  nothing to read the room against, so a design between turns ends on the
+  model's own submit or at the 8-step cap. It is now put into the world, not
+  just seeded. The plan's purpose could be that text (`room_done_missing`
+  over the brief): of three Gale house designs replayed on 2026-10-08, one
+  dropped the purpose's "a man's boots drying beside it". The step cap is
+  the in-beat one; out of band it could be the owner's to raise. One of
+  three Gale house runs ended at it with a chair and the bed on one cell.
 - **The route is the owner's.** On the owner's NanoGPT `z-ai/glm-5.2:thinking`
   at `medium`, one loop took 162-174 s and met the 150 s wall; every
   measurement here is plain `z-ai/glm-5.2` with `reasoning_effort` `off`.
-- **A prepared design's effect on a room is unmeasured.** Turning
-  predevelopment off by default changes the rooms on beats a seed would have
-  started. On chat 166 these are the turn-3 low walk, the turn-9 bell loft
-  and the turn-26 Gale house; the seeded bell loft kept `bell_mount` and two
-  loft walkways the prose never named. Replay those beats with and without a
-  seed before turning it back on.
+- ~~**A prepared design's effect on a room is unmeasured.**~~ **MEASURED
+  2026-10-08** (replay of chat 166 turns 3, 9 and 26 on a db copy, 52
+  room-author calls, about $0.22).
+  - Built in, the bell loft, the low walk and (two of three runs) the Gale
+    house stood when the beat opened, and the in-beat designer was not
+    started for them.
+  - A built room is what its plan says, not what a beat's prose later adds.
+    The run's in-beat low walk carried the guide rope and the second bridge
+    the Director's prose had put there; the built one has the tide stain,
+    the Gale doorstep and the joins, and the encoder may only turn a built
+    room's doorways.
+  - The reach of the cast and of bubble travellers (the owner's same-day
+    choice) is not replayed live; it is tested with fake designers only.
 - **The prepared cache rolls back with a reroll.** `PREPARED_KEY` is a world
   row, so a checkpoint restore returns it to the checkpoint's copy and drops
-  the designs and brief fingerprints made after it.
+  the designs and brief fingerprints made after it. A reroll therefore
+  builds in from the checkpoint's copy, and a design filed after the beat's
+  checkpoint is made again (spend only; the room is never built twice). A
+  failed design's back-off (`failed`, `failed_turn`) and a refusal's filing
+  (`refused_turn`) live in the same row. So a reroll takes them back with
+  the beat, and its commit tries the room again at once (spend only;
+  `test_a_design_run_that_fails_is_filed_and_waits_before_it_is_tried_again`).
+  A run still designing when its beat is rerolled is stopped and writes
+  nothing (`core.jobs.cancel_from`). The call it was inside is paid for and
+  thrown away, and the rerolled commit's run designs that room again.
 - **The card asks the room author to redraft a standing room's physical
   change, and the engine discards it.** `room_author.txt` (en and ja) says
   to redraft only what the prose physically does to a standing room, while
@@ -2248,6 +2269,86 @@ dropped from the draft, and Jev says when a design is finished. Left:
   prepared cache keeps a design while its room is a stub and its brief
   unchanged, near or far, and `prepared_rooms` handed the beat's own
   briefs refuses a design made from an older one.
+- **A design overrides the plan's measured geometry.** The bell loft's and
+  the Gale house's plans say `exposure: enclosed`. Both built designs (and
+  the run's in-beat bell loft) wrote `sheltered`, which puts the sky into
+  their light (`room_light`). `planned_geometry` carries the plan's fields
+  onto the stub, and nothing keeps them through a design. The same class
+  exists in-beat.
+- **A plan's own fixtures stay beside the design's.** The bell loft's stub
+  carries the plan's `bell_wheel` and `bell_louvre`. The built design added
+  `bell_beam`, with the bell on an eyebolt, and did not mention them, and
+  the merge keeps all five: the spatial merge keeps a fixture until
+  `remove_anchors` takes it (`world/spatial_merge.py`,
+  `_merge_anchor_fields`). The card tells the designer everything in a
+  planned room is its own; the run's in-beat designer wrote `remove_anchors`
+  for both instead.
+- **A frontier space held open is left for the Writers' Room.** This is the
+  main session's ruling on the review of the landing (2026-10-08), under the
+  owner's ruling 1 that the Room plants ahead. `rooms_to_build` drops every
+  stub `structure.provisional_room_ids` names, for every actor, so the job
+  never designs it and the install never builds it. Built from the name the
+  grammar gave it (chat 166's `the_open_water`, purpose empty), the space
+  was spent before the Room could claim it: a claim keeps the name of a room
+  with prose, and its purpose and geometry reach the registry and never the
+  room. What is left: a held-open space in view stays a name through its
+  opening ("Through the opening is The Open Water.") until a plan claims it
+  or a beat enters it. Nothing asks the Room to claim a held-open space in
+  view sooner than its fill comes round.
+- **Two designs each clean alone can contradict each other.** In the turn-3
+  replay, the open water's continued design and the built low walk took the
+  same cells of the landing stage's east wall. The install builds the first
+  one the players meet. The next commit's job runs the same test
+  (`_install_test`), merges what stands into the scene it designs on, and
+  takes the other up again there, once (`PREDEVELOP_CONTINUATIONS`). Refused
+  again after that, it is filed not clean and waits as a seed for the beat
+  that enters its room, and no beat's install re-checks it, even if the
+  world later makes room for it. Not replayed live.
+- **A failed design is retried for as long as its room is in reach.** A
+  design that raises waits 2 beats, doubling to 16
+  (`PREDEVELOP_RETRY_BEATS`, `PREDEVELOP_RETRY_BEATS_CAP`, the Writers'
+  Room's own fill back-off). So a room that can never be designed costs one
+  designer run in sixteen beats for as long as it stays in an actor's view.
+  Whether failures should stop after some count is the owner's call.
+- **A run that raises outside a design is not backed off.** A design that
+  raises is filed and waits, but the rest of a run is outside that guard:
+  the actors, the plan's briefs, the install's own test, the cache writes
+  and the card loads. A raise there files nothing. The job is recorded
+  failed (`core.jobs.history`), and the next commit runs it again, so a
+  raise that repeats repeats at every commit. It makes no model call (the
+  designer is the only one, and it is inside the guard). An ask made while
+  it ran still gets its run (`core.jobs._run`, the third review of the
+  landing). Whether to file it with the design back-off is the owner's call.
+  Not seen live.
+- **One design a room, across frames.** The cache keeps one design per room
+  id, and every frame's run prunes it; a design is kept while any live frame
+  holds its room as the stub it was made for. Where two live frames hold the
+  same stub under different briefs (a door one frame opened, a neighbour one
+  frame named), the design made for one frame's brief is that frame's to
+  build. The other frame's run neither takes it up nor designs over it, and
+  its beat that enters the room designs it in the beat. Not seen live: a
+  bubble exists while its travellers are out of the player's range, so one
+  stub in reach of two frames is rare. Keying the cache by room and brief
+  would build both.
+- **A follow-up run is stamped with the turn that asked.** A commit landing
+  while a run designs asks for one more run under its own turn
+  (`core.jobs.submit_latest`). A restore can discard that commit while the
+  run, which read an earlier beat, goes on. The ask then stays in place: the
+  next run reads the restored world and files under the discarded turn
+  number, so a failure's back-off filed there can end a beat or so early
+  (spend only).
+- **`PREDEVELOP_PER_TURN` (4, per run of one frame's job),
+  `PREDEVELOP_CONTINUATIONS` (1) and the retry back-off (2 doubling to 16)
+  are the owner's to set.**
+  - 4 is the most stubs in the player's reach on any of the run's 30 beats
+    (the low walk at turns 4-5). With every actor's reach a busy frame can
+    owe more; the players' rooms go first and the rest wait for the next
+    run.
+  - The bound is per frame so that a bubble traveller's rooms never wait
+    behind the player's view (`OFFSCREEN_BEATS_ARE_UNCAPPED`).
+  - 1 continuation is one more designer run per brief at most.
+  - The back-off is the Writers' Room's own (`FILL_RETRY_BEATS`,
+    `FILL_RETRY_BEATS_CAP`).
 
 <a id="unbuilt-2-39"></a>
 

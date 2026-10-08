@@ -1,20 +1,28 @@
-"""Room predevelopment: the host's to turn on, and a brief designed once.
+"""A planned room's brief is designed once, and that design is continued at
+most n times -- n is `director_rooms.PREDEVELOP_CONTINUATIONS`. A design is
+taken up again from where it stopped, never begun again from nothing; a run
+that fails is tried again only after a back-off; the host may turn the job off.
 
-Measured on the Brackwater run (chat 166, 2026-10-07, 30 beats): preparing
-the planned rooms beside the player between turns spent 131 designer calls --
-1.76M prompt tokens (0.57M uncached), 51k response, 964 s -- on 25 designs, at
-least 19 of which never seeded a beat. Every seeded design was judged
-unfinished on its first look, because it was made with no prose to read the
-room against, and on the one matched pair (turn 3, the low walk) the seeded
-runs took 7 and 6 steps where the unseeded run took 3. So it is OFF until the
-host turns it on (`PREDEVELOP_SETTING`).
+Preparing rooms between turns was turned OFF by default on 2026-10-08, on the
+Brackwater run's measurement (chat 166, 30 beats): 131 designer calls -- 1.76M
+prompt tokens (0.57M uncached), 51k response, 964 s -- on 25 hidden designs,
+at least 19 of which never seeded a beat, because a design was read only when
+a beat ENTERED its room and was then judged unfinished against that beat's
+prose. The owner's ruling the same day turned it back ON by default in a new
+shape: the rooms the player can see into or is heading for are designed and
+BUILT INTO THE WORLD when the next beat opens
+(`tests/test_a_room_in_view_is_built_before_anyone_walks_in.py`). The host's
+setting (`PREDEVELOP_SETTING`) still turns it off.
 
-For when it is on, the waste the same run measured: a design was kept only on
-a clean final check and a failed attempt left nothing behind, so four design
-runs opened on the identical 8,558-token first call. Now every attempt is
-filed under the fingerprint of the brief it was made from, a design whose
-check failed is kept as a seed, and a brief is designed again only when the
-plan changes it.
+The waste the same run measured stays fixed: a design was kept only on a clean
+final check and a failed attempt left nothing behind, so four design runs
+opened on the identical 8,558-token first call. Every attempt is filed under
+the fingerprint of the brief it was made from, a design whose check failed is
+kept as a seed and taken up again at most n times, and a brief is designed
+afresh only when the plan changes it. A run that raises is filed too, and
+waits (`PREDEVELOP_RETRY_BEATS`, doubling to `PREDEVELOP_RETRY_BEATS_CAP`):
+unfiled, a designer that raised at its third step made 12 calls over 4
+commits and filed nothing (review of the 2026-10-08 landing).
 """
 
 from __future__ import annotations
@@ -66,8 +74,9 @@ def _brief(monkeypatch, purpose="a quiet room"):
     return brief
 
 
-def test_predevelopment_is_off_until_the_host_turns_it_on(temp_db, monkeypatch):
-    """Off, no job is queued, no call is made, and a design an earlier run
+def test_predevelopment_is_on_until_the_host_turns_it_off(temp_db, monkeypatch):
+    """With no setting the job runs and a cached design seeds a beat; turned
+    off, no job is queued, no call is made, and a design an earlier run
     cached does not go on seeding beats."""
     import agents.common as common
     ctx = _make_ctx(temp_db, interp=_action_interp())
@@ -78,19 +87,19 @@ def test_predevelopment_is_off_until_the_host_turns_it_on(temp_db, monkeypatch):
     temp_db.wset(ctx.chat.id, director_rooms.PREPARED_KEY,
                  {"study": {"room": {"name": "Study", "desc": "Old design."}}})
 
+    assert director_rooms.predevelopment_enabled() is True
+    assert director_rooms.prepared_rooms(ctx.chat.id, ["study"])["study"]["desc"] \
+        == "Old design."
+
+    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "off")
     assert director_rooms.predevelopment_enabled() is False
     assert director_rooms.schedule_room_predevelopment(ctx) is None
     assert director_rooms.prepared_rooms(ctx.chat.id, ["study"]) == {}
     assert calls == []
 
-    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "1")
-    assert director_rooms.prepared_rooms(ctx.chat.id, ["study"])["study"]["desc"] \
-        == "Old design."
-
 
 def test_an_unchanged_brief_is_designed_once(temp_db, monkeypatch):
     import agents.common as common
-    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "1")
     ctx = _make_ctx(temp_db, interp=_action_interp())
     temp_db.wset(ctx.chat.id, "scene", SCENE)
     brief = _brief(monkeypatch)
@@ -115,10 +124,17 @@ def test_an_unchanged_brief_is_designed_once(temp_db, monkeypatch):
 
 def test_a_design_whose_check_failed_is_kept_as_a_seed(temp_db, monkeypatch):
     """Two fixtures on one cell at one height is a check the design never
-    passed within its steps: kept, flagged, and handed to the beat that
-    enters the room -- not thrown away to be built again from nothing."""
+    passed within its steps: kept, flagged, taken up again from where it
+    stopped at most `PREDEVELOP_CONTINUATIONS` times, and then handed to the
+    beat that enters the room -- never thrown away to be built again from
+    nothing.
+
+    Taken up again with no `prepared`: the room author's card reads that
+    field as a design to keep except where a beat's prose says otherwise,
+    and between turns there is no prose. The design is in its `draft`, the
+    check's problems first in its transcript, and the pack's note says what
+    a draft already holding the room is (review of the 2026-10-08 landing)."""
     import agents.common as common
-    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "1")
     monkeypatch.setattr(director_rooms, "MAX_ROOM_STEPS", 1)
     ctx = _make_ctx(temp_db, interp=_action_interp())
     temp_db.wset(ctx.chat.id, "scene", SCENE)
@@ -136,8 +152,92 @@ def test_a_design_whose_check_failed_is_kept_as_a_seed(temp_db, monkeypatch):
     seed = director_rooms.prepared_rooms(ctx.chat.id, ["study"])
     assert set(seed["study"]["anchors"]) == {"stool", "chair"}
 
+    for n in range(1, director_rooms.PREDEVELOP_CONTINUATIONS + 1):
+        _wait(director_rooms.schedule_room_predevelopment(ctx))
+        assert len(calls) == 1 + n, "an unclean design in reach is taken up again"
+        payload = calls[n][3]
+        assert "prepared" not in payload, "no prose between turns to keep it against"
+        assert set(payload["draft"]["rooms"]["study"]["anchors"]) == {"stool", "chair"}
+        assert payload["transcript"][0]["tool"] == "check", \
+            "the continuation starts from what the check found"
+        entry = temp_db.wget(ctx.chat.id, director_rooms.PREPARED_KEY)["study"]
+        assert entry["continued"] == n and entry["clean"] is False
+
     _wait(director_rooms.schedule_room_predevelopment(ctx))
-    assert len(calls) == 1, "a failed check is not a reason to design the brief again"
+    assert len(calls) == 1 + director_rooms.PREDEVELOP_CONTINUATIONS, \
+        "a failed check is not a reason to design the brief again"
+
+
+def test_a_design_run_that_fails_is_filed_and_waits_before_it_is_tried_again(
+        temp_db, monkeypatch):
+    """A run that raises -- nothing validating after the repair, a
+    transcript past the model's context, a provider down -- is filed with
+    the beat it failed at, and the room waits `predevelop_retry_beats`
+    before it is designed again: `PREDEVELOP_RETRY_BEATS` after the first
+    failure, doubling for each further one, and a run that finishes clears
+    the count.
+
+    A REROLL TAKES THE FILING BACK WITH ITS BEAT. The cache is a world row,
+    so restoring the checkpoint before the beat restores the cache from
+    before the failure, and the rerolled beat's commit tries the room again
+    at once -- spend only, out of band. (This test used to re-run the job at
+    the failed beat's turn WITHOUT a restore and call that a reroll that
+    waits; review of the 2026-10-08 landing.)"""
+    import agents.common as common
+    from persist import checkpoints
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    temp_db.wset(ctx.chat.id, "scene", SCENE)
+    _brief(monkeypatch)
+    steps, failing = [], {"on": True}
+
+    def designer(role, step_key, system, payload, **kw):
+        steps.append(payload.get("step"))
+        if failing["on"] and payload.get("step") == 3:
+            raise RuntimeError("context length exceeded")
+        return {"calls": [{"tool": "draft_room", "args": {"room_id": "study", "room": {
+            "name": "Study", "desc": "Shelves and a desk."}}}]}
+
+    monkeypatch.setattr(common, "_agent_json", designer)
+
+    def commit_at(turn):
+        ctx.turn.idx = turn
+        _wait(director_rooms.schedule_room_predevelopment(ctx))
+        return temp_db.wget(ctx.chat.id, director_rooms.PREPARED_KEY)["study"]
+
+    checkpoints.ensure_checkpoint(ctx.chat.id, 1)
+    entry = commit_at(1)
+    assert len(steps) == 3
+    assert entry["failed"] == 1 and entry["failed_turn"] == 1
+    assert entry["room"] is None and entry["clean"] is False
+    assert "context length" in entry["error"]
+
+    checkpoints.restore_checkpoint(ctx.chat.id, 1)
+    assert "study" not in (temp_db.wget(ctx.chat.id, director_rooms.PREPARED_KEY) or {}), \
+        "the restore took the filing back with its beat"
+    entry = commit_at(1)
+    assert len(steps) == 6, "the rerolled beat's commit tries the room again"
+    assert entry["failed"] == 1 and entry["failed_turn"] == 1
+
+    wait = director_rooms.predevelop_retry_beats(1)
+    assert wait == director_rooms.PREDEVELOP_RETRY_BEATS
+    for turn in range(2, 1 + wait):
+        commit_at(turn)
+    assert len(steps) == 6, "a failed room waits"
+
+    entry = commit_at(1 + wait)
+    assert len(steps) == 9, "its wait over, the room is designed again"
+    assert entry["failed"] == 2 and entry["failed_turn"] == 1 + wait
+    longer = director_rooms.predevelop_retry_beats(2)
+    assert longer == min(2 * wait, director_rooms.PREDEVELOP_RETRY_BEATS_CAP)
+    commit_at(1 + wait + longer - 1)
+    assert len(steps) == 9, "each failure in a row waits longer"
+    assert director_rooms.predevelop_retry_beats(99) \
+        == director_rooms.PREDEVELOP_RETRY_BEATS_CAP
+
+    failing["on"] = False
+    entry = commit_at(1 + wait + longer)
+    assert entry["clean"] is True and entry["room"]["desc"] == "Shelves and a desk."
+    assert "failed" not in entry, "a run that finishes clears the count"
 
 
 def test_a_seed_whose_check_fails_arrives_with_its_check():
@@ -198,7 +298,6 @@ def test_a_design_made_from_an_old_brief_does_not_seed_the_beat(temp_db, monkeyp
     briefs, `prepared_rooms` refuses one whose brief the plan has since
     changed -- a re-plan landing after the last commit tail (review of the
     2026-10-08 landing)."""
-    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "1")
     ctx = _make_ctx(temp_db, interp=_action_interp())
     old = {"name": "Study", "purpose": "a quiet room"}
     temp_db.wset(ctx.chat.id, director_rooms.PREPARED_KEY, {"study": {
@@ -215,7 +314,6 @@ def test_a_far_stubs_design_does_not_outlive_its_re_plan(temp_db, monkeypatch):
     """The cache keeps a design while its room is a stub AND its brief is the
     one it was made from, near or far."""
     import agents.common as common
-    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "1")
     ctx = _make_ctx(temp_db, interp=_action_interp())
     temp_db.wset(ctx.chat.id, "scene", SCENE)
     brief = _brief(monkeypatch)
@@ -224,8 +322,9 @@ def test_a_far_stubs_design_does_not_outlive_its_re_plan(temp_db, monkeypatch):
     assert "study" in temp_db.wget(ctx.chat.id, director_rooms.PREPARED_KEY)
 
     brief["study"]["purpose"] = "the keeper's records room"
-    from world import structure
-    monkeypatch.setattr(structure, "rooms_to_develop", lambda sc, room: [])
+    # The study is out of reach now: neither in view nor where the player is
+    # going (`rooms_in_reach`, the module that DEFINES it, patched).
+    monkeypatch.setattr(director_rooms, "rooms_in_reach", lambda sc, body: [])
     _wait(director_rooms.schedule_room_predevelopment(ctx))
     assert "study" not in temp_db.wget(ctx.chat.id, director_rooms.PREPARED_KEY)
 

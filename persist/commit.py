@@ -683,12 +683,17 @@ def _commit_all_locked(ctx, nonce):
         results["room_work"] = {"error": str(exc)}
 
     # The prose contract's room designer, between turns: the planned rooms
-    # beside the player are designed now, so a beat that enters one adapts a
-    # finished design instead of building it inside the player's wait.
-    # Scheduled only under that contract and only when the host has turned
-    # it on (`director_rooms.PREDEVELOP_SETTING`, off by default: on chat
-    # 166 it spent 131 background calls and never shortened a beat); a
-    # failure is a warning.
+    # any actor in this commit's frame -- the players, then each cast member
+    # its scene places, a causality bubble's travellers included -- can see
+    # into or is heading for are designed now, by that frame's job, and the
+    # frame's next beat opens with each finished one built into the world
+    # (`director_rooms.install_prepared_rooms`, in band at its interpret, so
+    # this commit stays the one scene writer). A commit landing while that
+    # job still designs asks it for one more run (`jobs.submit_latest`). On
+    # unless the host turned it off (`director_rooms.PREDEVELOP_SETTING`,
+    # owner's rulings 2026-10-08: "build rooms in view", "heavy build near
+    # any actor"). The job writes its cache, never the scene; a failure is a
+    # warning.
     try:
         from agents.director_rooms import schedule_room_predevelopment
         job = schedule_room_predevelopment(ctx)

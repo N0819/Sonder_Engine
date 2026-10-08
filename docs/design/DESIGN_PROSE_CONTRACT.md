@@ -359,6 +359,121 @@ Addendum):
   plan's stub wherever the player stands, and what a seed's first look found
   -- its check, or what the prose puts in the room that its record does not
   hold -- is the first thing the in-turn designer reads.
+- **Superseded the same day: rooms in view are BUILT before anyone walks
+  in, on by default.** The owner's ruling (2026-10-08): "Between turns, each
+  planned room the player can see into or is heading for is designed once
+  and put into the world, so it exists before they walk in and the view
+  through a doorway has something real in it. This replaces the hidden-draft
+  predevelopment and is on by default." The hidden draft's failure was where
+  it was READ -- only by a beat that entered the room, against that beat's
+  prose -- not that it was made. Now:
+  - *Whose rooms*: every actor's, not only the player's. The owner chose it
+    the same day ("Rooms in view of, or ahead of, ANY cast member get built,
+    bubble travellers included, not just the player's" -- light plans far,
+    heavy builds near the actors). Each frame's commits run that frame's job
+    (`predevelop_job_key`) over `actors_ahead`: the players first, then
+    every cast member the frame's scene places. A causality bubble places no
+    player, so its job serves its travellers, and its own beats -- which run
+    the pipeline -- build the rooms in at its next beat: with no prose
+    contract at a bubble's interpret, the stage's own assertions carry them
+    (`carry_installed_rooms`). The bound is per frame, the players' rooms
+    first within it: one bound for the chat would make a traveller's rooms
+    wait behind every beat the player's view had work, a freeze in the
+    owner's sense (`OFFSCREEN_BEATS_ARE_UNCAPPED`).
+  - *What is built*: the actor's room, the next leg and the end of a walk
+    under way (`scene.approach`), and every room sight reaches through a
+    doorway (`structure.rooms_in_view_or_ahead` over
+    `visible_adjacent_rooms`, perception's own answer). A room behind a shut
+    door is neither seen into nor headed for until someone opens it or sets
+    off for it; the brief a beat is handed (`rooms_to_develop`) still
+    includes it, so a beat that opens the door designs the room as before.
+    Nor is a frontier space the plan holds open (`rooms_to_build` drops
+    every `structure.provisional_room_ids` stub): its name is the grammar's
+    and its purpose often empty, built from that name it is spent -- a
+    claim keeps the name of a room with prose and its purpose never reaches
+    the room -- and the Writers' Room plants ahead exactly there (owner's
+    ruling 1, the same day). It stays a stub until a plan claims it, and a
+    beat that enters it first still designs it in the beat.
+  - *Prepared out of band, installed in band.* The commit tail's job
+    (`schedule_room_predevelopment`, at most `PREDEVELOP_PER_TURN` = 4 a
+    commit) writes its cache, never the scene, and files each design the
+    moment it is made. The next beat's `director_interpret` opens on the
+    scene with every clean design for a stub still in reach built in
+    (`install_prepared_rooms`: same brief fingerprint, clean final check,
+    the state schema takes it, the layout check still clean against this
+    scene together with every room built beside it), so the Director, the
+    encoder and any room author read the room and not its stub; and its
+    prose contract puts the rooms in the beat as its first event
+    (`with_installed_rooms`, `room_event`). Perception previews that event,
+    the resolve's planned brief is read off the previewed world (a built
+    room is no stub, and no designer is handed it), and the commit persists
+    it with the registry projection, the checkpoint and the archive. A
+    reroll restores the stub and builds it again, never twice.
+  - *The run, the commits and the restore* (the second and third reviews of
+    the landing). A design takes about 40 s, longer than a sub-minute beat,
+    so a commit that lands while a run designs now asks it for one more run
+    on the scene it left (`core.jobs.submit_latest`, decided under the lock
+    the run releases its slot under, so no ask is lost, a run that raises
+    included); asks fold into one run. Before, the commit joined a run that
+    never saw its view. Every write re-reads the cache in one transaction
+    and writes only the run's own rooms; a design is kept while ANY live
+    frame holds its room as the stub it was made for (`_wanted_elsewhere`),
+    since every frame's run prunes the one cache. `restore_checkpoint` stops
+    only a run that read a beat it discards (`core.jobs.cancel_from`), and a
+    stopped run writes nothing: before, a run designing during a reroll
+    wrote its whole in-memory cache over the restored row and the redone
+    beat lost the gallery's design. A silent beat (empty input) clears the
+    player's declaration and the row establishing its places, which also
+    holds every place its stale prose made, and carries exactly the rooms
+    the install built in its assertions
+    (`director_rooms.carry_installed_rooms`): clearing the row alone
+    committed the stub of a room it opened on built, and keeping it whole
+    committed the place the prose invented. `orchestration.installed_rooms`
+    names only what the stage carries.
+  - *A design is taken up again, never begun again*, from where it
+    stopped, at most `PREDEVELOP_CONTINUATIONS` (1) times: one whose own
+    check was not clean, and a clean one the install refuses. The job runs
+    the install's own test first (`_install_test`, the one rule both read),
+    merges what would stand into the scene it designs on -- so every design
+    and continuation is drafted beside the rooms the next beat builds --
+    and seeds a refused design's continuation with the check that refused
+    it, the schema's words included (`design_rooms`' `seed_check`; no
+    layout check reads those). Refused with its continuations spent, a
+    design is filed not clean and waits as a seed for the beat that enters
+    the room; no beat's install checks it again. Before the review a design
+    refused once was never designed again and was refused at every beat
+    after, its room a name through the doorway.
+  - *A design that fails is filed and waits* (`failed`, `failed_turn`;
+    `predevelop_retry_beats`: `PREDEVELOP_RETRY_BEATS` 2 beats, doubling to
+    `PREDEVELOP_RETRY_BEATS_CAP` 16, the Writers' Room's own back-off). An
+    unfiled failure was designed again from nothing on every commit: the
+    review's probe made 12 calls over 4 commits and filed nothing. A run
+    that raises outside a design (the actors, the plan's briefs, the
+    install's test, a card load) files nothing and is recorded failed on its
+    job; it makes no model call, and an ask made while it ran still gets its
+    run (`core.jobs._run`).
+  - *The between-turns note* (`prose_contract.room_prepare_note`, en and
+    ja) says no beat has described these rooms yet, never that nobody is in
+    them -- the player's own room is among them, and a stub can hold a body
+    -- and says what a draft that already holds a room is. A continuation
+    carries no `prepared`, whose card clause keeps a design except where a
+    beat's prose says otherwise: between turns there is no prose.
+  - *Replayed on chat 166* at turns 3, 9 and 26 (db copy, OpenRouter plain
+    GLM 5.2, 52 room-author calls, about $0.22 at list price): the bell loft
+    (3 steps, 23 s) and the low walk (3-4 steps, 11-30 s) came back clean
+    and were built in; the Gale house came back unclean once (a chair and
+    the bed on one cell, at its 8-step cap) and clean twice (3 and 7 steps,
+    the second spending five on one table and one bench); the open
+    water's first design broke the plan's own bearings at the cap and its
+    continuation came back clean in 6 -- and was still refused, because its
+    doorway and the built low walk's took the same cells of the landing
+    stage's east wall. (The open water is a provisional frontier stub, which
+    the job now leaves to the Writers' Room; the class -- two designs each
+    clean alone -- is what the job's own run of the install's test now
+    takes up.) Through the bell loft ladder the player's view went from
+    "the bell loft." to the loft itself; the Gale house door from "the Gale
+    house." to the house; Hester's view on the landing stage from the low
+    walk's name to the walk (the player faced away from it).
 
 
 ## Playerless bubbles (2026-09-23, `tools/two_lives_drive.py`, rounds 2–8)

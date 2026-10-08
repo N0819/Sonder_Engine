@@ -42,12 +42,24 @@ class TestTheGuardExists:
     def test_it_clears_every_channel_a_declaration_travels_on(self):
         """`sequence` is what perception injects; `speech`/`action` are the
         scalar mirrors several stages read instead. Clearing one and leaving
-        the others would move the fabrication rather than remove it."""
+        the others would move the fabrication rather than remove it.
+
+        The row establishing the beat's places goes too: on an empty input
+        the prose it was made from restates stale conduct, and a place that
+        prose invents is as much a fabrication as the words. What survives is
+        exactly the rooms the install built in when the beat opened, carried
+        in the stage's assertions (`_silent_rooms`) -- kept whole, the row
+        committed the invented place; cleared with nothing carried, the
+        stub of a room the beat opened on built (reviews of the 2026-10-08
+        rooms-in-view landing; `test_a_silent_beat_keeps_nothing_its_prose_made`,
+        `test_a_silent_beat_keeps_the_rooms_it_opened_on`)."""
         block = SRC[SRC.index('if not str(ctx.input or "").strip():'):]
         block = block[:block.index("# A speech element that swallowed")]
         for field in ('out["sequence"] = []', 'out["speech"] = None',
-                      'out["action"] = None', 'out["actions"] = []'):
+                      'out["action"] = None', 'out["actions"] = []',
+                      "_silent_rooms = _installed"):
             assert field in block, field
+        assert "carry_installed_rooms(out, _silent_rooms)" in SRC
 
     def test_it_runs_before_anything_reads_the_sequence(self):
         """Downstream binds targets, routes authorial beats and injects speech

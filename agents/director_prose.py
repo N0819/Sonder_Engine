@@ -1988,6 +1988,63 @@ def reconcile_rooms(ctx, rooms_answer, events, prose, scene=None):
 ROOM_EVENT_SOURCE = "engine:places"
 
 
+def is_places_row(row):
+    """Whether a ledger or sequence row is the one establishing the beat's
+    places (`room_event`): the world's, never anybody's conduct, so it is
+    never counted as a declaration -- a silent beat discarding it counts the
+    places it held instead (`places_written`)."""
+    if not isinstance(row, dict):
+        return False
+    return ROOM_EVENT_SOURCE in (str(row.get("source_entity_id") or ""),
+                                 str(row.get("actor") or ""))
+
+
+def places_written(ctx, keep=None):
+    """The room ids the stage's places event (`room_event`) builds or
+    redraws, less the rooms in `keep`, then those it takes away or cuts a
+    doorway of: what the stage's own prose did to the places, beside the
+    rooms the beat opened on (`with_installed_rooms`). Read off the prose
+    contract's record while the stage still holds it (`attach_record` takes
+    it); empty when no contract ran."""
+    held = ctx.get(CTX_KEY) if hasattr(ctx, "get") else None
+    events = ((held or {}).get("record") or {}).get("events") or ()
+    keep = keep or {}
+    written = []
+    for event in events:
+        if not is_places_row(event):
+            continue
+        for transform in event.get("transforms") or ():
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            patch = patch if isinstance(patch, dict) else {}
+            ids = [rid for rid in patch.get("rooms") or {} if rid not in keep]
+            ids += list(patch.get("remove_rooms") or ())
+            ids += [cut.get("room") for cut in patch.get("remove_adjacent") or ()
+                    if isinstance(cut, dict)]
+            for rid in ids:
+                if rid and str(rid) not in written:
+                    written.append(str(rid))
+    return written
+
+
+def with_installed_rooms(rooms_answer, installed):
+    """The room author's answer with the rooms the beat opened on built into
+    it, each WHOLE under its own id: the design is the room. A doorway this
+    beat's author drew onto one joins it (`keep_new_places` has cut the
+    author's redraw of a built room to its doorways, since the beat opened
+    on the room standing)."""
+    if not installed:
+        return rooms_answer
+    import copy
+    from .director_rooms import _merge_room
+    answer = dict(rooms_answer or {})
+    rooms = dict(answer.get("rooms") or {})
+    for rid, room in installed.items():
+        if isinstance(room, dict):
+            rooms[rid] = _merge_room(copy.deepcopy(room), rooms.get(rid))
+    answer["rooms"] = rooms
+    return answer
+
+
 def room_event(rooms_answer, events):
     """The places the author made, as the beat's FIRST event: a place exists
     before any body walks into it. None when the author made nothing."""
@@ -2690,6 +2747,15 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             if reconciled:
                 reconciled["seconds"] = round(time.time() - t2, 3)
                 room_record["reconcile"] = reconciled
+        # THE ROOMS THIS BEAT OPENED ON, BUILT INTO IT: designed between
+        # turns for the planned rooms in the player's view
+        # (`director_rooms.install_prepared_rooms`), they ride the beat's
+        # first event, so every stage after previews them and the commit
+        # keeps them, as it keeps any room the beat builds.
+        installed = extras.get("installed_rooms") if isinstance(extras, dict) else None
+        if installed:
+            rooms_answer = with_installed_rooms(rooms_answer, installed)
+            room_record["installed"] = sorted(installed)
         extra = room_event(rooms_answer or {}, events)
         if extra is not None:
             events = [extra] + events

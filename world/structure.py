@@ -954,6 +954,43 @@ def rooms_to_develop(scene, focus_room, extra=()):
     return out
 
 
+def rooms_in_view_or_ahead(scene, focus_room, *, next_leg=None, bound_for=None):
+    """The rooms a body standing in `focus_room` can SEE INTO or is HEADING
+    FOR, in the order it meets them: the focus room, the next leg of a walk
+    under way, every room sight reaches through one of the focus room's
+    doorways -- `visible_adjacent_rooms`, the same answer perception admits
+    into a view, so an open doorway, a window or bars, and a one-way window
+    only the way it looks -- and the walk's end. Only rooms the scene holds.
+    Deterministic; reads no prose.
+
+    NOT `rooms_to_develop`, which also takes every room behind a closed
+    door: that set is the BRIEF a beat is handed, cheap author knowledge
+    for a door the beat may open. This one is the set the world builds
+    before anyone arrives (owner's ruling 2026-10-08: each planned room the
+    player "can see into or is heading for"), and a room behind a shut door
+    is neither until somebody opens it or sets off for it -- a beat that
+    opens one still has its room designed in the beat, as before."""
+    from world.spatial import visible_adjacent_rooms
+
+    rooms = (scene or {}).get("rooms") or {}
+    out = []
+
+    def add(rid):
+        rid = str(rid or "")
+        if rid and rid in rooms and rid not in out:
+            out.append(rid)
+
+    if not focus_room or focus_room not in rooms:
+        return out
+    add(focus_room)
+    add(next_leg)
+    for seen in visible_adjacent_rooms(scene, focus_room) or ():
+        if isinstance(seen, dict):
+            add(seen.get("room_id"))
+    add(bound_for)
+    return out
+
+
 def planned_room_brief(cid, scene, room_ids):
     """The Director's development brief for the planned stubs among
     `room_ids`: {room_id: {name, purpose, access, exits, structure}}.
@@ -1022,6 +1059,17 @@ def planned_room_ids(cid):
     """Every live registry room that carries a plan -- the town's own
     topology, which a beat may furnish and may not delete."""
     return set(_planned_specs(cid))
+
+
+def provisional_room_ids(cid):
+    """Every live planned room that is a frontier space HELD OPEN: a stub
+    `mint_frontier` made from an axis and marked `provisional`, standing in
+    until a plan claims the space (`claim_frontier_spaces`, which rewrites
+    the row without the mark). Its name came from the structure's grammar
+    and its purpose is often empty; what the space IS is the Writers'
+    Room's to say."""
+    return {uid for uid, (_name, spec) in _planned_specs(cid).items()
+            if spec.get("provisional")}
 
 
 def planned_room_index(cid, scene=None):

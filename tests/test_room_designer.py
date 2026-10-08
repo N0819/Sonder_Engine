@@ -293,13 +293,13 @@ def test_a_prepared_design_starts_in_the_draft():
 
 
 def test_rooms_beside_the_player_are_prepared_between_turns(temp_db, monkeypatch):
-    """After a prose-contract turn commits, the planned stubs beside the
-    player are designed out of band and cached for the beat that enters one
-    -- when the host has turned predevelopment on (it is off by default)."""
+    """After a prose-contract turn commits, the planned stubs the player can
+    see into are designed out of band and cached -- for the next beat to
+    build in (`install_prepared_rooms`), or as a seed for a beat that enters
+    one. On unless the host turns it off."""
     import agents.common as common
     from core import jobs
     from world import structure
-    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "1")
     ctx = _make_ctx(temp_db, interp=_action_interp())
     temp_db.wset(ctx.chat.id, "scene", dict(SCENE, positions={"The Stranger": "hall"}))
     brief = {"study": {"name": "Study", "purpose": "a quiet room", "exits": {}}}

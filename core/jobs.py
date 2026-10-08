@@ -59,6 +59,11 @@ class Job:
         self.started = None
         self.finished = None
         self.cancelled = threading.Event()
+        # A join's ask to run once more before the slot is released
+        # (`submit_latest`), and the newest turn that asked: the next run's
+        # `base_turn`. Read and cleared only under `_LOCK`.
+        self.asked_again = False
+        self.again_turn = None
 
     def as_dict(self):
         return {"chat_id": self.chat_id, "key": self.key,
@@ -74,10 +79,19 @@ def submit(chat_id, key, fn, base_turn=None):
     Deduped on (chat_id, key): a second submit while one is in flight joins
     the first rather than paying twice for the same work. `fn` is called as
     fn(job) so long work can consult `job.cancelled`.
+
+    A CANCELLED JOB IS NEVER JOINED (review, 2026-10-08). Cancellation is
+    cooperative, so a cancelled job holds its slot until the call it is
+    inside returns -- for a Writers' Room pass, a Planner call of 10-21 s --
+    and the submit that came in meanwhile joined work that had already been
+    told to write nothing: a reroll's own commit, or a player's ask, queued
+    nothing that ran. It starts fresh in the slot instead; the old job, when
+    it finishes, no longer holds the slot, so it neither evicts the new one
+    nor files a record (`_finish`).
     """
     with _LOCK:
         existing = _ACTIVE.get((chat_id, str(key)))
-        if existing is not None:
+        if existing is not None and not existing.cancelled.is_set():
             return existing
         job = Job(chat_id, key, base_turn)
         _ACTIVE[(chat_id, job.key)] = job
@@ -103,6 +117,47 @@ def submit(chat_id, key, fn, base_turn=None):
                     job.chat_id, job.key, job.error)
         _finish(job, "failed")
     return job
+
+
+def submit_latest(chat_id, key, fn, base_turn=None):
+    """`submit`, for work that must answer the LATEST world rather than the
+    one it read: a submit that finds the job already RUNNING asks it to run
+    `fn` once more when this run returns, with `base_turn` the newest turn
+    that asked, and returns it.
+
+    `submit`'s join is right for work whose answer does not depend on when
+    it started, and wrong for work that read the world once and works from
+    what it read: a beat committed while it runs is joined to a run that
+    will never see it. Measured on the rooms built in view (review of the
+    2026-10-08 landing): a design run outlasts a sub-minute beat, so the
+    next beat's commit joined it and a room that came into view on that beat
+    waited for the first commit after the run ended -- about every other
+    view, in fast play.
+
+    ONE MORE RUN, NOT ONE PER ASK: the asks made during one run fold into
+    the next, which reads the world as it then stands, so the work is
+    bounded by the commits that asked and never stacks. A PENDING job has
+    read nothing yet, so a join then asks nothing of it. The ask is made
+    under the lock the job releases its slot under (`_run`), so it is either
+    seen by the job or finds no job and starts one: no ask is lost between
+    the job's last look and its finish, nor with a run that raises -- its
+    failure is recorded and the asked run still goes. A cancelled job is
+    never joined (`submit`)."""
+    with _LOCK:
+        existing = _ACTIVE.get((chat_id, str(key)))
+        if (existing is not None and not existing.cancelled.is_set()
+                and existing.state == "running"):
+            existing.asked_again = True
+            if base_turn is not None:
+                try:
+                    newer = (existing.again_turn is None
+                             or int(base_turn) > int(existing.again_turn))
+                except (TypeError, ValueError):
+                    newer = True
+                if newer:
+                    existing.again_turn = base_turn
+            return existing
+    return submit(chat_id, key, fn, base_turn=base_turn)
 
 
 #: Contextvars that belong to ONE turn's wall clock and must not ride into
@@ -166,35 +221,66 @@ def _run(job, fn):
         with _LOCK:
             job.state = "running"
             job.started = time.time()
-        result = fn(job)
+        while True:
+            try:
+                result, failed = fn(job), False
+            except Exception as exc:
+                result, failed = None, True
+                _record_failure(job, exc)
+            with _LOCK:
+                # ASKED AGAIN (`submit_latest`): one more run before the slot
+                # is released, decided under the lock the ask is made under,
+                # so an ask is either seen here or finds no job at all -- and
+                # after a run that raised too, whose failure stays recorded:
+                # the ask was lost with the failure (review of the 2026-10-08
+                # rooms-in-view landing, round 3).
+                if (job.asked_again and not job.cancelled.is_set()
+                        and _ACTIVE.get((job.chat_id, job.key)) is job):
+                    job.asked_again = False
+                    if job.again_turn is not None:
+                        job.base_turn, job.again_turn = job.again_turn, None
+                    continue
+                if failed:
+                    return _finish_locked(job, "failed")
+                job.result = result
+                return _finish_locked(
+                    job, "cancelled" if job.cancelled.is_set() else "done")
     except Exception as exc:
-        # Type and message, not a traceback: the point is to be countable
-        # across turns, and above all to leave something saying this ran and
-        # failed rather than never ran at all.
-        job.error = "%s: %s" % (type(exc).__name__, str(exc)[:300])
-        logger.info("job failed: chat=%s key=%s error=%s",
-                    job.chat_id, job.key, job.error)
+        _record_failure(job, exc)
         return _finish(job, "failed")
-    job.result = result
-    return _finish(job, "cancelled" if job.cancelled.is_set() else "done")
+
+
+def _record_failure(job, exc):
+    # Type and message, not a traceback: the point is to be countable
+    # across turns, and above all to leave something saying this ran and
+    # failed rather than never ran at all.
+    job.error = "%s: %s" % (type(exc).__name__, str(exc)[:300])
+    logger.info("job failed: chat=%s key=%s error=%s",
+                job.chat_id, job.key, job.error)
 
 
 def _finish(job, state):
     with _LOCK:
-        job.state = state
-        job.finished = time.time()
-        # Identity check, not a bare delete: a later job under the same key
-        # must not be evicted by an older one finishing late.
-        # The same check gates the history write, which is what makes `reset`
-        # safe against a worker still running: reset empties `_ACTIVE`, so a
-        # job released afterwards no longer holds its slot and files nothing.
-        # Without this a late finisher put its record into the history the
-        # next test had just cleared.
-        if _ACTIVE.get((job.chat_id, job.key)) is job:
-            del _ACTIVE[(job.chat_id, job.key)]
-            past = _HISTORY.setdefault(job.chat_id, [])
-            past.append(job)
-            del past[:-_HISTORY_LIMIT]
+        return _finish_locked(job, state)
+
+
+def _finish_locked(job, state):
+    """`_finish` for a caller already holding `_LOCK` -- the run loop, which
+    must decide "no ask came" and release the slot in one hold."""
+    job.state = state
+    job.finished = time.time()
+    # Identity check, not a bare delete: a later job under the same key
+    # must not be evicted by an older one finishing late.
+    # The same check gates the history write, which is what makes `reset`
+    # safe against a worker still running: reset empties `_ACTIVE`, so a
+    # job released afterwards no longer holds its slot and files nothing.
+    # Without this a late finisher put its record into the history the
+    # next test had just cleared.
+    if _ACTIVE.get((job.chat_id, job.key)) is job:
+        del _ACTIVE[(job.chat_id, job.key)]
+        past = _HISTORY.setdefault(job.chat_id, [])
+        past.append(job)
+        del past[:-_HISTORY_LIMIT]
     return job
 
 
@@ -211,6 +297,43 @@ def cancel(chat_id, key):
         return None
     job.cancelled.set()
     return job
+
+
+def cancel_from(chat_id, key, turn_idx):
+    """Ask the job under ``key`` to stop ONLY when it was computed from a
+    beat at or after ``turn_idx`` -- a beat a restore to ``turn_idx``
+    discards -- returning it, or None when there is none or it read only
+    beats the restore keeps. A job with no ``base_turn`` is asked to stop:
+    the absence of a stamp is no evidence that it read nothing discarded.
+
+    Restoring checkpoint N takes the story back to before beat N, so work
+    queued at beat N-1's commit read nothing the restore throws away
+    (review, 2026-10-08: rerolling beat 7 cancelled beat 6's deliberation,
+    nothing re-armed it, and a proposal whose package had already published
+    stayed open for the next deliberation to judge again)."""
+    with _LOCK:
+        job = _ACTIVE.get((chat_id, str(key)))
+    if job is None:
+        return None
+    if job.base_turn is not None and turn_idx is not None:
+        try:
+            if int(job.base_turn) < int(turn_idx):
+                return None
+        except (TypeError, ValueError):
+            pass
+    job.cancelled.set()
+    return job
+
+
+def is_cancelled(job):
+    """Whether the job a body was handed has been asked to stop. False for
+    None, so work that also runs outside a job (a test, a panel reply) can
+    ask unconditionally. A body that writes asks this before every write:
+    cancellation is cooperative, so this is the only thing that stops a job
+    whose model call was already under way when it was cancelled from
+    writing what that call returned."""
+    event = getattr(job, "cancelled", None)
+    return bool(event is not None and event.is_set())
 
 
 def cancel_chat(chat_id):

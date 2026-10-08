@@ -249,6 +249,9 @@
     "room_reconcile": {
       "$text": "prose_contract/room_reconcile.txt"
     },
+    "room_prepare_note": {
+      "$text": "prose_contract/room_prepare_note.txt"
+    },
     "encoder_cue": {
       "$text": "prose_contract/encoder_cue.txt"
     },

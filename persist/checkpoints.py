@@ -541,6 +541,21 @@ def restore_checkpoint(chat_id, idx):
         jobs.cancel(chat_id, AUTO_PROMOTION_JOB_KEY)
     except Exception:
         pass
+    # The rooms designed between turns (`agents/director_rooms.py`) on the
+    # same terms, one job per frame (review of the 2026-10-08 rooms-in-view
+    # landing). A design run reads the scene a commit left and files into a
+    # world row this restore rolls back; one still designing when the player
+    # rerolled wrote its whole in-memory cache over the restored row, and the
+    # redone beat lost the gallery's design. ONLY a run that read a beat this
+    # restore discards is stopped (`core.jobs.cancel_from`), and every write
+    # it makes asks `is_cancelled` inside the transaction that re-reads the
+    # row, so a run stopped mid-call writes nothing and a run that read a
+    # kept beat writes only its own rooms.
+    try:
+        from agents.director_rooms import cancel_discarded_predevelopment
+        cancel_discarded_predevelopment(chat_id, idx)
+    except Exception:
+        pass
     # Checkpoint blobs store fully-resolved storage keys already (see
     # snapshot_state, which dumps the `world` table's own key column
     # verbatim, suffix and all). Restoring them through wget/wset while

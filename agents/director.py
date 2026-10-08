@@ -1378,9 +1378,43 @@ def director_interpret(ctx, nonce):
     # to author. The deterministic payload declares no conduct at all and
     # names the minds whose beat it is.
     if is_offscreen_beat(chat["id"], ctx.turn):
-        return offscreen_interpretation(ctx.cast, get_scene(chat["id"], chat))
+        _osc = get_scene(chat["id"], chat)
+        _oout = offscreen_interpretation(ctx.cast, _osc)
+        # A BUBBLE'S TRAVELLERS OPEN ON THE ROOMS BUILT AHEAD OF THEM, as a
+        # played beat does (below): their frame's commits designed them
+        # (`director_rooms.schedule_room_predevelopment`), and with no prose
+        # contract at this stage the stage's own assertions carry them, so
+        # perception, the resolve and the commit read them like any of the
+        # beat's writes (`director_rooms.carry_installed_rooms`). Fail-open.
+        try:
+            from . import director_rooms
+            _osc, _obuilt = director_rooms.install_prepared_rooms(
+                chat["id"], _osc, None, cast=ctx.cast,
+                frame_id=ctx.turn.frame_id)
+            director_rooms.carry_installed_rooms(_oout, _obuilt)
+        except Exception as exc:
+            ctx.add_warning(f"rooms prepared in view not built in: {exc}")
+        return _oout
     sc = get_scene(chat["id"], chat)
     pers = persona_of(chat)
+    # THE ROOMS BUILT IN VIEW STAND WHEN THE BEAT OPENS (owner's ruling
+    # 2026-10-08). A planned room an actor of this beat -- the player, or any
+    # cast member the scene places -- can see into or is heading for was
+    # designed between turns; a finished design is built into the scene this
+    # stage reads -- so the Director, its encoder and any room author see the
+    # room, not its stub -- and into the beat's first event, so perception
+    # previews it and the commit persists it
+    # (`director_rooms.install_prepared_rooms`). Fail-open: the beat opens on
+    # the stored scene, and a beat that enters a stub still designs it.
+    _installed = {}
+    try:
+        from . import director_rooms
+        sc, _installed = director_rooms.install_prepared_rooms(
+            chat["id"], sc, (pers or {}).get("name") or persona_name(pers or {}),
+            cast=ctx.cast, frame_id=ctx.turn.frame_id)
+    except Exception as exc:
+        ctx.add_warning(f"rooms prepared in view not built in: {exc}")
+        _installed = {}
     # The scene before the cache before the resolver -- one ordering for the
     # whole pipeline (`common.player_room_in`, review finding B36). This
     # stage used to read the cache FIRST, so a rerun carrying last beat's
@@ -1725,10 +1759,14 @@ def director_interpret(ctx, nonce):
         }
 
     # THE DIRECTOR WRITES PROSE (agents/director_prose.py): see
-    # director_resolve.
+    # director_resolve. The rooms built in when the beat opened ride its
+    # first event (`installed_rooms`, above).
+    _first_extras = _interpret_extras({})
+    if _installed:
+        _first_extras["installed_rooms"] = _installed
     out = director_prose.run(
         ctx, "interpret", sc, _interpret_model_payload,
-        _interpret_beat_view(ctx, {}, p_name), _interpret_extras({}),
+        _interpret_beat_view(ctx, {}, p_name), _first_extras,
         _gate_facts(ctx, sc, physical=True, speech=True,
                     crowds_rows=_icrowds, notices_rows=_inotices,
                     couriers_rows=_icouriers, reports_rows=_ireports,
@@ -1813,16 +1851,38 @@ def director_interpret(ctx, nonce):
     # player DID -- downstream still receives the beat, and
     # `_player_silence_note` still tells characters about it. What it no longer
     # receives is words.
+    #
+    # A SILENT BEAT KEEPS THE ROOMS IT OPENED ON AND NOTHING ITS PROSE MADE.
+    # The row establishing the beat's places (`director_prose.is_places_row`)
+    # carries the rooms built in view between turns -- already read as
+    # standing by the Director, the encoder and the room author -- AND every
+    # place this stage's prose made. On an empty input that prose is the
+    # Director restating stale conduct, the class this guard exists for, and
+    # a place it invents is as much a fabrication as the words. So the row
+    # goes with the rest and is counted as the places it held, and the rooms
+    # the install built -- its records, not the author's merge, which can
+    # hold a doorway to an invented place -- are carried in the stage's
+    # assertions once they are computed (`_silent_rooms`, below), as a
+    # bubble's beat carries them. Cleared with nothing carried, a player who
+    # let beats pass never saw a room in view built while the record said it
+    # was; kept whole, the row committed the place the stale prose invented,
+    # rooms in view built or not (reviews of the 2026-10-08 rooms-in-view
+    # landing).
+    _silent_rooms = {}
     if not str(ctx.input or "").strip():
         _invented = [
             e for e in (out.get("sequence") or [])
             if isinstance(e, dict) and (e.get("text") or e.get("attempt"))
+            and not director_prose.is_places_row(e)
         ]
-        if _invented or str(out.get("speech") or "").strip():
+        _made = director_prose.places_written(ctx, _installed)
+        if _invented or _made or str(out.get("speech") or "").strip():
+            _places_note = (f", {len(_made)} place(s) its prose made or "
+                            f"changed ({', '.join(_made)})" if _made else "")
             ctx.add_warning(
                 "director_interpret: player input was empty; discarded "
-                f"{len(_invented)} invented declaration(s) and any speech "
-                "attributed to the player")
+                f"{len(_invented)} invented declaration(s){_places_note} and "
+                "any speech attributed to the player")
             ctx.tell_director(
                 "The player said and did nothing that beat. An empty input is "
                 "not a cue to restate what they last said -- their silence is "
@@ -1834,6 +1894,7 @@ def director_interpret(ctx, nonce):
         out["actions"] = []
         out["contact_assertions"] = []
         out["state_assertions"] = {}
+        _silent_rooms = _installed
     # A speech element that swallowed the raw input's narration is repaired
     # BEFORE anything reads it: perception injects these texts verbatim as
     # dialogue, so narration left here is delivered to every hearer as words
@@ -2001,6 +2062,27 @@ def director_interpret(ctx, nonce):
         _onset_assertions.get("contact_ops", []) if _onset_assertions.get("causal_steps")
         else _onset_assertions.pop("contact_ops", []))
     out["onset_state_assertions"] = _onset_assertions
+    # A silent beat's assertions carry the rooms it opened on (above).
+    if _silent_rooms:
+        director_rooms.carry_installed_rooms(out, _silent_rooms)
+    # WHAT WAS BUILT IN IS WHAT THE STAGE CARRIES. The record names a room
+    # as installed only where the stage's own assertions still hold it -- the
+    # beat commits those -- and says so out loud where one did not survive:
+    # the record once said a room was built on a beat that committed its stub.
+    if _installed:
+        _kept = director_rooms.installed_rooms_kept(out, _installed)
+        _orch = out.get("orchestration")
+        if not isinstance(_orch, dict):
+            _orch = out["orchestration"] = {}
+        _orch["installed_rooms"] = _kept
+        _author = (_orch.get("prose_contract") or {}).get("room_author")
+        if isinstance(_author, dict):
+            _author["installed"] = _kept
+        _lost = sorted(set(_installed) - set(_kept))
+        if _lost:
+            ctx.add_warning(
+                "rooms built in when the beat opened did not survive the "
+                f"stage and stay stubs: {', '.join(_lost)}")
 
     fl = out.get("flow")
     if not isinstance(fl, dict):
@@ -5365,15 +5447,19 @@ def director_resolve(ctx, nonce, _corrections=None):
         # against whether the bar is between them.
         "sightlines": _sightlines_view(sc, ctx, p_name),
         # The plan's seed for every stub this beat stands in, moves into or
-        # looks into. See `_planned_rooms_view`; absent when none.
+        # looks into. See `_planned_rooms_view`; absent when none. Read off
+        # the world the reactors saw (`resolve_sc`), not the stored one: a
+        # room the beat's interpret already built -- one put into the world
+        # when the beat opened (`director_rooms.install_prepared_rooms`) --
+        # is no stub, and a designer handed its brief would build it twice.
         **({"planned_rooms": _planned} if (
             _planned := _planned_rooms_view(
-                sc, ctx, ctx.get("_player_room"), _mv_target)) else {}),
+                resolve_sc, ctx, ctx.get("_player_room"), _mv_target)) else {}),
         # ...and the NAME of every other room the plan holds
         # (`_planned_elsewhere_view`).
         **({"planned_elsewhere": _elsewhere} if (
             _elsewhere := _planned_elsewhere_view(
-                sc, ctx, _planned or ())) else {}),
+                resolve_sc, ctx, _planned or ())) else {}),
         # The room's notes on what its plan MEANS, in scope where the cast
         # stands, moves into or beside (`_author_notes_view`); absent when
         # none.
