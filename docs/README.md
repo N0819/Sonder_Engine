@@ -347,6 +347,10 @@ modes each one documents.
   code and adversarial readers (`tools/chrono_bench/`), retrieval in four
   rounds, the Doctor's first-words miss on chat 74, and the character in four
   arms graded blind.
+- [`PLAY_2026_10_07_brackwater.md`](experiments/PLAY_2026_10_07_brackwater.md)
+  — a 30-beat harsh play run with the Writers' Room at full authority: what
+  broke, the fifty commits it took, the ranked open findings (companion travel
+  first), and the decisions left for the owner.
 
 ## `archive/` — superseded
 
