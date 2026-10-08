@@ -5,7 +5,8 @@ through a vocabulary the engine owns: a word it does not hold answers None.
 Two readers then disagreed about what None meant. `commit_cast_changes` left
 the roster untouched and warned -- the character stayed `active`, in the scene,
 addressable. `spatial_frames._cast_changes_leaving`, the single set behind the
-stranded-occupant guard, destruction's vacate and companion carry, tested
+stranded-occupant guard and destruction's vacate (and, until 2026-10-07, the
+companion carry), tested
 `!= CAST_STATUS_PRESENT` and so counted the same entry as a departure.
 
 The cost of the disagreement is at the vacate, whose comment promises "the
@@ -121,35 +122,3 @@ class TestTheRoster:
         assert any("fled" in w for w in ctx.warnings), ctx.warnings
         assert spatial_frames._cast_changes_leaving(
             [{"who": "Mira", "status": "fled"}]) == set()
-
-
-class TestCompanionCarry:
-    def test_a_companion_whose_status_could_not_be_read_is_still_carried(
-        self, temp_db,
-    ):
-        """She is still active in the roster and still standing beside the
-        player; the exemption is for someone the beat sent AWAY."""
-        chat_id = temp_db.qi(
-            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
-            ("Test", "", time.time()))
-        prev_scene = {
-            "rooms": {
-                "room_a": {"name": "Room A", "adjacent": []},
-                "ship_cockpit": {"name": "Cockpit", "adjacent": [],
-                                 "parent_entity": "ship"},
-            },
-            "entities": {"ship": {"kind": "vehicle", "name": "Ship",
-                                  "interior_rooms": ["ship_cockpit"]}},
-            "positions": {"The Stranger": "room_a", "Reya": "room_a",
-                          "ship": "room_a"},
-            "attire": {}, "overlays": {},
-        }
-        new_scene = json.loads(json.dumps(prev_scene))
-        new_scene["positions"]["The Stranger"] = "ship_cockpit"
-
-        changed = spatial_frames.infer_companion_carry(
-            chat_id, None, prev_scene, new_scene, ["Reya"],
-            [{"who": "Reya", "status": "bewildered"}])
-
-        assert changed is True
-        assert new_scene["positions"]["Reya"] == "ship_cockpit"

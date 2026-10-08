@@ -23,7 +23,7 @@ from world.spatial_identity import _ci_get, PositionsIndex, room_of_record
 # instance: an elevator narrated as sealed and descending whose room kept an
 # open_door edge onto the smoke-filled hallway it left). These functions
 # recompute that doorway deterministically from the entity's own structured
-# state, joining the infer_vehicle_zones/infer_companion_carry family of
+# state, joining the infer_vehicle_zones family of
 # mechanical follow-throughs: the model authors WHAT the entity is doing
 # (state.transit / state.link, its position); code derives the adjacency.
 #

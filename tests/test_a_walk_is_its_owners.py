@@ -110,3 +110,44 @@ def test_the_floor_runs_on_every_encoded_beat():
     source = inspect.getsource(director_prose.run)
     assert "a_walk_is_its_owners(" in source
     assert source.index("a_walk_is_its_owners(") < source.index("ledger_from_events(")
+
+
+# ---------------------------------------------------------------------------
+# What was written for the refused move goes with it
+# ---------------------------------------------------------------------------
+
+FIGURE, KEEPER = "Ricuock Fenendon", "Bararon Haugenish"
+CHAPEL_AND_BRIDGE = {
+    "rooms": {"tide_chapel": {"name": "Tide Chapel"},
+              "rope_bridge": {"name": "the rope bridge"}},
+    "positions": {PLAYER: "tide_chapel", PILOT: "tide_chapel",
+                  KEEPER: "tide_chapel", FIGURE: "rope_bridge"}}
+
+
+def _sitting(who, near, source_event=HER_ACT):
+    return {"source_entity_id": who, "source_event_id": source_event,
+            "event": f"{who} sits where he is", "movement": None,
+            "transforms": [{"item": who, "patch": {"stations": {
+                who: {"at": "bridge_midspan", "near": list(near)}}}}]}
+
+
+def test_a_claim_beside_a_kept_mind_goes_with_the_refused_move():
+    """Scratch story 166 turn 4596: the floor kept the player at the chapel
+    door, but a figure sitting on the bridge was still written `near` her.
+    The near-group repair read the two as one group, pulled the pilot who
+    HAD crossed back into the chapel, and the page invented the figure's
+    walk in to match."""
+    hers = _walk("character:81", HER_ACT, PILOT, room="rope_bridge")
+    follow = _walk("persona:21", HER_ACT, PLAYER, room="rope_bridge")
+    sitter = _sitting(FIGURE, [PILOT, PLAYER])
+    out, warnings = _run([hers, follow, sitter], scene=CHAPEL_AND_BRIDGE)
+    assert warnings and PLAYER in warnings[0]
+    station = out[-1]["transforms"][0]["patch"]["stations"][FIGURE]
+    assert station["near"] == [PILOT], "she is on the bridge; the player is not"
+
+
+def test_a_claim_beside_a_kept_mind_in_the_room_it_kept_stands():
+    follow = _walk("persona:21", HER_ACT, PLAYER, room="rope_bridge")
+    keeper = _sitting(KEEPER, [PLAYER])
+    out, _ = _run([follow, keeper], scene=CHAPEL_AND_BRIDGE)
+    assert out[-1]["transforms"][0]["patch"]["stations"][KEEPER]["near"] == [PLAYER]

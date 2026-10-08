@@ -188,6 +188,7 @@ from .director_movement import (
     _sightlines_view,
     _ci_mapping_key,
     _reconcile_near_group_positions,
+    walkers_this_beat,
     _set_down_where_they_are,
     _declares_rapid_movement,
     _follow_op_for_actor,
@@ -6416,8 +6417,14 @@ def director_resolve(ctx, nonce, _corrections=None):
     # A fresh station is structured within-room evidence.  Reconcile the
     # narrow provable case before approach semantics gets final authority over
     # whether the player's own movement arrived this beat. A follower the
-    # carry held where they are (`_held`) is in no group.
-    _reconcile_near_group_positions(ctx, sc, sd, p_name, held=_held)
+    # carry held where they are (`_held`) is in no group -- and neither is a
+    # body that WALKED this beat (`travel`): a station is a decoration on the
+    # ledger, and a near claim never undoes a walk. Measured over every
+    # stored beat (2026-10-07): the repair moved a body that had just walked
+    # once, scratch story 166 turn 4596, pulling the pilot back off the
+    # bridge she had crossed by her own declaration.
+    _reconcile_near_group_positions(ctx, sc, sd, p_name,
+                                    held=_held | walkers_this_beat(out, p_name))
 
     # THE PHYSICAL FLOOR, for the writes nothing above was watching.
     #

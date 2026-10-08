@@ -239,10 +239,12 @@ def test_rerun_determinism_same_checkpoint_same_input_identical_world(temp_db):
     assert first == second
 
 
-def test_companion_carry_applies_to_the_prepared_scene(temp_db):
-    """Pass (e) must be visible on the PREPARED scene: memory preparation
-    reads it before the write transaction opens, so a carried companion's
-    episodic memories this beat are located at the new position."""
+def test_the_prepared_scene_puts_no_companion_aboard(temp_db):
+    """Pass (e) is visible on the PREPARED scene, which memory preparation
+    reads before the write transaction opens -- so it must not put a
+    companion aboard that she never declared boarding: her memories of the
+    beat would be filed in a boat she watched from the dock. There is no
+    companion carry (2026-10-07; `tests/test_companion_carry.py`)."""
     from story.character_schema import default_character_data
 
     chat_id, persona_id = _make_chat(temp_db, persona_name="Vera")
@@ -268,5 +270,5 @@ def test_companion_carry_applies_to_the_prepared_scene(temp_db):
     prepared = prepare_scene_commit(ctx)
 
     assert prepared["scene"]["positions"]["Vera"] == "cabin"
-    assert prepared["scene"]["positions"]["Mara"] == "cabin", \
-        "companion carry must be applied at preparation time"
+    assert prepared["scene"]["positions"]["Mara"] == "dock", \
+        "a companion goes only where her own declaration takes her"

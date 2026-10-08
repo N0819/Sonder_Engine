@@ -247,96 +247,6 @@ def infer_vehicle_zones(chat_id, frame_id, prev_scene, new_scene):
     return changed
 
 
-def infer_companion_carry(chat_id, frame_id, prev_scene, new_scene, cast_names,
-                           cast_changes=None):
-    """Deterministic backstop for a companion-position lag: when the
-    player's own declared action narrates OTHER present characters
-    moving/boarding a vehicle alongside them (a ship, a TARDIS...),
-    director_resolve reliably updates the PLAYER's own state_diff.positions
-    entry but reliably fails to write the matching entry for those
-    companions (confirmed live 3 times: a ship, then a TARDIS, twice).
-    Mirrors infer_vehicle_zones' role above -- a narrow, deterministic
-    mechanical follow-through for a pattern the model keeps missing, not
-    a general "figure out who else moved" solver. The fully general case
-    (two people just walk into the next room together) is deliberately
-    left unhandled -- that really is NLU-hard, and guessing there risks
-    silently teleporting a character the player actually left behind.
-
-    Trigger (all must hold):
-    - the player's own position changed this beat;
-    - the player's new room is inside a kind="vehicle" entity's interior
-      rooms, OR the player's previous and new rooms are in different
-      pre-diff connected components (the same "genuine gap-crossing" test
-      infer_vehicle_zones uses above, reused rather than reimplemented);
-    - a registered cast member was co-located with the player pre-diff;
-    - that cast member's position was left untouched by the diff (no
-      explicit new position this beat) and no cast_changes entry marks
-      them departed/incapacitated/removed this beat.
-
-    On trigger: copies the player's new position onto that cast member's
-    entry in new_scene["positions"], mutating `new_scene` in place -- same
-    calling convention as infer_vehicle_zones (called from commit.py's
-    commit_scene on the same already-merged `sc` object, before it is
-    persisted via wset).
-    """
-    prev_positions = prev_scene.get("positions") or {}
-    new_positions = new_scene.setdefault("positions", {})
-    prev_rooms = prev_scene.get("rooms") or {}
-    new_rooms = new_scene.get("rooms") or {}
-    entities = new_scene.get("entities") or {}
-
-    chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
-    if not chat:
-        return False
-    pers = persona_of(dict(chat))
-    player_name = persona_name(pers) if isinstance(pers, dict) else None
-    if not player_name:
-        return False
-
-    prev_room = prev_positions.get(player_name)
-    new_room = new_positions.get(player_name)
-    if not new_room or new_room == prev_room:
-        return False  # player didn't change rooms this beat
-
-    new_room_def = new_rooms.get(new_room) or {}
-    parent_entity = new_room_def.get("parent_entity")
-    is_vehicle_interior = bool(
-        parent_entity
-        and isinstance(entities.get(parent_entity), dict)
-        and entities[parent_entity].get("kind") == "vehicle"
-    )
-
-    # Only a move into a VEHICLE INTERIOR auto-carries co-located companions.
-    # Boarding a ship/TARDIS/boat together is a reliable default: people in the
-    # room walk aboard with you. A bare GAP-CROSS is NOT -- a teleport or a
-    # transporter beam relocates a specific ROSTER ("two to beam down"), and a
-    # co-located bystander (the transporter operator at the console, someone
-    # left behind) does NOT come along. The gap-cross branch used to carry them
-    # anyway, teleporting the operator to the planet surface (TR-1); who moves
-    # on a beam/teleport comes from the director/mapping roster, not from here.
-    # This restores the function's own stated caution: a gap-cross "risks
-    # silently teleporting a character the player actually left behind."
-    if not is_vehicle_interior:
-        return False
-
-    departed = _cast_changes_leaving(cast_changes)
-
-    changed = False
-    for name in cast_names:
-        if not name or name == player_name:
-            continue
-        if prev_positions.get(name) != prev_room:
-            continue  # not co-located with the player pre-diff
-        if name.casefold() in departed:
-            continue  # explicitly handled this beat -- don't override
-        if new_positions.get(name) != prev_room:
-            continue  # diff already moved them somewhere -- don't override
-        new_positions[name] = new_room
-        changed = True
-
-    return changed
-
-
 def _cast_changes_leaving(cast_changes):
     """Casefolded names this beat's `cast_changes` send OUT of the scene.
 
@@ -370,8 +280,8 @@ def _cast_changes_leaving(cast_changes):
 
 def infer_came_from(chat_id, frame_id, prev_scene, new_scene, cast_names):
     """Deterministic per-character orientation, joining the infer_vehicle_zones
-    / infer_companion_carry family (called from commit_scene on the merged
-    scene before it is persisted).
+    family (called from commit_scene on the merged scene before it is
+    persisted).
 
     When a character's position changes from A to an ADJACENT room B this beat,
     record A as their `came_from` -- the room now at their back, which

@@ -1150,7 +1150,7 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
         key = key_of.get(str(label or "").strip().casefold())
         return key if key and _MIND_KEY.match(key) else None
 
-    out, kept_out = [], []
+    out, kept_out, refused_all = [], [], set()
     for event in events or []:
         if not isinstance(event, dict):
             out.append(event)
@@ -1178,6 +1178,7 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             out.append(event)
             continue
         kept_out.extend(sorted(names.get(k) or k for k in refused))
+        refused_all |= refused
         if mind(event.get("source_entity_id")) in refused:
             continue
         forms = {f.casefold() for k in refused for f in (k, names.get(k) or k)}
@@ -1201,10 +1202,70 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             transforms.append(transform)
         event["transforms"] = transforms
         out.append(event)
+    if refused_all and isinstance(scene, dict):
+        out = _near_the_kept(out, scene, {names.get(k) or k for k in refused_all})
     if kept_out and warn:
         warn("a walk is its owner's: %s kept their room -- moved by another's "
              "declaration, with no hold, carry or declaration of their own"
              % ", ".join(sorted(set(kept_out))))
+    return out
+
+
+def _near_the_kept(events, scene, kept):
+    """The encoder wrote the beat for a world in which the refused minds
+    moved, and its stations still say so: a body `near` one of them stands
+    beside it in the room it never reached. Measured on scratch story 166,
+    turn 4596: the floor kept the player at the chapel door, but a figure's
+    station on the bridge still read `near: [Hester, Tamsin]`; the
+    near-group repair read that as one group, pulled the walker who HAD
+    crossed back into the chapel, and the page invented the figure's walk
+    in to match. A claim beside a kept mind survives only where the
+    claimant ends the beat in the room that mind kept; anywhere else it was
+    written for the refused move and goes with it."""
+    from world.spatial import room_of
+    kept_room = {name.casefold(): room_of(scene, name) for name in kept}
+    ends = {}
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        movement = event.get("movement")
+        if isinstance(movement, dict) and movement.get("mover") \
+                and str(movement.get("to_room") or "").strip():
+            ends[str(movement["mover"]).strip().casefold()] = str(movement["to_room"])
+        for transform in event.get("transforms") or []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if isinstance(patch, dict) and isinstance(patch.get("positions"), dict):
+                for who, room in patch["positions"].items():
+                    if str(room or "").strip():
+                        ends[str(who).strip().casefold()] = str(room)
+
+    def end_of(who):
+        return ends.get(str(who).strip().casefold()) or room_of(scene, who)
+
+    def stale(claimant, other):
+        room = kept_room.get(str(other).strip().casefold(), "missing")
+        return room != "missing" and room and end_of(claimant) not in (None, room)
+
+    out = []
+    for event in events:
+        if not isinstance(event, dict) or not event.get("transforms"):
+            out.append(event)
+            continue
+        transforms, changed = [], False
+        for transform in event["transforms"]:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            stations = patch.get("stations") if isinstance(patch, dict) else None
+            if isinstance(stations, dict):
+                fixed = {}
+                for claimant, station in stations.items():
+                    near = station.get("near") if isinstance(station, dict) else None
+                    if isinstance(near, list) and any(stale(claimant, n) for n in near):
+                        station = dict(station, near=[n for n in near if not stale(claimant, n)])
+                        changed = True
+                    fixed[claimant] = station
+                transform = dict(transform, patch=dict(patch, stations=fixed))
+            transforms.append(transform)
+        out.append(dict(event, transforms=transforms) if changed else event)
     return out
 
 

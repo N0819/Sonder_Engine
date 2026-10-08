@@ -19,7 +19,7 @@ from world.spatial import (BEARING_MANNERS, contradictory_sight_edges, derived_r
                            guessed_room_sizes,
                            layout_warning, merge_scene_with_diff,
                            room_layout_lint, scene_room_id)
-from world.spatial_frames import (_cast_changes_leaving, infer_companion_carry,
+from world.spatial_frames import (_cast_changes_leaving,
                             infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
                             infer_threshold_crossings)
@@ -2162,16 +2162,20 @@ def compose_beat_scene(ctx):
         apply_attire_diff(sc, diff, ctx, res)
 
     infer_vehicle_zones(cid, ctx.turn.frame_id, prev_scene, sc)
+    # NO COMPANION CARRY. `infer_companion_carry` copied every registered
+    # cast member left in the player's old room into a vehicle the player
+    # boarded, reading nothing the companion declared. Measured 2026-10-07
+    # over every stored beat (scratch play db and engine.db): 30 boardings,
+    # two firings, both wrong -- a lieutenant put aboard the shuttle he was
+    # at the station's override panel trying to stop (chat 20 turn 384), a
+    # pilot put in the boat while she stood mid-span on the bridge behind it
+    # (scratch story 166 turn 4597). The encoder writes a companion who
+    # boards (every TARDIS boarding in both dbs carried its own position),
+    # and a mind goes only where its own declaration takes it (owner ruling,
+    # 2026-10-07; `director_prose.a_walk_is_its_owners`).
     _carry_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
-    infer_companion_carry(
-        cid, ctx.turn.frame_id, prev_scene, sc,
-        _carry_names,
-        diff.get("cast_changes") or [],
-    )
     # Per-character orientation (came_from + focus + facing), read by
-    # egocentric_frame. Runs AFTER companion-carry so a carried companion's
-    # inferred new position is already in sc when its came_from is computed;
-    # infer_focus runs after infer_came_from (which clears focus on a
+    # egocentric_frame; infer_focus runs after infer_came_from (which clears focus on a
     # disorienting jump); infer_facing runs LAST -- it reads the freshly-set
     # came_from and focus to derive the compass heading left/right depends on.
     infer_came_from(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)

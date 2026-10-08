@@ -12,7 +12,7 @@ prepare_scene_commit's tail:
         cadence ACTS while it lasts (see the pass (c1) block below), and
         (c2) expire due world_conditions;
     (d) recompute derived dock edges (when an arrival fired);
-    (e) vehicle-zone / companion-carry inference.
+    (e) vehicle-zone inference.
 
 `mechanics_sweep` is pure with respect to the DATABASE: it never writes --
 every durable effect is returned as an event_op for the commit domain
@@ -21,16 +21,16 @@ mutates only the passed-in scene dict, exactly as the pieces it gathers
 always did. Pass implementations shared with other consumers stay where
 those consumers need them (apply_transit_dock_edges in spatial.py, because
 merge_scene_with_diff must derive the same doorways for perception's
-mid-turn merges; infer_vehicle_zones/infer_companion_carry in
-spatial_frames.py, whose tests exercise them directly) -- this module owns
+mid-turn merges; infer_vehicle_zones in spatial_frames.py, whose tests
+exercise it directly) -- this module owns
 the ordering and the sweep contract, not duplicate copies.
 
 Behavior preservation notes (the refactor this module came from is
 contractually behavior-identical -- tests/test_mechanics_sweep.py pins it):
 - pass (e) ALSO runs during scene preparation (prepare_scene_commit), so
   memory preparation -- which reads the prepared scene before the write
-  transaction opens -- sees carried companions at their new position, as
-  it always has. Both passes are idempotent, so the sweep's (e) run is a
+  transaction opens -- sees vehicle zones as the commit will. Both passes
+  are idempotent, so the sweep's (e) run is a
   no-op unless pass (a) moved a vehicle this very sweep -- the one case
   the old arrangement structurally missed.
 - pass (d) runs only when an arrival fired, mirroring the old sweep: on a
@@ -66,7 +66,7 @@ import json
 from core import jobs
 from world.spatial import (apply_transit_dock_edges, room_of_record,
                            scene_names_body)
-from world.spatial_frames import infer_companion_carry, infer_vehicle_zones
+from world.spatial_frames import infer_vehicle_zones
 
 
 def stable_event_key(*parts):
@@ -1254,8 +1254,7 @@ def _expire_conditions(conditions, elapsed):
 
 def mechanics_sweep(scene, clock, frame_id, pending, *,
                     conditions=(), prev_scene=None, chat_id=None,
-                    turn_id=None, turn_idx=None, cast_names=(),
-                    cast_changes=(), player_room=None, town=None,
+                    turn_id=None, turn_idx=None, player_room=None, town=None,
                     presence_rooms=()):
     """Run the ordered passes (a)-(e).
 
@@ -1323,11 +1322,11 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
     if counts["fired"]:
         apply_transit_dock_edges(scene)
 
-    # (e) vehicle-zone / companion-carry inference (idempotent; also
-    # applied at preparation time -- see the module docstring).
+    # (e) vehicle-zone inference (idempotent; also applied at preparation
+    # time -- see the module docstring). There is no companion carry: a mind
+    # goes only where its own declaration takes it (`commit_scene_state`
+    # says what the carry did and why it went).
     if prev_scene is not None and chat_id is not None:
         infer_vehicle_zones(chat_id, frame_id, prev_scene, scene)
-        infer_companion_carry(chat_id, frame_id, prev_scene, scene,
-                              list(cast_names), list(cast_changes or []))
 
     return scene, event_ops, notices, counts

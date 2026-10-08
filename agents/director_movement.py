@@ -597,6 +597,21 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name, held=()
 
 
 
+def walkers_this_beat(out, player_name):
+    """The bodies that WALKED this beat -- the travel record's subjects,
+    walked by their own declared move or their own follow -- the player
+    aside, whose room the near-group repair already never takes from
+    somebody else's station. A walk ends where it ended: a near claim, a
+    decoration on the ledger, is not evidence it did not happen (scratch
+    story 166, turn 4596)."""
+    travel = (out or {}).get("travel") if isinstance((out or {}).get("travel"), dict) else {}
+    walkers = {str(a.get("subject")) for a in travel.get("advanced") or ()
+               if isinstance(a, dict) and a.get("subject")}
+    walkers |= {str(x) for x in travel.get("arrived") or () if x}
+    walkers.discard(str(player_name or ""))
+    return walkers
+
+
 def _declares_rapid_movement(result):
     """Whether an actor declared pace an ordinary follower cannot inherit."""
     if not isinstance(result, dict):

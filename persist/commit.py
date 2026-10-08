@@ -51,7 +51,7 @@ from world.survival import vitals_of
 from world.comfort import comfort_level
 from world.paradox import check_and_apply_paradox
 from world.spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
-from world.spatial_frames import (infer_companion_carry, infer_vehicle_zones,
+from world.spatial_frames import (infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
                             infer_threshold_crossings)
 

@@ -91,7 +91,6 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
     clock = prepared.get("clock") or wget(cid, "simulation_clock", {}) or {}
     res = ctx.director_resolve or ctx.director_establish or {}
     diff = res.get("state_diff") or {}
-    cast_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
 
     # The player's room in the PREPARED scene -- after this beat's movement
     # merged -- so a consequence landing exactly where the party now stands
@@ -138,8 +137,6 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
             sc, clock, frame_id, pending,
             conditions=conditions, prev_scene=prev_scene, chat_id=cid,
             turn_id=ctx.turn.id, turn_idx=ctx.turn.idx,
-            cast_names=cast_names,
-            cast_changes=diff.get("cast_changes") or [],
             player_room=_player_room,
             town=town, presence_rooms=presence_rooms,
         )
