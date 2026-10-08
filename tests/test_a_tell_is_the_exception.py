@@ -130,7 +130,7 @@ def _delivered(subtlety, *, known=False, focus=None, sheet=None):
              "positions": {"Ada": "hall", "Bo": "hall"}}
     if focus:
         scene["orientation"] = {"Ada": {"focus": {"kind": "entity", "ref": focus}}}
-    ctx = SimpleNamespace(character_results={7: {"manifest": {
+    ctx = SimpleNamespace(reaction_results={}, character_results={7: {"manifest": {
         "surface_demeanor": "", "tells": [{"channel": "seen", "cue": _CUE, "subtlety": subtlety}]}}})
     out = _delivered_manifest(ctx, scene, "Ada", [{"name": "Bo", "room": "hall"}],
                               {"Ada": ["Bo"]} if known else {}, {"Bo": 7}, sheet)
@@ -369,3 +369,81 @@ def test_the_step_reads_the_stored_carriage_and_anchors_its_tell(temp_db, monkey
     act = next(e for e in out["sequence"] if e.get("type") == "action")
     assert tell["at_event"] == act["event_id"]
     assert not [e for e in out["sequence"] + list(out.get("actions") or []) if STEP_MARK in e]
+
+
+def test_a_tell_is_not_placed_where_its_observer_could_not_see_the_giver(temp_db, _no_model):
+    """A tell admitted at the end of the beat is placed at its step only if
+    the observer could see the giver just before that step. The case the
+    review of 9a29099a traced: a line said from behind a shut door, then the
+    door opened and the giver walked in, with the tell anchored at the line
+    -- she was shown a visual sign at a moment she had no sight of him. It
+    goes after the beat instead, where it was admitted."""
+    from agents.perception import perception_outcome
+    from tests.test_a_line_is_heard_from_where_it_was_spoken import _beat
+
+    ctx = _beat(temp_db)
+    shut = [{"to": "study", "barrier": "closed_door"}]
+    temp_db.wset(ctx.chat.id, "scene", {
+        "rooms": {"hall": {"name": "Hall", "light": "lit", "adjacent": shut},
+                  "study": {"name": "Study", "light": "lit",
+                            "adjacent": [{"to": "hall", "barrier": "closed_door"}]}},
+        "positions": {"Hinami": "hall", "The Doctor": "study"},
+        "entities": {}, "stations": {}, "attire": {}})
+    said = "I never touched the money."
+    sequence = [
+        {"type": "speech", "text": said, "volume": "normal", "visibility": "overt",
+         "conceal_from": [], "targets": [], "event_id": "walk:0:speech"},
+        {"type": "action", "attempt": "opens the door and steps into the hall",
+         "observable": "opens the door and steps into the hall",
+         "visibility": "overt", "commitment": "asserted",
+         "conceal_from": [], "targets": [], "event_id": "walk:1:action"},
+    ]
+    tell = {"cue": "his hand closes over his coat pocket", "channel": "seen",
+            "subtlety": jev.MISS["plain"], "at_event": "walk:0:speech"}
+    ctx["interaction_loop"]["rounds"][0]["result"]["sequence"] = sequence
+    ctx.character_results[int(ctx.cast[0]["id"])] = {
+        "sequence": sequence, "manifest": {"surface_demeanor": "", "tells": [tell]}}
+    ctx.director_resolve = {
+        "resolved_event": "He answers from the study, then comes in.",
+        "dialogue_log": [{"speaker": "The Doctor", "exact_quote": said,
+                          "volume": "normal"}],
+        # The door's own opening is a causal step with its own moment in a
+        # played beat; held fixed here, so only the mover's cut decides
+        # whether she could see him when he spoke.
+        "state_diff": {"positions": {"The Doctor": "hall"}},
+    }
+    out = perception_outcome(ctx, "n0")
+    events = sorted((o for o in out["observations"]["player"] if o.get("phase") == "event"),
+                    key=lambda o: o["order"])
+    kinds = [(o["kind"], str((o.get("observed") or {}).get("text") or "")) for o in events]
+    cues = [i for i, (kind, _) in enumerate(kinds) if kind == "cue"]
+    walk = [i for i, (_, text) in enumerate(kinds) if "steps into the hall" in text]
+    assert cues and walk, kinds
+    assert cues[0] > walk[0], kinds
+
+
+def test_a_reaction_phase_tell_reaches_who_saw_it(temp_db, _no_model):
+    """A character who declared in the reaction phase gives its tells and
+    carriage like any other: its lines and acts were delivered while its
+    manifest was read from the interaction map alone (UNBUILT_CHARACTERS
+    §6.18)."""
+    from agents.perception import perception_outcome
+    from tests.test_composer_pipeline import _interp, _make_ctx
+
+    ctx, char_id = _make_ctx(temp_db)
+    ctx.director_interpret = _interp(char_id, [
+        {"type": "speech", "text": "Hand it over.", "volume": "normal", "tone": "",
+         "visibility": "overt", "conceal_from": []}])
+    line = {"volume": "normal", "tone": "", "visibility": "overt", "conceal_from": [], "targets": []}
+    tell = {"cue": "her grip whitens on the strap", "channel": "seen",
+            "subtlety": jev.MISS["plain"]}
+    ctx.character_results = {}
+    ctx.reaction_results = {char_id: {
+        "sequence": [{"type": "speech", "text": "Not a chance.", **line,
+                      "event_id": f"turn:{ctx.turn.id}:character:{char_id}:0:speech"}],
+        "manifest": {"surface_demeanor": "", "tells": [tell]}}}
+    ctx.director_resolve = {"resolved_event": "", "state_diff": {}, "dialogue_log": [
+        {"speaker": "Reya", "exact_quote": "Not a chance.", "volume": "normal"}]}
+    out = perception_outcome(ctx, "n0")
+    cues = [o for o in out["observations"]["player"] if o.get("kind") == "cue"]
+    assert cues, out["observations"]["player"]

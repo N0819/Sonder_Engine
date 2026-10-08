@@ -419,7 +419,7 @@ Landed 2026-10-08 (one tell a reply, the gate on one scale, cues placed where th
 - The observable floor on `how`/`demeanor`/`tells` is a card clause, not the deterministic part check `do` has (`jev.act_parts`, which kept 19 of 23 visible parts). Meaning written into those fields still reaches other minds if the model ignores the card. This is an owner decision.
 - `how` renders in the voice slot ('says in a <how> voice') yet carries gaze and posture in both arms ('eyes on her hands not her face').
 - `tell_variety` still pushes 'another part of the body', the rotation that cycled one body vocabulary across both Brackwater characters.
-- A reaction-loop character's demeanor (§6.18, never delivered) is still filed as its `carriage`. The next read-back then compares against words nobody saw; harmless, but not 'shown'.
+- ~~A reaction-loop character's demeanor (§6.18, never delivered) is still filed as its `carriage`.~~ FIXED 2026-10-08: `_delivered_manifest` reads both behaviour paths (`_settled_character_result`), so the carriage filed is the carriage shown.
 
 ## 2. Roadmap
 
@@ -1813,9 +1813,11 @@ day, these remain:
   play re-derives observations from the rendered view, so their wording is
   the view's; an archived turn replayed with observations older than its
   final view repair is the case, by reading, not run.
-- **A reaction-loop character's demeanour and tells are recorded as shown
-  and never delivered**: `_delivered_manifest` reads only
-  `ctx.character_results`, while commit files the tells as shown.
+- ~~**A reaction-loop character's demeanour and tells are recorded as shown
+  and never delivered**~~ **FIXED 2026-10-08**: `_delivered_manifest` read only
+  `ctx.character_results`; it now reads both behaviour paths
+  (`perception._settled_character_result`), as the outcome stream already did
+  (`tests/test_a_tell_is_the_exception.py::test_a_reaction_phase_tell_reaches_who_saw_it`).
 - By reading, not run: the commit rebind of current-beat ids
   (`commit_memory.py`) may change `ctx.character_results` in place, because
   merging into nothing returns the same object.

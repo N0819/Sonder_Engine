@@ -798,8 +798,8 @@ def _settled_character_result(ctx, character_id):
     sequences and the accumulating update fields.
     """
     return _merge_character_results(
-        (ctx.reaction_results or {}).get(character_id),
-        (ctx.character_results or {}).get(character_id),
+        (getattr(ctx, "reaction_results", None) or {}).get(character_id),
+        (getattr(ctx, "character_results", None) or {}).get(character_id),
     ) or {}
 
 
@@ -2680,7 +2680,11 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
         cid = cast_by_name.get(sname) if sname else None
         if not sname or sname == observer or cid is None:
             continue
-        manifest = (ctx.character_results.get(cid) or {}).get("manifest") or {}
+        # Both behaviour paths: a reaction-phase declarer's carriage and tells
+        # were never delivered, while its lines and acts were (UNBUILT
+        # CHARACTERS §6.18; reachable more often since the acted-upon widening
+        # sends a contested act's target through the reaction phase).
+        manifest = (_settled_character_result(ctx, cid) or {}).get("manifest") or {}
         demeanor = manifest.get("surface_demeanor")
         tells = [t for t in (manifest.get("tells") or [])
                  if isinstance(t, dict) and t.get("cue")]
@@ -4249,7 +4253,10 @@ def _cue_slots(sc, manifest, observer, beat_events):
     source's LAST line or act of the beat: inside its giver's conduct, and in
     the round the tells came from, since a mind's manifest is its latest
     round's (`_MERGE_LATEST_WINS_FIELDS`) while its lines and acts are every
-    round's. Never after all of it.
+    round's. Not after all of it -- except where the outcome stage finds
+    the observer could not see the giver just before that step: a cue
+    admitted on the end-of-beat relation goes after the beat then, where
+    it was admitted (review of this placement, 2026-10-08).
 
     They used to be numbered after every event, so they were always the last
     records, and the narrator, told the order is absolute, ended the page on
@@ -7587,6 +7594,19 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
 
             for at_index, beat_event in enumerate(beat_events):
                 for _giver, _cue in cue_slots.get(at_index, ()):
+                    # A TELL IS PLACED WHERE IT SHOWED ONLY IF IT COULD BE SEEN
+                    # THERE. It was admitted on the end-of-beat relation
+                    # (`_delivered_manifest`), so an observer who could not see
+                    # its giver just before the step -- a line said behind a
+                    # shut door, then a walk in -- was shown a visual sign at a
+                    # moment it had no sight of (review of 9a29099a). The
+                    # moment between the previous entry and this one, the
+                    # step's own move still pending; failing it, the cue goes
+                    # after the beat, where it was admitted, as before.
+                    if not _sight_as_of(_giver, at_index - 1):
+                        unplaced_manifest.setdefault(_giver, {}).setdefault(
+                            "cues", []).append(_cue)
+                        continue
                     percept = _cue_percept(
                         sc, _giver, _cue, name, display_map, recognized,
                         unknown, order, sense_card=p.get("sense_card"))
