@@ -4129,8 +4129,42 @@ def room_prose(rdata):
     for field in ("notes", "desc", "description"):
         text = rdata.get(field)
         if text:
-            return strip_engine_provenance(str(text))[:600]
+            return whole_sentences(strip_engine_provenance(str(text)),
+                                   ROOM_PROSE_CHARS)
     return ""
+
+
+#: The most of a room's description a view carries, in characters. Named,
+#: per ask-before-limiting: 60 of the 681 described rooms on the 2026-10-07
+#: scratch db (8.8%) run longer, the longest 1,348.
+ROOM_PROSE_CHARS = 600
+
+
+def whole_sentences(text, limit):
+    """`text` cut to the whole sentences that fit in `limit` characters --
+    never mid-word, and never less than the first sentence, which is kept
+    whole however long it is. A bare slice cut the landing stage's 655
+    characters at 600 and the view read "and the open fen stretc." (scratch
+    story 166, turn 4597); `_end_sentence` then gave the stump a full stop.
+    Sentences are the language pack's (`split_sentences`)."""
+    text = str(text or "")
+    if len(text) <= limit:
+        return text
+    kept, pos = 0, 0
+    for piece in split_sentences(text):
+        piece = str(piece or "").strip()
+        if not piece:
+            continue
+        at = text.find(piece, pos)
+        if at < 0:
+            break
+        end = at + len(piece)
+        if end > limit and kept:
+            break
+        kept = pos = end
+        if end > limit:
+            break
+    return text[:kept].rstrip() if kept else text
 
 
 def _room_notes_from_lore(room_id, ctx, scene=None):
