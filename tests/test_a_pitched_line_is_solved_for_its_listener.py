@@ -1,18 +1,27 @@
-"""A LINE'S VOLUME IS HOW FAR IT IS MEANT TO CARRY.
+"""A PITCHED LINE IS SOLVED FOR ITS LISTENER, AND A QUIET ANSWER STANDS.
 
 The engine's vocabulary says so to the encoder (`encoder/core.txt`): a voice
 aimed at one listener is `pitched` -- lowered so only they would catch it, or
-raised so it reaches them -- and whisper and mutter are only for words kept
-from somebody present. The character's read-back asks "how loudly" and offers
-no `pitched`, so a voice lowered FOR its listener was booked a whisper, the
-volume graded at a fixed breath level.
+raised so it reaches them. Two rules here:
 
-Measured, scratch story 166 turn 4614 (the Brackwater run, 2026-10-07):
-Hester, outside the Gale house door, spoke to Tamsin inside it -- "through
-the shut door, voice pitched low and even" -- and the read-back booked it
-`whisper`, kept from no one. Tamsin never received the line. Across chats
-160-166, 20 of 111 character lines were booked whisper or mutter while the
-read-back said they were kept from nobody.
+* THE INTERACTION LOOP SOLVES A PITCHED LINE from its addressee's cell, as
+  both perception passes do. Read by its word, `pitched` is no volume
+  `hear_level` knows and fell through to an ordinary voice, so a line
+  lowered for one listener reached every bystander in the round whole.
+
+* THE CHARACTER READ-BACK'S QUIET ANSWER IS BOOKED AS ANSWERED. Scratch
+  story 166 turn 4614 (the Brackwater run, 2026-10-07): Hester, outside the
+  Gale house door, spoke to Tamsin inside it ("through the shut door, voice
+  pitched low and even") and the read-back booked it `whisper`; Tamsin never
+  received the line. A code-side rebooking -- a whisper or mutter kept from
+  nobody and aimed at someone booked as `pitched` -- was built (1833958f)
+  and withdrawn on review the same day: the read-back names its addressee
+  in the speaker's own words, a description for a stranger, which no solver
+  can place, so the line fell back to an ordinary voice the whole room
+  heard; and three readers (charter observation, two background paths)
+  grade the bare word and never solve it. Failing quiet is the firewall's
+  direction. Asking for reach is the read-back's own question to change
+  (`docs/UNBUILT_CHARACTERS.md` §6.19).
 
 Same class as the 2026-09-14 case `test_a_line_pitched_to_its_addressee.py`
 opens with ("low, so that only his table would hear" filed as a whisper and
@@ -65,27 +74,16 @@ def _line(answers, reply=None):
 
 
 class TestTheBookedVolume:
-    def test_a_whisper_kept_from_no_one_is_pitched_for_its_listener(self):
-        line = _line(_answers("whisper"))
-        assert (line["volume"], line["targets"], line["conceal_from"]) == (
-            "pitched", ["Tamsin Coyle"], [])
-
-    def test_a_mutter_kept_from_no_one_is_pitched_too(self):
-        assert _line(_answers("mutter"))["volume"] == "pitched"
+    def test_a_quiet_answer_aimed_at_someone_is_booked_as_answered(self):
+        for volume in ("whisper", "mutter"):
+            line = _line(_answers(volume))
+            assert (line["volume"], line["targets"], line["conceal_from"]) == (
+                volume, ["Tamsin Coyle"], [])
 
     def test_words_kept_from_someone_keep_their_whisper(self):
         line = _line(_answers("whisper", kept=("Abel Gale",)))
         assert (line["volume"], line["conceal_from"]) == (
             "whisper", ["Abel Gale"])
-
-    def test_a_line_said_to_no_one_keeps_its_mutter(self):
-        reply = _reply()
-        reply["sequence"][0]["to"] = ""
-        answers = _answers("mutter")
-        answers["say:0:to:0"] = {"type": "choice",
-                                 "probabilities": {"no": 1.0}}
-        line = _line(answers, reply)
-        assert (line["targets"], line["volume"]) == ([], "mutter")
 
     def test_an_ordinary_or_raised_answer_stands(self):
         for volume in ("normal", "loud", "shout"):

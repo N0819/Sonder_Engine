@@ -4763,6 +4763,26 @@ def character_step(ctx, cid, nonce):
         out, {**_before_answers, **(_answers or {})}, _holding)
     for _warning in _compile_warnings:
         ctx.add_warning(f"character {character_name(sh)}: {_warning}")
+    # A LINE KEPT FROM A STRANGER IS KEPT FROM THAT BODY: the read-back's
+    # kept-from entries are this speaker's own labels, a description for a
+    # stranger, and no concealment reader resolves one
+    # (`character_bare.name_concealed_bodies`). Read back through the
+    # speaker's own label map, the floor every payload shares.
+    _speaker = character_name(sh)
+    _cast_handles = {}
+    for _row in ctx.cast or ():
+        try:
+            _cast_handles[character_name(normalized_character_of_row(_row))] = \
+                f"character:{_row['id']}"
+        except Exception:
+            continue
+
+    def _bodies_named(label):
+        from .director import _bodies_addressed_as
+        return _bodies_addressed_as(ctx, sc, _speaker, [label])
+
+    character_bare.name_concealed_bodies(
+        out, _bodies_named, lambda body: _cast_handles.get(body, body))
 
     # Deterministic decision-continuity screen. Semantic similarity is a review
     # trigger, not proof of bad repetition -- an invited continuation,
