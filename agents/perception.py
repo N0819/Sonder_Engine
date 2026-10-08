@@ -3493,9 +3493,10 @@ def _redact_concealed_from_event(event_text, concealed_for_this_perceiver):
     return " ".join(kept) if kept else _REDACTED_NOTICE
 
 
-def identity_bearing_sources(sources):
+def identity_bearing_sources(sources, scene=None):
     """The act sources that carry an IDENTITY an observer may or may not
-    have earned -- every one but a crowd's chorus.
+    have earned -- every one but a crowd's chorus, and, given the scene,
+    every one the scene shows is a thing or a place.
 
     A chorus is the crowd answering as one, named by its composition
     (`background._chorus_entry`: "cousins and mistress"). Filed into the
@@ -3505,9 +3506,47 @@ def identity_bearing_sources(sources):
     person granite" (scratch play 2026-09-14, chat 7 turn 3). A crowd has
     no name to withhold; its act is delivered like any other and its
     composition is prose.
+
+    A THING HAS NO ACQUAINTANCE TO EARN EITHER. Recognition is a fact about
+    bodies; a boat's name is the world's name for it, and the view already
+    says it wherever it names a room ("the deck of the Grebe"). Filed as an
+    identity because it was a beat's source, the boat was scrubbed to the
+    person fallback in the player's view and memory -- "You are in the deck
+    of the unfamiliar person", "You feel the unfamiliar person's thwart"
+    (scratch story 166, turn 4597). `_source_is_a_body` decides, and it is
+    conservative in the direction the firewall needs: a source the scene
+    cannot show to be a thing or a room still bears an identity.
     """
     return [s for s in (sources or ()) if isinstance(s, dict)
-            and not s.get("chorus")]
+            and not s.get("chorus")
+            and (scene is None or _source_is_a_body(scene, s.get("name")))]
+
+
+def _source_is_a_body(sc, name):
+    """Is a beat's source somebody, rather than a place or a thing? A room
+    the scene holds (by id or by its name) is a place; an entity the
+    engine's own test calls inert is a thing (`_mover_is_a_body`); anything
+    else -- a cast member, a presence, a name the scene has no record of --
+    is a body, so a miss here keeps an identity rather than dropping one."""
+    text = str(name or "").strip()
+    if not text:
+        return False
+    rooms = (sc or {}).get("rooms") or {}
+    if isinstance(rooms, dict) and (text in rooms or any(
+            isinstance(room, dict)
+            and str(room.get("name") or "").strip().casefold() == text.casefold()
+            for room in rooms.values())):
+        return False
+    return _mover_is_a_body(sc, text)
+
+
+def _thing_label(sc, name):
+    """What a thing that acts is called: its own name, as the scene holds
+    it -- never a person's label, which is what the act renderer gave the
+    Grebe when the tide rocked it ("The unfamiliar person rocks once")."""
+    from world.spatial import _entity_named
+    entity = _entity_named(sc, name) or {}
+    return str(entity.get("name") or name or "").strip()
 
 
 def _background_beats(ctx, scene):
@@ -7089,7 +7128,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
          **_worn_identity(nm, bodies, sc, titles_of)}
         for nm, ap in appearances.items()
     ]
-    for s in identity_bearing_sources(sources):
+    for s in identity_bearing_sources(sources, sc):
         if s.get("name") and all(r["name"] != s["name"] for r in ident_roster):
             ident_roster.append(
                 {"name": s["name"], "appearance": None, "aliases": [],
@@ -7623,6 +7662,9 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     # Nobody did it: the surface is the whole sentence, never
                     # "The unfamiliar person fluorescent tube flickers".
                     display = ""
+                elif not _source_is_a_body(event_scene, actor):
+                    # A THING did it, and is called what it is.
+                    display = _thing_label(event_scene, actor)
                 # A BODY THE SURFACE NAMES IS A PERCEPT OF ITS OWN (PX5),
                 # asked before the identity scrub rewrites the names.
                 surface, _cut = _act_surface_admission(
