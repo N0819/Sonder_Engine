@@ -21,7 +21,7 @@ event を起きた順に書いてください。一つの event は一つの因�
 - look: 段階が向きを変える、または見るとき。身体、設備、出口の id、left|right|back、または around。隣の部屋より遠い場所や地平線上のものを見るときは、その場所を名指しします。world_index に id があればその id、なければ記述がその場所を呼ぶ名前です。
 - seconds: この段階にかかった物語上の秒数。記述が与える尺度で。合計はコードが出します。
 - until_light / until_hour は、記述がその段階をかかった長さではなく一日のどこまで届いたかで測るときに、seconds の代わりに書きます。until_light は dark | dim | lit で、空の明るさが次にそれになるまで続きます。until_hour はその段階が続く時刻です。秒数はコードが物語の時計から出します。
-- movement: 身体が部屋を移るときだけ {to_room, why, mover, arrives, to_anchor?, pace?}。to_room は歩みの終点で、経路はエンジンが歩きます。arrives はこの beat がそこで終わるかどうか、to_anchor は記述が行き先として名指す設備、pace はその段階が走るときの run です。それ以外は null。
+- movement: 身体が別の部屋へ向かって歩き出したとき、この beat のうちに着くかどうかに関わらず {to_room, why, mover, arrives, to_anchor?, pace?}。to_room は歩みの終点で、経路はエンジンが歩きます。arrives はこの beat がそこで終わるかどうか（まだ途中の身体は arrives false の movement で、この beat が運ぶところまでエンジンが歩きます）、to_anchor は記述が行き先として名指す設備、pace はその段階が走るときの run です。それ以外は null。
 - commitment: asserted、または記述が結果を開いたままにしているなら contestable。
 - item_names: この段階が変えるもの。それぞれ安定した名前を一つ付け、同じものが再び出るところでは同じ名前を使います。
 - transforms: [{item, patch}]。item はこの event の item_names の一つ。patch はその変化を、あなたの tool の一つの正確な形で書きます。一つの段階にいくつもの transform が要ることもあります。記録を何も変えない段階には transform はありません。
