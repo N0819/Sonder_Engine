@@ -1597,6 +1597,23 @@ no sheet says they are author knowledge that may not reach a mind or the
 page, or that a note never licenses replacing the player's declaration. Only
 `director_establish` still carries the clause, and that is a different call.
 
+Measured on chat 166 (2026-10-07/08): 6 of the 9 surviving notes name no
+room, so `active_director_notes` delivers them everywhere. The encoder
+carried notes on 140 of 176 calls (about 3.1k chars each) while the story
+was elsewhere: the bell-loft and far-reeds notes rode every call from t5-t10
+to t30, aboard the Grebe and in the Gale house. The 2026-10-08 encoder-scope
+patch left them unscoped on purpose. Who reads them is the unsettled
+question: the ruling Director, for whom they were written, has received none
+since 2026-09-12 (§ 1.1 item 4), and no encoder sheet says what they are. A
+scope chosen for a reader nobody has chosen would be guessed. Once the
+reader is settled there are two ways:
+
+- the Room names the rooms a note is about (a story_planner clause, en and
+  ja; a room-less note stays 'everywhere'); or
+- a room-less note inherits the planned rooms its own package lays out
+  (`plan_rooms` keys). In this run that would scope the four place-bound
+  notes and leave the two whole-story notes everywhere.
+
 **h. A filled mouth and a tongue mid-act.** The clauses naming those
 occasions, and the remedy (end the contact, or a word or two at `mutter`),
 are in no sheet. Lowest cost of the set: the rendering half is
@@ -1774,6 +1791,29 @@ Open:
   owner's choice.
 - The same breakpoint plus cue for other Gemini-routed roles is untested
   below Gemini's minimum cache size.
+
+<a id="unbuilt-1-188"></a>
+
+### 1.188 Encoder payload scope: residuals (2026-10-08)
+
+(a) Grouping carried reports by wording halves the ledger on calls that may
+    tell (191 rows were 40.7k chars, grouped 20.9k) and keeps every who/id
+    pair. But on one replayed telling beat (capture 6927) the grouped arm
+    wrote no telling where both stored-row arms wrote one. It needs a multi-
+    sample A/B before it ships.
+(b) A report held by someone outside the beat cannot be told, sent or posted
+    this beat. In chat 166 every telling's speaker was in the identity
+    index, so scoping the rows to holders in the beat would cut most of what
+    remains. Unmeasured on replay.
+(c) `ENCODER_ROOM_HOPS` = 4 is the owner's distance (`landscape.MID_HOPS`).
+    Measured cuts are 73k at 4, 145k at 3, 258k at 2 and 372k at 1 tokens
+    per 30 beats, with no answer-named room lost at any of them.
+(d) The room author's `world_index.elsewhere` repeats every room its ledger
+    carries whole (873/873 entries, about 48k tokens per 30 beats, measured
+    before 2026-10-08). Since `director_rooms._groundwork` (2026-10-08) that
+    ledger holds only the rooms in question, so the repeat shrinks to those;
+    one `map_without_whole_rooms` call at the end of `_room_payload` would
+    close it.
 
 ## 2. Roadmap
 

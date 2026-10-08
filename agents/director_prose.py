@@ -66,7 +66,7 @@ from llm.prompts import (
     prose_director_prompt,
     unified_specialist_prompt,
 )
-from .director_fanout import _specialist_payload
+from .director_fanout import _beat_rooms, _specialist_payload
 from .director_scopes import (
     SPECIALISTS,
     _STRUCTURAL_CHANNEL_FACTS,
@@ -495,6 +495,205 @@ def without_raw_text(event_inputs):
     return out
 
 
+# ---- what of the world rides with the encoder --------------------------------
+
+#: A RECORD LEDGER RIDES WITH THE CHANNELS THAT WRITE ABOUT ITS RECORDS:
+#: `{gate fact: payload key}`. The channels are read off `_RECORD_FACTS` --
+#: the channels whose only possible subject is a record the world already
+#: holds, by the fact that says one exists -- rather than listed a second
+#: time, so the gate that decides whether a channel is asked and the payload
+#: that decides whether its records ride cannot disagree.
+#:
+#: Measured on chat 166 (Brackwater, 2026-10-07): the whole town's report
+#: ledger, 180-191 rows and 31-41k chars, rode in the social owner's slice to
+#: every encoder call holding any social channel; the 20 kept calls holding
+#: none of the channels that name a report carried 711k chars of it and used
+#: it 0 times. And `artifact_ops`, whose poster "must HOLD that report", is
+#: the OBJECTS owner's: it saw the reports only when a social channel
+#: happened to be granted beside it. The other record ledgers ran to under
+#: 900 characters a call on the same run (crowds 497 on average; couriers,
+#: notices and unratified claims empty), so the report ledger is the one
+#: listed; another joins with one line when a measurement says it costs.
+#:
+#: The rows ride as stored. Grouping them by wording (191 rows were 83
+#: wordings, 40.7k chars to 20.9k) was replayed once against a telling beat
+#: (2026-10-08, capture 6927) and that arm wrote no telling where both arms
+#: with the stored rows wrote one; one sample cannot tell noise from effect,
+#: so the shape the chunks were written against stays until it can.
+RIDING_LEDGERS = {"reports_carried": "carried_reports"}
+
+
+def ledger_readers(fact):
+    """The channels whose op may name a record `fact` counts."""
+    return frozenset(channel for channel, facts in _RECORD_FACTS.items()
+                     if fact in facts)
+
+
+#: HOW MANY DOORWAYS FROM THE BEAT'S PEOPLE A ROOM STILL REACHES THE ENCODER
+#: WHOLE, over the undirected room graph every payload trim walks
+#: (`world.spatial.attended_rooms`). Past it, a room the beat neither names
+#: nor holds anything in rides as its entry on the map alone
+#: (`world_index.elsewhere`: name, storey, exits, ways). 4 is the owner's own
+#: distance (`world.landscape.MID_HOPS`, ruling 2026-10-05: "two to four
+#: rooms off is the place and what is big on it, five or more its outline"),
+#: so nothing the owner counts as near is subtracted. Bounds a PER-CALL
+#: payload, never what the world keeps. The owner's to move: measured over
+#: chat 166's 107 kept encoder calls that carried room records (2026-10-08),
+#: it cuts 73k tokens at 4, 145k at 3, 258k at 2 and 372k at 1 (1.7%-8.9% of
+#: encoder input), and at every one of those no room an answer named would
+#: have been cut -- the rules in `rooms_in_play` after the radius caught
+#: every far room the answers used, so the radius is a margin, not the
+#: mechanism.
+ENCODER_ROOM_HOPS = 4
+
+
+def _phrase_text(value):
+    """`value` folded the way a place reference is (`_fold_place`); a record
+    as its JSON, so an id inside it is found the way a name in prose is."""
+    if value is None or value == "":
+        return ""
+    if not isinstance(value, str):
+        value = json.dumps(value, ensure_ascii=False, default=str)
+    return _fold_place(value)
+
+
+def rooms_named_in(rooms, texts):
+    """The ids of the rooms whose id or name stands in `texts` as a whole
+    phrase: both sides folded the way a place reference is (`_fold_place`,
+    so `bell_loft` and "the Bell Loft" are one phrase), each end bounded by
+    its own script (`name_boundary_regex`), so a name written in a script
+    without spaces is found where it stands."""
+    from story.character_schema import name_boundary_regex
+    folded = " ".join(text for text in (_phrase_text(t) for t in texts or ())
+                      if text)
+    if not folded:
+        return set()
+    named = set()
+    for rid, room in (rooms or {}).items():
+        forms = {_fold_place(rid)}
+        if isinstance(room, dict):
+            forms.add(_fold_place(room.get("name")))
+        forms.discard("")
+        if any(name_boundary_regex(form).search(folded) for form in forms):
+            named.add(str(rid))
+    return named
+
+
+def rooms_in_play(sc, people=(), centers=(), texts=(), interiors=(),
+                  hops=None):
+    """The ids of the rooms the encoder is handed WHOLE; every other room
+    the world holds reaches it as its map entry.
+
+    A ROOM IS GEOGRAPHY UNLESS SOMETHING PUTS IT IN PLAY. In play is:
+
+    - the rooms the beat's people stand in or are bound for, the far end of
+      a channel they talk over, and every room within `hops` doorways of
+      those (`attended_rooms`, the room math every stage payload trims by;
+      `hops` defaults to `ENCODER_ROOM_HOPS`, read when called);
+    - every room something the world holds stands in, a body or a thing
+      (`room_of`, the engine's "where is X"): a beat writes about what is
+      there (chat 166 turn 4588: the encoder named `bell_loft`, three
+      doorways from anyone in the beat, where the tide bell hung);
+    - every room heard beyond its own walls (`sound_sources`);
+    - every room `texts` name by id or name (`rooms_named_in`; turn 4607
+      named `gale_house`, which no walk from the beat's rooms reached);
+    - every inside of a thing in play: `interiors`, and any room whose
+      `parent_entity` stands in a room in play (turn 4598 named
+      `grebe_board`, the deck of a boat moored at the landing stage, five
+      doorways out by the room graph and named in nothing it read).
+
+    What is left is a room nobody in the beat stands near, that holds
+    nothing, makes no sound and that nothing names: its name, storey, exits
+    and ways are what a route or a reference to it needs, and the map holds
+    them. Measured on chat 166's 107 kept encoder calls that carried room
+    records (2026-10-08): of the 97 rooms their answers named, 82 stood
+    within one doorway of the beat's people, and each of the other 15 is
+    kept by one of the rules after the first."""
+    rooms = sc.get("rooms") if isinstance(sc, dict) else None
+    if not isinstance(rooms, dict) or not rooms:
+        return set()
+    from world.spatial import attended_rooms, room_of, sound_sources
+    hops = ENCODER_ROOM_HOPS if hops is None else hops
+    keep = {str(rid) for rid in attended_rooms(
+        sc, [str(c) for c in centers or () if c], hops=hops,
+        names=[str(p) for p in people or () if p])}
+    for key in list(sc.get("positions") or {}) + list(sc.get("entities") or {}):
+        room = room_of(sc, str(key))
+        if room in rooms:
+            keep.add(str(room))
+    sources, _notices = sound_sources(sc)
+    keep.update(str(source.get("room")) for source in sources or ()
+                if str(source.get("room") or "") in rooms)
+    keep |= rooms_named_in(rooms, texts)
+    keep.update(str(rid) for rid in interiors or () if str(rid) in rooms)
+    grew = True
+    while grew:
+        grew = False
+        for rid, room in rooms.items():
+            if str(rid) in keep or not isinstance(room, dict):
+                continue
+            holder = str(room.get("parent_entity") or "").strip()
+            if holder and room_of(sc, holder) in keep:
+                keep.add(str(rid))
+                grew = True
+    return keep
+
+
+def map_without_whole_rooms(index, whole):
+    """The world index with no map entry for a room the same payload carries
+    whole, as a COPY (the Director's own index is the model payload's).
+
+    One room, one representation. The map lists every room outside the
+    acting bodies' sight -- name, storey, exits, ways -- and the spatial
+    owner's slice carried every room's record besides, so in the 107 kept
+    chat 166 calls that held both, the map repeated all 3,045 of its entries
+    (about 174k tokens over 30 beats). A record says everything its entry
+    says; nothing reads `elsewhere` for a room that also has one."""
+    index = dict(index or {})
+    elsewhere = index.get("elsewhere")
+    if isinstance(elsewhere, dict) and whole:
+        kept = {rid: entry for rid, entry in elsewhere.items() if rid not in whole}
+        if kept:
+            index["elsewhere"] = kept
+        else:
+            index.pop("elsewhere", None)
+    return index
+
+
+def _scope_rooms_in_play(ctx, sc, payload, view, extras):
+    """Narrow the spatial owner's room records in `payload` to the rooms in
+    play (`rooms_in_play`), and take every room it then holds whole off the
+    map (`map_without_whole_rooms`). A room the scene does not hold cannot be
+    judged far and stays. Fail-open: a scope that cannot be computed sends
+    every room whole, as before."""
+    view = view if isinstance(view, dict) else {}
+    extras = extras if isinstance(extras, dict) else {}
+    known = (sc.get("rooms") if isinstance(sc, dict) else None) or {}
+    people = [p for p in [view.get("player")] + list(view.get("cast") or []) if p]
+    try:
+        centers = list(_beat_rooms(sc, ctx, people, view)) + [
+            str(row.get("room")) for row in extras.get("present_figures") or ()
+            if isinstance(row, dict) and row.get("room")]
+        interiors = [rid for row in (extras.get("entity_interiors") or {}).values()
+                     if isinstance(row, dict)
+                     for rid in row.get("interior_rooms") or ()]
+        keep = rooms_in_play(
+            sc, people, centers,
+            [payload.get("prose"), payload.get("event_inputs"),
+             payload.get("already_happened"), extras.get("movement"),
+             extras.get("movers")],
+            interiors)
+    except Exception as exc:
+        ctx.add_warning(f"prose contract: room scope unavailable ({exc}); "
+                        "every room sent whole")
+        keep = None
+    if keep is not None:
+        payload["rooms"] = {rid: record for rid, record in payload["rooms"].items()
+                            if rid in keep or rid not in known}
+    payload["world_index"] = map_without_whole_rooms(
+        payload.get("world_index"), payload["rooms"])
+
+
 def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
     """The prose, the Director's own inputs without the text a player typed
     (`without_raw_text`), and the union of the world slices each selected
@@ -505,7 +704,13 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
     spatial owner carries the records, adjacency and `vertical` included.
     Keeping the first slice to supply a key meant an encoder granted `rooms`
     edited a graph it was never shown (found 2026-09-27). Any other key two
-    owners both supply is taken once, from the first in canonical order."""
+    owners both supply is taken once, from the first in canonical order.
+
+    WHAT THE GRANT CAN USE, AND NOT THE WHOLE WORLD. A record ledger rides
+    with the channels that write about its records, whichever owner holds
+    them (`RIDING_LEDGERS`), and the spatial owner's room records ride for
+    the rooms in play, the rest of the map as the map (`rooms_in_play`,
+    `map_without_whole_rooms`)."""
     payload = {
         "prose": prose,
         "event_inputs": without_raw_text(model_payload.get("event_inputs") or []),
@@ -529,6 +734,13 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
             if key in payload and _owner(key) != name:
                 continue
             payload[key] = value
+    tools = set(channels)
+    for fact, key in RIDING_LEDGERS.items():
+        rows = (extras or {}).get(key) if isinstance(extras, dict) else None
+        if rows and tools & ledger_readers(fact):
+            payload[key] = rows
+    if "spatial" in hands and isinstance(payload.get("rooms"), dict):
+        _scope_rooms_in_play(ctx, sc, payload, view, extras)
     # An extension's channel has no owner here: ITS extension keeps its
     # record, if it keeps one, and hands it over the same way.
     granted = [c for c in channels if str(c).startswith(EXTENSION_CHANNEL_PREFIX)]

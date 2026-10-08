@@ -198,6 +198,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.183 — A story with no scenario opens on a line nobody can answer (2026-10-07)](UNBUILT_PIPELINE.md#unbuilt-1-183)
 - [§1.185 — A quiet beat still weighs as much as a loud one, and the card is not the lever (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-185)
 - [§1.187 — The encoder repair's continuation: what is not measured (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-187)
+- [§1.188 — Encoder payload scope: residuals (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-188)
 
 **2. Roadmap**
 

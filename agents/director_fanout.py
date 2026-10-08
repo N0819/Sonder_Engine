@@ -674,10 +674,16 @@ def _specialist_payload(name, ctx, sc, view, extras):
             payload["public_sources"] = list(view.get("public_sources") or [])
         # The traffic ledgers, exactly as the retired offscreen hand
         # received them (built precisely so a Director could name the uids
-        # its ops require): crowds and couriers in reach, who carries which
-        # report, the standing hearsay, and a room index for the rooms an
-        # op names. A crowd is a charter projection and a courier a body on
-        # a route, so charter SIMULATES both; the ops are this hand's.
+        # its ops require): crowds and couriers in reach, the standing
+        # hearsay, and a room index for the rooms an op names. A crowd is a
+        # charter projection and a courier a body on a route, so charter
+        # SIMULATES both; the ops are this hand's.
+        #
+        # WHO CARRIES WHICH REPORT is not in this slice: it rides with the
+        # channels whose op names a report its actor holds, whichever owner
+        # holds them (`director_prose.RIDING_LEDGERS`) -- `artifact_ops` is
+        # the objects owner's and needs the poster's reports as much as a
+        # telling does, and here it could only have had them by accident.
         payload.update({
             # Existing debts and evident public roles constrain the social
             # consequence of a routed act. They are standing context only;
@@ -685,7 +691,6 @@ def _specialist_payload(name, ctx, sc, view, extras):
             "social_standing": extras.get("social_standing") or {},
             "crowds": extras.get("crowds") or [],
             "couriers": extras.get("couriers") or [],
-            "carried_reports": extras.get("carried_reports") or [],
             "unratified_claims": extras.get("unratified_claims") or [],
             "rooms": rooms_index,
         })
@@ -812,6 +817,10 @@ def _specialist_payload(name, ctx, sc, view, extras):
             # may have the label without a clock; show the stored fact without
             # manufacturing elapsed time or modifying the clock record.
             "time_of_day": sc.get("time_of_day") or "",
+            # Every record, as the keeper of the graph holds it. The ENCODER
+            # is handed the rooms in play whole and the rest as their map
+            # entries (`director_prose.rooms_in_play`); the room author,
+            # which reads this slice too, is handed all of it.
             "rooms": sc.get("rooms") or {},
             "positions": sc.get("positions") or {},
             "stations": sc.get("stations") or {},

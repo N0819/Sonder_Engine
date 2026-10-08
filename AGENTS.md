@@ -311,7 +311,7 @@ other room the world holds is on its map under `elsewhere` -- name, storey,
 exits and ways, never what it holds; the inside of a thing is not on it --
 because a body bound for a place two rooms off is routed by the world's ways,
 and a Director shown only the next room routes by whatever it can see (Larch
-Hill turn 3, 2026-10-04). Player/character bodies are omitted from this
+Hill turn 3, 2026-10-04). The ENCODER's copy of that map leaves out every room its payload carries whole (`director_prose.map_without_whole_rooms`). The spatial owner's room records reach the encoder whole only for the rooms in play (`director_prose.rooms_in_play`; `ENCODER_ROOM_HOPS`, the owner's to move); every other room is its map entry, and the encoder's core says such a room exists. A record ledger reaches the encoder only with the channels that write about its records (`director_prose.RIDING_LEDGERS`, read off `_RECORD_FACTS`): `carried_reports` with `telling_ops`, `courier_ops` or `artifact_ops`. Player/character bodies are omitted from this
 ordinary interior roster unless the current event explicitly names that person
 AS THE INTERIOR HOLDER (``inside Sera``, ``Sera's interior``); mere mention or
 spatial relation does not opt a body in. Anatomical or bodily interiors are

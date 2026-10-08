@@ -381,6 +381,7 @@ their rooms and physically visible adjacent rooms. Room rows expose exits,
 storey and how each exit is taken (`ways`); entities in that slice expose only
 identity, placement, and existing interior room ids. Every other room is on the
 map under `elsewhere` -- name, storey, exits and ways, never what it holds --
+(the encoder's copy omits every room its payload carries whole)
 and `object_index.rooms`, which the decision model reads as the places already
 known, names them all. An entity outside the slice, and the inside of a thing,
 are absent.
@@ -969,7 +970,13 @@ vouches for an entity-backed body. Worn garments reach the encoder as
 `worn_garments` (name and `worn_by`), keeping the outer `attire` key (the
 wearer) separate from the garment handles inside its operations.
 The encoder receives the standing state of every granted channel's owner (the
-union of the owners' world slices). The spatial slice carries `following`, `location`, `weather`, and `time_of_day` alongside
+union of the owners' world slices). Two things narrow it. A record ledger rides
+only with a granted channel that writes about its records
+(`director_prose.RIDING_LEDGERS`: `carried_reports` with `telling_ops`,
+`courier_ops` or `artifact_ops`). The spatial owner's room records ride whole
+only for the rooms in play (`director_prose.rooms_in_play`); every other room
+rides as its `world_index.elsewhere` entry, which never repeats a room sent
+whole. The spatial slice carries `following`, `location`, `weather`, and `time_of_day` alongside
 its geometry and `simulation_clock`. The scene's time label remains available
 when an older scene has no clock record; payload assembly does not create or
 alter a clock to supply that label.

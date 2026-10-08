@@ -171,10 +171,15 @@ def test_a_part_ships_only_when_chosen():
 
 def test_the_owners_sheet_is_half_what_it_was():
     """The sheet the owner pasted: obligations, entities, sensory_events and
-    poses, 32,543 characters under the causal chunks."""
+    poses, 32,543 characters under the causal chunks.
+
+    0.61 since 2026-10-08, from 0.6: the core's `world_index.elsewhere` line
+    (183 characters), which the encoder needs once it is handed only the
+    rooms in play whole -- a room on the map alone is a room the world holds.
+    The sheet stood at 19,455 of the old 19,526 ceiling; it is 19,638."""
     sheet = prompts.unified_specialist_prompt(
         ["obligations", "entities", "sensory_events", "poses"], parts=[])
-    assert len(sheet) < 32543 * 0.6, len(sheet)
+    assert len(sheet) < 32543 * 0.61, len(sheet)
 
 
 def _scores(scores):
