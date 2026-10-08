@@ -20,7 +20,7 @@
 | `agents/director_fanout.py` | 1084 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2450 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
-| `agents/director_movement.py` | 2068 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
+| `agents/director_movement.py` | 2094 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 2383 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1550 |  | `core.db`, `llm`, `llm.prompts` |
@@ -410,13 +410,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_reconcile_near_group_positions()` | 307 | 289 lines |
-| `_apply_following_movement()` | 783 | 257 lines |
-| `_travel_continues()` | 1735 | 175 lines |
-| `walk_declared()` | 1470 | 136 lines |
-| `_guard_approach_is_not_arrival()` | 1912 | 96 lines |
-| `_unreachable_position_writes()` | 1041 | 82 lines |
-| `_set_down_where_they_are()` | 707 | 74 lines |
-| `walk_within_room()` | 1617 | 64 lines |
+| `_apply_following_movement()` | 809 | 257 lines |
+| `_travel_continues()` | 1761 | 175 lines |
+| `walk_declared()` | 1496 | 136 lines |
+| `_guard_approach_is_not_arrival()` | 1938 | 96 lines |
+| `_unreachable_position_writes()` | 1067 | 82 lines |
+| `_set_down_where_they_are()` | 733 | 74 lines |
+| `walk_within_room()` | 1643 | 64 lines |
 
 ### `agents/director_prose.py`
 

@@ -597,17 +597,43 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name, held=()
 
 
 
-def walkers_this_beat(out, player_name):
+def walkers_this_beat(out, player_name, cast=()):
     """The bodies that WALKED this beat -- the travel record's subjects,
-    walked by their own declared move or their own follow -- the player
-    aside, whose room the near-group repair already never takes from
-    somebody else's station. A walk ends where it ended: a near claim, a
-    decoration on the ledger, is not evidence it did not happen (scratch
-    story 166, turn 4596)."""
+    walked by their own declared move or their own follow, and every cast
+    member the encoder placed in a room through an event carried out from
+    its OWN declaration -- the player aside, whose room the near-group
+    repair already never takes from somebody else's station. A walk ends
+    where it ended: a near claim, a decoration on the ledger, is not
+    evidence it did not happen (scratch story 166, turn 4596).
+
+    The second half because a walk need not pass the travel system: the
+    encoder can write a body's room as a `positions` patch with no
+    `movement`. Scratch story 166 idx 22: the pilot's own events put her on
+    the low walk, she was in no travel record, and the repair pulled her
+    back to the landing stage "by fresh anchor" -- so the page walked her to
+    her brother's door while the world kept her on the stage."""
     travel = (out or {}).get("travel") if isinstance((out or {}).get("travel"), dict) else {}
     walkers = {str(a.get("subject")) for a in travel.get("advanced") or ()
                if isinstance(a, dict) and a.get("subject")}
     walkers |= {str(x) for x in travel.get("arrived") or () if x}
+    names = {}
+    for row in cast or ():
+        try:
+            names[f"character:{row['id']}"] = character_name_from_text(row["sheet"])
+        except Exception:
+            continue
+    events = (((out or {}).get("orchestration") or {}).get("prose_contract") or {}).get("events")
+    for event in events or ():
+        own = names.get(str((event or {}).get("source_entity_id") or "")) \
+            if isinstance(event, dict) else None
+        if not own:
+            continue
+        for transform in event.get("transforms") or ():
+            placed = (transform.get("patch") or {}).get("positions") \
+                if isinstance(transform, dict) and isinstance(transform.get("patch"), dict) else None
+            if isinstance(placed, dict) and any(
+                    str(key).strip().casefold() == own.casefold() for key in placed):
+                walkers.add(own)
     walkers.discard(str(player_name or ""))
     return walkers
 

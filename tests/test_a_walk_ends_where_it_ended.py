@@ -72,4 +72,21 @@ def test_the_player_is_never_one_of_the_walkers():
 
 def test_the_resolve_hands_the_repair_its_walkers():
     source = inspect.getsource(director.director_resolve)
-    assert "held=_held | walkers_this_beat(out, p_name)" in source
+    assert "held=_held | walkers_this_beat(out, p_name, ctx.cast)" in source
+
+
+def test_a_walk_written_as_a_position_by_her_own_event_is_held():
+    """Scratch story 166 idx 22: the encoder placed the pilot on the low walk
+    through position patches on her OWN events, with no `movement`, so no
+    travel record named her and the repair pulled her back to the stage."""
+    import json
+    from story.character_schema import default_character_data
+    cast = [{"id": 81, "sheet": json.dumps(default_character_data(PILOT))}]
+    out = {"orchestration": {"prose_contract": {"events": [
+        {"source_entity_id": "character:81", "transforms": [
+            {"item": PILOT, "patch": {"positions": {PILOT: "low_walk"}}}]},
+        {"source_entity_id": "persona:21", "transforms": [
+            {"item": FIGURE, "patch": {"positions": {FIGURE: "low_walk"}}}]}]}}}
+    assert walkers_this_beat(out, PLAYER, cast) == {PILOT}, (
+        "her own event's placement is her walk; a body placed by somebody "
+        "else's event is not")

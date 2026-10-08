@@ -6424,7 +6424,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # once, scratch story 166 turn 4596, pulling the pilot back off the
     # bridge she had crossed by her own declaration.
     _reconcile_near_group_positions(ctx, sc, sd, p_name,
-                                    held=_held | walkers_this_beat(out, p_name))
+                                    held=_held | walkers_this_beat(out, p_name, ctx.cast))
 
     # THE PHYSICAL FLOOR, for the writes nothing above was watching.
     #
