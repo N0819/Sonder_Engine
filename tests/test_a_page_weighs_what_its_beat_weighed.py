@@ -29,7 +29,8 @@ which is where that fix belongs).
 
 Measured after, on six captured requests from that run (24 calls, one
 upstream for every arm): page length did not move -- quiet-beat medians of
-181.5 words on the old card against 201.5 on the new one, six samples each --
+181.5 words on the old card against 201.5 on the new one (which then still
+carried the VOICE section above), six samples each --
 and every delivered line was placed exactly once in every answer. So these
 pins hold the card to a true statement; they do not claim it shortens a page.
 What sets a page's length is upstream of the card, like the glosses.

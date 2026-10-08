@@ -288,8 +288,8 @@ for what follows. Residuals of this entry rather than a section of their own:
   job (deduped per chat, capped per story hour) when what it would answer --
   open needs, the player's room, the shortfall, the active grants -- changed
   since a fill last answered it, or when the back-off from that answer has
-  run (`room_frontier.fill_due`, 2026-10-08; `FILL_RETRY_BEATS` = 2 doubling
-  per empty answer to `FILL_RETRY_BEATS_CAP` = 16, `FILL_MEMO_KEPT` = 16
+  run (`room_frontier.fill_due`, 2026-10-08; `FILL_RETRY_BEATS` = 2 beats, doubling from the second
+  consecutive empty answer to `FILL_RETRY_BEATS_CAP` = 16, `FILL_MEMO_KEPT` = 16
   questions remembered). Left: the memo rides the `room_frontier` row and
   rolls back with a reroll like the rest of the Room's state (F31), so a
   reroll landing between an answer and the next checkpoint re-asks once; and

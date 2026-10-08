@@ -820,7 +820,9 @@ def _specialist_payload(name, ctx, sc, view, extras):
             # Every record, as the keeper of the graph holds it. The ENCODER
             # is handed the rooms in play whole and the rest as their map
             # entries (`director_prose.rooms_in_play`); the room author,
-            # which reads this slice too, is handed all of it.
+            # which reads this slice too, is handed the records of the rooms
+            # around its places (`director_rooms._groundwork`) and reads any
+            # other through `inspect_rooms`.
             "rooms": sc.get("rooms") or {},
             "positions": sc.get("positions") or {},
             "stations": sc.get("stations") or {},

@@ -85,8 +85,9 @@ HOUR_AS_TURNS_FALLBACK = 8
 #: kept commit from turn 6 to turn 30. Two beats: a fill there took a median
 #: of about 7 minutes (0.3 to 29) and a beat about 10, so an unchanged
 #: question waits some twenty minutes of play, two or three fills' length,
-#: before it is asked again. It doubles for each consecutive answer that
-#: landed nothing (`fill_wait_beats`).
+#: before it is asked again -- after an answer that landed something, and
+#: after the first that landed nothing -- and it doubles for each further
+#: consecutive empty answer (`fill_wait_beats`).
 FILL_RETRY_BEATS = 2
 #: ...up to this many beats, and no further: the ceiling is what keeps an
 #: open planning need re-asked for as long as it stays open (an unanswered

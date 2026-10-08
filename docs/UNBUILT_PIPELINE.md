@@ -1812,8 +1812,9 @@ Open:
     carries whole (873/873 entries, about 48k tokens per 30 beats, measured
     before 2026-10-08). Since `director_rooms._groundwork` (2026-10-08) that
     ledger holds only the rooms in question, so the repeat shrinks to those;
-    one `map_without_whole_rooms` call at the end of `_room_payload` would
-    close it.
+    one `map_without_whole_rooms` call in `design_rooms`, AFTER `_groundwork`
+    has cut the ledger, would close it -- at the end of `_room_payload` the
+    ledger is still whole, and the trim would drop every room's map entry.
 
 ## 2. Roadmap
 
