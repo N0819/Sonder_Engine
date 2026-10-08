@@ -2316,7 +2316,12 @@ _NOT_A_PATH = set("()[]{}<>,;|\"'=*?`")
 #: repository) and none of them is something documentation names by filename.
 _UNWALKED = {".git", ".claude", ".venv", ".venv-browser", ".pytest_cache",
              "__pycache__", "node_modules", "backdrops", "backups",
-             "artefacts", "ambience"}
+             "artefacts", "ambience",
+             # Kept run artefacts, git-ignored: benches, archives, the scripts
+             # a measurement ran. A fresh checkout (CI) has none, and walking
+             # it locally read a bench's scripts as source the inventory had
+             # missed (2026-10-08).
+             "output"}
 
 
 def _repository_files() -> tuple[set[str], set[str], set[str]]:
