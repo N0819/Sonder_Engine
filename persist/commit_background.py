@@ -1098,11 +1098,21 @@ def _background_name_mentioned(name, text, shared=()):
     name_cf = name.casefold()
     if re.search(rf"\b{re.escape(name_cf)}\b", text_cf):
         return True
-    words = [w.strip(".,;:").casefold() for w in name.split()]
+    words = [w.strip(".,;:") for w in name.split()]
     significant = [
-        w for w in words
-        if w and w not in _BACKGROUND_NAME_TITLE_WORDS and len(w) >= 3
-        and w not in shared
+        w.casefold() for w in words
+        if w and w.casefold() not in _BACKGROUND_NAME_TITLE_WORDS and len(w) >= 3
+        and w.casefold() not in shared
+        # A NAME'S PARTS ARE ITS CAPITALISED WORDS. A tracked name can be a
+        # DESCRIPTION -- "a hunched man in an oilskin coat", aliases "broad
+        # man", "man in oilskin" -- whose words are the language's common
+        # nouns, and the fallback read the player's every line about the
+        # coat on a stake as naming him: scratch story 166, idx 15-17, a
+        # presence standing in no room was "addressed" and voiced on four
+        # beats running. A cased word counts only capitalised, which is how
+        # the writing marks a name ("Crusher", "Nookfeller"); a script with
+        # no case (Japanese) keeps every part, as before.
+        and (w[:1].upper() == w[:1].lower() or w[:1].isupper())
     ]
     return any(
         re.search(rf"\b{re.escape(w)}\b", text_cf) for w in significant
