@@ -7249,6 +7249,44 @@ def widen_reactors_to_enclosure(chat_id, cast_rows, reactors):
     return widened
 
 
+def widen_reactors_to_rejoined(chat_id, cast_rows, reactors, turn_idx,
+                               frame_id=None):
+    """`reactors` plus every cast member a causality bubble returned to this
+    frame AT this beat. The merge runs before the plan precisely because the
+    beat walks the player into the bubble's reach (`runtime._merge_bubbles_
+    the_beat_reaches`: "so its cast hear, see and answer it") -- but the
+    reactors come from the interpret, which ran BEFORE the merge and never
+    saw her. Measured on scratch story 166 (idx 13): the pilot rejoined at
+    the foot of the stair with no step in the plan, so under "a walk is its
+    owner's" nobody could move her and nobody could ask her; the player
+    walked past her, boarded the boat she was to take her out in, and sat
+    there alone, and the pilot was bubbled off again at the commit.
+
+    Read from the durable record (`frames.merged_turn_idx`), so a resume or
+    a rerun of the turn plans the same steps the run did."""
+    if turn_idx is None:
+        return reactors
+    try:
+        children = [row["id"] for row in q(
+            "SELECT id FROM frames WHERE chat_id=? AND kind='spatial' "
+            "AND merged_turn_idx=? AND parent_frame_id IS ?",
+            (chat_id, int(turn_idx), frame_id))]
+        if not children:
+            return reactors
+        marks = ",".join("?" for _ in children)
+        rejoined = {int(row["char_id"]) for row in q(
+            f"SELECT char_id FROM chat_char_frames WHERE chat_id=? "
+            f"AND frame_id IN ({marks})", (chat_id, *children))}
+    except Exception:
+        return reactors
+    valid = {int(row["id"]) for row in cast_rows or ()}
+    out = list(reactors)
+    for char_id in sorted(rejoined & valid):
+        if char_id not in out:
+            out.append(char_id)
+    return out
+
+
 def widen_reactors_to_engaged(chat_id, cast_rows, reactors, turn_idx,
                               frame_id=None):
     """`reactors` plus every present cast body OUTSIDE the player's room

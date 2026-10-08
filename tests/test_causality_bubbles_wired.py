@@ -1323,3 +1323,33 @@ def test_an_ordinary_turn_zero_is_still_an_opening(temp_db):
                               time.time(), None))
     row = temp_db.q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
     assert is_offscreen_beat(chat_id, row) is False
+
+
+class TestTheRejoinedAreAsked:
+    """The pre-beat merge folds a bubble back in because the beat walks the
+    player into its reach, but the reactors come from the interpret, which
+    ran before the merge and never saw her. Scratch story 166 idx 13: the
+    pilot rejoined at the foot of the stair with no step in the plan, the
+    player walked past her and boarded the boat alone, and she was bubbled
+    off again at the commit (`common.widen_reactors_to_rejoined`)."""
+
+    def _plan(self, chat_id, turn_idx):
+        from agents import runtime
+        interp = {"flow": {"reactors": []}}
+        return [k for k, _ in runtime.build_plan(
+            interp, active_cast(chat_id, None), chat_id=chat_id,
+            frame_id=None, turn_idx=turn_idx)]
+
+    def test_a_cast_member_rejoined_this_beat_is_asked(self, temp_db):
+        chat_id, hinami = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+        spatial_frames.perform_merge(chat_id, None, bubble, 7)
+        plan = self._plan(chat_id, 7)
+        assert "interaction_loop" in plan or f"character:{hinami}" in plan
+
+    def test_a_merge_on_an_earlier_beat_widens_nothing(self, temp_db):
+        chat_id, hinami = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+        spatial_frames.perform_merge(chat_id, None, bubble, 7)
+        plan = self._plan(chat_id, 8)
+        assert "interaction_loop" not in plan and f"character:{hinami}" not in plan

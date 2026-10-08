@@ -38,7 +38,8 @@ from .background import background_react
 from .character import character_step
 from .common import (_assert_plan_materialized, _dict, _present_cast_bodies,
                      player_speech_lines, widen_reactors_to_enclosure,
-                     widen_reactors_to_engaged, widen_reactors_to_hearers)
+                     widen_reactors_to_engaged, widen_reactors_to_hearers,
+                     widen_reactors_to_rejoined)
 from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
 from .mapping import compile_world_context
@@ -858,6 +859,13 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     valid_ids = {int(row["id"]) for row in cast_rows}
     reactors = [int(char_id) for char_id in (fl.get("reactors") or [])
                 if int(char_id) in valid_ids]
+
+    # A CAST MEMBER A BUBBLE RETURNED THIS BEAT was out of the interpret's
+    # world when it chose the reactors (`widen_reactors_to_rejoined`). Widened
+    # before the gates below, so an asleep or unplaced one is still dropped.
+    if chat_id is not None and turn_idx is not None:
+        reactors = widen_reactors_to_rejoined(chat_id, cast_rows, reactors,
+                                              turn_idx, frame_id)
 
     # Consciousness gate: an unconscious/asleep/sedated mind neither perceives
     # nor deliberates, so drop it from the reactor set before any character
