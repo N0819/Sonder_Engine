@@ -43,7 +43,7 @@ def test_rule_four_still_says_what_it_always_said(lang):
     text = raw_card(lang)["prompts"]["narrator"]
     if lang == "en":
         assert "DECIDE FOR NO ONE" in text
-        assert "never a feeling that decides something for them." in text
+        assert "never a feeling that decides something for them" in text
     else:
         assert "誰の代わりにも決めないこと" in text
         assert "感情によって何かを決めてしまわないこと" in text
@@ -60,3 +60,15 @@ def test_the_two_fields_the_clause_points_at_are_real():
     assert "interoception" in CHANNELS
     assert '"private_thought": interpreted.get("private_thought")' in \
         inspect.getsource(narration._narrator_player_declared)
+
+
+@pytest.mark.parametrize("lang", ["en", "ja"])
+def test_the_players_conclusions_are_the_players(lang):
+    """Scratch story 166 turn 4595: after each keeper's account the page wrote
+    the assessor's own verdicts -- "Not the same account. Close enough for one
+    tide. Not for one word." -- which she had never drawn."""
+    text = raw_card(lang)["prompts"]["narrator"]
+    if lang == "en":
+        assert "nor a conclusion they have not drawn" in text
+    else:
+        assert "本人が下していない結論も同じです" in text
