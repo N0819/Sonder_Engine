@@ -2238,10 +2238,16 @@ dropped from the draft, and Jev says when a design is finished. Left:
   places built that beat, and warns. Narrowing the clause or keeping the
   change is the owner's call. Today only the encoder's doorway edits write a
   standing room's physical change.
-- **A whole record can outrun an inspect result.** `inspect_rooms` returns a
-  room's stored record, and a result past `ROOM_RESULT_CHARS` (6,000) is
-  cut. On chat 166 that is the low walk (11.5k) and the high walk (6.4k), as
-  the low walk's old projection (7.2k) already was.
+- ~~**A whole record can outrun an inspect result.**~~ **FIXED 2026-10-08**:
+  `inspect_rooms` is fitted room by room (`director_rooms._fit_inspection`,
+  `ROOM_INSPECT_CHARS` = 16,000): whole records in the order asked while
+  they fit, the first always (its drawing dropped before its record is
+  cut), the rest named under `not_shown` to ask for again. A raw
+  6,000-character prefix had cut chat 166's low walk (11.5k) mid-record.
+- **A design seeds only the brief it was made from** (2026-10-08): the
+  prepared cache keeps a design while its room is a stub and its brief
+  unchanged, near or far, and `prepared_rooms` handed the beat's own
+  briefs refuses a design made from an older one.
 
 <a id="unbuilt-2-39"></a>
 

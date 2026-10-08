@@ -19,6 +19,7 @@ plan changes it.
 
 from __future__ import annotations
 
+import json
 import time
 
 from agents import director_rooms
@@ -190,3 +191,70 @@ def test_a_clean_seed_the_prose_outgrew_arrives_with_what_is_missing(monkeypatch
     assert record["still_missing_said"] == 0
     later = [e for e in seen[-1]["transcript"] if e["tool"] == "complete"]
     assert len(later) == 1, "said once, at the seed's first look"
+
+
+def test_a_design_made_from_an_old_brief_does_not_seed_the_beat(temp_db, monkeypatch):
+    """A design seeds only the brief it was made from. Handed the beat's own
+    briefs, `prepared_rooms` refuses one whose brief the plan has since
+    changed -- a re-plan landing after the last commit tail (review of the
+    2026-10-08 landing)."""
+    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "1")
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    old = {"name": "Study", "purpose": "a quiet room"}
+    temp_db.wset(ctx.chat.id, director_rooms.PREPARED_KEY, {"study": {
+        "room": {"name": "Study", "desc": "Shelves and a desk."},
+        "brief": director_rooms._brief_signature(old)}})
+
+    assert director_rooms.prepared_rooms(ctx.chat.id, {"study": old})["study"]["desc"] \
+        == "Shelves and a desk."
+    replanned = dict(old, purpose="the keeper's records room")
+    assert director_rooms.prepared_rooms(ctx.chat.id, {"study": replanned}) == {}
+
+
+def test_a_far_stubs_design_does_not_outlive_its_re_plan(temp_db, monkeypatch):
+    """The cache keeps a design while its room is a stub AND its brief is the
+    one it was made from, near or far."""
+    import agents.common as common
+    temp_db.set_setting(director_rooms.PREDEVELOP_SETTING, "1")
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    temp_db.wset(ctx.chat.id, "scene", SCENE)
+    brief = _brief(monkeypatch)
+    monkeypatch.setattr(common, "_agent_json", _study_designer([]))
+    _wait(director_rooms.schedule_room_predevelopment(ctx))
+    assert "study" in temp_db.wget(ctx.chat.id, director_rooms.PREPARED_KEY)
+
+    brief["study"]["purpose"] = "the keeper's records room"
+    from world import structure
+    monkeypatch.setattr(structure, "rooms_to_develop", lambda sc, room: [])
+    _wait(director_rooms.schedule_room_predevelopment(ctx))
+    assert "study" not in temp_db.wget(ctx.chat.id, director_rooms.PREPARED_KEY)
+
+
+def test_an_inspect_result_is_fitted_room_by_room():
+    """Whole records in the order asked while they fit, the first always,
+    the rest named to ask for again -- never one raw prefix that cuts a
+    record mid-field and loses every room after it."""
+    big = "x" * 7000
+    scene = {"rooms": {rid: {"name": rid, "desc": big, "extent": {"w": 4, "d": 4},
+                             "adjacent": []} for rid in ("a", "b", "c")},
+             "positions": {}}
+    fitted = director_rooms._fit_inspection(
+        director_rooms._inspect(scene, ["a", "b", "c"], whole=True))
+    assert "truncated" not in json.dumps(fitted)
+    assert fitted["a"]["record"]["desc"] == big
+    shown = [rid for rid in ("a", "b", "c") if rid in fitted]
+    assert shown[0] == "a" and fitted["not_shown"]["rooms"] == [
+        rid for rid in ("a", "b", "c") if rid not in shown]
+    assert len(json.dumps(fitted)) <= director_rooms.ROOM_INSPECT_CHARS + 200
+
+    # A record that fits only without its drawing: a large room's map is
+    # what tips it over (40 x 30 paces, 16.4k with the map, 15.1k without).
+    huge = {"rooms": {"a": {"name": "a", "desc": "y" * 15000,
+                            "extent": {"w": 40, "d": 30}, "adjacent": []}},
+            "positions": {}}
+    whole = director_rooms._inspect(huge, ["a"], whole=True)
+    assert len(json.dumps(whole)) > director_rooms.ROOM_INSPECT_CHARS
+    alone = director_rooms._fit_inspection(whole)
+    assert alone["a"]["record"]["desc"] == "y" * 15000, \
+        "the drawing goes before the record is cut"
+    assert "map" not in alone["a"]

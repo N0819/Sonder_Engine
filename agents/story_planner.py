@@ -1742,8 +1742,9 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
     thread as the Planner's own line."""
     from core.jobs import story_rewound_past
     from story import room_conversation as room
-    from story.room_frontier import (fill_signature, frontier_report,
-                                     record_fill, record_fill_asked)
+    from story.room_frontier import (fill_signature, frame_turn_idx,
+                                     frontier_report, record_fill,
+                                     record_fill_asked)
     now = room.current_turn_idx(cid)
     if story_rewound_past(base_turn, now):
         return {"skipped": "rewound", "base_turn": base_turn, "turn": now}
@@ -1759,8 +1760,9 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
         # Filed at the beat the answer CAME, not the beat that queued it: a
         # fill runs for several beats, and the back-off counts from the
         # answer. A story that rewound under the job answered nothing the
-        # timeline it is now in asked.
-        end = room.current_turn_idx(cid)
+        # timeline it is now in asked. THIS frame's newest beat, never a
+        # live bubble's row above it (`room_frontier.frame_turn_idx`).
+        end = frame_turn_idx(cid, frame_id)
         if not story_rewound_past(base_turn, end):
             record_fill_asked(cid, frame_id, signature, turn_idx=end,
                               published=published)
@@ -1806,17 +1808,29 @@ def schedule_room_work(ctx):
                                      frontier_report, record_measure,
                                      spend_this_hour)
     from story.room_proposals import last_pass_turn
+    from world.spatial_frames import is_bubble_frame
     cid = ctx.chat.id
     frame_id = getattr(ctx.turn, "frame_id", None)
     turn_idx = getattr(ctx.turn, "idx", None)
-    report = frontier_report(cid, frame_id)
-    record_measure(cid, frame_id, report, turn_idx=turn_idx)
+    # A LIVE BUBBLE'S COMMIT NEITHER MEASURES NOR FILLS. Its scene is cut down
+    # to its own subjects, so the frontier read "the player stands in no
+    # room", filed that measure over the era's shared row, and asked the
+    # era's open needs under a second signature with a back-off of its own
+    # (review, 2026-10-08). The player frame's next commit reads the same
+    # needs and grants. The Dramaturge pass and the fold are unchanged.
+    try:
+        bubble = bool(frame_id) and is_bubble_frame(cid, frame_id)
+    except Exception:
+        bubble = False
+    report = {} if bubble else frontier_report(cid, frame_id)
+    if not bubble:
+        record_measure(cid, frame_id, report, turn_idx=turn_idx)
     queued = []
     spend = spend_limits(cid, frame_id, turn_idx)
     hour_open = (spend["calls_per_hour"] is None
                  or spend_this_hour(cid, frame_id, turn_idx) < spend["calls_per_hour"])
 
-    if _fill_wanted(report):
+    if not bubble and _fill_wanted(report):
         limit = fill_limit(cid, frame_id, turn_idx)
         if limit is None:
             current = room.status(cid, frame_id)

@@ -61,6 +61,14 @@ MAX_ROOM_CALLS_PER_STEP = 6
 #: Characters of one tool result shown back, and of the transcript overall.
 ROOM_RESULT_CHARS = 6_000
 ROOM_TRANSCRIPT_CHARS = 30_000
+#: Characters of one `inspect_rooms` result, fitted room by room
+#: (`_fit_inspection`). Since `_groundwork` the room author is no longer
+#: handed the town's records, so this tool is how it reads any other room,
+#: and a raw cut at `ROOM_RESULT_CHARS` mid-record was a room it could not
+#: read at all. Sized to hold the largest whole record measured -- chat
+#: 166's low walk, 11.5k -- beside its drawing, and under
+#: `ROOM_TRANSCRIPT_CHARS`; rooms past it come back named, to ask for again.
+ROOM_INSPECT_CHARS = 16_000
 #: Standing rooms handed over already inspected -- `_inspect`'s own cap.
 ROOM_SURROUNDINGS = 6
 #: Wall seconds code may spend trying where a new place's doorway fits
@@ -370,6 +378,33 @@ def _fit(value, limit):
     if len(text) <= limit:
         return value
     return {"truncated": text[:limit]}
+
+
+def _fit_inspection(result, limit=ROOM_INSPECT_CHARS):
+    """An `inspect_rooms` result fitted ROOM BY ROOM: whole records in the
+    order asked while they fit, the first always -- its drawing dropped
+    before its record is cut -- and the rest named under `not_shown`, to ask
+    for in a later call. One raw prefix of the whole result cut a record
+    mid-field and silently lost every room after it (review of the
+    2026-10-08 landing: six whole records past 6,000 characters)."""
+    def size(value):
+        return len(json.dumps(value, ensure_ascii=False, default=str))
+    shown, later = {}, []
+    for rid, entry in (result or {}).items():
+        if not shown:
+            if size({rid: entry}) > limit and isinstance(entry, dict):
+                entry = {k: v for k, v in entry.items()
+                         if k not in ("map", "legend")}
+            shown[rid] = entry if size({rid: entry}) <= limit else _fit(entry, limit)
+        elif size(dict(shown, **{rid: entry})) <= limit:
+            shown[rid] = entry
+        else:
+            later.append(rid)
+    if later:
+        shown["not_shown"] = {"rooms": later,
+                              "why": "past this result's size; ask for these "
+                                     "in a later call"}
+    return shown
 
 
 def _shown(transcript):
@@ -966,8 +1001,9 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None)
             elif tool == "view_room":
                 result = render_room(_merged(scene, draft), str(args.get("room_id") or ""))
             elif tool == "inspect_rooms":
-                result = _inspect(_merged(scene, draft), args.get("room_ids") or [],
-                                  whole=True)
+                result = _fit_inspection(_inspect(
+                    _merged(scene, draft), args.get("room_ids") or [],
+                    whole=True))
             elif tool == "check":
                 result = last_check = checked()
                 unchecked = False
@@ -987,7 +1023,8 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None)
             else:
                 result = {"refused": f"unknown tool {tool!r}"}
             transcript.append({"step": step, "tool": tool, "args": args,
-                               "result": _fit(result, ROOM_RESULT_CHARS)})
+                               "result": result if tool == "inspect_rooms"
+                               else _fit(result, ROOM_RESULT_CHARS)})
         # A call past the step's cap was never run, and a designer not told
         # so believes it drafted the room (2026-09-27: the stage beat's 7th
         # and 8th draft_room calls, the corridor and the auditorium).
@@ -1110,7 +1147,16 @@ def prepared_rooms(chat_id, room_ids):
         return {}
     out = {}
     for rid in room_ids or ():
-        room = (cache.get(rid) or {}).get("room") if isinstance(cache.get(rid), dict) else None
+        entry = cache.get(rid)
+        if not isinstance(entry, dict):
+            continue
+        # A DESIGN SEEDS ONLY THE BRIEF IT WAS MADE FROM. Given the beat's own
+        # briefs (`{room_id: brief}`), a design whose brief has since changed
+        # -- a re-plan landing after the last commit tail -- is no seed.
+        if isinstance(room_ids, dict) and entry.get("brief") != _brief_signature(
+                room_ids[rid]):
+            continue
+        room = entry.get("room")
         if isinstance(room, dict):
             out[rid] = room
     return out
@@ -1174,11 +1220,15 @@ def schedule_room_predevelopment(ctx):
             cache = cache if isinstance(cache, dict) else {}
             briefs = planned_room_brief(
                 cid, current, list(dict.fromkeys(list(near) + list(cache)))) or {}
+            # A design is kept only while its room is a stub AND the plan's
+            # brief for it is the one it was made from, near or far: a far
+            # stub's old design otherwise outlived its re-plan and seeded the
+            # beat that finally entered it (review, 2026-10-08).
             cache = {rid: entry for rid, entry in cache.items()
-                     if rid in briefs and isinstance(entry, dict)}
+                     if rid in briefs and isinstance(entry, dict)
+                     and entry.get("brief") == _brief_signature(briefs[rid])}
             todo = [rid for rid in near if rid in briefs
-                    and (cache.get(rid) or {}).get("brief")
-                    != _brief_signature(briefs[rid])][:PREDEVELOP_PER_TURN]
+                    and rid not in cache][:PREDEVELOP_PER_TURN]
             sheet = room_author_prompt(language_id)
             done = []
             for rid in todo:

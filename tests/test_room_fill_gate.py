@@ -423,3 +423,70 @@ def test_the_planner_card_says_what_a_fill_is_in_both_packs():
     for token in ('"fill"', '"needs"', '"frontier"', '"rooms_short"',
                   '"identities_short"', '"bodies_ahead"'):
         assert token in en and token in ja, token
+
+
+def test_a_bubbles_commit_neither_measures_nor_fills(temp_db, monkeypatch):
+    """A live causality bubble's commit runs the commit tail too. Its scene
+    is cut to its own subjects, so the frontier read "the player stands in
+    no room", overwrote the era's measure and asked the era's open needs
+    under a second signature with a back-off of its own (review of the
+    2026-10-08 landing). The player frame's commit asks; the bubble's does
+    not."""
+    import world.spatial_frames as spatial_frames
+    from world.planning_needs import file_planning_need
+    cid, _ = _story(temp_db, positions={PLAYER: "quay"})
+    _grant_fills(cid)
+    file_planning_need(cid, {"kind": "thing",
+                             "surface": {"name": "the sealed letter"}})
+    bubble = temp_db.qi(
+        "INSERT INTO frames(chat_id,label,ordinal,kind,created) VALUES(?,?,?,?,?)",
+        (cid, "away", 1, "spatial", time.time()))
+    measured = []
+    monkeypatch.setattr(rf, "record_measure",
+                        lambda *a, **k: measured.append(a))
+    beat = _beat(temp_db, cid, 2)
+    ctx = PipelineContext(chat=beat.chat, cast=[], input="", turn=TurnData(
+        id=beat.turn.id, chat_id=cid, idx=2, player_input="",
+        created=time.time(), frame_id=bubble))
+    # The same commit in the player's frame would queue the fill.
+    monkeypatch.setattr(spatial_frames, "is_bubble_frame", lambda c, f: False)
+    assert sp.schedule_room_work(ctx) is not None and measured
+    from core import jobs
+    jobs.drain(timeout=5.0)
+    measured.clear()
+    monkeypatch.setattr(spatial_frames, "is_bubble_frame", lambda c, f: True)
+    assert sp.schedule_room_work(_beat_in(ctx, 3)) is None
+    assert measured == []
+
+
+def _beat_in(ctx, idx):
+    """`ctx`'s frame, one beat on."""
+    return PipelineContext(chat=ctx.chat, cast=[], input="", turn=TurnData(
+        id=ctx.turn.id, chat_id=ctx.chat.id, idx=idx, player_input="",
+        created=time.time(), frame_id=ctx.turn.frame_id))
+
+
+def test_a_bubbles_beats_do_not_shorten_the_back_off(temp_db):
+    """Turn rows are numbered across the chat, and a live bubble inserts its
+    beats into that numbering: counted as this frame's beats, they ran the
+    wait down early, and a fill answered after a bubble's row was filed
+    above the player's own beat."""
+    cid, _ = _story(temp_db)
+    bubble = temp_db.qi(
+        "INSERT INTO frames(chat_id,label,ordinal,kind,created) VALUES(?,?,?,?,?)",
+        (cid, "away", 1, "spatial", time.time()))
+    sig = "c" * 16
+    rf.record_fill_asked(cid, None, sig, turn_idx=5, published=True)
+    for idx, frame in ((6, bubble), (7, None)):
+        temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+                   "VALUES(?,?,?,?,?)", (cid, idx, "", time.time(), frame))
+    # Two chat-wide beats since the answer, one of them the bubble's.
+    assert not rf.fill_due(cid, None, sig, 7)[0]
+    temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+               (cid, 8, "", time.time()))
+    assert rf.fill_due(cid, None, sig, 8)[0]
+    # The frame's own newest beat, never the bubble's row above it.
+    temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+               "VALUES(?,?,?,?,?)", (cid, 9, "", time.time(), bubble))
+    assert rf.frame_turn_idx(cid, None) == 8
+    assert rf.frame_turn_idx(cid, bubble) == 9

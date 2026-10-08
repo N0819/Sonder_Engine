@@ -54,7 +54,7 @@ import hashlib
 import json
 import time
 
-from core.db import transaction, wget_for_frame, wset_for_frame
+from core.db import q, transaction, wget_for_frame, wset_for_frame
 
 #: The world key. Frame-scoped (core/db.FRAME_SCOPED_WORLD_KEYS).
 FRONTIER_KEY = "room_frontier"
@@ -466,6 +466,29 @@ def record_fill_asked(cid, frame_id, signature, *, turn_idx, published):
     return _update(cid, frame_id, _apply)
 
 
+def frame_turn_idx(cid, frame_id):
+    """The newest beat THIS frame has played -- the stamp a fill's answer is
+    filed at. Turn rows are numbered across the whole chat, and a live
+    causality bubble inserts its own beats into that numbering, so the
+    chat-wide newest (`room_conversation.current_turn_idx`) can be a
+    bubble's row sitting above the player's own beat; filed there, the
+    player's next commit read its own earlier beat as a rewind and asked an
+    unchanged question again at once (review, 2026-10-08)."""
+    row = q("SELECT MAX(idx) AS m FROM turns WHERE chat_id=? AND frame_id IS ?",
+            (int(cid), frame_id), one=True)
+    return int(row["m"]) if row and row["m"] is not None else 0
+
+
+def _other_frames_beats(cid, frame_id, after, upto):
+    """How many of the chat's turn rows in ``(after, upto]`` belong to some
+    OTHER frame -- the beats a live bubble played inside this frame's
+    window, which are not this frame's beats to count."""
+    row = q("SELECT COUNT(*) AS n FROM turns WHERE chat_id=? AND idx>? "
+            "AND idx<=? AND frame_id IS NOT ?",
+            (int(cid), int(after), int(upto), frame_id), one=True)
+    return int(row["n"] or 0) if row else 0
+
+
 def fill_due(cid, frame_id, signature, turn_idx):
     """Whether a fill against ``signature`` is due at beat ``turn_idx``:
     never asked, asked in a timeline the story has since rewound out of, or
@@ -481,7 +504,11 @@ def fill_due(cid, frame_id, signature, turn_idx):
     if story_rewound_past(asked, turn_idx):
         return True, ""
     wait = fill_wait_beats(prior.get("misses"))
-    if int(turn_idx) - asked >= wait:
+    # This frame's beats since the answer: a bubble's rows interleaved in
+    # the chat-wide numbering would otherwise shorten every wait.
+    beats = int(turn_idx) - asked - _other_frames_beats(
+        cid, frame_id, asked, turn_idx)
+    if beats >= wait:
         return True, ""
     return False, ("answered at beat %d with %d empty in a row; next ask at "
                    "beat %d" % (asked, int(prior.get("misses") or 0),
