@@ -721,6 +721,14 @@ the turn, a worse outcome than not caching. The host reaches all of it through a
 per-provider checkbox in ⚙ API rather than by hand-editing a settings row, and
 the UI reads its state from the predicate rather than re-deriving it.
 
+One caller marks its USER message. The encoder's draft call is a breakpoint
+with a cue after it, and its repair continues that request byte for byte, so
+the repair reads the draft's whole sheet and payload from cache (Gemini through
+OpenRouter, measured 2026-10-08: write billed $0.1167/M, read $0.075/M,
+uncached $0.75/M). A cache here is a cost saving, never a speed one: a write
+delays the first token by 0.6-1.0 s. The rebuild and fallback rungs of
+complete_validated_json never continue anything.
+
 ---
 
 ## 11. Frontend

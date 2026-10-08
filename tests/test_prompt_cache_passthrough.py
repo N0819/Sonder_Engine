@@ -133,8 +133,10 @@ def test_only_the_system_prompt_is_ever_cache_marked(temp_db):
     dialogue, perception views -- changes every call, so marking it would write
     a new cache entry per turn and never read one back: pure overhead.
 
-    Only `system` is ever reshaped; the user message stays a plain string on
-    both dialects."""
+    Only `system` is reshaped by default; the user message stays a plain
+    string on both dialects. The one exception is a caller whose payload WILL
+    be read back -- the encoder, whose repair continues its request
+    (`cache_user`, tests/test_the_encoder_repair_continues_the_draft_request.py)."""
     for prov in ({"kind": "nanogpt", "name": "nanogpt"},
                  {"kind": "openrouter", "name": "openrouter"}):
         msg = providers._openai_system_message("stable prompt", prov, CLAUDE)

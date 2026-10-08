@@ -1181,6 +1181,96 @@ def _openai_system_message(system, prov, model):
                              "cache_control": {"type": "ephemeral"}}]}
     return {"role": "system", "content": system}
 
+
+def _model_is_gemini(model):
+    return "gemini" in str(model or "").lower()
+
+
+# A GEMINI MODEL CACHES ONLY BEHIND AN EXPLICIT BREAKPOINT on the aggregator
+# documented to build its cache from one: OpenRouter writes Gemini's context
+# cache from a `cache_control` breakpoint and uses only the LAST breakpoint in
+# a request (its prompt-caching guide). nanogpt documents implicit caching for
+# Gemini and explicit control for Claude only, so it is not built in for this
+# family; `prompt_cache_allow` still opts any provider in, and
+# `prompt_cache_deny` still wins over both.
+#
+# Measured 2026-10-08 on the encoder's own requests (google/gemini-3.8-flash
+# through OpenRouter, served by Google AI Studio; real 25-50k-token captures
+# from the Brackwater run, chat 166):
+# - unmarked, nothing is read from cache: 0 of 224 encoder calls in the run,
+#   and an identical 6.7k-token system re-sent seconds later read 0;
+# - a breakpoint on the LAST message writes nothing: 32,706 prompt tokens,
+#   0 cached, billed the full $0.75/M;
+# - a breakpoint with a message after it writes the prefix, and the writing
+#   call itself is billed $0.1167/M for it -- the $0.075/M read price plus
+#   five minutes' storage at $0.0417/M -- not the "input price plus storage"
+#   the guide states (`usage.cost` and the generation record agree; three
+#   writes of 25k, 33k and 50k tokens, the last through this module's own
+#   streamed request);
+# - a later call that sends the same messages up to the breakpoint reads
+#   them at $0.075/M, routed to the same upstream;
+# - a write is not free in time: the writing calls' first tokens came 2.3 s
+#   and 2.8 s after the request against 1.75 s unmarked, and the reads 1.7 s
+#   and 2.7 s (one sample each), so a cache is a cost saving here, never a
+#   speed one (docs/experiments/MEASUREMENT_BACKLOG.md §2).
+_GEMINI_BREAKPOINT_KINDS = ("openrouter",)
+
+
+def cache_breakpoint_honoured(prov, model):
+    """Whether a `cache_control` breakpoint in an OpenAI-style request to this
+    provider caches this model's prompt: a model family whose caching needs
+    one (Claude, Gemini), a provider that translates it for that family
+    (`_CACHE_PASSTHROUGH_KINDS` for Claude, `_GEMINI_BREAKPOINT_KINDS` for
+    Gemini, or one the host named in `prompt_cache_allow`), and no
+    `prompt_cache_deny` or kill switch against it. Every other family caches
+    implicitly or not at all and is sent no marker: one would buy nothing,
+    and a strict parser may refuse the content-part form. A native Anthropic
+    or CLI connection builds no OpenAI-style body, so this is False there."""
+    if not PROMPT_CACHE_ENABLED or prov is None:
+        return False
+    if str(_prov_field(prov, "kind") or "").strip().casefold() in (
+            "anthropic", CLAUDE_CLI_KIND):
+        return False
+    if _model_is_anthropic(model):
+        return _cache_passthrough_allowed(prov)
+    if not _model_is_gemini(model) or _cache_denied(prov):
+        return False
+    name, kind = cache_tokens(prov)
+    return (kind in _GEMINI_BREAKPOINT_KINDS
+            or bool({kind, name} & _setting_name_set("prompt_cache_allow")))
+
+
+def role_caches_prefix(role):
+    """Whether `role`'s first model honours a cache breakpoint
+    (`cache_breakpoint_honoured`): what a caller asks before it shapes a
+    request to be continued by a later one. False when the role resolves to
+    nothing."""
+    try:
+        prov, model, _config = resolve_role_candidates(role)[0]
+    except Exception:
+        return False
+    return cache_breakpoint_honoured(prov, model)
+
+
+def _openai_user_message(user, prov, model, mark=False):
+    """The user message for an OpenAI-compatible request: a cache breakpoint
+    when the caller asks for one (`cache_user`) and the route honours it
+    (`cache_breakpoint_honoured`), else the plain string every provider takes.
+
+    The SYSTEM message alone is marked by default, and that stays the rule: a
+    payload is unique to its call, so a breakpoint on it buys a write that
+    nothing reads back -- on Claude, billed above the input it replaces. A
+    caller asks only when a later call will send the same messages this far
+    -- the encoder's repair continues the encoder's own request
+    (`agents/director_repair.call_repair`) -- and then puts a message after
+    this one, since Gemini through OpenRouter writes nothing for a breakpoint
+    on the last message."""
+    if mark and user and cache_breakpoint_honoured(prov, model):
+        return {"role": "user",
+                "content": [{"type": "text", "text": user,
+                             "cache_control": {"type": "ephemeral"}}]}
+    return {"role": "user", "content": user}
+
 # OpenRouter provider routing. One OpenRouter model id is served by several
 # upstream providers (Anthropic direct, Amazon Bedrock, Azure, Google Vertex,
 # and third-party hosts), and they are not interchangeable: output quality
@@ -3621,6 +3711,7 @@ def chat_complete(
     tools=None,
     tool_choice=None,
     turn=None,
+    cache_user=None,
 ):
     """``reasoning_effort`` is a per-CALL override of the role's configured
     effort (`reasoning_effort_for`): "off" for a JSON-shaped utility call
@@ -3638,10 +3729,14 @@ def chat_complete(
     results), the tools offered, and an out-dict the stream fills with the
     round's content, reasoning and tool calls. Passed on only when set, so a
     caller that sends none reaches `_chat_complete_once` exactly as before.
-    A route that cannot carry them raises `ToolsUnsupported`."""
+    A route that cannot carry them raises `ToolsUnsupported`. ``history``
+    alone is also how a call CONTINUES an earlier one: the messages after
+    its user message, with ``cache_user`` making that user message a cache
+    breakpoint where the route honours one (`_openai_user_message`)."""
     _check_cancel()
     _tool_kwargs = {k: v for k, v in (("history", history), ("tools", tools),
-                                       ("tool_choice", tool_choice), ("turn", turn))
+                                       ("tool_choice", tool_choice), ("turn", turn),
+                                       ("cache_user", cache_user))
                     if v is not None}
     # Final, universal boundary: even repair prompts and utility calls that do
     # not originate in prompts.py must know that free text is localized while
@@ -3970,6 +4065,7 @@ def _chat_complete_once(
     tools=None,
     tool_choice=None,
     turn=None,
+    cache_user=None,
 ):
     _check_cancel()
     # Clear before the request, not after: every path below either records a
@@ -3985,8 +4081,12 @@ def _chat_complete_once(
     # A TOOL ROUND NEVER REACHES A BACKEND THAT WOULD DROP IT: the two
     # branches below return before the OpenAI-style body exists, and
     # without this a round's history and tools would vanish and the model
-    # answer as though no tool had ever run.
-    if (tools or history) and not tools_supported(prov, model):
+    # answer as though no tool had ever run. History WITHOUT tools -- a call
+    # continuing an earlier one -- needs only the OpenAI-style body: a host
+    # that refused `tools` (`_NO_TOOLS`) still takes plain messages.
+    if ((tools or history)
+            and _prov_field(prov, "kind") in ("anthropic", CLAUDE_CLI_KIND)) \
+            or (tools and not tools_supported(prov, model)):
         raise ToolsUnsupported(
             f"{_prov_field(prov, 'name') or _prov_field(prov, 'kind')}: "
             f"{model} takes no tool rounds here")
@@ -4086,10 +4186,7 @@ def _chat_complete_once(
         "max_tokens": max_tokens,
         "messages": [
             _openai_system_message(system, prov, model),
-            {
-                "role": "user",
-                "content": user,
-            },
+            _openai_user_message(user, prov, model, cache_user),
         ] + list(history or ()),
     }
     if tools:

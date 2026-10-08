@@ -48,6 +48,7 @@ at or above this Jev probability; `DEFAULT_THRESHOLD`), `prose_contract_widen`
 from __future__ import annotations
 
 import contextvars
+import json
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -61,6 +62,7 @@ from llm.prompts import (
     encoder_parts,
     jev_channel_questions,
     jev_question,
+    prose_contract_text,
     prose_director_prompt,
     unified_specialist_prompt,
 )
@@ -1613,27 +1615,55 @@ def _extension_sections(channels):
 
 
 def _call_encoder(ctx, channels, payload, parts):
+    """`(answer, exchange)`. Where the encoder's route caches a prefix
+    (`providers.role_caches_prefix`), the request goes as one -- its user
+    message a cache breakpoint, and one line after it (`encoder_cue`),
+    because Gemini through OpenRouter writes nothing for a breakpoint on the
+    last message (32,706 prompt tokens, 0 cached, 2026-10-08) -- and
+    `exchange` is that request as sent with the answer it got, for the
+    repair to continue (`director_repair.continuation`). Elsewhere the
+    request is exactly what it always was, and `exchange` is None."""
+    from llm.providers import role_caches_prefix
+    sheet = unified_specialist_prompt(channels, ctx.language, parts,
+                                      extensions=_extension_sections(channels))
+    sent = dict(payload, granted_tools=list(channels) + list(parts))
+    prefix = None
+    if role_caches_prefix("encoder"):
+        prefix = {"user": json.dumps(sent, ensure_ascii=False),
+                  "after": [{"role": "user", "content": prose_contract_text(
+                      "encoder_cue", ctx.language)}]}
     answer = _agent_json(
         "encoder",
         "director_specialist",
-        unified_specialist_prompt(channels, ctx.language, parts,
-                                  extensions=_extension_sections(channels)),
-        dict(payload, granted_tools=list(channels) + list(parts)),
+        sheet,
+        sent,
         temperature=0.2,
         max_tokens=None,
+        **({"prefix": prefix} if prefix else {}),
     ) or {}
+    exchange = None
+    if prefix is not None and isinstance(answer, dict):
+        try:
+            exchange = {"system": sheet, "user": prefix["user"],
+                        "after": list(prefix["after"]),
+                        "answer": json.dumps(answer, ensure_ascii=False),
+                        "channels": list(channels), "parts": list(parts)}
+        except (TypeError, ValueError):
+            exchange = None
     if isinstance(answer, dict) and isinstance(answer.get("events"), list):
         answer = dict(answer, events=transforms_as_written(answer["events"]))
-    return answer
+    return answer, exchange
 
 
 def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=None,
            rooms_elsewhere=False, new_places=None, parts=None):
-    """`(answer, channels, record)`: the encoder's events and the tools it
-    finally held. At most one widening pass, whose answer REPLACES the
-    first. With `rooms_elsewhere`, places are the room author's: the encoder
-    holds no room tool, may not ask for one, and names a new place as
-    `new:<words>`.
+    """`(answer, channels, record, exchange)`: the encoder's events, the
+    tools it finally held, and -- where the route caches a prefix -- the
+    request the kept answer came from, as sent (`_call_encoder`; None
+    elsewhere), which the repair continues. At most one widening pass, whose
+    answer REPLACES the first. With `rooms_elsewhere`, places are the room
+    author's: the encoder holds no room tool, may not ask for one, and names
+    a new place as `new:<words>`.
 
     `parts` are the encoder parts the decision model chose (None: every part
     of every held channel -- fail open). The payload's `requestable_tools`
@@ -1667,7 +1697,7 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     payload["new_places"] = dict(new_places or {})
     payload["requestable_tools"] = requestable()
     t0 = time.time()
-    answer = _call_encoder(ctx, channels, payload, parts)
+    answer, exchange = _call_encoder(ctx, channels, payload, parts)
     record["seconds"] = round(time.time() - t0, 3)
     missing = lacking(answer.get("missing_tools"))
     # CODE CLOSES THE KNOWN DEPENDENCIES; the decision model only predicts.
@@ -1697,6 +1727,7 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
         record["missing_tools"] = missing
         if _widen_allowed():
             first, first_channels, first_parts = answer, list(channels), list(parts)
+            first_exchange = exchange
             added = [tool for tool in dict.fromkeys(missing) if tool in known]
             channels = channels + added
             parts = parts + [part for part in dict.fromkeys(
@@ -1714,7 +1745,7 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
             # and the replacement dropped every later step of the beat.
             payload["previous_events"] = list(first.get("events") or [])
             t1 = time.time()
-            answer = _call_encoder(ctx, channels, payload, parts)
+            answer, exchange = _call_encoder(ctx, channels, payload, parts)
             record["widened_to"] = list(channels) + list(parts)
             record["widen_seconds"] = round(time.time() - t1, 3)
             # A replacement, never a merge -- so a thinner replacement must
@@ -1728,6 +1759,7 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
                                 f"than the first; kept the first, {missing} "
                                 "unencoded")
                 answer, channels, parts = first, first_channels, first_parts
+                exchange = first_exchange
             still = lacking(answer.get("missing_tools"))
             if still and "widen_rejected" not in record:
                 record["unmet_tools"] = still
@@ -1736,7 +1768,7 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
         else:
             ctx.add_warning(f"{stage}: encoder lacked {missing} (widening off)")
     record["parts"] = list(parts)
-    return answer, list(channels), record
+    return answer, list(channels), record, exchange
 
 
 # ---- 4. code converts ------------------------------------------------------
@@ -2114,7 +2146,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     units = director_repair.sentences(prose) if director_repair.enabled() else None
     t_rooms = time.time()
     try:
-        answer, encoder_channels, encoding = encode(
+        answer, encoder_channels, encoding, exchange = encode(
             ctx, stage, sc, prose, model_payload, view, extras,
             encoder_channels, facts, rooms_elsewhere=rooms_elsewhere,
             new_places=new_places if rooms_elsewhere else None,
@@ -2136,7 +2168,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             ctx, stage, sc, units, events, encoder_channels,
             encoding.get("parts") or [], model_payload, view, extras, facts=facts,
             rooms_elsewhere=rooms_elsewhere,
-            new_places=new_places if rooms_elsewhere else None)
+            new_places=new_places if rooms_elsewhere else None, held=exchange)
         # A repaired write copies ids out of the same payload, and can slip
         # one the same way (`entity_keys_name_held_things`).
         events = entity_keys_name_held_things(events, sc, warn=ctx.add_warning)

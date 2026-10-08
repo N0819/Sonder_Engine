@@ -249,8 +249,14 @@
     "room_reconcile": {
       "$text": "prose_contract/room_reconcile.txt"
     },
+    "encoder_cue": {
+      "$text": "prose_contract/encoder_cue.txt"
+    },
     "encoder_repair": {
       "$text": "prose_contract/encoder_repair.txt"
+    },
+    "encoder_repair_continues": {
+      "$text": "prose_contract/encoder_repair_continues.txt"
     },
     "encoder_extensions": {
       "$text": "prose_contract/encoder_extensions.txt"

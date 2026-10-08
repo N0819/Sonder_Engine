@@ -43,6 +43,10 @@ failure: its final runs ended with 220 of 225 ledger findings uncertain, and
    a flagged mistake is the prose's to settle, not the draft's, which can
    repeat it. Jev picks the tools for a missing sentence, and places each
    recovered event among its neighbours. A job skipped is asked once more.
+   Where the route caches a prefix, each call CONTINUES the draft's own
+   request -- its system and payload as sent, read from cache, then the
+   draft as its answer and the repair's turn (`continuation`); elsewhere it
+   goes on its own sheet. The jobs and the grant are the same either way.
 6. Only the repaired writes are checked again, and nothing aborts the turn:
    whatever stays unresolved is committed with a warning. A user's Stop
    (`Aborted`) is the one thing that propagates.
@@ -882,11 +886,15 @@ def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts)
 
 
 def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view, extras,
-                rooms_elsewhere=False, new_places=None, base_payload=None):
+                rooms_elsewhere=False, new_places=None, base_payload=None, held=None):
     """One encoder call for every job, with the completed draft in front of it.
     `base_payload` stands in for the slices the stage would assemble -- a
     replay of a captured encoder call has them and nothing to rebuild them
-    from."""
+    from. `held` is the request the draft came from, as sent
+    (`director_prose._call_encoder`): the repair continues it where the route
+    caches a prefix (`continuation`), and is sent on its own sheet otherwise.
+    Its sheet and payload are the same either way -- what is validated
+    against, and what the rungs that rebuild a broken answer send."""
     from .director_prose import _agent_json, encoder_payload
     language = ctx.language
     sheet = unified_specialist_prompt(tools, language, parts)
@@ -900,6 +908,7 @@ def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view,
     payload["minted"] = _minted(events)
     sources = dict(zip(refs_of(events), attribute(events, units)))
     payload["jobs"] = [_job_view(job, units, sources) for job in jobs]
+    prefix = continuation(held, payload, tools, parts, language)
     # THE REPAIR KEEPS THE GRAMMAR its role's draft call goes without: its
     # answers bind to their jobs by id, and sent free, GLM 5.2 answered a
     # sixteen-sentence job by re-encoding the whole beat in the draft's own
@@ -907,8 +916,76 @@ def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view,
     # 4398's first roll, 2 of 3 runs, 2026-09-25).
     out = _agent_json("encoder", "director_repair", sheet, payload,
                       temperature=0.2, max_tokens=None,
-                      response_format="json_schema") or {}
+                      response_format="json_schema",
+                      **({"prefix": prefix} if prefix else {})) or {}
     return merge_answers(out.get("answers"), jobs), list(out.get("notes") or [])
+
+
+#: What a repair turn carries whatever the request it continues already
+#: showed: what this repair is asked, and what it may write.
+REPAIR_TURN_KEYS = ("prose", "granted_tools", "draft", "minted", "jobs")
+
+
+def _as_sent(value):
+    """`value` as it reads once sent -- tuples as lists, keys as strings."""
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def continuation(held, payload, tools, parts, language=None):
+    """The repair as a CONTINUATION of the request its draft came from, for
+    `complete_validated_json(prefix=)`: that request's system and user
+    messages exactly as sent -- so the cache its breakpoint wrote is read --
+    then its own trailing line, the draft as the answer it was, and this
+    repair's turn. None when nothing is held, or the route caches no prefix,
+    and the repair goes on its own sheet as before.
+
+    THE REPAIR RE-SENT THE BEAT'S WHOLE WORLD. On the Brackwater run (chat
+    166, 30 kept beats) 85 of 142 kept encoder calls were repairs, carrying
+    51% of the encoder's input (2.15M tokens) for 22% of its output, with
+    every world slice byte-identical to the draft call's within a stage
+    (world_index 53/53, positions 42/42) under a sheet of its own, so
+    nothing was ever read from a cache. Continued, the draft call's whole
+    request is the repair's prefix: replayed on that chat's captured
+    requests (2026-10-08) a repair read 32,706 of its 39,635 prompt tokens
+    at $0.075/M, where the same tokens sent alone cost $0.75/M.
+
+    WHAT THE REPAIR IS TOLD AND MAY WRITE IS UNCHANGED. Its turn carries
+    `REPAIR_TURN_KEYS`, then every key of its own payload the request above
+    did not show the same -- a slice its grant shapes differently (`rooms`
+    an index where the draft held records: 65 of chat 166's 261 repair
+    calls; records where the draft held an index: 13) or one the draft never
+    had -- with its card's text, and every encoder piece its grant holds
+    that the draft's sheet lacked (`encoder_sheet_additions`)."""
+    from llm.prompts import encoder_sheet_additions
+    from llm.providers import role_caches_prefix
+    if not held or not role_caches_prefix("encoder"):
+        return None
+    try:
+        system, user, answer = held["system"], held["user"], str(held["answer"])
+        shown = json.loads(user)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not isinstance(shown, dict) or not isinstance(system, str):
+        return None
+    turn = {}
+    for key, value in payload.items():
+        try:
+            same = key in shown and _as_sent(value) == shown[key]
+        except (TypeError, ValueError):
+            same = False
+        if key in REPAIR_TURN_KEYS or not same:
+            turn[key] = value
+    text = [prose_contract_text("encoder_repair_continues", language).strip(),
+            prose_contract_text("encoder_repair", language).strip()]
+    extra = encoder_sheet_additions(tools, parts, held.get("channels") or (),
+                                    held.get("parts") or (), language)
+    if extra:
+        text.append(extra)
+    text.append(json.dumps(turn, ensure_ascii=False))
+    return {"system": system, "user": user,
+            "after": list(held.get("after") or ()) + [
+                {"role": "assistant", "content": answer},
+                {"role": "user", "content": "\n\n".join(text)}]}
 
 
 def _job_of(answer_id, job_ids):
@@ -987,14 +1064,17 @@ def _fuller(job, first, again):
 
 
 def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_payload,
-                  view, extras, facts, rooms_elsewhere, new_places, base_payload):
+                  view, extras, facts, rooms_elsewhere, new_places, base_payload,
+                  held=None):
     """One repair call for one group of jobs, its one retry, and its writes
-    held to its grant. Returns `{answers, notes, tools, retried, stray}`."""
+    held to its grant. Returns `{answers, notes, tools, retried, stray}`.
+    Both calls continue `held`, the draft's own request, where they can
+    (`continuation`)."""
     tools, tool_parts, routing = repair_tools(ctx, stage, units, jobs, model_payload,
                                               facts, channels, parts)
     answers, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
                                  model_payload, view, extras, rooms_elsewhere, new_places,
-                                 base_payload)
+                                 base_payload, held=held)
     # THE REPAIR CALL STOPS SHORT AS THE ENCODER DOES: on its first runs it
     # answered a fix and skipped the sixteen-sentence event job beside it,
     # answered another with one event where the next run gave twenty-five,
@@ -1014,7 +1094,7 @@ def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_pa
     if leftover:
         again, more_notes = call_repair(ctx, sc, units, events, leftover, tools, tool_parts,
                                         model_payload, view, extras, rooms_elsewhere,
-                                        new_places, base_payload)
+                                        new_places, base_payload, held=held)
         retried = [job["id"] for job in leftover]
         by_id = {job["id"]: job for job in leftover}
         redo, extra = {}, []
@@ -1341,16 +1421,18 @@ def _changed_writes(before, after):
 
 def check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payload,
                      view, extras, facts=None, rooms_elsewhere=False, new_places=None,
-                     base_payload=None):
+                     base_payload=None, held=None):
     """`(events, record)`. Never raises except for a user's Stop: any
-    failure returns the draft as it came, with a warning."""
+    failure returns the draft as it came, with a warning. `held` is the
+    request the draft came from, as sent, for the repair to continue
+    (`continuation`); None sends each repair on its own sheet."""
     from llm.providers import Aborted
     record = {"sentences": len(units)}
     t0 = time.time()
     try:
         events, record = _check_and_repair(
             ctx, stage, sc, units, events, channels, parts, model_payload, view, extras,
-            facts, rooms_elsewhere, new_places, record, base_payload)
+            facts, rooms_elsewhere, new_places, record, base_payload, held=held)
     except Aborted:
         raise
     except Exception as exc:
@@ -1362,7 +1444,7 @@ def check_and_repair(ctx, stage, sc, units, events, channels, parts, model_paylo
 
 def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payload,
                       view, extras, facts, rooms_elsewhere, new_places, record,
-                      base_payload=None):
+                      base_payload=None, held=None):
     from .director_prose import encoder_payload
     events = [e for e in events or [] if isinstance(e, dict)]
     cited = citations(events, units)
@@ -1445,7 +1527,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     def run_group(group):
         return _repair_group(ctx, stage, sc, units, events, group, channels, parts,
                              model_payload, view, extras, facts, rooms_elsewhere,
-                             new_places, base_payload)
+                             new_places, base_payload, held=held)
 
     if len(groups) > 1:
         import contextvars

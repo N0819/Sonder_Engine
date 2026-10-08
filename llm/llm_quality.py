@@ -801,6 +801,7 @@ def complete_validated_json(
     first_raw=None,
     first_started=None,
     rung_system=None,
+    prefix=None,
 ) -> dict:
     # None means "the configured ceiling" (providers._clamp_max_tokens). This
     # used to be a hardcoded 16000, which made max_output_tokens a one-way
@@ -878,7 +879,41 @@ def complete_validated_json(
     if first_raw is not None and first_started:
         _capture_t0 = float(first_started)
 
+    # A CACHED PREFIX AND WHAT FOLLOWS IT (`prefix`: `{"system", "user",
+    # "after"}`). The request goes as `prefix`'s system and user messages --
+    # this call's own `system` and payload where it names none -- with the
+    # user message a cache breakpoint where the route honours one
+    # (`providers.cache_breakpoint_honoured`), and `after` the messages that
+    # follow it. The first attempt and every re-ask of THE SAME REQUEST send
+    # it -- the empty object, the truncation, the stall -- because each is
+    # that request again. The rungs that REBUILD a broken answer and the
+    # fallback candidates send `system` and `payload` on their own, as
+    # before: neither continues anything. `payload` is what the answer is
+    # validated against either way. The encoder sends its draft this way and
+    # its repair continues the draft's own request
+    # (`agents/director_repair.call_repair`).
+    #
+    # The capture records what was SENT (one row per call, A84): the user
+    # message's object, and what followed it under `messages_after`.
+    if prefix is not None and _closing:
+        raise TypeError("a cached prefix does not close a tool round")
+    _asked = {"prefixed": prefix is not None}
+    if prefix is not None:
+        _asked["system"] = prefix.get("system", system)
+        _asked["user"] = prefix.get("user", user)
+        _asked["after"] = list(prefix.get("after") or ())
+        try:
+            _shown = json.loads(prefix["user"]) if "user" in prefix else payload
+        except ValueError:
+            _shown = None
+        if not isinstance(_shown, dict):
+            _shown = {"user": _asked["user"]}
+        _sent_system = _asked["system"]
+        _sent = {**_shown, "messages_after": _asked["after"]}
+
     def _first_call(**closing):
+        if _asked["prefixed"]:
+            return _same_request()
         return chat_complete(
             role,
             system,
@@ -892,6 +927,22 @@ def complete_validated_json(
             **closing,
         )
 
+    def _same_request(**overrides):
+        """The first attempt's request once more, a cached prefix and what
+        follows it included -- what every re-ask of it sends."""
+        shape = {"temperature": temperature, "max_tokens": max_tokens,
+                 "sampler": sampler, "candidate_offset": 0,
+                 "json_schema": json_schema, "response_format": response_format,
+                 **overrides}
+        if _asked["prefixed"]:
+            return chat_complete(role, _asked["system"], _asked["user"], **shape,
+                                 history=_asked["after"], cache_user=True)
+        return chat_complete(role, system, user, **shape)
+
+    def _same_request_record():
+        """`(system, payload)` the capture records for a re-ask."""
+        return (_sent_system, _sent) if _asked["prefixed"] else (system, payload)
+
     try:
         if first_raw is not None:
             raw = str(first_raw)
@@ -899,24 +950,34 @@ def complete_validated_json(
             try:
                 raw = _first_call(**_closing)
             except ToolsUnsupported as exc:
-                if not _closing:
+                if not _closing and not _asked["prefixed"]:
                     raise
-                # The route served the tool rounds and refused the closing
-                # one (the grammar beside the tools, or the history itself).
-                # Asked again as a plain request, with what the lookups
-                # brought folded into the packet -- a beat a single call
-                # would have survived is not lost to the rounds.
                 note_provider_exchange(
-                    role=role, system=system, payload=_sent, response="",
+                    role=role, system=_sent_system, payload=_sent, response="",
                     ok=False, started=_capture_t0, error=str(exc))
-                note_step_warning(
-                    f"{step_key}: the closing round was refused ({str(exc)[:160]}); "
-                    "asked again without the rounds, what they found folded in")
-                if folded_payload is not None:
-                    payload = folded_payload
-                    user = json.dumps(payload, ensure_ascii=False)
-                if rung_system is not None:
-                    system = rung_system
+                if _asked["prefixed"]:
+                    # The route took no message after the user's -- the role
+                    # resolved to a backend that builds no OpenAI-style body
+                    # after the caller shaped the request. Asked as the plain
+                    # request: a beat is never lost to a cost saving.
+                    note_step_warning(
+                        f"{step_key}: the route took no cached prefix "
+                        f"({str(exc)[:160]}); asked as the plain request")
+                    _asked["prefixed"] = False
+                else:
+                    # The route served the tool rounds and refused the closing
+                    # one (the grammar beside the tools, or the history itself).
+                    # Asked again as a plain request, with what the lookups
+                    # brought folded into the packet -- a beat a single call
+                    # would have survived is not lost to the rounds.
+                    note_step_warning(
+                        f"{step_key}: the closing round was refused ({str(exc)[:160]}); "
+                        "asked again without the rounds, what they found folded in")
+                    if folded_payload is not None:
+                        payload = folded_payload
+                        user = json.dumps(payload, ensure_ascii=False)
+                    if rung_system is not None:
+                        system = rung_system
                 _sent, _sent_system, _capture_t0 = payload, system, time.time()
                 raw = _first_call()
     except Aborted:
@@ -1004,11 +1065,7 @@ def complete_validated_json(
         _t0 = time.monotonic()
         _wall0 = time.time()
         try:
-            again = chat_complete(
-                role, system, user, temperature=temperature,
-                max_tokens=max_tokens, sampler=sampler, candidate_offset=0,
-                token_ceiling=token_ceiling, json_schema=json_schema,
-                response_format=response_format)
+            again = _same_request(token_ceiling=token_ceiling)
         except Aborted:
             raise
         except LLMError as exc:
@@ -1023,20 +1080,22 @@ def complete_validated_json(
             again_parsed = _parse_whole(again)
         except Exception:
             again_parsed = None
+        _asked_system, _asked_payload = _same_request_record()
         if isinstance(again_parsed, dict) and again_parsed:
             again_report = validate_llm_output_strict(
                 step_key, again_parsed, source_payload=payload)
             note_provider_exchange(
-                role=role, system=system, payload=payload, response=again,
-                ok=bool(again_report.valid), started=_wall0,
+                role=role, system=_asked_system, payload=_asked_payload,
+                response=again, ok=bool(again_report.valid), started=_wall0,
                 error="" if again_report.valid
                 else "; ".join(again_report.errors[:3]))
             if again_report.valid:
                 return _accepted(again_report)
         else:
             note_provider_exchange(
-                role=role, system=system, payload=payload, response=again,
-                ok=False, started=_wall0, error="empty or unparseable re-ask")
+                role=role, system=_asked_system, payload=_asked_payload,
+                response=again, ok=False, started=_wall0,
+                error="empty or unparseable re-ask")
         return _accepted(report)
 
     if report.valid:
@@ -1102,19 +1161,10 @@ def complete_validated_json(
             _t0 = time.monotonic()
             _wall0 = time.time()
             _budget = max_tokens if ran_away else token_ceiling
+            _asked_system, _asked_payload = _same_request_record()
             try:
-                raw = chat_complete(
-                    role,
-                    system,
-                    user,
-                    temperature=temperature,
-                    max_tokens=_budget,
-                    sampler=sampler,
-                    candidate_offset=0,
-                    token_ceiling=token_ceiling,
-                    json_schema=json_schema,
-                    response_format=response_format,
-                )
+                raw = _same_request(max_tokens=_budget,
+                                    token_ceiling=token_ceiling)
             except Aborted:
                 raise
             except LLMError as exc:
@@ -1122,8 +1172,8 @@ def complete_validated_json(
                 provider_errored = True
                 last_provider_error = exc
                 note_provider_exchange(
-                    role=role, system=system, payload=payload, response="",
-                    ok=False, started=_wall0, error=str(exc))
+                    role=role, system=_asked_system, payload=_asked_payload,
+                    response="", ok=False, started=_wall0, error=str(exc))
                 note_step_warning(
                     "llm second call: "
                     + ("runaway re-ask at the same budget"
@@ -1159,8 +1209,8 @@ def complete_validated_json(
                     report.errors.insert(0, parse_error)
 
                 note_provider_exchange(
-                    role=role, system=system, payload=payload, response=raw,
-                    ok=bool(report.valid), started=_wall0,
+                    role=role, system=_asked_system, payload=_asked_payload,
+                    response=raw, ok=bool(report.valid), started=_wall0,
                     error=("" if report.valid
                            else "; ".join(report.errors[:3])))
 
@@ -1203,19 +1253,16 @@ def complete_validated_json(
     if not provider_errored and _empty_answer_stall:
         _t0 = time.monotonic()
         _wall0 = time.time()
+        _asked_system, _asked_payload = _same_request_record()
         try:
-            previous_raw = chat_complete(
-                role, system, user, temperature=temperature,
-                max_tokens=max_tokens, sampler=sampler, candidate_offset=0,
-                token_ceiling=token_ceiling, json_schema=json_schema,
-                response_format=response_format)
+            previous_raw = _same_request(token_ceiling=token_ceiling)
         except Aborted:
             raise
         except LLMError as exc:
             last_provider_error = exc
             note_provider_exchange(
-                role=role, system=system, payload=payload, response="",
-                ok=False, started=_wall0, error=str(exc))
+                role=role, system=_asked_system, payload=_asked_payload,
+                response="", ok=False, started=_wall0, error=str(exc))
             note_step_warning(
                 "llm second call: empty-object reply re-ask errored after "
                 f"{time.monotonic() - _t0:.1f}s ({exc})")
@@ -1235,7 +1282,7 @@ def complete_validated_json(
                 report.valid = False
                 report.errors.insert(0, parse_error)
             note_provider_exchange(
-                role=role, system=system, payload=payload,
+                role=role, system=_asked_system, payload=_asked_payload,
                 response=previous_raw, ok=bool(report.valid),
                 started=_wall0,
                 error="" if report.valid else "; ".join(report.errors[:3]))
@@ -1480,18 +1527,19 @@ def complete_validated_json(
         for _attempt in range(MALFORMED_REASKS):
             _t0 = time.monotonic()
             _wall0 = time.time()
+            # The request AS IT WAS FIRST ASKED, a cached prefix and what
+            # follows it included (`_same_request`), so a continued encoder
+            # repair is re-asked as the continuation it was, and recorded as
+            # one (`_same_request_record`).
+            _asked_system, _asked_payload = _same_request_record()
             try:
-                fresh = chat_complete(
-                    role, system, user, temperature=temperature,
-                    max_tokens=max_tokens, sampler=sampler,
-                    candidate_offset=0, token_ceiling=token_ceiling,
-                    json_schema=json_schema, response_format=response_format)
+                fresh = _same_request(token_ceiling=token_ceiling)
             except Aborted:
                 raise
             except LLMError as exc:
                 last_provider_error = exc
                 note_provider_exchange(
-                    role=role, system=system, payload=payload, response="",
+                    role=role, system=_asked_system, payload=_asked_payload, response="",
                     ok=False, started=_wall0, error=str(exc))
                 note_step_warning(
                     "llm second call: re-ask after every answer failed to "
@@ -1514,7 +1562,7 @@ def complete_validated_json(
             # the failure.
             stalled = fresh_error is None and fresh_parsed == {}
             note_provider_exchange(
-                role=role, system=system, payload=payload, response=fresh,
+                role=role, system=_asked_system, payload=_asked_payload, response=fresh,
                 ok=bool(fresh_report.valid) and not stalled, started=_wall0,
                 error="empty object" if stalled
                 else "" if fresh_report.valid

@@ -256,6 +256,13 @@ first claimed) or "refuted". In descending value:
    with one probe first. Then choose among a system-part cache marker
    (-20% or +1%), repair as a continuation of the main call (-21% to -77%),
    or a per-stage world block (-20% to -64%).
+   Settled 2026-10-08 (6 probe calls, $0.059): OpenRouter bills the writing
+   call $0.1167/M (read $0.075 plus storage), not the documented input-
+   plus-storage, and a breakpoint on the last message writes nothing.
+   Built: the repair as a continuation of the draft call, with the draft
+   call marked behind a cue line (director_repair.continuation). Projected
+   -75% of encoder input on the kept beats; inert while prompt_cache_deny
+   lists openrouter.
 3. Scope the encoder's rooms and carried reports: -9% to -16% of encoder
    input. Needs a replay check; the hop cap is the owner's.
 4. Narrator reasoning off, behind a fiction-quality A/B: up to about

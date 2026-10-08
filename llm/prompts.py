@@ -465,6 +465,19 @@ def unified_specialist_prompt(channels, language=None, parts=None, *,
     (`prose_contract.encoder_extensions`), each channel's name and its
     extension's instructions verbatim. Their names are the grant: a channel
     in `channels` with no entry here reaches no sheet."""
+    sections, overlay = _encoder_pieces(channels, language, parts,
+                                        extensions=extensions)
+    sheet = "\n\n".join(text.strip("\n") for _key, text in sections) + "\n"
+    sheet += overlay
+    return apply_prompt_policy(sheet, _language(language), "director_specialist")
+
+
+def _encoder_pieces(channels, language=None, parts=None, *, extensions=()):
+    """`([(key, text)], overlay)`: the encoder sheet's pieces in sheet order
+    -- the core, each granted channel's chunk and its picked parts, the
+    extensions block -- and the adult overlay it closes with, or "".
+    `unified_specialist_prompt` assembles them; `encoder_sheet_additions`
+    compares two grants by them."""
     card = _prompt_card(language)
     encoder = card["encoder"]
     granted = set(channels or ())
@@ -476,29 +489,45 @@ def unified_specialist_prompt(channels, language=None, parts=None, *,
         override = _preset_override(ENCODER_PIECE_PREFIX + key, language)
         return str(override if override is not None else encoder[key])
 
-    sections = [piece("core")]
+    sections = [("core", piece("core"))]
     hands = []
     for name, spec in card["specialists"].items():
         shipped = [channel for channel in spec["order"] if channel in granted]
         if shipped:
             hands.append(name)
         for channel in shipped:
-            sections.append(piece(channel))
+            sections.append((channel, piece(channel)))
             prefix = f"{channel}{ENCODER_PART_SEP}"
             sections.extend(
-                piece(part) for part in encoder
+                (part, piece(part)) for part in encoder
                 if part.startswith(prefix) and (picked is None or part in picked))
     if extensions:
         block = [str(card["prose_contract"]["encoder_extensions"]).strip("\n")]
         for channel, instructions, list_shaped in extensions:
             head = f"`{channel}`" + (" `(list)`" if list_shaped else "")
             block.append(f"{head}\n{str(instructions).strip()}")
-        sections.append("\n\n".join(block))
-    sheet = "\n\n".join(section.strip("\n") for section in sections) + "\n"
+        sections.append(("extensions", "\n\n".join(block)))
     overlay = next((nsfw_overlay(f"director_{name}", card) for name in hands
                     if nsfw_overlay(f"director_{name}", card)), "")
-    sheet += overlay
-    return apply_prompt_policy(sheet, _language(language), "director_specialist")
+    return sections, overlay
+
+
+def encoder_sheet_additions(channels, parts, held_channels, held_parts,
+                            language=None):
+    """What a repair continuing the encoder's own request must be handed
+    beyond that request's sheet: each piece of the sheet for (`channels`,
+    `parts`) that the sheet for (`held_channels`, `held_parts`) did not
+    carry, in sheet order, then the adult overlay when only the new grant
+    brings one. "" when the held sheet carries everything. A record being
+    mended ships whole, parts and all (`director_repair.repair_tools`), so a
+    repair can hold parts its beat's own sheet left out."""
+    held, held_overlay = _encoder_pieces(held_channels, language, held_parts)
+    wanted, overlay = _encoder_pieces(channels, language, parts)
+    have = {key for key, _text in held}
+    out = [text.strip("\n") for key, text in wanted if key not in have]
+    if overlay and not held_overlay:
+        out.append(overlay.strip("\n"))
+    return "\n\n".join(out)
 
 
 #: The place-topology channels the prose contract's room author owns, in the

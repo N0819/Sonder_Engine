@@ -1756,6 +1756,25 @@ Open:
 2. A `{{...}}` span that is not a line token reaches the page (`{{new_specifics: []}}`, at effort off).
 3. One new-grammar answer of 24 re-rendered its beat a second time inside `prose`. Whether removing `text` from the grammar moved that urge there is unmeasured.
 
+<a id="unbuilt-1-187"></a>
+
+### 1.187 The encoder repair's continuation: what is not measured (2026-10-08)
+
+**Built:** `director_repair.continuation` (Design.md, 'The encoder's repair reads the draft call's request from cache').
+
+- A replay A/B of repair quality on chat 166 (events per stage, decline
+  rate, writes per channel): the repair now reads the draft call's whole
+  sheet, payload and answer. Three probe samples matched 2 of 3 verdicts,
+  and the third recovered an event the original had declined.
+- Turn-latency measurement: draft-call writes cost +0.6-1.0 s TTFT, from
+  single samples.
+- Inert while the owner's `prompt_cache_deny` lists openrouter.
+- Alternative B (mark every encoder call, repairs on their own sheet plus a
+  cue) is -84% at today's billing but +6% at the documented price; it is the
+  owner's choice.
+- The same breakpoint plus cue for other Gemini-routed roles is untested
+  below Gemini's minimum cache size.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

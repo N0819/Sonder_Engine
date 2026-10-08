@@ -3969,7 +3969,9 @@ def _agent_json(
     `first_started`, `rung_system`) is a character's closing round after it
     looked things up (`agents/character_tools.py`):
     passed on only when a tool loop ran, so every other caller -- and every
-    test stub of this seam -- sees exactly the call it always did.
+    test stub of this seam -- sees exactly the call it always did. `prefix`
+    is the encoder's: its request as a cached prefix and what follows it
+    (`complete_validated_json`), passed on only where the route caches one.
     """
     return complete_validated_json(
         role=role,
@@ -3983,7 +3985,7 @@ def _agent_json(
         response_format=response_format,
         **{k: v for k, v in tool_closing.items()
            if k in ("history", "tools", "folded_payload", "first_raw", "first_started",
-                    "rung_system") and v is not None},
+                    "rung_system", "prefix") and v is not None},
     )
 
 def jparse(text, fallback_key="text", required=False):
