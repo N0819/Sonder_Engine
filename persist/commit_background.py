@@ -1098,25 +1098,37 @@ def _background_name_mentioned(name, text, shared=()):
     name_cf = name.casefold()
     if re.search(rf"\b{re.escape(name_cf)}\b", text_cf):
         return True
-    words = [w.strip(".,;:") for w in name.split()]
+    words = [w.strip(".,;:").casefold() for w in name.split()]
     significant = [
-        w.casefold() for w in words
-        if w and w.casefold() not in _BACKGROUND_NAME_TITLE_WORDS and len(w) >= 3
-        and w.casefold() not in shared
-        # A NAME'S PARTS ARE ITS CAPITALISED WORDS. A tracked name can be a
-        # DESCRIPTION -- "a hunched man in an oilskin coat", aliases "broad
-        # man", "man in oilskin" -- whose words are the language's common
-        # nouns, and the fallback read the player's every line about the
-        # coat on a stake as naming him: scratch story 166, idx 15-17, a
-        # presence standing in no room was "addressed" and voiced on four
-        # beats running. A cased word counts only capitalised, which is how
-        # the writing marks a name ("Crusher", "Nookfeller"); a script with
-        # no case (Japanese) keeps every part, as before.
-        and (w[:1].upper() == w[:1].lower() or w[:1].isupper())
+        w for w in words
+        if w and w not in _BACKGROUND_NAME_TITLE_WORDS and len(w) >= 3
+        and w not in shared
     ]
     return any(
         re.search(rf"\b{re.escape(w)}\b", text_cf) for w in significant
     )
+
+
+def _thing_name_words(scene):
+    """The significant words of every THING the scene holds -- its name and
+    aliases, for each entity the engine's own test calls inert
+    (`_is_inert_presence_candidate`). A word that names something else in
+    the scene is that thing's name, not a person's: scratch story 166, idx
+    15-17, the player's every line about the coat on a stake ("the coat",
+    alias of the waterlogged coat) named "a hunched man in an oilskin coat",
+    and a presence standing in no room was counted addressed and voiced on
+    four beats running. Joined to `_shared_name_words`' set where a name's
+    parts are matched, so the whole name still reaches its holder."""
+    words = set()
+    for eid, ent in ((scene or {}).get("entities") or {}).items():
+        if not isinstance(ent, dict) or not _is_inert_presence_candidate(scene, eid, ent):
+            continue
+        for label in [ent.get("name"), *(ent.get("aliases") or [])]:
+            for word in str(label or "").split():
+                word = word.strip(".,;:").casefold()
+                if word and word not in _BACKGROUND_NAME_TITLE_WORDS and len(word) >= 3:
+                    words.add(word)
+    return words
 
 
 def _shared_name_words(names):
@@ -2583,7 +2595,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # word every holder of a post shares names the post, and a mention of
     # it is not a mention of each of them (`_shared_name_words`).
     shared_words = _shared_name_words(
-        n for k, r in presences.items() for n in _presence_names(k, r))
+        n for k, r in presences.items() for n in _presence_names(k, r)) \
+        | _thing_name_words(_scene_now)
     for key, record in presences.items():
         if key in touched:
             continue
@@ -4273,7 +4286,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     # The words this story's tracked names hold in common -- its title
     # vocabulary, derived rather than listed (`_shared_name_words`).
     shared_words = _shared_name_words(
-        presence_display_name(k, r) for k, r in ranked.items())
+        presence_display_name(k, r) for k, r in ranked.items()) \
+        | _thing_name_words(sc)
 
     candidates = []
     forced = 0

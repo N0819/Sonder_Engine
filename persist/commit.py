@@ -149,7 +149,7 @@ from persist.commit_background import (beat_reactions, BACKGROUND_PROMOTION_DIAL
     emerge_from_charter_crowd, absorb_into_charter_crowd,
     overt_declaration, overt_declaration_text,
     _background_name_mentioned, _background_name_named_exactly,
-    _shared_name_words, _communication_targets, _propose_promotions,
+    _shared_name_words, _thing_name_words, _communication_targets, _propose_promotions,
     _character_address_of,
     _at_own_station, _authored_arrival_rooms, _owed_clock_seconds,
     abandoned_debts, apply_abandoned_debts, owed_service, owed_to,
