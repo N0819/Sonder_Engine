@@ -289,3 +289,36 @@ class TestAPromotedCardIsStillRepairedAfterTheHandoff:
         hedonic = stored["initial_state"]["hedonic"]
         assert isinstance(hedonic["pain"], float)
         assert isinstance(hedonic["pleasure"], float)
+
+
+class TestAPromotedPresenceKeepsThePlaceItStood:
+    """A promotion puts the new cast member where the presence's own body
+    stood -- read by `presence_room` (scene position, entity id, station) --
+    before falling back to the player's room. Scratch story 166, idx 24-26:
+    the brother's body was filed under its entity id inside his house, the
+    card's name was no position key, and the fallback put him on the landing
+    beside the player: one person as two bodies in two rooms, and the
+    confession he called her in to hear came through the door she shut."""
+
+    def test_the_brother_stays_inside_his_house(self, temp_db):
+        from persist.commit import promote_background_character
+
+        chat_id = _make_chat(temp_db)
+        temp_db.wset(chat_id, "scene", {
+            "rooms": {"landing": {"name": "the landing",
+                                  "adjacent": [{"to": "house", "barrier": "closed_door"}]},
+                      "house": {"name": "the house",
+                                "adjacent": [{"to": "landing", "barrier": "closed_door"}]}},
+            "positions": {"The Stranger": "landing", "abel_gale": "house"},
+            "entities": {"abel_gale": {"name": "Abel Gale", "kind": "person"}}})
+        temp_db.wset(chat_id, "background_presences", {
+            "p_abel": {"uid": "p_abel", "name": "Abel Gale", "entity_id": "abel_gale",
+                       "first_turn": 23, "last_turn": 24, "dialogue_turns": [24]}})
+        sheet = {"identity": {"name": "Abel Gale"},
+                 "psychology": {"drive": {"essence": "keep the town from the worst of it"}},
+                 "embodiment": {"visible": {"summary": "a lean bargeman"}}}
+        # By name: the ledger re-keys a record to its canonical uid on read
+        # (`_fold_duplicate_presences`), which is the id the routes pass.
+        promote_background_character(chat_id, "Abel Gale", sheet=sheet, memory_seeds=[])
+        positions = temp_db.wget(chat_id, "scene", {})["positions"]
+        assert positions.get("Abel Gale") == "house", positions

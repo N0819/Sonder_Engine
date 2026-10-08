@@ -4973,8 +4973,18 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
         positions = sc.setdefault("positions", {})
         if character_name(sheet) not in positions:
             player_name = persona_name(persona_of(chat_row))
+            # WHERE THE PRESENCE'S OWN BODY STOOD, before anywhere else: the
+            # canonical resolver reads its scene position, then its entity
+            # id, then its station (`presence_room`). The card's name is
+            # rarely the key its body was filed under, and the fallback to
+            # the player's room put a man on his doorstep beside the player
+            # while his body still stood inside his house (scratch story
+            # 166, idx 24-26): one person as two bodies in two rooms, and
+            # the confession he called her in to hear came through the
+            # door she had closed on him.
             positions[character_name(sheet)] = (
                 (charter_bundle or {}).get("place")
+                or presence_room(sc, _display or name, presence_record)
                 or positions.get(player_name))
         # Survival remains opt-in.  If this scene already owns vitals, carry
         # the body's real depletion across; never create the subsystem here.
