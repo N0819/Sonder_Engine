@@ -406,3 +406,28 @@ def test_an_intended_target_addresses_one_body_not_the_cohort(temp_db):
     ctx = _make_ctx(temp_db, THREE_TRADERS, director_resolve=dr)
     out = pick_voice_demand(ctx, dr, cap=1)
     assert out["picks"] == ["Trader Tate"]
+
+
+def test_a_figure_that_answered_before_the_resolve_owes_nothing(temp_db):
+    """Charter bodies declare AHEAD of the resolve now, and the discharge read
+    the post-resolve reactor alone: a keeper who answered the player there
+    was still owed a reply and was asked again next beat on the line he had
+    just answered (scratch story 166 idx 8-9, two keepers telling the player
+    twice who rang the bell; 11 of 121 pre-resolve answers on that db)."""
+    debt = {"from": "Soren Vale", "quote": "A well, is there one?",
+            "tone": "", "turn": 6, "expires_turn": 8}
+    presences = {"Trader Tate": {"first_turn": 1, "pending_reply": dict(debt)}}
+    ctx = _make_ctx(temp_db, presences, turn_idx=7,
+                    background_react={"selected": [], "reactions": []},
+                    director_resolve={
+                        "resolved_event": "The square hums.", "dialogue_log": [],
+                        "charter_declarations": [{
+                            "name": "Trader Tate", "is_figure": True,
+                            "room": ROOM, "action": "",
+                            "dialogue_log_entry": {
+                                "speaker": "Trader Tate",
+                                "exact_quote": "East side. Ask for the stone lip."}}]})
+    track_background_presences(ctx, nonce=0)
+    rec = _rec_named(temp_db.wget(ctx.chat.id, "background_presences", {}),
+                     "Trader Tate")
+    assert "pending_reply" not in rec

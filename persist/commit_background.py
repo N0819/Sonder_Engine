@@ -2600,10 +2600,18 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # each time -- and selection-keyed discharge then erased the very debt
     # that would have re-asked him. A debt is paid by a line or a visible
     # act; a declined call leaves it standing until its own expiry.
+    #
+    # AND A FIGURE THAT ANSWERED BEFORE THE RESOLVE ANSWERED. This read the
+    # post-resolve reactor alone, written before charter bodies declared
+    # ahead of the resolve, so a keeper who answered the player there was
+    # still owed a reply and was asked again next beat on the line he had
+    # just answered -- 11 of 121 pre-resolve answers on the 2026-10-07
+    # scratch db, among them two keepers telling the player twice who rang
+    # the bell (story 166 idx 8-9). `br` is `beat_reactions(ctx)`, the one
+    # list this domain reads both kinds of voice from.
     answered_names = {
         str(_r.get("name") or "").strip().casefold()
-        for _r in _background_fired_reactions_any(
-            ctx.get("background_react") or {})
+        for _r in _background_fired_reactions_any(br)
         if str(_r.get("name") or "").strip()}
     # A chorused addressee's moment was answered TOGETHER (§C3): the crowd
     # entry names them so their reply debts discharge here exactly as a

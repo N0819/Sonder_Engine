@@ -95,7 +95,7 @@
 | `persist/checkpoints.py` | 1593 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 843 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1797 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire`, `world.spatial` |
-| `persist/commit_background.py` | 5469 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
+| `persist/commit_background.py` | 5477 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 576 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -1241,14 +1241,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `track_background_presences()` | 2044 | 877 lines |
-| `pick_voice_demand()` | 4107 | 441 lines |
-| `promote_background_character()` | 4694 | 393 lines |
-| `descriptor_bindings()` | 3660 | 156 lines |
+| `track_background_presences()` | 2044 | 885 lines |
+| `pick_voice_demand()` | 4115 | 441 lines |
+| `promote_background_character()` | 4702 | 393 lines |
+| `descriptor_bindings()` | 3668 | 156 lines |
 | `_fold_duplicate_presences()` | 750 | 143 lines |
-| `schedule_auto_promotion()` | 5347 | 123 lines |
-| `addressed_rooms()` | 3984 | 121 lines |
-| `apply_presence_handovers()` | 3167 | 95 lines |
+| `schedule_auto_promotion()` | 5355 | 123 lines |
+| `addressed_rooms()` | 3992 | 121 lines |
+| `apply_presence_handovers()` | 3175 | 95 lines |
 
 ### `persist/commit_common.py`
 
