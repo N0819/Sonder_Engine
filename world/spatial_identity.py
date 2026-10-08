@@ -804,7 +804,7 @@ def room_spellings(room_id, room_def=None) -> tuple:
     return tuple(out)
 
 
-def scene_room_id(scene, target) -> str:
+def scene_room_id(scene, target, aliases=None) -> str:
     """The id of the scene room `target` names, or "" when the world holds
     none under that spelling.
 
@@ -813,6 +813,14 @@ def scene_room_id(scene, target) -> str:
     (`room_spellings`). A spelling two rooms answer to names neither and
     resolves to "" -- the same refusal commit's mint dedup makes for a name
     two plans share.
+
+    `aliases`, `{room id: [spelling, ...]}`, are further spellings a room
+    the scene holds answers to: the names the room registry keeps for a
+    room renamed since it was minted (`persist.commit_room_registry`
+    accumulates them, and `world.structure.registry_rows` reads them). Each
+    is one more spelling of its room under both rules below, and a room is
+    one answer however many of its spellings a target matches. Omitted, the
+    answer is exactly what it always was.
     """
     target = str(target or "")
     rooms = scene.get("rooms") if isinstance(scene, dict) else None
@@ -823,8 +831,14 @@ def scene_room_id(scene, target) -> str:
     folded = normalize_room_id(target)
     if not folded:
         return ""
+    aliases = aliases if isinstance(aliases, dict) else {}
+
+    def also(rid):
+        return [str(a) for a in (aliases.get(rid) or ()) if str(a or "").strip()]
+
     hits = [str(rid) for rid, rdef in rooms.items()
-            if folded in room_spellings(rid, rdef)]
+            if folded in room_spellings(rid, rdef)
+            or any(folded == normalize_room_id(a) for a in also(rid))]
     if len(hits) == 1:
         return hits[0]
     if hits:
@@ -844,7 +858,8 @@ def scene_room_id(scene, target) -> str:
         return ""
     matched = [str(rid) for rid, rdef in rooms.items()
                if any(room_words_answer(want, room_name_words(form))
-                      for form in ((rdef or {}).get("name") if isinstance(rdef, dict) else None, rid))]
+                      for form in ((rdef or {}).get("name") if isinstance(rdef, dict) else None,
+                                   rid, *also(rid)))]
     return matched[0] if len(matched) == 1 else ""
 
 

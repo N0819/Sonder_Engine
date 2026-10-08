@@ -1815,6 +1815,41 @@ Open:
     one `map_without_whole_rooms` call in `design_rooms`, AFTER `_groundwork`
     has cut the ledger, would close it -- at the end of `_room_payload` the
     ledger is still whole, and the trim would drop every room's map entry.
+(e) What the rules for references and headings still leave as a map entry
+    (built 2026-10-08: `rooms_named_by_part`, `room_aliases`,
+    `headings_of`, `destination_place`). The encoder can name and route to
+    each of these rooms, but cannot stand a body at its fixtures:
+    - a far room called by a word from the front or middle of its name
+      alone, because only a spelling's last word stands alone: "the hall"
+      for "the Hall of Records", and "Cope's" for Cope's Boatyard, which
+      `world.spatial.scene_room_id` itself reads as that room. Reading any
+      one word alone cost +15.6k tokens on 26 of chat 166's 107
+      room-carrying calls, nearly all on words that named no place. A
+      possessive front word alone (the joined "...s" word
+      `room_name_words` makes) was not measured on its own;
+    - a word two far rooms share ("the loft" beside the bell loft and the
+      loft over the boat sheds), which the resolver refuses. Sending every
+      room that answers cost +23.6k on 34 calls;
+    - part of a name written outside the letters a to z. `room_name_words`
+      reads only those letters and digits, so a partial name in another
+      script, such as Japanese, is not read; a whole name or alias still
+      is, through `rooms_named_in`;
+    - an undeclared move to a place the prose does not name at all;
+    - the room a far crowd stands in. Only its heading rides; adding the
+      room would have cost +1.3k on 7 calls.
+    An answer-side hand-off would close all five. When the encoder's answer
+    stands a body in a room it held only as a map entry, ask once more with
+    that room whole, inside the widening pass when one runs. This is
+    unbuilt, because it costs a second encoder call each time it fires. On
+    chat 166 it would have fired 0 times, since no answer named a room
+    outside the scope.
+(f) The destination fail-open fired on 0 of chat 166's 107 calls. Sixteen
+    calls checked a destination, and each was known. One firing costs 447
+    tokens on average (median 0, at most 4,538). In the play db, 1 of 22
+    recorded compiler verdicts resolved to nothing: chat 154 idx 23,
+    `new:in the time vortex`. Every `new:` destination that nothing built
+    fails open the same way. Whether the room author's places should be
+    exempt is the owner's call.
 
 ## 2. Roadmap
 

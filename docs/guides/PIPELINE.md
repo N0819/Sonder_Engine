@@ -973,10 +973,7 @@ The encoder receives the standing state of every granted channel's owner (the
 union of the owners' world slices). Two things narrow it. A record ledger rides
 only with a granted channel that writes about its records
 (`director_prose.RIDING_LEDGERS`: `carried_reports` with `telling_ops`,
-`courier_ops` or `artifact_ops`). The spatial owner's room records ride whole
-only for the rooms in play (`director_prose.rooms_in_play`); every other room
-rides as its `world_index.elsewhere` entry, which never repeats a room sent
-whole. The spatial slice carries `following`, `location`, `weather`, and `time_of_day` alongside
+`courier_ops` or `artifact_ops`). The spatial owner's room records ride whole only for the rooms in play (`director_prose.rooms_in_play`). A room is in play if it lies within `ENCODER_ROOM_HOPS` doorways of the rooms the beat's people stand in or are bound for, holds something, is heard, or is the inside of a thing in play. It is also in play if the prose, inputs or movement name it by id, name or alias (`room_aliases`), or call it by part of a name as `rooms_named_by_part` reads one (two or more of its words in a row, or a spelling's last word alone, resolved through `world.spatial.scene_room_id`); if a walk under way ends there or a doorway being crossed opens on it (`headings_of`); or if a crowd or a courier is heading there. A word from the front or middle of a name, alone, puts no room in play. A beat whose declared destination resolves to no room at all sends every room whole (`destination_place`). Every other room rides as its `world_index.elsewhere` entry, which never repeats a room sent whole. The spatial slice carries `following`, `location`, `weather`, and `time_of_day` alongside
 its geometry and `simulation_clock`. The scene's time label remains available
 when an older scene has no clock record; payload assembly does not create or
 alter a clock to supply that label.

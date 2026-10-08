@@ -17,6 +17,20 @@ Measured on chat 166 (Brackwater, 2026-10-07/08) over the kept encoder calls:
 
 Each rule is pinned at the radius `ENCODER_ROOM_HOPS` is patched to, so the
 owner may move the number without these tests moving with it.
+
+A FAR ROOM THE BEAT NAMES, OR A BODY IS BOUND FOR, ARRIVES WHOLE BY THE RULES
+PINNED BELOW (owner, 2026-10-08: efficiency never removes a capability). A
+map entry lets the encoder name a far room and route to it, never stand a
+body at its fixtures. A far room rides whole when the beat calls it by two or
+more of its words in a row, by the last word of one of its spellings, or by
+a name its record or the room registry keeps; when a walk under way ends
+there or a doorway being crossed opens on it; and when a crowd or a courier
+is heading there. Failing open, every room rides whole when the beat's
+declared destination resolves to no room at all. An ordinary beat keeps its
+scope: a word from the front of a name, alone, or a number puts no room in
+play. That leaves some references the engine resolves on the map: "Cope's"
+alone, which the resolver reads as Cope's Boatyard, is a front word.
+`docs/UNBUILT_PIPELINE.md` § 1.188(e) lists what the rules still leave there.
 """
 
 from __future__ import annotations
@@ -218,6 +232,219 @@ def test_the_room_author_is_still_handed_every_room(ctx, radius):
 ])
 def test_a_room_is_named_by_its_whole_name_in_its_own_script(rooms, text, named):
     assert bool(director_prose.rooms_named_in(rooms, [text])) is named
+
+
+# ---------------------------------------------------------------------------
+# A far room the beat names, or a body is bound for, arrives whole by these
+# rules: a map entry lets the encoder name a room and route to it, never
+# stand a body at its fixtures.
+# ---------------------------------------------------------------------------
+
+#: The id every far-room test below adds, one doorway past the corridor's
+#: end -- so past the radius by construction.
+FAR = "far_room"
+
+
+def _with_far_room(name, **extra):
+    """The corridor with one more room past its end, holding a fixture a body
+    could be stood at."""
+    scene = _corridor()
+    last = f"bay{HOPS + BEYOND}"
+    scene["rooms"][last]["adjacent"].append({"to": FAR, "barrier": "open"})
+    scene["rooms"][FAR] = {"name": name, "adjacent": [{"to": last, "barrier": "open"}],
+                           "anchors": {"altar": {"desc": "a stone altar"}}, **extra}
+    return scene
+
+
+def _whole(payload, rid=FAR):
+    return (rid in payload["rooms"]
+            and bool(payload["rooms"][rid].get("anchors"))
+            and rid not in (payload["world_index"].get("elsewhere") or {}))
+
+
+@pytest.mark.parametrize("name, prose", [
+    # The last word of the name, alone: the word the rest describe.
+    ("the Bell Loft", "Mara hears boots on the ladder up to the loft."),
+    ("the wreck of the Corvina", "Mara thinks of the Corvina going down."),
+    # Words in a row, one of them the tail of a word of the name -- the
+    # resolver's own reading of a destination spelled the way people say it.
+    ("Cope's Boatyard", "Mara looks along the quay toward Cope's yard."),
+])
+def test_a_far_room_called_by_part_of_its_name_rides_whole(ctx, radius, name, prose):
+    payload, _ = _payload(ctx, _with_far_room(name), ["positions"], prose=prose)
+    assert _whole(payload)
+
+
+@pytest.mark.parametrize("name, prose", [
+    # A word from the front of a name, alone, names no place: measured on
+    # chat 166, words like these put far rooms in play on beats that never
+    # meant them.
+    ("the Low Walk", "Mara keeps her voice low."),
+    ("the Counting House", "Mara is counting the crates on the rack."),
+    # A number tells rooms that share a name apart; it names none of them,
+    # even one no other room's name carries (the bays here end at 5).
+    ("the Pile Houses 7", "Mara counts 7 crates on the rack."),
+])
+def test_a_word_that_is_not_a_part_of_a_far_rooms_name_leaves_it_on_the_map(
+        ctx, radius, name, prose):
+    payload, _ = _payload(ctx, _with_far_room(name), ["positions"], prose=prose)
+    assert FAR not in payload["rooms"]
+    assert payload["world_index"]["elsewhere"][FAR]["name"] == name
+
+
+@pytest.mark.parametrize("aliases, prose", [
+    ('["the old net store", "far room"]',
+     "Mara remembers mending nets in the old net store."),
+    # A script without spaces: the part rule reads only the letters a to z
+    # and digits (`room_name_words`), so the whole alias is the only reading.
+    ('["鐘楼"]', "彼女は鐘楼へ登った。"),
+])
+def test_a_far_room_called_by_a_name_the_registry_keeps_rides_whole(
+        ctx, radius, temp_db, aliases, prose):
+    """A renamed room keeps its old names as registry aliases, and a beat
+    that still calls it by one is calling that room."""
+    temp_db.qi("INSERT INTO room_registry(chat_id,room_uid,name,aliases,payload) "
+               "VALUES(?,?,?,?,?)",
+               (ctx.chat["id"], FAR, "the Salt House", aliases, "{}"))
+    payload, _ = _payload(ctx, _with_far_room("the Salt House"), ["positions"],
+                          prose=prose)
+    assert _whole(payload)
+
+
+def test_an_alias_is_read_whole_in_a_script_without_spaces():
+    """`rooms_named_in` reads an alias where it stands, bounded by its own
+    script, as it reads a name; without the alias the text names nothing."""
+    rooms = {"far": {"name": "the Bell Tower"}}
+    text = "彼女は鐘楼へ登った。"
+    assert director_prose.rooms_named_in(rooms, [text]) == set()
+    assert director_prose.rooms_named_in(rooms, [text], {"far": ["鐘楼"]}) == {"far"}
+
+
+def test_a_rooms_other_names_are_its_records_and_the_registrys(temp_db):
+    """Both stores of a room's other names, for the rooms the scene holds
+    only; a lone alias stored as a string is one name, not its letters."""
+    chat_id = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Aliases", "", time.time()))
+    for uid, aliases in (("bay1", '["the old net store"]'),
+                         ("gone", '["a room the scene no longer holds"]')):
+        temp_db.qi("INSERT INTO room_registry(chat_id,room_uid,name,aliases,payload) "
+                   "VALUES(?,?,?,?,?)", (chat_id, uid, uid, aliases, "{}"))
+    rooms = {"bay0": {"name": "Storage Bay 0", "aliases": "the cold store"},
+             "bay1": {"name": "Storage Bay 1", "aliases": ["the net loft"]}}
+    assert director_prose.room_aliases(chat_id, rooms) == {
+        "bay0": ["the cold store"],
+        "bay1": ["the net loft", "the old net store"],
+    }
+
+
+def test_a_beat_bound_for_a_place_that_resolves_to_no_room_sends_every_room_whole(
+        ctx, radius):
+    """Fail-open: the world may hold the place under a spelling nothing here
+    reads, and only a whole room lets the encoder stand a body in it."""
+    scene = _corridor()
+    payload, _ = _payload(ctx, scene, ["positions"], prose="Mara sets off.",
+                          extras={"movement": {"to_room": "the far shore",
+                                               "mover": "self"}})
+    assert sorted(payload["rooms"]) == sorted(scene["rooms"])
+    assert all(isinstance(record, dict) for record in payload["rooms"].values())
+    assert not set(payload["world_index"].get("elsewhere") or {}) & set(scene["rooms"])
+    assert any("resolves to no room" in w for w in ctx.warnings)
+
+
+@pytest.mark.parametrize("to_room, extras, verdict", [
+    # A room the plan holds and the scene does not, by its plan id or name.
+    ("chapel_annex", {"planned_elsewhere": {"chapel_annex": "the chapel annex"}}, ""),
+    ("the chapel annex", {"planned_elsewhere": {"chapel_annex": "the chapel annex"}}, ""),
+    # A thing to get inside.
+    ("cart", {}, ""),
+    # A place spelled new: that the world already holds -- where she stands,
+    # so the radius around it is the radius already drawn.
+    ("new:storage bay 0", {}, ""),
+    # The compiler's own verdict on the declared movement.
+    ("somewhere the plan keeps", {}, "planned"),
+])
+def test_a_beat_bound_for_a_place_the_world_has_another_way_keeps_the_scope(
+        ctx, radius, to_room, extras, verdict):
+    scene = _corridor()
+    scene["positions"]["cart"] = "bay1"
+    scene["entities"]["cart"] = {"name": "a handcart"}
+    ctx.movement_status = lambda: verdict
+    payload, _ = _payload(ctx, scene, ["positions"], prose="Mara sets off.",
+                          extras={"movement": {"to_room": to_room, "mover": "self"},
+                                  **extras})
+    for rid in _far():
+        assert rid not in payload["rooms"]
+    assert not any("resolves to no room" in w for w in ctx.warnings)
+
+
+def test_an_ordinary_beat_with_a_near_destination_keeps_the_scope(ctx, radius):
+    """The destination is a centre like the room she stands in: the radius
+    is drawn from both, and everything past it stays on the map."""
+    payload, _ = _payload(ctx, _with_far_room("the Tide Chapel"), ["positions"],
+                          prose="Mara walks on to the next bay along the spine.",
+                          extras={"movement": {"to_room": "bay1", "mover": "self"}})
+    past = {f"bay{k}" for k in range(1 + HOPS + 1, HOPS + 1 + BEYOND)} | {FAR}
+    assert past and not past & set(payload["rooms"])
+    assert past <= set(payload["world_index"]["elsewhere"])
+    assert not ctx.warnings
+
+
+@pytest.mark.parametrize("approach", [
+    {"Ivo": {"to_room": FAR}},
+    # The scene-global shape that predates per-mover records.
+    {"who": "Ivo", "to_room": FAR},
+])
+def test_the_room_a_body_is_walking_to_rides_whole(ctx, radius, approach):
+    """A walk under way is a heading, in either shape the scene keeps one."""
+    scene = _with_far_room("the Tide Chapel")
+    scene["positions"]["Ivo"] = "bay1"
+    scene["approach"] = approach
+    payload, _ = _payload(ctx, scene, ["positions"])
+    assert _whole(payload)
+
+
+def test_the_room_a_body_has_just_stepped_out_of_rides_whole(ctx, radius):
+    """Both sides of a doorway being crossed ride whole. The body stands in
+    the room it entered, so no other rule reaches the one it left. Here Ivo
+    has just come through a closed door out of the far room
+    (`spatial_frames.infer_threshold_crossings` records a crossing only
+    through a boundary sight does not pass)."""
+    scene = _with_far_room("the Tide Chapel")
+    last = f"bay{HOPS + BEYOND}"
+    # The one doorway between them, from both sides.
+    scene["rooms"][last]["adjacent"][-1]["barrier"] = "closed_door"
+    scene["rooms"][FAR]["adjacent"][0]["barrier"] = "closed_door"
+    scene["positions"]["Ivo"] = last
+    scene["crossings"] = {"Ivo": {"from": FAR, "to": last, "beats": 1}}
+    payload, _ = _payload(ctx, scene, ["positions"])
+    assert _whole(payload)
+
+
+@pytest.mark.parametrize("extras", [
+    {"crowds": [{"crowd_id": "crowd:1", "room": f"bay{HOPS + BEYOND}",
+                 "heading": FAR}]},
+    {"couriers": [{"courier_id": "courier:1", "at": "bay1", "heading": "bay2",
+                   "destination": FAR}]},
+])
+def test_the_room_a_crowd_or_a_courier_is_heading_for_rides_whole(ctx, radius, extras):
+    payload, _ = _payload(ctx, _with_far_room("the Tide Chapel"), ["positions"],
+                          extras=extras)
+    assert _whole(payload)
+
+
+def test_the_room_a_courier_enters_next_rides_whole_though_its_route_runs_on(
+        ctx, radius):
+    """A courier's `heading` is the next room on its route and its
+    `destination` the last one (`director_views._couriers_view`). A route
+    that runs on through the far room still puts that room in play."""
+    scene = _with_far_room("the Tide Chapel")
+    scene["rooms"][FAR]["adjacent"].append({"to": "crypt", "barrier": "open"})
+    scene["rooms"]["crypt"] = {"name": "the Crypt",
+                               "adjacent": [{"to": FAR, "barrier": "open"}]}
+    payload, _ = _payload(ctx, scene, ["positions"], extras={"couriers": [
+        {"courier_id": "courier:1", "at": f"bay{HOPS + BEYOND}", "heading": FAR,
+         "destination": "crypt"}]})
+    assert _whole(payload)
 
 
 # ---------------------------------------------------------------------------

@@ -46,6 +46,24 @@ def test_a_word_two_rooms_answer_to_names_neither():
     assert scene_room_id(SCENE, "the inn") == ""
 
 
+def test_a_room_answers_to_the_aliases_it_is_given():
+    """A renamed room keeps its old names (the registry's aliases): handed
+    them, the resolver reads each as one more spelling of that room, under
+    the fold and under the words alike; without them, nothing changes."""
+    aliases = {"village_wharf": ["The Old Net Store"]}
+    assert scene_room_id(SCENE, "the old net store") == ""
+    assert scene_room_id(SCENE, "the old net store", aliases) == "village_wharf"
+    assert scene_room_id(SCENE, "net store", aliases) == "village_wharf"
+    # The room's own spellings still answer, and a room is one answer.
+    assert scene_room_id(SCENE, "Village Wharf", aliases) == "village_wharf"
+
+
+def test_a_spelling_an_alias_shares_with_another_room_names_neither():
+    aliases = {"village_wharf": ["Inn Cellar & Pantry"]}
+    assert scene_room_id(SCENE, "inn cellar & pantry") == "inn_cellar"
+    assert scene_room_id(SCENE, "inn cellar & pantry", aliases) == ""
+
+
 def test_the_exact_fold_still_wins_over_the_words():
     scene = {"rooms": {"yard": {"name": "The Yard"},
                        "copes_boatyard": {"name": "Cope's Boatyard"}}}

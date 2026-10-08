@@ -557,30 +557,191 @@ def _phrase_text(value):
     return _fold_place(value)
 
 
-def rooms_named_in(rooms, texts):
-    """The ids of the rooms whose id or name stands in `texts` as a whole
-    phrase: both sides folded the way a place reference is (`_fold_place`,
-    so `bell_loft` and "the Bell Loft" are one phrase), each end bounded by
-    its own script (`name_boundary_regex`), so a name written in a script
-    without spaces is found where it stands."""
+def _strings_of(value):
+    """Every string `value` holds: itself, or a record's VALUES at any depth
+    and never its keys. A place is named in what was written; a record's
+    keys (`to_room`, `exits`) are the engine's words, not the story's."""
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, dict):
+        return [s for item in value.values() for s in _strings_of(item)]
+    if isinstance(value, (list, tuple)):
+        return [s for item in value for s in _strings_of(item)]
+    return []
+
+
+def room_aliases(chat_id, rooms):
+    """`{room id: [spelling, ...]}`: the other names the world keeps for the
+    rooms `rooms` holds -- any a record carries (`aliases`, which
+    `world.subjects` reads as well) and every one the room registry keeps,
+    since a renamed room keeps each name it had
+    (`persist.commit_room_registry`; read through `world.structure.
+    registry_rows`, the shared parse). An alias is one more way a room is
+    named, never a gate: a registry that cannot be read leaves the names
+    the records carry."""
+    held = {str(rid) for rid in (rooms or {})}
+    out = {}
+
+    def add(rid, raw):
+        raw = [raw] if isinstance(raw, str) else raw
+        names = [str(a).strip() for a in (raw if isinstance(raw, (list, tuple)) else ())
+                 if str(a or "").strip()]
+        if names:
+            kept = out.setdefault(rid, [])
+            kept.extend(n for n in names if n not in kept)
+
+    for rid, room in (rooms or {}).items():
+        if isinstance(room, dict):
+            add(str(rid), room.get("aliases"))
+    if chat_id is None:
+        return out
+    try:
+        from world.structure import registry_rows
+        rows = registry_rows(chat_id) or {}
+    except Exception:
+        return out
+    for uid, entry in rows.items():
+        if str(uid) in held and isinstance(entry, dict):
+            add(str(uid), entry.get("aliases"))
+    return out
+
+
+def rooms_named_in(rooms, texts, aliases=None):
+    """The ids of the rooms whose id, name or alias (`room_aliases`) stands
+    in `texts` as a whole phrase: both sides folded the way a place
+    reference is (`_fold_place`, so `bell_loft` and "the Bell Loft" are one
+    phrase), each end bounded by its own script (`name_boundary_regex`), so
+    a name written in a script without spaces is found where it stands."""
     from story.character_schema import name_boundary_regex
     folded = " ".join(text for text in (_phrase_text(t) for t in texts or ())
                       if text)
     if not folded:
         return set()
+    aliases = aliases if isinstance(aliases, dict) else {}
     named = set()
     for rid, room in (rooms or {}).items():
         forms = {_fold_place(rid)}
         if isinstance(room, dict):
             forms.add(_fold_place(room.get("name")))
+        forms.update(_fold_place(alias) for alias in aliases.get(str(rid)) or ())
         forms.discard("")
         if any(name_boundary_regex(form).search(folded) for form in forms):
             named.add(str(rid))
     return named
 
 
+def rooms_named_by_part(sc, texts, aliases=None, among=None):
+    """The ids of the rooms `texts` call by PART of a name, the way a person
+    shortens one: "the loft" for the Bell Loft, "the Corvina" for the wreck
+    of the Corvina, "Cope's yard" for Cope's Boatyard.
+
+    A part is a phrase the engine's own resolver (`scene_room_id`, the
+    answer the compiler and every destination reader take, aliases
+    included) gives this room and no other -- so a word two rooms share
+    names neither, exactly as a destination spelled that way would. The
+    phrases asked are read in the words the engine reads a room name by
+    (`room_name_words`), in what the texts WROTE (`_strings_of`), never in a
+    record's keys:
+
+    - two or more words in a row, each a word of some room's spelling or
+      the tail of one (the resolver's own reading: "yard" of "boatyard");
+    - one word alone only when it is the LAST word of one of the room's
+      spellings (its id, its name, an alias) -- the word the ones before it
+      describe -- and never a number, which tells apart rooms that share a
+      name ("the pile houses 3") and names none of them.
+
+    A word from the front or the middle of a name is not a part on its own.
+    Measured on chat 166's 107 kept encoder calls (2026-10-08): reading any
+    one word of a name alone put a far room in play on 26 calls (+15.6k
+    tokens), nearly all on words that named no place -- the prepositions
+    inside "the loft over the boat sheds", "low" in "its hood pushed low",
+    "counting" in "counting strokes", "grain" in "the grain of the
+    planking". The rule above put one in play on 7 (+0.5k): "water" for the
+    open water, "flats" for the reed flats, "the Corvina" for her wreck.
+
+    `among` limits the rooms that can be named (the rooms not in play yet);
+    every room still answers for uniqueness."""
+    from world.spatial import room_name_words, scene_room_id
+    rooms = sc.get("rooms") if isinstance(sc, dict) else None
+    if not isinstance(rooms, dict) or not rooms:
+        return set()
+    aliases = aliases if isinstance(aliases, dict) else {}
+    # Per room that can be named: every tail of every word of its spellings
+    # -- a superset of what the resolver's word rule reads, so a phrase it
+    # could give this room is never filtered out here, and the resolver
+    # alone decides -- and the last word of each spelling.
+    tails, ends, longest = {}, {}, 1
+    for rid, room in rooms.items():
+        rid = str(rid)
+        if among is not None and rid not in among:
+            continue
+        name = room.get("name") if isinstance(room, dict) else None
+        for spelling in (rid, name, *aliases.get(rid, ())):
+            words = room_name_words(spelling)
+            if not words:
+                continue
+            longest = max(longest, len(words))
+            tails.setdefault(rid, set()).update(
+                word[k:] for word in words for k in range(len(word)))
+            if not words[-1].isdigit():
+                ends.setdefault(words[-1], set()).add(rid)
+    if not tails:
+        return set()
+    vocabulary = set().union(*tails.values())
+    phrases = set()
+    for text in texts or ():
+        for string in _strings_of(text):
+            words = room_name_words(string)
+            for i, word in enumerate(words):
+                if word in ends:
+                    phrases.add((word,))
+                if word not in vocabulary:
+                    continue
+                for j in range(i + 2, min(len(words), i + longest) + 1):
+                    if words[j - 1] not in vocabulary:
+                        break
+                    run = tuple(words[i:j])
+                    if not all(w.isdigit() for w in run) and any(
+                            set(run) <= held for held in tails.values()):
+                        phrases.add(run)
+    named = set()
+    for phrase in phrases:
+        held = scene_room_id(sc, " ".join(phrase), aliases)
+        if not held or held not in tails:
+            continue
+        if len(phrase) == 1 and held not in ends.get(phrase[0], ()):
+            continue
+        named.add(held)
+    return named
+
+
+def headings_of(sc):
+    """Every room a body the scene holds is bound for, as the scene spells
+    it: the end of each walk under way (`approach`, in either of its shapes)
+    and both sides of each doorway being crossed (`crossing_of`). Following
+    needs no line of its own: the one followed is a body, so the room it
+    stands in is held and the room it is bound for is here."""
+    if not isinstance(sc, dict):
+        return []
+    from world.spatial import crossing_of
+    out = []
+    legs = sc.get("approach") if isinstance(sc.get("approach"), dict) else {}
+    if "who" in legs:
+        # The scene-global shape that predates per-mover records.
+        legs = {legs.get("who"): legs} if legs.get("who") else {}
+    for leg in legs.values():
+        if isinstance(leg, dict) and str(leg.get("to_room") or "").strip():
+            out.append(str(leg["to_room"]).strip())
+    for body in (sc.get("crossings") or {}) if isinstance(sc.get("crossings"), dict) else {}:
+        record = crossing_of(sc, str(body))
+        if isinstance(record, dict):
+            out.extend(str(record.get(side)).strip() for side in ("from", "to")
+                       if str(record.get(side) or "").strip())
+    return out
+
+
 def rooms_in_play(sc, people=(), centers=(), texts=(), interiors=(),
-                  hops=None):
+                  hops=None, aliases=None, bound_for=()):
     """The ids of the rooms the encoder is handed WHOLE; every other room
     the world holds reaches it as its map entry.
 
@@ -595,25 +756,36 @@ def rooms_in_play(sc, people=(), centers=(), texts=(), interiors=(),
       there (chat 166 turn 4588: the encoder named `bell_loft`, three
       doorways from anyone in the beat, where the tide bell hung);
     - every room heard beyond its own walls (`sound_sources`);
-    - every room `texts` name by id or name (`rooms_named_in`; turn 4607
-      named `gale_house`, which no walk from the beat's rooms reached);
+    - every room `texts` name by id, name or alias (`rooms_named_in`; turn
+      4607 named `gale_house`, which no walk from the beat's rooms reached);
+    - every room a body is bound for (`headings_of`, and `bound_for`: the
+      headings the caller holds outside the scene -- a crowd's, a
+      courier's), by any spelling the room answers to (`scene_room_id`);
     - every inside of a thing in play: `interiors`, and any room whose
       `parent_entity` stands in a room in play (turn 4598 named
       `grebe_board`, the deck of a boat moored at the landing stage, five
-      doorways out by the room graph and named in nothing it read).
+      doorways out by the room graph and named in nothing it read);
+    - every room `texts` call by a part of a name as `rooms_named_by_part`
+      reads one: two or more of its words in a row, or a spelling's last
+      word alone.
 
-    What is left is a room nobody in the beat stands near, that holds
-    nothing, makes no sound and that nothing names: its name, storey, exits
-    and ways are what a route or a reference to it needs, and the map holds
-    them. Measured on chat 166's 107 kept encoder calls that carried room
-    records (2026-10-08): of the 97 rooms their answers named, 82 stood
-    within one doorway of the beat's people, and each of the other 15 is
-    kept by one of the rules after the first."""
+    `aliases` are the further names each room answers to (`room_aliases`).
+
+    What is left is a room nobody in the beat stands near or is bound for,
+    that holds nothing, makes no sound and that the texts name by none of
+    the rules above (the references those rules leave are
+    `docs/UNBUILT_PIPELINE.md` § 1.188(e)): its name, storey, exits and ways
+    are what a route or a reference to it needs, and the map holds them.
+    Measured on chat 166's 107 kept encoder calls that carried room records
+    (2026-10-08): of the 97 rooms their answers named, 82 stood within one
+    doorway of the beat's people, and each of the other 15 is kept by one of
+    the rules after the first."""
     rooms = sc.get("rooms") if isinstance(sc, dict) else None
     if not isinstance(rooms, dict) or not rooms:
         return set()
-    from world.spatial import attended_rooms, room_of, sound_sources
+    from world.spatial import attended_rooms, room_of, scene_room_id, sound_sources
     hops = ENCODER_ROOM_HOPS if hops is None else hops
+    aliases = aliases if isinstance(aliases, dict) else {}
     keep = {str(rid) for rid in attended_rooms(
         sc, [str(c) for c in centers or () if c], hops=hops,
         names=[str(p) for p in people or () if p])}
@@ -624,8 +796,14 @@ def rooms_in_play(sc, people=(), centers=(), texts=(), interiors=(),
     sources, _notices = sound_sources(sc)
     keep.update(str(source.get("room")) for source in sources or ()
                 if str(source.get("room") or "") in rooms)
-    keep |= rooms_named_in(rooms, texts)
+    keep |= rooms_named_in(rooms, texts, aliases)
+    for spelling in [*headings_of(sc), *(bound_for or ())]:
+        held = scene_room_id(sc, spelling, aliases)
+        if held:
+            keep.add(held)
     keep.update(str(rid) for rid in interiors or () if str(rid) in rooms)
+    keep |= rooms_named_by_part(sc, texts, aliases,
+                                among={str(rid) for rid in rooms} - keep)
     grew = True
     while grew:
         grew = False
@@ -660,29 +838,117 @@ def map_without_whole_rooms(index, whole):
     return index
 
 
+def beat_destinations(ctx, view, extras):
+    """Where this beat's declared movement goes, as written, each spelling
+    once: the interpret view's own declaration while it is still being
+    written, the movement the resolve hands its owners (`movement`), and the
+    pipeline's declared movement once there is one (`declared_movement`,
+    the compiler's spelling)."""
+    rows = [((view or {}).get("declaration") or {}).get("movement"),
+            (extras or {}).get("movement")]
+    try:
+        rows.append(ctx.declared_movement() if ctx is not None else None)
+    except Exception:
+        pass
+    out = []
+    for row in rows:
+        spelling = str((row or {}).get("to_room") or "").strip() \
+            if isinstance(row, dict) else ""
+        if spelling and spelling not in out:
+            out.append(spelling)
+    return out
+
+
+def destination_place(ctx, sc, spelling, aliases=None, extras=None):
+    """`(room id, resolved)` for one spelling of where the beat is going.
+
+    The room the scene holds under any spelling it answers to
+    (`scene_room_id`, aliases included; a `new:<words>` place by its
+    words), or no room but RESOLVED for a place the world has another way:
+    a thing or body to be inside, or its inside (`_names_a_holder`, and
+    the compiler's own `is_contained_destination`), a room the plan holds
+    (`planned_rooms`, `planned_elsewhere`), or the compiler's verdict on
+    the declared movement (`movement_status`: known, planned, contained).
+    Anything else resolves to no room at all."""
+    from world.spatial import scene_room_id
+    words = spelling[len(NEW_PLACE_PREFIX):].strip() \
+        if spelling.startswith(NEW_PLACE_PREFIX) else spelling
+    held = scene_room_id(sc, words, aliases)
+    if held:
+        return held, True
+    if _names_a_holder(sc, words):
+        return "", True
+    from .mapping import is_contained_destination
+    if is_contained_destination(words, sc):
+        return "", True
+    planned = {}
+    for key in ("planned_rooms", "planned_elsewhere"):
+        table = (extras or {}).get(key) if isinstance(extras, dict) else None
+        for uid, entry in (table or {}).items() if isinstance(table, dict) else ():
+            name = entry.get("name") if isinstance(entry, dict) else entry
+            planned[str(uid)] = {"name": str(name or uid)}
+    if planned and scene_room_id({"rooms": planned}, words):
+        return "", True
+    try:
+        verdict = ctx.movement_status() if ctx is not None else ""
+    except Exception:
+        verdict = ""
+    return "", verdict in ("known", "planned", "contained")
+
+
 def _scope_rooms_in_play(ctx, sc, payload, view, extras):
     """Narrow the spatial owner's room records in `payload` to the rooms in
     play (`rooms_in_play`), and take every room it then holds whole off the
     map (`map_without_whole_rooms`). A room the scene does not hold cannot be
-    judged far and stays. Fail-open: a scope that cannot be computed sends
-    every room whole, as before."""
+    judged far and stays.
+
+    FAIL-OPEN, twice. A scope that cannot be computed sends every room
+    whole, as before. And so does a beat whose declared destination
+    resolves to no room at all (`beat_destinations`, `destination_place`):
+    the world may hold the place under a spelling no rule here reads, and
+    the encoder, handed every room, can still find it and stand a body at
+    its fixtures, where a map entry would only let it name the room."""
     view = view if isinstance(view, dict) else {}
     extras = extras if isinstance(extras, dict) else {}
     known = (sc.get("rooms") if isinstance(sc, dict) else None) or {}
     people = [p for p in [view.get("player")] + list(view.get("cast") or []) if p]
     try:
+        chat = getattr(ctx, "chat", None)
+        chat_id = chat.get("id") if isinstance(chat, dict) else getattr(chat, "id", None)
+        aliases = room_aliases(chat_id, known)
         centers = list(_beat_rooms(sc, ctx, people, view)) + [
             str(row.get("room")) for row in extras.get("present_figures") or ()
             if isinstance(row, dict) and row.get("room")]
+        unresolved = []
+        for spelling in beat_destinations(ctx, view, extras):
+            held, resolved = destination_place(ctx, sc, spelling, aliases, extras)
+            if held:
+                centers.append(held)
+            elif not resolved:
+                unresolved.append(spelling)
         interiors = [rid for row in (extras.get("entity_interiors") or {}).values()
                      if isinstance(row, dict)
                      for rid in row.get("interior_rooms") or ()]
-        keep = rooms_in_play(
-            sc, people, centers,
-            [payload.get("prose"), payload.get("event_inputs"),
-             payload.get("already_happened"), extras.get("movement"),
-             extras.get("movers")],
-            interiors)
+        bound_for = [str(row.get(key)) for rows, keys in (
+            (extras.get("crowds"), ("heading",)),
+            (extras.get("couriers"), ("heading", "destination")))
+            for row in (rows if isinstance(rows, list) else ())
+            if isinstance(row, dict)
+            for key in keys if str(row.get(key) or "").strip()]
+        if unresolved:
+            note = (f"prose contract: the beat's destination {unresolved!r} "
+                    "resolves to no room the world holds or plans; every room "
+                    "sent whole")
+            if note not in (getattr(ctx, "warnings", None) or ()):
+                ctx.add_warning(note)
+            keep = None
+        else:
+            keep = rooms_in_play(
+                sc, people, centers,
+                [payload.get("prose"), payload.get("event_inputs"),
+                 payload.get("already_happened"), extras.get("movement"),
+                 extras.get("movers")],
+                interiors, aliases=aliases, bound_for=bound_for)
     except Exception as exc:
         ctx.add_warning(f"prose contract: room scope unavailable ({exc}); "
                         "every room sent whole")
