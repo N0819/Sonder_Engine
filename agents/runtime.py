@@ -37,7 +37,8 @@ from story.scene import (
 from .background import background_react
 from .character import character_step
 from .common import (_assert_plan_materialized, _dict, _present_cast_bodies,
-                     player_speech_lines, widen_reactors_to_enclosure,
+                     player_speech_lines, widen_reactors_to_acted_upon,
+                     widen_reactors_to_enclosure,
                      widen_reactors_to_engaged, widen_reactors_to_hearers,
                      widen_reactors_to_rejoined)
 from .director import director_establish, director_interpret, director_resolve
@@ -866,6 +867,12 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     if chat_id is not None and turn_idx is not None:
         reactors = widen_reactors_to_rejoined(chat_id, cast_rows, reactors,
                                               turn_idx, frame_id)
+    # ...and a body the declaration's own acts are aimed at, which addressing
+    # somebody else no longer silences (`widen_reactors_to_acted_upon`).
+    # Before the gates too: an act aimed at a sleeper does not wake him.
+    if chat_id is not None:
+        reactors = widen_reactors_to_acted_upon(chat_id, cast_rows, interp,
+                                                reactors)
 
     # Consciousness gate: an unconscious/asleep/sedated mind neither perceives
     # nor deliberates, so drop it from the reactor set before any character

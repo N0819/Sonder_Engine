@@ -1096,10 +1096,19 @@ def _conceal_from_targets_observer(conceal_from, observer_id, observer_sheet):
     apply: unresolved, this guard cannot show the observer is NOT the
     excluded party, and withholding one line costs a delivery while
     delivering it costs the firewall. Reported rather than swallowed,
-    because a subtraction nothing announces is the next invisible defect."""
+    because a subtraction nothing announces is the next invisible defect.
+
+    The ENGINE'S OWN HANDLE, `character:<id>`, is one of the observer's
+    handles too: the composer's twin of this test (`composer.
+    concealed_from_observer`) has always read it, and this one did not, so
+    an exclusion written only in it named nobody here. Measured on the
+    scratch play db (chats 150-166): 39 resolve-stage entries were handles
+    and no list held handles alone -- the floor held because the model also
+    wrote names, which is the dependence it must not have."""
     if not conceal_from:
         return False
-    id_forms = {str(observer_id).strip()}
+    id_forms = {str(observer_id).strip().casefold(),
+                f"character:{str(observer_id).strip()}".casefold()}
     try:
         keys = {k.casefold() for k in character_scene_keys(observer_sheet)}
     except Exception as exc:
@@ -1118,7 +1127,7 @@ def _conceal_from_targets_observer(conceal_from, observer_id, observer_sheet):
         text = str(entry or "").strip()
         if not text:
             continue
-        if text in id_forms or text.casefold() in keys:
+        if text.casefold() in id_forms or text.casefold() in keys:
             return True
     return False
 
@@ -3647,6 +3656,14 @@ def _requires_reaction_phase(event, valid_actor_ids, actor_names):
             break
         text = str(target).strip().casefold()
         if text.isdigit() and int(text) in valid_actor_ids:
+            targets_actor = True
+            break
+        # The engine's own handle (`character:<id>`) binds a target as much
+        # as the id or the name does -- a prose-contract row writes a cast
+        # target either way, and this gate read only the other two (the
+        # class `normalize_character_refs` names).
+        handle = text[10:] if text.startswith("character:") else ""
+        if handle.isdigit() and int(handle) in valid_actor_ids:
             targets_actor = True
             break
         if text in actor_names:
@@ -6468,6 +6485,18 @@ def _contains_quote(view, quote):
     ) is not None
 
 def normalize_character_refs(values, cast):
+    """The cast ids a list of references names, in order, each once.
+
+    A reference is a cast id (int or digit string), a sheet name, or THE
+    ENGINE'S OWN IDENTITY HANDLE, `character:<id>` -- one of the two forms a
+    prose-contract row carries a cast target in (most name the body; 10
+    targets on the scratch play db's 90 prose-contract beats are handles).
+    This read ids and names only, so a target in the engine's own spelling
+    resolved to nobody: on the Brackwater beat (chat 166, turn idx 30) the
+    player's act "steps aside so that brother and sister face each other"
+    carried `targets: ["character:81", "character:83"]`, and the
+    interaction loop's acted-upon ranking, which reads targets through
+    here, found neither."""
     valid_ids = {int(row["id"]) for row in cast}
     names = {}
     for row in cast:
@@ -6482,8 +6511,12 @@ def normalize_character_refs(values, cast):
             resolved = value
         elif isinstance(value, str):
             text = value.strip()
+            handle = (text[10:] if text[:10].casefold() == "character:"
+                      else "")
             if text.isdigit() and int(text) in valid_ids:
                 resolved = int(text)
+            elif handle.isdigit() and int(handle) in valid_ids:
+                resolved = int(handle)
             else:
                 resolved = names.get(text.casefold())
         if resolved is not None and resolved not in result:
@@ -7384,6 +7417,127 @@ def widen_reactors_to_engaged(chat_id, cast_rows, reactors, turn_idx,
             continue
         if str(body.get("name") or "").strip().casefold() in spoke_to_player:
             widened.append(body["id"])
+    return widened
+
+
+#: The declared elements that can be AIMED at a body: what the beat says to
+#: someone, does to someone, or sends to someone. The engine's own element
+#: types (`schemas` sequence `type`), a closed set -- not a vocabulary of acts.
+#: A `thought` is aimed at nobody.
+AIMED_ELEMENT_TYPES = ("action", "speech", "communication")
+
+
+def acted_upon_cast(scene, cast_rows, interp, player_name):
+    """The cast ids an element of this beat's declaration is AIMED AT -- a
+    sequence element whose `targets` name them -- that the beat reaches
+    where they stand: present (`_present_cast_bodies`), and able to
+    perceive the beat (`can_perceive_onset`) from the player's room or the
+    room the declared walk takes the player into. In element order, each
+    once. Pure: reads nothing but its arguments, so the planner, both loops
+    and a replay against a stored beat get one answer.
+
+    An element CONCEALED from a target does not put that target on the
+    spot -- the act is hidden from them, and asking them what they do about
+    it would be asking about a thing they cannot know. A concealed element
+    that does not say whom it is hidden from widens nobody: the widening
+    adds a call, so where the record cannot say, it stays as it was.
+    """
+    if not isinstance(interp, dict) or not player_name:
+        return []
+    from world.spatial import can_perceive_onset
+    beat_rooms = []
+    here = room_of(scene, player_name)
+    if here:
+        beat_rooms.append(here)
+    movement = interp.get("movement")
+    if isinstance(movement, dict) and movement.get("arrives", True) is not False:
+        mover = str(movement.get("mover") or "self").strip().casefold()
+        destination = str(movement.get("to_room") or "").strip()
+        if mover in ("self", player_name.casefold()) and destination \
+                and destination not in beat_rooms:
+            beat_rooms.append(destination)
+    if not beat_rooms:
+        return []
+    bodies = {int(body["id"]): body
+              for body in _present_cast_bodies(scene, cast_rows)}
+    if not bodies:
+        return []
+    out = []
+    for element in interp.get("sequence") or []:
+        if not isinstance(element, dict) \
+                or element.get("type") not in AIMED_ELEMENT_TYPES:
+            continue
+        aimed = normalize_character_refs(_list(element.get("targets")),
+                                         cast_rows)
+        if not aimed:
+            continue
+        if str(element.get("visibility") or "").strip().casefold() == "concealed":
+            hidden_from = _list(element.get("conceal_from"))
+            if not hidden_from:
+                continue
+            sheets = {int(row["id"]): normalized_character_of_row(row)
+                      for row in cast_rows or ()}
+            # The firewall's own reading of an exclusion list -- every handle
+            # a body answers to -- and a body it cannot enumerate counts as
+            # excluded, as that reading fails closed.
+            aimed = [cid for cid in aimed
+                     if sheets.get(cid) is not None
+                     and not _conceal_from_targets_observer(
+                         hidden_from, cid, sheets[cid])]
+        for cid in aimed:
+            body = bodies.get(cid)
+            if body is None or cid in out:
+                continue
+            if any(can_perceive_onset(scene, room, body.get("room"))
+                   for room in beat_rooms):
+                out.append(cid)
+    return out
+
+
+def widen_reactors_to_acted_upon(chat_id, cast_rows, interp, reactors):
+    """`reactors` plus every cast body an element of this beat's
+    declaration is aimed at, where the beat reaches them
+    (`acted_upon_cast`).
+
+    A BODY THE BEAT'S ACTS ARE AIMED AT IS ASKED WHAT IT DOES. Under the
+    prose contract `flow.reactors` is derived (`director.director_interpret`):
+    the beat's addressees, or everyone who perceives it when nobody was
+    addressed. So addressing one person silenced every other mind in the
+    room, including one the declaration's own act landed on. Brackwater,
+    chat 166 turn idx 30, the run's final beat: the player opened the door
+    to the pilot ("Come in, Mrs Gale") and "steps aside so that brother and
+    sister face each other across the lantern" -- that act's targets were
+    `character:81` and `character:83`, the reactors `[81]`. The pilot's
+    line turned to the player, the loop stopped `awaiting player
+    response`, and her brother -- a full character at the table, whose
+    drive and taboo are about her -- was never asked. The page spent the
+    beat on an unopened pocket instead of the exchange the scene had set.
+
+    It is the response the act asks for: "a line's addressee is asked"
+    (`director._addressed_characters`) one channel over, and the registered
+    P5(a) (`docs/UNBUILT_PIPELINE.md` § 5.3) without its conflict-verb list.
+    Not a contest over whether the act succeeded -- that stays the reaction
+    phase's, gated on `commitment` -- and nobody's conduct is written for
+    them: the body is asked, and answers or does not.
+
+    Cost, replayed against every stored beat of the scratch play db
+    (2026-10-08, chats 135-166, each beat's own interpret on its pre-beat
+    checkpoint): one extra character call on 1 of 385 beats -- the beat
+    above, and no other. Read by the planner, the interaction loop and the
+    reaction phase alike, so the three cannot disagree about who was put on
+    the spot.
+    """
+    try:
+        scene = get_scene(chat_id)
+        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+        p_name = persona_name(persona_of(dict(chat))) if chat else ""
+        aimed = acted_upon_cast(scene, cast_rows, interp, p_name)
+    except Exception:
+        return reactors
+    widened = list(reactors)
+    for cid in aimed:
+        if cid not in widened:
+            widened.append(cid)
     return widened
 
 

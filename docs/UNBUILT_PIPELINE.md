@@ -311,6 +311,19 @@ defect at all, or a COMMIT defect — the narrowing drops them from the beat;
 having commit place every active cast member is the other half and is not in
 this cluster.
 
+2026-10-08: the address-only derivation silenced every bystander, including one the player's own act landed on (Brackwater idx 30). `widen_reactors_to_acted_upon` answers that half. Whether pacing asks the bystanders a reader would expect beyond that is still unmeasured.
+
+<a id="unbuilt-1-11b"></a>
+
+### 1.11b What the acted-upon widening left open
+
+**Found:** landing `widen_reactors_to_acted_upon`, 2026-10-08 (Brackwater, scratch story 166).
+
+- (i) **An arrival declared in the loop owes nobody a turn.** A character's own walk into a room is prose until the resolve, because character results carry no typed destination. So a mind already standing there is asked only if the player's act or line reached it (Brackwater idx 30: the sister's walk in). Making the arrival typed is the owner's call; it costs one call per present mind.
+- (ii) **A character step reads the committed scene.** The shared `character_turn_snapshot` is pre-onset, so a payload's own room, exits and positions can disagree with its act view and micro-rounds, which see the onset.
+- (iii) **The two concealment readers disagree on an empty `conceal_from`.** `composer.concealed_from_observer` hides the line from every non-actor; `common._conceal_from_targets_observer`, the micro-round floor, excludes nobody. None of the 12 concealed loop lines on the scratch db had an empty list. Needs a ruling against 'a line cannot be concealed from its own addressee'.
+- (iv) **`allow_npc_to_npc_dialogue: False` still ends a beat after its first wave**, before the summoned cast has run.
+
 <a id="unbuilt-1-13"></a>
 
 ### 1.13 `ActionStage` is classified and the resolve path never reads it
@@ -1894,12 +1907,13 @@ choice for the beat.
 "contestable": return False`. A player physical act on an NPC is `asserted`
 (player authority), so the NPC never enters the reaction loop. Separately, a
 player-*authored* NPC volitional act executes as an objective event with no
-character-agent call at all. Reactor derivation remains spatial-only.
+character-agent call at all. Reactor derivation is the addressees, else everyone
+perceiving (`director_interpret`), widened by the engine's own classes: hearers,
+engaged, enclosure, rejoined, acted upon.
 
-**Fix.** (a) In `director_interpret`, when a player action targets a present,
-volitional, sheeted character with a conflict verb, add that character to the
-beat's reactors **even when the player's act is `asserted`** — the reaction is the
-NPC's *response*, not a contest over whether the player's act succeeded. (b) When
+**Fix.** (a) LANDED 2026-10-08 as the class, without the conflict-verb list. `common.widen_reactors_to_acted_upon` (pure core `acted_upon_cast`) asks every present cast body that an element of the player's declaration is aimed at (`targets`), that the beat reaches (`can_perceive_onset` from the player's room or the declared walk's destination), and that the element is not concealed from. The planner, the interaction loop and the reaction phase apply it before the awareness and presence gates. The contest gate `_requires_reaction_phase` now reads a `character:<id>` target. Tests: `tests/test_a_body_the_beat_acts_on_is_asked.py`. Measured on Brackwater idx 30; on replay 1 of 385 stored beats. (b) is still open.
+
+(b) When
 the player declares a volitional act *by* an NPC, hand it to that NPC's character
 agent to adopt (supplying interiority and voice) or refuse. Both touch the
 delicate director/reaction seam — go test-first, small.

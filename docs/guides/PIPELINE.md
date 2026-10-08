@@ -665,6 +665,15 @@ Used for contested, time-sensitive physical reactions. Reactions are declaration
 
 Runs bounded observable conversational or physical micro-beats when autonomous interaction is enabled. Later participants can receive legitimate consequences of earlier visible or audible beats; they do not receive hidden agent state.
 
+**Who it opens with.** `flow.reactors` is the interpret's derivation: the beat's addressees, or everyone who perceives it when nobody was addressed. It is widened by what the engine knows that the derivation did not use:
+- a body elsewhere that hears the player's line;
+- the body that answered the player last beat from another room;
+- the body the player is inside;
+- a cast member a bubble returned this beat;
+- a body the declaration's own acts are aimed at (`common.widen_reactors_to_acted_upon`).
+
+The planner and the loop apply the same widenings, so they cannot disagree about who was called to. **The micro-rounds read the onset.** Who perceives a speaker's round is judged against the scene `perception_act` built its views from (the player's onset previewed onto a copy), so a door the player opened is open to the loop too.
+
 **What ends a beat.** `_requires_director_resolution` is the commonest early
 exit and it ends the BEAT, not the round, so its bar is "nobody can sensibly
 respond until the world says what happened" — `commitment: "contestable"`, a
@@ -673,6 +682,8 @@ target": in conversation every nod and glance is aimed at somebody, and gating
 on targets meant 70% of all character actions ended the beat, making an
 unprompted exchange between two characters impossible. With that narrowed, `max_micro_rounds` is what actually bounds an
 exchange.
+
+**A deferred exit is still an exit.** A line turned to the player and an act the Director must resolve both defer for the cast the beat summoned, and for its focus once. After that the beat closes with that reason: the loop draws nobody new while the player's answer or the Director's resolution is owed.
 
 **The first wave is one speaker, by default.** `initial_parallel_reactors`
 defaults to **1** (`story/scene.py`'s `DEFAULT_INTERACTION_CONFIG`), so the

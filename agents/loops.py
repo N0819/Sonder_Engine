@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import random
 
 from story.character_schema import (character_appearance, character_name,
                               character_name_from_text, character_senses,
                               normalized_character_from_text,
-                              normalized_character_of_row)
+                              normalized_character_of_row, persona_name)
 from core.db import wget
 from core.pipeline_context import note_step_decision
 from language_runtime import compositor_text
@@ -20,17 +21,20 @@ from story.scene import (
     cast_state,
     dialogue_config,
     get_scene,
+    persona_of,
     reaction_config,
 )
-from world.spatial import (hear_level, pitched_level_db, proximity_rel,
-                     room_of, sense_adjusted, sound_bearing, spatial_rel,
-                     spatial_rel_between, visual_level_between,
+from world.spatial import (apply_contact_ops, hear_level, pitched_level_db,
+                     proximity_rel, room_of, sense_adjusted, sound_bearing,
+                     spatial_rel, spatial_rel_between, visual_level_between,
                      word_for_level)
 
 from . import composer
 from .character import _unanswered_question_note, character_step
 from .common import (
     player_speech_lines,
+    preview_player_state_assertions,
+    widen_reactors_to_acted_upon,
     widen_reactors_to_enclosure,
     widen_reactors_to_engaged,
     widen_reactors_to_hearers,
@@ -710,6 +714,68 @@ def _defer_to_unrun_reactor(queue_ids, initial_reactors, already_spoke,
     return [first] + [cid for cid in queue_ids if cid != first]
 
 
+#: The early exits that wait on somebody OUTSIDE the loop -- the player's
+#: answer, the Director's resolution -- and so, once deferred for the summoned
+#: cast (`_defer_to_unrun_reactor`), close the beat when that cast has run:
+#: nobody new is drawn in while either is owed. The loop's own `stop_reason`
+#: strings, a closed set. "speaker completed exchange" is not one: a speaker
+#: closing his own exchange waits on nobody, and the cast may go on talking.
+EXITS_THAT_WAIT_OUTSIDE_THE_LOOP = frozenset({
+    "awaiting player response",
+    "physical resolution required",
+})
+
+
+def _beat_onset_scene(ctx, scene):
+    """The scene every delivery INSIDE the loop is judged against: the
+    committed one with the player's own onset applied, on a copy -- the
+    preview `perception_act` builds its views from (contact assertions, then
+    `preview_player_state_assertions` over the onset), so the act views and
+    the micro-rounds that follow them read one world. Persisted by nobody
+    here; the commit writes the onset once, from resolve.
+
+    The loop judged its micro-rounds against the committed scene, where the
+    player's onset had not happened yet. Brackwater, chat 166 turn idx 30:
+    the player opened the house door at onset ("Come in, Mrs Gale"), the
+    pilot answered from the threshold, and her brother at the table got
+    "...them... them's... still..." -- on the committed scene the door was
+    shut (hearing `fragment`, sight `none`); on the onset scene it stood
+    open (hearing `full`, sight `conduct`). Replayed over the 382 stored
+    loops of chats 135-166, that is the one round whose deliveries the onset
+    changes. A walk a SPEAKER declares in the loop is still the resolve's
+    to place, as before.
+
+    Fails to the committed scene, with a warning, if the onset cannot be
+    previewed -- the channels it judges are then the ones the loop always
+    used, never wider ones.
+    """
+    interp = _dict(getattr(ctx, "director_interpret", None))
+    assertions = (interp.get("onset_state_assertions")
+                  if interp.get("onset_state_assertions") is not None
+                  else interp.get("state_assertions"))
+    contacts = interp.get("contact_assertions")
+    if not assertions and not contacts:
+        return scene
+    try:
+        onset = scene
+        if contacts and not _dict(interp.get("state_assertions")).get(
+                "causal_steps"):
+            onset = apply_contact_ops(copy.deepcopy(onset), contacts,
+                                      _age=False)
+        if assertions:
+            pers = persona_of(ctx.chat)
+            onset = preview_player_state_assertions(
+                onset, assertions, ctx,
+                pers.get("name") or persona_name(pers), causal_worlds=[])
+        return onset if isinstance(onset, dict) else scene
+    except Exception as exc:
+        ctx.warnings.append(
+            "interaction_loop: the beat's onset could not be previewed for "
+            f"the micro-rounds ({type(exc).__name__}: {exc}); judged against "
+            "the committed scene")
+        return scene
+
+
 def _standing_pressure(ctx, char_id):
     """How much this character currently WANTS to act, in [0, 1].
 
@@ -892,6 +958,12 @@ def interaction_loop(ctx, nonce):
         int(cid) for cid in widen_reactors_to_rejoined(
             ctx.chat.id, ctx.cast, list(initial_reactors), ctx.turn.idx,
             ctx.turn.frame_id)]))
+    # ...and a body the declaration's own acts are aimed at, whom addressing
+    # somebody else no longer silences (`common.widen_reactors_to_acted_upon`;
+    # Brackwater chat 166 idx 30, the brother at the table).
+    initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+        int(cid) for cid in widen_reactors_to_acted_upon(
+            ctx.chat.id, ctx.cast, interp, list(initial_reactors))]))
 
     # WHO THE BEAT LANDED ON GOES FIRST, and the beat says who that is in two
     # places: who was spoken to, and who was acted upon. Order is causality
@@ -1013,6 +1085,12 @@ def interaction_loop(ctx, nonce):
     if scene is None:
         scene = get_scene(ctx.chat.id, ctx.chat)
         shared["scene"] = scene
+    # Who perceives a speaker's round is judged against the world the
+    # player's onset left -- the one the act views were built from -- not
+    # the committed scene before it (`_beat_onset_scene`). The shared
+    # snapshot stays the committed scene: it is every character step's, and
+    # what those read is not this loop's to change.
+    micro_scene = _beat_onset_scene(ctx, scene)
 
     base_views = dict(
         (ctx.perception_act or {}).get("views")
@@ -1209,7 +1287,7 @@ def interaction_loop(ctx, nonce):
         delivered_observations = {}
         event_prefix = f"micro:{len(rounds)}:{speaker_id}"
         delivered, perceived_by = deterministic_micro_perception(
-            ctx, speaker_id, result, scene,
+            ctx, speaker_id, result, micro_scene,
             observation_out=delivered_observations, event_prefix=event_prefix)
         self_observations = []
         self_view = self_micro_view(
@@ -1253,7 +1331,7 @@ def interaction_loop(ctx, nonce):
             # `_isolated_wave`. Off until offscreen simulation exists, so this
             # resolves to the configured wave size (1) on every live story.
             isolated = _isolated_wave(
-                ctx, scene, queue_ids,
+                ctx, micro_scene, queue_ids,
                 bool(config.get("parallel_isolated_reactors", False)))
             size = max(len(isolated), min(wave_size, len(queue_ids)))
         else:
@@ -1355,6 +1433,7 @@ def interaction_loop(ctx, nonce):
             )
             if deferred is not None:
                 queue_ids, focus_deferred = deferred, True
+                pending_exit_reason = "physical resolution required"
                 continue
             stop_reason = (
                 "physical resolution required"
@@ -1392,10 +1471,42 @@ def interaction_loop(ctx, nonce):
             )
             if deferred is not None:
                 queue_ids, focus_deferred = deferred, True
+                pending_exit_reason = "awaiting player response"
                 continue
             stop_reason = (
                 "awaiting player response"
             )
+            break
+
+        # A DEFERRED EXIT IS STILL AN EXIT. The two above defer for the cast
+        # the beat summoned -- and for its focus, once -- and were right
+        # about what comes after: nobody new is drawn in, and the beat ends
+        # when that cast has run. Only the speaker who RE-triggered an exit
+        # was held to it; one who did not fell through to the next-speaker
+        # draw below, which brought back whoever had perceived them --
+        # usually the very speaker still waiting on the player. Brackwater,
+        # chat 166 turn idx 26: the brother asked the player, the pilot was
+        # drained in and spoke to nobody, and the brother was called a second
+        # time to ask the player again before the player had said a word (1
+        # of the 2,082 stored loops in which a line asked the player; the
+        # deferral's own tests could not see it, because their stand-ins
+        # perceive nobody or stub the next-speaker draw out). While the
+        # player's answer or the Director's resolution is owed, the loop runs
+        # who it already owes a first turn and then stops.
+        if pending_exit_reason in EXITS_THAT_WAIT_OUTSIDE_THE_LOOP:
+            drained = _defer_to_unrun_reactor(
+                queue_ids, initial_set, already_spoke, calls, max_calls)
+            if drained is not None:
+                queue_ids = drained
+                continue
+            deferred = _defer_to_focus(
+                queue_ids, tom_focus, already_spoke,
+                focus_deferred, calls, max_calls,
+            )
+            if deferred is not None:
+                queue_ids, focus_deferred = deferred, True
+                continue
+            stop_reason = pending_exit_reason
             break
 
         # EVERY member of the wave has to be done, not just the last one to
@@ -1597,6 +1708,11 @@ def reaction_loop(ctx, nonce):
     reactor_ids = flow.get("reactors") or []
     valid_ids = {int(row["id"]) for row in ctx.cast}
     reactor_ids = [int(rid) for rid in reactor_ids if int(rid) in valid_ids]
+    # The body a contested act is AIMED AT is who this phase is for, whoever
+    # else the beat addressed (`common.widen_reactors_to_acted_upon`); the
+    # planner planned this phase on the widened list, so read the same one.
+    reactor_ids = [int(cid) for cid in widen_reactors_to_acted_upon(
+        ctx.chat.id, ctx.cast, interp, reactor_ids)]
     reactor_ids = _drop_absent(ctx, _drop_non_awake(ctx, reactor_ids))[:max_reactors]
 
     if not reactor_ids:
