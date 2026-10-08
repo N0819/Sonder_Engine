@@ -218,3 +218,42 @@ class TestTheSheetsAskForTheRecord:
         rel = "prompts/director_establish.txt"
         assert "is minted WITH a `state`" in self._leaf("en", rel)
         assert "`state` を伴って鋳造" in self._leaf("ja", rel)
+
+
+class TestALookIsARead:
+    """A thing the observer's OWN act looked at is read by sight, in this
+    room or wherever the eye reaches it in full. Scratch story 166 (idx 16):
+    the player leaned out of a boat to examine a coat caught on a stake, the
+    encoder wrote the treenail through its shoulder, the slit pocket and the
+    cut reed into its record, and her view said only that she was studying
+    it -- so the page invented the opposite of every one."""
+
+    def _look(self, sc, who, looks):
+        rows = _things_read_by(sc, who, "bridge", bodies=BODIES, looks=looks)
+        return {eid: channel for eid, _entity, channel in rows}
+
+    def test_a_thing_looked_at_across_the_room_is_read(self):
+        assert self._look(_scene(), "Bram", ["hull plate"]) == {"hull_plate": "sight"}
+
+    def test_a_glance_without_a_look_reads_nothing(self):
+        assert "hull_plate" not in self._look(_scene(), "Bram", [])
+
+    def test_a_look_in_the_dark_reads_nothing(self):
+        assert "hull_plate" not in self._look(_scene(light="dark"), "Bram", ["hull plate"])
+
+    def test_a_look_at_a_body_reads_no_record(self):
+        assert "Reya" not in self._look(_scene(), "Bram", ["Reya"])
+
+    def test_a_look_through_an_open_way_reads_the_thing_beyond(self):
+        sc = _scene()
+        sc["rooms"]["bridge"]["adjacent"] = [{"to": "hold", "barrier": "open"}]
+        sc["rooms"]["hold"] = {"name": "Hold", "light": "lit",
+                               "adjacent": [{"to": "bridge", "barrier": "open"}]}
+        assert self._look(sc, "Bram", ["lantern"]) == {"lantern": "sight"}
+
+    def test_a_look_through_a_closed_door_reads_nothing(self):
+        sc = _scene()
+        sc["rooms"]["bridge"]["adjacent"] = [{"to": "hold", "barrier": "closed_door"}]
+        sc["rooms"]["hold"] = {"name": "Hold", "light": "lit",
+                               "adjacent": [{"to": "bridge", "barrier": "closed_door"}]}
+        assert "lantern" not in self._look(sc, "Bram", ["lantern"])

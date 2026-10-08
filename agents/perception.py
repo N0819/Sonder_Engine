@@ -469,7 +469,7 @@ def _station_anchor_of(scene, name):
     return ""
 
 
-def _things_read_by(sc, name, room, *, bodies=()):
+def _things_read_by(sc, name, room, *, bodies=(), looks=(), senses=None):
     """The things whose own record this observer is READING right now, as
     ``[(entity_id, entity, channel)]`` -- for `composer.thing_reading_percepts`.
 
@@ -485,6 +485,19 @@ def _things_read_by(sc, name, room, *, bodies=()):
         station means (`stations.at`), and a display at arm's reach is read
         without touching it. Across the room it is not: no distance
         vocabulary is spent here, so nothing is read from afar.
+
+      * LOOKED: a thing this observer's OWN act looked at this beat
+        (`_own_looks`), seen in full -- in this room or wherever the eye
+        reaches it. A close look is a read by sight: the encoder authors the
+        detail for exactly that act (its `entities__examined` card: "the act
+        of looking promised the reader the detail"), and the owner's
+        2026-09-19 ruling is that a thing examined closely tells you what it
+        is like. Measured on scratch story 166 (idx 16): the player leaned
+        out of the boat to examine a coat caught on a stake, the encoder
+        wrote its treenail, its slit pocket and the cut reed into the coat's
+        record, and her view said only that she was studying it -- so the
+        page invented the opposite. The look is the observer's own, so the
+        station rule's "nothing is read from afar" still holds for a glance.
 
     A body is never a thing (rule 2 of `_visible_things`, the same
     `same_subject` test), and a thing the observer only WATCHES someone else
@@ -532,6 +545,21 @@ def _things_read_by(sc, name, room, *, bodies=()):
             if not isinstance(row, dict) or str(row.get("at") or "") != at:
                 continue
             if _is_body(eid, entity) or not _here(eid):
+                continue
+            found[eid] = (entity, "sight")
+    for look in looks or ():
+        look = str(look or "").strip()
+        if not look:
+            continue
+        for eid, entity in entities.items():
+            if not isinstance(entity, dict) or eid in found:
+                continue
+            if not (same_subject(sc, str(eid), look)
+                    or same_subject(sc, str(entity.get("name") or ""), look)):
+                continue
+            if _is_body(eid, entity):
+                continue
+            if visual_level_between(sc, name, str(eid), senses) != "full":
                 continue
             found[eid] = (entity, "sight")
     return [(eid, entity, channel) for eid, (entity, channel) in found.items()]
@@ -5713,7 +5741,8 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             entity.get("state")), str(eid), channel)
         for eid, entity, channel in _things_read_by(
             sc, name, room,
-            bodies=[name] + [str(b.get("name") or "") for b in others or []])
+            bodies=[name] + [str(b.get("name") or "") for b in others or []],
+            looks=p.get("own_looks") or (), senses=p.get("sense_card"))
     ]))
     region_labels = {name: "you"}
     for body in others:
