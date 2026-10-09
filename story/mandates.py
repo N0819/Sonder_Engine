@@ -129,10 +129,13 @@ TOTAL_CAPABILITY = "everything"
 #: The limits a grant may carry, each a number. `fills_per_hour` is read by
 #: the fill job; `calls_per_reply` and `calls_per_hour` are the SPEND the
 #: room may make (the loop's own ceilings are safety only, 2026-09-03:
-#: "the bounds may potentially be too strict"); `surprise` is the
-#: Dramaturge's creativity dial and `beats_per_proposal` its pacing; the
-#: rest are ceilings the Planner is told to honour and cites when it
-#: declines.
+#: "the bounds may potentially be too strict"); `surprise` TUNES the
+#: Dramaturge's creativity dial and `beats_per_proposal` its pacing -- a
+#: story has both without a grant, and a grant naming either changes it,
+#: never licenses it (owner, 2026-10-08); a pacing of 0 is off
+#: (`BEATS_PER_PROPOSAL_OFF`); the rest are ceilings the Planner is told to
+#: honour and cites when it declines. A grant may carry limits and no
+#: capability: it permits nothing and still says how the room works.
 MANDATE_LIMITS = ("fills_per_hour", "calls_per_reply", "calls_per_hour",
                   "surprise", "beats_per_proposal",
                   "packages", "rooms", "people", "hours", "turns")
@@ -162,16 +165,44 @@ CALLS_PER_STORY_HOUR_CAP = None
 
 #: THE CREATIVITY DIAL (`surprise`): 0 holds to the target the player
 #: stated and proposes only what serves it; 4 is wildly inventive, a turn
-#: nobody asked for. A grant that names the dial without a number gets the
-#: middle. The Dramaturge runs at all only under a grant that carries the
-#: dial: a story begins with it unset, and it proposes nothing.
+#: nobody asked for.
+#:
+#: THE DIAL TUNES THE DRAMATURGE; IT NEVER LICENSES IT (owner, 2026-10-08:
+#: "It was never meant to be surprise only, it was meant to suggest story
+#: directions"). Until that day the Dramaturge ran only under a grant whose
+#: limits carried a numeric `surprise`. Measured on a copy of the owner's
+#: database (2026-10-08): none of its 68 grants across 33 stories did --
+#: eleven carried the `surprise` capability and ten the total grant, and
+#: neither sets a number -- so it had never run in any story: 0 calls, 0
+#: `room_proposals` rows, and this default was read by nothing. Now every
+#: story's Dramaturge suggests on its pacing (`BEATS_PER_PROPOSAL`), and
+#: this is how inventive it is until the player names a number of their
+#: own: the middle of the scale, bold enough to offer a turn and tied
+#: enough to the story the player is telling to be worth judging.
+#: SUGGESTING NEEDS NO GRANT; ACTING ON A SUGGESTION STILL DOES -- a
+#: package the Planner drafts for one publishes only under mandates that
+#: cover every operation in it (`plot_packages.authority_errors`, checked at
+#: validation and again at publish).
 SURPRISE_DEFAULT = 2
 SURPRISE_MAX = 4
-#: PACING: the Dramaturge is asked at most once every this many beats,
-#: when no grant names another number; it may not be asked more often than
-#: every beat.
+#: PACING: the Dramaturge's turn comes once every this many beats of the
+#: frame's own play, counted from its last pass or, before the first, from
+#: the frame's opening (`room_proposals.pass_due`), when no grant names
+#: another number; it may not be asked more often than every beat. At 6 a
+#: thirty-beat story is asked five times (beats 6, 12, 18, 24, 30). The
+#: number is the original 2026-09-04 default, kept: it was never run, so no
+#: measurement argues for another, and the 2026-10-08 Brackwater pass is the
+#: first reading of what one costs -- two Dramaturge calls and six of the
+#: Planner's before a verdict, about $0.055 (§ 4.6 of
+#: `docs/design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`).
 BEATS_PER_PROPOSAL = 6
 BEATS_PER_PROPOSAL_MIN = 1
+#: THE OFF SWITCH (review F8, 2026-10-08): a grant naming this pace stops
+#: the Dramaturge's own passes; the player's ask still runs. Before it, 0
+#: was clamped to `BEATS_PER_PROPOSAL_MIN` -- a player asking for no
+#: suggestions got a pass and a deliberation every beat, six times the
+#: default spend -- and with no grant needed there was no way to stop it.
+BEATS_PER_PROPOSAL_OFF = 0
 
 #: Rows kept per frame, active and lapsed together; past it the oldest
 #: lapsed rows fall off. An active mandate is never dropped by the cap.
@@ -222,6 +253,20 @@ REQUEST_TEXT_CHARS = 300
 
 def _text(value, limit):
     return " ".join(str(value or "").split())[:limit]
+
+
+def _pace(value):
+    """A grant's `beats_per_proposal`: 0 is off (`BEATS_PER_PROPOSAL_OFF`);
+    anything above it is a pace, never more often than every
+    `BEATS_PER_PROPOSAL_MIN` beats; None for a value that is no number (a
+    stored row keeps strings, `room_conversation.normalize_mandate`)."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return BEATS_PER_PROPOSAL_OFF
+    return max(BEATS_PER_PROPOSAL_MIN, int(number))
 
 
 def permits(row, capability):
@@ -344,9 +389,13 @@ def grant_mandate(cid, frame_id, *, text, capabilities, scope=DEFAULT_SCOPE,
                   limits=None, expires_turn=None, turn_idx=None,
                   request=None, renewed_from=""):
     """Record one grant the player made in words. Refuses an empty sentence,
-    no capability, or a capability outside `MANDATE_CAPABILITIES` -- the
-    vocabulary is closed so a grant means exactly one thing to the checks
-    that read it. Returns the stored row.
+    a capability outside `MANDATE_CAPABILITIES` -- the vocabulary is closed
+    so a grant means exactly one thing to the checks that read it -- and a
+    grant that permits no capability and sets no limit. A grant that only
+    sets limits permits nothing: it is the player's word on how the room
+    works, how often it suggests or how much it may spend, and the one way
+    to say "suggest nothing I did not ask for" (`beats_per_proposal` 0,
+    review F8 2026-10-08). Returns the stored row.
 
     ``request`` is the ask this grant answers -- a package uid, a question
     uid, or a sentence -- and scopes the grant to it (module note, first
@@ -364,8 +413,6 @@ def grant_mandate(cid, frame_id, *, text, capabilities, scope=DEFAULT_SCOPE,
                              % (cap, ", ".join(MANDATE_CAPABILITIES)))
         if cap not in wanted:
             wanted.append(cap)
-    if not wanted:
-        raise ValueError("a mandate permits at least one capability")
     clean_limits = {}
     for key, value in (limits or {}).items() if isinstance(limits, dict) else ():
         if str(key) not in MANDATE_LIMITS:
@@ -388,8 +435,10 @@ def grant_mandate(cid, frame_id, *, text, capabilities, scope=DEFAULT_SCOPE,
         clean_limits["surprise"] = max(0, min(int(clean_limits["surprise"]),
                                               SURPRISE_MAX))
     if "beats_per_proposal" in clean_limits:
-        clean_limits["beats_per_proposal"] = max(
-            BEATS_PER_PROPOSAL_MIN, int(clean_limits["beats_per_proposal"]))
+        clean_limits["beats_per_proposal"] = _pace(clean_limits["beats_per_proposal"])
+    if not wanted and not clean_limits:
+        raise ValueError("a mandate permits at least one capability or sets "
+                         "at least one limit")
     granted_turn = int(_turn_now(cid) if turn_idx is None else turn_idx)
     rows = _load(cid, frame_id)
     # THE SAME SENTENCE IS ONE GRANT. A model re-emits a grant on every step
@@ -583,49 +632,52 @@ def _most_permissive(cid, frame_id, key, default, cap, turn_idx=None,
     return limit
 
 
+def _spend(rows, key):
+    """``(calls, uid)``: the spend ``key`` in force under ``rows`` and the
+    grant that set it -- None and '' for no limit.
+
+    Every grant that PERMITS something carries spend, because it is a
+    licence to work: None is no limit and the most permissive answer, so a
+    licence naming no number leaves the room unlimited, and only when every
+    licence names one does the largest stand. A grant that permits nothing
+    -- the Dramaturge's off switch, a dial, a pace (review R3-3, 2026-10-08)
+    -- is no licence, so naming no number it lifts nothing; a number it does
+    name is the player's word on spend and only ever lowers what stands."""
+    licences = [row for row in rows if row["capabilities"]]
+    best, uid = None, ""
+    if licences and all(row["limits"].get(key) is not None for row in licences):
+        for row in licences:
+            if best is None or int(row["limits"][key]) > best:
+                best, uid = int(row["limits"][key]), row["uid"]
+    for row in rows:
+        own = row["limits"].get(key)
+        if row["capabilities"] or own is None:
+            continue
+        if best is None or int(own) < best:
+            best, uid = int(own), row["uid"]
+    return best, uid
+
+
 def spend_limits(cid, frame_id, turn_idx=None):
-    """What the room may spend: tool calls per reply and per story hour.
-    Every active mandate carries spend, because every grant is a licence to
-    work; with no active mandate the defaults stand (the room can still
-    answer a question), so this never returns None."""
-    # Per reply, as per hour: None is no limit and the most permissive
-    # answer, so a grant naming no number leaves a reply unlimited.
-    per_reply, reply_unlimited = None, True
+    """What the room may spend: tool calls per reply and per story hour
+    (`_spend`). Every grant that permits something carries spend, because it
+    is a licence to work; with no active mandate the defaults stand (the
+    room can still answer a question), so this never returns None."""
     rows = active_mandates(cid, frame_id, turn_idx)
-    if rows:
-        named = [row["limits"].get("calls_per_reply") for row in rows]
-        if all(n is not None for n in named):
-            per_reply, reply_unlimited = max(int(n) for n in named), False
-    # Per hour: None is no limit, and it is the most permissive answer -- a
-    # standing grant naming no hourly number leaves the room unlimited; only
-    # when every grant names one does the largest stand.
-    per_hour, unlimited = None, True
-    if rows:
-        named = [row["limits"].get("calls_per_hour") for row in rows]
-        if all(n is not None for n in named):
-            per_hour, unlimited = max(int(n) for n in named), False
-    return {"calls_per_reply": None if reply_unlimited else per_reply,
-            "calls_per_hour": None if unlimited else per_hour}
+    return {"calls_per_reply": _spend(rows, "calls_per_reply")[0],
+            "calls_per_hour": _spend(rows, "calls_per_hour")[0]}
 
 
 def spend_citation(cid, frame_id, key, turn_idx=None):
-    """The active mandate that set ``key`` most permissively, for the
+    """The active mandate that set the ``key`` in force (`_spend`), for the
     Planner to cite when spend stops it; '' when the default is in force."""
-    best, best_uid = None, ""
-    for row in active_mandates(cid, frame_id, turn_idx):
-        own = row["limits"].get(key)
-        if own is None:
-            continue
-        if best is None or int(own) > best:
-            best, best_uid = int(own), row["uid"]
-    return best_uid
+    return _spend(active_mandates(cid, frame_id, turn_idx), key)[1]
 
 
-def surprise_dial(cid, frame_id, turn_idx=None):
-    """The Dramaturge's creativity dial under the standing grants, or None
-    when no active mandate carries it -- in which case the Dramaturge does
-    not run. The dial is the grant: a player who names how much they want
-    to be surprised has licensed the room to propose."""
+def granted_surprise(cid, frame_id, turn_idx=None):
+    """The creativity dial a standing grant names, or None when no active
+    mandate names a number. The most inventive grant wins, under
+    `SURPRISE_MAX`."""
     dial = None
     for row in active_mandates(cid, frame_id, turn_idx):
         own = row["limits"].get("surprise")
@@ -636,18 +688,36 @@ def surprise_dial(cid, frame_id, turn_idx=None):
     return dial
 
 
+def surprise_dial(cid, frame_id, turn_idx=None):
+    """How inventive the Dramaturge is: the number a standing grant names
+    (`granted_surprise`), else `SURPRISE_DEFAULT`. Never None -- the dial
+    tunes the Dramaturge and never decides whether it runs (owner,
+    2026-10-08; `SURPRISE_DEFAULT`'s note). A grant naming 0 is the
+    player's own word and wins over the default, like any other number."""
+    dial = granted_surprise(cid, frame_id, turn_idx)
+    return SURPRISE_DEFAULT if dial is None else dial
+
+
 def beats_per_proposal(cid, frame_id, turn_idx=None):
-    """The pacing budget: how many beats pass between Dramaturge passes.
-    Read only from rows that carry the dial; the most frequent wins."""
+    """The pacing: how many of the frame's own beats pass between
+    Dramaturge passes. The most frequent number any standing grant names
+    wins, never more often than every `BEATS_PER_PROPOSAL_MIN` beats; with
+    none named, `BEATS_PER_PROPOSAL`. Read from every grant, not only one
+    naming the dial: the dial no longer licenses the pass, so a grant that
+    says only how often is the player's word on how often. Never None.
+
+    0 IS OFF (`BEATS_PER_PROPOSAL_OFF`, review F8 2026-10-08) and wins over
+    any number another standing grant names: a player who said they want no
+    suggestions they did not ask for is not overruled by an older word on
+    how often. The pass then runs only when the player asks
+    (`story_planner.planner_reply`); revoking the grant turns it back on."""
     beats = None
     for row in active_mandates(cid, frame_id, turn_idx):
-        if row["limits"].get("surprise") is None:
+        own = _pace(row["limits"].get("beats_per_proposal"))
+        if own is None:
             continue
-        own = row["limits"].get("beats_per_proposal")
-        own = BEATS_PER_PROPOSAL if own is None else max(
-            BEATS_PER_PROPOSAL_MIN, int(own))
         beats = own if beats is None else min(beats, own)
-    return beats
+    return BEATS_PER_PROPOSAL if beats is None else beats
 
 
 def revoked_since(cid, frame_id, turn_idx):

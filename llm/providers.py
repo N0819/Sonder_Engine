@@ -1849,8 +1849,10 @@ ROLES = [
     # planning, proposes direction and builds nothing, reads lore and
     # nothing else of the world. Its own row because the owner may want a
     # more inventive model here than the Planner's. NEVER in the turn
-    # pipeline; runs out of band under the surprise dial. Unset, it
-    # follows `default`.
+    # pipeline; runs out of band in every story on its pacing
+    # (`mandates.beats_per_proposal`; a grant naming 0 stops it), with or
+    # without a grant, and whenever the player asks. Unset, it follows
+    # `default`.
     "dramaturge",
     # Writes an image prompt from spatial data (backdrops.py). OPTIONAL and
     # deliberately out of band: it never runs inside the turn pipeline, so a

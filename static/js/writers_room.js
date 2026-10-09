@@ -78,6 +78,7 @@ const ROOM_PLANNER_LINES = [
   "The room has spent this story hour's allowance; its background work resumes with the next hour.",
   "The room could not agree on a direction; the proposal and the objection are yours to settle.",
   "The room has nothing in motion.",
+  "The room has something in motion.",
   "The room has open planning needs and no grant to answer them. Tell the Story Planner what it may prepare.",
   "The room would plan what lies ahead of the story and has no grant to. Tell the Story Planner it may prepare ahead between beats.",
   "The story rewound under the room's work; nothing landed.",

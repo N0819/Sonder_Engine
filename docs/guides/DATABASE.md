@@ -66,13 +66,35 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   it up to the branch turn with frame ids remapped, a portable archive
   carries every era (`room_messages` in the archive), a deleted story
   cascades it -- and the turn checkpoint deliberately does NOT snapshot or
-  restore it, because a reroll unsays a beat, never what the player told
-  the room afterwards. Pruned to `ROOM_HISTORY_KEPT` per thread on write.
-  The mandates and status the panel shows beside it are `world` rows
+  restore it, because a reroll unsays a beat, never what the player told the
+  room afterwards. Pruned to `ROOM_HISTORY_KEPT` per thread on write. The
+  mandates and status the panel shows beside it are `world` rows
   (`room_mandates`, `room_status`, frame-scoped), so they follow the world
   table's own carriage; so are the Story Planner's packages
   (`plot_packages`) and the frontier measure with its identity-fill ledger
-  (`room_frontier`).
+  (`room_frontier`). The Dramaturge's proposals ride `room_proposals`
+  (frame-scoped, keyed by era), with the log of its passes (`pass_log`: each
+  pass's number, the beat it was recorded at and the newest beat its answer
+  was read from; `last_pass_turn` is the newest), the player's asks no pass
+  has taken yet (a brief a failed pass handed back carries `failed_turn`),
+  and the lazy follow-up's marks: per proposal `due` (asked, touched or
+  waited), `taken_turn`, `filed_turn` (the newest beat its pass read) and
+  `asks` (the player's asks it answers), and the row's `follow_up_turn`. A
+  restore rolls the proposals and the marks back with the world, but leaves
+  the waiting asks as they stood before it
+  (`persist/checkpoints._held_room_briefs`/`_keep_room_briefs`, review
+  2026-10-08): an ask is the conversation's, like the thread, and one whose
+  answer the restore dropped waits again. It also puts back what a job it
+  spared wrote after the snapshot from beats it keeps
+  (`_held_room_rows`/`_keep_spared_room_work`,
+  `story/room_proposals.keep_spared`, review R3-2): proposals filed from
+  kept beats, as filed, and a refusal reached at a kept beat. The pass log
+  is kept as it stood, less every pass recorded at a discarded beat or whose
+  answer was read from one (review R4-1); the follow-up's reading is not
+  kept, since what it concluded rolls back. Each status-row question records
+  who asked it (`source`: `engine`, `reply` or `task`; one stored without it
+  reads as `reply`) and, for a task's or an engine ask's, `asker` and
+  `proposals`, which decide who may take it off.
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
 - `memories`, `memory_summaries`: character-owned experience records and

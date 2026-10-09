@@ -4,7 +4,8 @@ NOT A PIPELINE STAGE. Nothing here runs inside a turn: the Planner answers
 the player's line in the room panel (`story/room_conversation.PLANNER`) and
 runs the out-of-band jobs the commit tail schedules -- the fill (planting
 ahead asked first as one compact call, `story/room_sketch.py`), the
-Dramaturge pass, the bible fold. At rest it costs nothing (v2 § 10).
+Dramaturge pass, the direction follow-up that judges its suggestions when
+the story nears them, the bible fold. At rest it costs nothing (v2 § 10).
 
 WHAT IT IS. A tool-using loop over the authoring facade
 (`story/room_tools.py`): the model is handed the tool table and the
@@ -30,7 +31,9 @@ would this read as something that happened in this world -- and answers
 with geography, identity, causal history and cost. It refuses with the
 contradiction named, sends back for revision, or accepts and implements
 through a package in the same reply. Bounded in rounds; a disagreement
-that outlives them is returned to the player, never forced.
+that outlives them is returned to the player, never forced. It runs when
+the story nears a suggestion, or once the suggestion has waited its bound,
+and at once for one the player asked for (`run_direction_follow_up`).
 
 TWO REGIMES, AND SPEND IS THE STOP (owner, 2026-09-03: "the bounds may
 potentially be too strict"). The step and call counts below are SAFETY
@@ -187,8 +190,36 @@ FILL_NEEDS_PER_JOB = 3
 #: The job keys (`core/jobs.py`), deduped per chat.
 FILL_JOB_KEY = "story_planner_fill"
 DRAMATURGE_JOB_KEY = "dramaturge_pass"
+#: THE LAZY DIRECTION FOLLOW-UP (owner, 2026-10-08: "save heavy plans for
+#: when the actors near them"): the job that asks whether a beat brought the
+#: story to a pending suggestion and deliberates the ones that are due
+#: (`run_direction_follow_up`). Every deliberation runs here, one at a time.
+DIRECTION_JOB_KEY = "direction_follow_up"
+#: The Room's jobs that read a beat, for the restore that may discard it
+#: (`persist/checkpoints.restore_checkpoint`, `core.jobs.cancel_from`).
+ROOM_JOB_KEYS = (DRAMATURGE_JOB_KEY, FILL_JOB_KEY, DIRECTION_JOB_KEY)
+#: The yes-share at which the decision model's "does this passage bring the
+#: story to what the suggestion is about?" (`jev_questions.direction_neared`)
+#: makes the suggestion due its deliberation. The engine's other yes/no
+#: floors are the same half (`director_prose.PRESSURE_ENDED_FLOOR`).
+DIRECTION_NEAR_FLOOR = 0.5
 #: Questions the status row keeps.
 STATUS_QUESTIONS_CAP = 6
+#: At most this many of them are the ENGINE's own asks (review E,
+#: 2026-10-08), so the other half is always the Planner's: the row's cap
+#: used to sort engine asks first and cut after them, so six returned
+#: deliberations left no room for any question the player had been asked in
+#: conversation, and a grant scoped to one lapsed with it. Each engine ask is
+#: one row per kind -- the fill waiting on a grant (`WAITING_LINE` while a
+#: need is open, `WAITING_TO_PLANT_LINE` while only the frontier is short,
+#: never both: `_say_what_waits_on_a_grant`) and the one standing
+#: returned-proposal ask (`ask_returned`) -- so this does not bind today; it
+#: keeps the half however many kinds the engine grows.
+ENGINE_QUESTIONS_CAP = 3
+#: One question's text on the row (`room_conversation.status` reads it at
+#: the same length). The returned-proposal ask keeps whole titles within it,
+#: the newest kept.
+QUESTION_CHARS = 600
 #: Deliberation rounds between the Planner and the Dramaturge before a
 #: disagreement is returned to the player (v2 § 6.3).
 DELIBERATION_ROUNDS = 2
@@ -214,6 +245,11 @@ HOUR_SPENT_LINE = ("The room has spent this story hour's allowance; its "
 DISAGREEMENT_LINE = ("The room could not agree on a direction; the proposal "
                      "and the objection are yours to settle.")
 NO_STATUS_LINE = "The room has nothing in motion."
+#: The row's line while something is in motion and nothing has said what
+#: (review R3-8, 2026-10-08): a pacing pass files a suggestion and writes no
+#: line, and judging is lazy now, so "nothing in motion" stood beside a
+#: pending suggestion for up to two pacing intervals.
+IN_MOTION_LINE = "The room has something in motion."
 SILENT_LINE = ("The room finished without a word; what it settled stands, and "
                "its status line says what is in motion.")
 WAITING_LINE = ("The room has open planning needs and no grant to answer "
@@ -224,6 +260,14 @@ WAITING_TO_PLANT_LINE = ("The room would plan what lies ahead of the story "
                          "and has no grant to. Tell the Story Planner it may "
                          "prepare ahead between beats.")
 REWOUND_LINE = "The story rewound under the room's work; nothing landed."
+#: The question the engine asks when a deliberation could not settle a
+#: proposal (v2 § 6.3): the proposal and the objection are the player's.
+#: ONE standing ask lists every returned proposal the player has not
+#: answered, each once (`ask_returned`, review E 2026-10-08): a new text per
+#: deliberation piled up past the row's cap.
+RETURNED_QUESTION = "Settle the returned proposal: %s"
+#: The `asker` that marks that one ask on the row.
+RETURNED_ASKER = "returned"
 LOST_ANSWER_LINE = ("The room lost its last answer to the model; what it had "
                     "already settled stands, and its notes say what that was.")
 #: What the reply says when a stop is a spend stop, keyed by stop reason.
@@ -592,43 +636,262 @@ def _apply_grants(cid, frame_id, grants, turn_idx):
     return rows, notes
 
 
-def _question_rows(questions):
-    out = []
-    for text in questions if isinstance(questions, list) else []:
-        text = " ".join(str(text or "").split())[:600]
-        if not text:
+def _question_text(text):
+    return " ".join(str(text or "").split())[:QUESTION_CHARS]
+
+
+def _asker_fields(entry):
+    """A question's `asker` and `proposals` -- which task or engine ask it
+    is, and what it was about -- when it carries them."""
+    out = {}
+    if not isinstance(entry, dict):
+        return out
+    asker = " ".join(str(entry.get("asker") or "").split())[:60]
+    if asker:
+        out["asker"] = asker
+    proposals = entry.get("proposals")
+    if isinstance(proposals, (list, tuple)):
+        uids = list(dict.fromkeys(str(u) for u in proposals if str(u or "").strip()))
+        if uids:
+            out["proposals"] = uids[:24]
+    return out
+
+
+def _question_rows(questions, source="reply"):
+    """The status row's questions: a uid, the text and who asked it
+    (`room_conversation.QUESTION_SOURCES`) -- a plain string is asked by
+    ``source`` -- with the task or engine ask it came from when it has one
+    (`asker`, `proposals`); one row per text, the first statement of a text
+    keeping its asker; the engine's own asks first, then the Planner's in
+    replies, then the background tasks', at most `ENGINE_QUESTIONS_CAP` of
+    the engine's and `STATUS_QUESTIONS_CAP` in all, so the cap cuts a
+    task's question before anything the player was asked in conversation,
+    and the engine's asks can never fill the row."""
+    from story.room_conversation import QUESTION_SOURCES
+    out, seen = [], set()
+    for entry in questions if isinstance(questions, list) else []:
+        asker, fields = source, _asker_fields(entry)
+        if isinstance(entry, dict):
+            asker = entry.get("source") or source
+            entry = entry.get("text")
+        text = _question_text(entry)
+        if not text or text in seen:
             continue
+        seen.add(text)
         out.append({"uid": "q_" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:8],
-                    "text": text})
+                    "text": text,
+                    "source": asker if asker in QUESTION_SOURCES else "reply",
+                    **fields})
+    out.sort(key=lambda row: QUESTION_SOURCES.index(row["source"]))
+    engine = [row for row in out if row["source"] == "engine"]
+    out = engine[:ENGINE_QUESTIONS_CAP] + [row for row in out
+                                           if row["source"] != "engine"]
     return out[:STATUS_QUESTIONS_CAP]
 
 
-def write_status(cid, frame_id, *, line=None, questions=None, turn_idx=None):
+def _unsettled(cid, frame_id, questions):
+    """``questions`` less a deliberation's whose every proposal has settled
+    (`room_proposals.SETTLED_STATUSES`): it was asked about those
+    proposals, and nothing about them is left to answer -- the package
+    landed, or it was refused, withdrawn or returned to the player. An
+    `accepted` proposal is not settled: a grant asked for to carry it out
+    stands until the player answers it (review D, 2026-10-08)."""
+    from story.room_proposals import SETTLED_STATUSES, proposals
+    rows = [q for q in questions if isinstance(q, dict) and q.get("source") == "task"
+            and q.get("proposals")]
+    if not rows:
+        return questions
+    status = {p["uid"]: p["status"] for p in proposals(cid, frame_id)}
+
+    def settled(q):
+        return all(status.get(uid, SETTLED_STATUSES[0]) in SETTLED_STATUSES
+                   for uid in q["proposals"])
+    return [q for q in questions
+            if not (isinstance(q, dict) and q.get("source") == "task"
+                    and q.get("proposals") and settled(q))]
+
+
+def write_status(cid, frame_id, *, line=None, questions=None, turn_idx=None,
+                 source="reply"):
     """The spoiler-safe projection the panel shows: what is in motion,
     never what it is. Built from package PROJECTIONS -- a title, a status --
     the pending proposals' kind and title, and the questions the room is
     asking. A sealed package's title is the Planner's to keep spoiler-safe;
-    nothing else of it is read here."""
-    from core.db import wset_for_frame
+    nothing else of it is read here.
+
+    ``line`` None keeps the standing line while something is in motion and
+    says nothing is when nothing is. The row never says "nothing in motion"
+    beside something in motion, nor the reverse (`IN_MOTION_LINE`, review
+    R3-8). ``questions`` None keeps the standing
+    questions as they are; a list is the row's questions from now on, a
+    plain string in it asked by ``source`` (`_question_rows`) -- a writer
+    that answers only for its own uses `_restated` to build that list.
+    Either way a deliberation's questions leave once every proposal they
+    were about has settled (`_unsettled`). One transaction: a pass, a fill
+    and a deliberation can all write the row at once."""
+    from core.db import transaction, wset_for_frame
     from story import room_conversation as room
     from story.plot_packages import list_packages
     from story.room_proposals import pending_proposals, projection
-    in_motion = []
-    for proj in list_packages(cid, frame_id=frame_id):
-        if proj["status"] in ("draft", "validating", "published", "active"):
-            in_motion.append({"uid": proj["uid"], "kind": "package",
-                              "label": proj["title"], "state": proj["status"]})
-    for prop in pending_proposals(cid, frame_id):
-        in_motion.append(projection(prop))
-    line = " ".join(str(line or "").split())
-    if not line:
-        line = room.status(cid, frame_id).get("line") if in_motion else ""
-        line = line or NO_STATUS_LINE
-    row = {"line": line[:400], "in_motion": in_motion,
-           "questions": _question_rows(questions),
-           "updated_turn": int(turn_idx or room.current_turn_idx(cid))}
-    wset_for_frame(cid, room.ROOM_STATUS_KEY, row, frame_id)
+    with transaction():
+        in_motion = []
+        for proj in list_packages(cid, frame_id=frame_id):
+            if proj["status"] in ("draft", "validating", "published", "active"):
+                in_motion.append({"uid": proj["uid"], "kind": "package",
+                                  "label": proj["title"], "state": proj["status"]})
+        for prop in pending_proposals(cid, frame_id):
+            in_motion.append(projection(prop))
+        current = room.status(cid, frame_id)
+        line = " ".join(str(line or "").split())
+        if not line:
+            line = current.get("line") if in_motion else ""
+        if in_motion and line in ("", NO_STATUS_LINE):
+            line = IN_MOTION_LINE
+        elif not in_motion and line in ("", IN_MOTION_LINE):
+            line = NO_STATUS_LINE
+        if questions is None:
+            questions = current.get("questions") or []
+        row = {"line": line[:400], "in_motion": in_motion,
+               "questions": _question_rows(_unsettled(cid, frame_id, list(questions)),
+                                           source),
+               "updated_turn": int(turn_idx or room.current_turn_idx(cid))}
+        wset_for_frame(cid, room.ROOM_STATUS_KEY, row, frame_id)
     return room.status(cid, frame_id)
+
+
+def _task_identity(entry):
+    """Which task a question, or an asker, is: its kind and the proposals
+    it was about. Two runs of one fill are the same task; a deliberation is
+    the proposals it was handed, whichever round asked."""
+    entry = entry if isinstance(entry, dict) else {}
+    return (str(entry.get("asker") or ""),
+            tuple(sorted(str(u) for u in entry.get("proposals") or ())))
+
+
+def _asker_for(task):
+    """A background task's asker when its caller named none: the task's own
+    kind, about no proposal, with nothing asked yet."""
+    kind = str((task or {}).get("kind") or "task") if isinstance(task, dict) else "task"
+    return {"asker": kind, "proposals": [], "asked": []}
+
+
+def _with_earlier(earlier, stated):
+    """What one task has asked across its rounds and passes: the earlier
+    questions first, then any new one, each text once."""
+    out, seen = [], set()
+    for text in list(earlier or ()) + list(stated or ()):
+        text = _question_text(text)
+        if text and text not in seen:
+            seen.add(text)
+            out.append(text)
+    return out
+
+
+def _restated(cid, frame_id, stated, source, *, engine=(), asker=None):
+    """The status row's questions once ``source`` has stated its own list.
+
+    WHO ASKED DECIDES WHO MAY TAKE IT OFF (review, 2026-10-08). A
+    BACKGROUND TASK answers nobody: its list replaces only the questions
+    THAT SAME TASK asked before (``asker``: a fill, or a deliberation of
+    the same proposals) and keeps the rest -- what the Planner asked the
+    player in a reply, the engine's own asks, and every other task's.
+    Keyed by the last task alone, a deliberation's second round wiped the
+    grant its first round asked for, and so did the next fill, and a grant
+    the player had scoped to that question lapsed with it
+    (`mandates.request_open`); before that every task replaced the whole
+    row. Rounds and passes of one task add to its list (`_with_earlier`).
+    A REPLY restates the row, as it always has: the player has just spoken
+    and the Planner was shown every question standing, so one it does not
+    restate was answered or dropped. An engine ask it restates stays the
+    engine's -- ``engine`` names the ones that stood when the reply began --
+    which is what lets the engine take it off again when its reason is gone
+    (`withdraw_question`)."""
+    from story import room_conversation as room
+    standing = room.status(cid, frame_id).get("questions") or []
+    stated = [t for t in (stated or ()) if _question_text(t)]
+    if source == "reply":
+        engine_rows = {q["text"]: q for q in standing if q["source"] == "engine"}
+        asked = set(engine) | set(engine_rows)
+        kept = [{**_asker_fields(engine_rows.get(_question_text(t))),
+                 "text": _question_text(t), "source": "engine"}
+                for t in stated if _question_text(t) in asked]
+        return kept + [{"text": t, "source": source} for t in stated]
+    identity = _task_identity(asker)
+    kept = [q for q in standing
+            if not (q["source"] == "task" and _task_identity(q) == identity)]
+    fields = {"asker": identity[0], "proposals": list(identity[1])}
+    return kept + [{"text": t, "source": "task", **fields} for t in stated]
+
+
+def ask_question(cid, frame_id, text, *, turn_idx=None):
+    """The engine asks the player something by its own reading of the story:
+    on the status row ahead of every question a model asked, until the
+    engine withdraws it or a reply restates the row without it. Idempotent:
+    an ask already standing is not written again. Returns the status row, or
+    None when nothing was written."""
+    from core.db import transaction
+    from story import room_conversation as room
+    text = _question_text(text)
+    with transaction():
+        standing = room.status(cid, frame_id).get("questions") or []
+        if not text or any(q["text"] == text and q["source"] == "engine"
+                           for q in standing):
+            return None
+        questions = [q for q in standing if q["text"] != text]
+        questions.append({"text": text, "source": "engine"})
+        return write_status(cid, frame_id, questions=questions, turn_idx=turn_idx)
+
+
+def withdraw_question(cid, frame_id, text, *, turn_idx=None):
+    """The engine takes back an ask whose reason is gone. Only its own: the
+    same words asked by the Planner are the Planner's to drop. Returns the
+    status row, or None when nothing was written."""
+    from core.db import transaction
+    from story import room_conversation as room
+    text = _question_text(text)
+    with transaction():
+        standing = room.status(cid, frame_id).get("questions") or []
+        kept = [q for q in standing
+                if not (q["text"] == text and q["source"] == "engine")]
+        if len(kept) == len(standing):
+            return None
+        return write_status(cid, frame_id, questions=kept, turn_idx=turn_idx)
+
+
+def ask_returned(cid, frame_id, uids, *, turn_idx=None):
+    """The engine's ONE standing ask about the proposals the room could not
+    settle (review E, 2026-10-08). Each deliberation that returned one asked
+    a new question naming its titles, so the asks piled up past the row's
+    cap and pushed out the questions the player had been asked in
+    conversation. Now the ask names every returned proposal the player has
+    not yet answered -- those the standing ask already named, then ``uids``
+    -- each once, as one row, keeping whole titles within
+    `QUESTION_CHARS`, the newest kept. A reply that does not restate it has
+    answered it, and the next return starts a fresh list. Returns the status
+    row, or None when there was nothing to ask."""
+    from core.db import transaction
+    from story import room_conversation as room
+    from story.room_proposals import get_proposal
+    with transaction():
+        standing = room.status(cid, frame_id).get("questions") or []
+        prior = [q for q in standing if q["source"] == "engine"
+                 and q.get("asker") == RETURNED_ASKER]
+        listed = list(dict.fromkeys(
+            [u for q in prior for u in q.get("proposals") or ()]
+            + [str(u) for u in uids or ()]))
+        titled = [(u, (get_proposal(cid, frame_id, u) or {}).get("title"))
+                  for u in listed]
+        titled = [(u, t) for u, t in titled if t]
+        while len(titled) > 1 and len(
+                RETURNED_QUESTION % "; ".join(t for _u, t in titled)) > QUESTION_CHARS:
+            titled.pop(0)
+        if not titled:
+            return None
+        rest = [q for q in standing if q not in prior]
+        return write_status(cid, frame_id, questions=rest + [{
+            "text": RETURNED_QUESTION % "; ".join(t for _u, t in titled),
+            "source": "engine", "asker": RETURNED_ASKER,
+            "proposals": [u for u, _t in titled]}], turn_idx=turn_idx)
 
 
 # ---------------------------------------------------------------------------
@@ -737,13 +1000,25 @@ def _session_account(transcript):
 
 
 def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
-                regime=None, on_event=None):
+                regime=None, on_event=None, job=None, asker=None):
     """One bounded reply. ``text`` is the player's line (the interactive
     regime); ``task`` a brief from a job (the background regime; no grants
     are read from a task). Returns ``{"reply", "dramaturge": None,
-    "mandates", "status", "published": [uids], "verdicts": [...],
-    "ask_dramaturge": str|None, "calls": n, "steps": n, "notes": [...],
-    "stopped": why|None, "regime"}``.
+    "mandates", "status", "published": [uids], "opened": [uids],
+    "verdicts": [...], "ask_dramaturge": str|None, "calls": n, "steps": n,
+    "notes": [...], "stopped": why|None, "regime"}`` -- ``opened`` being
+    the packages THIS reply's own `new_package` calls opened.
+
+    ``asker`` is which background task this is, for its questions
+    (`_restated`): ``{"asker": kind, "proposals": [uids], "asked":
+    [texts]}``, ``asked`` holding what the task's earlier rounds and passes
+    asked and updated in place. None: the task's own kind, asked afresh.
+
+    ``job`` is the out-of-band job a task runs in. Once it is cancelled
+    (`core.jobs.cancel` -- a restore, above all) the loop runs no further
+    step and no further tool, and writes nothing more: no status row, no
+    spend, and an empty reply for its caller to post (stopped
+    "cancelled").
 
     ``on_event`` is an optional callable taking one dict, for a caller
     watching the loop rather than waiting on it. It is told when a step
@@ -760,7 +1035,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             on_event(event)
         except Exception:  # a watcher is never allowed to break the work
             pass
-    from core.jobs import story_rewound_past
+    from core.jobs import is_cancelled, story_rewound_past
     from story import room_conversation as room
     from story.mandates import expire_mandates, spend_citation, spend_limits
     from story.room_calls import ReplyMemo
@@ -796,8 +1071,18 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                  max(0, int(spend["calls_per_hour"]) - spend_this_hour(cid, frame_id, turn_idx)))
     started = time.time()
     transcript, notes, published, verdicts, claims = [], [], [], [], []
+    # THE DRAFTS THIS REPLY OPENED, recorded where its own `new_package`
+    # call returns them (review A, 2026-10-08): the only drafts a task's end
+    # may retire (`_retire_stranded`).
+    opened = []
     calls_made, delegations, steps = 0, 0, 0
-    reply, status_line, questions, ask_dramaturge = "", "", [], None
+    # `questions` stays None until the model states a list: saying nothing
+    # about the questions standing is not an answer to them.
+    reply, status_line, questions, ask_dramaturge = "", "", None, None
+    # The engine's asks as the reply found them, so one the model restates
+    # stays the engine's even after a progress write (`_restated`).
+    engine_asks = {q["text"] for q in room.status(cid, frame_id).get("questions") or []
+                   if q.get("source") == "engine"}
     stopped = None
     # THE ECHO POLICY. `answered` maps a call (tool + arguments) to the index
     # of the transcript entry that last showed its result in full; a repeat
@@ -822,6 +1107,9 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
         stopped = "spend_hour"
     for step in range(1, steps_cap + 1):
         if stopped:
+            break
+        if is_cancelled(job):
+            stopped = "cancelled"
             break
         _emit({"type": "room_step", "step": step,
                "calls_made": calls_made, "seconds": round(time.time() - started, 1)})
@@ -872,6 +1160,11 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             notes.extend(_session_account(transcript))
             stopped = "model"
             break
+        if is_cancelled(job):
+            # Cancelled while the model answered: nothing it said is acted
+            # on -- it read a story the player may since have rerolled.
+            stopped = "cancelled"
+            break
         in_view = {first_shown + n for n in whole}
         if not any(k in out for k in ANSWER_KEYS):
             # A truncated or shapeless output is reported, not read as "done":
@@ -920,13 +1213,21 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
         # PROGRESS IS VISIBLE: the status row is rewritten every step, so
         # the panel's one-second watch shows a long reply working.
         if regime == "reply" and status_line:
-            write_status(cid, frame_id, line=status_line, questions=questions,
-                         turn_idx=turn_idx)
+            from core.db import transaction
+            with transaction():
+                write_status(cid, frame_id, line=status_line,
+                             questions=(None if questions is None else _restated(
+                                 cid, frame_id, questions, "reply",
+                                 engine=engine_asks)),
+                             turn_idx=turn_idx)
             memo.wrote()  # the status row the next payload states
         calls = out.get("calls") if isinstance(out.get("calls"), list) else []
         if not calls:
             break
         for call in calls[:PLANNER_TOOL_CALLS_PER_STEP]:
+            if is_cancelled(job):
+                stopped = "cancelled"
+                break
             if calls_made >= PLANNER_TOOL_CALLS_PER_REPLY:
                 stopped = "calls"
                 break
@@ -985,6 +1286,10 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                 if name == "publish_package" and isinstance(result, dict) \
                         and result.get("published_turn") is not None:
                     published.append(str(result.get("uid") or args.get("uid") or ""))
+                if name == "new_package" and isinstance(result, dict) \
+                        and result.get("uid") and not (
+                            "error" in result or "refused" in result):
+                    opened.append(str(result["uid"]))
                 if name in ("publish_package", "resolve_package"):
                     _note_bible(cid, frame_id, name, args, result, turn_idx)
             # A CALL THE TABLE DOES NOT MARK AS A PURE READ MAY HAVE MOVED
@@ -1023,6 +1328,18 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             break
     else:
         stopped = "steps"
+    if stopped == "cancelled":
+        # A CANCELLED JOB WRITES NOTHING MORE -- not the status row, not the
+        # spend, and no line for its caller to post. What its tools already
+        # wrote before the cancel landed is what the restore that cancelled
+        # it rolls back (`persist/checkpoints.restore_checkpoint`).
+        return {"reply": "", "dramaturge": None,
+                "mandates": room.mandates(cid, frame_id),
+                "status": room.status(cid, frame_id),
+                "published": published, "opened": opened, "verdicts": [],
+                "claims": claims, "ask_dramaturge": None, "calls": calls_made,
+                "steps": steps, "notes": notes, "stopped": stopped,
+                "regime": regime}
     if stopped and not reply:
         reply = STOP_LINES.get(stopped, BOUNDED_LINE)
         if stopped in ("spend_reply", "spend_hour"):
@@ -1040,28 +1357,60 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     if calls_made:
         record_spend(cid, frame_id, turn_idx=turn_idx, calls=calls_made,
                      who="planner")
-    status = write_status(cid, frame_id, line=status_line, questions=questions,
-                          turn_idx=turn_idx)
+    from core.db import transaction
+    with transaction():
+        if regime == "task":
+            # A BACKGROUND TASK ANSWERS NO QUESTION: what it has asked over
+            # all its rounds and passes -- none stated adds none -- replaces
+            # only what THIS task asked before, and what the player was asked
+            # in a reply, the engine's own asks and every other task's stand
+            # (`_restated`, review D 2026-10-08).
+            asker = asker if asker is not None else _asker_for(task)
+            asker["asked"] = _with_earlier(asker.get("asked"), questions or [])
+            questions = _restated(cid, frame_id, asker["asked"], "task",
+                                  asker=asker)
+        elif regime in ("opening", "location"):
+            # NOBODY IS THERE TO ANSWER, so the questions the Room asked
+            # before the story -- the prelude's, above all -- are cleared
+            # here as they always were, and the engine's own asks stand
+            # (review G, 2026-10-08). The prelude expects the player may
+            # simply begin; left standing, its question rode every task
+            # payload for the whole story (the class chat 126 found).
+            questions = [q for q in room.status(cid, frame_id).get("questions") or []
+                         if q.get("source") == "engine"]
+        elif questions is not None:
+            questions = _restated(cid, frame_id, questions, "reply",
+                                  engine=engine_asks)
+        status = write_status(cid, frame_id, line=status_line,
+                              questions=questions, turn_idx=turn_idx)
     return {"reply": reply, "dramaturge": None,
             "mandates": room.mandates(cid, frame_id), "status": status,
-            "published": published, "verdicts": verdicts, "claims": claims,
-            "ask_dramaturge": ask_dramaturge, "calls": calls_made,
-            "steps": steps, "notes": notes, "stopped": stopped, "regime": regime}
+            "published": published, "opened": opened, "verdicts": verdicts,
+            "claims": claims, "ask_dramaturge": ask_dramaturge,
+            "calls": calls_made, "steps": steps, "notes": notes,
+            "stopped": stopped, "regime": regime}
 
 
-def _run_task(cid, frame_id, task, *, base_turn, job=None, before_pass=None):
+def _run_task(cid, frame_id, task, *, base_turn, job=None, before_pass=None,
+              asker=None):
     """A background task: passes of `run_planner` in the task regime until
     the reply is done, a pass ends on a non-resumable stop, the passes cap
     is reached, or the job is cancelled. Spend per hour is checked by each
     pass; the wall is per pass. The passes so far ride the task so the
-    model knows it is continuing. ``before_pass(carried)``, when given, is
-    handed each pass's copy of the task before that pass runs and may
-    change it: a task whose question can move while it runs reads the
-    question afresh there (the fill's open needs, `run_fill`)."""
+    model knows it is continuing, and what each asked carries into the next
+    (``asker``, `_restated`; None: the task's own kind).
+    ``before_pass(carried)``, when given, is handed each pass's copy of the
+    task before that pass runs and may change it: a task whose question can
+    move while it runs reads the question afresh there (the fill's open
+    needs, `run_fill`). A task the job was cancelled under ends "cancelled"
+    whichever pass the cancel reached, so its caller writes nothing on its
+    account. A task that ends otherwise retires the drafts its own passes
+    opened that the standing grants cannot carry (`_retire_stranded`)."""
+    from core.jobs import is_cancelled
+    asker = asker if asker is not None else _asker_for(task)
     passes, out = 0, None
     while passes < TASK_PASSES_CAP:
-        cancelled = getattr(job, "cancelled", None)
-        if cancelled is not None and getattr(cancelled, "is_set", lambda: False)():
+        if is_cancelled(job):
             break
         passes += 1
         carried = dict(task)
@@ -1072,12 +1421,13 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None, before_pass=None):
         if before_pass is not None:
             before_pass(carried)
         this = run_planner(cid, frame_id, task=carried, base_turn=base_turn,
-                           regime="task")
+                           regime="task", job=job, asker=asker)
         if out is None:
             out = this
         else:
             out = {**this,
                    "published": out["published"] + this["published"],
+                   "opened": out["opened"] + this["opened"],
                    "calls": out["calls"] + this["calls"],
                    "steps": out["steps"] + this["steps"],
                    "notes": out["notes"] + this["notes"],
@@ -1093,11 +1443,63 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None, before_pass=None):
         # on `out["passes"]` -- a TypeError filed as the job's error where
         # the truth was a cancellation, and one the fill's back-off would now
         # read as an empty answer.
-        out = {"reply": "", "published": [], "verdicts": [], "claims": [],
-               "calls": 0, "steps": 0, "notes": [], "stopped": "cancelled",
-               "regime": "task", "ask_dramaturge": None}
+        out = {"reply": "", "published": [], "opened": [], "verdicts": [],
+               "claims": [], "calls": 0, "steps": 0, "notes": [],
+               "stopped": "cancelled", "regime": "task", "ask_dramaturge": None}
+    if is_cancelled(job):
+        out = {**out, "stopped": "cancelled", "reply": "", "verdicts": []}
+    else:
+        out["retired"] = _retire_stranded(cid, frame_id, out["opened"])
     out["passes"] = passes
     return out
+
+
+def _retire_stranded(cid, frame_id, opened):
+    """THE FLOOR UNDER "OPEN NO PACKAGE THAT CANNOT VALIDATE" (review F3,
+    2026-10-08). A draft the Planner opens needs no grant; validating and
+    publishing it do (`plot_packages.authority_errors`), and only the host
+    may retire one. So in a story with no grant every accepted proposal the
+    Planner tried to carry out left a draft that could never publish --
+    measured by the review: three passes, three drafts -- each shown on the
+    status row as in motion and each counted against `PACKAGES_CAP`, past
+    which `new_package` refuses everything, the player's own asks included,
+    until the host retires drafts by hand. At the end of a background task,
+    every draft in ``opened`` -- the drafts THAT TASK's own `new_package`
+    calls opened (`run_planner`'s ``opened``) -- authored by the room, that
+    the standing grants do not cover is retired with the refusal as its
+    note: a draft placed nothing, so nothing in the world changes. A draft
+    the grants do cover is left for the work to go on.
+
+    ONLY ITS OWN (review A, 2026-10-08). The floor first diffed the package
+    ledger against the task's start, and every Planner draft carries the
+    same author, so a draft a panel reply opened WHILE the task ran -- the
+    player asking for a storm and the reply asking, package-scoped, for the
+    grant -- was retired at the task's end, and the grant the player then
+    gave lapsed on arrival (`mandates.request_open`). The status line is
+    restated too: it stands only while something is in motion
+    (`write_status`, review H), so a fill whose one draft is retired no
+    longer leaves its "drafting ..." line behind. Returns the uids
+    retired."""
+    from story.plot_packages import (AGENT_AUTHORS, authority_errors, packages,
+                                     retire_package)
+    retired = []
+    stored = packages(cid, frame_id)
+    for uid in dict.fromkeys(str(u) for u in opened or ()):
+        pkg = stored.get(uid)
+        if pkg is None or pkg["status"] != "draft":
+            continue
+        if pkg["provenance"].get("created_by") not in AGENT_AUTHORS:
+            continue
+        errors = authority_errors(cid, frame_id, pkg)
+        if not errors:
+            continue
+        retire_package(cid, uid, frame_id=frame_id, note=(
+            "retired at the end of the background task that opened it, which "
+            "the standing grants do not cover: %s" % errors[0])[:400])
+        retired.append(uid)
+    if retired:
+        write_status(cid, frame_id)
+    return retired
 
 
 def _opening_task(cid, frame_id, passage, first_beat=""):
@@ -1508,41 +1910,53 @@ def planner_reply(cid, frame_id, text, *, on_event=None):
     """The seam's shape: what `room_conversation.PLANNER` returns. When the
     Planner hands a brief to the Dramaturge, the pass runs OUT OF BAND (a
     background task has no wall) and its lines land in the thread; the
-    envelope's `dramaturge` stays None and the panel's watch shows them."""
+    envelope's `dramaturge` stays None and the panel's watch shows them.
+    The brief is handed whatever the grants say: asking the Dramaturge for
+    direction needs no grant (owner, 2026-10-08), and acting on what it
+    suggests still does (`run_dramaturge_pass`).
+
+    THE ASK IS KEPT BEFORE ANYTHING IS QUEUED (review F1, 2026-10-08). The
+    pacing pass and the asked one share `DRAMATURGE_JOB_KEY`, and
+    `core.jobs.submit` joins a job already in flight: an ask made while a
+    pacing pass ran -- minutes, with its deliberation -- joined it and was
+    never read, and the pass's own note looked like the answer. The brief
+    waits on the room's row (`room_proposals.ask_brief`) for whichever pass
+    takes it: this one, the one it joined (at its end), or, when that one was
+    cancelled, the next commit's (`schedule_room_work`)."""
     from core import jobs
     from persist.llm_capture import room_capture
     from story import room_conversation as room
-    from story.mandates import surprise_dial
     from story.room_bible import schedule_fold
+    from story.room_proposals import ask_brief
     out = run_planner(cid, frame_id, text=text, regime="reply",
                       on_event=on_event)
     if out.get("ask_dramaturge"):
-        dial = surprise_dial(cid, frame_id)
-        if dial is not None:
-            brief = out["ask_dramaturge"]
-            # EVERY JOB CARRIES ITS BASE TURN (review 2026-09-07 A33). Both
-            # rewind guards -- `run_planner`'s per-write check and
-            # `run_dramaturge_pass`'s own -- open with `if base_turn is not
-            # None`, so a None here is not a missing number, it is the guard
-            # switched off: a pass launched from the panel could land its
-            # proposals, judgements and revisions onto a story the player had
-            # meanwhile rewound underneath it. The commit tail already passes
-            # `turn_idx` for exactly this reason; the panel is the same act
-            # from the other door, and reads the number the same way
-            # `run_planner` does.
-            base = room.current_turn_idx(cid)
+        brief = out["ask_dramaturge"]
+        # EVERY JOB CARRIES ITS BASE TURN (review 2026-09-07 A33). Both
+        # rewind guards -- `run_planner`'s per-write check and
+        # `run_dramaturge_pass`'s own -- open with `if base_turn is not
+        # None`, so a None here is not a missing number, it is the guard
+        # switched off: a pass launched from the panel could land its
+        # proposals, judgements and revisions onto a story the player had
+        # meanwhile rewound underneath it. The commit tail already passes
+        # `turn_idx` for exactly this reason; the panel is the same act
+        # from the other door, and reads the number the same way
+        # `run_planner` does.
+        base = room.current_turn_idx(cid)
+        ask_brief(cid, _player_frame(cid, frame_id), brief, turn_idx=base)
 
-            def _run(job):
-                # The reply's own scope does not reach here: the pass runs
-                # out of band, in a job, and `core/jobs.py` clears
-                # turn-scoped contextvars. A brief handed to the Dramaturge
-                # is the most readable thing the room does and would
-                # otherwise be the least readable.
-                with room_capture(cid, "dramaturge"):
-                    return run_dramaturge_pass(cid, frame_id, base_turn=base,
-                                               brief=brief, job=job)
+        def _run(job):
+            # The reply's own scope does not reach here: the pass runs out
+            # of band, in a job, and `core/jobs.py` clears turn-scoped
+            # contextvars. A brief handed to the Dramaturge is the most
+            # readable thing the room does and would otherwise be the
+            # least readable. The brief itself is not passed: the pass
+            # takes it, and any other waiting, from the room's row.
+            with room_capture(cid, "dramaturge"):
+                return run_dramaturge_pass(cid, frame_id, base_turn=base,
+                                           job=job)
 
-            jobs.submit(cid, DRAMATURGE_JOB_KEY, _run, base_turn=base)
+        jobs.submit(cid, DRAMATURGE_JOB_KEY, _run, base_turn=base)
     try:
         schedule_fold(cid, frame_id, window=PLANNER_HISTORY_MESSAGES)
     except Exception as exc:
@@ -1587,16 +2001,61 @@ def deliberate(cid, frame_id, proposals, *, base_turn=None, dial=0,
     drafts; a `revise` goes back to the Dramaturge, whose revision is judged
     in the next round. After `DELIBERATION_ROUNDS` a proposal still pending
     is RETURNED to the player as a disagreement, never forced (v2 § 6.3).
-    Returns a report; every line of the exchange is stored in the thread."""
+    Returns a report; every line of the exchange is stored in the thread.
+    A cancelled ``job`` stops the deliberation where it stands: nothing is
+    judged, said, returned or asked after the cancel (`report["cancelled"]`),
+    because what it would write was weighed against a beat the player may
+    have rerolled (`persist/checkpoints.restore_checkpoint`).
+
+    The proposals are TAKEN first (`room_proposals.take_proposals`): no
+    longer due, and stamped with the beat, so one this deliberation leaves
+    pending -- a failed call, a cancel -- waits its bound again from here
+    rather than being judged twice at once (`run_direction_follow_up`). The
+    questions every round asks are ONE task's, keyed by the proposals it was
+    handed (`_restated`): a later round, a fill or another deliberation does
+    not take them off, and they leave once all those proposals settle.
+
+    WHAT IT READS, IT READS BEFORE IT TAKES ANYTHING (review R3-1,
+    2026-10-08): its proposals were written from the beats through their
+    `filed_turn`, and its Planner reads the world the newest beat left, so
+    ``job``'s read horizon is raised there first (`core.jobs.read_through`)
+    and a restore that discards one of those beats stops it. A job a restore
+    has spared starts nothing it could only build on a beat being played
+    again (`report["spared"]`). A verdict on a proposal that is gone -- a
+    restore rolled it back under a deliberation -- is skipped (review R3-5).
+
+    ONLY WHAT IT LEFT PENDING IS RETURNED (review R4-2, 2026-10-08). A
+    proposal this deliberation accepted, refused, or saw withdrawn, and that
+    is pending again at the end, had that verdict rolled back by a restore
+    that spared the job -- a verdict that acted is not kept across one
+    (`room_proposals.keep_spared`). It is judged again at its bound, as the
+    restore leaves it; returned, the Planner's acceptance was thrown away
+    and the player was asked to settle a disagreement the room never had.
+    """
     from agents import dramaturge
+    from core.jobs import is_cancelled, read_through
     from story import room_conversation as room
+    from story.room_frontier import frame_turn_idx
     from story.room_proposals import (PENDING_STATUSES, get_proposal,
-                                      judge_proposal, settle_proposal)
+                                      judge_proposal, settle_proposal,
+                                      take_proposals)
     turn_idx = room.current_turn_idx(cid) if turn_idx is None else int(turn_idx)
     uids = [p["uid"] for p in proposals if p.get("kind") != "quiet"]
     report = {"rounds": 0, "implemented": [], "refused": [], "withdrawn": [],
               "returned": [], "published": [], "calls": 0}
+    if uids and job is not None:
+        newest = max([frame_turn_idx(cid, frame_id)]
+                     + [int(p.get("filed_turn") or 0) for p in proposals])
+        if read_through(job, newest) < newest:
+            report["spared"] = True
+            return report
+    if uids and not is_cancelled(job):
+        take_proposals(cid, frame_id, uids, turn_idx)
+    asker = {"asker": "deliberate", "proposals": sorted(uids), "asked": []}
+    concluded = set()        # the uids a round of this one judged to an end
     for round_no in range(1, DELIBERATION_ROUNDS + 1):
+        if is_cancelled(job):
+            break
         pending = [get_proposal(cid, frame_id, u) for u in uids]
         pending = [p for p in pending if p and p["status"] in PENDING_STATUSES]
         if not pending:
@@ -1605,9 +2064,12 @@ def deliberate(cid, frame_id, proposals, *, base_turn=None, dial=0,
         task = {"kind": "deliberate", "round": round_no,
                 "rounds": DELIBERATION_ROUNDS, "dial": int(dial),
                 "proposals": [_proposal_brief(p) for p in pending]}
-        out = _run_task(cid, frame_id, task, base_turn=base_turn, job=job)
+        out = _run_task(cid, frame_id, task, base_turn=base_turn, job=job,
+                        asker=asker)
         report["calls"] += out["calls"]
         report["published"].extend(out["published"])
+        if is_cancelled(job):
+            break
         if out["reply"]:
             try:
                 room.add_message(cid, frame_id, "planner", out["reply"],
@@ -1616,6 +2078,8 @@ def deliberate(cid, frame_id, proposals, *, base_turn=None, dial=0,
                 pass
         judged = set()
         for v in out["verdicts"]:
+            if is_cancelled(job):
+                break
             uid = str(v.get("proposal_uid") or v.get("uid") or "")
             if uid not in {p["uid"] for p in pending}:
                 continue
@@ -1630,7 +2094,14 @@ def deliberate(cid, frame_id, proposals, *, base_turn=None, dial=0,
                     turn_idx=turn_idx, package_uid=package_uid)
             except ValueError:
                 continue
+            if row is None:
+                # Gone from the row while the Planner judged it: a restore
+                # rolled it back (review R3-5). Nothing to judge or revise.
+                report.setdefault("vanished", []).append(uid)
+                continue
             judged.add(uid)
+            if row["status"] not in PENDING_STATUSES:
+                concluded.add(uid)
             if row["status"] == "implemented":
                 report["implemented"].append(uid)
             elif row["status"] == "refused":
@@ -1638,8 +2109,8 @@ def deliberate(cid, frame_id, proposals, *, base_turn=None, dial=0,
             elif row["status"] == "revised":
                 revised, note = dramaturge.revise(
                     cid, frame_id, row, row["judgements"][-1], dial=dial,
-                    turn_idx=turn_idx)
-                if note:
+                    turn_idx=turn_idx, job=job)
+                if note and not is_cancelled(job):
                     try:
                         room.add_message(cid, frame_id, "dramaturge", note,
                                          turn_idx=turn_idx)
@@ -1647,13 +2118,21 @@ def deliberate(cid, frame_id, proposals, *, base_turn=None, dial=0,
                         pass
                 if revised and revised["status"] == "withdrawn":
                     report["withdrawn"].append(uid)
+                if revised and revised["status"] not in PENDING_STATUSES:
+                    concluded.add(uid)
         # An accepted proposal with no package yet stays accepted: the
         # Planner said it is natural and is working it; nothing more to
         # deliberate. A pending proposal the Planner did not judge stays
         # pending for the next round.
+    if is_cancelled(job):
+        report["cancelled"] = True
+        return report
     for uid in uids:
         p = get_proposal(cid, frame_id, uid)
         if p and p["status"] in PENDING_STATUSES:
+            if uid in concluded:
+                report.setdefault("rolled_back", []).append(uid)
+                continue
             settle_proposal(cid, frame_id, uid, "returned", turn_idx=turn_idx)
             report["returned"].append(uid)
     if report["returned"]:
@@ -1662,38 +2141,237 @@ def deliberate(cid, frame_id, proposals, *, base_turn=None, dial=0,
                              turn_idx=turn_idx)
         except ValueError:
             pass
-        titles = [get_proposal(cid, frame_id, u)["title"] for u in report["returned"]]
-        current = room.status(cid, frame_id)
-        questions = [q["text"] for q in current.get("questions") or []]
-        questions.append("Settle the returned proposal: %s" % "; ".join(titles))
-        write_status(cid, frame_id, line=current.get("line"), questions=questions,
-                     turn_idx=turn_idx)
+        # THE ENGINE'S OWN ASK, ahead of every model question (review,
+        # 2026-10-08), and ONE of it: the standing returned-proposal ask
+        # names these beside the ones the player has not answered yet, each
+        # once (`ask_returned`, review E). The player settles it in
+        # conversation, and a reply that does not restate it drops it.
+        ask_returned(cid, frame_id, report["returned"], turn_idx=turn_idx)
+    # THE ROW SAYS WHAT IS IN MOTION AFTER THE JUDGEMENT, not before it. The
+    # task wrote it while the proposals still waited on the Planner, so an
+    # accepted, refused or returned proposal stood on the row as open until
+    # some later write; the line is kept only while something is in motion
+    # (`write_status`).
+    write_status(cid, frame_id, turn_idx=turn_idx)
     return report
 
 
+def _player_frame(cid, frame_id):
+    """The frame a Dramaturge pass reads, paces and speaks in: ``frame_id``
+    itself, or -- for a live causality bubble, a frame nobody plays -- its
+    era's. A bubble's beats carry no player line and no narration
+    (`agents/offscreen_beat.py`), so a pass read there reads an empty
+    stream, and the pacing row it would stamp is the era's shared one. The
+    commit tail never queues a pass from a bubble; this is the panel's
+    door, which a viewer reaches by switching to a bubble's frame pill."""
+    if frame_id is None:
+        return None
+    from core.db import era_of_frame
+    from world.spatial_frames import is_bubble_frame
+    try:
+        if is_bubble_frame(cid, frame_id):
+            return era_of_frame(frame_id)
+    except Exception:
+        pass
+    return frame_id
+
+
 def run_dramaturge_pass(cid, frame_id, *, base_turn=None, brief=None, job=None):
-    """One Dramaturge pass and the deliberation it leads to, out of band.
-    Refuses when no grant carries the dial (the Dramaturge proposes nothing
-    until the player has said how much they want to be surprised) or the
-    story rewound under the job. Every line lands in the thread."""
-    from agents import dramaturge
-    from core.jobs import story_rewound_past
+    """One Dramaturge pass, out of band: it suggests, and leaves the
+    judging to the follow-up -- at once when the player asked, and when the
+    story comes near the suggestion otherwise (`run_direction_follow_up`).
+
+    SUGGESTING NEEDS NO GRANT (owner, 2026-10-08: "It was never meant to be
+    surprise only, it was meant to suggest story directions"). The pass
+    runs at the dial a standing grant names, else at
+    `mandates.SURPRISE_DEFAULT`; it is never refused for want of one.
+    ACTING ON A SUGGESTION STILL NEEDS THE PLAYER'S GRANTS: the Planner
+    implements an accepted proposal only through a package, a package the
+    Planner drafted validates and publishes only under mandates covering
+    every operation in it (`plot_packages.authority_errors`, read at both),
+    and a task reads no grants (`run_planner`), so the deliberation cannot
+    license itself. With none, the Planner says what it would need -- the
+    card's "ask for it plainly".
+
+    Refuses when the story rewound under the job or the story hour's spend
+    is gone (`mandates.spend_limits`). A live bubble's pass is its era's
+    (`_player_frame`). The pass is RECORDED before the Dramaturge is
+    called, at the frame's own newest beat (`room_frontier.frame_turn_idx`,
+    never a bubble's row above it), so a pass whose provider failed has had
+    its turn and is asked again at the pacing, not at every commit. Every
+    line lands in the thread.
+
+    THE PLAYER'S ASKS ARE ANSWERED HERE, WHENEVER THEY CAME (review F1,
+    2026-10-08). The Planner keeps the brief it hands on
+    (`room_proposals.ask_brief`) before it queues a pass, and the pacing
+    pass and the asked one share one job key, so an ask made while a pass
+    ran used to join it and go unread. A pass takes every brief waiting at
+    its start (``brief``, when a caller hands one directly, goes first), and
+    when it is done it answers, with one more pass, whatever was asked while
+    it ran -- until nothing waits. One pass answers every ask that waited
+    for it.
+
+    A CANCELLED PASS WRITES NOTHING (review F2, 2026-10-08): a restore that
+    discards the beat it read cancels it (`persist/checkpoints.
+    restore_checkpoint`) and every write below asks `core.jobs.is_cancelled`
+    first. Its one write is to hand back the briefs it took AND HAD NOT YET
+    ANSWERED (review C): they are the conversation's, not the rerolled
+    beat's, but once the Dramaturge's answer is in the thread -- which no
+    restore takes back -- handing the ask back had it answered twice, at the
+    cost of two passes. A REROLL RE-ARMS THE PACING: a cancelled pass that
+    had not answered gives its turn back (`room_proposals.give_back_pass`),
+    and one whose answer was read from the rerolled beat loses it with that
+    answer (`room_proposals.keep_spared`), so the rerolled beat is asked
+    again, as itself (`room_proposals.pass_due`).
+
+    BY WHAT IT READ (review R3-1): every round of the loop reads the beats
+    played since, and the stream raises the job's read horizon before it
+    reads them (`dramaturge.player_visible_stream`), so a restore that
+    discards a beat any round read cancels the pass. A pass the restore
+    spared -- it read only beats the restore keeps -- finishes the round it
+    is in and starts no other (`core.jobs.spared`) -- the next would read the
+    beat being played again -- unless the replayed beat's own commit joins
+    it, which hands it that beat (`core.jobs.submit`).
+
+    A PASS THAT FAILS HANDS BACK THE ASKS IT TOOK AND HAD NOT ANSWERED
+    (review R3-7): they are the conversation's, and the provider's refusal
+    is not an answer. Handed back with the beat it failed at, so the next
+    pass that takes them comes at the pacing -- or, with the passes off, at
+    the default pace -- rather than at every commit, which a dead provider
+    makes expensive (`room_proposals.briefs_due`)."""
+    from core.jobs import is_cancelled, spared, story_rewound_past
     from story import room_conversation as room
-    from story.mandates import spend_limits, surprise_dial
-    from story.room_frontier import record_spend, spend_this_hour
-    from story.room_proposals import record_pass
+    from story.mandates import spend_limits
+    from story.room_frontier import spend_this_hour
+    from story.room_proposals import give_back_pass, hand_back_briefs, take_briefs
     now = room.current_turn_idx(cid)
     if base_turn is not None and story_rewound_past(base_turn, now):
         return {"skipped": "rewound", "base_turn": base_turn, "turn": now}
+    frame_id = _player_frame(cid, frame_id)
+
+    def _spent():
+        spend = spend_limits(cid, frame_id, now)
+        return (spend["calls_per_hour"] is not None
+                and spend_this_hour(cid, frame_id, now) >= spend["calls_per_hour"])
+
+    report, given = None, [brief] if brief else []
+    while not is_cancelled(job) and not spared(job) and not _spent():
+        asks = given + take_briefs(cid, frame_id)
+        given = []
+        if report is not None and not asks:
+            break
+        progress, failed = {}, False
+        try:
+            one = _dramaturge_pass(cid, frame_id, now=now, brief=_joined_briefs(asks),
+                                   asks=asks, base_turn=base_turn, job=job,
+                                   progress=progress)
+        except BaseException:
+            failed = True
+            raise
+        finally:
+            if asks and not progress.get("answered") \
+                    and (failed or is_cancelled(job)):
+                hand_back_briefs(cid, frame_id, asks,
+                                 failed_turn=None if is_cancelled(job) else now)
+            if progress.get("pass") is not None and is_cancelled(job) \
+                    and not progress.get("answered") and not progress.get("landed"):
+                give_back_pass(cid, frame_id, progress["pass"])
+        if report is None:
+            report = one
+        else:
+            report.setdefault("asked_after", []).append(one)
+    if report is None:
+        return {"skipped": "cancelled" if is_cancelled(job)
+                else "spared" if spared(job) else "spend_hour"}
+    if is_cancelled(job):
+        report["cancelled"] = True
+    elif spared(job):
+        report["spared"] = True
+    return report
+
+
+def _joined_briefs(asks):
+    """The asks one pass answers, as the one `player_asks` the Dramaturge
+    reads: oldest first, and within its cap the newest kept whole."""
+    from agents.dramaturge import DRAMATURGE_BRIEF_CHARS
+    asks = [str(a).strip() for a in asks or () if str(a or "").strip()]
+    if not asks:
+        return None
+    text = "\n".join(asks)
+    return text[-DRAMATURGE_BRIEF_CHARS:]
+
+
+def _dramaturge_pass(cid, frame_id, *, now, brief, base_turn, job, progress=None,
+                     asks=()):
+    """One Dramaturge pass in the frame the caller resolved. See
+    `run_dramaturge_pass`. ``progress["answered"]`` is set once the pass's
+    answer lands -- its note in the thread, its proposals on the row -- so
+    a cancel after that point is not handed the ask back (review C);
+    ``progress["pass"]`` names the pass's entry in the row's log, which a
+    cancel before that point gives back (`room_proposals.give_back_pass`).
+    ``asks`` are the player's asks the pass took, which ``brief`` joins.
+
+    RECORDED AT THE NEWEST BEAT SOMETHING HAS ANSWERED
+    (`dramaturge.newest_answered_beat`, review R4-1): the beats a pass reads
+    (`dramaturge.player_visible_stream`), never a line still being answered
+    above them -- recorded there, a pass that read through the beat before
+    stood on the beat in play, and a reroll of it took the pass's turn.
+    LANDED with the newest beat its job had read (`room_proposals.land_pass`),
+    so a restore that discards one of them gives the turn back with the
+    answer (`room_proposals.keep_spared`).
+
+    THE DELIBERATION IS NOT THIS PASS'S (owner, 2026-10-08: "save heavy
+    plans for when the actors near them"). The Planner's judgement is six
+    or more calls; on the pacing it ran in the same job, every six beats,
+    over directions the story might never come near. A PACING pass now
+    files its suggestions and leaves them pending: the follow-up at each
+    commit asks whether the beat brought the story to one, and judges it
+    then -- or once it has waited its bound, so nothing is dropped
+    (`run_direction_follow_up`). A pass THE PLAYER ASKED FOR marks what it
+    filed due at once and queues the follow-up: an answer the player is
+    waiting on is never left to wait on the story."""
+    from agents import dramaturge
+    from core.jobs import is_cancelled, spared
+    from story import room_conversation as room
+    from story.mandates import surprise_dial
+    from story.room_frontier import frame_turn_idx, record_spend
+    from story.room_proposals import (awaits_planner, land_pass, mark_due,
+                                      record_pass)
     dial = surprise_dial(cid, frame_id, now)
-    if dial is None:
-        return {"skipped": "no dial"}
-    spend = spend_limits(cid, frame_id, now)
-    if spend["calls_per_hour"] is not None \
-            and spend_this_hour(cid, frame_id, now) >= spend["calls_per_hour"]:
-        return {"skipped": "spend_hour"}
-    out = dramaturge.propose(cid, frame_id, dial=dial, brief=brief, turn_idx=now)
-    record_pass(cid, frame_id, now)
+    answered = dramaturge.newest_answered_beat(cid, frame_id)
+    entry = record_pass(cid, frame_id, answered if answered is not None
+                        else frame_turn_idx(cid, frame_id))
+    if progress is not None:
+        progress["pass"] = entry["pass"]
+    out = dramaturge.propose(cid, frame_id, dial=dial, brief=brief, turn_idx=now,
+                             job=job, asks=asks)
+    report = {"dial": dial, "proposals": [p["uid"] for p in out["proposals"]],
+              "none_needed": out["none_needed"], "refused": out["refused"],
+              "dramaturge_calls": out["calls"], "deliberation": None}
+    if brief:
+        report["asked"] = brief
+    if is_cancelled(job):
+        report["cancelled"] = True
+        # WHAT IT FILED BEFORE THE CANCEL STANDS OR FALLS BY ITS OWN BEAT
+        # (`room_proposals.keep_spared`): a suggestion from a beat the
+        # restore keeps is the pass's turn, had, and the pass lands with it;
+        # one with nothing standing gives its turn back
+        # (`run_dramaturge_pass`). By the beat the restore took the story
+        # back to (`core.jobs.cancel_from`), so the answer is the same
+        # whether this runs before the restore's transaction or after it.
+        back_to = getattr(job, "cancelled_from", None)
+        stands = [p["filed_turn"] for p in out["proposals"]
+                  if back_to is None or p["filed_turn"] < back_to]
+        if stands:
+            land_pass(cid, frame_id, entry["pass"], max(stands))
+            if progress is not None:
+                progress["landed"] = True
+        return report
+    if progress is not None:
+        progress["answered"] = True
+    read = getattr(job, "read_turn", None)
+    land_pass(cid, frame_id, entry["pass"],
+              read if read is not None else entry["turn"])
     if out["calls"]:
         record_spend(cid, frame_id, turn_idx=now, calls=out["calls"],
                      who="dramaturge")
@@ -1702,15 +2380,280 @@ def run_dramaturge_pass(cid, frame_id, *, base_turn=None, brief=None, job=None):
             room.add_message(cid, frame_id, "dramaturge", out["note"], turn_idx=now)
         except ValueError:
             pass
-    report = {"dial": dial, "proposals": [p["uid"] for p in out["proposals"]],
-              "none_needed": out["none_needed"], "refused": out["refused"],
-              "dramaturge_calls": out["calls"], "deliberation": None}
-    live = [p for p in out["proposals"] if p["kind"] != "quiet"]
-    if live:
-        report["deliberation"] = deliberate(cid, frame_id, live, base_turn=base_turn,
-                                            dial=dial, turn_idx=now, job=job)
-    else:
+    filed = [p["uid"] for p in out["proposals"] if awaits_planner(p)]
+    if brief and filed and not is_cancelled(job):
+        mark_due(cid, frame_id, {uid: "asked" for uid in filed})
+        if spared(job):
+            # A PASS A RESTORE SPARED QUEUES NO FOLLOW-UP (review of
+            # 2026-10-08, round 4): a fresh job carries no read limit and
+            # would read the beat being played again, its old narration
+            # still standing. What it filed waits due as asked, and the
+            # replayed beat's commit -- or the next, when the pass files
+            # after it -- has it judged (`follow_up_wanted`).
+            report["deliberation"] = "due"
+        else:
+            report["deliberation"] = "queued"
+            _queue_follow_up(cid, frame_id, base_turn)
+    elif filed:
+        report["awaiting"] = filed
+    if not is_cancelled(job):
+        # THE ROW SHOWS WHAT THE PASS FILED and keeps the questions the room
+        # is waiting on: written bare, the row lost them -- and a grant
+        # scoped to a question lapses when the question leaves the row
+        # (`mandates.request_open`) -- which, on the pacing, would have been
+        # every sixth beat. The LINE is not kept for its own sake: it says
+        # what is in motion, so it stands while something is and gives way
+        # to "nothing in motion" when nothing is (`write_status`); kept
+        # whole, a deliberation's "building the bill" outlived the package
+        # it described and was read back as the next pass's `status_line`
+        # (review, 2026-10-08).
         write_status(cid, frame_id, turn_idx=now)
+    return report
+
+
+# ---------------------------------------------------------------------------
+# The direction follow-up: the deliberation waits for the story to near it
+# ---------------------------------------------------------------------------
+
+def _queue_follow_up(cid, frame_id, base_turn):
+    """Queue the direction follow-up (`run_direction_follow_up`) under
+    `DIRECTION_JOB_KEY`: one at a time per chat, so two deliberations never
+    judge one proposal at once. One already running takes up whatever is due
+    when it finishes what it holds. Never raises; returns the job."""
+    from core import jobs
+    from persist.llm_capture import room_capture
+
+    def _follow(job):
+        # Armed inside the job: `core/jobs.py` clears turn-scoped contextvars
+        # (`persist/llm_capture.room_capture`).
+        with room_capture(cid, "dramaturge"):
+            return run_direction_follow_up(cid, frame_id, base_turn=base_turn,
+                                           job=job)
+    return jobs.submit(cid, DIRECTION_JOB_KEY, _follow, base_turn=base_turn)
+
+
+def follow_up_wanted(cid, frame_id, turn_idx):
+    """Whether a commit at beat ``turn_idx`` has anything for the follow-up:
+    a proposal already due (a player's ask a running follow-up has not
+    taken), one that has waited its bound, or -- when the decision model
+    can be asked at all -- one no deliberation has taken yet, whose beat
+    this may be. Pure reads; never raises."""
+    try:
+        from story.mandates import beats_per_proposal
+        from story.room_proposals import (direction_wait_beats, pending_proposals,
+                                          waited_beats)
+        pending = pending_proposals(cid, frame_id)
+        if not pending:
+            return False
+        if any(p["due"] for p in pending):
+            return True
+        wait = direction_wait_beats(beats_per_proposal(cid, frame_id, turn_idx))
+        if any(waited_beats(cid, frame_id, p, turn_idx) >= wait for p in pending):
+            return True
+        if any(p["taken_turn"] is None for p in pending):
+            from llm import decisions
+            return bool(decisions.configured())
+    except Exception as exc:
+        logger.info("direction follow-up not weighed for chat %s: %s", cid, exc)
+    return False
+
+
+def _unread_stream(cid, frame_id, beat, job=None):
+    """The beats of this frame the follow-up's decision has not read yet, as
+    the player saw them: every beat after the last one it read (the beats
+    that passed while a deliberation held the job included), at most
+    `dramaturge.DRAMATURGE_BEATS`, through ``job``'s read horizon -- which
+    the read raises (`core.jobs.read_through`). Each suggestion is asked
+    only about those of them played after the beats it was written from
+    (`_mark_due_now`).
+
+    ONLY A NARRATED BEAT IS READ (review R3-6, 2026-10-08). The turn row
+    exists from the moment the player sends their line, so a follow-up that
+    came round while the beat ran read the line alone, marked the beat read,
+    and the narration that answered it was never asked about."""
+    from agents.dramaturge import DRAMATURGE_BEATS, player_visible_stream
+    from core.jobs import story_rewound_past
+    from story.room_proposals import follow_up_turn
+    stream = [b for b in player_visible_stream(cid, frame_id, beats=DRAMATURGE_BEATS,
+                                               job=job)
+              if b["narration"]]
+    last = follow_up_turn(cid, frame_id)
+    if last is None or story_rewound_past(last, beat):
+        return stream
+    return [b for b in stream if b["beat"] > last]
+
+
+def _passage(stream):
+    """The decision model's state: the beats as the player read them, their
+    own line and the narration that answered it."""
+    parts = []
+    for b in stream or ():
+        said = " ".join(str(b.get("player") or "").split())
+        prose = str(b.get("narration") or "").strip()
+        parts.append("\n".join(x for x in (("> " + said) if said else "", prose) if x))
+    return "\n\n".join(p for p in parts if p)
+
+
+def directions_neared(cid, proposals, stream):
+    """``{uid: yes-share}`` -- whether ``stream`` brings the story to what
+    each proposal is about (`jev_questions.direction_neared`, asked of the
+    passage alone, one question per proposal: its title, what it wants true
+    and why now). None when the decision model cannot answer -- unconfigured,
+    refused, unreachable -- so the caller falls back on the bound alone;
+    nothing waits on it."""
+    from language_runtime import story_language
+    from llm import decisions
+    from llm.prompts import jev_question
+    passage = _passage(stream)
+    if not passage or not proposals:
+        return {}
+    try:
+        if not decisions.configured():
+            return None
+        language = story_language(cid)
+    except Exception:
+        return None
+    battery = {}
+    for p in proposals:
+        text = jev_question("direction_neared", language, title=p["title"],
+                            wants_true=p["wants_true"],
+                            why_now=p.get("why_now") or "")
+        if text:
+            battery["near:" + p["uid"]] = {"type": "noul", "instructions": text}
+    if not battery:
+        return {}
+    try:
+        answers = decisions.decide("PASSAGE:\n" + passage, battery)
+    except Exception as exc:  # noqa: BLE001 -- the bound still holds
+        logger.info("direction follow-up: the decision model did not answer "
+                    "for chat %s: %s", cid, exc)
+        return None
+    return {key[len("near:"):]: round(decisions.probability(answers.get(key)), 4)
+            for key in battery}
+
+
+def _mark_due_now(cid, frame_id, beat, report, job):
+    """Read the beats since the last reading and mark what is due: every
+    pending proposal that has waited its bound (`DIRECTION_WAIT_INTERVALS`
+    of the story's pace), and every one no deliberation has taken yet that
+    the decision model reads the unread beats as nearing. A proposal a cut-
+    short deliberation left pending waits its bound again (`taken_turn`).
+    The decision model unavailable, the bound alone decides.
+
+    A SUGGESTION IS ASKED ONLY ABOUT THE BEATS AFTER THE ONES IT WAS WRITTEN
+    FROM (review R3-4, 2026-10-08): those through its `filed_turn`, the
+    newest beat its pass read. Asked of the beats its own `why_now`
+    describes, the answer confirmed itself, and the suggestion was judged a
+    beat after it was filed. Suggestions with the same unread beats share one
+    request. The beats count as read only once every request about them was
+    answered (review R3-6): one the decision model could not answer is asked
+    again with the next."""
+    from core.jobs import is_cancelled
+    from story.mandates import beats_per_proposal
+    from story.room_proposals import (awaits_planner, direction_wait_beats,
+                                      mark_due, proposals, record_follow_up,
+                                      waited_beats)
+    waiting = [p for p in proposals(cid, frame_id)
+               if awaits_planner(p) and not p["due"]]
+    reasons = {}
+    if waiting:
+        wait = direction_wait_beats(beats_per_proposal(cid, frame_id, beat))
+        fresh = []
+        for p in waiting:
+            if waited_beats(cid, frame_id, p, beat) >= wait:
+                reasons[p["uid"]] = "waited"
+            elif p["taken_turn"] is None:
+                fresh.append(p)
+        stream = _unread_stream(cid, frame_id, beat, job) if fresh else []
+        passages = {}
+        for p in fresh:
+            after = tuple(b["beat"] for b in stream if b["beat"] > p["filed_turn"])
+            if after:
+                passages.setdefault(after, []).append(p)
+        answered = bool(passages)
+        for after, asked in passages.items():
+            neared = directions_neared(cid, asked,
+                                       [b for b in stream if b["beat"] in after])
+            if neared is None:
+                answered = False
+                continue
+            report.setdefault("neared", {}).update(neared)
+            for uid, share in neared.items():
+                if share >= DIRECTION_NEAR_FLOOR:
+                    reasons[uid] = "touched"
+        if passages:
+            report["decision"] = "asked" if answered else "unavailable"
+        if answered and not is_cancelled(job):
+            record_follow_up(cid, frame_id, stream[-1]["beat"])
+    if is_cancelled(job):
+        return
+    if reasons:
+        marked = set(mark_due(cid, frame_id, reasons))
+        report.setdefault("due", {}).update(
+            {uid: why for uid, why in reasons.items() if uid in marked})
+
+
+def run_direction_follow_up(cid, frame_id, *, base_turn=None, job=None):
+    """THE LAZY DIRECTION FOLLOW-UP (owner, 2026-10-08: "Can we do lighter
+    weight planning potentially? And save heavy plans for when the actors
+    near them?"). The Dramaturge suggests on its pacing; the Planner's
+    deliberation -- six calls and more -- waits until the story nears what
+    a suggestion is about. Queued at each commit of the player's frame
+    while a suggestion is pending (`follow_up_wanted`), it asks the decision
+    model, of the beats it has not read yet, whether they bring the story
+    to each suggestion not yet deliberated (`directions_neared`), and judges
+    the ones they do. NOTHING IS DROPPED: a suggestion that has waited
+    `DIRECTION_WAIT_INTERVALS` pacing intervals is judged anyway, and so is
+    every one the decision model could not be asked about by then. A
+    player's ask is never lazy: its pass marks what it filed due, and this
+    judges it at once (`_dramaturge_pass`).
+
+    Every deliberation runs here, one at a time, until nothing is due --
+    whatever a commit or a player's ask made due while one ran is taken up
+    when it finishes, and the beats that passed meanwhile are read then.
+    Refuses when the story rewound under the job; stops at the story hour's
+    spend (`mandates.spend_limits`), the due proposals waiting for the next
+    commit. A cancelled job writes nothing more (`core.jobs.is_cancelled`).
+    Returns a report: what was read and found due, and each deliberation's.
+
+    BY WHAT IT READ (review R3-1): each round reads later beats than the one
+    the job was queued from, and raises the job's read horizon before it
+    does (`_unread_stream`, `deliberate`), so a restore that discards any
+    beat a round read cancels it. One the restore spared finishes the
+    deliberation it is in and starts no other (`core.jobs.spared`) unless the
+    replayed beat's own commit joins it, which hands it that beat to read
+    (`core.jobs.submit`); otherwise the next commit's follow-up reads it."""
+    from core.jobs import is_cancelled, spared, story_rewound_past
+    from story import room_conversation as room
+    from story.mandates import spend_limits, surprise_dial
+    from story.room_frontier import frame_turn_idx, spend_this_hour
+    from story.room_proposals import due_proposals
+    now = room.current_turn_idx(cid)
+    if base_turn is not None and story_rewound_past(base_turn, now):
+        return {"skipped": "rewound", "base_turn": base_turn, "turn": now}
+    frame_id = _player_frame(cid, frame_id)
+    report = {"deliberations": []}
+    while not is_cancelled(job) and not spared(job):
+        _mark_due_now(cid, frame_id, frame_turn_idx(cid, frame_id), report, job)
+        due = due_proposals(cid, frame_id)
+        if not due or is_cancelled(job) or spared(job):
+            break
+        # Read here, at the deliberation's door: its verdicts carry this beat,
+        # and a restore keeps a refusal only when it was reached from beats
+        # the restore keeps (`room_proposals.keep_spared`).
+        now = room.current_turn_idx(cid)
+        spend = spend_limits(cid, frame_id, now)
+        if spend["calls_per_hour"] is not None \
+                and spend_this_hour(cid, frame_id, now) >= spend["calls_per_hour"]:
+            report["stopped"] = "spend_hour"
+            break
+        report["deliberations"].append(deliberate(
+            cid, frame_id, due, base_turn=base_turn,
+            dial=surprise_dial(cid, frame_id, now), turn_idx=now, job=job))
+    if is_cancelled(job):
+        report["cancelled"] = True
+    elif spared(job):
+        report["spared"] = True
     return report
 
 
@@ -1823,8 +2766,11 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
     loop in passes (`_run_task`) exactly as before, its task carrying the
     reason under "escalated". Each pass reads the frontier and the open
     needs afresh, and the reply is kept in the thread as the Planner's own
-    line."""
-    from core.jobs import story_rewound_past
+    line.
+    A cancelled ``job`` -- a restore cancels the fill as it cancels a
+    Dramaturge pass (review F2, 2026-10-08) -- writes nothing: no answer for
+    the back-off, no fill record, no line."""
+    from core.jobs import is_cancelled, story_rewound_past
     from story import room_conversation as room
     from story.room_frontier import (fill_signature, frame_turn_idx,
                                      frontier_report, record_fill,
@@ -1905,15 +2851,19 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
                                 actor=PLANNER_ACTOR, base_turn=base_turn,
                                 job=job, turn_idx=now)
         except Exception:
-            _asked(False)
+            if not is_cancelled(job):
+                _asked(False)
             raise
         if sketch["calls"]:
             record_spend(cid, frame_id, turn_idx=now, calls=sketch["calls"],
                          who="sketch")
-        if sketch["stopped"] in ("rewound", "cancelled"):
+        if sketch["stopped"] in ("rewound", "cancelled") or is_cancelled(job):
+            # A CANCEL THAT LANDS AFTER THE SKETCH'S LAST LOOK is the full
+            # loop's case below, met the same way: nothing filed for the
+            # back-off, no fill record, no line.
             return {"tier": "sketch", "published": [], "calls": sketch["calls"],
-                    "steps": sketch["calls"], "stopped": sketch["stopped"],
-                    "passes": 0}
+                    "steps": sketch["calls"],
+                    "stopped": sketch["stopped"] or "cancelled", "passes": 0}
         if not sketch["escalate"]:
             published = sketch["published"]
             _asked(bool(published))
@@ -1945,9 +2895,14 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
         # A fill that failed (the provider refused, the credit ran out) is an
         # empty answer for the back-off: re-asking on the very next commit is
         # what a dead provider makes expensive.
-        _asked(False)
+        if not is_cancelled(job):
+            _asked(False)
         raise
-    if out["stopped"] not in ("rewound", "cancelled"):
+    if is_cancelled(job) or out["stopped"] == "cancelled":
+        return {"published": out["published"], "calls": out["calls"],
+                "steps": out["steps"], "stopped": "cancelled",
+                "passes": out.get("passes", 1)}
+    if out["stopped"] != "rewound":
         _asked(bool(out["published"]))
     if out["published"]:
         record_fill(cid, frame_id, turn_idx=now, package_uid=out["published"][0],
@@ -1989,19 +2944,30 @@ def _say_what_waits_on_a_grant(cid, frame_id, turn_idx, line):
     once written stood until the Planner next wrote the row, whatever had
     become true since. Written only when the row changes. Never raises: the
     row is what the room SAYS, and the commit tail settles it before it
-    queues the fill, which a failed read here must not cost."""
+    queues the fill, which a failed read here must not cost.
+
+    THE LINE IS THE ENGINE'S ASK (`ask_question`'s terms, the Dramaturge
+    lane's review E): it stands as ``source`` "engine", so the row's own
+    sort keeps it ahead of the Room's questions and a reply that restates it
+    leaves it the engine's to withdraw. A copy under any other source is
+    taken off with it -- these words are the engine's alone, and a row
+    written before the asks carried a source holds them as a plain
+    question."""
+    from core.db import transaction
     from story import room_conversation as room
     try:
-        current = room.status(cid, frame_id)
-        texts = [qn["text"] for qn in current.get("questions") or []]
-        kept = [line] if line else []
-        for text in texts:
-            if text in GRANT_WAITING_LINES:
-                continue            # said first above, or no longer true
-            kept.append(text)
-        if [row["text"] for row in _question_rows(kept)] != texts:
-            write_status(cid, frame_id, line=current.get("line"),
-                         questions=kept, turn_idx=turn_idx)
+        with transaction():
+            current = room.status(cid, frame_id)
+            standing = current.get("questions") or []
+            kept = [q for q in standing
+                    if q["text"] not in GRANT_WAITING_LINES
+                    or (q["text"] == line and q["source"] == "engine")]
+            if line and not any(q["text"] == line for q in kept):
+                kept.insert(0, {"text": line, "source": "engine"})
+            if [(row["text"], row["source"]) for row in _question_rows(kept)] \
+                    != [(q["text"], q["source"]) for q in standing]:
+                write_status(cid, frame_id, line=current.get("line"),
+                             questions=kept, turn_idx=turn_idx)
     except Exception as exc:
         logger.info("room status not settled for chat %s: %s", cid, exc)
 
@@ -2013,21 +2979,26 @@ def schedule_room_work(ctx):
     answer has changed since a fill last answered it or the back-off has run
     (`room_frontier.fill_due`) -- the fill itself picks its tier, a sketch
     for planting ahead and the full loop for the rest (`run_fill`); a
-    Dramaturge pass when a grant carries the dial and the pacing budget
-    says the story is due a turn; a bible fold when a batch of thread lines
-    has aged past the window. With no grant the status row asks. Never
-    raises; returns the first job queued, or None."""
+    Dramaturge pass whenever the frame has played `beats_per_proposal` of
+    its own beats since the last one (`room_proposals.pass_due`; a pacing of
+    0 is off) or a player's ask is waiting, while the hour's spend is open --
+    no grant needed to suggest, never from a live bubble; the direction
+    follow-up while a suggestion is pending (`follow_up_wanted`), which
+    judges the ones the story has come near; a bible fold when a batch of
+    thread lines has aged past the window. With no fill grant the engine
+    asks for one on the status row, naming what waits on it, ahead of every
+    model question, and withdraws the ask once a grant arrives or nothing is
+    wanted (`_say_what_waits_on_a_grant`). Never raises; returns the first
+    job queued, or None."""
     from core import jobs
     from persist.llm_capture import room_capture
-    from story import room_conversation as room
     from story.mandates import (beats_per_proposal, fill_limit,
-                                fill_limit_stated, spend_limits,
-                                surprise_dial)
+                                fill_limit_stated, spend_limits)
     from story.room_bible import schedule_fold
     from story.room_frontier import (fill_due, fill_signature, fills_this_hour,
                                      frontier_report, record_measure,
                                      spend_this_hour)
-    from story.room_proposals import last_pass_turn
+    from story.room_proposals import briefs_due, pass_due
     from world.spatial_frames import is_bubble_frame
     cid = ctx.chat.id
     frame_id = getattr(ctx.turn, "frame_id", None)
@@ -2037,7 +3008,8 @@ def schedule_room_work(ctx):
     # room", filed that measure over the era's shared row, and asked the
     # era's open needs under a second signature with a back-off of its own
     # (review, 2026-10-08). The player frame's next commit reads the same
-    # needs and grants. The Dramaturge pass and the fold are unchanged.
+    # needs and grants. Nor does it queue a Dramaturge pass (below); the
+    # fold is unchanged.
     try:
         bubble = bool(frame_id) and is_bubble_frame(cid, frame_id)
     except Exception:
@@ -2053,8 +3025,11 @@ def schedule_room_work(ctx):
     wanted = not bubble and _fill_wanted(report)
     limit = fill_limit(cid, frame_id, turn_idx) if wanted else None
     if not bubble:
-        # WITH NO FILL GRANT THE STATUS ROW ASKS FOR ONE, naming what waits
-        # on it: an open need, or the frontier the room would plant.
+        # THE ENGINE'S OWN ASK FOR A FILL GRANT, read again at every commit
+        # of the player's frame: the line true now -- an open need, or the
+        # frontier the room would plant -- asked ahead of every model
+        # question so a full row cannot cut it, and withdrawn once a grant
+        # arrives or nothing is wanted (`_say_what_waits_on_a_grant`).
         _say_what_waits_on_a_grant(
             cid, frame_id, turn_idx,
             None if not wanted or limit is not None
@@ -2097,17 +3072,39 @@ def schedule_room_work(ctx):
                 queued.append(jobs.submit(cid, FILL_JOB_KEY, _fill,
                                           base_turn=turn_idx))
 
-    dial = surprise_dial(cid, frame_id, turn_idx)
-    if dial is not None and hour_open and turn_idx is not None:
-        beats = beats_per_proposal(cid, frame_id, turn_idx)
-        last = last_pass_turn(cid, frame_id)
-        if last is None or int(turn_idx) - last >= int(beats):
+    # THE DRAMATURGE'S TURN COMES ON PACING ALONE (owner, 2026-10-08): every
+    # `beats_per_proposal` beats of this frame's own play, with no grant --
+    # the dial a grant names only tunes how inventive it is -- and under the
+    # same spend stop as the fill. Never from a live bubble's commit: its
+    # stream is empty (no player line, no narration) and the pacing row it
+    # would stamp is the era's (review, 2026-10-08). A pacing of 0 is off
+    # (`room_proposals.pass_due`). AN ASK STILL WAITING IS DUE AT ONCE,
+    # pacing or none: the pass it joined was cancelled before it answered
+    # (`planner_reply`, review F1) -- unless a pass took it and its provider
+    # failed, when it waits a pacing interval (`briefs_due`, review R3-7).
+    if not bubble and hour_open and turn_idx is not None:
+        pace = beats_per_proposal(cid, frame_id, turn_idx)
+        due, _why = pass_due(cid, frame_id, turn_idx, pace)
+        if not due and briefs_due(cid, frame_id, turn_idx, pace):
+            due = True
+        if due:
             def _pass(job):
                 with room_capture(cid, "dramaturge"):
                     return run_dramaturge_pass(cid, frame_id,
                                                base_turn=turn_idx, job=job)
             queued.append(jobs.submit(cid, DRAMATURGE_JOB_KEY, _pass,
                                       base_turn=turn_idx))
+
+    # THE DIRECTION FOLLOW-UP, at every commit of the player's frame while a
+    # suggestion is pending (owner, 2026-10-08: "save heavy plans for when
+    # the actors near them"): one decision-model question per suggestion
+    # against the beat, and the deliberation for the ones it nears, or that
+    # have waited their bound (`run_direction_follow_up`). Out of band like
+    # the pass, so the beat never waits on the question; under the same
+    # spend stop; never from a live bubble's commit, whose stream is empty.
+    if not bubble and hour_open and turn_idx is not None \
+            and follow_up_wanted(cid, frame_id, turn_idx):
+        queued.append(_queue_follow_up(cid, frame_id, turn_idx))
 
     fold = schedule_fold(cid, frame_id, window=PLANNER_HISTORY_MESSAGES,
                          base_turn=turn_idx)

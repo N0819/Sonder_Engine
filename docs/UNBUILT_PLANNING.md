@@ -104,25 +104,118 @@ compiler's half) and § 2.33 (the plan tier's half).
 Phase C, first half):** the Dramaturge is seated (`agents/dramaturge.py`,
 role `dramaturge`): pure planning over the player-visible stream with lore
 search and lookup as its one tool, proposing typed direction
-(`story/room_proposals.py`) under the creativity dial (`surprise` 0..4, a
-mandate limit; unset, it proposes nothing) and a pacing budget
-(`beats_per_proposal`, default 6). The deliberation loop
-(`agents/story_planner.deliberate`, `DELIBERATION_ROUNDS` = 2) has the
-Planner judge each proposal for naturalness -- accept and implement through
-a package, refuse with the contradiction named, or send back for revision
--- and returns a disagreement to the player after the rounds. The bounds
-rework landed with it: steps and calls per reply are safety ceilings (40,
-200), the wall splits by regime (600s interactive with the status row
-rewritten every step; 600s per pass in the background, resuming under the
-same mandate up to `TASK_PASSES_CAP` = 12 passes), and SPEND is the stop
-(`calls_per_reply` default 60 / ceiling 200, `calls_per_hour` default 240 /
-ceiling 1200, mandate limits the Planner cites). Left from this half: no
-proposal card (the exchange is thread lines and the status row's
-`proposal` entries); the Dramaturge's and the fold's judgement are
-unmeasured on a live model; a verdict the Planner does not name a
-`proposal_uid` for leaves the proposal pending into the next round; the
-local drama, nudge and region-event operations and firing clocks are the
-other half (fork C2).
+(`story/room_proposals.py`) in every story on a pacing
+(`beats_per_proposal`, default 6, the frame's own beats; 0 is off; owner
+ruling and review 2026-10-08), at a creativity dial a grant may name
+(`surprise` 0..4, default 2), its suggestions judged lazily: when a beat
+played after the suggestion brings the story near it, after a bounded wait
+otherwise, and at once when the player asked
+(`story_planner.run_direction_follow_up`, owner 2026-10-08). The
+deliberation loop (`agents/story_planner.deliberate`, `DELIBERATION_ROUNDS`
+= 2) has the Planner judge each proposal for naturalness -- accept and
+implement through a package, refuse with the contradiction named, or send
+back for revision -- and returns a disagreement to the player after the
+rounds. The bounds rework landed with it: steps and calls per reply are
+safety ceilings (40, 200), the wall splits by regime (600s interactive with
+the status row rewritten every step; 600s per pass in the background,
+resuming under the same mandate up to `TASK_PASSES_CAP` = 12 passes), and
+SPEND is the stop (`calls_per_reply` default 60 / ceiling 200,
+`calls_per_hour` default 240 / ceiling 1200, mandate limits the Planner
+cites). Left from this half: no proposal card (the exchange is thread lines
+and the status row's `proposal` entries); the Dramaturge was measured on one
+live pass (2026-10-08, below); the Planner's deliberation verdict, the fold
+and the follow-up's decision question are unmeasured; a verdict the Planner
+does not name a `proposal_uid` for leaves the proposal pending into the next
+round; the local drama, nudge and region-event operations and firing clocks
+are the other half (fork C2).
+
+**The Dramaturge on pacing, judged lazily (2026-10-08).** What the live pass
+and the four reviews of that day left:
+
+- **From the live pass** (copy of chat 166, beat 30): (a) ONE PASS, TWO
+  PROPOSALS FOR ONE DIRECTION -- the coat's pockets were filed as a
+  `pressure` beside a lore search, then rewritten as a `revelation`, and
+  kind-and-title identity does not catch it; the Dramaturge card now states
+  the class, no code holds it, and it is unmeasured since. (b) The
+  Dramaturge's note named the direction ("it just needs a hand in a pocket")
+  although its card asks for a spoiler-safe line; whether suggestions are
+  shown openly is the owner's call. (c) The revelation scripted two live
+  minds: the known class, left for the Planner to send back. (d) THE
+  DELIBERATION READS LONG: six DeepSeek steps without a verdict, and no
+  deliberation budget below the 40-step safety ceiling. (e) `scale` is cut
+  at 60 characters; both live sentences were cut mid-word.
+- **Fixed with tests, from the reviews:** the ask lost to a pass in flight;
+  a reroll neither cancelling nor fencing a pass or fill, then cancelling
+  jobs that read no discarded beat, then -- deciding by the queued beat --
+  leaving a looping follow-up or pass running after a reroll of a beat it
+  read; a spared pass's suggestions and a spared refusal rolled back by the
+  next beat's reroll; an answered ask handed back; a failed pass dropping
+  the player's ask; stranded no-grant drafts, and then a reply's draft
+  retired by a task; background questions crowding out the engine's asks,
+  then one task's questions wiped by another's, then returned asks piling
+  up; a submit joining a cancelled job; the prelude's question standing into
+  the story; stale status lines, and "nothing in motion" beside a
+  suggestion; `player_asks` misread as the player's words; 0 meaning every
+  beat; a grant that permits nothing lifting the spend caps; a suggestion
+  asked about the beats it was written from; beats marked read unnarrated or
+  unanswered; a verdict on a rolled-back proposal failing the job. And from
+  round 4 (`tests/test_a_reroll_gives_the_room_back_its_turn.py`): a pass
+  that read only a line still in play losing its suggestion and its pacing
+  to that beat's reroll; a pass whose answer was read from a rerolled beat,
+  or that the reroll cancelled, keeping a turn it never had (R4-1); an asked
+  pass's answer dropped with the ask gone for good; a standing suggestion's
+  ask answered twice; a fresh re-ask folded behind a failed copy; a spared
+  deliberation returning as a disagreement what it had accepted (R4-2); a
+  follow-up keeping a reading whose conclusion rolled back; a spared asked
+  pass's fresh follow-up reading the discarded beat.
+- **Left:** (f) A pass asked from a bubble's panel speaks in the era's
+  thread while the panel watches the bubble's (F6). (g) Cancellation is
+  cooperative: a tool call already running when a restore starts can land
+  after it. A Planner task's own steps re-read the world as later beats
+  commit, and the read horizon is not raised per Planner step, so a restore
+  of such a beat leaves a deliberation or fill that read only earlier beats
+  running; its writes are validated against the restored world at landing.
+  Raising it per step would cancel only the deliberations whose steps read a
+  beat the player then rerolls -- the choice between cancelling and
+  re-judging those, and landing a verdict or package built on a discarded
+  beat's world, is the owner's. A pass submitted from the panel while a
+  rerolled beat is being replayed -- or joined by such an ask, which hands a
+  spared job the beat -- reads that beat in flight. (h) Interactive replies
+  are not covered by the stranded-draft floor. (i) Each reroll of a pacing
+  beat, and since round 4 each reroll of a beat a pass's answer was read
+  from, costs one more pass: the ruling, and an owner question. (j) Off wins
+  over any other grant's pace, so 'start again' needs the off grant revoked:
+  owner question. Likewise a spend number on a grant that permits nothing is
+  a ceiling, the lowest winning: a later 'spend up to 500' does not raise an
+  earlier 'no more than 30'. (k) No host setting switches Room work off for
+  drives and benches. (l) In a story with no grants every accepted proposal
+  is accepted-without-package and is never re-tasked after a later grant;
+  its draft is retired, so the Planner redrafts. (m) The follow-up's
+  question (`jev_questions.direction_neared`) is unprobed in both packs; its
+  floor (0.5) and bound (`DIRECTION_WAIT_INTERVALS` = 2) are the owner's to
+  rule on. With no decision model every suggestion is still judged, at its
+  bound: the saving is timing and batching, not fewer judgements. (n) The
+  Planner's deliberation task does not say why a suggestion is judged now
+  (neared, waited or asked). (o) `keep_spared` decides a verdict's lineage
+  by the deliberation's chat-wide beat; a reroll of a live bubble's beat
+  that spares a deliberation in the player's frame resets a proposal filed
+  after that snapshot to as-filed, and it is judged again. (p) A verdict
+  that acted -- a package, a grant ask, a return -- and landed after the
+  next beat's snapshot rolls back with that beat's reroll and is judged
+  again at its bound, its thread line standing. (q) `keep_spared`'s refusal
+  carry restores the status and judgements but not a round-1 revision's
+  restated `wants_true`, `why_now` or revision count. (r) `deliberate`
+  raises its horizon to the frame's newest row, the beat in play included --
+  deliberately, since its Planner reads the world, which that beat may
+  commit under it -- so a reroll of a beat still in play cancels a
+  deliberation that read only the beat before. (s) A spared asked pass that
+  files after the replayed beat's commit has its answer judged a beat later,
+  at the next commit. (t) The pass log keeps `PASS_LOG_CAP` = 8 passes, so a
+  restore that gives back more passes than that counts the pacing from the
+  frame's opening. (u) A suggestion answers an ask by its words, as an ask
+  waits by its words (`ask_brief`): the same words asked again while a
+  suggestion answering them still waits on the Planner are that suggestion's
+  to answer.
 
 **Phase B, the panel (2026-09-04, `design/DESIGN_WRITERS_ROOM_PLAN.md` § 6
 items 5 and 6):** the popout panel is built in both shapes -- docked right

@@ -672,8 +672,12 @@ def _commit_all_locked(ctx, nonce):
     # The Writers' Room's own out-of-band work (agents/story_planner.py):
     # measure the prepared frontier and, when a need is open or the frontier
     # is short AND the player has granted identity fills, queue one bounded
-    # Planner job under the hour's budget. Never inside the turn's clock;
-    # with no grant the status row asks and nothing runs.
+    # Planner job under the hour's budget; with no such grant the status row
+    # asks and no fill runs. And on its pacing, grant or none, a Dramaturge
+    # pass that suggests where the story could go, and -- while a suggestion
+    # waits -- the follow-up that asks whether this beat brought the story
+    # near it and has the Planner judge the ones it did. Never inside the
+    # turn's clock.
     try:
         from agents.story_planner import schedule_room_work
         job = schedule_room_work(ctx)

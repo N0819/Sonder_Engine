@@ -556,6 +556,30 @@ def restore_checkpoint(chat_id, idx):
         cancel_discarded_predevelopment(chat_id, idx)
     except Exception:
         pass
+    # The Writers' Room's beat-reading jobs joined the list with the review
+    # of 2026-10-08, on consolidation's argument. A Dramaturge pass reads the
+    # beat's narration and files proposals built on it; a fill answers the
+    # frontier the beat left; the direction follow-up asks whether the beat
+    # brought the story to a suggestion and deliberates the ones it did; all
+    # three write world rows this restore rolls back. A same-beat reroll does
+    # not move the turn index, so `story_rewound_past` cannot see it, and a
+    # pass still running filed the DISCARDED beat's direction into the
+    # rerolled timeline -- a package, under a total grant. Cancelled, none
+    # writes again (`core.jobs.is_cancelled`, asked before every write).
+    # ONLY THE JOBS THAT READ A DISCARDED BEAT (`core.jobs.cancel_from`,
+    # review 2026-10-08): restoring checkpoint N takes the story back to
+    # before beat N, so a job queued at beat N-1 read nothing it throws away
+    # -- cancelling it killed beat 6's deliberation when the player rerolled
+    # beat 7, and nothing asked it again. THE PACING IS RE-ARMED, NOT KEPT:
+    # the pass's record rolls back with `room_proposals`, so a rerolled pacing
+    # beat is asked again -- an owner question, 2026-10-08.
+    try:
+        from core import jobs
+        from agents.story_planner import ROOM_JOB_KEYS
+        for key in ROOM_JOB_KEYS:
+            jobs.cancel_from(chat_id, key, idx)
+    except Exception:
+        pass
     # Checkpoint blobs store fully-resolved storage keys already (see
     # snapshot_state, which dumps the `world` table's own key column
     # verbatim, suffix and all). Restoring them through wget/wset while
@@ -906,6 +930,66 @@ def _preserved_settings(chat_id):
     return preserved
 
 
+def _held_room_briefs(chat_id):
+    """The Writers' Room's waiting briefs, by stored key, before a restore
+    (`story.room_proposals.held_briefs`). A read that fails holds nothing:
+    a restore is never refused for an ask."""
+    try:
+        from story.room_proposals import held_briefs
+        return held_briefs(chat_id)
+    except Exception as exc:
+        logger.warning("checkpoints: chat %s room briefs unreadable (%s); a "
+                       "restore will roll them back", chat_id, exc)
+        return None
+
+
+def _keep_room_briefs(chat_id, held):
+    """Put the waiting briefs back as they stood before the restore
+    (`story.room_proposals.keep_briefs`), inside its transaction. Never
+    raises: an ask the room loses is a line the player can say again, and a
+    failed restore is a story stuck on the beat it was rerolling."""
+    if held is None:
+        return
+    try:
+        from story.room_proposals import keep_briefs
+        keep_briefs(chat_id, held)
+    except Exception as exc:
+        logger.warning("checkpoints: chat %s room briefs not kept across the "
+                       "restore (%s)", chat_id, exc)
+
+
+def _held_room_rows(chat_id):
+    """The Writers' Room's proposal rows, by stored key, before a restore
+    (`story.room_proposals.held_rows`). A read that fails holds nothing."""
+    try:
+        from story.room_proposals import held_rows
+        return held_rows(chat_id)
+    except Exception as exc:
+        logger.warning("checkpoints: chat %s room proposals unreadable (%s); "
+                       "a restore will roll them back", chat_id, exc)
+        return None
+
+
+def _keep_spared_room_work(chat_id, held, turn_idx):
+    """Put back what the Room wrote after the snapshot from beats the restore
+    keeps (`story.room_proposals.keep_spared`, review R3-2, 2026-10-08): a
+    pass queued at the beat before is still writing when the next beat's
+    snapshot is taken, and the restore spares it (`core.jobs.cancel_from`)
+    -- its suggestions must not roll back with a beat it never read. The
+    status row of each era it changed is rewritten, so what is in motion
+    says so. Never raises: a restore is never refused for the Room."""
+    if held is None:
+        return
+    try:
+        from agents.story_planner import write_status
+        from story.room_proposals import keep_spared
+        for frame_id in keep_spared(chat_id, held, turn_idx):
+            write_status(chat_id, frame_id)
+    except Exception as exc:
+        logger.warning("checkpoints: chat %s room work not kept across the "
+                       "restore (%s)", chat_id, exc)
+
+
 def _discard_orphaned_mint(chat_id, char_id):
     """Take a promotion's LIBRARY row back with its cast link.
 
@@ -960,7 +1044,19 @@ def _restore_checkpoint_body(chat_id, r):
     # Read before the wipe, written after it: the reader's settings are not
     # part of the beat being rolled back.
     preserved = _preserved_settings(chat_id)
+    # Nor are the player's asks the Writers' Room has not answered yet: they
+    # are the conversation's, and the conversation is not in the checkpoint
+    # (`story/room_conversation.py`). Kept on the `room_proposals` row until
+    # a Dramaturge pass takes them, they rolled back with it -- so an ask
+    # made while a pass ran, then a reroll of that beat, lost the ask the
+    # cancelled pass was going to answer (review F1/F2, 2026-10-08). Both
+    # reads are inside the transaction, under the write lock, so no Room
+    # write lands between them and the wipe; nor does the work a job the
+    # restore spared wrote after the snapshot roll back with the beat it never
+    # read (`_keep_spared_room_work`, review R3-2).
     with transaction():
+        briefs = _held_room_briefs(chat_id)
+        room_rows = _held_room_rows(chat_id)
         qi("DELETE FROM world WHERE chat_id=?", (chat_id,))
         for k, v in (b.get("world") or {}).items():
             wset(chat_id, k, v)
@@ -1013,6 +1109,9 @@ def _restore_checkpoint_body(chat_id, r):
         # frame_id stamps must land on existing frames).
         if "frames" in b:
             _restore_frames(chat_id, b.get("frames") or [])
+        # After the frames: an era this restore took away takes its asks.
+        _keep_room_briefs(chat_id, briefs)
+        _keep_spared_room_work(chat_id, room_rows, r["turn_idx"])
         qi("DELETE FROM chat_char_frames WHERE chat_id=?", (chat_id,))
         for cf in b.get("char_frames") or []:
             qi("""INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state)

@@ -4,15 +4,16 @@ PURE PLANNING (owner, 2026-09-03; plan § 5 Phase C). Its input is the
 PLAYER-VISIBLE STREAM -- the player's inputs and the narration outputs of
 recent beats, spoiler-safe by construction and cheap -- plus its own
 standing proposals, the story bible, the genre as the scenario and the
-bible's `voice` state it, and the CREATIVITY DIAL the player set in words
-(`mandates.surprise_dial`: 0 holds to the target the player stated, 4 is
-wildly inventive). It thinks: what would be a good progression of this
-story, from what I know of fiction, the chosen genre, and how far I am
-licensed to surprise? It proposes DIRECTION -- pressure, reversal,
-revelation, arrival, opportunity, or that nothing is needed -- as typed
-proposals (`story/room_proposals.py`): what it wants to be true, why now,
-what it must not contradict. Never a package, never a scene list (v2
-§ 4.2), never a conclusion for a live mind (v2 § 4.3).
+bible's `voice` state it, and the CREATIVITY DIAL (`mandates.surprise_dial`:
+0 holds to the target the player stated, 4 is wildly inventive; the number
+the player set in words when a grant names one, `SURPRISE_DEFAULT` until
+then). It thinks: what would be a good progression of this story, from
+what I know of fiction, the chosen genre, and how far I am licensed to
+surprise? It proposes DIRECTION -- pressure, reversal, revelation,
+arrival, opportunity, or that nothing is needed -- as typed proposals
+(`story/room_proposals.py`): what it wants to be true, why now, what it
+must not contradict. Never a package, never a scene list (v2 § 4.2),
+never a conclusion for a live mind (v2 § 4.3).
 
 ONE TOOL, AND IT READS. Lore search and lookup, bounded per pass, because
 the setting bible is the one thing it cannot propose without -- a heresy
@@ -21,11 +22,32 @@ bodies, events, packages' truths) and never writes it; the Story Planner
 fetches everything else it asks for and cites it back
 (`agents/story_planner.deliberate`).
 
-WHEN IT RUNS. Out of band after a beat commits, when a grant carries the
-dial and the pacing budget says the story is due a turn
-(`story_planner.schedule_room_work`); and when the player addresses it in
-the panel, through the Planner. A story begins with no dial set, and it
-proposes nothing.
+WHEN IT RUNS. IN EVERY STORY, ON PACING ALONE (owner, 2026-10-08: "It was
+never meant to be surprise only, it was meant to suggest story
+directions"). Out of band after a beat commits, once the frame has played
+`mandates.beats_per_proposal` beats of its own since the last pass -- or,
+before the first, since its opening (`room_proposals.pass_due`) -- while
+the story hour's spend is open (`story_planner.schedule_room_work`); never
+from a live causality bubble's commit, whose stream is empty; and when the
+player asks the Planner for direction in the panel, at once -- the ask
+waits on the room's row until a pass takes it (`room_proposals.ask_brief`),
+so one made while a pass runs is answered when that pass is done. It needs
+no grant: the dial a grant names only tunes how inventive it is, and a
+grant naming a pacing of 0 stops its own passes while the player's ask
+still runs. Until 2026-10-08 it ran only under a grant whose limits carried
+a numeric `surprise`, which no grant in the owner's database ever did, so it
+had never run. ITS SUGGESTIONS ARE JUDGED LAZILY (owner, 2026-10-08: "save
+heavy plans for when the actors near them"): the Planner's deliberation runs
+when a beat brings the story near one, or once it has waited its bound, and
+at once for what the player asked (`story_planner.run_direction_follow_up`).
+
+SUGGESTING IS NOT ACTING. Nothing it proposes reaches the world except as
+a package the Planner drafts for it, and a package the Planner drafted
+publishes only under mandates covering every operation in it
+(`plot_packages.authority_errors`). A story with no grants still gets the
+suggestions -- as the Dramaturge's line and the Planner's judgement in the
+thread, and the pending proposals' kinds and titles on the status row --
+and the Planner asks for whatever acting on one would need.
 """
 
 from __future__ import annotations
@@ -34,6 +56,7 @@ import time
 
 from core.db import data_version
 from core.logging_utils import logger
+from story.room_proposals import BRIEF_CHARS
 
 #: The model role (`providers.ROLES`). Its own row: the owner may want a
 #: more inventive model here than the Planner's coding-agent temperament.
@@ -55,6 +78,11 @@ DRAMATURGE_MAX_TOKENS = 40_000
 DRAMATURGE_WALL_SECONDS = 120.0
 #: Proposals one pass may file.
 DRAMATURGE_PROPOSALS_PER_PASS = 3
+#: The Planner's brief the payload carries as `player_asks` -- what one
+#: waiting brief may hold (`room_proposals.BRIEF_CHARS`, one number), and
+#: what one pass reads when several asks waited for it
+#: (`story_planner._joined_briefs` keeps the newest whole).
+DRAMATURGE_BRIEF_CHARS = BRIEF_CHARS
 #: The one tool, both spellings of it.
 LORE_TOOLS = ("search_lore", "read_lore")
 
@@ -97,23 +125,76 @@ def _call(system, payload, *, max_tokens=None):
 # What it is shown
 # ---------------------------------------------------------------------------
 
-def player_visible_stream(cid, frame_id=None, beats=DRAMATURGE_BEATS):
+#: Rows a reader looks past for the newest beat something has answered: the
+#: beat in play is one, and a second covers a line sent while the first was
+#: still being answered.
+IN_PLAY_ROWS = 2
+
+
+def _frame_turns(cid, frame_id, limit):
+    """The frame's newest turn rows, newest first."""
+    from core.db import q
+    if frame_id is None:
+        return list(q("SELECT id, idx, player_input FROM turns WHERE chat_id=? "
+                      "AND frame_id IS NULL ORDER BY idx DESC LIMIT ?",
+                      (int(cid), int(limit))))
+    return list(q("SELECT id, idx, player_input FROM turns WHERE chat_id=? "
+                  "AND frame_id=? ORDER BY idx DESC LIMIT ?",
+                  (int(cid), int(frame_id), int(limit))))
+
+
+def _answered(turns):
+    """``turns`` (newest first) less the newest ones still IN PLAY: the
+    player's line is sent and the turn row stands, but no narration has
+    answered it yet (no active `narrator` step -- a hand-edited one of any
+    shape still counts). Only the newest rows can be in play; one with no
+    narration further down is a beat that ended without it, and is kept."""
+    from persist.steps import active_content
+    turns = list(turns)
+    while turns and active_content(turns[0]["id"], "narrator") is None:
+        turns = turns[1:]
+    return turns
+
+
+def newest_answered_beat(cid, frame_id=None):
+    """The newest beat of the frame that something has answered -- the beat
+    in play above it left out (`player_visible_stream`) -- or None when it
+    has none. A pass is recorded at it (`story_planner._dramaturge_pass`):
+    the pacing counts from the beats a pass reads, not from a line still
+    being answered."""
+    turns = _answered(_frame_turns(cid, frame_id, IN_PLAY_ROWS + 1))
+    return int(turns[0]["idx"]) if turns else None
+
+
+def player_visible_stream(cid, frame_id=None, beats=DRAMATURGE_BEATS, *, job=None):
     """The last ``beats`` beats as the player saw them: their input and the
     narration that answered it (the active `narrator` variant's prose).
     Spoiler-safe by construction: nothing here was hidden from the player.
-    Oldest first."""
-    from core.db import q
+    Oldest first.
+
+    A BEAT IN PLAY IS NOT READ (review R4-1, 2026-10-08): a line the player
+    has sent and nothing has answered yet (`_answered`) is left out, line
+    and place in the read horizon alike. Read, it carried the horizon of a
+    pass that came round while the next beat ran onto that beat, so a
+    reroll of it -- which keeps the line -- took everything the pass wrote:
+    its suggestions dropped, its pacing spent, a player's ask answered and
+    gone.
+
+    A ``job`` reading it has its read horizon raised to the newest beat it
+    returns (`core.jobs.read_through`, review R3-1), so a restore that
+    discards a beat the job has read stops the job -- and a job a restore
+    spared reads none of the beats being played again: the horizon is
+    raised before any narration is returned, and nothing past the limit a
+    restore set is."""
+    from core.jobs import read_through
     from persist.steps import active_content
-    if frame_id is None:
-        turns = q("SELECT id, idx, player_input FROM turns WHERE chat_id=? "
-                  "AND frame_id IS NULL ORDER BY idx DESC LIMIT ?",
-                  (int(cid), int(beats)))
-    else:
-        turns = q("SELECT id, idx, player_input FROM turns WHERE chat_id=? "
-                  "AND frame_id=? ORDER BY idx DESC LIMIT ?",
-                  (int(cid), int(frame_id), int(beats)))
+    turns = _answered(_frame_turns(cid, frame_id, int(beats) + IN_PLAY_ROWS))
+    turns = turns[:int(beats)]
+    if turns and job is not None:
+        through = read_through(job, max(int(t["idx"]) for t in turns))
+        turns = [t for t in turns if int(t["idx"]) <= through]
     out = []
-    for t in reversed(list(turns)):
+    for t in reversed(turns):
         prose = ""
         # One reader of a step's active content (`persist/steps.py`); the
         # copy that used to stand here answered `.get("prose")` on whatever
@@ -137,7 +218,7 @@ def system_block(cid, frame_id=None):
 
 
 def _payload(cid, frame_id, *, dial, brief, transcript, step, lore_left,
-             seconds_left, turn_idx, memo=None):
+             seconds_left, turn_idx, memo=None, job=None):
     """The step's payload. Everything but the dial, the transcript and the
     budget is derived from the database, and a pass reads far more often
     than it writes, so ``memo`` (`room_calls.ReplyMemo`) holds that half
@@ -178,7 +259,7 @@ def _payload(cid, frame_id, *, dial, brief, transcript, step, lore_left,
             memo, "pacing_beats",
             lambda: beats_per_proposal(cid, frame_id, turn_idx)),
         "stream": memo_part(memo, "stream",
-                            lambda: player_visible_stream(cid, frame_id)),
+                            lambda: player_visible_stream(cid, frame_id, job=job)),
         "standing_proposals": memo_part(memo, "standing_proposals", _standing),
         "status_line": memo_part(memo, "status_line",
                                  lambda: room.status(cid, frame_id).get("line")),
@@ -192,7 +273,7 @@ def _payload(cid, frame_id, *, dial, brief, transcript, step, lore_left,
                    "proposals_max": DRAMATURGE_PROPOSALS_PER_PASS},
     }
     if brief:
-        payload["player_asks"] = str(brief)[:1200]
+        payload["player_asks"] = str(brief)[-DRAMATURGE_BRIEF_CHARS:]
     return payload
 
 
@@ -200,28 +281,48 @@ def _payload(cid, frame_id, *, dial, brief, transcript, step, lore_left,
 # The pass
 # ---------------------------------------------------------------------------
 
-def _file(cid, frame_id, raw, *, dial, turn_idx, brief):
+def _file(cid, frame_id, raw, *, dial, turn_idx, brief, job=None, asks=()):
+    from core.jobs import is_cancelled
     from story.room_proposals import file_proposal
+    if is_cancelled(job):
+        # A cancelled pass files nothing: what it read may be a beat the
+        # player has since rerolled (`persist/checkpoints.restore_checkpoint`).
+        return None, "the pass was cancelled; nothing is filed"
     if not isinstance(raw, dict):
         return None, "a proposal is an object"
+    # FILED AT THE NEWEST BEAT THE PASS READ (review R3-2/R3-4, 2026-10-08):
+    # its job's read horizon, which the stream raised before the call that
+    # wrote this answered. A suggestion is about the beats after the ones it
+    # was written from (`story_planner._mark_due_now`), and a restore keeps
+    # one written only from beats it keeps (`room_proposals.keep_spared`).
+    horizon = getattr(job, "read_turn", None)
+    if horizon is not None:
+        turn_idx = int(horizon)
     try:
         row = file_proposal(
             cid, frame_id, kind=raw.get("kind"), title=raw.get("title"),
             wants_true=raw.get("wants_true"), why_now=raw.get("why_now"),
             must_not_contradict=raw.get("must_not_contradict") or "",
             scale=raw.get("scale") or "", dial=dial, turn_idx=turn_idx,
-            brief=brief)
+            brief=brief, asks=asks)
     except ValueError as exc:
         return None, str(exc)[:200]
     return row, None
 
 
-def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None):
+def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None, job=None,
+            asks=()):
     """One pass: read lore if it must, then propose. Returns
     ``{"proposals": [rows], "note": str, "none_needed": bool, "calls": n,
     "steps": n, "refused": [reasons], "stopped": why|None}``. Proposals are
-    filed as state (`room_proposals`); the note is the Dramaturge's line
-    for the thread and is the caller's to store."""
+    filed as state (`room_proposals`), each naming the player's ``asks`` it
+    answers -- the ones its pass took, which ``brief`` joins -- so a restore
+    that drops it gives them back (`room_proposals.keep_spared`); the note
+    is the Dramaturge's line for the thread and is the caller's to store. A
+    ``job`` that is cancelled stops the pass at its next step and files
+    nothing more (`core.jobs.is_cancelled`); ``stopped`` is then
+    "cancelled"."""
+    from core.jobs import is_cancelled
     from story import room_conversation as room
     from story.room_calls import ReplyMemo
     from story.room_tools import ToolError, run_tool, tool_only_reads
@@ -236,6 +337,9 @@ def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None):
     # landing under it, which no write of the pass's own would report (C21).
     memo = ReplyMemo()
     for step in range(1, DRAMATURGE_STEPS + 1):
+        if is_cancelled(job):
+            stopped = "cancelled"
+            break
         seconds_left = DRAMATURGE_WALL_SECONDS - (time.time() - started)
         if seconds_left <= 0:
             stopped = "wall"
@@ -245,7 +349,12 @@ def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None):
         out = _call(system, _payload(
             cid, frame_id, dial=dial, brief=brief, transcript=transcript,
             step=step, lore_left=DRAMATURGE_LORE_CALLS - calls_made,
-            seconds_left=seconds_left, turn_idx=turn_idx, memo=memo))
+            seconds_left=seconds_left, turn_idx=turn_idx, memo=memo, job=job))
+        if is_cancelled(job):
+            # Cancelled while the model answered: what it answered is about a
+            # beat the story may no longer hold.
+            stopped = "cancelled"
+            break
         if not any(k in out for k in ANSWER_KEYS):
             transcript.append({"tool": None, "args": None,
                                "result": {"error": CUT_OFF_NOTE}})
@@ -258,14 +367,19 @@ def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None):
                     else [])[:DRAMATURGE_PROPOSALS_PER_PASS]:
             if len(filed) >= DRAMATURGE_PROPOSALS_PER_PASS:
                 break
+            if is_cancelled(job):
+                stopped = "cancelled"
+                break
             row, why = _file(cid, frame_id, raw, dial=dial, turn_idx=turn_idx,
-                             brief=brief)
+                             brief=brief, job=job, asks=asks)
             if row is None:
                 refused.append(why)
             else:
                 memo.wrote()  # the standing proposals the next payload states
                 if all(f["uid"] != row["uid"] for f in filed):
                     filed.append(row)
+        if stopped:
+            break
         calls = out.get("calls") if isinstance(out.get("calls"), list) else []
         if not calls:
             break
@@ -310,13 +424,18 @@ def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None):
             "stopped": stopped}
 
 
-def revise(cid, frame_id, proposal, judgement, *, dial, turn_idx=None):
+def revise(cid, frame_id, proposal, judgement, *, dial, turn_idx=None, job=None):
     """The Dramaturge answers the Planner's critique: it re-states the
     proposal so the natural version is still worth encountering, or
     withdraws it. One call, no tools. Returns the proposal row as it now
-    stands (revised, withdrawn or returned) and its note."""
+    stands (revised, withdrawn or returned) and its note. A cancelled
+    ``job`` writes nothing and says nothing: the proposal comes back as it
+    stood."""
+    from core.jobs import is_cancelled
     from story import room_conversation as room
     from story.room_proposals import revise_proposal, settle_proposal
+    if is_cancelled(job):
+        return proposal, ""
     turn_idx = room.current_turn_idx(cid) if turn_idx is None else int(turn_idx)
     payload = {
         "dial": int(dial), "dial_scale": DIAL_SCALE,
@@ -326,10 +445,12 @@ def revise(cid, frame_id, proposal, judgement, *, dial, turn_idx=None):
         "planner_says": {"verdict": judgement.get("verdict"),
                          "reason": judgement.get("reason"),
                          "contradiction": judgement.get("contradiction")},
-        "stream": player_visible_stream(cid, frame_id, beats=6),
+        "stream": player_visible_stream(cid, frame_id, beats=6, job=job),
         "task": "revise_or_withdraw",
     }
     out = _call(system_block(cid, frame_id), payload)
+    if is_cancelled(job):
+        return proposal, ""
     note = " ".join(str(out.get("note") or "").split())[:1200]
     if out.get("withdraw"):
         row = settle_proposal(cid, frame_id, proposal["uid"], "withdrawn",

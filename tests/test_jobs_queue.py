@@ -117,6 +117,91 @@ def test_cancelling_files_the_job_as_cancelled_rather_than_done():
     assert jobs.status(4, "tick") == "cancelled"
 
 
+def test_a_submit_never_joins_a_cancelled_job():
+    """(review F, 2026-10-08) Cancellation is cooperative, so a cancelled job
+    holds its slot until the call it is inside returns -- for a Writers' Room
+    pass, a Planner call of 10-21 s -- and a submit meanwhile joined work
+    already told to write nothing: a reroll's own commit queued nothing that
+    ran. It starts fresh, and the old job, finishing late, neither evicts
+    the new one nor files a record."""
+    release = threading.Event()
+
+    def stubborn(_job):
+        release.wait(3.0)
+        return "old"
+
+    old = jobs.submit(14, "tick", stubborn, base_turn=4)
+    assert _wait(lambda: old.state == "running")
+    assert jobs.cancel(14, "tick") is old
+    ran = threading.Event()
+    new = jobs.submit(14, "tick", lambda _job: ran.set() or "new", base_turn=4)
+    assert new is not old
+    assert _wait(ran.is_set)
+    assert _wait(lambda: new.state == "done")
+    release.set()
+    assert _wait(lambda: old.state == "cancelled")
+    assert jobs.status(14, "tick") == "done"
+    assert old not in jobs.history(14) and new in jobs.history(14)
+
+
+def test_a_restore_cancels_only_the_work_that_read_a_beat_it_discards():
+    """(review B, 2026-10-08) Restoring checkpoint N takes the story back to
+    before beat N, so work queued from beat N-1 read nothing it discards:
+    `cancel_from` asks a job to stop only when its read horizon -- its base
+    turn, until it reads further -- is at or after N, or unstamped: the
+    absence of a stamp is no evidence of anything."""
+    def waits(job):
+        job.cancelled.wait(3.0)
+
+    earlier = jobs.submit(15, "earlier", waits, base_turn=6)
+    same = jobs.submit(15, "same", waits, base_turn=7)
+    unstamped = jobs.submit(15, "unstamped", waits)
+    assert _wait(lambda: all(j.state == "running" for j in (earlier, same, unstamped)))
+    assert jobs.cancel_from(15, "earlier", 7) is None
+    assert jobs.cancel_from(15, "same", 7) is same
+    assert jobs.cancel_from(15, "unstamped", 7) is unstamped
+    assert jobs.cancel_from(15, "absent", 7) is None
+    assert _wait(lambda: same.state == "cancelled" and unstamped.state == "cancelled")
+    assert earlier.state == "running"
+    jobs.cancel(15, "earlier")
+    assert _wait(lambda: earlier.state == "cancelled")
+
+
+def test_a_restore_decides_by_what_a_job_has_read():
+    """(review R3-1, 2026-10-08) A job that loops reads later beats than the
+    one it was queued from, so a restore deciding by the queued base turn
+    left a job that had read the discarded beat running. Its readers raise
+    its read horizon before they read (`read_through`), and `cancel_from`
+    stops a job whose horizon reaches the restored beat. A job it spares --
+    one that read only kept beats -- may finish what it is doing but reads
+    none of the beats being played again, until the replayed beat's own
+    submit joins it and hands it the new timeline."""
+    def waits(job):
+        job.cancelled.wait(3.0)
+
+    looping = jobs.submit(16, "looping", waits, base_turn=3)
+    assert jobs.read_through(looping, 4) == 4 and looping.read_turn == 4
+    assert jobs.read_through(looping, 2) == 2 and looping.read_turn == 4  # never falls
+    assert jobs.cancel_from(16, "looping", 4) is looping
+
+    kept = jobs.submit(16, "kept", waits, base_turn=3)
+    assert jobs.cancel_from(16, "kept", 4) is None
+    assert jobs.spared(kept) and not jobs.is_cancelled(kept)
+    assert jobs.read_through(kept, 5) == 3 and kept.read_turn == 3
+    assert jobs.submit(16, "kept", waits, base_turn=3) is kept and jobs.spared(kept)
+    assert jobs.submit(16, "kept", waits, base_turn=4) is kept and not jobs.spared(kept)
+    assert jobs.read_through(kept, 5) == 5 and kept.read_turn == 5
+
+    unstamped = jobs.submit(16, "unstamped", waits)
+    assert jobs.read_through(unstamped, 4) == 4 and unstamped.read_turn is None
+    assert jobs.cancel_from(16, "unstamped", 9) is unstamped
+    assert jobs.read_through(None, 7) == 7 and not jobs.spared(None)
+    assert _wait(lambda: looping.state == "cancelled"
+                 and unstamped.state == "cancelled")
+    kept.cancelled.set()
+    assert _wait(lambda: kept.state == "cancelled")
+
+
 def test_finished_jobs_leave_the_active_table_and_history_is_capped():
     for i in range(jobs._HISTORY_LIMIT + 5):
         job = jobs.submit(5, "k%d" % i, lambda job: True, base_turn=0)

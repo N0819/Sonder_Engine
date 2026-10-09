@@ -249,9 +249,11 @@ def test_a_job_queued_from_the_commit_tail_arms_its_own_scope(
     monkeypatch.setattr(mandates, "spend_limits",
                         lambda *a, **k: {"calls_per_hour": 10})
     monkeypatch.setattr(mandates, "fill_limit", lambda *a, **k: 3)
-    monkeypatch.setattr(mandates, "surprise_dial", lambda *a, **k: None)
-    monkeypatch.setattr(mandates, "beats_per_proposal", lambda *a, **k: 1)
-    monkeypatch.setattr(room_proposals, "last_pass_turn", lambda *a, **k: None)
+    # The Dramaturge's pass is queued on pacing alone now (owner,
+    # 2026-10-08), so this used to hold it off by having no grant carry the
+    # dial; the pacing is what decides it, and it is not due here.
+    monkeypatch.setattr(room_proposals, "pass_due",
+                        lambda *a, **k: (False, "not under test"))
     monkeypatch.setattr(room_bible, "schedule_fold", lambda *a, **k: None)
     # The fill's own work is not what this holds; that it runs armed is.
     monkeypatch.setattr(story_planner, "run_fill",

@@ -275,7 +275,10 @@ def test_the_status_row_is_normalised_on_read(client, temp_db, unseated):
     assert st["line"] == "Something is in motion at the harbour."
     assert st["in_motion"] == [{"uid": "p1", "kind": "plot",
                                 "label": "a matter at the harbour", "state": "active"}]
-    assert st["questions"] == [{"uid": "q1", "text": "May the harbour burn?"}]
+    # A question stored with no asker reads as the Planner's, asked in a
+    # reply (`room_conversation.QUESTION_SOURCES`).
+    assert st["questions"] == [{"uid": "q1", "text": "May the harbour burn?",
+                                "source": "reply"}]
     assert st["updated_turn"] == 4
     assert client.get(f"/api/chats/{cid}/room/status",
                       params={"frame_id": 42}).status_code == 404

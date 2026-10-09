@@ -52,6 +52,21 @@ class Job:
         self.chat_id = chat_id
         self.key = str(key)
         self.base_turn = base_turn
+        # THE READ HORIZON (review R3-1, 2026-10-08): the newest beat this job
+        # has read, raised by the job's own readers before they read
+        # (`read_through`). It starts at the beat the job was queued from; a
+        # job that loops reads later beats than that, and a restore decides by
+        # what the job READ, not by when it was queued (`cancel_from`).
+        self.read_turn = base_turn
+        # Set by a restore that spared this job because it read only beats the
+        # restore keeps: the newest beat it may still read. The beats after it
+        # are being played again; the replayed beat's commit lifts it.
+        self.read_limit = None
+        # Set by a restore that stopped this job: the beat it took the story
+        # back to, so the job can tell what it wrote from beats the restore
+        # keeps from what it built on one it discards (`cancel_from`). None
+        # for a job no restore stopped.
+        self.cancelled_from = None
         self.state = "pending"        # pending|running|done|failed|cancelled
         self.result = None
         self.error = ""
@@ -88,10 +103,23 @@ def submit(chat_id, key, fn, base_turn=None):
     nothing that ran. It starts fresh in the slot instead; the old job, when
     it finishes, no longer holds the slot, so it neither evicts the new one
     nor files a record (`_finish`).
+
+    A JOB A RESTORE SPARED IS JOINED, AND HANDED THE NEWER BEAT (review
+    R3-1): it read only beats the restore kept, and stops short of the beats
+    being played again (`cancel_from`, `read_through`). A submit from a beat
+    past its limit -- the replayed beat's own commit -- is the new timeline
+    asking, so the limit lifts and the job reads on: one job per key still,
+    and nothing it was asked for waits on a later commit.
     """
     with _LOCK:
         existing = _ACTIVE.get((chat_id, str(key)))
         if existing is not None and not existing.cancelled.is_set():
+            if existing.read_limit is not None and base_turn is not None:
+                try:
+                    if int(base_turn) > int(existing.read_limit):
+                        existing.read_limit = None
+                except (TypeError, ValueError):
+                    pass
             return existing
         job = Job(chat_id, key, base_turn)
         _ACTIVE[(chat_id, job.key)] = job
@@ -300,29 +328,81 @@ def cancel(chat_id, key):
 
 
 def cancel_from(chat_id, key, turn_idx):
-    """Ask the job under ``key`` to stop ONLY when it was computed from a
-    beat at or after ``turn_idx`` -- a beat a restore to ``turn_idx``
-    discards -- returning it, or None when there is none or it read only
-    beats the restore keeps. A job with no ``base_turn`` is asked to stop:
-    the absence of a stamp is no evidence that it read nothing discarded.
+    """Ask the job under ``key`` to stop ONLY when it has READ a beat at or
+    after ``turn_idx`` -- a beat a restore to ``turn_idx`` discards --
+    returning it, or None when there is none or it read only beats the
+    restore keeps. A job with no read horizon is asked to stop: the absence
+    of a stamp is no evidence that it read nothing discarded.
 
     Restoring checkpoint N takes the story back to before beat N, so work
-    queued at beat N-1's commit read nothing the restore throws away
+    that read only up to beat N-1 read nothing the restore throws away
     (review, 2026-10-08: rerolling beat 7 cancelled beat 6's deliberation,
     nothing re-armed it, and a proposal whose package had already published
-    stayed open for the next deliberation to judge again)."""
+    stayed open for the next deliberation to judge again).
+
+    BY WHAT THE JOB READ, NOT WHEN IT WAS QUEUED (review R3-1, 2026-10-08).
+    The Writers' Room's follow-up and its Dramaturge pass loop until nothing
+    is left to do, and each round reads the beats played since: a job queued
+    at beat 3 read beat 4, and a reroll of beat 4 left it writing what it
+    built on the discarded beat. Its readers raise `Job.read_turn` before
+    they read (`read_through`), and that is what is compared here.
+
+    A JOB THIS SPARES may finish the unit of work it is in, but reads none
+    of the beats the restore discards while they are being played again --
+    their old narration stands until the replay replaces it: `read_through`
+    stops it short of them, and it starts no new unit (`spared`) unless the
+    replayed beat's own commit joins it (`submit` lifts the limit). The
+    horizon check and the limit are one step under the lock, against
+    `read_through` raising the horizon at the same moment."""
     with _LOCK:
         job = _ACTIVE.get((chat_id, str(key)))
-    if job is None:
-        return None
-    if job.base_turn is not None and turn_idx is not None:
+        if job is None:
+            return None
+        horizon = job.read_turn
+        if horizon is not None and turn_idx is not None:
+            try:
+                if int(horizon) < int(turn_idx):
+                    limit = int(turn_idx) - 1
+                    job.read_limit = limit if job.read_limit is None \
+                        else min(int(job.read_limit), limit)
+                    return None
+            except (TypeError, ValueError):
+                pass
         try:
-            if int(job.base_turn) < int(turn_idx):
-                return None
+            job.cancelled_from = None if turn_idx is None else int(turn_idx)
         except (TypeError, ValueError):
-            pass
-    job.cancelled.set()
+            job.cancelled_from = None
+        job.cancelled.set()
     return job
+
+
+def read_through(job, turn_idx):
+    """A job's reader is about to read the story through beat ``turn_idx``:
+    raise the job's read horizon (`Job.read_turn`) there FIRST, so a restore
+    that comes after the read has begun sees it (`cancel_from`), and return
+    the newest beat the reader may read -- ``turn_idx``, or less when a
+    restore has spared the job and the later beats are being played again
+    (`Job.read_limit`). The horizon never falls, and a job with none (no
+    stamp: a restore always stops it) stays without one. ``job`` None -- a
+    test, a panel reply, a caller outside any job -- reads ``turn_idx``."""
+    if job is None or turn_idx is None or not hasattr(job, "read_turn"):
+        return turn_idx
+    with _LOCK:
+        through = int(turn_idx)
+        if job.read_limit is not None:
+            through = min(through, int(job.read_limit))
+        if job.read_turn is not None and through > int(job.read_turn):
+            job.read_turn = through
+    return through
+
+
+def spared(job):
+    """Whether a restore spared this job (`cancel_from`) and nothing has
+    handed it a newer beat since (`submit`): it read only beats the restore
+    kept, so it finishes the unit of work it is in -- and starts no other,
+    because the next would read the beats being played again. False for
+    None, like `is_cancelled`."""
+    return getattr(job, "read_limit", None) is not None
 
 
 def is_cancelled(job):

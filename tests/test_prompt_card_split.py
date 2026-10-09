@@ -49,7 +49,7 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 279   # +1 (2026-10-08): `character_bare.not_answered_yet`, what
+PART_COUNT = 280   # +1 (2026-10-08): `character_bare.not_answered_yet`, what
                    # a mind called again in one beat left waiting on the
                    # player or the world (`character._not_answered_yet_note`).
                    # +1 (2026-10-08): `prose_contract.room_prepare_note`,
@@ -60,6 +60,10 @@ PART_COUNT = 279   # +1 (2026-10-08): `character_bare.not_answered_yet`, what
                    # the fill's light tier, one compact call that files
                    # light plans or hands the question to the full
                    # planner (`story/room_sketch.py`).
+                   # +1 (2026-10-08): `jev_questions.direction_neared`, the
+                   # lazy direction follow-up's "does the passage bring the
+                   # story near what this suggestion is about?"
+                   # (`story_planner.directions_neared`).
                    # +2 (2026-10-08): `character_jev.tell_when` (which of
                    # its own steps a tell shows at, so the cue is placed
                    # there and not after the whole beat) and

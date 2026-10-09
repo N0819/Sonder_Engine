@@ -111,8 +111,26 @@ MANDATE_LAPSE_REASONS = ("", "term_ended", "request_closed")
 #:                   "state": str}] (labels are spoiler-safe by contract:
 #:                   the Planner writes "a matter at the harbour", never
 #:                   the truth behind it),
-#:    "questions": [{"uid": str, "text": str}] (what the room is asking),
+#:    "questions": [{"uid": str, "text": str, "source": str,
+#:                   "asker": str (optional), "proposals": [str] (optional)}]
+#:                  (what the room is asking, and who asked it --
+#:                  `QUESTION_SOURCES`; a task's kind or an engine ask's, and
+#:                  the proposals it was about),
 #:    "updated_turn": int}
+
+#: WHO ASKED A QUESTION ON THE STATUS ROW, which decides who may take it off
+#: again (`agents/story_planner.write_status`, review 2026-10-08). `engine`:
+#: an ask the engine makes by its own reading of the story -- the fill
+#: waiting on a grant, the proposals the room could not settle -- shown
+#: first, so the row's cap does not cut it. `reply`: what the Planner asked
+#: the player in conversation; a reply restates these. `task`: what a
+#: background task asked, keyed by WHICH task (`asker`: its kind, and the
+#: proposals a deliberation judged) -- a task restates only its own, every
+#: round and pass of it adding to the same list, and a deliberation's stands
+#: while any proposal it judged is unsettled. A question stored before
+#: sources were recorded reads as `reply`: kept by a task, restated by a
+#: reply.
+QUESTION_SOURCES = ("engine", "reply", "task")
 
 #: The one line the placeholder says. English is the message id: the panel
 #: renders every text node through the UI catalog (`el()` -> `t()`), so this
@@ -294,8 +312,22 @@ def status(cid, frame_id=None):
     questions = []
     for qn in stored.get("questions") or []:
         if isinstance(qn, dict) and str(qn.get("text") or "").strip():
-            questions.append({"uid": str(qn.get("uid") or ""),
-                              "text": _line(qn.get("text"), 600)})
+            source = str(qn.get("source") or "")
+            row = {"uid": str(qn.get("uid") or ""),
+                   "text": _line(qn.get("text"), 600),
+                   "source": (source if source in QUESTION_SOURCES
+                              else "reply")}
+            # WHICH TASK OR ASK, when it is one (`QUESTION_SOURCES`): the
+            # asker's kind and the proposals it was about. Read back so the
+            # next write keeps them; absent on a plain question.
+            if str(qn.get("asker") or "").strip():
+                row["asker"] = _line(qn.get("asker"), 60)
+            proposals = [str(u) for u in qn.get("proposals") or ()
+                         if str(u or "").strip()] \
+                if isinstance(qn.get("proposals"), list) else []
+            if proposals:
+                row["proposals"] = proposals[:24]
+            questions.append(row)
     return {
         "line": _line(stored.get("line"), 400),
         "in_motion": in_motion,

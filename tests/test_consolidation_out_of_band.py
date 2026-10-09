@@ -199,8 +199,16 @@ def test_checkpoint_restore_cancels_the_inflight_job(temp_db, monkeypatch):
     promotion is applied on the next beat's tail, in the turn thread), so
     this cancel is about the spend: a sheet drafted from a beat the restore
     is discarding would be paid for and then refused at landing. The
-    offscreen ticks beside them are deliberately left running (their
-    landings are provisional; a turn starting must never cancel them)."""
+    Writers' Room's Dramaturge pass, fill and direction follow-up joined it
+    with the review of 2026-10-08: each reads the beat and writes rows the
+    restore rolls back, and a same-beat reroll does not move the turn index
+    their rewind guard reads. They are asked through `jobs.cancel_from`,
+    which stops one only when it read a beat the restore discards (its base
+    turn at or after the restored one, review B). The offscreen ticks
+    beside them are deliberately left running (their landings are
+    provisional; a turn starting must never cancel them)."""
+    from agents.story_planner import (DIRECTION_JOB_KEY, DRAMATURGE_JOB_KEY,
+                                      FILL_JOB_KEY, ROOM_JOB_KEYS)
     from persist import checkpoints
 
     ctx = _make_ctx(temp_db)
@@ -208,12 +216,16 @@ def test_checkpoint_restore_cancels_the_inflight_job(temp_db, monkeypatch):
                                         "entities": {}})
     checkpoints.ensure_checkpoint(ctx.chat.id, 12)
 
-    cancelled = []
+    cancelled, from_turn = [], []
     monkeypatch.setattr(jobs, "cancel",
                         lambda cid, key: cancelled.append((cid, key)))
+    monkeypatch.setattr(jobs, "cancel_from",
+                        lambda cid, key, idx: from_turn.append((cid, key, idx)))
     checkpoints.restore_checkpoint(ctx.chat.id, 12)
     assert cancelled == [(ctx.chat.id, commit.MEMORY_CONSOLIDATION_JOB_KEY),
                          (ctx.chat.id, commit.AUTO_PROMOTION_JOB_KEY)]
+    assert set(ROOM_JOB_KEYS) == {DRAMATURGE_JOB_KEY, FILL_JOB_KEY, DIRECTION_JOB_KEY}
+    assert from_turn == [(ctx.chat.id, key, 12) for key in ROOM_JOB_KEYS]
 
 def test_utility_is_configured_not_inherited(monkeypatch):
     """`utility` is the background helper lane (memory consolidation above

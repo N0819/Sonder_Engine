@@ -69,8 +69,8 @@ def test_a_panel_launched_dramaturge_pass_states_the_turn_it_ran_from(
     """The defect: the panel's door passed None and the guard never ran."""
     from core import jobs
     cid = _story(temp_db)
-    md.grant_mandate(cid, None, text="Surprise me a little.",
-                     capabilities=["plan_entity"], limits={"surprise": 1})
+    # No grant: asking the Dramaturge needs none (owner, 2026-10-08).
+    assert md.active_mandates(cid, None) == []
     seen = {}
 
     def _capture_pass(chat_id, frame_id, *, base_turn=None, brief=None,

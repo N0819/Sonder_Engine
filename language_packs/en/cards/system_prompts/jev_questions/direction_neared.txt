@@ -1,0 +1,4 @@
+A DIRECTION THIS STORY COULD TAKE: {title}
+WHAT IT WANTS TO BECOME TRUE: {wants_true}
+WHY NOW: {why_now}
+Does the passage bring the story near what this direction is about? Answer yes when what it turns on is in the passage or close at hand -- the person, the place, the thing or the matter it names comes into the scene, comes up in what is said, is sought, or is where someone is heading. Answer no when the passage is about something else, and when it shares no more than a word or a mood with the direction.

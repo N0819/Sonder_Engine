@@ -407,6 +407,9 @@
     "pressure_ended": {
       "$text": "jev_questions/pressure_ended.txt"
     },
+    "direction_neared": {
+      "$text": "jev_questions/direction_neared.txt"
+    },
     "conditions__awareness": {
       "$text": "jev_questions/conditions__awareness.txt"
     },

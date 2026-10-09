@@ -826,18 +826,26 @@ legitimately perceive, learn, remember or infer.
 - **Writers' Room panel** (partial) — A tab on the right edge opens a simple
   chat with the Story Planner beside the story: dock it as a column or float
   it over the prose with its own opacity. The thread is kept per story and
-  era; the standing mandates you have granted and a spoiler-safe line of what
-  is in motion sit beside it. The Story Planner answers: it reads the world
-  through its tools, drafts what you ask for as a plot package, and acts only
-  under what you have granted it in words -- a grant becomes a standing
-  mandate you can read and withdraw. Given a fill grant it also works
-  between beats on its own: it plans the rooms and people just beyond where
-  the story has reached and, when you have allowed such things, now and then
-  an event arriving nearby -- each a package in the list, sketched in one
-  call and handed to its full tools when a sketch cannot say it. Beside it sits the Dramaturge, which
-  proposes direction and builds nothing; the Planner judges each proposal
-  for naturalness and you can show, summarise or hide its lines. No proposal
-  card yet: an actionable reply is prose plus the standing list. Under ⚙ Settings, *Writers' Room
+  era; the standing mandates you have granted and a spoiler-safe line of
+  what is in motion sit beside it. The Story Planner answers: it reads the
+  world through its tools, drafts what you ask for as a plot package, and
+  acts only under what you have granted it in words -- a grant becomes a
+  standing mandate you can read and withdraw. Given a fill grant it also
+  works between beats on its own: it plans the rooms and people just beyond
+  where the story has reached and, when you have allowed such things, now
+  and then an event arriving nearby -- each a package in the list, sketched
+  in one call and handed to its full tools when a sketch cannot say it.
+  Beside it sits the Dramaturge. Every few beats it suggests where the story
+  could go, and when you ask it for a direction it answers, even if it was
+  busy when you asked or could not be reached at first. It builds nothing.
+  It needs no grant to suggest, nothing it suggests reaches the world except
+  under what you have granted, and you can tell the Story Planner you want
+  no suggestions you did not ask for. The Planner judges a suggestion for
+  naturalness when the story comes near it, and judges what you asked for at
+  once; you can show, summarise or hide their lines. The questions the room
+  is waiting on stay on its status line until they are answered, and the
+  line says when something is in motion. No proposal card yet: an actionable
+  reply is prose plus the standing list. Under ⚙ Settings, *Writers' Room
   research* names a web search provider and its key; once a story has also
   granted the room research in words, the Planner may search the web for
   reference material, every query shown in the thread before it is sent and

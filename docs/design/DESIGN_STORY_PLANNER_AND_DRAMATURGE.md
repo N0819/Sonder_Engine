@@ -12,7 +12,9 @@ direction and builds nothing". The unfinished work is registered in
 [`../UNBUILT.md`](../UNBUILT.md) §§2.9 and 2.26 (no proposal card, the
 Planner's tool discipline unmeasured live, mandates per era not per package,
 the frontier a count not a ranking). This note argues for the product and
-authority shape; where it and the plan disagree, the plan won.
+authority shape; where it and the plan disagree, the plan won. Since the
+owner's ruling of 2026-10-08 the Dramaturge suggests in every story on its
+pacing, with no grant (§ 4.6).
 
 The Charter-specific data seams in
 [`FABLE_TOWN_IMPLEMENTATION.md`](FABLE_TOWN_IMPLEMENTATION.md) §5 are the
@@ -410,6 +412,241 @@ replacing a completed Director resolution, Background Life response or
 character choice is an explicit edit/retcon operation, never the invisible
 default behavior of an active plot.
 
+### 4.6 When it runs: on its pacing, in every story (owner ruling, 2026-10-08)
+
+> "It was never meant to be surprise only, it was meant to suggest story
+> directions." — the owner, 2026-10-08
+
+As built on 2026-09-04 the Dramaturge ran only under a grant whose limits
+carried a numeric `surprise`. Measured on a copy of the owner's database on
+2026-10-08: none of its 68 grants across 33 stories carried one -- eleven
+held the `surprise` capability and ten the total grant, and neither sets a
+number -- so it had never run in any story: 0 calls, 0 `room_proposals`
+rows, and `mandates.SURPRISE_DEFAULT` read by nothing. The gate made the
+Room's dramatic half wait on a word nobody knew to say, which is the second
+of the engine's two goals -- a world that does not feel static -- failing
+without a sound. As built now:
+
+- **Its turn comes on pacing alone.** Every `beats_per_proposal` beats
+  (`mandates.BEATS_PER_PROPOSAL` = 6 unless a grant names a number) of the
+  frame's OWN play, counted from the last pass, or from the frame's opening
+  before the first (`room_proposals.pass_due`): a thirty-beat story is asked
+  at beats 6, 12, 18, 24 and 30. A story already past one interval with no
+  pass on record -- every story written before the ruling -- is asked at
+  its next commit. The player's own ask through the Planner (`to_dramaturge`)
+  still runs at once.
+- **The dial tunes it and never licenses it.** `mandates.surprise_dial` is
+  the number a standing grant names (the most inventive wins), else
+  `SURPRISE_DEFAULT` = 2, the middle of the 0-4 scale. A grant's
+  `beats_per_proposal` is the player's word on how often, with or without a
+  dial beside it; the most frequent wins.
+- **A pacing of 0 is off.** No grant is needed for the Dramaturge to
+  suggest, so a grant is the player's one way to stop its own passes:
+  `beats_per_proposal` 0 (`mandates.BEATS_PER_PROPOSAL_OFF`) wins over any
+  number another standing grant names, and the player's ask still runs. A
+  grant may carry limits and no capability -- it permits nothing -- so the
+  Planner can record "suggest nothing I did not ask for" as the player said
+  it. Until the review of 2026-10-08, 0 was clamped to every beat: a pass and
+  a deliberation at every commit for the player who asked for none. A grant
+  that permits nothing is no licence to work, so it never lifts the spend a
+  licence set; a spend number it names only lowers what stands
+  (`mandates.spend_limits`; third review, R3-3: the off switch, a dial or a
+  pace had left the room uncapped).
+- **Suggesting needs no grant; acting on a suggestion still does.** A
+  proposal is typed intent and changes nothing. The Planner implements an
+  accepted one only through a package, a package the Planner drafted
+  validates and publishes only under standing mandates that cover every
+  operation in it (`plot_packages.authority_errors`, read at both), and a
+  background task reads no grants, so the deliberation cannot license itself.
+  Carrying an accepted proposal out is acting: when the grants do not cover
+  what it needs, the Planner's card has it accept the proposal, ask the
+  player for that grant by name and open no package that cannot validate.
+  The floor under the clause is code: a background task retires, when it
+  ends, every draft ITS OWN `new_package` calls opened that the grants do
+  not cover, with the refusal as its note (`story_planner._retire_stranded`,
+  `run_planner`'s `opened`). Without it, each accepted proposal in a story
+  with no grants left a draft that could never publish -- shown in motion,
+  counted against `PACKAGES_CAP` (32), past which the room could open
+  nothing, the player's own asks included. Its first form diffed the package
+  ledger, so it also retired a draft a panel reply opened while the task ran,
+  and the grant the player then gave for it lapsed on arrival (second
+  review, A).
+- **The player's ask waits until a pass takes it.** The pacing pass and the
+  asked one share one job key, and a job in flight absorbs a second submit,
+  so an ask made while a pacing pass ran -- minutes, with its deliberation --
+  was never read. The Planner now keeps the brief on the `room_proposals`
+  row before it queues anything (`room_proposals.ask_brief`); a pass takes
+  every brief waiting at its start, answers what was asked while it ran with
+  one more pass when it is done, and a commit queues a pass while one waits.
+  A brief is the conversation's, not the beat's: a restore leaves the
+  waiting ones as they stand, as it leaves the thread. A pass whose provider
+  fails hands back the briefs it took and had not answered, marked with the
+  beat it failed at, and a commit takes them up again at the pacing -- the
+  default pace when the passes are off -- not at every commit, unless the
+  player asks again (`room_proposals.briefs_due`; third review, R3-7: the
+  ask was lost for good).
+- **A reroll cancels the pass that read it, and asks again.** A same-beat
+  reroll does not move the turn index, so the rewind guard cannot see it; a
+  pass still running filed the discarded beat's direction into the rerolled
+  timeline. `restore_checkpoint` cancels the Dramaturge pass, the fill and
+  the direction follow-up (each reads the beat and writes rows the restore
+  rolls back) -- ONLY when the job READ a beat the restore discards
+  (`core.jobs.cancel_from`; second review, B: rerolling beat 7 had cancelled
+  beat 6's deliberation, and nothing asked it again). What a job read is its
+  read horizon, not the beat it was queued from (third review, R3-1): the
+  follow-up and the pass loop until nothing is left, and each round reads
+  the beats played since, so a job queued at beat 3 read beat 4 and a reroll
+  of beat 4 left it writing what it built on the discarded beat. The stream
+  raises the horizon before it reads (`dramaturge.player_visible_stream`,
+  `core.jobs.read_through`), and so does a deliberation, to the newest beat
+  and the beats its proposals were written from. A job the restore spares
+  finishes the unit it is in and reads none of the beats being played again
+  -- their old narration stands until the replay replaces it -- unless the
+  replayed beat's own commit joins it, which hands it that beat. Each asks
+  `core.jobs.is_cancelled` before every write -- proposals, judgements,
+  revisions, tool calls, thread lines, the status row, spend. A cancelled
+  pass hands back the briefs it had taken and NOT YET ANSWERED, its one
+  write: once the Dramaturge's line is in the thread -- which no restore
+  takes back -- handing the ask back had it answered twice (second review,
+  C). A submit never joins a cancelled job still finishing its call
+  (`core.jobs.submit`, second review, F): the rerolled beat's own commit
+  used to join the dying pass and was never asked. The pass's record rolls
+  back with the row, so THE REROLLED BEAT IS ASKED AGAIN, as itself: one
+  more pass per reroll of a pacing beat, an owner question. WHAT A SPARED
+  JOB WROTE STANDS (third review, R3-2): the next beat's snapshot is taken
+  as it starts, and the pass queued a beat earlier can still be filing then,
+  so a reroll of that next beat rolled its suggestions back while its note
+  stood in the thread, and its pacing stayed spent. The restore puts back
+  (`room_proposals.keep_spared`) the proposals filed from beats it keeps --
+  `filed_turn` is the newest beat the pass read -- as their pass filed them,
+  due at once when they answer the player's ask; a refusal reached by a
+  deliberation that began at a kept beat; and the passes that had their
+  turn. A verdict that acted -- a package, a grant asked for, a return --
+  rolled back with the world and the status row, and is judged again at its
+  bound. WHAT A JOB BUILT ON A DISCARDED BEAT IS GIVEN BACK (fourth review,
+  R4-1): the pass record stood whenever the pass had recorded before the
+  snapshot, so a pass that read the next beat lost its suggestions to that
+  beat's reroll with its pacing spent, and an asked pass lost the player's
+  ask. The row keeps a log of passes (`pass_log`), each landed with the
+  newest beat its answer was read from (`land_pass`); the restore keeps the
+  log as it stood less every pass recorded at a discarded beat or read from
+  one, and a pass it cancels before it answered gives itself back
+  (`give_back_pass`) -- before the restore's transaction or after, either
+  way holds. A suggestion names the player's asks it answers (`asks`): one
+  the restore drops hands them back, one that stands keeps a cancelled pass
+  from handing them back twice, and a fresh re-ask in the same words is
+  never put behind a failed copy. A beat in play -- its line sent, nothing
+  yet answering it -- is read by no reader of the stream, so a pass that
+  came round while the next beat ran is simply spared. The follow-up's
+  reading is not kept, since what it concluded rolls back. And a spared
+  deliberation returns to the player only what it left pending, never a
+  verdict the restore rolled back (R4-2).
+- **The deliberation waits for the story to near the suggestion** (owner,
+  2026-10-08: "Can we do lighter weight planning potentially? And save heavy
+  plans for when the actors near them?"). The Planner's deliberation is six
+  calls and more, and it ran in the pacing pass's own job over directions
+  the story might never come near. A pacing pass now files its suggestions
+  and stops. At each commit of the player's frame while one is pending, the
+  direction follow-up (`story_planner.run_direction_follow_up`, its own job)
+  asks the decision model one question per suggestion not yet deliberated,
+  of the narrated beats it has not read that were played AFTER the beats the
+  suggestion was written from: does the passage bring the story near what
+  this direction is about (`jev_questions.direction_neared`: the title, what
+  it wants true and why now)? A yes (`DIRECTION_NEAR_FLOOR` = 0.5) makes it
+  due, and the follow-up deliberates it then. Asked of its own beats, a new
+  suggestion's answer confirmed itself (third review, R3-4); a beat whose
+  turn row stood without its narration yet was marked read off the player's
+  line alone, and so was a beat whose decision call failed (R3-6): a beat
+  counts as read only once narrated and answered. NOTHING IS DROPPED: a
+  suggestion that has waited `room_proposals.DIRECTION_WAIT_INTERVALS` = 2
+  pacing intervals of the frame's own beats (12 at the default pace) is
+  deliberated anyway, and the decision model unconfigured or unreachable,
+  that bound alone decides. A PLAYER'S ASK IS NEVER LAZY: what its pass
+  files is due at once (`due` "asked") and the follow-up is queued from the
+  pass. Every deliberation runs in that one job, one at a time, so two never
+  judge a proposal together; it takes up whatever came due while it ran,
+  and reads the beats that passed meanwhile. A deliberation TAKES what it
+  judges (`taken_turn`): a proposal a failed or cancelled one left pending
+  is not taken again at the next commit -- a dead provider would be asked at
+  every one -- but waits its bound again from there.
+- **The spend stop holds, and so do its own caps.** A grant's
+  `calls_per_hour` stops the pass at the commit tail and again inside the
+  job; the Dramaturge keeps `DRAMATURGE_STEPS` = 3, `DRAMATURGE_LORE_CALLS`
+  = 4, `DRAMATURGE_PROPOSALS_PER_PASS` = 3 and 120 seconds a pass, and the
+  deliberation `DELIBERATION_ROUNDS` = 2.
+- **Never a live bubble's.** A causality bubble's beats carry no player line
+  and no narration (`agents/offscreen_beat.py`) and the Room's rows are its
+  era's, so a pass queued there read an empty stream and spent the era's
+  pacing. A bubble's commit queues none; a pass asked from its panel -- a
+  viewer can switch to its frame -- reads, paces and speaks in its era's
+  frame; and the pacing counts the frame's own beats with the same helper
+  as the fill's back-off, so a bubble's interleaved rows do not bring it
+  early. One residual (review F6, left): the panel watches the bubble's own
+  thread, so the lines that pass speaks in the era's thread are not the ones
+  it shows.
+- **A failed pass has had its turn.** The pass is recorded before the
+  Dramaturge is called, so a provider that refuses is asked again at the
+  pacing and not at every commit -- which, with no grant in the way, would be
+  every commit of every story. The player's asks it took wait again, on the
+  same back-off.
+
+**What the player sees.** A pass leaves the Dramaturge's `note` in the
+thread (its card asks for a spoiler-safe line), the pending proposals' kind
+and title on the status row while the Planner weighs them, and the Planner's
+judgement as its own line; the row is restated once the judgements land. With
+no grants an accepted proposal stays `accepted` with no package, and the
+question the Planner asks for the grant sits on the status row. The row's
+questions record who asked each (`room_conversation.QUESTION_SOURCES`):
+the engine's own asks -- the fill waiting on a grant, the proposals the room
+could not settle -- come first, at most `ENGINE_QUESTIONS_CAP` = 3 of them
+so half the row of six stays the Planner's, and the engine withdraws the
+fill's once a grant arrives or nothing is wanted. The returned proposals are
+ONE standing ask naming each returned proposal the player has not answered,
+once (`story_planner.ask_returned`; second review, E: a new question per
+deliberation had filled the row and cut the player's own). A background
+task's list replaces only what THAT task asked -- a fill its last fill's, a
+deliberation its own over the same proposals, every round and pass of it
+adding to one list -- and a deliberation's questions leave once every
+proposal it judged has settled; an accepted proposal waiting on a grant has
+not (second review, D: keyed by "the last task", round 2 and the next fill
+wiped the grant ask round 1 made). A reply restates the row, and a reply
+that says nothing about the questions leaves them standing. Before this,
+every task replaced the row -- and a grant scoped to a question lapses when
+the question leaves it (`mandates.request_open`) -- and then, for a day,
+every task only added, so six of them filled the row and cut the engine's
+asks. The opening and the location pass, which run when nobody can answer,
+clear the Room's questions as they always did and keep the engine's (second
+review, G: the prelude's question had stood into the story). A pass that
+finds nothing keeps the questions, and keeps the line only while something
+is in motion: the line says what is in motion, and a deliberation's line
+outlived the package it described; a retired draft takes its line with it
+too (second review, H). With no line standing beside something in motion,
+the row says "The room has something in motion." (`IN_MOTION_LINE`, en and
+ja; third review, R3-8: a pacing pass's suggestion stood beside "nothing in
+motion" for up to two pacing intervals). A `quiet` proposal never waits on
+the Planner, so it is never in motion and the cap may drop it.
+
+**The first live pass** (2026-10-08, a copy of chat 166, Brackwater, at beat
+30; the Dramaturge on GLM 5.2 and the Planner on DeepSeek V4.1 Flash, both
+through OpenRouter, the play database's own routing). The commit tail queued
+the pass on pacing alone, at dial 2 under the story's total grant (which
+names no number). The Dramaturge read the lore once and filed two proposals
+for ONE direction -- the drowned man's coat on the Gale table has something
+in its unopened pockets that changes what the receipt means -- as a
+`pressure` in the step that also searched lore and again, rewritten, as a
+`revelation` after the result came back, so the kind-and-title identity did
+not catch it. Its note was not spoiler-safe ("it just needs a hand in a
+pocket"), the revelation's `wants_true` scripted two live minds ("neither is
+going to name it before she does"), and both `scale` sentences were cut at
+the 60-character field cap. The Dramaturge's card now states the class the
+double filing is an instance of: each proposal is a different direction, and
+one circumstance seen two ways is one proposal, filed once. The Planner read
+for six steps (rooms, plans, events, needs, the same lore query four times)
+and had not judged when the experiment's eight-call budget stopped it. Two
+Dramaturge calls (~12 s, ~8k prompt and ~0.5k answer tokens each, no
+reasoning) and six Planner calls (10-21 s, 21-28k prompt tokens, 3-6k answer
+tokens of which ~90% reasoning) cost an estimated $0.055.
+
 ---
 
 ## 5. The plot package
@@ -770,6 +1007,7 @@ Calls occur only when:
   its stored package.
 - A generation job requires qualitative authoring.
 - The host explicitly requests a review or revision.
+- The Dramaturge's pacing comes round (§ 4.6).
 
 The Planner may run ahead of contact in an out-of-band job. The job records the
 base turn, frame, plan revision and source registry revision; landing refuses
@@ -778,7 +1016,13 @@ guard pattern.
 
 The Dramaturge does not wake every turn to “keep things dramatic.” Typed clocks
 and Charter consequences advance without it. A later review may inspect what
-the simulation produced and propose a new package revision.
+the simulation produced and propose a new package revision. It does wake on
+its pacing, every `beats_per_proposal` beats of play (§ 4.6) -- with no
+grant, since 2026-10-08 -- and a pass is the Dramaturge's one to three
+calls. The Planner's deliberation, which on the first live pass was the
+larger share (six calls of reading before a verdict), waits until a beat
+brings the story near the suggestion, one decision-model question a
+suggestion a commit, or until its bound.
 
 Budgets are first-class:
 
