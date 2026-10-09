@@ -417,6 +417,7 @@ def _mount(page: Page):
     index = copy.deepcopy(INDEX)
     attire = {"Alice": copy.deepcopy(ALICE_ATTIRE)}
     looks: dict[str, str] = {}
+    far_looks: dict[str, str] = {}
 
     def edge_of(rid, to):
         return next((e for e in slices[rid]["record"]["adjacent"] if e["to"] == to), None)
@@ -496,6 +497,8 @@ def _mount(page: Page):
                 rid = path.rsplit("/", 1)[1]
                 if "look" in payload:
                     looks[rid] = payload["look"]
+                if "far_look" in payload:
+                    far_looks[rid] = payload["far_look"]
                 if "name" in payload:
                     for r in index["vocab"]["regions"]:
                         if r["id"] == rid:
@@ -504,6 +507,7 @@ def _mount(page: Page):
                         if s["region"] == rid:
                             s["region_name"] = payload["name"]
                 body = {"id": rid, "name": payload.get("name", rid), "brief": "", "look": looks.get(rid, ""),
+                        "far_look": far_looks.get(rid, ""),
                         "rooms": [s for s in slices if slices[s]["region"] == rid]}
             elif request.method == "POST" and path == "/api/chats/1/doorways":
                 rid, to = payload["room"], payload["to"]
@@ -611,7 +615,7 @@ def _mount(page: Page):
                 rid = path.rsplit("/", 1)[1]
                 room = slices[rid]
                 for key in ("light", "size", "exposure", "name", "desc", "notes", "region",
-                            "shape", "parts", "anchors"):
+                            "shape", "parts", "anchors", "far_look"):
                     if key in payload:
                         room["record"][key] = payload[key]
                 if "region" in payload:
@@ -704,6 +708,7 @@ def _mount(page: Page):
             if rid in slices:
                 body = dict(slices[rid])
                 body["region_look"] = looks.get(body.get("region") or "", "")
+                body["region_far_look"] = far_looks.get(body.get("region") or "", "")
             else:
                 status, body = 404, {"detail": f"No room '{rid}' in this story"}
         elif path == "/api/chats/1/positions":
@@ -907,7 +912,8 @@ def test_editing_the_region_look_persists_and_shows_on_a_sibling_room(
     _, writes = _open_story(page, ui_base_url)
     page.locator("#b-world").click()
     card = page.locator("#modal .wb-card")
-    look = card.locator(".wb-look .wb-field input")
+    # The picture's register, never the far look beside it on the same card.
+    look = card.locator(".wb-look .wb-field:not(.wb-far-look) input")
     expect(card.locator(".wb-look")).to_contain_text("Shared by every room in")
     expect(card.locator(".wb-look")).to_contain_text("East Wing")
     look.fill("brick and iron under sodium lamps")
@@ -920,11 +926,46 @@ def test_editing_the_region_look_persists_and_shows_on_a_sibling_room(
     # A sibling room in the same region reads the one sentence.
     card.locator(".wb-exit .wb-link", has_text="Hallway").click()
     expect(card.locator("textarea").first).to_have_value("A long, dim hallway.")
-    expect(card.locator(".wb-look .wb-field input")).to_have_value("brick and iron under sodium lamps")
+    expect(card.locator(".wb-look .wb-field:not(.wb-far-look) input")).to_have_value(
+        "brick and iron under sodium lamps")
     # A room in no region has no look to edit.
     page.locator("#modal .wb-tree .wb-room[data-room=garden]").click()
     expect(card.locator("textarea").first).to_have_value("An overgrown garden.")
     expect(card.locator(".wb-look")).to_have_count(0)
+
+
+def test_a_rooms_far_look_and_its_regions_are_each_written_where_they_are_kept(
+        page: Page, ui_base_url: str) -> None:
+    """How a place reads from far off (`world/landscape.py`): the room's own
+    far look is a field of the room PATCH, and the region's -- how the whole
+    of that part of the map reads from far off, a different fact from the
+    picture's register beside it -- goes through the regions route. Neither
+    write carries the other's field."""
+    _, writes = _open_story(page, ui_base_url)
+    page.locator("#b-world").click()
+    card = page.locator("#modal .wb-card")
+    room_far = card.locator(".wb-field-far-look input")
+    room_far.fill("a low stone farmhouse under a slate roof")
+    room_far.press("Enter")
+    expect(page.locator("#toasts")).to_contain_text("Saved.")
+    patches = [w for w in writes if w[0] == "PATCH" and w[1] == "/api/chats/1/rooms/kitchen"]
+    assert patches[-1][2] == {"far_look": "a low stone farmhouse under a slate roof"}
+    expect(card.locator(".wb-field-far-look input")).to_have_value(
+        "a low stone farmhouse under a slate roof")
+    region_far = card.locator(".wb-look .wb-far-look input")
+    region_far.fill("farmland to the edge of sight")
+    with page.expect_response(lambda r: r.request.method == "PATCH"
+                              and r.url.endswith("/api/chats/1/regions/east_wing")):
+        region_far.press("Enter")
+    assert ("PATCH", "/api/chats/1/regions/east_wing",
+            {"far_look": "farmland to the edge of sight"}) in writes
+    # The picture's register is untouched, and the room PATCH never carried
+    # the region's far look.
+    assert not [w for w in writes if w[1].startswith("/api/chats/1/regions/") and "look" in w[2]]
+    assert not [w for w in writes if w[1].startswith("/api/chats/1/rooms/")
+                and w[2].get("far_look") == "farmland to the edge of sight"]
+    expect(card.locator(".wb-look .wb-far-look input")).to_have_value("farmland to the edge of sight")
+    expect(card.locator(".wb-look .wb-field:not(.wb-far-look) input")).to_have_value("")
 
 
 def test_a_region_is_created_from_the_card_and_renamed(page: Page, ui_base_url: str) -> None:

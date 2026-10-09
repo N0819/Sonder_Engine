@@ -401,10 +401,14 @@ def _merge_anchor_fields(prior: dict, incoming: dict) -> dict:
 # Room fields whose empty value means "unmentioned" rather than "cleared".
 # `extent`, `shape` and `parts` (the room's proportion, DESIGN_ROOM_FIDELITY)
 # join for the reason `size` is here: a re-echo without them must not square
-# a corridor.
+# a corridor. `far_look` (how the place reads from far off, `world/landscape`)
+# joins for the same reason (2026-10-08): `RoomDef` keeps an explicitly empty
+# string, so a beat whose room write echoed the key blank would have erased
+# the plan's look for good. A host clears it through the World Browser,
+# which writes the record directly.
 _ROOM_SILENT_WHEN_EMPTY = frozenset({"anchors", "size", "zone", "region", "light",
                                      "exposure", "transit_seconds", "quiet",
-                                     "windows",
+                                     "windows", "far_look",
                                      "extent", "shape", "parts"})
 
 # Every SceneEntityDef field whose schema default is indistinguishable from

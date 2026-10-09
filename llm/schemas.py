@@ -1695,6 +1695,26 @@ class RoomDef(LenientModel):
     # horizon is seen through them. Declared for the same reason `exposure`
     # is: the round-trip drops what it does not declare.
     windows: Optional[list[str]] = None
+    # HOW THE PLACE READS FROM FAR OFF (2026-10-08, `world/landscape`): the
+    # plan's `far_look`, a phrase the far layer says in place of the place's
+    # ground word. Declared so a beat that changes what a place IS from
+    # afar -- burned to the piles, flooded, fallen -- can say so, which the
+    # round-trip would otherwise strip; Optional-None so a room merely
+    # echoed keeps the look it had (`_merge_room`: silence keeps).
+    far_look: Optional[str] = None
+
+    @validator("far_look", pre=True, allow_reuse=True)
+    def _spell_far_look(cls, value):
+        """The one spelling every writer and reader keeps
+        (`landscape.normalize_far_look`), written as it is stored: stored
+        raw, a 412-character look reached the room author and the encoder
+        whole while the far layer said its first clause (review
+        2026-10-08, R2-7). None stays None and "" stays "" -- both silence
+        at the merge."""
+        if value is None:
+            return None
+        from world.landscape import normalize_far_look
+        return normalize_far_look(value)
     # A STUB THE OPENING DOES NOT SEE (2026-09-16). `planned: true` beside an
     # empty `desc` marks a room written from outside -- the far side of a
     # shut door, the back room a sign names -- so `world/structure.

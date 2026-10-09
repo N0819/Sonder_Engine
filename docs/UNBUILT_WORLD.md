@@ -1240,6 +1240,11 @@ than the shortest (PX11). A planned edge may carry `distance` (PR13).
 * **PS19's other half — the tool must state what it stored.** `extent_clamp`
   exists; `story/room_tools.py`'s `plan_rooms` result still reports the
   extent the Room asked for rather than the one the registry holds.
+  The preview's own clamp warning (`plot_packages._preview_plan_rooms`)
+  never fired from a drafted package until 2026-10-08: it read the STORED
+  op, whose extent was already clamped, and compared the clamp with itself.
+  The shaped op now keeps what was written (`extent_said`), as it keeps a
+  cut far look's length (`far_look_cut_from`).
 
 <a id="unbuilt-1-132"></a>
 
@@ -2518,17 +2523,74 @@ critic and a panel of three designs and three judges. Left:
   rough: the stair's footprint ran over the square and the lane, and the
   hill fell 6 m from the shrine to the river. The far scenery it wanted
   seen (the river, the fields across it, the hills) it made vistas.
-- **A far place nobody has been to reads as its ground and nothing else.**
-  Named only once known, an unvisited place is "open ground", "a sheltered
-  place" or "a building", and a run of open places "open ground stretching
-  on" (Kirinoura: the stair, the square with its stalls, the lane and the
-  landing, seen from the terrace). It has nothing better to say: a planned
-  room carries no `desc` until someone goes there, and its `purpose` is the
-  planner's brief to the designer -- intent and proper names ("Kirinoura's
-  square ... lamps are lit here after dark"), never what an eye sees. What
-  it would take, the owner's call: the planner writing, for an outdoor
-  place, how it looks from a distance -- a field of its own, read by the far
-  layer, never a desc.
+- ~~**A far place nobody has been to reads as its ground and nothing else.**~~
+  BUILT 2026-10-08 on the owner's choice of the option this entry held
+  (Design.md, "A far place reads by how it looks from a distance"): the
+  planner writes `far_look` -- how an outdoor place, a building's outside or
+  a region reads from far off -- and the far layer says it in place of the
+  ground word, never the name of another place or of a region the mind has
+  not learned. What is left:
+  * **Places nobody planned have none.** A room the Director mints in a beat,
+    and every place of a story planned before 2026-10-08, reads by its ground
+    as before: `plan_rooms` refuses a room the story has described (a retcon,
+    not a plan), and no Room operation writes a far look onto a place that
+    already stands. Whether the Room should have one is the owner's call;
+    the in-beat room author (`agents/director_rooms.py`) is not asked for one
+    either.
+  * **A town drafted through `draft_location` carries none.** Its room shape
+    (`charter_generate._PLAN_SYSTEM`) does not ask; a drafted room's
+    `far_look` would already travel (`plant_structure` keeps it), so the fix
+    is one field in that shape.
+  * **A flood or a fire that is not a destruction does not rewrite a look by
+    itself.** The encoder may (`RoomDef.far_look`, one clause in its `rooms`
+    part, en and ja) when a beat shows the place changed for good, and the
+    commit keeps its word on a stub the plan seeded (`_lay_planned_looks`)
+    -- not yet seen in a live run; a `region_event`'s `damage` writes a hazard
+    row and leaves the look as it was. Destruction removes the room, look and
+    all.
+  * **The floor reads whole names, and in a script without capitals one
+    name passes it unmarked.** A look carrying the name of a room the mind
+    does not know, as the room is called, or of a region, is not said; a
+    room's own name in its own look, written as a word, is the word for what
+    the place is and is said there (`landscape.SIGHT_NAMES`, "own"). In a
+    script with case the look's own capitals mark a proper name; in one
+    without, nothing does, so a place's own coined name the plan writes into
+    its own look against the card is said to every eye in that look --
+    measured, 1 of 16 leaking looks, a Japanese inn's own name, which "own"
+    keeps out of every other look ("every" also said it in a neighbour's: 2
+    of 16 together). Under "own", a look naming another place by the word for
+    what that place is reads by its ground: measured on Kirinoura with its
+    rooms named in Japanese, 1 of 7 (a hall "above the stone stair"), where a
+    floor reading every name as a name refused 6 of the 7. Left to the card
+    besides: a name held nowhere in the world, and a family name inside a
+    possessive with no person the world holds behind it. A one-character name
+    that its own place's look does not use still matches inside a longer word
+    in a script without spaces (川 inside 小川), as the people floor chooses.
+  * **A part of the map's name is said to nobody.** No engine channel carries
+    a region's name to a mind, so a look carrying one is withheld from every
+    mind and its place reads by its ground -- save inside a place's own name
+    in its own look, which the own-name pass above says where nothing marks
+    it as a name (a harbour named for its town, written in a script with no
+    capitals). A structure's region carries the structure's own name, so a
+    re-plan that renames it renames the region, and only a host's rename
+    stands over it. Letting a mind that knows a place of the region be told
+    it is the owner's switch
+    (`landscape.REGION_NAMES_TO_LOCALS`, off). A region named by a common word
+    withholds every look that uses the word: of the 39 region and structure
+    names in the two scratch dbs, one, chat 94's structure "apartment".
+  * **A row of buildings that each read differently is each described.**
+    Buildings that share a look are said once with their count, and a run of
+    ground folds as it always did, so no mind is told about fewer places (414
+    on chat 166, as before). Trading places for detail -- each distinct look
+    its own row, which told minds about 347 -- is the owner's switch
+    (`landscape.LOOKS_SPLIT_RUNS`, off), and saying only the nearest looks of
+    a row, the rest as if they had no look, is the owner's number
+    (`landscape.DESCRIBED_BUILDINGS_PER_ROW`, none). Replayed, a line averages
+    259.2 characters against 126.2 (longest 473); with the cap at 2 it would
+    average 252.8 (longest 447), at 1 239.8 (longest 395), the same 414 places
+    told.
+  * **The planner cannot see which planned rooms lack one**: its room slices
+    show a stub's purpose and exits, never its geometry or its look.
 - **Off a site plan a height is inferred from the graph** -- and since
   2026-10-07 what stands between is tested there too (Design.md "What stands
   between hides what is behind it, by height"): the ground of every open
@@ -2539,10 +2601,10 @@ critic and a panel of three designs and three judges. Left:
   time, never a winding street as a whole. On a plan, open ground now hides
   what is lower behind it; terrain between two cells is still flat (§2.39).
 - **A far place nobody has been to is still described by its ground alone**
-  ("a building", "open ground") -- the owner's 2026-10-07 ruling on
-  placeholders ("nothing can be made out and similar place holders are quite
-  frustrating") reaches this too. The planner-written far look below is
-  the way to retire it.
+  where no look is declared ("a building", "open ground") -- the owner's
+  2026-10-07 ruling on placeholders ("nothing can be made out and similar
+  place holders are quite frustrating") reaches it, and the far look above
+  retires it place by place as plans carry one.
 - **Messy data, as found**: chat 114's TARDIS console room declares itself
   `sheltered` with no `parent_entity`, so the layer -- reading declared data
   -- has it look out over the beach to the terrace.

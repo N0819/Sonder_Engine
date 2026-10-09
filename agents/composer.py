@@ -2892,8 +2892,14 @@ def landscape_percepts(places):
     re-announce, or re-file in memory, a place already seen, and learning a
     place's name is not news about it (the scent precedent). Salience under
     the room's own, so a far line never takes a memory's gist from where the
-    body stood. Grouped back into lines by `landscape_lines`."""
-    from world.landscape import BIG_PER_PLACE
+    body stood. Grouped back into lines by `landscape_lines`.
+
+    A place's FAR LOOK (`world.landscape`: the planner's own field, admitted
+    to this mind or "") rides as `look`, and joins the key only where there
+    is one: a look rewritten -- the reeds burned, the quay flooded -- is
+    news about the place, and a place that declares none keeps the key it
+    always had."""
+    from world.landscape import BIG_PER_PLACE, normalize_far_look
     out = []
     for place in places or ():
         if not isinstance(place, dict) or not place.get("room"):
@@ -2929,10 +2935,13 @@ def landscape_percepts(places):
             # Only its top shows, over the roofs or the ground nearer in.
             "over": (place.get("over") if place.get("shows") == "top"
                      and place.get("over") in LANDSCAPE_COVERS else ""),
+            "look": normalize_far_look(place.get("look")),
         }
         signature = (data["grain"], data["ground"], data["breadth"], data["height"],
                      data["lights"], data["high"], data["dark"], len(data["big"]),
                      data["over"])
+        if data["look"]:
+            signature += (_short_hash("landscape-look", data["look"]),)
         out.append(Percept(
             kind="ambient", channel="sight", source_label=data["name"],
             data={"landscape": data}, salience=0.15,
@@ -2941,10 +2950,18 @@ def landscape_percepts(places):
 
 
 def _plain_ground(row):
+    """What a row of bare ground IS, for the run that folds a line of it
+    into one item: its kind and breadth, as it always was, so a far look
+    never costs a mind a place the run said (`landscape.LOOKS_SPLIT_RUNS`,
+    the owner's switch, off). With the switch on, a place's far look is part
+    of what it is, and only places that read alike fold."""
+    from world.landscape import LOOKS_SPLIT_RUNS
     g = row.get("ground")
     if (g is None or row.get("buildings") or g.get("name") or g.get("big")
             or g.get("lights") or g.get("dark")):
         return None
+    if LOOKS_SPLIT_RUNS and g.get("look"):
+        return ("look", g["look"])
     return ("plain", g.get("ground"), g.get("breadth"))
 
 
@@ -2954,9 +2971,10 @@ def landscape_lines(percepts):
     precedent): one line per way out, nearest first; ground in order along
     it, each with the buildings fronting it; the buildings fronting the way
     out itself said beside it; a run of plain unnamed ground of one kind said
-    once ("stretching on"); at most `SEGMENTS_PER_LINE` rows, the nearest
-    two and the farthest. The representative is the line's first place, the
-    one an observation is filed against."""
+    once ("stretching on"), by its nearest and farthest far looks where they
+    have them (`_plain_ground`); at most `SEGMENTS_PER_LINE` rows, the
+    nearest two and the farthest. The representative is the line's first
+    place, the one an observation is filed against."""
     from world.landscape import SEGMENTS_PER_LINE
     groups, order = {}, []
     for p in percepts or ():
@@ -3022,6 +3040,15 @@ def compose_landscape_line(line, text, *, episode=False, thing=None,
     compass_words = compass_words or {}
     joiner = str(text("landscape_and"))
     sep = str(text("landscape_items"))
+    # Every kind of building this line has said so far, in the words it said
+    # it -- a look's phrase, a named or notable building's, and the plain
+    # ones counted -- so a row whose buildings read as the ONE kind said
+    # before is said as more of them (`building_parts`).
+    said_kinds = set()
+
+    def count_bucket(n):
+        """The count words' bucket, as plain buildings are counted."""
+        return "1" if n == 1 else "2" if n == 2 else "few" if n <= 5 else "many"
 
     def lights_word(d):
         if not d.get("lights"):
@@ -3040,7 +3067,13 @@ def compose_landscape_line(line, text, *, episode=False, thing=None,
 
     def _building_whole(d):
         lights = lights_word(d)
-        base = text("landscape_building_" + (d.get("height") or "one"))
+        # ITS FAR LOOK, where the planner wrote one, in place of the words
+        # that say only that a building stands there (`world.landscape`) --
+        # never when its mass is dark: then only its lights show, and a mind
+        # that knows the place by name is told where they are, not what it
+        # is built of (review 2026-10-08, F5).
+        look = thing(d["look"]) if d.get("look") and not d.get("dark") else ""
+        base = look or text("landscape_building_" + (d.get("height") or "one"))
         if d.get("name"):
             base = text("landscape_building_named", building=base, name=d["name"])
             # The light at the named building, never trailing its name: "a
@@ -3050,30 +3083,100 @@ def compose_landscape_line(line, text, *, episode=False, thing=None,
             return base if not d.get("dark") else ""
         if d.get("dark"):
             return lights
+        if lights and d.get("look"):
+            # A look carries its own phrase ("hung with coils of rope"), so
+            # what stands with it is set apart from it (`landscape_with_look`).
+            return text("landscape_with_look", place=base, things=lights)
         return text("landscape_with_lights", place=base, lights=lights) if lights else base
 
-    def buildings(bs):
+    def building_parts(bs):
+        """``(again, parts)``: a row's buildings as phrases. `again` is the
+        back-reference, when there is one, which the caller says FIRST.
+
+        A building with a look of its own, its mass in view, is said by it
+        and never counted -- and buildings that read the same (the look,
+        and whatever light or top shows with it) are said once with their
+        count, so a row of alike houses is one phrase, never the same
+        phrase over and over (review 2026-10-08, F6: four alike houses ran
+        a line to 1,270 characters). With the owner's cap, the nearest that
+        many phrases of a row are said and the rest of its buildings are
+        said as if they had no look -- by their height, their lights and
+        their top (review R2-8: counted as plain, a lit one lost its light).
+        A building with no look is said or counted exactly as it was.
+
+        MORE OF THEM, ONLY WHERE NOTHING ELSE CAN BE WHAT THEY ARE MORE OF
+        (review R2-1). A row whose buildings read as the one kind of
+        building this line has said so far is said as more of them, with
+        their count ("two more such buildings"), and before anything else
+        on the row: said after a new phrase it read as more of THAT -- "a
+        tall brick warehouse with a hoist and more of the same" told the
+        mind of warehouses that were tarred houses, in both packs. Where the
+        line has said other kinds as well, the phrase is said again whole,
+        since a back-reference would leave the mind to guess which kind."""
+        from world.landscape import DESCRIBED_BUILDINGS_PER_ROW
         named = [b for b in bs if b.get("name")]
-        plain = [b for b in bs if not b.get("name") and (b.get("height") or "one") == "one"
+        looked = [b for b in bs if not b.get("name") and b.get("look") and not b.get("dark")]
+        alike = {}
+        for b in looked:
+            alike.setdefault(str(building(b)), []).append(b)
+        phrases = list(alike)
+        cap = DESCRIBED_BUILDINGS_PER_ROW
+        described = phrases if cap is None else phrases[:cap]
+        unlooked = [b for b in bs if b not in named and b not in looked] + [
+            dict(b, look="") for phrase in phrases[len(described):] for b in alike[phrase]]
+        plain = [b for b in unlooked if (b.get("height") or "one") == "one"
                  and not b.get("lights") and not b.get("dark") and not b.get("over")]
-        notable = [b for b in bs if b not in named and b not in plain]
-        parts = [building(b) for b in named + notable]
-        if len(plain) == 1:
-            parts.append(text("landscape_building_one"))
-        elif len(plain) == 2:
-            parts.append(text("landscape_buildings_2"))
-        elif 3 <= len(plain) <= 5:
-            parts.append(text("landscape_buildings_few"))
-        elif len(plain) > 5:
-            parts.append(text("landscape_buildings_many"))
-        parts = [str(x) for x in parts if x]
+        notable = [b for b in unlooked if b not in plain]
+        before = set(said_kinds)
+        again, parts = [], []
+        for b in named + notable:
+            phrase = str(building(b))
+            if phrase:
+                parts.append(phrase)
+                said_kinds.add(phrase)
+        for phrase in described:
+            bucket = count_bucket(len(alike[phrase]))
+            if before == {phrase}:
+                again.append(text("landscape_again_" + bucket))
+            elif bucket == "1":
+                parts.append(phrase)
+            else:
+                parts.append(text("landscape_alike_" + bucket, look=phrase))
+            said_kinds.add(phrase)
+        if plain:
+            parts.append(text("landscape_building_one") if len(plain) == 1
+                         else text("landscape_buildings_" + count_bucket(len(plain))))
+            said_kinds.add("\0plain")
+        return ([str(x) for x in again if x], [str(x) for x in parts if x])
+
+    def joined(parts):
         if len(parts) <= 1:
             return parts[0] if parts else ""
         return str(text("landscape_list")).join(parts[:-1]) + joiner + parts[-1]
 
-    def ground(d, run=False, standing=()):
-        if d.get("name"):
+    def buildings(bs):
+        again, parts = building_parts(bs)
+        return joined(again + parts)
+
+    def ground(d, run=False, standing=(), also=()):
+        # A RUN, said by its two ends: the nearest place's far look and the
+        # farthest's, where they have them -- the places between are said by
+        # the run, as they always were (`_plain_ground`).
+        head = thing(d["look"]) if d.get("look") and not d.get("name") else ""
+        tail = also[-1] if run and also else {}
+        far = thing(tail["look"]) if tail.get("look") else ""
+        if run and far and far != head:
+            kind = text("landscape_sheltered" if d.get("ground") == "sheltered"
+                        else "landscape_open")
+            base = text("landscape_look_run_to" if head else "landscape_run_to",
+                        place=head or kind, far=far)
+        elif run and head:
+            base = text("landscape_look_run", place=head)
+        elif d.get("name"):
             base = d["name"]
+        elif head:
+            # How it reads from afar, where the world declares it.
+            base = head
         elif d.get("ground") == "sheltered":
             base = text("landscape_sheltered")
         elif run:
@@ -3087,15 +3190,26 @@ def compose_landscape_line(line, text, *, episode=False, thing=None,
         # What stands on it -- its big things, then its buildings -- is ONE
         # list after "with", so nothing in it can read as standing on the
         # last noun of another (review: "an oak, and on it two buildings").
-        things = [thing(t) for t in d.get("big") or () if thing(t)]
-        bs = buildings(standing)
+        # More of the buildings said before leads it, so nothing new on the
+        # row can be what they are more of (`building_parts`).
+        again, bparts = building_parts(standing)
+        things = again + [thing(t) for t in d.get("big") or () if thing(t)]
+        bs = joined(bparts)
         things += ([bs] if bs else []) + ([lights] if lights else [])
-        return text("landscape_with", place=base, things=joiner.join(things)) if things else base
+        if not things:
+            return base
+        # A look is a phrase of its own and often ends in one ("lined with
+        # stalls"), so the list after it is set apart rather than read as
+        # part of it: "lined with stalls, with a narrow office" -- never
+        # "lined with stalls with a narrow office".
+        key = "landscape_with_look" if (d.get("look") and not d.get("name")) else "landscape_with"
+        return text(key, place=base, things=joiner.join(things))
 
     def row_phrase(row):
         if row.get("ground") is None:
             return buildings(row.get("buildings") or ())
-        return ground(row["ground"], run=row.get("run"), standing=row.get("buildings") or ())
+        return ground(row["ground"], run=row.get("run"), standing=row.get("buildings") or (),
+                      also=row.get("also") or ())
 
     lead = line.get("lead") or {}
     compass = compass_words.get(lead.get("compass") or "", "") if lead.get("compass") else ""

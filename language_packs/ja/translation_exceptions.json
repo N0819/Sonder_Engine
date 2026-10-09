@@ -250,6 +250,7 @@
   "wb-exit wb-thing-light": "CSS class names",
   "wb-exit wb-thing-sound": "CSS class names",
   "wb-exit wb-wall-form": "CSS class names",
+  "wb-field wb-far-look": "CSS class names",
   "wb-group wb-townsfolk-heading": "CSS class names",
   "wb-input wb-kind": "CSS class names",
   "wb-input wb-paces": "CSS class list — code, not prose",

@@ -17,7 +17,8 @@ out and open exits), the frontier's counts, the story's voice (its bible
 and the names its people carry), the names the world already holds, what
 the plan already holds ahead, the last few beats as the player saw them,
 and the grants. It answers with LIGHT PLANS -- rooms (a name, what it is
-for, the room and the way it joins), people (a name, a role, where they
+for, the room and the way it joins, how much sky it stands under and how it
+reads from far off -- `_seen_from_afar`), people (a name, a role, where they
 belong) and, only when a grant allows one and the pacing has run
 (`room_frontier.LOCAL_EVENT_BEATS`), at most one local event near the
 actors through the engine's own local-drama kinds. Code validates every
@@ -523,6 +524,28 @@ def _edge(joins, raw):
     return edge
 
 
+def _seen_from_afar(raw):
+    """What a sketched room says about being SEEN FROM FAR OFF: its
+    `exposure` in the engine's closed vocabulary (`weather.EXPOSURES`) and
+    its `far_look` (`landscape.normalize_far_look`), each fail-open -- a
+    word the engine cannot read is no value, as `plan_rooms` reads them.
+
+    Planting ahead is when a place is planned, and a sketched room arrived
+    with neither: every room the sketch filed was in no far view at all (an
+    undeclared room is no ground to the far layer), and one it had been
+    asked to look at from afar could only read as its ground."""
+    from world.landscape import FAR_LOOK_CHARS, normalize_far_look
+    from world.weather import EXPOSURES
+    out = {}
+    exposure = _given(raw.get("exposure"), 20).casefold()
+    if exposure in EXPOSURES:
+        out["exposure"] = exposure
+    look = normalize_far_look(_given(raw.get("far_look"), FAR_LOOK_CHARS * 2))
+    if look:
+        out["far_look"] = look
+    return out
+
+
 def _structure_for(cid, context, joins):
     """The structure a sketched room is planted under: its joined room's
     (as stored; publishing keeps whatever the stored record holds either
@@ -642,7 +665,7 @@ def _plan(cid, context, answer):
                             % (name, _text(raw.get("joins"), 120)))
             continue
         spec = {"name": name, "purpose": _text(raw.get("purpose"), 400),
-                "adjacent": [_edge(joins, raw)]}
+                "adjacent": [_edge(joins, raw)], **_seen_from_afar(raw)}
         if entry["claim"]:
             spec["claims"] = entry["claim"]
         planted[uid] = (joins, spec)

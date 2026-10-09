@@ -689,7 +689,12 @@ function wbRoomFields(slice, ctx) {
       field("Shape", shape, "wb-field-shape"),
       field("Exposure", wbSelect(vocab.exposure, record.exposure,
         { blank: "—", onchange: v => patch({ exposure: v }) })),
-      field("Region", el("span", { class: "wb-region-field" }, regionInput, regionsList, newRegion))),
+      field("Region", el("span", { class: "wb-region-field" }, regionInput, regionsList, newRegion)),
+      // How the place reads from far off (`world/landscape.py`): said to a
+      // far eye in place of its ground word; never its name, light or people.
+      field("Far look", wbText(record.far_look, v => patch({ far_look: v }),
+        { placeholder: "How the place reads from far off — no names, no light, no people" }),
+        "wb-field-far-look")),
     ...wbLintRows(slice, "extent"),
     partsEditor,
     ...wbLintRows(slice, "shape"),
@@ -721,11 +726,25 @@ function wbRegionLook(slice, ctx) {
     await ctx.refresh();
     return true;
   });
+  // The region's `far_look`: how the whole of it reads from far off, the
+  // far layer's word at the outline for a place with none of its own. A
+  // different fact from the picture's register above, on the same route.
+  const saveFar = far_look => wbWrite(ctx, async () => {
+    await api("PATCH",
+      `/api/chats/${ctx.chatId}/regions/${encodeURIComponent(region)}${frameQuery()}`,
+      { far_look });
+    await ctx.refresh();
+    return true;
+  });
   return el("div", { class: "wb-look" },
     el("label", { class: "wb-field" },
       el("span", { class: "small dim" }, "Look of the region"),
       wbText(slice.region_look || "", save,
         { placeholder: "What every picture of this part of the map shares — brick and iron under sodium lamps" })),
+    el("label", { class: "wb-field wb-far-look" },
+      el("span", { class: "small dim" }, "Far look of the region"),
+      wbText(slice.region_far_look || "", saveFar,
+        { placeholder: "How the whole of this part of the map reads from far off — no names, no light, no people" })),
     el("div", { class: "small dim wb-region-name-row" },
       "Shared by every room in", " ", el("b", { translate: "no" }, txt(name)),
       siblings.length ? [" ", el("span", { translate: "no" },

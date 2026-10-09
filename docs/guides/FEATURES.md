@@ -380,8 +380,17 @@ legitimately perceive, learn, remember or infer.
   four rooms off the place and what stands on it, five or more its outline,
   or by metres where the world measured the way. Places only, never the
   people in them; a far place is named once the character knows it and
-  described until then. *(partial: it reads only rooms that declare their
-  exposure, which the planner does from 2026-10-05; older worlds rarely do.)*
+  described until then -- by how it looks from a distance where the plan
+  says (a far look the Room writes for a place or a part of the map), never
+  by the name of another place the character has not learned, nor by the
+  name of a part of the map, save inside a place's own name as that place's
+  own look writes it. *(partial: it reads only rooms that declare
+  their exposure, which the planner does from 2026-10-05; a place has a far
+  look only where a plan, the planting sketch, a beat or the host wrote
+  one, from 2026-10-08, and older worlds rarely do; and a place's own name
+  written into its own far look is said as the word for what the place is
+  wherever nothing marks it as a name -- in a script without capitals that
+  takes in a coined name the card told the planner to leave out.)*
 - **Gates, portals and seals** — A way between two places can be a thing
   standing in a room rather than a doorway in a wall. It can be seen through
   while shut, let only the bodies it names pass, and be worn down by force a

@@ -2302,6 +2302,30 @@ def _player_known_places(ctx):
             if isinstance(stamp, dict) and str(stamp.get("room") or "") == str(key)}
 
 
+def _far_regions(ctx):
+    """The frame's region registry (`world.regions.region_registry`,
+    planted structures included), {region id: {name, far_look, ...}}, for
+    the far layer (`world/landscape`): a region's `far_look` is how a place
+    of it with none of its own reads at the outline, and a region's `name`
+    is one a look may not carry. Read once per stage; a world with no
+    regions gets {} and the far layer reads as before.
+
+    A FAILED READ FAILS CLOSED (review 2026-10-08, R2-3): it is logged and
+    handed on as `landscape.REGIONS_UNREAD`, which withholds every far look
+    of the view -- read as "no regions", the floor knew no region's name to
+    withhold, and a look naming the town was said to a stranger. Never a
+    failed view: the places read by their ground."""
+    from world.landscape import REGIONS_UNREAD
+    try:
+        from world.regions import region_registry
+        return region_registry(ctx.chat.id, getattr(ctx.turn, "frame_id", None))
+    except Exception as exc:
+        from core.logging_utils import logger
+        logger.warning("perception: the region registry is unavailable, so no far "
+                       "look is said this stage: %s", exc)
+        return REGIONS_UNREAD
+
+
 def _visible_rooms_for(scene, observer, room_id):
     """`visible_adjacent_rooms`, minus whatever is at this observer's back.
 
@@ -5520,7 +5544,8 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 body_scents=None, body_descriptions=None,
                                 prune_appearance=False,
                                 self_forms=(), self_pronouns=None,
-                                sound=None, prev_standing=frozenset()):
+                                sound=None, prev_standing=frozenset(),
+                                regions=None):
     """The standing-state half of one observer's IR: environment, presence,
     first-mention/changed appearances, own body state, standing contact
     sensations, bare body regions. Every admission is a subtraction --
@@ -5540,7 +5565,11 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     beat, and the one thing read from it here is whether they were already
     being delivered this room's sound (D3) -- empty on the opening beat and
     on any caller that has no ledger, which reads as "no record" and mints
-    nothing, never as "the room was silent"."""
+    nothing, never as "the room was silent".
+
+    `regions` is the frame's region registry (`_far_regions`): the far
+    layer's outline look for a place with none of its own, and the region
+    names its floor withholds."""
     percepts = []
     room = p.get("room")
     via_names = {}
@@ -5651,13 +5680,13 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         # and a place a look answered is not said again as standing ground.
         found = looked_far(sc, name, p.get("own_looks") or (),
                            known=p.get("known_places"), senses=p.get("sense_card"),
-                           via_names=via_names, gate=gate)
+                           via_names=via_names, gate=gate, regions=regions)
         percepts.extend(composer.landscape_look_percepts(found))
         answered = {f["room"] for f in found if f.get("place")}
         percepts.extend(composer.landscape_percepts([
             place for place in far_places(
                 sc, name, known=p.get("known_places"), senses=p.get("sense_card"),
-                via_names=via_names, gate=gate)
+                via_names=via_names, gate=gate, regions=regions)
             if (place.get("key_room") or place.get("room")) not in answered]))
         # WHAT STANDS ON THE HORIZON (`world/vistas`): from open air or a
         # window facing its way, through the weather, by the light, over what
@@ -6130,6 +6159,7 @@ def _opening_line_percept(ctx, sc, p, pid, name, entry, order, *, field,
 def _composer_establish_views(ctx, sc, perceivers, known, p_name,
                               p_appearance, entity_states, sensory_events,
                               presence_bodies=()):
+    regions = _far_regions(ctx)
     bodies = []
     p_visible, _, p_known_to, _ci = _subject_disguise_context(
         ctx, p_name, p_appearance, known)
@@ -6214,7 +6244,8 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
                 body_descriptions=body_descriptions,
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"),
-                sound=_sound_field_for(ctx, sc, name, p.get("room")))
+                sound=_sound_field_for(ctx, sc, name, p.get("room")),
+                regions=regions)
             # THIS BEAT'S sounds, so they reach the numbered deliveries
             # rather than the wallpaper. The establish stage's own call is
             # left keyless: its ambience is the air of a place and belongs
@@ -6290,6 +6321,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         p_disguise_terms, co_present, amap, speech_elems,
                         action, onset_legs=(), *, p_room, origin_sc=None,
                         origin_room=None, causal_worlds=()):
+    regions = _far_regions(ctx)
     onset_sequence = sequence_onset_elements(interp.get("sequence") or [])
     actor_names = {f"character:{c['id']}": character_name_from_text(c["sheet"])
                    for c in ctx.cast}
@@ -6470,7 +6502,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 self_pronouns=p.get("pronouns"),
                 sound=_sound_field_for(ctx, sc, name, p.get("room"),
                                        events=act_sounds),
-                prev_standing=prev_standing)
+                prev_standing=prev_standing,
+                regions=regions)
             if act_sounds:
                 percepts.extend(_gated_ambient_percepts(
                     _authored_prose_gate(
@@ -7029,6 +7062,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             amap, presence_bodies=()):
     chat = ctx.chat
     pers = persona_of(chat)
+    regions = _far_regions(ctx)
 
     cast_aliases = {}
     for c in ctx.cast:
@@ -7432,7 +7466,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                                   and not full_player_render),
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"),
-                sound=field, prev_standing=prev_standing)
+                sound=field, prev_standing=prev_standing,
+                regions=regions)
             if beat_sounds:
                 # WHERE IT HAPPENED, and then everywhere else it reached.
                 # A signal is received whole only in its own room, so that

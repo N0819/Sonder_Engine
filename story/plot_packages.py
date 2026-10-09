@@ -807,6 +807,15 @@ def _plan_geometry(raw):
     extent = normalize_extent(raw.get("extent"))
     if extent:
         out["extent"] = extent
+        # WHAT WAS WRITTEN, when the engine clamped it, for the preview to
+        # report (`_preview_plan_rooms`): the preview reads the STORED op,
+        # which holds only the clamped extent, so a clamp computed from it
+        # could never fire. Kept on the drafted op only -- the registry's
+        # allowlist (`structure.plant_structure`) takes `extent` alone.
+        from world.spatial import extent_clamp
+        moved = extent_clamp(raw.get("extent"))
+        if moved:
+            out["extent_said"] = dict(moved["requested"])
     shape = str(raw.get("shape") or "").strip().casefold()
     if shape in SHAPES:
         out["shape"] = shape
@@ -1040,10 +1049,43 @@ def _shape_plan_rooms(op):
             "frontier": [_text(x, 60) for x in raw.get("frontier") or ()
                          if _text(x, 60)],
             **_plan_geometry(raw),
+            **_plan_far_look(raw),
             **_plan_claim(uid, raw.get("claims")),
         }
-    return {"structure": dict(structure), "rooms": clean,
+    structure = dict(structure)
+    if "far_look" in structure:
+        far = _plan_far_look(structure)
+        if far:
+            structure.update(far)
+        else:
+            structure.pop("far_look")
+    return {"structure": structure, "rooms": clean,
             "owning_book_id": op.get("owning_book_id")}
+
+
+def _plan_far_look(raw):
+    """HOW A PLANNED PLACE READS FROM FAR OFF (`world.landscape`, the
+    owner's option of UNBUILT_WORLD §2.40, chosen 2026-10-08): the
+    planner's own field, never a desc -- a planned room carries no desc
+    until somebody goes there, and its `purpose` is a brief to the designer
+    (intent and proper names), never what an eye sees, so a far place
+    nobody had visited read as its ground alone ("open ground", "a
+    building"). Kept as the one spelling every reader shares
+    (`landscape.normalize_far_look`), fail-open like the rest of the
+    record: absent stays absent. What it may say is the card's; what a
+    mind may be told of it is decided where it is read (`landscape.
+    _admit_look`), never here."""
+    from world.landscape import normalize_far_look
+    look = normalize_far_look(raw.get("far_look"))
+    if not look:
+        return {}
+    out = {"far_look": look}
+    # HOW LONG IT WAS, when the engine cut it, for the preview to report --
+    # on the drafted op only, as `extent_said` is (`_plan_geometry`).
+    written = " ".join(str(raw.get("far_look") or "").split())
+    if len(written) > len(look):
+        out["far_look_cut_from"] = len(written)
+    return out
 
 
 def _preview_plan_rooms(cid, frame_id, op, world):
@@ -1099,7 +1141,8 @@ def _preview_plan_rooms(cid, frame_id, op, world):
     # (measured 2026-09-05, the manor run: a stable yard asked for "roughly
     # ten by six" was reported back as fourteen by twelve).
     geometry = {uid: {k: room[k] for k in ("extent", "shape", "exposure", "level",
-                                           "over", "floor", "surface", "quiet")
+                                           "over", "floor", "surface", "quiet",
+                                           "far_look")
                       if room.get(k)}
                 for uid, room in rooms.items()}
     geometry = {uid: g for uid, g in geometry.items() if g}
@@ -1115,7 +1158,8 @@ def _preview_plan_rooms(cid, frame_id, op, world):
     try:
         from world.spatial import extent_clamp
         for uid, raw in (op.get("rooms") or {}).items():
-            moved = extent_clamp((raw or {}).get("extent")) \
+            moved = extent_clamp((raw or {}).get("extent_said")
+                                 or (raw or {}).get("extent")) \
                 if isinstance(raw, dict) else None
             if not moved:
                 continue
@@ -1127,6 +1171,17 @@ def _preview_plan_rooms(cid, frame_id, op, world):
                    moved["max"], moved["min"]))
     except Exception:
         pass
+    # A FAR LOOK THE ENGINE CUT, likewise: the planner reads back what is
+    # kept (`landscape.FAR_LOOK_CHARS`), never only what it wrote.
+    from world.landscape import FAR_LOOK_CHARS
+    for uid, raw in [(None, op.get("structure") or {})] + list(
+            (op.get("rooms") or {}).items()):
+        if isinstance(raw, dict) and raw.get("far_look_cut_from"):
+            warnings.append(
+                "%s far_look was %d characters and at most %d are kept: %r"
+                % ("the structure's" if uid is None else "room %r's" % uid,
+                   int(raw["far_look_cut_from"]), FAR_LOOK_CHARS,
+                   raw.get("far_look", "")))
     vertical = sorted({"%s -> %s (%s)" % (uid, edge.get("to"), edge["vertical"])
                        for uid, room in rooms.items()
                        for edge in room["adjacent"] if edge.get("vertical")})
@@ -1136,6 +1191,10 @@ def _preview_plan_rooms(cid, frame_id, op, world):
                                         if r in world["planned"])}
     if geometry:
         change["geometry"] = geometry
+    if op["structure"].get("far_look"):
+        # How the whole of the structure reads from far off, shown back as
+        # the region's it becomes (`_apply_plan_rooms`).
+        change["region_far_look"] = op["structure"]["far_look"]
     if vertical:
         change["vertical"] = vertical
     if claim_plan["claims"]:
@@ -1196,6 +1255,18 @@ def _apply_plan_rooms(cid, frame_id, op, turn_idx):
         cid, _structure_as_held(cid, op["structure"]), rooms,
         owning_book_id=op.get("owning_book_id"), claims=claim_plan)
     out = {"structure": structure["key"], "rooms": sorted(planted)}
+    # A STRUCTURE IS A REGION (`world/regions.py`), so how the whole of it
+    # reads from far off is the region's, written into the frame's registry
+    # once -- never copied onto its rooms, where it would be a second
+    # spelling of one fact, free to disagree with a room's own -- and only
+    # when the plan says something new, so a host's edit stands
+    # (`lay_planned_region_far_look`). Reported as the region now reads.
+    far = _plan_far_look(op.get("structure") or {})
+    if far:
+        from world.regions import lay_planned_region_far_look
+        entry = lay_planned_region_far_look(cid, frame_id, structure["key"],
+                                            far["far_look"]) or {}
+        out["region_far_look"] = str(entry.get("far_look") or "")
     if claim_plan["claims"]:
         out["claimed"] = claim_plan["claims"]
     if errors:
@@ -2945,8 +3016,8 @@ OPERATION_FIELDS = {
                   "after it has gone",
     },
     "plan_rooms": {
-        "structure": "{key, name} -- the structure the rooms belong to",
-        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it; say it on every room: open ground and the buildings standing on it are what is seen from far off, and the engine never guesses it from a name, so a room that does not say is in no far view), level? (the storey: 0 the ground, +1 the floor above, -1 below; a stair changes it, a door does not), over? [<room_id>...] (rooms this one lies DIRECTLY ABOVE with no way between -- a loft over a byre; the engine puts the floor between them), floor? (timber | stone | concrete -- what that floor is made of: a tread on boards is heard below, a tread on stone is not), surface? (bare | furnished | soft -- what the walls give back: bare stone rings, carries a sound far, and smears words; absent is an ordinary furnished room), quiet? (hushed | dead -- a place that makes no sound of its own), sound? {level (faint | audible | loud | deafening | thunderous | catastrophic), detail (what it sounds LIKE, in a phrase)} -- a standing noise THE PLACE makes, heard from other rooms before anybody has seen this one: water moving, wind through a grille, something breathing. It is the room's, not a thing's -- a thing that makes a noise, a machine running included, is an entity with `sound_source` and falls silent when its state stops it. It is what the place would still be making with nobody in it, whatever the weather and whatever the story does: what someone there is doing is theirs and stops when they stop, what comes down from the sky is the weather's, which the engine hears for itself, and what WILL HAPPEN there -- the event you are planning -- is the beat's that plays it, never the room's. Written here, any of them goes on sounding for the rest of the story and drowns the voices in the room. A listener beyond the room is told the level, a direction and your `detail`, and never the room's name or what is in it, so say what it SOUNDS like and nothing about what it is), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing? (the compass point the way out is in, n | ne | e | se | s | sw | w | nw -- with distance, the only thing that says where a far place lies), vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this), way? (stair | ladder | hatch | overlook -- what a vertical way is; an overlook is a rail or an opening looked and called through and never walked), a vertical way carries a bearing TOO: the wall its own end sits on in this room, the same wall on every floor of a tower, and an overlook's bearing is the side its rail runs along, distance? (adjacent | near | far | remote, or a measurement with its unit -- how much ground the crossing itself is; far and remote take more than one beat to cross, so a way through that is not stepped over in a breath must say so here and not only in prose; a measurement is kept as one, and is how far off a place is seen)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>], claims? {room, axis} (this room FILLS a space an earlier plan held open -- give the room the frontier hangs off and its axis, exactly as inspect_structures lists them under `frontiers`; the space becomes this room instead of a second one beside it, and a room the story has already been in keeps the name it is known by)}}",
+        "structure": "{key, name, far_look?} -- the structure the rooms belong to, which is the part of the map they make; its far_look is how the WHOLE of it reads from far off, a phrase of the same kind as a room's, written only where that is true of every place in it: a place of it with no far_look of its own is seen by it from five or more rooms away",
+        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it; say it on every room: open ground and the buildings standing on it are what is seen from far off, and the engine never guesses it from a name, so a room that does not say is in no far view), far_look? (how the place reads FROM FAR OFF, as one short phrase a stranger's eye would compose of what stands there, seen whole -- for every place seen from outside: open ground, and a building as its outside shows; never its desc, and nothing for an inside nobody sees from afar. Every eye that far off is told it, knowing the place or not, so it names nothing -- not this place, not another, not the part of the map it is in, not anyone. A look that names another place or the part of the map is never said to a mind that has not learned that name; this place's own name, where the look uses it, is read as the word for what the place is and may be said to anyone. It is what the place is, never what passes over it: light and the hour are the engine's to add, and who is there or what is happening is the beat's), level? (the storey: 0 the ground, +1 the floor above, -1 below; a stair changes it, a door does not), over? [<room_id>...] (rooms this one lies DIRECTLY ABOVE with no way between -- a loft over a byre; the engine puts the floor between them), floor? (timber | stone | concrete -- what that floor is made of: a tread on boards is heard below, a tread on stone is not), surface? (bare | furnished | soft -- what the walls give back: bare stone rings, carries a sound far, and smears words; absent is an ordinary furnished room), quiet? (hushed | dead -- a place that makes no sound of its own), sound? {level (faint | audible | loud | deafening | thunderous | catastrophic), detail (what it sounds LIKE, in a phrase)} -- a standing noise THE PLACE makes, heard from other rooms before anybody has seen this one: water moving, wind through a grille, something breathing. It is the room's, not a thing's -- a thing that makes a noise, a machine running included, is an entity with `sound_source` and falls silent when its state stops it. It is what the place would still be making with nobody in it, whatever the weather and whatever the story does: what someone there is doing is theirs and stops when they stop, what comes down from the sky is the weather's, which the engine hears for itself, and what WILL HAPPEN there -- the event you are planning -- is the beat's that plays it, never the room's. Written here, any of them goes on sounding for the rest of the story and drowns the voices in the room. A listener beyond the room is told the level, a direction and your `detail`, and never the room's name or what is in it, so say what it SOUNDS like and nothing about what it is), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing? (the compass point the way out is in, n | ne | e | se | s | sw | w | nw -- with distance, the only thing that says where a far place lies), vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this), way? (stair | ladder | hatch | overlook -- what a vertical way is; an overlook is a rail or an opening looked and called through and never walked), a vertical way carries a bearing TOO: the wall its own end sits on in this room, the same wall on every floor of a tower, and an overlook's bearing is the side its rail runs along, distance? (adjacent | near | far | remote, or a measurement with its unit -- how much ground the crossing itself is; far and remote take more than one beat to cross, so a way through that is not stepped over in a breath must say so here and not only in prose; a measurement is kept as one, and is how far off a place is seen)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>], claims? {room, axis} (this room FILLS a space an earlier plan held open -- give the room the frontier hangs off and its axis, exactly as inspect_structures lists them under `frontiers`; the space becomes this room instead of a second one beside it, and a room the story has already been in keeps the name it is known by)}}",
         "owning_book_id?": "lorebook id"},
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",

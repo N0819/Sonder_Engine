@@ -624,6 +624,18 @@ room minted afterwards with no region is not quietly given one on the next
 open. A new column would have been a second spelling of `planned.structure`
 for every planned room.
 
+`far_look` (2026-10-08) is the third, and needed no backfill: a room's rides the
+scene blob and, for a planned room, `room_registry.payload.planned`; a region's
+rides the frame-scoped `regions` key beside its picture `look`, with
+`far_look_laid` -- the far look the plan last laid on it, written by
+`world.regions.lay_planned_region_far_look` alone; and `scene.far_looks_laid` --
+the far look each prose-free planned stub last took from its plan, read and
+written by `world.structure.materialize_planned_fringe` alone (the entity-rename
+walk leaves it, as it leaves every room-keyed ledger) and absent from a scene
+whose plans carry none -- rides the scene blob. Archive, checkpoint and branch
+carry all of them with no code of their own, and `tests/test_far_looks.py`
+proves the archive and checkpoint round trips.
+
 ## Runtime database selection
 
 `DB` defaults to `engine.db` and can be overridden with `ENGINE_DB` before importing `core/db.py`. Tests use `db.configure(path)` to switch connections safely.

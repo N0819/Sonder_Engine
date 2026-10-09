@@ -34,7 +34,7 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   map's legend words.
 * ``GET  /{room_id}?frame_id=`` -> the slice plus ``holder_name``,
   ``record`` (the room's stored editable fields: name, desc, notes, light,
-  size, exposure, region, extent, shape, parts, anchors, adjacent -- the
+  size, exposure, region, far_look, extent, shape, parts, anchors, adjacent -- the
   slice renders prose capped and exits derived, and an editor needs what
   is STORED -- plus ``geometry``, what the engine's grid makes of them:
   ``{w, d, shape, measured, size_derived, walls: {n, e, s, w: paces}}``,
@@ -43,7 +43,9 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   may name here, authored and the implicit `door:<to>` ones --
   `world.spatial.effective_anchors`, the same set
   `normalize_scene_stations` keeps -- each with its bearing), ``region_look``
-  (the region's `look` from the registry, '' when none) and ``lint`` (the
+  (the region's `look` from the registry, '' when none), ``region_far_look``
+  (the region's `far_look`, how it reads from far off, '' when none) and
+  ``lint`` (the
   layout-lint rows naming this room -- `world.spatial.room_layout_lint`,
   every standing row -- each the row plus ``field`` (`LINT_FIELDS`: the
   card field it concerns) and ``text`` (`layout_warning`)); 404 when no
@@ -106,6 +108,8 @@ tail), writing it through `wset` as `attire_put` does, and reconciling the
   with a message naming the set, and an empty string CLEARS the field
   (absent means the engine's default, which is what the word means);
   ``region`` is free text folded to a region id, empty clearing it;
+  ``far_look`` is text, kept as every writer keeps it
+  (`world.landscape.normalize_far_look`), empty clearing it;
   ``extent`` is ``{w, d}`` in paces, clamped by the engine's own
   `normalize_extent` to [`EXTENT_MIN_PACES`, `EXTENT_MAX_PACES`], refused
   when it is not a measurement, null/empty clearing it -- and setting one
@@ -709,6 +713,7 @@ def _geometry(scene, room_id, room):
 def _record(scene, room_id, room):
     """The room's stored editable fields, for the card's inputs, plus the
     `geometry` the engine derives from them."""
+    from world.landscape import normalize_far_look
     room = room if isinstance(room, dict) else {}
     anchors = room.get("anchors") or {}
     if isinstance(anchors, (list, tuple)):
@@ -721,6 +726,10 @@ def _record(scene, room_id, room):
         "size": str(room.get("size") or ""),
         "exposure": str(room.get("exposure") or ""),
         "region": str(room.get("region") or ""),
+        # How the place reads from far off (`world.landscape`), the plan's
+        # phrase the far layer says in place of its ground word -- in the
+        # one spelling every writer and reader keeps.
+        "far_look": normalize_far_look(room.get("far_look")),
         # The measurement as the engine reads it: an unreadable stored extent
         # is None here (the lint row `extent_unreadable` says what it was),
         # an unknown shape word is the rectangle it is read as.
@@ -744,6 +753,15 @@ def _region_look(cid, frame_id, region_id):
     return str(entry.get("look") or "")
 
 
+def _region_far_look(cid, frame_id, region_id):
+    """The region's `far_look` from the registry, '' when it has none."""
+    if not region_id:
+        return ""
+    from world.regions import region_registry
+    entry = region_registry(cid, frame_id).get(str(region_id)) or {}
+    return str(entry.get("far_look") or "")
+
+
 def _decorated_slice(cid, frame_id, room_id, scene, lint_rows=None):
     row = rooms.room_slice(cid, frame_id, room_id, scene)
     if row is None:
@@ -753,6 +771,10 @@ def _decorated_slice(cid, frame_id, room_id, scene, lint_rows=None):
     # meets the region; it is the REGION's field, shared by every room there,
     # and is written through the regions route, never the room PATCH.
     row["region_look"] = _region_look(cid, frame_id, row.get("region"))
+    # ...and how the region reads from far off, its other registry field
+    # (`world.regions.set_region_far_look`): a different fact from the
+    # picture's register beside it, written through the same route.
+    row["region_far_look"] = _region_far_look(cid, frame_id, row.get("region"))
     room = (scene.get("rooms") or {}).get(room_id)
     if isinstance(room, dict):
         row["record"] = _record(scene, room_id, room)
@@ -1560,6 +1582,19 @@ def room_patch(cid: int, room_id: str, body: dict = Body(...),
                     room[field] = value
                 else:
                     room.pop(field, None)
+        if "far_look" in body:
+            # Text, kept as every writer keeps it (`landscape.
+            # normalize_far_look`); empty removes it, and the place reads by
+            # its ground again.
+            from world.landscape import normalize_far_look
+            raw = body.get("far_look")
+            if raw is not None and not isinstance(raw, str):
+                raise HTTPException(400, "far_look must be text")
+            look = normalize_far_look(raw or "")
+            if look:
+                room["far_look"] = look
+            else:
+                room.pop("far_look", None)
         if "region" in body:
             from world.regions import normalize_region_id
             region = normalize_region_id(str(body.get("region") or ""))
@@ -1695,22 +1730,28 @@ def region_patch(cid: int, region_id: str, body: dict = Body(...),
     fidelity note left for a Room tool that is not built). Host-only,
     era-scoped and idle-guarded like the room writes; the region is entered
     by its id when the registry lacks it, as the seam does; an empty look
-    removes the field. Returns ``{id, name, brief, look, rooms}``, `rooms`
-    the live rooms of this frame in the region, so the card can say how
-    many rooms the one sentence reaches."""
+    removes the field. Or its `far_look` -- how the region reads from far
+    off, a different fact from the picture's register
+    (`world.regions.set_region_far_look`), the same rules. Returns ``{id,
+    name, brief, look, far_look, rooms}``, `rooms` the live rooms of this
+    frame in the region, so the card can say how many rooms the one
+    sentence reaches."""
     from world.regions import (ensure_regions, normalize_region_id,
-                               region_registry, set_region_look,
-                               set_region_name)
+                               region_registry, set_region_far_look,
+                               set_region_look, set_region_name)
     chat = _chat_or_404(cid)
     _require_idle(cid)
-    if not isinstance(body, dict) or not ({"look", "name"} & set(body)):
-        raise HTTPException(400, "Send {look} or {name}")
+    if not isinstance(body, dict) or not ({"look", "name", "far_look"} & set(body)):
+        raise HTTPException(400, "Send {look}, {far_look} or {name}")
     rid = normalize_region_id(region_id)
     if not rid:
         raise HTTPException(400, "A region needs an id")
     look = body.get("look")
     if look is not None and not isinstance(look, str):
         raise HTTPException(400, "look must be text")
+    far_look = body.get("far_look")
+    if far_look is not None and not isinstance(far_look, str):
+        raise HTTPException(400, "far_look must be text")
     # `name` (2026-09-05, the map's rename): the display name alone; the
     # id every room carries stays, so no room changes region.
     name = body.get("name")
@@ -1730,6 +1771,8 @@ def region_patch(cid: int, region_id: str, body: dict = Body(...),
         entry = None
         if "look" in body:
             entry = set_region_look(cid, frame_id, rid, look or "")
+        if "far_look" in body:
+            entry = set_region_far_look(cid, frame_id, rid, far_look or "")
         if "name" in body:
             entry = set_region_name(cid, frame_id, rid, name)
         if entry is None:
@@ -1742,7 +1785,8 @@ def region_patch(cid: int, region_id: str, body: dict = Body(...),
         if isinstance(room, dict) and str(room.get("region") or "") == rid)
     return {"id": rid, "name": str(entry.get("name") or rid),
             "brief": str(entry.get("brief") or ""),
-            "look": str(entry.get("look") or ""), "rooms": in_region}
+            "look": str(entry.get("look") or ""),
+            "far_look": str(entry.get("far_look") or ""), "rooms": in_region}
 
 
 bodies_router = APIRouter(prefix="/api/chats/{cid}/bodies", tags=["world-browser"])

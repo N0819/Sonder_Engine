@@ -94,6 +94,29 @@ def normalize_regions(stored):
         look = " ".join(str(value.get("look") or "").split())
         if look:
             entry["look"] = look
+        # `far_look`: how this part of the map READS FROM A DISTANCE -- the
+        # far layer's word for a place of it with no look of its own, at the
+        # outline (`world.landscape`). A DIFFERENT FACT from `look` beside
+        # it, and kept apart on purpose: `look` is a picture's register,
+        # shared by every room of the region inside and out and handed to an
+        # image model, and is free to carry weather and light ("under sodium
+        # lamps"); a far look is a noun phrase a mind is told, about the
+        # region seen whole from far off, and may carry neither (the hour
+        # is the engine's, UNBUILT_WORLD §1.174). One field asked both
+        # questions would answer one of them wrong.
+        from world.landscape import normalize_far_look
+        far_look = normalize_far_look(value.get("far_look"))
+        if far_look:
+            entry["far_look"] = far_look
+        # `far_look_laid`: the far look the PLAN last laid on this region
+        # (`lay_planned_region_far_look`), so a host's edit stands until the
+        # plan says something new. Kept whenever it was written, "" included.
+        if isinstance(value.get("far_look_laid"), str):
+            entry["far_look_laid"] = normalize_far_look(value["far_look_laid"])
+        # `name_set`: a host renamed this region (`set_region_name`), so the
+        # name stands even over a planted structure's own (`region_registry`).
+        if value.get("name_set") is True:
+            entry["name_set"] = True
         out[rid] = entry
     return {"version": REGIONS_VERSION, "items": out}
 
@@ -114,18 +137,30 @@ def region_registry(cid, frame_id=None):
     """``{region_id: {name, brief}}`` for the frame: the stored registry
     with every planted structure standing in it as a region. Read-through
     seeding, so a structure is never written twice; a stored entry for a
-    structure's key (a brief the room wrote) wins over the seed."""
+    structure's key (a brief the room wrote) wins over the seed.
+
+    A PLANTED STRUCTURE'S NAME IS THE STRUCTURE'S, unless a host renamed the
+    region (`set_region_name` marks the entry `name_set`). Every writer of a
+    stored entry seeds it with the name the structure had at that moment,
+    and a later plan that renamed the structure renamed nothing here: a far
+    look laid on a structure froze its old name, so the far layer's name
+    floor withheld the old name and let the new one through to a stranger
+    (review of 2026-10-08, the far looks' B1)."""
     from core.db import wget_for_frame
 
-    out = {}
+    out, planted = {}, {}
     for key, name in _planted_structures(cid).items():
         rid = normalize_region_id(key)
         if rid:
+            planted[rid] = name
             out[rid] = {"name": name, "brief": ""}
     stored = normalize_regions(
         wget_for_frame(cid, REGIONS_KEY, frame_id, {}) or {})["items"]
     for rid, entry in stored.items():
-        out[rid] = dict(entry)
+        entry = dict(entry)
+        if rid in planted and not entry.get("name_set"):
+            entry["name"] = planted[rid]
+        out[rid] = entry
     return out
 
 
@@ -185,6 +220,80 @@ def set_region_look(cid, frame_id, region_id, look):
     return dict(entry)
 
 
+def set_region_far_look(cid, frame_id, region_id, far_look):
+    """Write a region's `far_look` -- how that part of the map reads from a
+    distance (`normalize_regions`) -- into the frame's registry, entering
+    the region by its id when the registry lacks it, as `set_region_look`
+    does. An empty one removes the field. Returns the stored entry.
+
+    The HOST's writer, from the World Browser's room card
+    (`web/world_routes.region_patch`): it leaves what the plan last laid
+    alone (`far_look_laid`), so a plan restating its old word does not undo
+    the edit. The plan writes through `lay_planned_region_far_look`."""
+    from core.db import wget_for_frame, wset_for_frame
+    from world.landscape import normalize_far_look
+
+    rid = normalize_region_id(region_id)
+    if not rid:
+        return None
+    stored = normalize_regions(
+        wget_for_frame(cid, REGIONS_KEY, frame_id, {}) or {})
+    entry = dict(stored["items"].get(rid) or {})
+    if not entry:
+        seed = region_registry(cid, frame_id).get(rid) or {}
+        entry = {"name": str(seed.get("name") or region_id), "brief": ""}
+    text = normalize_far_look(far_look)
+    if text:
+        entry["far_look"] = text
+    else:
+        entry.pop("far_look", None)
+    stored["items"][rid] = entry
+    wset_for_frame(cid, REGIONS_KEY, stored, frame_id)
+    return dict(entry)
+
+
+def lay_planned_region_far_look(cid, frame_id, region_id, said):
+    """Lay the far look a PLAN says for a region -- a structure IS one, and
+    `plan_rooms` names it on the structure -- only when the plan says
+    something new, as `world.structure._lay_planned_looks` does for a stub
+    (review 2026-10-08, R2-5: a re-plan that added a barn and repeated the
+    structure's look put the plan's farmland back over the host's burned
+    waste). The entry keeps what the plan last laid (`far_look_laid`):
+
+    * the plan says what it last laid: nothing changes, and whatever the
+      region reads now -- a host's edit or clear -- stands;
+    * the plan says something new: its word is laid;
+    * the plan has laid nothing on this region yet: its word is laid only
+      where the region has no far look, so a host's earlier one stands.
+
+    A plan that names no far look on its structure is not asked here: a
+    publish that adds a room restates the structure's key and name and is
+    saying nothing about how the whole of it reads. Returns the stored
+    entry; writes only when something changed."""
+    from core.db import wget_for_frame, wset_for_frame
+    from world.landscape import normalize_far_look
+
+    rid = normalize_region_id(region_id)
+    said = normalize_far_look(said)
+    if not rid or not said:
+        return None
+    stored = normalize_regions(
+        wget_for_frame(cid, REGIONS_KEY, frame_id, {}) or {})
+    before = stored["items"].get(rid)
+    entry = dict(before or {})
+    if not entry:
+        seed = region_registry(cid, frame_id).get(rid) or {}
+        entry = {"name": str(seed.get("name") or region_id), "brief": ""}
+    laid = entry.get("far_look_laid")
+    if (laid is not None and said != laid) or (laid is None and not entry.get("far_look")):
+        entry["far_look"] = said
+    entry["far_look_laid"] = said
+    if entry != before:
+        stored["items"][rid] = entry
+        wset_for_frame(cid, REGIONS_KEY, stored, frame_id)
+    return dict(entry)
+
+
 def set_region_name(cid, frame_id, region_id, name):
     """Rename a region in the frame's registry -- the display name only; the
     id every room's `region` field carries is untouched, so no room moves.
@@ -206,6 +315,7 @@ def set_region_name(cid, frame_id, region_id, name):
         entry = {"name": str(seed.get("name") or region_id),
                  "brief": str(seed.get("brief") or "")}
     entry["name"] = text
+    entry["name_set"] = True
     stored["items"][rid] = entry
     wset_for_frame(cid, REGIONS_KEY, stored, frame_id)
     return dict(entry)
@@ -580,8 +690,9 @@ def backfill_regions(c):
 __all__ = [
     "REGIONS_KEY", "assign_regions", "backfill_regions", "ensure_regions",
     "holder_room_of", "inherit_regions", "normalize_region_id",
-    "normalize_regions", "planned_structure_of", "region_name",
-    "region_registry", "registry_room_regions", "registry_row_region",
-    "room_pieces", "room_region", "scene_anchors", "scene_rooms",
+    "normalize_regions", "planned_structure_of",
+    "region_name", "region_registry", "registry_room_regions",
+    "registry_row_region", "room_pieces", "room_region", "scene_anchors",
+    "scene_rooms", "lay_planned_region_far_look", "set_region_far_look",
     "set_region_look", "set_region_name",
 ]

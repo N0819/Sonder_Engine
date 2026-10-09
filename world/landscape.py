@@ -40,6 +40,23 @@ observer's by any edge declared from either side with any barrier
 (`neighbor_map`), and every room directly over or under it with no way
 between (`floor_edges`). No reader of sight reads this module, and it writes
 nothing.
+
+A FAR LOOK, where the world declares one (the owner's option of
+UNBUILT_WORLD §2.40, chosen 2026-10-08): how a place reads from a distance,
+written by the planner as a field of its own -- `far_look` on a room, and on
+a region in its registry (`world.regions`) -- never a `desc`. A place said
+by its ground alone ("open ground", "a sheltered place", "a building") is
+said by its look instead; a known place is still said by its name. A
+region's look stands for a ground place with none of its own only at the
+outline, five or more rooms off, where a place reads as the part of the map
+it is in. A look is admitted to a mind only when it carries no place's
+name that mind has not learned and no part of the map's name
+(`_admit_look`), and a person it has not met is said as its own gate says
+them. One name passes: a place's own, in its own look, where the look
+writes it as the word for what the place is (`SIGHT_NAMES`), which in a
+script without capitals nothing tells from a coined name; and a part of
+the map's name reaches a mind that knows a place of it only where the
+owner's switch says so (`REGION_NAMES_TO_LOCALS`, off).
 """
 
 from __future__ import annotations
@@ -67,9 +84,119 @@ NOMINAL_SPAN_M = 8.0     # a room with no authored extent, along a line of
 SLIVER_M = 0.5           # less of a place than this over what is in front of
                          # it is not a view of it
 
+#: THE LONGEST FAR LOOK KEPT, in characters (named to the owner,
+#: ask-before-limiting). A look is ONE phrase spliced into a line that
+#: carries up to three places (`SEGMENTS_PER_LINE`); 160 characters is about
+#: twenty-five English words -- room for a phrase, not a paragraph. A longer
+#: one is cut at its last comma, else its last space, before the limit
+#: (`normalize_far_look`), never refused: a look kept short is still a look.
+FAR_LOOK_CHARS = 160
+
+#: A RUN OF GROUND IS SAID TOGETHER WHETHER OR NOT ITS PLACES READ ALIKE --
+#: the owner's switch, OFF (review 2026-10-08, F10). Off, a run of plain,
+#: unnamed ground of one kind folds as it always did, so the three-row trim
+#: (`SEGMENTS_PER_LINE`) reaches no place the run covered, and the run is
+#: said by its nearest place's look and its farthest's ("a reedy bank,
+#: stretching on to a bare green hill"). On, every place whose look differs
+#: from its neighbour's is a row of its own -- each said by its own look --
+#: and the trim drops the middle rows a run used to carry: replayed on chat
+#: 166 with a look on every declared place, places told fell 414 -> 347.
+#: Trading places for detail is the owner's call.
+LOOKS_SPLIT_RUNS = False
+
+#: WHERE A ROOM'S NAME IS SAID AS THE WORD FOR WHAT THE PLACE IS, to a mind
+#: that has not learned the place -- the owner's switch (review 2026-10-08,
+#: F3 and R2-2; `_said_as_a_word`). A name is that word only where the
+#: place's OWN far look uses it, written all in lower case in a script with
+#: case, and with nobody inside it the observer has not met. Measured on
+#: Kirinoura and Brackwater with their rooms named in Japanese, and twelve
+#: looks that do carry a name a stranger lacks, plus two one-word coined
+#: English names, each in its own look and another's:
+#:
+#: * "own" (the default): the name is said in that place's own look and
+#:   nowhere else. Valid looks refused to a stranger: Kirinoura 1 of 7 (a
+#:   hall "above the stone stair", 石段 being the stair's name), Brackwater
+#:   0 of 20, English 0. Leaks admitted: 1 of 16 -- a Japanese inn's own
+#:   coined name in its own look, which nothing in a script without capitals
+#:   marks -- and it never reaches another look, alone or with the rest.
+#: * "every": the name is said in every look that carries it. Valid looks
+#:   refused: 0 of 7 and 0 of 20. Leaks admitted: 1 of 16 alone, 2 of 16
+#:   together -- once the inn's own look names the inn, a neighbour's look
+#:   naming the inn is said to every stranger as well.
+#: * None: never; every room name a mind lacks refuses the look, the floor
+#:   as first built. Valid looks refused: Kirinoura 6 of 7 and Brackwater 1
+#:   of 20, read as their ground; leaks admitted 0 of 16.
+#:
+#: "own" is the default because it is the narrowest that keeps the measured
+#: worlds' looks: a model's mistake costs one look, never every look that
+#: names the place.
+SIGHT_NAMES = "own"
+
+#: A REGION'S NAME IS SAID TO A MIND THAT KNOWS A PLACE OF IT -- the owner's
+#: switch, OFF (review 2026-10-08, R2-9). No engine channel carries a
+#: region's name to a mind, so a look that carries one -- a region's own, or
+#: a room's naming its town -- is withheld from every mind by default, and
+#: the place reads by its ground as it did before far looks. On, a mind
+#: that knows some room of the region is taken to know what that part of the
+#: map is called, and is told it. Measured: no valid look in either replay
+#: names a region (the card asks for none), so off withholds nothing a plan
+#: wrote by the card.
+REGION_NAMES_TO_LOCALS = False
+
+#: HOW MANY BUILDINGS OF ONE ROW ARE DESCRIBED BY THEIR LOOKS -- the owner's
+#: cap, NONE until they set one (review 2026-10-08, F6).
+#: Buildings that share a look are said once with their count whatever this
+#: is ("a few buildings alike, each a narrow house of tarred board"); with
+#: a number, the nearest that many looks of a row are said and the rest of
+#: its buildings are said as if they had no look -- counted where they are
+#: plain ("and two buildings"), by their height, their lights and their top
+#: where they are not (review R2-8: counted as plain, a lit one lost its
+#: light) -- which bounds a row's looks by `FAR_LOOK_CHARS` times this.
+#: None describes every one.
+DESCRIBED_BUILDINGS_PER_ROW = None
+
+
+class _UnreadRegions(dict):
+    """A region registry a stage could not read: it vouches for no region,
+    so no far look is said at all (`REGIONS_UNREAD`)."""
+
+
+#: What a stage hands the far layer when the frame's region registry could
+#: not be read (`perception._far_regions`): every far look is withheld for
+#: that view and its places read by their ground, because the floor cannot
+#: tell which names are regions' (review 2026-10-08, R2-3: read as "no
+#: regions", a look naming the town was said to a stranger).
+REGIONS_UNREAD = _UnreadRegions()
+
 OPEN_GROUND = ("open", "sheltered")
 _LOOKS_OUT = ("window", "open", "open_door", "bars", "one_way_window")
 _LIGHT_SHOWS = ("lit", "bright")
+#: Where a too-long look is cut first: a clause break, in either script.
+_LOOK_BREAKS = (", ", "、", "，", "; ")
+
+
+def normalize_far_look(value):
+    """A far look as stored and read: whitespace collapsed, at most
+    `FAR_LOOK_CHARS` characters -- cut at the last clause break, else the
+    last space, before the limit -- and "" for anything that is not text.
+    The one spelling every writer and the reader share (the plan, the
+    sketch, a beat's room write, the World Browser, the region registry)."""
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.split())
+    if len(text) <= FAR_LOOK_CHARS:
+        return text
+    head = text[:FAR_LOOK_CHARS]
+    cut = max(head.rfind(b) for b in _LOOK_BREAKS)
+    if cut <= 0:
+        cut = head.rfind(" ")
+    head = head[:cut] if cut > 0 else head
+    return head.rstrip(" ,;:、，-–—")
+
+
+def far_look_of(scene, rid):
+    """The far look a room declares, normalized; "" when it declares none."""
+    return normalize_far_look((_rooms(scene).get(rid) or {}).get("far_look"))
 
 
 def _rooms(scene):
@@ -610,7 +737,7 @@ def _eye_on_plan(scene, observer, here, toward):
 # ---------------------------------------------------------------------------
 
 def far_places(scene, observer, *, known=None, senses=None, via_names=None,
-               gate=None, hidden=None):
+               gate=None, hidden=None, regions=None):
     """The far places one body sees now, nearest first, each a record the
     composer words (`composer.landscape_percepts`). [] when none qualifies,
     which is every body in a closed room and almost every body in the
@@ -622,6 +749,15 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
     rows `perception._visible_openings` filled): a line leaving through any
     other room leads with its compass or nothing. `gate` is the observer's
     authored-prose gate, applied to every desc this hands on.
+
+    `regions` is the frame's region registry, {region id: {name, far_look,
+    ...}} (`world.regions.region_registry`, planted structures included): a
+    ground place with no look of its own reads by its region's `far_look`
+    at the outline, and a region's `name` is one a look may not carry
+    (`_place_forms`; `REGION_NAMES_TO_LOCALS`). `REGIONS_UNREAD`, a registry
+    the stage could not read, withholds every look. Each record's `look` is
+    the far look this mind may receive (`_admit_look`), "" where there is
+    none.
 
     `hidden`, when a list, collects every far place the walk reached and
     sight did not deliver, each with what hid it (`hidden_by`): the window's
@@ -792,6 +928,19 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
     twilight = SUN_LIGHT.get(phase) == "dim"
     obs_site = room_site(scene, here)
     places, claimed, graded = [], set(), 0
+    place_forms = None
+
+    def look_for(look, own_rooms=()):
+        """`look` as this mind may receive it, the place names read once a
+        walk and only when some place declares a look; `own_rooms` the rooms
+        whose own look it is. A registry the stage could not read vouches
+        for no name, so nothing is said (`REGIONS_UNREAD`)."""
+        nonlocal place_forms
+        if not look or isinstance(regions, _UnreadRegions):
+            return ""
+        if place_forms is None:
+            place_forms = _place_forms(scene, known, regions=regions) or False
+        return _admit_look(look, place_forms or None, gate, own=own_rooms, scene=scene)
     for rid, rec in sorted(best.items(), key=lambda kv: (kv[1]["hops"], kv[0])):
         if rid in near or rid in own:
             continue
@@ -911,6 +1060,12 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
             # in from it (`building_of` keeps that order) -- never the first
             # in the alphabet.
             named = next((known_name(m) for m in [rid, *rise] if known_name(m)), "")
+            # ITS LOOK, by the same order: the planner writes a far look on
+            # the room it plans, and any room of the mass may carry it -- the
+            # mass's own look, whichever of its rooms carries it.
+            place["look"] = look_for(next(
+                (far_look_of(scene, m) for m in [rid, *rise] if far_look_of(scene, m)), ""),
+                own_rooms=tuple(sorted(members)))
         else:
             light = normalize_light(room_light(scene, rid))
             seen_mass = not (night and light == "dark")
@@ -921,6 +1076,15 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
             place = {"ground": ground, "lights": lights, "high": False,
                      "breadth": _breadth(scene, rid), "dark": not seen_mass}
             named = known_name(rid)
+            # ITS LOOK: its own, else -- at the outline only, where a place
+            # reads as the part of the map it is in -- its region's.
+            look, looks_own = far_look_of(scene, rid), (rid,)
+            if not look and tier == "outline":
+                region = str((rooms.get(rid) or {}).get("region") or "")
+                look = normalize_far_look(
+                    ((regions or {}).get(region) or {}).get("far_look")) if region else ""
+                looks_own = ()                # the region's, no room's own
+            place["look"] = look_for(look, own_rooms=looks_own)
         grain = ("outline" if (tier == "outline" or dusk or not seen_mass
                                or sight != "full") else "mid")
         claimed |= members
@@ -963,7 +1127,7 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
 
 
 def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=None,
-               gate=None):
+               gate=None, regions=None):
     """What each far place this body's own act LOOKED AT this beat shows it:
     `[{"room", "label", "place": <far_places record> | None,
        "hidden_by": <cover> | None}]`.
@@ -993,7 +1157,8 @@ def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=Non
     bearings = {b for b in (normalize_bearing8(w) for w in words) if b}
     hidden = []
     places = far_places(scene, observer, known=known, senses=senses,
-                        via_names=via_names, gate=gate, hidden=hidden)
+                        via_names=via_names, gate=gate, hidden=hidden,
+                        regions=regions)
 
     def named_in(members):
         """The member a look named, by id or by its own name, or None."""
@@ -1072,6 +1237,209 @@ def looked_far(scene, observer, looks, *, known=None, senses=None, via_names=Non
                                            in OPEN_GROUND else "walls"),
                                   "room": "", "name": ""}})
     return out
+
+
+class _Floor:
+    """One mind's place-name floor for one walk (`_place_forms`): the
+    alternation over every name a place of this world goes by, the folded
+    names this mind lacks, and what it needs to ask whether a room's name is
+    said as the word for what the place is (`_said_as_a_word`)."""
+    __slots__ = ("pattern", "unknown", "rooms_named", "scene", "memo")
+
+    def __init__(self, pattern, unknown, rooms_named, scene):
+        self.pattern = pattern
+        self.unknown = unknown
+        self.rooms_named = rooms_named      # folded room name -> its room ids
+        self.scene = scene
+        self.memo = {}
+
+
+def _place_forms(scene, known, *, regions=None):
+    """The floor (`_Floor`) a far look must pass for this mind: one
+    alternation over every name a place of this world goes by -- each
+    room's, and each region's (`regions`, the frame's registry, planted
+    structures included) -- longest first, and the folded names among them a
+    look may not carry to this mind: the closed sets of place names the
+    world holds, never a list of words. None when this mind lacks none. ONE
+    alternation so the longest name wins at every position, as
+    `common._scrub_unknown_identities` does for people: a known "The Mill
+    Field" is matched whole and shields the unknown "The Mill" inside it.
+
+    WHAT A MIND LACKS. A room's name, unless it knows the room; where the
+    room's own look uses its name as the word for what the place is, the
+    look may still say it (`_said_as_a_word`). A region's name, always,
+    unless the owner's switch takes a mind that knows a room of that region
+    to know what that part of the map is called (`REGION_NAMES_TO_LOCALS`,
+    off): no engine channel carries a region's name to a mind (review
+    2026-10-08, F4: "the tarred roofs of Saltmarsh" was said to a mind that
+    knew no place there). A region's name is never a sight word: of the 39
+    region and structure names the two scratch dbs hold, 26 are engine ids
+    and 12 proper names ("Brackwater", "Minase", "Site-17"); the one common
+    word, chat 94's structure "apartment", is a word a look in that story
+    then may not carry at all."""
+    import re
+    from story.character_schema import name_boundary_pattern
+    known = known or {}
+    rooms = _rooms(scene)
+    names, unknown, rooms_named = {}, set(), {}
+    for rid, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        name = " ".join(str(room.get("name") or "").split())
+        if not name:
+            continue
+        folded = name.casefold()
+        names.setdefault(folded, name)
+        rooms_named.setdefault(folded, []).append(str(rid))
+        if str(rid) not in known:
+            unknown.add(folded)
+    known_regions = ({str((rooms.get(rid) or {}).get("region") or "") for rid in known}
+                     if REGION_NAMES_TO_LOCALS else set())
+    for region_id, entry in (regions or {}).items():
+        name = " ".join(str((entry or {}).get("name") or "").split()) \
+            if isinstance(entry, dict) else ""
+        if not name:
+            continue
+        names.setdefault(name.casefold(), name)
+        if str(region_id) not in known_regions:
+            unknown.add(name.casefold())
+    for rid in known:
+        own = " ".join(str((rooms.get(rid) or {}).get("name") or "").split())
+        unknown.discard(own.casefold())
+        learned = " ".join(str(known.get(rid) or "").split())
+        if learned:
+            names.setdefault(learned.casefold(), learned)
+    if not unknown:
+        return None
+    forms = sorted(names.values(), key=lambda f: (-len(f), f))
+    pattern = re.compile("|".join(name_boundary_pattern(f) for f in forms), re.IGNORECASE)
+    return _Floor(pattern, frozenset(unknown), rooms_named, scene)
+
+
+def _said_as_a_word(floor, written, own, gated):
+    """Is a room's name, matched in a look as `written`, said there as the
+    word for what the place IS -- never a spelling of its identity?
+    `gated()` is the look through the observer's people gate.
+
+    THE CLASS, MEASURED (review 2026-10-08, F3). A story names a place by
+    what it is as readily as by whose it is, and in a script with no spaces
+    nothing tells the name from the word: Kirinoura named in Japanese (広場
+    the square, 石段 the stone stair, 船着き場 the landing) refused six of
+    the seven looks written for it to a stranger -- five for carrying the
+    place's own name ("...丘のふもとの小さな広場") and one for carrying the
+    stair's ("石段の上に建つ...堂") -- so the far layer said "open ground"
+    where the plan had said what stood there. The name of a place nobody
+    has learned is withheld because it is learned by a channel; the word for
+    what a thing is, is what an eye meets.
+
+    A name is that word only where the place's OWN far look uses it -- the
+    plan, saying how the place reads from far off, said it with that word --
+    and only as far as the owner's switch reaches (`SIGHT_NAMES`): "own", in
+    that look alone; "every", in every look that carries it. Two things keep
+    a name a name all the same:
+
+    * A CAPITAL WHERE THE LOOK WRITES IT. Running text is how a script with
+      case marks a proper name ("the Turned Tide", "the mill of Thornby"),
+      so a look that writes the name with a capital anywhere -- the place's
+      own look or this one -- uses it as a name. A script without case has
+      no such mark, and there the card alone keeps a place's own coined name
+      out of its look: the one leak measured, kept to that one look by
+      "own" (review R2-2: under "every" it was said in a neighbour's look
+      too, and a one-word English name with only its initial capital passed
+      the old mark, which read the room's name and not the look).
+    * A STRANGER INSIDE IT: the observer's people gate changes it, so it is
+      no longer in the look the gate hands back ("the Gale house" is a
+      family's, whatever its look says). That is the gate call the look
+      pays to be said at all, so asking costs nothing more (review R2-4:
+      asked of every self-naming room on every walk, the gate cost 80-335 ms
+      a walk in a world named in Japanese)."""
+    folded = written.casefold()
+    if not SIGHT_NAMES or folded not in floor.rooms_named:
+        return False                   # a region's name is never a word
+    if any(ch.isupper() for ch in written):
+        return False
+    carriers = floor.rooms_named[folded]
+    if not any(str(r) in carriers for r in own):
+        if SIGHT_NAMES != "every" or not any(
+                _writes_as_a_word(floor, rid, folded) for rid in carriers):
+            return False
+    return written in gated()
+
+
+def _writes_as_a_word(floor, rid, folded):
+    """Does room `rid`'s own far look write its name `folded`, and only in
+    lower case?"""
+    key = ("own-look", rid, folded)
+    if key not in floor.memo:
+        look = far_look_of(floor.scene, rid)
+        written = [m.group(0) for m in floor.pattern.finditer(look)
+                   if m.group(0).casefold() == folded] if look else []
+        floor.memo[key] = bool(written) and not any(
+            ch.isupper() for w in written for ch in w)
+    return floor.memo[key]
+
+
+def _through_gate(scene, gate, look):
+    """`look` through the observer's people gate, as written (not yet cut to
+    length): once per look per read pass, so a stage's two walks over the
+    same view -- the standing one and a look's own (`looked_far`) -- pay one
+    gate call between them. `gate` is the observer's own, built once per
+    observer per stage, and is held by the pass's key, so no other mind's
+    gate can answer for it."""
+    if not gate:
+        return look
+    from world.scene_memo import scene_memo
+    try:
+        hash(gate)
+    except TypeError:                 # a gate that cannot key a memo is asked
+        return str(gate(look) or "")
+    return scene_memo(scene, ("landscape-look-gate", gate, look),
+                      lambda: str(gate(look) or ""))
+
+
+def _admit_look(look, forms, gate, own=(), scene=None):
+    """A far look as THIS mind may receive it, or "" when it may not.
+
+    TWO SUBTRACTIONS, both deterministic, because a leak is the engine's
+    failure and never a model's (`CLAUDE.md`, the firewall):
+
+    * a PERSON the mind has not met is said as the observer's own gate says
+      every authored prose about them (`gate`, `perception._authored_prose_
+      gate`: an unknown identity becomes its descriptor), as a big thing's
+      desc already is;
+    * a PLACE the mind has not learned is never named at range (ruling 3),
+      so a look that carries the name of a room this mind does not know --
+      matched whole, as the room is called, in whatever script it is
+      written, the longest name first (`_place_forms`) -- or of a region, is
+      not said at all, and the place reads by its ground as before. A look
+      says what an eye meets ("a footbridge of rope"); the name a place is
+      CALLED by ("the rope bridge") is what the mind learns by a channel,
+      and the planner is told so (`plan_rooms.far_look`). The one exception
+      is a room's name its own look uses as the word for what the place is
+      (`_said_as_a_word`, `SIGHT_NAMES`).
+
+    `forms` is `_place_forms`' floor, or None when this mind lacks no name;
+    `own` the rooms whose own look this is (a building's: every room of the
+    mass), empty for a region's; `scene` the scene the read pass is open
+    over (`_through_gate`)."""
+    if not look:
+        return ""
+    gated = []
+
+    def through_gate():
+        if not gated:
+            gated.append(_through_gate(scene, gate, look))
+        return gated[0]
+    # The place names first, on the look AS WRITTEN: the people gate
+    # rewrites a name's own parts into a descriptor, and a place called
+    # after somebody ("the Gale house") would then slip past as a phrase
+    # that names no place at all.
+    if isinstance(forms, _Floor):
+        for m in forms.pattern.finditer(look):
+            if m.group(0).casefold() in forms.unknown \
+                    and not _said_as_a_word(forms, m.group(0), own, through_gate):
+                return ""
+    return normalize_far_look(through_gate())
 
 
 def _breadth(scene, rid):

@@ -116,6 +116,26 @@ LAYOUT_PLAN_PREFIX = "layout:"
 #: a beat wrote and the yard's doorway offset off it, every commit).
 LAID_OUT_KEY = "laid_out"
 
+#: WHAT A PLAN SEEDS AND THE WORLD MAY CHANGE (2026-10-08). `far_look` --
+#: how the place reads from far off (`world.landscape`) -- travels with the
+#: plan the way `GEOMETRY_FIELDS` do: into the registry, onto the skeleton
+#: and onto the stub, because a stub that arrived without it would read as
+#: its ground alone ("open ground", "a building") to every far eye. It is
+#: NOT held by the plan while the stub is prose-free, as a measurement is: a
+#: beat that burns the place and a host who edits it both change how it
+#: reads from afar, and the plan re-imposing its word every commit undid
+#: both on exactly the places far looks are for (review 2026-10-08, F1).
+#: The plan's word reaches the stub when the plan SAYS something new
+#: (`_lay_planned_looks`).
+PLAN_SEEDED_FIELDS = ("far_look",)
+
+#: The scene's record of the far look each prose-free planned stub last took
+#: from its plan: ``{room uid: look}``. Read and written by
+#: `materialize_planned_fringe` alone, and absent from a scene whose plans
+#: carry no far look. Frame-scoped because the scene is, so a look a beat
+#: changes in one frame never reaches another frame's stub.
+LAID_LOOKS_KEY = "far_looks_laid"
+
 
 def planned_anchors(planned):
     """``{"anchors": {id: {...}}}`` for a planned room that names its
@@ -451,6 +471,64 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
     return True
 
 
+def planned_seed(planned):
+    """What a planned room SEEDS onto its record (`PLAN_SEEDED_FIELDS`),
+    omitting what it does not say -- a far look in the one spelling every
+    writer and reader keeps (`landscape.normalize_far_look`), whoever
+    planted it."""
+    from world.landscape import normalize_far_look
+    planned = planned if isinstance(planned, dict) else {}
+    out = {}
+    for key in PLAN_SEEDED_FIELDS:
+        value = (normalize_far_look(planned.get(key)) if key == "far_look"
+                 else copy.deepcopy(planned.get(key)))
+        if value:
+            out[key] = value
+    return out
+
+
+def _lay_planned_looks(scene, stubs, specs):
+    """Lay each prose-free planned stub's far look as its plan last SAID it.
+
+    `stubs` is the room ids of the prose-free planned stubs this pass keeps
+    and `specs` {uid: (name, spec)}. The scene keeps what each stub last
+    took (`LAID_LOOKS_KEY`), so the rule reads only the plan and that record:
+
+    * the plan says what the stub last took: nothing to do, and whatever the
+      stub reads now -- a beat's rewrite, a host's edit or clear -- stands;
+    * the plan says something new (a re-plan, a claim on a frontier space):
+      its word is laid;
+    * the stub has taken nothing yet in this frame: the plan's word is laid
+      only where the stub has no look, so a look the opening wrote onto it
+      stands;
+    * the plan says nothing: nothing is taken away, as no measurement is,
+      and a plan that once spoke is remembered as having fallen silent, so
+      its next word is new.
+
+    The record holds only stubs that still are ones; it leaves a scene
+    whose plans carry no far look exactly as it was."""
+    rooms = scene.get("rooms") or {}
+    laid = scene.get(LAID_LOOKS_KEY)
+    laid = dict(laid) if isinstance(laid, dict) else {}
+    kept = {}
+    for uid in stubs:
+        room = rooms.get(uid)
+        if not isinstance(room, dict):
+            continue
+        said = str((specs.get(uid) or (None, {}))[1].get("far_look") or "")
+        if uid in laid:
+            if said and laid[uid] != said:
+                room["far_look"] = said
+        elif said and not room.get("far_look"):
+            room["far_look"] = said
+        if said or uid in laid:
+            kept[uid] = said
+    if kept:
+        scene[LAID_LOOKS_KEY] = kept
+    else:
+        scene.pop(LAID_LOOKS_KEY, None)
+
+
 def _payload(row):
     try:
         return json.loads(row["payload"] or "{}")
@@ -604,6 +682,8 @@ def skeleton_rooms(cid, structure_key, frame_id=None):
             "region": normalize_region_id(structure_key),
             # And what the plan MEASURED, beside what the room is FOR.
             **planned_geometry(planned),
+            # And how it reads from far off (`PLAN_SEEDED_FIELDS`).
+            **planned_seed(planned),
             # And what it is MADE OF: the fixtures a body can reach.
             **planned_anchors(planned),
         }
@@ -974,6 +1054,9 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             # reached the registry sizeless and survived only as prose in
             # `purpose` (F47, measured 2026-09-05 in all five play runs).
             **planned_geometry(raw),
+            # And how it reads from far off, which the plan seeds and the
+            # world may change (`PLAN_SEEDED_FIELDS`).
+            **planned_seed(raw),
             # And the FIXTURES it named, which is what a hand resolves a
             # contact target against (`planned_anchors`).
             **planned_anchors(raw),
@@ -1179,6 +1262,7 @@ def materialize_planned_fringe(cid, scene):
             # opening, and a measurement the plan stated is not the
             # Director's to invent a second time.
             **planned_geometry(spec),
+            **planned_seed(spec),
             **planned_anchors(spec),
         }
         if spec.get("structure"):
@@ -1195,12 +1279,14 @@ def materialize_planned_fringe(cid, scene):
     # un-happens. Once the room carries prose it is its own
     # (`settle_developed_stubs` takes the seed off) and nothing here touches
     # it -- which is the same line the claim draws when it refuses to rename.
+    stubs = []
     for uid, (name, spec) in planned.items():
         room = rooms.get(uid)
         if not isinstance(room, dict) or not room.get("planned"):
             continue
         if str(room.get("desc") or room.get("description") or "").strip():
             continue
+        stubs.append(uid)
         room["name"] = name
         if str(spec.get("purpose") or ""):
             room["purpose"] = str(spec["purpose"])
@@ -1212,6 +1298,10 @@ def materialize_planned_fringe(cid, scene):
         # and every station hanging off it.
         for _aid, _anchor in planned_anchors(spec).get("anchors", {}).items():
             room.setdefault("anchors", {}).setdefault(_aid, _anchor)
+    # ITS FAR LOOK IS THE PLAN'S ONLY WHEN THE PLAN SPEAKS: a beat that
+    # burned the place, or a host who edited it, has the last word until the
+    # plan says something new (`PLAN_SEEDED_FIELDS`).
+    _lay_planned_looks(scene, stubs, planned)
     # THE SCENE ONLY EVER HOLDS AN EDGE INTO A ROOM THE SCENE HOLDS, and the
     # membership test runs after every stub of this pass exists, so two
     # planned rooms minted together keep the doorway between them.
@@ -1455,6 +1545,7 @@ def planned_room_brief(cid, scene, room_ids):
     Director stages and the spatial hand, never to a mind or the narrator,
     which learn the room by perceiving what the Director wrote.
     """
+    from world.landscape import normalize_far_look
     specs = _planned_specs(cid)
     rooms = (scene or {}).get("rooms") or {}
     names = {rid: str((r or {}).get("name") or rid) for rid, r in rooms.items()}
@@ -1483,6 +1574,16 @@ def planned_room_brief(cid, scene, room_ids):
             "access": str(spec.get("access") or room.get("access") or ""),
             "exits": list(exits.values()),
         }
+        # HOW IT READS FROM FAR OFF, as far eyes have been seeing it: the
+        # stub's own look first -- a beat that burned the place or a host
+        # who edited it wrote there, and the far layer reads nothing else --
+        # and the plan's only for a room the scene does not hold yet. The
+        # room the hand furnishes is the one that look describes, and a desc
+        # free to contradict it would be a second spelling of the place.
+        far_look = normalize_far_look(room.get("far_look") if rid in rooms
+                                      else spec.get("far_look"))
+        if far_look:
+            brief["far_look"] = far_look
         skey = str(spec.get("structure") or "")
         if skey:
             if structures is None:
@@ -2358,9 +2459,10 @@ def structure_warnings(structure, rooms, known=()):
 
 
 __all__ = [
-    "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "LAYOUT_ANCHOR_FIELDS",
-    "LAYOUT_EDGE_FIELDS", "LAYOUT_PLAN_PREFIX", "STRUCTURES_KEY",
-    "apply_planned_layout", "apply_solved_plans", "planned_anchors",
+    "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "LAID_LOOKS_KEY",
+    "LAYOUT_ANCHOR_FIELDS", "LAYOUT_EDGE_FIELDS", "LAYOUT_PLAN_PREFIX",
+    "PLAN_SEEDED_FIELDS", "STRUCTURES_KEY", "apply_planned_layout",
+    "apply_solved_plans", "planned_anchors", "planned_seed",
     "write_planned_layout",
     "apply_frontier_mutations", "claim_frontier_spaces",
     "composed_scene", "frontier_refusal", "frontier_spaces",
