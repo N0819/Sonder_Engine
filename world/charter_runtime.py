@@ -1810,6 +1810,16 @@ def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
         for edge in room.get("adjacent") or ():
             if isinstance(edge, dict):
                 edge["to"] = room_map.get(str(edge.get("to")), edge.get("to"))
+        # A split room's mark names the room it came from, and the rooms a
+        # room lies `over` are rooms too (the closure keeps a drafted room's
+        # measurements since 2026-10-08): both are room references like any
+        # edge, and travel with the re-key.
+        from world.frontage import split_marks
+        for mark, parent in split_marks(room).items():
+            room[mark] = room_map.get(parent, parent)
+        if isinstance(room.get("over"), list):
+            room["over"] = [room_map.get(str(under), under)
+                            for under in room["over"]]
         rooms[room_map[str(old_uid)]] = room
     # A dropped twin's doorways are the kept room's: its neighbours were
     # declared toward the same place under the other spelling.

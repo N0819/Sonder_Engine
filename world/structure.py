@@ -16,9 +16,14 @@ import re
 import threading
 
 from world.charter_model import integer as _integer
+from world.frontage import split_marks
 from world.regions import normalize_region_id
-from world.spatial import (derived_room_name, normalize_room_id,
-                           room_name_words, room_words_answer)
+from world.place_names import (SLOT, deal_place_name, is_pattern,
+                               name_patterns, resident_name_words,
+                               standing_fillers)
+from world.spatial import (derived_room_name, normalize_bearing,
+                           normalize_room_id, room_name_words,
+                           room_words_answer)
 
 
 STRUCTURES_KEY = "structures"
@@ -543,8 +548,10 @@ def registry_rows_for_update(cid):
     return _read_registry_rows(cid)
 
 
-def retired_room_spellings(cid):
-    """Every spelling a RETIRED registry row still answers to, normalized.
+def retired_room_spellings(cid, *, folded=True):
+    """Every spelling a RETIRED registry row still answers to, normalized
+    (`folded=False`: as written, for a reader that compares a script
+    `normalize_room_id` drops -- `world/place_names.spelling_key`).
 
     A RETIREMENT IS SPENT IDENTITY (review 2026-09-07, Section I residual on
     B8/A55). The registry is the authority for a room being over, and a ruin
@@ -570,7 +577,8 @@ def retired_room_spellings(cid):
         except (TypeError, ValueError, json.JSONDecodeError):
             aliases = []
         for spelling in (row["room_uid"], row["name"], *aliases):
-            slug = normalize_room_id(str(spelling or ""))
+            slug = normalize_room_id(str(spelling or "")) if folded \
+                else " ".join(str(spelling or "").split())
             if slug:
                 out.add(slug)
     return out
@@ -725,11 +733,15 @@ def frontier_refusal(axis, *, allow_bearing=False):
     return None
 
 
-def mint_frontier(structure, from_uid, axis, seed, existing=()):
+def mint_frontier(structure, from_uid, axis, seed, existing=(), *,
+                  lanes=None, reservation=None, standing=(), residents=(),
+                  spellings=()):
     """Deterministically turn one structure-side frontier label into a room.
 
-    A FRONTIER STUB IS NAMED FOR THE DIRECTION IT LEAVES IN, never for a room
-    the plan already has. The grammar's rule is chosen by its affinity with
+    A FRONTIER STUB IS NAMED FOR THE DIRECTION IT LEAVES IN -- or, for a
+    later stretch of one axis or a bare bearing whose kind the axis asked
+    for, dealt a word in its rule's frame (below) -- never for a room the
+    plan already has. The grammar's rule is chosen by its affinity with
     the axis (the words the axis shares with the rule's kind, names and
     purposes), so the "upland road" axis draws on the road rule and not the
     residential one; and a grammar name that is already a room -- the
@@ -760,6 +772,43 @@ def mint_frontier(structure, from_uid, axis, seed, existing=()):
     axis is refused exactly where the plan-side gate refuses it (ONE RULE,
     ONE OWNER, `frontier_refusal`): a bearing is not the name of a place, so
     it cannot be the name of what lies beyond the place it named.
+
+    A GRAMMAR NAME WITH A SLOT IS A FRAME, NOT A NAME. "the {name} Row" says
+    how this story calls a row; handed out as written it named a stub "the
+    {name} Sheds" (chat 165's grammar, the axis "the mainland": every one of
+    its eight patterns opens on "the", so the article alone made each one
+    eligible). A frame is never a stub's name as written, and a word every
+    grammar name shares cannot say which name the axis asked for, so it
+    makes none eligible: an axis that shares only an article with a
+    grammar of literal names keeps its own label.
+
+    A FRAME IS DEALT ONLY FOR A KIND THE AXIS ASKED FOR. Where the stub would
+    otherwise be named by an ordinal (a later stretch of one axis) or by a
+    bare bearing -- neither of which is a place's name -- the slot of its
+    rule's frame is dealt a word from the story's own naming `lanes`
+    (`world/place_names.py`, seeded by the structure and the stub's uid,
+    refusing `reservation`'s people, the town's `residents`, the `standing`
+    place words, and every spelling in `existing` and in `spellings`, the
+    rooms' spellings as written), but only when the axis names that rule's
+    kind -- a word of its `kind`, or one its frames do not all share -- more
+    than any other rule's, and the rule was drawn alone. A rule drawn at
+    random -- no affinity, or a tie broken by the seed -- is a kind nobody
+    chose, and each stretch of one axis can draw a different one: that guess
+    lives in `purpose`, which reaches the Director's brief and no mind, and
+    putting it into the NAME every mind reads would assert it (review
+    2026-10-08, M2: "the mainland" ran The Mainland -> "the Fennasted Way"
+    -> "the Hollaholm Row"). So is a rule a purpose's prose drew: its
+    articles and prepositions are words too, and "the far end of the walk"
+    drew the row rule by them (N1). The ordinal stays there. An axis the
+    planner named stays its name: it is the planner's word for what lies
+    that way, and a dealt one would replace it.
+
+    A DEALT NAME RENAMES THE ROOM, NEVER RE-KEYS IT. The uid stays the one
+    minted above (`far_walk_2`), as a sibling the closure names keeps its
+    own (`back_row_2`): the uid is the engine's key, the name the story's
+    word, and a uid re-derived from a name in a script `normalize_room_id`
+    does not fold was the empty id -- a kana name re-keyed a stub to the
+    room uid '' (review 2026-10-08, H1).
     """
     structure = normalize_structure(structure)
     material = "|".join((structure["key"], str(from_uid), str(axis), str(seed)))
@@ -770,16 +819,55 @@ def mint_frontier(structure, from_uid, axis, seed, existing=()):
         "kind": "place", "names": [axis_label], "purposes": [axis_label]}]
     words = _axis_words(axis_label)
 
-    def affinity(rule):
+    def pool_of(rule):
         pool = _axis_words(rule.get("kind"))
         for text in list(rule.get("names") or ()) + list(rule.get("purposes") or ()):
-            pool |= _axis_words(text)
-        return len(words & pool)
+            pool |= _axis_words(str(text).replace(SLOT, " "))
+        return pool
 
-    best = max(affinity(rule) for rule in grammar)
-    rules = [rule for rule in grammar if affinity(rule) == best] if best \
-        else list(grammar)
+    pools = [pool_of(rule) for rule in grammar]
+    # What every name says cannot tell one name from another, so it never
+    # makes a name eligible. (A word every RULE's pool holds raises every
+    # rule's affinity alike, which moves neither which rules tie at the top
+    # nor how many, so it needs no rule of its own.)
+    every_name = [_axis_words(str(n).replace(SLOT, " "))
+                  for rule in grammar for n in rule.get("names") or ()]
+    name_shared = set.intersection(*every_name) if len(every_name) > 1 else set()
+
+    def affinity(index):
+        return len(words & pools[index])
+
+    best = max(affinity(i) for i in range(len(grammar)))
+    rules = [rule for i, rule in enumerate(grammar) if affinity(i) == best] \
+        if best else list(grammar)
     rule = rules[rng.randrange(len(rules))]
+    # WHAT THE AXIS ASKED FOR IS READ OFF THE WORDS THAT NAME A KIND, never
+    # off a purpose's prose. The draw above reads every word of a rule, and
+    # a purpose is a sentence: its articles and prepositions are words like
+    # any other, so "the far end of the walk" drew the row rule by "the",
+    # "of" and "walk" (its purpose: "a row of stilt houses ... onto the
+    # walk") and its second stretch was dealt "the Holawick Row" -- a kind
+    # nobody chose, in the name every mind reads (review 2026-10-08, N1,
+    # chat 165's own grammar). A rule's kind is named by its `kind` and by
+    # the words its frames write around the slot, less the words EVERY one
+    # of its frames writes: those are how the story frames a place of that
+    # kind ("the {name} ..."), not which kind it is, and a rule with one
+    # frame is named by its `kind` alone. The axis asked for a rule when it
+    # shares more of those words with it than with any other rule, and its
+    # frame is dealt only where the draw picked that same rule, alone: a tie
+    # broken by the seed is a kind nobody chose (M2), and a draw the asking
+    # words disagree with was decided by the prose. The draw itself does not
+    # move, so `purpose` is what it was.
+    asking = []
+    for candidate in grammar:
+        frames = [_axis_words(str(pattern).replace(SLOT, " "))
+                  for pattern in name_patterns(candidate)]
+        framed = set().union(*frames) - set.intersection(*frames) \
+            if len(frames) > 1 else set()
+        asking.append(len(words & (_axis_words(candidate.get("kind")) | framed)))
+    top = max(asking)
+    asked = (bool(best) and len(rules) == 1 and bool(top)
+             and asking.count(top) == 1 and grammar[asking.index(top)] is rule)
     taken = {str(x) for x in existing}
     # A grammar name is the stub's only when the axis asked for it by a
     # word of its own -- "north" draws "North Lane"; "upland road" draws
@@ -789,8 +877,9 @@ def mint_frontier(structure, from_uid, axis, seed, existing=()):
     # name, and the Director names the room properly when it furnishes it.
     kind_words = _axis_words(rule.get("kind"))
     names = [name for name in (rule["names"] or ())
-             if normalize_room_id(name) not in taken
-             and (_axis_words(name) & words) - kind_words]
+             if not is_pattern(name)
+             and normalize_room_id(name) not in taken
+             and (_axis_words(name) & words) - kind_words - name_shared]
     purposes = rule["purposes"] or [rule["kind"]]
     name = _proper(names[rng.randrange(len(names))] if names else axis_label)
     base = normalize_room_id(name) or "planned_room"
@@ -801,6 +890,18 @@ def mint_frontier(structure, from_uid, axis, seed, existing=()):
         # A second segment of the same axis is the same name with an
         # ordinal, so the Director never sees two rooms spelled alike.
         name = f"{name} {suffix - 1}"
+    bare_bearing = not names and bool(
+        normalize_bearing(axis_label.casefold())
+        or axis_label.casefold() in ("up", "down"))
+    patterns = name_patterns(rule)
+    if (uid != base or bare_bearing) and asked and lanes and patterns:
+        pattern = patterns[int(digest[16:32], 16) % len(patterns)]
+        dealt = deal_place_name(
+            pattern, scope=structure["key"], key=uid, lanes=lanes,
+            reservation=reservation, residents=residents, standing=standing,
+            taken=list(taken) + [str(x) for x in spellings or ()])
+        if dealt:
+            name = dealt
     # A PURPOSE THAT IS THE NAME SAYS NOTHING, AND READS AS AUTHORED. A
     # structure with no grammar falls back to a rule built out of the axis
     # label itself, so the purpose comes back as the room's own name: the
@@ -876,6 +977,10 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             # And the FIXTURES it named, which is what a hand resolves a
             # contact target against (`planned_anchors`).
             **planned_anchors(raw),
+            # And, for a room the closure invented, the room it was split
+            # from (`world/frontage.py`): the plan is where provenance lives,
+            # and the frontage reads it there by the room's own uid.
+            **split_marks(raw),
         }
     if len(normalized) > structure["max_planned"]:
         raise ValueError("planned rooms exceed structure.max_planned")
@@ -946,6 +1051,17 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             held = spec.get("frontier_of")
             if isinstance(held, dict) and str(held.get("room")) in renamed:
                 held["room"] = renamed[str(held["room"])]
+            # Every other field that names a room: the room a split room came
+            # from, and the rooms a room lies `over` (a storey's footprint,
+            # `spatial_levels`), which a closure plan now carries. Left on the
+            # spent spelling, `over` named a ruin and the storey inference
+            # dropped the pair as unknown (review 2026-10-08, L4).
+            for mark, parent in split_marks(spec).items():
+                if parent in renamed:
+                    spec[mark] = renamed[parent]
+            if isinstance(spec.get("over"), list):
+                spec["over"] = [renamed.get(str(under), under)
+                                for under in spec["over"]]
     claimed = (claims or {}).get("rows") or {}
     holders = (claims or {}).get("holders") or {}
     with transaction():
@@ -1131,6 +1247,17 @@ def materialize_planned_fringe(cid, scene):
     # standing on the tier's plan, is read.
     apply_planned_layout(scene, planned)
     _settle_stub_barriers(rooms)
+    # THE ROOMS THE CLOSURE INVENTED, GIVEN A PLACE ONCE THEIR STREET HAS A
+    # WALL (`world/frontage.py`). A plan rarely says which wall a doorway is
+    # on -- the location contract asks for none -- so the wall arrives with
+    # whichever hand first declares one, usually the opening's establish, and
+    # this is the first point after every merge where the scene holds it. It
+    # writes doorway offsets only on rooms still the plan's prose-free stubs,
+    # moves a split room only along the wall a hand chose for it and only to
+    # where it then stands on no room on the plane, and a room it has placed
+    # carries its offset and is left alone thereafter.
+    from world.frontage import lay_frontages
+    lay_frontages(scene, {uid: spec for uid, (_name, spec) in planned.items()})
     return scene, added
 
 
@@ -1604,6 +1731,56 @@ def planned_context(cid, query):
     return None
 
 
+def _place_naming(cid, structure, by_uid, cache):
+    """What `mint_frontier` deals a place name with: the story's own naming
+    lanes, the identities they must not reproduce, the town's own residents,
+    every spelling a room answers to as written, and the place words already
+    standing in the grammar's frames -- or nothing at all for a grammar that
+    opened no slot, or a story with no naming law, so neither pays a read.
+
+    THE RESIDENTS ARE THE CHARTER REGISTRY'S PEOPLE, every institution's and
+    the unemployed alike: the closure held a dealt word apart from them and
+    the frontier was passed none, so chat 165's mainland minted "the
+    Holensted Walk" with Tibidis Holensted asleep in the Back Row (review
+    2026-10-08, M1). The SPELLINGS are as written, live rows and retired
+    ones, because `existing` is folded by `normalize_room_id` and a name in
+    a script it drops is not in it at all (H1). `cache["names"]` is the
+    pass's own list: `prepare_frontier_expansion` adds each name it mints,
+    so two stubs of one pass are held apart as well."""
+    grammar = normalize_structure(structure)["grammar"]
+    if not any(name_patterns(rule) for rule in grammar):
+        return {}
+    if "lanes" not in cache:
+        from story.naming import story_identity_reservation, story_naming_lanes
+        lanes, _source = story_naming_lanes(cid)
+        cache["lanes"] = lanes
+        cache["reservation"] = None
+        cache["residents"] = []
+        cache["names"] = []
+        if lanes:
+            from world.charter_runtime import registry_for
+            cache["reservation"] = story_identity_reservation(cid, lanes)
+            registry = registry_for(cid, None) or {}
+            bodies = []
+            for item in (registry.get("items") or {}).values():
+                state = (item or {}).get("state") or {}
+                bodies.extend((state.get("bodies") or {}).values())
+            for person in (registry.get("people") or {}).values():
+                if isinstance(person, dict):
+                    bodies.append(person.get("bodies"))
+            cache["residents"] = resident_name_words(bodies)
+            names = cache["names"]
+            for uid, entry in by_uid.items():
+                names.extend([str(uid), str(entry["name"] or "")])
+                names.extend(str(alias or "") for alias in entry["aliases"] or ())
+            names.extend(retired_room_spellings(cid, folded=False))
+    if not cache["lanes"]:
+        return {}
+    return {"lanes": cache["lanes"], "reservation": cache["reservation"],
+            "residents": cache["residents"], "spellings": cache["names"],
+            "standing": standing_fillers(grammar, cache["names"])}
+
+
 def prepare_frontier_expansion(cid, scene):
     """Mint approached frontier nodes without writing during commit prepare.
 
@@ -1655,6 +1832,7 @@ def prepare_frontier_expansion(cid, scene):
     # space beside it instead of a door into closed history.
     existing = set(by_uid) | set(by_name) | retired_room_spellings(cid)
     rooms = scene.setdefault("rooms", {})
+    naming_cache = {}
     for uid in sorted(occupied):
         if uid not in specs:
             continue
@@ -1718,8 +1896,14 @@ def prepare_frontier_expansion(cid, scene):
                 retained.append(axis)
                 continue
             new_uid, new_spec = mint_frontier(
-                structure, uid, axis, f"{cid}:{structure_key}", existing)
+                structure, uid, axis, f"{cid}:{structure_key}", existing,
+                **_place_naming(cid, structure, by_uid, naming_cache))
             existing.add(new_uid)
+            # A NAME DEALT THIS PASS IS A SPELLING THIS PASS HOLDS: the next
+            # stub is minted beside it, never onto it.
+            existing.add(normalize_room_id(new_spec["name"]) or new_uid)
+            if "names" in naming_cache:
+                naming_cache["names"].extend([new_uid, new_spec["name"]])
             standing[axis] = new_uid
             counts[structure_key] = counts.get(structure_key, 0) + 1
             edge = {"to": new_uid, "barrier": "open_door",

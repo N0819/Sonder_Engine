@@ -405,6 +405,18 @@ def check(cid):
             "stood at or taken cover behind: %s. Give each the features it is "
             "made of (`anchors`), or leave bare the ones that honestly hold "
             "nothing." % (len(bare), ", ".join(bare[:12])))
+    # THE ROOMS THE CLOSURE WILL INVENT, said to the planner whose plan made
+    # it invent them. A split was recorded in the closure and reached the
+    # host's launch warnings, never this review: chat 164's plan berthed a
+    # port-labour population on its public walk, the closure hung 29
+    # purpose-less annexes off that one room, and the Room was told nothing.
+    # A note, not an error -- a dwelling that grows siblings may be exactly
+    # what was meant.
+    if town is not None:
+        from world.charter_generate import berth_split_warning
+        for berth, record in sorted(
+                ((town.get("closure") or {}).get("berths_split") or {}).items()):
+            notes.append(berth_split_warning(berth, record))
     row["checked"] = not errors
     save_draft(cid, row)
     return {"ok": not errors, "errors": errors[:12], "notes": notes,

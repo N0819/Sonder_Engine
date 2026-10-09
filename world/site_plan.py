@@ -521,10 +521,93 @@ def _neighbour_offset(scene, a, a_xy, b):
     return (target[0] - db[0][0], target[1] - db[0][1])
 
 
+def _site_group(scene, start) -> set:
+    """Every placeable room joined to `start` by any edge, vertical
+    included: one building and its grounds, as the derivation groups them."""
+    from world.spatial import effective_adjacent
+    rooms = _scene_rooms(scene)
+    group, frontier = {start}, [start]
+    while frontier:
+        cur = frontier.pop()
+        for e in effective_adjacent(scene, cur):
+            to = str((e or {}).get("to") or "")
+            if to in rooms and to not in group and _placeable(scene, to):
+                group.add(to)
+                frontier.append(to)
+    return group
+
+
+def _grow(scene, group, xy) -> dict:
+    """Grow `xy` (``{room: (x, y)}``) outward over `group`, in place: across
+    doorways on a storey, straight up or down a stair (a stair lands over
+    where it left). Returns `xy`."""
+    from world.spatial import effective_adjacent, normalize_vertical
+    changed = True
+    while changed:
+        changed = False
+        for a in sorted(xy, key=str):
+            for e in effective_adjacent(scene, a):
+                b = str((e or {}).get("to") or "")
+                if b not in group or b in xy:
+                    continue
+                if normalize_vertical(e.get("vertical")):
+                    xy[b] = xy[a]
+                else:
+                    if room_level(scene, a) != room_level(scene, b):
+                        continue
+                    spot = _neighbour_offset(scene, a, xy[a], b)
+                    if spot is None:
+                        continue
+                    xy[b] = spot
+                changed = True
+    return xy
+
+
+def plan_clashes(scene, xy, *, first=False) -> list:
+    """``[(room, other)]`` for two rooms of `xy` on one storey whose cells
+    land on each other -- a plan that does not hold together -- but a
+    building standing on open ground is not a clash (`_stands_on`): live,
+    the Larch Hill tower's kitchen corner fell on the landing under its
+    legs, and a whole tower went without a plan (2026-10-04). `first` stops
+    at the first."""
+    from world.spatial import room_grid
+    held, out = {}, []
+    for r in sorted(xy, key=str):
+        level = room_level(scene, r)
+        for x, y in room_grid(scene, r).cells:
+            key = (level, x + xy[r][0], y + xy[r][1])
+            for o in held.get(key, ()):
+                if not _stands_on(scene, o, r) and (o, r) not in out:
+                    out.append((o, r))
+                    if first:
+                        return out
+            held.setdefault(key, []).append(r)
+    return out
+
+
+def plan_frames(scene) -> list:
+    """``[{room: (x, y)}]``: where the derivation lays every group of the
+    scene out, one frame per group, grown from the rooms already on a plan
+    or else from the group's first room at ``(0, 0)`` -- one storey or
+    several, whether or not the frame holds together. A reader that moves a
+    room asks this whether it would make a plan clash (`world/frontage.py`),
+    by the same growth `derive_site_plans` writes a plan with."""
+    rooms = _scene_rooms(scene)
+    frames, seen = [], set()
+    for start in sorted(rooms, key=str):
+        if start in seen or not _placeable(scene, start):
+            continue
+        group = _site_group(scene, start)
+        seen |= group
+        xy = {r: (room_site(scene, r)["x"], room_site(scene, r)["y"])
+              for r in group if room_site(scene, r)}
+        frames.append(_grow(scene, group, xy or {start: (0, 0)}))
+    return frames
+
+
 def derive_site_plans(scene) -> list:
     """Give every room of a multi-storey group that has no `site` one, in
     place; returns the room ids it placed. Idempotent."""
-    from world.spatial import effective_adjacent, normalize_vertical, room_grid
     rooms = _scene_rooms(scene)
     placed_now = []
     # the groups: rooms joined by any edge, vertical included
@@ -532,14 +615,7 @@ def derive_site_plans(scene) -> list:
     for start in sorted(rooms, key=str):
         if start in seen or not _placeable(scene, start):
             continue
-        group, frontier = {start}, [start]
-        while frontier:
-            cur = frontier.pop()
-            for e in effective_adjacent(scene, cur):
-                to = str((e or {}).get("to") or "")
-                if to in rooms and to not in group and _placeable(scene, to):
-                    group.add(to)
-                    frontier.append(to)
+        group = _site_group(scene, start)
         seen |= group
         if len({room_level(scene, r) for r in group}) < 2:
             continue                       # one storey: nothing for height to do
@@ -553,43 +629,13 @@ def derive_site_plans(scene) -> list:
             xy[start] = (0, 0)
         # grow outward from what is placed: across doorways on a storey,
         # straight up or down a stair (a stair lands over where it left)
-        changed = True
-        while changed:
-            changed = False
-            for a in sorted(xy, key=str):
-                for e in effective_adjacent(scene, a):
-                    b = str((e or {}).get("to") or "")
-                    if b not in group or b in xy:
-                        continue
-                    if normalize_vertical(e.get("vertical")):
-                        xy[b] = xy[a]
-                    else:
-                        if room_level(scene, a) != room_level(scene, b):
-                            continue
-                        spot = _neighbour_offset(scene, a, xy[a], b)
-                        if spot is None:
-                            continue
-                        xy[b] = spot
-                    changed = True
+        _grow(scene, group, xy)
         new = [r for r in group if r in xy and not room_site(scene, r)]
         if not new:
             continue
         # a plan that does not hold together is not written -- but a building
-        # standing on open ground is not a clash (`_stands_on`): live, the
-        # Larch Hill tower's kitchen corner fell on the landing under its
-        # legs, and a whole tower went without a plan (2026-10-04)
-        held = {}
-        clash = False
-        for r in sorted(xy, key=str):
-            for x, y in room_grid(scene, r).cells:
-                key = (room_level(scene, r), x + xy[r][0], y + xy[r][1])
-                if any(not _stands_on(scene, o, r) for o in held.get(key, ())):
-                    clash = True
-                    break
-                held.setdefault(key, []).append(r)
-            if clash:
-                break
-        if clash:
+        # standing on open ground is not a clash (`plan_clashes`)
+        if plan_clashes(scene, xy, first=True):
             continue
         for r in new:
             rooms[r]["site"] = {"plan": plan, "x": int(xy[r][0]), "y": int(xy[r][1]),

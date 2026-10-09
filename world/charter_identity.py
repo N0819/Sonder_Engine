@@ -583,6 +583,60 @@ def reconstructs_a_reserved_name(text, reservation):
     return False
 
 
+#: THE SIMILARITY FLOOR, ruled with the two above (owner, 2026-08-28: "LCS 4,
+#: Jaro-Winkler 0.88, shared-prefix veto 4" -- mid-band of what the
+#: record-linkage literature supports) and built 2026-10-08 for the first
+#: reader that screens by similarity: a place word code deals into a slot a
+#: structure grammar opened (`world/place_names.py`), held apart from the
+#: story's reserved name elements, from the town's residents and from the
+#: place words already standing, so a dealt "Saltwich" is never minted beside
+#: a standing "Saltwick", nor a "Marlaburn Row" where the Marleyburns sleep.
+#: Two words at or above it read as one word misheard. The person mint
+#: (`name_is_reserved`) still refuses by `NAME_RUN_FLOOR` and
+#: `NAME_PREFIX_FLOOR` alone; wiring this floor there changes who gets which
+#: name in every generated population, and is its own measured change.
+NAME_SIMILARITY_FLOOR = 0.88
+
+#: Jaro-Winkler's own constants (Winkler 1990): the common prefix it rewards
+#: is at most four characters, each worth a tenth of the distance left. They
+#: define the measure the floor above was ruled in, not a tuning of it.
+_WINKLER_PREFIX = 4
+_WINKLER_SCALE = 0.1
+
+
+def jaro_winkler(left, right) -> float:
+    """Jaro-Winkler similarity of two words, 0.0 to 1.0, over their
+    casefolded letters (`_letters`), so a hyphen, an apostrophe or a space
+    does not hide a resemblance. Two empty words are not similar."""
+    a, b = _letters(left), _letters(right)
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    window = max(0, max(len(a), len(b)) // 2 - 1)
+    a_hit, b_hit = [False] * len(a), [False] * len(b)
+    matches = 0
+    for i, ch in enumerate(a):
+        for j in range(max(0, i - window), min(len(b), i + window + 1)):
+            if not b_hit[j] and b[j] == ch:
+                a_hit[i] = b_hit[j] = True
+                matches += 1
+                break
+    if not matches:
+        return 0.0
+    a_seq = [ch for ch, hit in zip(a, a_hit) if hit]
+    b_seq = [ch for ch, hit in zip(b, b_hit) if hit]
+    transpositions = sum(x != y for x, y in zip(a_seq, b_seq)) / 2.0
+    jaro = (matches / len(a) + matches / len(b)
+            + (matches - transpositions) / matches) / 3.0
+    prefix = 0
+    for x, y in zip(a[:_WINKLER_PREFIX], b[:_WINKLER_PREFIX]):
+        if x != y:
+            break
+        prefix += 1
+    return jaro + prefix * _WINKLER_SCALE * (1.0 - jaro)
+
+
 def name_is_reserved(name, profile, reservation, given="", family=""):
     """Would minting this name take an identity a registered mind already has?
 

@@ -2557,6 +2557,86 @@ critic and a panel of three designs and three judges. Left:
   two-storey halls (every line to a far place is sampled four times a pace
   over the plan's slabs), against 2 ms off it -- the one cost left to cut.
 
+<a id="unbuilt-2-44"></a>
+
+### 2.44 The rooms the closure invents: frontages and names -- BUILT 2026-10-08, what is left
+
+[`design/DESIGN_CHARTER_PLACES.md`](design/DESIGN_CHARTER_PLACES.md). Built:
+split siblings and annexes marked, measured and laid along their street once
+a hand gives it a wall, a place taken only where the room then lands on no
+room on the plane; a street nobody measured lengthened to hold them and a
+split dwelling's siblings named in its frame, both on the owner's ruling of
+2026-10-08; names dealt into the grammar's `{name}` frames for a kind the
+axis names; the closure keeping a drafted room's measurements; every split
+said in the Room's review. What it leaves:
+
+* **One call is the owner's, built OFF: whether the plan specification tells
+  the Room what a frame is** (`charter_generate.PLAN_EXPLAINS_FRAMES`).
+  Rooms write frames unprompted -- chat 165's grammar is eight of them -- and
+  the engine fills them either way; the sentence changes only what the Room
+  is told, and may lead it to write more frames in every story.
+* **A street the Room measured is never lengthened at run time**, because
+  the fringe re-applies the plan's measurement to a stub every beat;
+  lengthening one would be a registry write, and is not built. Chat 165's
+  cross walk is unmeasured, so it is measured to 30 paces and holds all four
+  of the Back Row's siblings (8 sibling rows -> 0, derive 33 -> 18 pairs).
+* **A sibling whose doorway onto its street has no wall yet is not counted
+  when the street is measured**: only a room standing on the wall is, so a
+  hand that walls the parent and not its copies leaves the copies waiting
+  for walls of their own.
+* **A developed street keeps its doors where its author put them**, so a
+  sibling on it moves only by its own door: chat 165's main row's one sibling
+  stays stacked on the main row, on the main walk.
+* **What does not fit at run time is said only by the layout lint's own
+  rows** (`rooms_overlap_when_placed`), whose sentence blames a bearing;
+  `lay_frontages`' report -- placed, far side, measured, unplaced, paces
+  short, put back, the streets a sibling could front -- reaches no reader in
+  play. The closure's split warning reaches the host's launch warnings and
+  the Room's review.
+* **What cannot be placed is tried again every commit.** Nothing is pinned
+  unless it stands clear, so a sibling with no clear run costs a pass each
+  beat -- on chat 165's 30 rooms about 40 ms while all five of its siblings
+  wait, and about 15 ms once its cross walk holds four of them and only the
+  main row's sibling waits; about 50 ms on chat 164's -- and reads no plane while no run along its wall is free; one whose free runs all land on a room reads it once or twice every commit (14 of 375 fuzzed configurations over the stored scenes, up to about 0.25 s a commit on chat 166). A measurement the
+  plane refuses is tried again every commit too, two reads of the plane
+  (about 30 ms each on chat 165).
+* **Rectangles only**: a round or composite street or room is left to
+  whoever drew it.
+* **Towns planted before 2026-10-08 carry no marks**, so their siblings are
+  never laid; the measurements reconstructed the marks from the closure's
+  `<berth>_<n>` minting, for measurement only.
+* **The establish's own stacked rooms are not touched**: chat 165's three
+  rooms on the cross walk's six-pace east wall, three on the main walk's, and
+  the rest of its 18 remaining clash pairs; chat 166's five are the Room's and
+  the Director's. Several doorways on one wall laid by width rather than by
+  even fractions is the room-designer doorway work, not the closure's.
+* **What names a kind is read off words a space separates**, so an axis in
+  a script that does not space its words rarely names one. The draw that
+  picks a stretch's rule still reads every word of a rule, a purpose's
+  included, so a purpose that mentions another kind ties the draw and the
+  stretch keeps its ordinal: chat 165's row and shed purposes say "the
+  walk", so "far walk" names the walk rule and is drawn to a three-way tie.
+  Preferring the rule whose kind the axis names would name more stretches,
+  and would change which rule a tied axis draws in every story: not built.
+  A word only some of one rule's frames write -- an article one frame opens
+  on and another does not -- and a word of a kind written with an article or
+  a conjunction in it (chat 115's "containment_and_intake_annex") still name
+  that kind; no stored grammar with a frame has either.
+* **A frontier axis with no affinity to any rule still borrows a random
+  rule's purpose** (author knowledge, never a name). The kind it asserts was
+  never chosen; an absent purpose would be honest.
+* **A frame whose fixed words the room fold keeps** ("{name} Nagaya") folds
+  every name it makes in another script to those words alone, so it names at
+  most one room and the rest keep their ordinals.
+* **An annex is never named**: no rule is its kind. Chat 164's 29 annex
+  ordinals stand until its plan berths the walk's people elsewhere.
+* **A dealt sibling name can coincide with an unlanded planned room's name
+  elsewhere in the story** and be merged into it by
+  `_merge_generated_rooms_by_name`; the closure sees only its own plan.
+  Unmeasured; a dealt word is seeded and rarely collides.
+* **The person mint does not use `NAME_SIMILARITY_FLOOR`**
+  (`UNBUILT_IDENTITY.md` §1.90a).
+
 
 <a id="unbuilt-2-43"></a>
 ### 2.43 Buildings from relations: the layout solver as a tier of the plan -- first slice BUILT 2026-10-08, what is left

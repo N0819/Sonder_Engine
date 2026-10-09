@@ -372,6 +372,30 @@ def _json_call(system, payload, *, max_tokens=None, temperature=0.5):
     return value
 
 
+#: WHETHER THE PLAN SPECIFICATION SAYS WHAT A `{name}` FRAME IS. OFF, which
+#: is the specification every location pass and the utility one-shot read
+#: before 2026-10-08, and the owner's call, put to the owner and not yet
+#: answered: a Room writes frames unprompted -- chat 165's grammar is eight
+#: of them -- and the engine fills them either way (`world/place_names.py`),
+#: so the sentence changes only what the Room is told, and being told what a
+#: frame does may lead it to write more of them, in every story. On, the
+#: specification gains `_FRAME_CLAUSE`, which says what the engine does with
+#: a frame under the rulings that stand (siblings named, a frontier stretch
+#: named only where its label names the kind).
+PLAN_EXPLAINS_FRAMES = False
+
+_FRAME_CLAUSE = """
+A grammar name may instead be a frame with the slot `{name}` in it, for a kind
+of place each of whose places carries a name of its own. A frame is never a
+room's name as written. The engine fills its slot only in a room it mints that
+is plainly of that kind -- a further room of a dwelling it splits because more
+people sleep there than one room holds, where the dwelling's own name is an
+instance of the frame, or a further stretch of a frontier, or a frontier named
+only by its bearing, whose label names the kind -- and only with a word in
+this setting's own sound. Anywhere else the
+frame is passed over, and the room is labelled as if it were not there."""
+
+
 def plan_specification():
     """WHAT A LOCATION PLAN IS, as one string with one definition.
 
@@ -381,7 +405,10 @@ def plan_specification():
     to the same shape, and this is it -- handed to the Room in its task the
     way it is handed to the one-shot as its system prompt. Two copies of a
     2,800-word specification would drift, and the drift would be a plan the
-    Room wrote correctly and the closure refused."""
+    Room wrote correctly and the closure refused. `PLAN_EXPLAINS_FRAMES` is
+    read here, at the call, so both readers see the same switch."""
+    if PLAN_EXPLAINS_FRAMES:
+        return _PLAN_SYSTEM + _FRAME_CLAUSE
     return _PLAN_SYSTEM
 
 
@@ -393,7 +420,7 @@ def propose_town(lore, brief="", *, constraints=None, model_call=None):
             for key in ("scale", "topology", "required_rooms",
                         "featured_residents", "population", "naming_register")
             if constraints.get(key) not in (None, "", [])})
-    return (model_call or (lambda p: _json_call(_PLAN_SYSTEM, p)))(payload)
+    return (model_call or (lambda p: _json_call(plan_specification(), p)))(payload)
 
 
 def propose_history(plan, lore, horizon_hours, *, model_call=None):
@@ -745,7 +772,44 @@ def _post_berths(post, upkeeps, room_ids, requested_place, default_place):
     return [str(post.get("place") or default_place)]
 
 
-def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
+#: What a doorway carries about WHERE it is on the parent's wall, as distinct
+#: from what kind of doorway it is. A sibling is more of a dwelling and keeps
+#: the kind -- barrier, width, which wall, a stair -- but a place along the
+#: wall, a pinned cell or a passage record is the parent's own doorway, and a
+#: copy of it put every sibling's door on the parent's (`world/frontage.py`
+#: lays each sibling at a place of its own once a wall is known).
+_DOORWAY_PLACE_KEYS = ("offset", "cell", "passage")
+
+
+def _sibling_edge(edge):
+    return {key: value for key, value in edge.items()
+            if key not in _DOORWAY_PLACE_KEYS}
+
+
+def berth_split_warning(berth, record, ceiling=BERTH_CEILING):
+    """One split, in the words the host and the Room both read.
+
+    An ANNEX IS A ROOM NOBODY PLANNED. Its sleepers belong to a room people
+    WORK at, and the closure can only hang more purpose-less rooms off it:
+    chat 164's planner berthed a port-labour population on its public walk
+    and the closure hung 29 annexes off one room ("The Plank Walk Spine 2" ..
+    "30"), which no frontage can lay out and which nothing told the Room.
+    The fix is the plan's -- a population whose people sleep somewhere else
+    names its `berth` -- so that is what is said, every time, not only past
+    some count."""
+    rooms = list(record.get("rooms") or ())
+    line = (f"{berth!r} berthed more than {ceiling} sleepers; "
+            f"{len(rooms)} {record.get('mode')} minted ({', '.join(rooms)})")
+    if record.get("mode") == "annexes":
+        line += (" -- rooms with no purpose hung off a room people work at; "
+                 "a population whose people sleep somewhere else names its "
+                 "`berth` among the dwellings")
+    return line
+
+
+def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING, *,
+                   grammar=(), lanes=(), reservation=None, scope="",
+                   residents=()):
     """Split a berth over its ceiling into rooms beside it.
 
     A berth room holding more than ``ceiling`` sleepers is split one of two
@@ -754,7 +818,7 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
     post placed there) is a workplace and every other berth is a dwelling:
 
       * a DWELLING gets siblings: same purpose, same neighbours, reciprocal
-        edges on those neighbours, an ordinal on the name -- more houses on
+        edges on those neighbours, the same measurements -- more houses on
         the same lane -- and its sleepers are dealt across the set;
       * a WORKPLACE keeps its first ``ceiling`` sleepers and the overflow
         moves into annexes hung off it, which claim no purpose: the plan
@@ -763,11 +827,34 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
         so an empty seed is a room it will write rather than a room the
         closer guessed at.
 
+    Each minted room is MARKED with the room it was split from
+    (`frontage.SPLIT_OF` / `frontage.ANNEX_OF`), which is what lets
+    `world/frontage.py` give it a place on the plan once its street has a
+    wall. A sibling copies its parent's doorways but not where on the wall
+    the parent's door stands (`_DOORWAY_PLACE_KEYS`).
+
+    A SIBLING IS NAMED THE WAY ITS PARENT IS, on the owner's ruling of
+    2026-10-08 (`place_names.DEAL_SIBLING_NAMES`): where the parent's name is
+    an instance of one of the structure grammar's patterns ("the Back Row" of
+    "the {name} Row"), the slot is dealt a word from the story's own naming
+    `lanes` (`world/place_names.py`), seeded by the structure key and the
+    sibling's uid, held apart from the story's people, the town's
+    `residents` -- every body every charter berths, exactly and at the
+    similarity floor -- and the place words standing. Where the parent's
+    name is no instance, or no word survives the refusals, or the switch is
+    off, the ordinal stays ("the Back Row 2"). An annex is never dealt a
+    name: no rule is its kind, so no slot was opened for it.
+
     `place` follows `berth` for a body that was standing at home.
     ``charter_bodies`` is ``[(charter_key, bodies_dict, work_places)]``.
     Mutates ``rooms`` and the bodies in place. Returns
     ``{berth: {"mode": "siblings"|"annexes", "rooms": [ids]}}``.
     """
+    from world.frontage import ANNEX_OF, SPLIT_OF
+    from world import place_names
+    from world.place_names import deal_place_name, instance_of, standing_fillers
+    from world.structure import planned_geometry
+
     occupancy = {}
     workplaces = set()
     for ckey, bodies, places in charter_bodies:
@@ -778,6 +865,9 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
                 occupancy.setdefault(berth, []).append((str(ckey), str(bkey)))
     by_charter = {str(ckey): bodies for ckey, bodies, _p in charter_bodies}
     minted = {}
+    standing = standing_fillers(
+        grammar, [room.get("name") for room in rooms.values()
+                  if isinstance(room, dict)])
     for berth in sorted(occupancy):
         sleepers = sorted(occupancy[berth])
         if len(sleepers) <= ceiling:
@@ -785,6 +875,8 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
         base = rooms[berth] if isinstance(rooms.get(berth), dict) else {}
         annexes = berth in workplaces
         needed = -(-len(sleepers) // ceiling)
+        frame = None if annexes or not place_names.DEAL_SIBLING_NAMES \
+            else instance_of(grammar, base.get("name"))
         new_rooms = []
         index = 2
         while len(new_rooms) + 1 < needed:
@@ -796,14 +888,36 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING):
                 edges = [{"to": berth, "barrier": "open_door"}]
                 purpose = ""
             else:
-                edges = [dict(edge) for edge in base.get("adjacent") or ()
+                edges = [_sibling_edge(edge) for edge in base.get("adjacent") or ()
                          if isinstance(edge, dict) and edge.get("to")]
                 purpose = str(base.get("purpose") or "")
+            name = ""
+            if frame is not None:
+                taken = [str(r) for r in rooms] + [
+                    str(room.get("name") or "") for room in rooms.values()
+                    if isinstance(room, dict)]
+                name = deal_place_name(
+                    frame[0], scope=scope, key=uid, lanes=lanes,
+                    reservation=reservation, residents=residents,
+                    standing=standing, taken=taken)
+            if name:
+                filler = instance_of(grammar, name)
+                if filler:
+                    standing.append(filler[1])
             rooms[uid] = {
-                "name": f"{base.get('name') or berth} {index}",
+                "name": name or f"{base.get('name') or berth} {index}",
                 "purpose": purpose,
                 "adjacent": edges,
                 "frontier": [],
+                (ANNEX_OF if annexes else SPLIT_OF): berth,
+                # A SIBLING IS THE SAME KIND OF ROOM, MEASURED THE SAME -- but
+                # not over the same room: `over` names one room beneath the
+                # parent, which five siblings cannot all be standing on. An
+                # annex is not the same kind: what it is waits for the
+                # Director.
+                **({} if annexes else {
+                    key: value for key, value in planned_geometry(base).items()
+                    if key != "over"}),
             }
             for edge in edges:
                 neighbour = rooms.get(str(edge["to"]))
@@ -1023,6 +1137,16 @@ def close_plan(plan, *, history=None, featured_residents=None,
         plan, population, seats_by_charter)
     structure = _mapping(plan.get("structure"))
     structure["key"] = _key(structure.get("key"), "town")
+    # A PLAN THAT MEASURED ITS ROOMS KEEPS THE MEASUREMENTS. This rebuild is
+    # an allowlist, and it held the prose fields and dropped every one of
+    # them: the plan specification asks every room for its `exposure`, the
+    # Room's review refuses a draft without one, and the closure then threw it
+    # away -- chat 166's closure-planted pile houses reached the registry with
+    # no exposure, no extent and no storey, where the rooms a plot package
+    # planted beside them kept all three. The same fail-open normalizer the
+    # package path reads a planned room through (`plot_packages._plan_geometry`,
+    # F47), so the two paths into the registry hold the same kind of value.
+    from story.plot_packages import _plan_geometry
     rooms = {}
     for uid, raw in _mapping(plan.get("rooms")).items():
         if not isinstance(raw, dict):
@@ -1033,6 +1157,7 @@ def close_plan(plan, *, history=None, featured_residents=None,
             "adjacent": [dict(e) for e in raw.get("adjacent") or ()
                          if isinstance(e, dict) and e.get("to")],
             "frontier": [str(x) for x in raw.get("frontier") or () if str(x)],
+            **_plan_geometry(raw),
             # A PLAN THAT NAMED ITS FIXTURES KEEPS THEM. This rebuild is an
             # allowlist and it dropped `anchors` the same way `plant_structure`
             # did, so even a furnished plan arrived bare.
@@ -1293,17 +1418,37 @@ def close_plan(plan, *, history=None, featured_residents=None,
     # dwelling is a room, and rooms are the town's; a house that the
     # households charter and the inn's staff both berth in overflows as one
     # room, so the split has to see every charter's sleepers at once.
+    #
+    # A SPLIT SIBLING'S NAME, dealt on the owner's ruling
+    # (`place_names.DEAL_SIBLING_NAMES`), comes from the story's own naming
+    # lanes, in the order `story/naming.py` ranks them: the author's law alone
+    # when there is one, else each charter's law -- the same fragments the
+    # launch writes back as this story's phonology lanes
+    # (`charter_runtime._record_phonology`). The town's own people are
+    # refused exactly and at the similarity floor, so a row is never named
+    # the way a family living in the town is called.
+    from world.charter_identity import normalize_naming_profile as _law
+    if naming_law:
+        place_lanes = [_law(naming_law)]
+    else:
+        place_lanes = [state.get("naming") for _ckey, state, _p in pending
+                       if isinstance(state.get("naming"), dict)]
+    residents = sorted({word
+                        for _ckey, state, _p in pending
+                        for body in (state.get("bodies") or {}).values()
+                        if isinstance(body, dict)
+                        for word in str(body.get("name") or "").split()})
     minted_dwellings = _spread_berths(
         rooms, [(ckey, state["bodies"], places)
-                for ckey, state, places in pending])
+                for ckey, state, places in pending],
+        grammar=list(structure.get("grammar") or ()), lanes=place_lanes,
+        reservation=reservation, scope=structure["key"],
+        residents=residents)
     if minted_dwellings:
         structure["max_planned"] = max(
             len(rooms), _integer(structure.get("max_planned"), len(rooms)))
         for berth, record in sorted(minted_dwellings.items()):
-            closure_warnings.append(
-                f"{berth!r} berthed more than {BERTH_CEILING} sleepers; "
-                f"{len(record['rooms'])} {record['mode']} minted "
-                f"({', '.join(record['rooms'])})")
+            closure_warnings.append(berth_split_warning(berth, record))
     heads = {}
     # THE SEARCH FOR WHAT FEEDS A BODY IS THE TOWN'S, NOT THE INSTITUTION'S
     # (A25, owner's ruling 2026-09-08). A guesthouse buys its groceries and
@@ -1672,7 +1817,7 @@ __all__ = [
     "HISTORIAN_RESIDENT_CAP", "HISTORIAN_OVERRUN_RETRIES",
     "HISTORIAN_SUMMARY_WORDS", "HISTORIAN_CITATIONS_PER_ENTRY",
     "HISTORIAN_TURNING_POINTS", "historian_budget",
-    "close_plan", "ensure_required_rooms",
+    "berth_split_warning", "close_plan", "ensure_required_rooms",
     "event_chronicle", "ground_history_output",
     "narrate_actual_history", "normalize_featured_residents",
     "propose_history", "propose_town", "required_room_ids",

@@ -118,6 +118,15 @@ World and body:
   charter body stands within its room: the four-place rule, the seeded dealing,
   the read-time view, the routed Director move, and the World Browser's map
   (the marks, the row, the drag onto the registry). Built 2026-09-05.
+- [`DESIGN_CHARTER_PLACES.md`](design/DESIGN_CHARTER_PLACES.md) — the rooms the
+  charter closure invents: a split dwelling's siblings laid along their street
+  and an annex on a free wall of its workplace once a hand gives the wall,
+  only where the room then stands clear on the plane; the closure keeping a
+  drafted room's measurements; a name dealt into the frame the Room's grammar
+  opened, for a dwelling's siblings and for a stretch whose axis names the
+  kind; and the split said in the Room's review. Built 2026-10-08;
+  lengthening a street nobody measured and naming a dwelling's siblings are
+  on, by the owner's ruling the same day.
 - [`DESIGN_RUNNING.md`](design/DESIGN_RUNNING.md) — multi-room movement, bounded
   by decision rather than sight. Built.
 - [`DESIGN_SURFACE_COMFORT.md`](design/DESIGN_SURFACE_COMFORT.md) — ambient

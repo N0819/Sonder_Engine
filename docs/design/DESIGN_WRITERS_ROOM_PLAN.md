@@ -145,8 +145,10 @@ authors read the seam and not the design:
   rooms survive turn 0 with every edge (4 of 19 before).
 - **The opening commit keeps the plan** — `seed_scene_from_plan` and
   `structure.planned_room_ids`; a room minted under a planned name lands on
-  the planned room; a frontier stub is named for the axis it leaves on and a
-  planned name is reserved (`structure.mint_frontier`).
+  the planned room; a frontier stub is named for the axis it leaves on (a
+  later stretch whose axis names a rule's kind is dealt a word in that rule's
+  `{name}` frame, `world/place_names.py`) and a planned name is reserved
+  (`structure.mint_frontier`).
 - **Closure invariants** in `world/charter_generate.py` — population as a
   closure input (`POPULATION_TOLERANCE`), one seat per head post
   (`HEAD_SEATS`), `BERTH_CEILING`, a historian budget that holds

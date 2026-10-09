@@ -826,10 +826,26 @@ def _plan_geometry(raw):
     level = normalize_level(raw.get("level"))
     if level is not None:
         out["level"] = level
-    over = [str(x).strip() for x in (raw.get("over") or ()) if str(x or "").strip()]
+    # `over` is a LIST of room ids. A bare string is one room, never its
+    # letters ("chapel" read as ['c','h','a','p','e','l']), and anything else
+    # -- `true`, a number, an object -- is no value; iterating it raised, and
+    # the closure reads every drafted room through here since 2026-10-08, so
+    # one malformed room failed the Room's review and a one-shot launch
+    # (review 2026-10-08, L3).
+    raw_over = raw.get("over")
+    if isinstance(raw_over, str):
+        raw_over = [raw_over]
+    elif not isinstance(raw_over, (list, tuple)):
+        raw_over = ()
+    over = [str(x).strip() for x in raw_over
+            if isinstance(x, (str, int)) and not isinstance(x, bool)
+            and str(x).strip()]
     if over:
         out["over"] = over[:8]
-    floor = str(raw.get("floor") or "").strip().casefold()
+    # A floor is a word; an object or a flag is no word, and its repr is not
+    # one either.
+    floor = raw.get("floor")
+    floor = floor.strip().casefold() if isinstance(floor, str) else ""
     if floor:
         out["floor"] = floor[:20]
     surface = normalize_surface(raw.get("surface"))

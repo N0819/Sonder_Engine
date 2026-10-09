@@ -766,6 +766,17 @@ phonology > charters > harvested. `tests/test_name_material_partition.py`,
   so 24 bodies draw from a 12 x 9 space and family names recur. That is the
   capacity allocator's documented reuse-after-exhaustion, not a new defect;
   a law that gives one clean opening in three cannot sound wider than it is.
+- **Jaro-Winkler 0.88 is built and screens place words only.** The owner
+  ruled LCS 4, Jaro-Winkler 0.88 and a shared-prefix veto of 4 together on
+  2026-08-28; the person mint still refuses by `NAME_RUN_FLOOR` and
+  `NAME_PREFIX_FLOOR` alone. `charter_identity.jaro_winkler` and
+  `NAME_SIMILARITY_FLOOR` landed 2026-10-08 for the first reader that screens
+  by similarity, a place word dealt into a structure grammar's frame
+  (`world/place_names.py`): held at the floor apart from the story's reserved
+  name elements, the town's residents and the place words standing, and by
+  the prefix veto apart from the place words standing. Wiring the floor into
+  `name_is_reserved` changes who gets which name in every generated
+  population, and wants its own measurement first.
 
 <a id="unbuilt-1-91"></a>
 
