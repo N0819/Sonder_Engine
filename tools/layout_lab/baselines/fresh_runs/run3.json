@@ -1,0 +1,1754 @@
+{
+ "scenario": "shrine2",
+ "title": "The Shrine of the Golden Fox",
+ "inventory": {
+  "name": "The Shrine of the Golden Fox",
+  "storeys": [
+   {
+    "level": 0,
+    "name": "GROUND FLOOR"
+   },
+   {
+    "level": 1,
+    "name": "SECOND FLOOR"
+   },
+   {
+    "level": 2,
+    "name": "TOP FLOOR",
+    "smaller": true
+   },
+   {
+    "level": -1,
+    "name": "BASEMENT"
+   }
+  ],
+  "rooms": [
+   {
+    "id": "genkan",
+    "name": "GENKAN",
+    "level": 0,
+    "own_walls": "The front door opens from the Lantern Path into the GENKAN",
+    "part_of": "",
+    "why": "The front door opens from the Lantern Path into the GENKAN, a small entry hall with an earthen floor in the middle of the south front"
+   },
+   {
+    "id": "main_hall",
+    "name": "MAIN HALL (O-HEYA)",
+    "level": 0,
+    "own_walls": "a shoji door opens onto the BOX STAIRCASE",
+    "part_of": "",
+    "why": "the MAIN HALL (O-HEYA), a twelve-mat tatami room at the heart of the house, its ceiling held by vermillion lacquered pillars"
+   },
+   {
+    "id": "kitchen",
+    "name": "KITCHEN (DAIDOKORO)",
+    "level": 0,
+    "own_walls": "the kitchen's back door, which opens onto the path to the well",
+    "part_of": "",
+    "why": "the KITCHEN (DAIDOKORO), a six-mat room on the service side of the house"
+   },
+   {
+    "id": "washroom",
+    "name": "WASHROOM (OFUROYA)",
+    "level": 0,
+    "own_walls": "Its back door opens north onto the roofed walkway to the latrine",
+    "part_of": "",
+    "why": "West of the main hall lies the WASHROOM (OFUROYA)"
+   },
+   {
+    "id": "hallway",
+    "name": "HALLWAY",
+    "level": 1,
+    "own_walls": "Windows line its west wall",
+    "part_of": "",
+    "why": "the HALLWAY, a narrow wooden corridor running north to south across the middle of the upper floor, which stands over the main hall"
+   },
+   {
+    "id": "meditation_room",
+    "name": "MEDITATION ROOM",
+    "level": 1,
+    "own_walls": "two shoji doors open, in order from the north: the MEDITATION ROOM",
+    "part_of": "",
+    "why": "the MEDITATION ROOM, a four-and-a-half-mat room of bare polished wood"
+   },
+   {
+    "id": "hinamis_room",
+    "name": "HINAMI'S ROOM",
+    "level": 1,
+    "own_walls": "then HINAMI'S ROOM, a six-mat tatami room",
+    "part_of": "",
+    "why": "then HINAMI'S ROOM, a six-mat tatami room with a window facing the moonrise to the east"
+   },
+   {
+    "id": "tamamo_roost",
+    "name": "TAMAMO'S ROOST",
+    "level": 2,
+    "own_walls": "TAMAMO'S ROOST is the room under the peaked roof",
+    "part_of": "",
+    "why": "TAMAMO'S ROOST is the room under the peaked roof, smaller than the floor below because of the roofline, the most private space in the shrine"
+   },
+   {
+    "id": "basement",
+    "name": "BASEMENT",
+    "level": -1,
+    "own_walls": "The stone stairs descend into the BASEMENT, carved directly into bedrock",
+    "part_of": "",
+    "why": "The stone stairs descend into the BASEMENT, carved directly into bedrock under the north half of the shrine, warm and damp"
+   },
+   {
+    "id": "latrine",
+    "name": "latrine",
+    "level": 0,
+    "own_walls": "The latrine is a separate small structure behind the shrine's west end",
+    "part_of": "",
+    "why": "The latrine is a separate small structure behind the shrine's west end, reached along a short roofed walkway from the back door of the washroom"
+   }
+  ],
+  "zones": [
+   {
+    "id": "engawa",
+    "name": "engawa veranda",
+    "room": "main_hall",
+    "why": "An engawa veranda runs along its east side behind sliding shoji, open to the garden"
+   },
+   {
+    "id": "sitting_area",
+    "name": "sitting area",
+    "room": "main_hall",
+    "why": "In the middle of the room is the sitting area"
+   },
+   {
+    "id": "earthen_floored_half",
+    "name": "earthen-floored half",
+    "room": "kitchen",
+    "why": "an earthen-floored half where the clay-and-stone kamado stove stands against the east wall"
+   }
+  ],
+  "fixtures": [
+   {
+    "id": "step",
+    "name": "step",
+    "in": "genkan",
+    "mount": "floor",
+    "implied": false,
+    "why": "a step up marks the strict boundary where footwear is forbidden"
+   },
+   {
+    "id": "shoe_rack",
+    "name": "shoe rack",
+    "in": "genkan",
+    "mount": "floor",
+    "implied": false,
+    "why": "A shoe rack stands against its east wall"
+   },
+   {
+    "id": "wooden_tablet",
+    "name": "wooden tablet",
+    "in": "genkan",
+    "mount": "hung",
+    "implied": false,
+    "why": "a wooden tablet in archaic kanji hangs above the step"
+   },
+   {
+    "id": "tokonoma_alcove",
+    "name": "tokonoma alcove",
+    "in": "main_hall",
+    "mount": "floor",
+    "implied": false,
+    "why": "The tokonoma alcove is set into the middle of the north wall, the place of honour"
+   },
+   {
+    "id": "hanging_scroll",
+    "name": "hanging scroll",
+    "in": "main_hall",
+    "mount": "in tokonoma_alcove",
+    "implied": false,
+    "why": "its hanging scroll"
+   },
+   {
+    "id": "ikebana_vase",
+    "name": "ikebana vase",
+    "in": "main_hall",
+    "mount": "in tokonoma_alcove",
+    "implied": false,
+    "why": "ikebana vase"
+   },
+   {
+    "id": "oshiire_closets",
+    "name": "oshiire closets",
+    "in": "main_hall",
+    "mount": "floor",
+    "implied": false,
+    "why": "The oshiire, deep wall closets with sliding doors, fill the west wall"
+   },
+   {
+    "id": "wooden_chests",
+    "name": "wooden chests",
+    "in": "main_hall",
+    "mount": "in oshiire_closets",
+    "implied": false,
+    "why": "inside are wooden chests of kimono"
+   },
+   {
+    "id": "hidden_compartments",
+    "name": "hidden compartments",
+    "in": "main_hall",
+    "mount": "in oshiire_closets",
+    "implied": false,
+    "why": "hidden compartments of old talismans and letters"
+   },
+   {
+    "id": "box_staircase_drawers",
+    "name": "drawers",
+    "in": "main_hall",
+    "mount": "floor",
+    "implied": false,
+    "why": "drawers built into the space beneath its steps"
+   },
+   {
+    "id": "chabudai_table",
+    "name": "chabudai table",
+    "in": "sitting_area",
+    "mount": "floor",
+    "implied": false,
+    "why": "a low lacquered chabudai table ringed with silk zabuton cushions"
+   },
+   {
+    "id": "zabuton_cushions",
+    "name": "silk zabuton cushions",
+    "in": "sitting_area",
+    "mount": "floor",
+    "implied": false,
+    "why": "silk zabuton cushions"
+   },
+   {
+    "id": "hibachi_brazier",
+    "name": "hibachi brazier",
+    "in": "sitting_area",
+    "mount": "floor",
+    "implied": false,
+    "why": "a hibachi brazier beside it"
+   },
+   {
+    "id": "painted_screens",
+    "name": "painted screens",
+    "in": "sitting_area",
+    "mount": "floor",
+    "implied": false,
+    "why": "painted screens standing behind"
+   },
+   {
+    "id": "kamado_stove",
+    "name": "kamado stove",
+    "in": "earthen_floored_half",
+    "mount": "floor",
+    "implied": false,
+    "why": "the clay-and-stone kamado stove stands against the east wall"
+   },
+   {
+    "id": "wooden_racks",
+    "name": "wooden racks",
+    "in": "kitchen",
+    "mount": "ceiling",
+    "implied": false,
+    "why": "Iron pots hang from wooden racks"
+   },
+   {
+    "id": "iron_pots",
+    "name": "iron pots",
+    "in": "kitchen",
+    "mount": "on wooden_racks",
+    "implied": false,
+    "why": "Iron pots hang from wooden racks"
+   },
+   {
+    "id": "ceramic_jars_kitchen",
+    "name": "ceramic jars",
+    "in": "kitchen",
+    "mount": "floor",
+    "implied": false,
+    "why": "ceramic jars of rice, dried vegetables, preserved fruits and fermented goods line the north wall"
+   },
+   {
+    "id": "stone_washing_basin",
+    "name": "stone washing basin",
+    "in": "kitchen",
+    "mount": "floor",
+    "implied": false,
+    "why": "a stone washing basin stands by the kitchen's back door"
+   },
+   {
+    "id": "ofuro_tub",
+    "name": "cedar ofuro tub",
+    "in": "washroom",
+    "mount": "floor",
+    "implied": false,
+    "why": "a deep cedar ofuro tub large enough for nine tails"
+   },
+   {
+    "id": "wood_fired_stove",
+    "name": "wood-fired stove",
+    "in": "washroom",
+    "mount": "floor",
+    "implied": false,
+    "why": "heated by a wood-fired stove beneath"
+   },
+   {
+    "id": "wooden_stools",
+    "name": "wooden stools",
+    "in": "washroom",
+    "mount": "floor",
+    "implied": false,
+    "why": "wooden stools and basins for washing before the soak"
+   },
+   {
+    "id": "basins",
+    "name": "basins",
+    "in": "washroom",
+    "mount": "floor",
+    "implied": false,
+    "why": "wooden stools and basins for washing before the soak"
+   },
+   {
+    "id": "shelf",
+    "name": "shelf",
+    "in": "washroom",
+    "mount": "hung",
+    "implied": false,
+    "why": "ceramic jars of herbal soaps on a shelf"
+   },
+   {
+    "id": "herbal_soap_jars",
+    "name": "ceramic jars of herbal soaps",
+    "in": "washroom",
+    "mount": "on shelf",
+    "implied": false,
+    "why": "ceramic jars of herbal soaps on a shelf"
+   },
+   {
+    "id": "zabuton_meditation",
+    "name": "zabuton",
+    "in": "meditation_room",
+    "mount": "floor",
+    "implied": false,
+    "why": "a lone zabuton in the middle facing a small altar"
+   },
+   {
+    "id": "altar_meditation",
+    "name": "small altar",
+    "in": "meditation_room",
+    "mount": "floor",
+    "implied": false,
+    "why": "a small altar with a bronze mirror and an offering bowl"
+   },
+   {
+    "id": "bronze_mirror",
+    "name": "bronze mirror",
+    "in": "meditation_room",
+    "mount": "on altar_meditation",
+    "implied": false,
+    "why": "a bronze mirror"
+   },
+   {
+    "id": "offering_bowl",
+    "name": "offering bowl",
+    "in": "meditation_room",
+    "mount": "on altar_meditation",
+    "implied": false,
+    "why": "an offering bowl"
+   },
+   {
+    "id": "futon",
+    "name": "futon",
+    "in": "hinamis_room",
+    "mount": "floor",
+    "implied": false,
+    "why": "a futon heaped with conflicting blankets"
+   },
+   {
+    "id": "blankets",
+    "name": "blankets",
+    "in": "hinamis_room",
+    "mount": "on futon",
+    "implied": false,
+    "why": "a futon heaped with conflicting blankets"
+   },
+   {
+    "id": "trunk",
+    "name": "massive trunk",
+    "in": "hinamis_room",
+    "mount": "floor",
+    "implied": false,
+    "why": "a massive trunk at its foot"
+   },
+   {
+    "id": "wooden_shelf",
+    "name": "low wooden shelf",
+    "in": "hinamis_room",
+    "mount": "floor",
+    "implied": false,
+    "why": "a low wooden shelf of small gods along the north wall"
+   },
+   {
+    "id": "terrarium",
+    "name": "terrarium",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "a terrarium"
+   },
+   {
+    "id": "ceramic_figurines",
+    "name": "ceramic figurines",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "ceramic figurines"
+   },
+   {
+    "id": "smartphone",
+    "name": "cracked smartphone",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "a cracked smartphone"
+   },
+   {
+    "id": "solar_charger",
+    "name": "solar charger",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "solar charger"
+   },
+   {
+    "id": "polaroid_camera",
+    "name": "polaroid camera",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "a polaroid camera"
+   },
+   {
+    "id": "photograph_box",
+    "name": "box of photographs",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "a box of photographs"
+   },
+   {
+    "id": "radio",
+    "name": "battered radio",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "a battered radio"
+   },
+   {
+    "id": "candies",
+    "name": "convenience-store candies",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "convenience-store candies"
+   },
+   {
+    "id": "laptop",
+    "name": "laptop",
+    "in": "hinamis_room",
+    "mount": "on wooden_shelf",
+    "implied": false,
+    "why": "a laptop"
+   },
+   {
+    "id": "paper_lanterns",
+    "name": "paper lanterns",
+    "in": "hinamis_room",
+    "mount": "ceiling",
+    "implied": false,
+    "why": "paper lanterns hanging from the ceiling"
+   },
+   {
+    "id": "woven_textiles",
+    "name": "woven textiles",
+    "in": "hinamis_room",
+    "mount": "hung",
+    "implied": false,
+    "why": "woven textiles"
+   },
+   {
+    "id": "woodblock_prints",
+    "name": "woodblock prints",
+    "in": "hinamis_room",
+    "mount": "hung",
+    "implied": false,
+    "why": "woodblock prints"
+   },
+   {
+    "id": "circus_poster",
+    "name": "1920s circus poster",
+    "in": "hinamis_room",
+    "mount": "hung",
+    "implied": false,
+    "why": "a 1920s circus poster on the walls"
+   },
+   {
+    "id": "wind_chime",
+    "name": "glass wind chime",
+    "in": "hinamis_room",
+    "mount": "hung",
+    "implied": false,
+    "why": "a glass wind chime in the window"
+   },
+   {
+    "id": "nest",
+    "name": "nest",
+    "in": "tamamo_roost",
+    "mount": "floor",
+    "implied": false,
+    "why": "the nest: a massive arrangement of futons, silk comforters and oversized pillows built for nine tails, the outer comforter embroidered in gold with running foxes and chrysanthemums"
+   },
+   {
+    "id": "altar_tamamo",
+    "name": "small altar",
+    "in": "tamamo_roost",
+    "mount": "floor",
+    "implied": false,
+    "why": "A small altar against the north wall holds memorial tablets with fresh flowers and incense"
+   },
+   {
+    "id": "memorial_tablets",
+    "name": "memorial tablets",
+    "in": "tamamo_roost",
+    "mount": "on altar_tamamo",
+    "implied": false,
+    "why": "memorial tablets"
+   },
+   {
+    "id": "flowers",
+    "name": "fresh flowers",
+    "in": "tamamo_roost",
+    "mount": "on altar_tamamo",
+    "implied": false,
+    "why": "fresh flowers"
+   },
+   {
+    "id": "incense",
+    "name": "incense",
+    "in": "tamamo_roost",
+    "mount": "on altar_tamamo",
+    "implied": false,
+    "why": "incense"
+   },
+   {
+    "id": "writing_desk",
+    "name": "low writing desk",
+    "in": "tamamo_roost",
+    "mount": "floor",
+    "implied": false,
+    "why": "a low writing desk stands beneath the window in the south gable"
+   },
+   {
+    "id": "calligraphy_set",
+    "name": "calligraphy set",
+    "in": "tamamo_roost",
+    "mount": "on writing_desk",
+    "implied": false,
+    "why": "a calligraphy set"
+   },
+   {
+    "id": "brushes",
+    "name": "brushes",
+    "in": "tamamo_roost",
+    "mount": "on writing_desk",
+    "implied": false,
+    "why": "brushes"
+   },
+   {
+    "id": "inkstone",
+    "name": "inkstone",
+    "in": "tamamo_roost",
+    "mount": "on writing_desk",
+    "implied": false,
+    "why": "an inkstone"
+   },
+   {
+    "id": "paper",
+    "name": "paper",
+    "in": "tamamo_roost",
+    "mount": "on writing_desk",
+    "implied": false,
+    "why": "paper"
+   },
+   {
+    "id": "wooden_boxes",
+    "name": "wooden boxes of finished writings",
+    "in": "tamamo_roost",
+    "mount": "floor",
+    "implied": false,
+    "why": "wooden boxes of finished writings line the east wall"
+   },
+   {
+    "id": "shamisen",
+    "name": "ancient shamisen",
+    "in": "tamamo_roost",
+    "mount": "floor",
+    "implied": false,
+    "why": "an ancient shamisen rests near the window"
+   },
+   {
+    "id": "oil_lamps",
+    "name": "oil lamps",
+    "in": "basement",
+    "mount": "floor",
+    "implied": false,
+    "why": "oil lamps in wall niches that burn without fuel"
+   },
+   {
+    "id": "shelves_basement",
+    "name": "shelves",
+    "in": "basement",
+    "mount": "floor",
+    "implied": false,
+    "why": "Shelves hold ceramic jars and sake barrels"
+   },
+   {
+    "id": "ceramic_jars_basement",
+    "name": "ceramic jars",
+    "in": "basement",
+    "mount": "on shelves_basement",
+    "implied": false,
+    "why": "Shelves hold ceramic jars and sake barrels"
+   },
+   {
+    "id": "sake_barrels",
+    "name": "sake barrels",
+    "in": "basement",
+    "mount": "on shelves_basement",
+    "implied": false,
+    "why": "Shelves hold ceramic jars and sake barrels"
+   },
+   {
+    "id": "festival_boxes",
+    "name": "rope-bound boxes of festival equipment",
+    "in": "basement",
+    "mount": "floor",
+    "implied": false,
+    "why": "rope-bound boxes of festival equipment are stacked by the walls"
+   },
+   {
+    "id": "inoculated_logs",
+    "name": "inoculated logs",
+    "in": "basement",
+    "mount": "floor",
+    "implied": false,
+    "why": "mushrooms grow on inoculated logs"
+   },
+   {
+    "id": "mushrooms",
+    "name": "mushrooms",
+    "in": "basement",
+    "mount": "on inoculated_logs",
+    "implied": false,
+    "why": "mushrooms grow on inoculated logs"
+   },
+   {
+    "id": "workbench",
+    "name": "scarred wooden workbench",
+    "in": "basement",
+    "mount": "floor",
+    "implied": false,
+    "why": "a scarred wooden workbench stands against the east wall"
+   },
+   {
+    "id": "heavy_wood_door",
+    "name": "heavy wood door",
+    "in": "basement",
+    "mount": "floor",
+    "implied": false,
+    "why": "a heavy wood door banded in black iron and covered in shifting ofuda wards"
+   },
+   {
+    "id": "wooden_bucket",
+    "name": "wooden bucket",
+    "in": "stone_well",
+    "mount": "on stone_well",
+    "implied": false,
+    "why": "an ancient stone well with a wooden bucket and hemp rope"
+   },
+   {
+    "id": "hemp_rope",
+    "name": "hemp rope",
+    "in": "stone_well",
+    "mount": "on stone_well",
+    "implied": false,
+    "why": "an ancient stone well with a wooden bucket and hemp rope"
+   },
+   {
+    "id": "shimenawa_rope",
+    "name": "shimenawa rope",
+    "in": "camphor_tree",
+    "mount": "on camphor_tree",
+    "implied": false,
+    "why": "bound with a shimenawa rope"
+   },
+   {
+    "id": "latrine_fixture",
+    "name": "latrine",
+    "in": "latrine",
+    "mount": "floor",
+    "implied": true,
+    "why": "The latrine is a separate small structure behind the shrine's west end"
+   }
+  ],
+  "windows": [
+   {
+    "room": "hallway",
+    "faces": "west wall",
+    "why": "Windows line its west wall"
+   },
+   {
+    "room": "meditation_room",
+    "faces": "the forest to the east",
+    "count": 1,
+    "why": "a single window facing the forest to the east"
+   },
+   {
+    "room": "hinamis_room",
+    "faces": "the moonrise to the east",
+    "count": 1,
+    "why": "a window facing the moonrise to the east"
+   },
+   {
+    "room": "tamamo_roost",
+    "faces": "the south gable",
+    "count": 1,
+    "why": "the window in the south gable"
+   }
+  ],
+  "stairs": [
+   {
+    "id": "box_staircase",
+    "name": "BOX STAIRCASE",
+    "from": "main_hall",
+    "to": "hallway",
+    "enclosed": true,
+    "door": "shoji door",
+    "why": "a shoji door opens onto the BOX STAIRCASE: a steep straight flight of dark wood rising along the north wall to the floor above, with drawers built into the space beneath its steps"
+   },
+   {
+    "id": "stone_stairs",
+    "name": "STEEP STONE STAIRS",
+    "from": "main_hall",
+    "to": "basement",
+    "enclosed": true,
+    "door": "shoji door",
+    "why": "a second shoji door opens onto STEEP STONE STAIRS that descend straight into the mountain"
+   },
+   {
+    "id": "roof_stair",
+    "name": "stair to the roof room",
+    "from": "hallway",
+    "to": "tamamo_roost",
+    "enclosed": true,
+    "door": "shoji door",
+    "why": "a shoji door opens onto a narrow, steep straight stair rising to the roof room"
+   }
+  ],
+  "outbuildings": [
+   {
+    "id": "latrine_building",
+    "name": "latrine",
+    "rooms": [
+     "latrine"
+    ],
+    "why": "The latrine is a separate small structure behind the shrine's west end, reached along a short roofed walkway from the back door of the washroom"
+   }
+  ],
+  "areas": [
+   {
+    "id": "karesansui_garden",
+    "name": "karesansui garden",
+    "why": "A karesansui garden of raked gravel, moss-wrapped granite boulders and chipped stone lanterns surrounds the shrine on every side"
+   }
+  ],
+  "ways": [
+   {
+    "id": "lantern_path",
+    "name": "Lantern Path",
+    "why": "From the torii the Lantern Path runs straight north to the shrine's front door, lined on both sides by weathered stone lanterns"
+   },
+   {
+    "id": "roofed_walkway",
+    "name": "roofed walkway",
+    "why": "reached along a short roofed walkway from the back door of the washroom"
+   },
+   {
+    "id": "well_path",
+    "name": "path to the well",
+    "why": "the kitchen's back door, which opens onto the path to the well"
+   }
+  ],
+  "features": [
+   {
+    "id": "torii",
+    "name": "vermillion torii",
+    "why": "A vermillion torii of ancient hinoki stands at the southern edge of the grounds"
+   },
+   {
+    "id": "kitsune_guardians",
+    "name": "two worn stone kitsune guardians",
+    "why": "just inside it two worn stone kitsune guardians flank the approach"
+   },
+   {
+    "id": "path_lanterns",
+    "name": "weathered stone lanterns",
+    "why": "lined on both sides by weathered stone lanterns"
+   },
+   {
+    "id": "garden_lanterns",
+    "name": "chipped stone lanterns",
+    "why": "chipped stone lanterns"
+   },
+   {
+    "id": "granite_boulders",
+    "name": "moss-wrapped granite boulders",
+    "why": "moss-wrapped granite boulders"
+   },
+   {
+    "id": "stone_well",
+    "name": "stone well",
+    "why": "an ancient stone well with a wooden bucket and hemp rope"
+   },
+   {
+    "id": "camphor_tree",
+    "name": "camphor tree",
+    "why": "a camphor tree so massive several people can shelter beneath it, bound with a shimenawa rope"
+   }
+  ],
+  "elsewhere": [
+   {
+    "name": "Seal Cavern",
+    "via": "heavy_wood_door",
+    "why": "it leads into the Seal Cavern, a vast steaming cavern of hot spring pools with the Dimensional Seal at its rear"
+   },
+   {
+    "name": "divine realm",
+    "via": "heavy_wood_door",
+    "why": "the Dimensional Seal at its rear -- a threshold to the divine realm"
+   }
+  ]
+ },
+ "spec": {
+  "name": "The Shrine of the Golden Fox",
+  "front": "s",
+  "entrance": {
+   "room": "genkan",
+   "kind": "front door"
+  },
+  "storeys": [
+   {
+    "level": 2,
+    "smaller": true
+   }
+  ],
+  "blocks": [
+   {
+    "id": "latrine_building",
+    "apart": true,
+    "beside": {
+     "block": "main",
+     "side": "n"
+    }
+   }
+  ],
+  "rooms": [
+   {
+    "id": "genkan",
+    "name": "GENKAN",
+    "level": 0,
+    "purpose": "entryway",
+    "joins": [
+     {
+      "to": "main_hall",
+      "side": "n",
+      "kind": "step"
+     },
+     {
+      "to": "kitchen",
+      "side": "e",
+      "kind": "door"
+     },
+     {
+      "to": "lantern_path",
+      "side": "s",
+      "kind": "front door"
+     }
+    ],
+    "fixtures": [
+     {
+      "id": "step",
+      "name": "step",
+      "kind": "step",
+      "size": "small",
+      "mount": "floor",
+      "at": "middle"
+     },
+     {
+      "id": "shoe_rack",
+      "name": "shoe rack",
+      "kind": "rack",
+      "mount": "floor",
+      "at": "e"
+     },
+     {
+      "id": "wooden_tablet",
+      "name": "wooden tablet",
+      "kind": "tablet",
+      "size": "small",
+      "mount": "hung",
+      "at": "middle",
+      "near": "step"
+     }
+    ]
+   },
+   {
+    "id": "main_hall",
+    "name": "MAIN HALL (O-HEYA)",
+    "level": 0,
+    "purpose": "hall",
+    "area_m2": 20,
+    "joins": [
+     {
+      "to": "washroom",
+      "side": "w",
+      "kind": "door"
+     },
+     {
+      "to": "karesansui_garden",
+      "side": "e",
+      "order": 1,
+      "kind": "shoji"
+     },
+     {
+      "to": "kitchen",
+      "side": "e",
+      "order": 2,
+      "kind": "shoji door"
+     }
+    ],
+    "zones": [
+     {
+      "id": "engawa",
+      "name": "engawa veranda",
+      "at": "e",
+      "size": "medium"
+     },
+     {
+      "id": "sitting_area",
+      "name": "sitting area",
+      "at": "middle",
+      "size": "medium"
+     }
+    ],
+    "fixtures": [
+     {
+      "id": "tokonoma_alcove",
+      "name": "tokonoma alcove",
+      "kind": "tokonoma",
+      "mount": "floor",
+      "at": "n"
+     },
+     {
+      "id": "hanging_scroll",
+      "name": "hanging scroll",
+      "kind": "scroll",
+      "size": "small",
+      "mount": "in tokonoma_alcove"
+     },
+     {
+      "id": "ikebana_vase",
+      "name": "ikebana vase",
+      "kind": "vase",
+      "size": "small",
+      "mount": "in tokonoma_alcove"
+     },
+     {
+      "id": "oshiire_closets",
+      "name": "oshiire closets",
+      "kind": "closet",
+      "mount": "floor",
+      "at": "w",
+      "count": 2
+     },
+     {
+      "id": "wooden_chests",
+      "name": "wooden chests",
+      "kind": "chest",
+      "mount": "in oshiire_closets",
+      "count": 2
+     },
+     {
+      "id": "hidden_compartments",
+      "name": "hidden compartments",
+      "kind": "compartment",
+      "size": "small",
+      "mount": "in oshiire_closets",
+      "count": 2
+     },
+     {
+      "id": "box_staircase_drawers",
+      "name": "drawers",
+      "kind": "drawer",
+      "size": "small",
+      "mount": "floor",
+      "at": "n",
+      "count": 3
+     },
+     {
+      "id": "chabudai_table",
+      "name": "chabudai table",
+      "kind": "chabudai",
+      "mount": "floor",
+      "in": "sitting_area",
+      "at": "middle"
+     },
+     {
+      "id": "zabuton_cushions",
+      "name": "silk zabuton cushions",
+      "kind": "cushion",
+      "mount": "floor",
+      "in": "sitting_area",
+      "near": "chabudai_table",
+      "count": 4
+     },
+     {
+      "id": "hibachi_brazier",
+      "name": "hibachi brazier",
+      "kind": "hearth",
+      "mount": "floor",
+      "in": "sitting_area",
+      "beside": "chabudai_table"
+     },
+     {
+      "id": "painted_screens",
+      "name": "painted screens",
+      "kind": "screen",
+      "mount": "floor",
+      "in": "sitting_area",
+      "near": "chabudai_table",
+      "count": 2
+     }
+    ]
+   },
+   {
+    "id": "kitchen",
+    "name": "KITCHEN (DAIDOKORO)",
+    "level": 0,
+    "purpose": "kitchen",
+    "area_m2": 10,
+    "joins": [
+     {
+      "to": "well_path",
+      "side": "e",
+      "kind": "back door"
+     }
+    ],
+    "zones": [
+     {
+      "id": "earthen_floored_half",
+      "name": "earthen-floored half",
+      "at": "e",
+      "size": "medium"
+     }
+    ],
+    "fixtures": [
+     {
+      "id": "kamado_stove",
+      "name": "kamado stove",
+      "kind": "stove",
+      "mount": "floor",
+      "in": "earthen_floored_half",
+      "at": "e"
+     },
+     {
+      "id": "wooden_racks",
+      "name": "wooden racks",
+      "kind": "rack",
+      "mount": "ceiling",
+      "count": 2
+     },
+     {
+      "id": "iron_pots",
+      "name": "iron pots",
+      "kind": "pot",
+      "size": "medium",
+      "mount": "on wooden_racks",
+      "count": 3
+     },
+     {
+      "id": "ceramic_jars_kitchen",
+      "name": "ceramic jars",
+      "kind": "jar",
+      "size": "small",
+      "mount": "floor",
+      "at": "n",
+      "count": 4
+     },
+     {
+      "id": "stone_washing_basin",
+      "name": "stone washing basin",
+      "kind": "basin",
+      "mount": "floor",
+      "at": "e"
+     },
+     {
+      "id": "wooden_bucket",
+      "name": "wooden bucket",
+      "kind": "bucket",
+      "size": "small",
+      "mount": "on stone_well",
+      "at": "e"
+     },
+     {
+      "id": "hemp_rope",
+      "name": "hemp rope",
+      "kind": "rope",
+      "size": "small",
+      "mount": "on stone_well",
+      "at": "e"
+     }
+    ]
+   },
+   {
+    "id": "washroom",
+    "name": "WASHROOM (OFUROYA)",
+    "level": 0,
+    "purpose": "washroom",
+    "joins": [
+     {
+      "to": "roofed_walkway",
+      "side": "n",
+      "kind": "back door"
+     }
+    ],
+    "fixtures": [
+     {
+      "id": "ofuro_tub",
+      "name": "cedar ofuro tub",
+      "kind": "tub",
+      "size": "large",
+      "mount": "floor",
+      "at": "middle"
+     },
+     {
+      "id": "wood_fired_stove",
+      "name": "wood-fired stove",
+      "kind": "stove",
+      "mount": "floor",
+      "near": "ofuro_tub"
+     },
+     {
+      "id": "wooden_stools",
+      "name": "wooden stools",
+      "kind": "stool",
+      "size": "small",
+      "mount": "floor",
+      "at": "w",
+      "count": 2
+     },
+     {
+      "id": "basins",
+      "name": "basins",
+      "kind": "basin",
+      "mount": "floor",
+      "at": "w",
+      "count": 2
+     },
+     {
+      "id": "shelf",
+      "name": "shelf",
+      "kind": "shelf",
+      "mount": "hung",
+      "at": "e"
+     },
+     {
+      "id": "herbal_soap_jars",
+      "name": "ceramic jars of herbal soaps",
+      "kind": "jar",
+      "size": "small",
+      "mount": "on shelf",
+      "count": 3
+     },
+     {
+      "id": "shimenawa_rope",
+      "name": "shimenawa rope",
+      "kind": "rope",
+      "size": "medium",
+      "mount": "on camphor_tree",
+      "at": "n"
+     }
+    ]
+   },
+   {
+    "id": "hallway",
+    "name": "HALLWAY",
+    "level": 1,
+    "purpose": "hallway",
+    "joins": [
+     {
+      "to": "meditation_room",
+      "side": "e",
+      "order": 1,
+      "kind": "shoji door"
+     },
+     {
+      "to": "hinamis_room",
+      "side": "e",
+      "order": 2,
+      "kind": "shoji door"
+     }
+    ],
+    "windows": [
+     {
+      "id": "hallway_w",
+      "side": "w",
+      "count": 2
+     }
+    ]
+   },
+   {
+    "id": "meditation_room",
+    "name": "MEDITATION ROOM",
+    "level": 1,
+    "purpose": "meditation",
+    "area_m2": 7,
+    "windows": [
+     {
+      "id": "meditation_w",
+      "side": "e",
+      "count": 1
+     }
+    ],
+    "fixtures": [
+     {
+      "id": "zabuton_meditation",
+      "name": "zabuton",
+      "kind": "cushion",
+      "mount": "floor",
+      "at": "middle"
+     },
+     {
+      "id": "altar_meditation",
+      "name": "small altar",
+      "kind": "altar",
+      "mount": "floor",
+      "at": "n"
+     },
+     {
+      "id": "bronze_mirror",
+      "name": "bronze mirror",
+      "kind": "mirror",
+      "size": "small",
+      "mount": "on altar_meditation"
+     },
+     {
+      "id": "offering_bowl",
+      "name": "offering bowl",
+      "kind": "bowl",
+      "size": "small",
+      "mount": "on altar_meditation"
+     }
+    ]
+   },
+   {
+    "id": "hinamis_room",
+    "name": "HINAMI'S ROOM",
+    "level": 1,
+    "purpose": "bedroom",
+    "area_m2": 10,
+    "windows": [
+     {
+      "id": "hinami_w",
+      "side": "e",
+      "count": 1
+     }
+    ],
+    "fixtures": [
+     {
+      "id": "futon",
+      "name": "futon",
+      "kind": "futon",
+      "mount": "floor",
+      "at": "middle"
+     },
+     {
+      "id": "blankets",
+      "name": "blankets",
+      "kind": "blanket",
+      "size": "small",
+      "mount": "on futon",
+      "count": 3
+     },
+     {
+      "id": "trunk",
+      "name": "massive trunk",
+      "kind": "trunk",
+      "size": "large",
+      "mount": "floor",
+      "beside": "futon"
+     },
+     {
+      "id": "wooden_shelf",
+      "name": "low wooden shelf",
+      "kind": "shelf",
+      "size": "small",
+      "mount": "floor",
+      "at": "n"
+     },
+     {
+      "id": "terrarium",
+      "name": "terrarium",
+      "kind": "terrarium",
+      "size": "small",
+      "mount": "on wooden_shelf"
+     },
+     {
+      "id": "ceramic_figurines",
+      "name": "ceramic figurines",
+      "kind": "statue",
+      "size": "tiny",
+      "mount": "on wooden_shelf",
+      "count": 3
+     },
+     {
+      "id": "smartphone",
+      "name": "cracked smartphone",
+      "kind": "phone",
+      "size": "tiny",
+      "mount": "on wooden_shelf"
+     },
+     {
+      "id": "solar_charger",
+      "name": "solar charger",
+      "kind": "charger",
+      "size": "tiny",
+      "mount": "on wooden_shelf"
+     },
+     {
+      "id": "polaroid_camera",
+      "name": "polaroid camera",
+      "kind": "camera",
+      "size": "small",
+      "mount": "on wooden_shelf"
+     },
+     {
+      "id": "photograph_box",
+      "name": "box of photographs",
+      "kind": "chest",
+      "size": "small",
+      "mount": "on wooden_shelf"
+     },
+     {
+      "id": "radio",
+      "name": "battered radio",
+      "kind": "radio",
+      "size": "small",
+      "mount": "on wooden_shelf"
+     },
+     {
+      "id": "candies",
+      "name": "convenience-store candies",
+      "kind": "candy",
+      "size": "tiny",
+      "mount": "on wooden_shelf",
+      "count": 5
+     },
+     {
+      "id": "laptop",
+      "name": "laptop",
+      "kind": "laptop",
+      "size": "small",
+      "mount": "on wooden_shelf"
+     },
+     {
+      "id": "paper_lanterns",
+      "name": "paper lanterns",
+      "kind": "lantern",
+      "mount": "ceiling",
+      "count": 2
+     },
+     {
+      "id": "woven_textiles",
+      "name": "woven textiles",
+      "kind": "textile",
+      "size": "small",
+      "mount": "hung",
+      "at": "walls",
+      "count": 3
+     },
+     {
+      "id": "woodblock_prints",
+      "name": "woodblock prints",
+      "kind": "print",
+      "size": "small",
+      "mount": "hung",
+      "at": "walls",
+      "count": 3
+     },
+     {
+      "id": "circus_poster",
+      "name": "1920s circus poster",
+      "kind": "poster",
+      "size": "medium",
+      "mount": "hung",
+      "at": "walls"
+     },
+     {
+      "id": "wind_chime",
+      "name": "glass wind chime",
+      "kind": "chime",
+      "size": "tiny",
+      "mount": "hung",
+      "at": "e"
+     }
+    ]
+   },
+   {
+    "id": "tamamo_roost",
+    "name": "TAMAMO'S ROOST",
+    "level": 2,
+    "purpose": "bedroom",
+    "windows": [
+     {
+      "id": "roost_w",
+      "side": "s",
+      "count": 1
+     }
+    ],
+    "fixtures": [
+     {
+      "id": "nest",
+      "name": "nest",
+      "kind": "nest",
+      "size": "large",
+      "mount": "floor",
+      "at": "middle"
+     },
+     {
+      "id": "altar_tamamo",
+      "name": "small altar",
+      "kind": "altar",
+      "mount": "floor",
+      "at": "n"
+     },
+     {
+      "id": "memorial_tablets",
+      "name": "memorial tablets",
+      "kind": "tablet",
+      "size": "small",
+      "mount": "on altar_tamamo",
+      "count": 3
+     },
+     {
+      "id": "flowers",
+      "name": "fresh flowers",
+      "kind": "flowers",
+      "size": "small",
+      "mount": "on altar_tamamo"
+     },
+     {
+      "id": "incense",
+      "name": "incense",
+      "kind": "incense",
+      "size": "small",
+      "mount": "on altar_tamamo"
+     },
+     {
+      "id": "writing_desk",
+      "name": "low writing desk",
+      "kind": "writing_desk",
+      "mount": "floor",
+      "at": "s"
+     },
+     {
+      "id": "calligraphy_set",
+      "name": "calligraphy set",
+      "kind": "set",
+      "size": "small",
+      "mount": "on writing_desk"
+     },
+     {
+      "id": "brushes",
+      "name": "brushes",
+      "kind": "brush",
+      "size": "tiny",
+      "mount": "on writing_desk",
+      "count": 3
+     },
+     {
+      "id": "inkstone",
+      "name": "inkstone",
+      "kind": "inkstone",
+      "size": "small",
+      "mount": "on writing_desk"
+     },
+     {
+      "id": "paper",
+      "name": "paper",
+      "kind": "paper",
+      "size": "small",
+      "mount": "on writing_desk"
+     },
+     {
+      "id": "wooden_boxes",
+      "name": "wooden boxes of finished writings",
+      "kind": "chest",
+      "mount": "floor",
+      "at": "e",
+      "count": 3
+     },
+     {
+      "id": "shamisen",
+      "name": "ancient shamisen",
+      "kind": "instrument",
+      "size": "medium",
+      "mount": "floor",
+      "at": "s"
+     }
+    ]
+   },
+   {
+    "id": "basement",
+    "name": "BASEMENT",
+    "level": -1,
+    "purpose": "basement",
+    "fixtures": [
+     {
+      "id": "oil_lamps",
+      "name": "oil lamps",
+      "kind": "lamp",
+      "mount": "floor",
+      "at": "walls",
+      "count": 4
+     },
+     {
+      "id": "shelves_basement",
+      "name": "shelves",
+      "kind": "shelf",
+      "mount": "floor",
+      "at": "walls",
+      "count": 2
+     },
+     {
+      "id": "ceramic_jars_basement",
+      "name": "ceramic jars",
+      "kind": "jar",
+      "size": "small",
+      "mount": "on shelves_basement",
+      "count": 4
+     },
+     {
+      "id": "sake_barrels",
+      "name": "sake barrels",
+      "kind": "barrel",
+      "mount": "on shelves_basement",
+      "count": 3
+     },
+     {
+      "id": "festival_boxes",
+      "name": "rope-bound boxes of festival equipment",
+      "kind": "crate",
+      "mount": "floor",
+      "at": "walls",
+      "count": 3
+     },
+     {
+      "id": "inoculated_logs",
+      "name": "inoculated logs",
+      "kind": "log",
+      "size": "medium",
+      "mount": "floor",
+      "at": "w",
+      "count": 3
+     },
+     {
+      "id": "mushrooms",
+      "name": "mushrooms",
+      "kind": "mushroom",
+      "size": "tiny",
+      "mount": "on inoculated_logs",
+      "count": 5
+     },
+     {
+      "id": "workbench",
+      "name": "scarred wooden workbench",
+      "kind": "workbench",
+      "mount": "floor",
+      "at": "e"
+     },
+     {
+      "id": "heavy_wood_door",
+      "name": "heavy wood door",
+      "kind": "door",
+      "size": "large",
+      "mount": "floor",
+      "at": "n"
+     }
+    ]
+   },
+   {
+    "id": "latrine",
+    "name": "latrine",
+    "level": 0,
+    "block": "latrine_building",
+    "purpose": "latrine",
+    "joins": [
+     {
+      "to": "roofed_walkway",
+      "side": "s",
+      "kind": "door"
+     }
+    ],
+    "fixtures": [
+     {
+      "id": "latrine_fixture",
+      "name": "latrine",
+      "kind": "toilet",
+      "mount": "floor",
+      "at": "middle"
+     }
+    ]
+   }
+  ],
+  "stairs": [
+   {
+    "id": "box_staircase",
+    "name": "BOX STAIRCASE",
+    "from": "main_hall",
+    "to": "hallway",
+    "enclosed": true,
+    "door": "shoji door",
+    "from_at": "n",
+    "to_at": "n",
+    "kind": "straight"
+   },
+   {
+    "id": "stone_stairs",
+    "name": "STEEP STONE STAIRS",
+    "from": "main_hall",
+    "to": "basement",
+    "enclosed": true,
+    "door": "shoji door",
+    "from_at": "n",
+    "to_at": "s",
+    "kind": "straight"
+   },
+   {
+    "id": "roof_stair",
+    "name": "stair to the roof room",
+    "from": "hallway",
+    "to": "tamamo_roost",
+    "enclosed": true,
+    "door": "shoji door",
+    "from_at": "s",
+    "to_at": "s",
+    "kind": "straight"
+   }
+  ],
+  "grounds": {
+   "areas": [
+    {
+     "id": "karesansui_garden",
+     "name": "karesansui garden",
+     "kind": "garden",
+     "where": "around"
+    }
+   ],
+   "ways": [
+    {
+     "id": "lantern_path",
+     "name": "Lantern Path",
+     "from": "entrance"
+    },
+    {
+     "id": "well_path",
+     "name": "path to the well",
+     "from": "kitchen",
+     "to": "stone_well"
+    },
+    {
+     "id": "roofed_walkway",
+     "name": "roofed walkway",
+     "from": "washroom",
+     "to": "latrine"
+    }
+   ],
+   "features": [
+    {
+     "id": "torii",
+     "name": "vermillion torii",
+     "kind": "gate",
+     "across": "lantern_path",
+     "end": "far"
+    },
+    {
+     "id": "kitsune_guardians",
+     "name": "two worn stone kitsune guardians",
+     "kind": "statue",
+     "count": 2,
+     "flank": "lantern_path",
+     "end": "far"
+    },
+    {
+     "id": "path_lanterns",
+     "name": "weathered stone lanterns",
+     "kind": "lantern",
+     "count": 6,
+     "along": "lantern_path"
+    },
+    {
+     "id": "garden_lanterns",
+     "name": "chipped stone lanterns",
+     "kind": "lantern",
+     "count": 4,
+     "by": "karesansui_garden"
+    },
+    {
+     "id": "granite_boulders",
+     "name": "moss-wrapped granite boulders",
+     "kind": "boulder",
+     "count": 3,
+     "by": "karesansui_garden"
+    },
+    {
+     "id": "stone_well",
+     "name": "stone well",
+     "kind": "well",
+     "by": "lantern_path"
+    },
+    {
+     "id": "camphor_tree",
+     "name": "camphor tree",
+     "kind": "tree",
+     "size": "huge",
+     "side": "n"
+    }
+   ]
+  },
+  "elsewhere": [
+   {
+    "name": "Seal Cavern",
+    "via": "heavy_wood_door",
+    "why": "it leads into the Seal Cavern, a vast steaming cavern of hot spring pools with the Dimensional Seal at its rear"
+   },
+   {
+    "name": "divine realm",
+    "via": "heavy_wood_door",
+    "why": "the Dimensional Seal at its rear -- a threshold to the divine realm"
+   }
+  ]
+ },
+ "note": "Fresh run 3 of sort+relate on baselines/shrine_rewritten_brief.txt, 2026-10-03, no hand edits."
+}
