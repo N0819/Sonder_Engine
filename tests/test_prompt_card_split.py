@@ -49,7 +49,12 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 280   # +1 (2026-10-08): `character_bare.not_answered_yet`, what
+PART_COUNT = 282   # +2 (2026-10-08): `prose_contract.layout_sort` and
+                   # `prose_contract.layout_relate`, the layout tier's two
+                   # calls -- what each room of a planned building holds and
+                   # how it relates, for the solver to place
+                   # (`agents/director_layout.py`).
+                   # +1 (2026-10-08): `character_bare.not_answered_yet`, what
                    # a mind called again in one beat left waiting on the
                    # player or the world (`character._not_answered_yet_note`).
                    # +1 (2026-10-08): `prose_contract.room_prepare_note`,

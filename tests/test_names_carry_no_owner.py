@@ -28,6 +28,11 @@ def test_every_naming_surface_says_a_name_carries_no_owner(language):
         "the Director, naming a new place (interpret)": card["prose_contract"]["director_interpret"],
         "the Director, naming a new place (resolve)": card["prose_contract"]["director_resolve"],
         "the room author, naming a fixture": card["prose_contract"]["room_author"],
+        # the layout tier's first call names what a planned room holds, and
+        # each name it gives a thing the plan does not describe is written
+        # as that anchor's desc, which every mind that sees the room reads
+        # (`layout_bridge.planned_layout`; review of 2026-10-08, R2-3)
+        "the layout tier, naming what a planned room holds": card["prose_contract"]["layout_sort"],
     }
     missing = [where for where, text in surfaces.items()
                if RULE[language].casefold() not in str(text).casefold()]

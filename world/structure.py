@@ -72,8 +72,44 @@ def normalize_structures(stored):
 #: same reason: it is a property of the PLACE that the plan knows and the
 #: scene does not, and a stub that arrives without it is a room the story
 #: laid out and then silenced.
+#: `site` (2026-10-08) is where a room stands on its building's plan and how
+#: high its floor is (`world/site_plan`). No model writes it: `plan_rooms`
+#: never reads one (`story.plot_packages._plan_geometry`), and the only
+#: writer is the layout tier, which places a planned building by code
+#: (`write_planned_layout`). Carried onto the stub so a sited room is
+#: "described, never re-measured" from the beat it is first seen
+#: (`spatial_merge`).
 GEOMETRY_FIELDS = ("extent", "shape", "exposure", "sound",
-                   "level", "over", "floor", "surface", "quiet")
+                   "level", "over", "floor", "surface", "quiet", "site")
+
+#: The fields of an anchor and of an edge that say WHERE it is, which a
+#: solved plan lays onto the stub it already made (`apply_planned_layout`).
+#: Positions only: what a thing is (`desc`) and what a doorway is (`barrier`)
+#: stay whatever the stub holds -- save a record the plan wrote for SEVERAL
+#: alike that a solve split into one anchor each, whose group words the stub
+#: was minted with (`planned.layout.split`, `_lay_stub_on_its_plan`).
+LAYOUT_ANCHOR_FIELDS = ("dir", "cell", "extent", "footprint", "height",
+                        "opacity", "offset")
+LAYOUT_EDGE_FIELDS = ("dir", "offset", "cell")
+#: The plans the layout tier lays a building out on are named
+#: `layout:<entrance room>` (`world.layout_bridge`). The name says which plan
+#: a room stands on, never that a solve put it there: the engine's derivation
+#: places every room it can beside one already on a plan ON THAT PLAN
+#: (`site_plan.derive_site_plans` reuses it), so the street a laid-out
+#: building opens onto, and a planned yard behind it, stand on a `layout:`
+#: plan without any solve having placed them.
+LAYOUT_PLAN_PREFIX = "layout:"
+#: THE RECORD A SOLVE LEAVES ON THE STUB IT LAYS (`_lay_stub_on_its_plan`):
+#: `{"plan": <the plan it was laid on>, "edges": [<each room the solve
+#: placed this stub's doorway or stair to>]}`. Only that code writes it --
+#: derivation places a room by its `site` alone, and a model cannot write a
+#: key `RoomDef` does not declare -- so a stub carrying it stands where a solve
+#: put it. The rule that takes a re-planned building's solve back off its
+#: stubs reads this record and nothing else, and gives back only what it
+#: lists (review of 2026-10-08, R2-1: keyed on the plan's name, the rule took
+#: the site a planned yard was DERIVED onto beside a solved kitchen, an extent
+#: a beat wrote and the yard's doorway offset off it, every commit).
+LAID_OUT_KEY = "laid_out"
 
 
 def planned_anchors(planned):
@@ -121,10 +157,293 @@ def planned_anchors(planned):
 
 
 def planned_geometry(planned):
-    """The geometry a planned room carries, omitting what it does not."""
+    """The geometry a planned room carries, omitting what it does not. A
+    `site` is read through `site_plan.normalize_site`, so one that is not a
+    place on a plan is no site at all rather than a guess at one."""
+    from world.site_plan import normalize_site
+
     planned = planned if isinstance(planned, dict) else {}
-    return {key: copy.deepcopy(planned[key]) for key in GEOMETRY_FIELDS
-            if planned.get(key)}
+    out = {key: copy.deepcopy(planned[key]) for key in GEOMETRY_FIELDS
+           if planned.get(key) and key != "site"}
+    site = normalize_site(planned.get("site"))
+    if site:
+        out["site"] = site
+    return out
+
+
+def _placed_pin(anchor):
+    """Whether an anchor carries a PLACER's pin: a `cell` with the whole
+    rectangle beside it (`spatial_fov.anchor_extent`). Only code that placed
+    a fixture writes `extent` on an anchor -- the layout tier, the layout
+    converter -- so a `cell` alone (the World Browser's pin) is never read
+    as one."""
+    return isinstance(anchor, dict) and "cell" in anchor \
+        and isinstance(anchor.get("extent"), dict)
+
+
+def _plan_edges(spec):
+    return {str(e.get("to")): e for e in (spec or {}).get("adjacent") or ()
+            if isinstance(e, dict) and e.get("to")}
+
+
+def apply_planned_layout(scene, specs, room_ids=None):
+    """Lay each prose-free stub of a SOLVED plan on its plan, in place, and
+    take the solve off a stub whose plan was re-planned since. Returns the
+    room ids it touched.
+
+    A plan is solved when it carries a `site` -- only the layout tier writes
+    one -- so every plan the Room or the charter wrote is untouched, byte for
+    byte. WHILE A ROOM IS THE PLAN'S PROSE-FREE STUB THE PLAN OWNS ITS
+    MEASUREMENTS (the fringe's own rule, `materialize_planned_fringe`), and a
+    solved plan's measurements are its rectangle, its storey, its site and
+    where each of its fixtures and doorways stands. So the stub takes the
+    plan's geometry (`planned_geometry`) and, on every anchor and doorway the
+    plan places, the plan's position fields (`LAYOUT_ANCHOR_FIELDS`,
+    `LAYOUT_EDGE_FIELDS`) -- the anchors the stub was minted with before the
+    solve included, which is every fixture the Room named (chat 165's
+    taproom planned `hearth`, `long_table`, `barrel_rack` and `stair_foot`,
+    and its stub carried all four without a position). A fixture the solve
+    left unpinned loses a placer's pin a stub held from an earlier solve
+    (`_placed_pin`); a host's own `cell` is never read as one.
+
+    A RE-PLAN DROPS THE SOLVE. `plant_structure` replaces a planned row
+    whole, so a building the Room re-plans after it was laid out has rows
+    with no `site` while its stubs still stand where the solve put them. A
+    stub the solve laid says so (`LAID_OUT_KEY`, written here and nowhere
+    else), and gives back what that record lists: its `site`, any rectangle
+    or storey the plan no longer states, every placer's pin on its fixtures,
+    and the `cell` and `offset` on each doorway and stair the solve placed --
+    taking the new plan's measurements where it states them -- so no stub
+    keeps a solve its plan no longer holds (review of 2026-10-08, F6: the
+    stub kept its old site under the new 12 by 3 box). What the solve added
+    that the new plan does not name stays an unpinned fixture of the stub.
+
+    ONLY WHAT A SOLVE LAID IS TAKEN BACK. The engine's derivation places a
+    planned neighbour beside a solved building on the building's own plan --
+    the yard behind its kitchen, the street before its door -- and that site,
+    with whatever a beat has measured on it since, is the neighbour's: it was
+    never solved, so it carries no record and nothing here touches it
+    (review of 2026-10-08, R2-1: read off the plan's name, the yard's derived
+    site, a 3 by 3 a beat wrote and its doorway's offset came off every
+    commit). A record left on a stub that no longer stands on the plan it
+    names describes nothing, and is dropped.
+
+    A room with a description is the story's and is never touched
+    (`is_planned_stub`): it was laid on its plan before it was described,
+    because every reader of a beat and the commit's own merge read the scene
+    through `apply_solved_plans`.
+
+    `specs` is `{uid: (name, planned)}` (`_planned_specs`); `room_ids`
+    limits the pass to those rooms."""
+    from world.site_plan import normalize_site
+    rooms = (scene or {}).get("rooms") or {}
+    touched = []
+    for uid, (_name, spec) in (specs or {}).items():
+        if room_ids is not None and uid not in room_ids:
+            continue
+        room = rooms.get(uid)
+        if not isinstance(room, dict) or not isinstance(spec, dict):
+            continue
+        if str(room.get("desc") or room.get("description") or "").strip():
+            continue
+        if normalize_site(spec.get("site")):
+            _lay_stub_on_its_plan(room, spec)
+            touched.append(uid)
+            continue
+        if LAID_OUT_KEY not in room:
+            continue
+        record = room[LAID_OUT_KEY] if isinstance(room[LAID_OUT_KEY], dict) else {}
+        site = normalize_site(room.get("site"))
+        if site and site["plan"] == record.get("plan"):
+            _take_the_solve_off(room, spec, record)
+        else:
+            room.pop(LAID_OUT_KEY, None)
+        touched.append(uid)
+    return touched
+
+
+def _lay_stub_on_its_plan(room, spec):
+    """One prose-free stub laid on its solved plan (`apply_planned_layout`),
+    and the record of what the solve laid on it (`LAID_OUT_KEY`)."""
+    room.update(planned_geometry(spec))
+    held = room.get("anchors") if isinstance(room.get("anchors"), dict) else {}
+    split = _split_records(spec)
+    for aid, anchor in (planned_anchors(spec).get("anchors") or {}).items():
+        live = held.get(aid)
+        if not isinstance(live, dict):
+            held[aid] = copy.deepcopy(anchor)
+            continue
+        if _placed_pin(live) and not _placed_pin(anchor):
+            live.pop("cell", None)
+            live.pop("extent", None)
+        for key in LAYOUT_ANCHOR_FIELDS:
+            if key in anchor:
+                live[key] = copy.deepcopy(anchor[key])
+        if aid in split and str(live.get("desc") or "") == split[aid] \
+                and str(anchor.get("desc") or "").strip():
+            # The plan's words for SEVERAL alike, which the solve split into
+            # one record each: the stub was minted with the group's words
+            # on the record that is now one of them, and takes that one's.
+            live["desc"] = anchor["desc"]
+    if held:
+        room["anchors"] = held
+    planned = _plan_edges(spec)
+    placed = []
+    for edge in room.get("adjacent") or ():
+        if not isinstance(edge, dict):
+            continue
+        plan_edge = planned.get(str(edge.get("to") or ""))
+        if not plan_edge:
+            continue
+        for key in LAYOUT_EDGE_FIELDS:
+            if key in plan_edge:
+                edge[key] = copy.deepcopy(plan_edge[key])
+        if "offset" in plan_edge or "cell" in plan_edge:
+            placed.append(str(edge["to"]))
+    room[LAID_OUT_KEY] = {"plan": room["site"]["plan"], "edges": sorted(set(placed))}
+
+
+def _split_records(spec):
+    """`{anchor id: the plan's words for the group}` for every record of the
+    plan a solve split into several alike (`planned.layout.split`,
+    `layout_bridge.planned_layout`)."""
+    record = spec.get("layout") if isinstance(spec.get("layout"), dict) else {}
+    return {str(s.get("anchor")): str(s.get("desc") or "")
+            for s in record.get("split") or () if isinstance(s, dict) and s.get("anchor")}
+
+
+def _take_the_solve_off(room, spec, record):
+    """One prose-free stub whose plan was re-planned after the layout tier
+    laid it out, given back to the plan it now has (`apply_planned_layout`):
+    what `record` (`LAID_OUT_KEY`) says the solve laid, and nothing else."""
+    room.pop(LAID_OUT_KEY, None)
+    room.pop("site", None)
+    stated = planned_geometry(spec)
+    for key in ("extent", "shape", "level"):
+        if key in stated:
+            room[key] = stated[key]
+        else:
+            room.pop(key, None)
+    plan_anchors = planned_anchors(spec).get("anchors") or {}
+    for aid, live in ((room.get("anchors") or {}) if isinstance(room.get("anchors"), dict)
+                      else {}).items():
+        if not _placed_pin(live):
+            continue
+        live.pop("cell", None)
+        live.pop("extent", None)
+        for key in LAYOUT_ANCHOR_FIELDS:
+            if key in (plan_anchors.get(aid) or {}):
+                live[key] = copy.deepcopy(plan_anchors[aid][key])
+    placed = {str(to) for to in record.get("edges") or ()}
+    planned = _plan_edges(spec)
+    for edge in room.get("adjacent") or ():
+        if not isinstance(edge, dict) or str(edge.get("to") or "") not in placed:
+            continue
+        edge.pop("cell", None)
+        edge.pop("offset", None)
+        plan_edge = planned.get(str(edge.get("to") or "")) or {}
+        for key in LAYOUT_EDGE_FIELDS:
+            if key in plan_edge:
+                edge[key] = copy.deepcopy(plan_edge[key])
+
+
+def apply_solved_plans(cid, scene):
+    """Lay every prose-free stub in `scene` on its plan's solve, in place
+    (`apply_planned_layout` over the whole registry); returns the room ids
+    it touched. Inert -- nothing read beyond the registry's shared parse --
+    for every story whose plans the layout tier never solved.
+
+    THE SCENE A BEAT READS AND THE SCENE ITS COMMIT MERGES ONTO ARE THE
+    PLAN'S. The tier writes the plan between commits, so the stored scene
+    holds a stub the commit minted before the solve until the next commit's
+    fringe pass lays it down -- and the job that solved the building designs
+    its rooms on the solved geometry meanwhile. Read off the stored scene,
+    the next beat installed that design onto the unsited stub and committed
+    it off the plan, its fixtures unpinned, and the fringe never touched it
+    again: half a building on a plan (review of 2026-10-08, F1). So
+    `story.scene.get_scene` -- every reader of a beat, the install among
+    them -- the commit's merge base (`compose_beat_scene`) and the design job
+    (`director_rooms._predevelop_run`) all read the scene through this, the
+    way the opening's readers and its merge both read the planted skeleton
+    (`story.scene.seed_scene_from_plan`). No model writes a `site`, and
+    nothing here makes one."""
+    return apply_planned_layout(scene, _planned_specs(cid))
+
+
+def write_planned_layout(cid, rooms, *, expected, job=None):
+    """Write a solved building into the plan rows of its rooms, and say
+    whether it was written. The layout tier's ONE write
+    (`agents/director_layout.py`), and code's alone: no model reaches it.
+
+    `rooms` is `{uid: {"geometry": {extent, shape, level, site}, "anchors":
+    {anchor id: fields}, "edges": {neighbour uid: fields}, "layout": the
+    solve's record}}` (`world.layout_bridge.planned_layout`). Each row's
+    `planned` payload takes the geometry, each anchor's fields merged onto
+    the plan's record of it (its `desc` kept), each edge's position fields
+    onto the plan's edge to that neighbour, and the record under `layout`.
+
+    ALL OR NOTHING, AND ONLY ONTO THE PLAN IT SOLVED. `expected` is each
+    row's `planned` payload as the solve read it; a row the Room re-planned
+    since, or retired, refuses the whole building, because half a building
+    on a plan is a contradiction the next reader cannot see. Nothing is
+    written once `job` is cancelled (`core.jobs.is_cancelled`, asked inside
+    the transaction, as `director_rooms._file_prepared` does): a restore
+    stops the job before it rolls the registry back.
+
+    The plan tier writes the plan; the scene is the commit's
+    (`materialize_planned_fringe` -> `apply_planned_layout`), so this is
+    never a second scene writer."""
+    from core import jobs
+    from core.db import q, qi, transaction
+
+    def canon(value):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+
+    with transaction():
+        if jobs.is_cancelled(job):
+            return False
+        current = {}
+        for uid in rooms:
+            row = q("SELECT payload FROM room_registry WHERE chat_id=? AND "
+                    "room_uid=? AND retired_turn_id IS NULL", (cid, uid))
+            if not row:
+                return False
+            payload = _payload(row[0])
+            planned = payload.get("planned") if isinstance(payload, dict) else None
+            if not isinstance(planned, dict) or canon(planned) != canon(
+                    (expected or {}).get(uid)):
+                return False
+            current[uid] = payload
+        for uid, solved in rooms.items():
+            payload = current[uid]
+            planned = payload["planned"]
+            planned.update(copy.deepcopy(solved.get("geometry") or {}))
+            anchors = planned.get("anchors") if isinstance(planned.get("anchors"), dict) else {}
+            split = set(_split_records(solved))
+            for aid, fields in (solved.get("anchors") or {}).items():
+                record = dict(anchors.get(aid) or {}) if isinstance(anchors.get(aid), dict) else {}
+                fields = copy.deepcopy(fields)
+                if str(record.get("desc") or "").strip() and aid not in split:
+                    # what a thing IS stays the plan's word for it; the solve
+                    # says only where it stands -- except on a record the
+                    # plan wrote for SEVERAL alike, now the first of them:
+                    # the group's words go to the solve's record
+                    # (`planned.layout.split`), and the copy takes its own
+                    fields.pop("desc", None)
+                record.update(fields)
+                anchors[aid] = record
+            if anchors:
+                planned["anchors"] = anchors
+            moves = solved.get("edges") or {}
+            for edge in planned.get("adjacent") or ():
+                if isinstance(edge, dict) and str(edge.get("to") or "") in moves:
+                    edge.update(copy.deepcopy(moves[str(edge["to"])]))
+            if solved.get("layout"):
+                planned["layout"] = copy.deepcopy(solved["layout"])
+            qi("UPDATE room_registry SET payload=? WHERE chat_id=? AND room_uid=? "
+               "AND retired_turn_id IS NULL",
+               (json.dumps(payload, ensure_ascii=False), cid, uid))
+    return True
 
 
 def _payload(row):
@@ -805,6 +1124,12 @@ def materialize_planned_fringe(cid, scene):
             if to and to in rooms and not crosses_an_interior(rooms, uid, to):
                 edges.setdefault(to, dict(edge))
         room["adjacent"] = list(edges.values())
+    # A SOLVED PLAN REACHES THE STUB IT ALREADY MADE: the positions the
+    # layout tier wrote onto anchors and doorways the stub was minted with
+    # -- and a re-planned one takes its solve back off it
+    # (`apply_planned_layout`). Only a plan carrying a `site`, or a stub
+    # standing on the tier's plan, is read.
+    apply_planned_layout(scene, planned)
     _settle_stub_barriers(rooms)
     return scene, added
 
@@ -1339,6 +1664,12 @@ def prepare_frontier_expansion(cid, scene):
             "key": structure_key, "max_planned": 200, "grammar": []}
         frontiers = [str(x) for x in spec.get("frontier") or () if str(x)]
         retained = []
+        # What this expansion adds to the holder's plan, kept apart so the
+        # write lays exactly this onto the row it finds inside the lock
+        # (`apply_frontier_mutations`).
+        added_edges = []
+        standing_was = dict(spec.get("frontier_standing") or {}) \
+            if isinstance(spec.get("frontier_standing"), dict) else {}
         # WHAT THE PLAN RESERVED AND WHAT NOW STANDS IN IT. An axis used to
         # be simply deleted the moment it minted, so nothing anywhere
         # recorded that a room was a placeholder and a later plan had no
@@ -1373,6 +1704,7 @@ def prepare_frontier_expansion(cid, scene):
             if target and target != uid:
                 edge = {"to": target, "barrier": "open_door", "axis": axis}
                 spec.setdefault("adjacent", []).append(edge)
+                added_edges.append(dict(edge))
                 rooms.setdefault(uid, {"name": str(by_uid[uid]["name"] or uid),
                                        "adjacent": []})
                 rooms[uid].setdefault("adjacent", []).append(dict(edge))
@@ -1393,6 +1725,7 @@ def prepare_frontier_expansion(cid, scene):
             edge = {"to": new_uid, "barrier": "open_door",
                     "axis": axis}
             spec.setdefault("adjacent", []).append(edge)
+            added_edges.append(dict(edge))
             rooms.setdefault(uid, {"name": str(by_uid[uid]["name"] or uid),
                                    "adjacent": []})
             rooms[uid].setdefault("adjacent", []).append(dict(edge))
@@ -1424,6 +1757,18 @@ def prepare_frontier_expansion(cid, scene):
                 "name": str(by_uid[uid]["name"] or uid),
                 "aliases": by_uid[uid]["aliases"],
                 "payload": payload,
+                # WHAT THE EXPANSION OWNS of the holder's plan: the edges it
+                # drew, the axes it spent and what now stands in them.
+                # `apply_frontier_mutations` lays exactly this onto the row as
+                # it stands inside the lock; the rest of the plan is written
+                # out of band meanwhile (`write_planned_layout`).
+                "expansion": {
+                    "adjacent": added_edges,
+                    "frontier_was": frontiers,
+                    "frontier": retained,
+                    "standing": {axis: room for axis, room in standing.items()
+                                 if standing_was.get(axis) != room},
+                },
             })
     return scene, mutations
 
@@ -1702,10 +2047,27 @@ def apply_frontier_mutations(cid, turn_id, mutations):
     spelling so the stub cannot land on one; leaving the revive in place
     would keep a second way to the same defect, and the holder is a live room
     whose row was never retired anyway.
+
+    THE HOLDER'S PLAN AS IT STANDS NOW, NOT AS IT WAS READ. The expansion is
+    prepared before the lock and the plan is written out of band meanwhile:
+    the layout tier lays a building onto its rows between any two commits.
+    Writing back the holder's whole payload as prepared took a solved hall's
+    site off it while its kitchen and loft kept theirs, and the building was
+    refused for good (review of 2026-10-08, R2-4; the registry projection's
+    own case was F5). So a holder's row is re-read here and only what the
+    expansion owns is laid onto it (`_expanded`); a stub this expansion
+    minted, which no row held when it was prepared, is written whole.
     """
-    from core.db import qtx
+    from core.db import q, qtx
 
     for row in mutations or ():
+        payload = row.get("payload") or {}
+        if isinstance(row.get("expansion"), dict):
+            current = q("SELECT payload FROM room_registry WHERE chat_id=? AND "
+                        "room_uid=?", (cid, row["room_uid"]), one=True)
+            stored = _payload(current) if current is not None else None
+            if isinstance(stored, dict) and isinstance(stored.get("planned"), dict):
+                payload = _expanded(stored, row["expansion"])
         qtx(
             "INSERT INTO room_registry"
             "(chat_id,room_uid,owning_book_id,parent_entity,name,aliases,payload,"
@@ -1717,8 +2079,35 @@ def apply_frontier_mutations(cid, turn_id, mutations):
             (cid, row["room_uid"], row.get("owning_book_id"),
              row.get("parent_entity"), row["name"],
              json.dumps(row.get("aliases") or []),
-             json.dumps(row.get("payload") or {}, ensure_ascii=False), turn_id),
+             json.dumps(payload, ensure_ascii=False), turn_id),
         )
+
+
+def _expanded(stored, expansion):
+    """A holder's stored registry payload with what its frontier expansion
+    owns laid onto it (`apply_frontier_mutations`): the edges it drew
+    appended, the axes it spent gone from the frontier, and what now stands
+    in each added to `frontier_standing`. On a row nobody wrote since it was
+    prepared this is exactly the payload the expansion prepared."""
+    payload = dict(stored)
+    planned = dict(payload["planned"])
+    planned["adjacent"] = list(planned.get("adjacent") or []) + [
+        dict(edge) for edge in expansion.get("adjacent") or ()]
+    was = [str(x) for x in expansion.get("frontier_was") or ()]
+    kept = [str(x) for x in expansion.get("frontier") or ()]
+    now = [str(x) for x in planned.get("frontier") or () if str(x)]
+    if now == was:
+        planned["frontier"] = kept
+    else:
+        spent = set(was) - set(kept)
+        planned["frontier"] = [x for x in now if x not in spent]
+    standing = dict(planned.get("frontier_standing") or {}) \
+        if isinstance(planned.get("frontier_standing"), dict) else {}
+    standing.update(expansion.get("standing") or {})
+    if standing:
+        planned["frontier_standing"] = standing
+    payload["planned"] = planned
+    return payload
 
 
 def structure_warnings(structure, rooms, known=()):
@@ -1785,8 +2174,10 @@ def structure_warnings(structure, rooms, known=()):
 
 
 __all__ = [
-    "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "STRUCTURES_KEY",
-    "planned_anchors",
+    "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "LAYOUT_ANCHOR_FIELDS",
+    "LAYOUT_EDGE_FIELDS", "LAYOUT_PLAN_PREFIX", "STRUCTURES_KEY",
+    "apply_planned_layout", "apply_solved_plans", "planned_anchors",
+    "write_planned_layout",
     "apply_frontier_mutations", "claim_frontier_spaces",
     "composed_scene", "frontier_refusal", "frontier_spaces",
     "planned_geometry",

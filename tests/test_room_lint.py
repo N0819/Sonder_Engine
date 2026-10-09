@@ -72,6 +72,41 @@ def test_a_wall_whose_anchors_need_more_paces_than_it_has_is_overfull():
     assert "wall_overfull" not in _kinds(room_layout_lint(sc))
 
 
+def test_a_pinned_anchor_takes_of_its_wall_the_cells_it_stands_on_along_it():
+    """`wall_overfull` asks whether what stands along a wall outruns its
+    length. A pinned anchor stands on its own cells, so it takes of its wall
+    exactly the cells of it it stands on: a bed a placer stood two by three
+    against a four-pace wall is two paces of that wall, not six -- and not
+    none, so a pinned bench three paces along a four-pace wall with two
+    chests laid beside it still fills the wall past its length (review of
+    2026-10-08, F7). The same bed laid by its footprint takes the two paces
+    it is laid at along the wall -- its inward row is floor, counted per
+    height (`wall_loads`) -- so with the chest the wall is full, not over;
+    a third thing laid along it outruns it."""
+    room = {"name": "R", "extent": {"w": 4, "d": 5},
+            "anchors": {"bed": {"desc": "a bed", "dir": "n", "cell": [0, 0],
+                                "extent": {"w": 2, "d": 3}, "footprint": "large"},
+                        "chest": {"desc": "a chest", "dir": "n", "cell": [2, 0],
+                                  "extent": {"w": 2, "d": 1}, "footprint": "small"}}}
+    sc = _scene({"r": room})
+    assert "wall_overfull" not in _kinds(room_layout_lint(sc))
+    for anchor in room["anchors"].values():
+        anchor.pop("cell")
+        anchor.pop("extent")
+    assert "wall_overfull" not in _kinds(room_layout_lint(sc)), \
+        "laid by footprint, the bed and the chest fill the wall's four paces"
+    room["anchors"]["crate"] = {"desc": "a crate", "dir": "n", "footprint": "small"}
+    assert "wall_overfull" in _kinds(room_layout_lint(sc)), \
+        "a wall holding more than its length of unpinned fixtures still reports"
+    crowded = {"name": "C", "extent": {"w": 5, "d": 4},
+               "anchors": {"bench": {"desc": "a bench", "dir": "w", "cell": [0, 0],
+                                     "extent": {"w": 1, "d": 3}, "footprint": "run"},
+                           "chest": {"desc": "a chest", "dir": "w", "footprint": "small"},
+                           "box": {"desc": "a box", "dir": "w", "footprint": "small"}}}
+    rows = [r for r in room_layout_lint(_scene({"c": crowded})) if r["kind"] == "wall_overfull"]
+    assert rows and rows[0]["wall"] == "w" and rows[0]["needs"] == 3 + 2 + 2, rows
+
+
 def test_two_doorways_placed_on_one_cell_overlap_and_two_walls_apart_do_not():
     """Two runs on one wall must share cells; a door per wall cannot."""
     sc = _scene({

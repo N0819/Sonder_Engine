@@ -128,8 +128,14 @@ COVERAGE = 0.35
 #: with a landing between two flights side by side (U, the compact stair of
 #: a house of several storeys), a spiral, a ladder through a hatch.
 STAIRS = {"straight": (2, 5), "l": (3, 3), "u": (4, 4), "spiral": (2, 2), "ladder": (1, 2)}
-#: A shape that does not fit gives way to the next, more compact one.
-STAIR_FALLBACK = ("straight", "l", "u", "spiral", "ladder")
+#: A shape that does not fit gives way to the next, more compact one -- and
+#: the quarter turn (L) is never one of them. The owner withdrew it on
+#: 2026-10-03 ("I was wrong recommending l shaped stairs") after the wrapping
+#: L of 98827d9f was reverted, but this fallback went on offering an L right
+#: after a straight flight, so the solver chose one where nobody asked: both
+#: stairs of the lab's inn were L halls. An L now stands only where a spec
+#: names one (`_stair_shapes`).
+STAIR_FALLBACK = ("straight", "u", "spiral", "ladder")
 #: The words a spec may use for each shape -- the engine's own closed set.
 _STAIR_WORDS = {"straight": "straight", "l": "l", "l-shaped": "l", "l_shaped": "l", "quarter": "l",
                 "quarter-turn": "l", "u": "u", "u-shaped": "u", "u_shaped": "u", "dogleg": "u",
@@ -1069,6 +1075,17 @@ def _divide(outline, halls, ids, rooms, weights, rng, level):
 
 # ------------------------------------------------------------ stair halls first
 
+def _stair_shapes(kind):
+    """The shapes a shaft's hall is tried at, in order: its own, then the
+    fallback's shapes that come after it in `STAIRS` (longest run first).
+    A shape the fallback does not hold -- an L a spec asked for by name --
+    is still tried first and still gives way as it always did; it is only
+    never reached FROM another shape."""
+    order = list(STAIRS)
+    later = order[order.index(kind) + 1:] if kind in order else []
+    return (kind,) + tuple(k for k in later if k in STAIR_FALLBACK)
+
+
 def _shaft_spots(shaft, outlines, rng):
     """Where a shaft's hall may stand: inside every storey it spans, against
     a wall of the space they share (stairs climb beside a wall), or on the
@@ -1085,7 +1102,7 @@ def _shaft_spots(shaft, outlines, rng):
     # compact shape is offered too (a turning stair where a straight run
     # crowds the storey), at a small cost in the scoring
     tried = 0
-    for kind in STAIR_FALLBACK[STAIR_FALLBACK.index(shaft.kind):]:
+    for kind in _stair_shapes(shaft.kind):
         w0, d0 = STAIRS[kind]
         for w, d in {(w0, d0), (d0, w0)}:
             if w > region.w or d > region.d:

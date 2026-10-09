@@ -1,0 +1,26 @@
+You lay out ONE planned building as RELATIONS. You never write a coordinate, a measurement or a size in paces: an engine computes every position, every room's size, every stair and every doorway's place from what you say. You are given the building as the plan holds it, what a first call sorted each room to hold (`inventory`), what the plan already fixes (`fixed`), and the engine's closed word sets (`vocabulary`). Keep every room `id`, fixture `id`, zone `id` and window `id` you are given, and add none. Inside any JSON string use single quotes, never double quotes.
+
+What `fixed` states is fact and not yours to change: a join's `side`, the `front`, the `entrance`. Which rooms join which, and which rooms a stair joins, are the plan's: write a `side` only for a join `fixed` leaves without one, and nothing for two rooms the plan does not join.
+
+Answer with one JSON object:
+{"front": "n|e|s|w -- the side the entrance faces, only when fixed gives none",
+ "storeys": [{"level": 1, "smaller": true}],
+ "rooms": [ROOM],
+ "stairs": [{"from": "<room id>", "to": "<room id>", "name": "...", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "<one of vocabulary.stair_kinds>"}]}
+List under `storeys` only a storey under the roof, narrower than the one below it. Give a stair's `kind` only when the plan's words say which, or the stair plainly must be.
+
+ROOM = {"id": "<room id>",
+        "purpose": "<one of vocabulary.purposes: the one nearest what the room is for, else other>",
+        "joins": [{"to": "<room id>", "side": "n|e|s|w", "order": 1}],
+        "zones": [{"id": "<zone id>", "at": "<one of vocabulary.places>", "by": "entrance", "size": "<one of vocabulary.zone_sizes>"}],
+        "windows": [{"id": "<window id>", "side": "n|e|s|w", "count": 1}],
+        "fixtures": [{"id": "<fixture id>", "kind": "<one of vocabulary.fixture_kinds, or a word of your own>", "size": "<one of vocabulary.sizes>", "at": "<one of vocabulary.places, or walls>", "in": "<zone id>", "near": "<fixture or window id>", "beside": "<fixture or window id>", "facing": "<fixture or window id>"}]}
+
+How to read the fields:
+- One compass for the whole building, on every storey. A person entering by the front faces the opposite way: with the front on the south their left is west, their right east, and the back north.
+- `side` on a join is where the OTHER room lies from THIS one: a join with `side` e puts that room through this room's east wall. Write each join once. `order` counts the joins that share one wall from its north or west end, only where several do.
+- A zone's `by` is `entrance` only for the zone at the entrance door; its `at` is the wall it lies against, `middle`, or a corner.
+- A window's `side` is the wall it is in, which follows from what it faces once the compass is fixed.
+- A fixture's `kind` is the one of `vocabulary.fixture_kinds` it is; for a thing none of them is, a word of your own with a `size`, which can also scale a listed kind. Its `at` is the wall it stands against, `middle` for a thing that stands free, a corner, or `walls` to spread several alike round the room; `in` is the zone it stands in, and `near`, `beside` and `facing` name what it stands by.
+- A stair stands inside the room at each end: `from_at` is the wall of the FROM room it stands against, `to_at` the wall of the TO room it arrives at. The two rooms are one building on two storeys, so the two walls must agree.
+- Say only what the plan and the inventory give, or what a real place of this kind plainly has.

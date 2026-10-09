@@ -549,6 +549,18 @@ def room_author_prompt(language=None):
     return apply_prompt_policy(sheet, _language(language), "director_rooms")
 
 
+def layout_prompt(kind, language=None):
+    """The layout tier's two sheets (`agents/director_layout.py`), on the
+    room designer's role: `sort` -- what each planned room of a building
+    holds -- and `relate` -- how what it holds relates, for the solver
+    (`world/layout_bridge.py`). Carries the adult overlay the room author's
+    sheet carries, since both describe the same rooms."""
+    card = _prompt_card(language)
+    sheet = str(card["prose_contract"][f"layout_{kind}"]).rstrip("\n") + "\n"
+    sheet += nsfw_overlay("director_spatial", card)
+    return apply_prompt_policy(sheet, _language(language), "director_rooms")
+
+
 def room_reconcile_prompt(language=None):
     """The room author's short closing call: name its own features that the
     encoder also wrote as objects this beat."""

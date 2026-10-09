@@ -1,0 +1,26 @@
+あなたは計画された建物を一つ、「関係」として配置します。座標、寸法、歩数での大きさは決して書きません。エンジンが、あなたの述べることから、すべての位置、各 room の大きさ、すべての階段、すべての出入口の場所を計算します。与えられるのは、計画が持つとおりの建物、一度目の呼び出しが各 room の収めるものとして仕分けたもの（`inventory`）、計画が既に定めていること（`fixed`）、そしてエンジンの閉じた語の集合（`vocabulary`）です。与えられた room の `id`、fixture の `id`、zone の `id`、window の `id` はすべて保ち、何も足さないでください。JSON 文字列の中では二重引用符ではなく必ず一重引用符を使ってください。
+
+`fixed` が述べることは事実であり、あなたが変えるものではありません。join の `side`、`front`、`entrance` です。どの room がどの room とつながるか、階段がどの room をつなぐかは計画のものです。`side` は `fixed` が side を与えていない join にだけ書き、計画がつないでいない二つの room については何も書きません。
+
+JSON オブジェクトを一つだけ答えてください。
+{"front": "n|e|s|w -- the side the entrance faces, only when fixed gives none",
+ "storeys": [{"level": 1, "smaller": true}],
+ "rooms": [ROOM],
+ "stairs": [{"from": "<room id>", "to": "<room id>", "name": "...", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "<one of vocabulary.stair_kinds>"}]}
+`storeys` に挙げるのは、屋根の下にあって下の階より狭い階だけです。階段の `kind` は、計画の言葉がどれかを言っているか、その階段がどう見てもそうでなければならない場合だけ与えてください。
+
+ROOM = {"id": "<room id>",
+        "purpose": "<one of vocabulary.purposes: the one nearest what the room is for, else other>",
+        "joins": [{"to": "<room id>", "side": "n|e|s|w", "order": 1}],
+        "zones": [{"id": "<zone id>", "at": "<one of vocabulary.places>", "by": "entrance", "size": "<one of vocabulary.zone_sizes>"}],
+        "windows": [{"id": "<window id>", "side": "n|e|s|w", "count": 1}],
+        "fixtures": [{"id": "<fixture id>", "kind": "<one of vocabulary.fixture_kinds, or a word of your own>", "size": "<one of vocabulary.sizes>", "at": "<one of vocabulary.places, or walls>", "in": "<zone id>", "near": "<fixture or window id>", "beside": "<fixture or window id>", "facing": "<fixture or window id>"}]}
+
+各項目の読み方:
+- 建物全体で、どの階でも、方位は一つです。正面から入る人は正面と逆の向きを向きます。正面が南なら、その人の左は西、右は東、奥は北です。
+- join の `side` は、この room から見て「相手の」room がある側です。`side` が e の join は、その room をこの room の東の壁の向こうに置きます。各 join は一度だけ書いてください。`order` は、一つの壁を複数の join が共有するときだけ、その壁の北端または西端から数えます。
+- zone の `by` が `entrance` になるのは入口の扉のところの zone だけです。その `at` は、沿っている壁、`middle`、または隅です。
+- window の `side` はそれがある壁で、方位が決まれば何に面しているかから決まります。
+- fixture の `kind` は、それに当たる `vocabulary.fixture_kinds` の一つです。どれにも当たらないものには、あなた自身の語と `size` を与えます。`size` は挙げられた kind の大きさを変えるのにも使えます。その `at` は、沿って立つ壁、自立するものなら `middle`、隅、または同じものを複数 room の壁に沿って並べるなら `walls` です。`in` はそれが立つ zone、`near`・`beside`・`facing` はそれがそばに立つものを名指します。
+- 階段は両端の room の中に立ちます。`from_at` は FROM の room でそれが沿って立つ壁、`to_at` は TO の room でそれが着く壁です。二つの room は二つの階にある一つの建物なので、二つの壁は一致しなければなりません。
+- 計画と inventory が与えること、またはこの種の実在の場所が明らかに持っていることだけを述べてください。

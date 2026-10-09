@@ -171,6 +171,32 @@ def test_a_lab_layout_becomes_rooms_on_one_plan_that_hold_together():
     assert rooms["loft"]["anchors"]["loft_w1"]["dir"] == "n"
 
 
+def test_the_converter_lays_every_fixture_on_the_cells_the_solver_chose():
+    """A solved fixture is the rectangle the solver placed, and the engine
+    lays it there (`spatial_fov.anchor_extent`): a bench along a side wall
+    runs north-south, a bed is two by three. The footprint word alone laid
+    two cells east of the origin -- 27 of the preferred shrine solve's 53
+    fixtures on the cells the solver chose, 5 of the lab inn's 17."""
+    from world.layout_solver import solve
+    from world.spatial import anchor_cells
+
+    spec = {"name": "cell", "front": "s", "entrance": {"room": "cell"},
+            "rooms": [{"id": "cell", "level": 0, "purpose": "bedroom",
+                       "fixtures": [{"id": "bed", "kind": "bed", "at": "e"},
+                                    {"id": "bench", "kind": "bench", "at": "w"},
+                                    {"id": "chest", "kind": "chest", "at": "n"}]}]}
+    layout = solve(spec).as_dict()
+    rooms = rooms_from_layout(layout, "cell")
+    sc = {"rooms": rooms, "entities": {}, "positions": {}}
+    placed = anchor_cells(sc, "cell")
+    ox, oy = rooms["cell"]["site"]["x"], rooms["cell"]["site"]["y"]
+    for f in layout["fixtures"]["cell"]:
+        r = f["rect"]
+        want = sorted((r["x"] + i - ox, r["y"] + j - oy) for i in range(r["w"]) for j in range(r["d"]))
+        assert placed[f["id"]]["cells"] == want, f["id"]
+    assert any(f["rect"]["d"] > f["rect"]["w"] for f in layout["fixtures"]["cell"])
+
+
 # ---------------------------------------------------------------------------
 # Step 2: sight with height (2026-10-04)
 # ---------------------------------------------------------------------------

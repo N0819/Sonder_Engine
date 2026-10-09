@@ -255,6 +255,12 @@
     "room_prepare_note": {
       "$text": "prose_contract/room_prepare_note.txt"
     },
+    "layout_sort": {
+      "$text": "prose_contract/layout_sort.txt"
+    },
+    "layout_relate": {
+      "$text": "prose_contract/layout_relate.txt"
+    },
     "encoder_cue": {
       "$text": "prose_contract/encoder_cue.txt"
     },

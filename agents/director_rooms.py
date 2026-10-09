@@ -2627,6 +2627,11 @@ def _predevelop_run(job, cid, frame_id, language_id):
     if not _frame_is_live(frame_id):
         return []
     current = wget(cid, "scene") or {}
+    # THE SCENE THE NEXT BEAT OPENS ON: its prose-free stubs on their plans'
+    # solves, as `get_scene` hands every reader of that beat
+    # (`structure.apply_solved_plans`).
+    from world.structure import apply_solved_plans
+    apply_solved_plans(cid, current)
     players, cast = actors_ahead(cid, frame_id, current)
     # THE PLAYERS' ROOMS FIRST, then the cast's; a room both reach is the
     # players'. Within the bound a bystander's room never costs the player
@@ -2638,6 +2643,15 @@ def _predevelop_run(job, cid, frame_id, language_id):
         seen.update(tier)
         tiers.append(tier)
     near = [rid for tier in tiers for rid in tier]
+    # A PLANNED BUILDING IS LAID OUT BEFORE ITS ROOMS ARE DESIGNED
+    # (`agents/director_layout.py`, off unless the host or the story turns it
+    # on): the solver places a building of several storeys with a room in
+    # reach, the plan takes its geometry, and every brief and design below is
+    # made on the stubs as the next beat will hold them. Off, nothing is read.
+    laid_out = set()
+    if near:
+        from agents.director_layout import lay_out_buildings
+        current, laid_out = lay_out_buildings(job, cid, current, near, language_id)
     stored = _read_prepared(cid)
     if not near and not stored:
         return []
@@ -2652,6 +2666,12 @@ def _predevelop_run(job, cid, frame_id, language_id):
              if not (rid in briefs and _filed_for(entry, briefs[rid]))}
     for rid in (_wanted_elsewhere(cid, frame_id, stale) if stale else ()):
         stale.pop(rid, None)
+    # A DESIGN MADE BEFORE ITS BUILDING WAS LAID OUT was made on another
+    # room -- its own measurements, its fixtures where its designer put them
+    # -- and a brief reads only names, purposes and exits, so it can still
+    # match. Every design filed for a room this run laid out is dropped,
+    # wherever it was filed from, and the room is designed on the plan.
+    stale.update({rid: stored[rid] for rid in laid_out if rid in stored})
     cache = {rid: entry for rid, entry in stored.items() if rid not in stale}
     # THE INSTALL'S OWN TEST, FIRST, on the scene the next beat opens on:
     # what would stand is merged into the scene everything below is drafted

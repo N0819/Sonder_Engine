@@ -1621,6 +1621,40 @@ def test_a_pinned_anchor_lays_its_footprint_from_its_origin(shape):
         assert placed["point"]["dir"] == "n" and placed["point"]["offset"] == 0.9
 
 
+@pytest.mark.parametrize("shape", sorted(SHAPES))
+def test_a_pinned_anchor_with_an_extent_takes_its_whole_rectangle(shape):
+    """A placer's rectangle is kept whole (`spatial_fov.anchor_extent`): a
+    bench three paces north-south and a bed two by three take exactly their
+    cells from the origin, clipped to the room, and the footprint word is
+    the one the rectangle falls in. The footprint words alone laid them as
+    two cells EAST of the origin -- 27 of the preferred shrine solve's 53
+    fixtures landed on the cells the solver chose (2026-10-08)."""
+    from world.spatial import anchor_extent, footprint_for_extent
+
+    room = SHAPES[shape]
+    grid = room_grid(scene(room), "r")
+    for cell in sorted(grid.cells):
+        x, y = cell
+        anchors = {
+            "bench": {"desc": "b", "footprint": "small", "dir": "e", "cell": [x, y],
+                      "extent": {"w": 1, "d": 3}},
+            "bed": {"desc": "d", "footprint": "point", "height": "waist", "cell": [x, y],
+                    "extent": {"w": 2, "d": 3}},
+        }
+        placed = anchor_cells(scene(room, anchors=anchors), "r")
+        bench = [c for c in [(x, y + j) for j in range(3)] if grid.contains(c)]
+        bed = [c for c in [(x + i, y + j) for j in range(3) for i in range(2)] if grid.contains(c)]
+        assert placed["bench"]["cells"] == sorted(bench)
+        assert placed["bed"]["cells"] == sorted(bed)
+        assert placed["bench"]["footprint"] == "run" and placed["bed"]["footprint"] == "large"
+        assert placed["bench"]["source"] == "cell" and placed["bench"]["dir"] == "e"
+    # what is not a rectangle is no extent: the footprint words, as they were
+    assert anchor_extent({"cell": [0, 0], "extent": {"w": 0, "d": 2}}) is None
+    assert anchor_extent({"cell": [0, 0], "extent": {"w": True, "d": 2}}) is None
+    assert anchor_extent({"cell": [0, 0], "extent": "three by one"}) is None
+    assert footprint_for_extent(1, 1) == "point" and footprint_for_extent(2, 1) == "small"
+
+
 # ---------------------------------------------------------------------------
 # Outside: the nearest cell the room still holds
 # ---------------------------------------------------------------------------

@@ -871,6 +871,12 @@ SETTING_PROVENANCE = {
     # its declaration: rolling it back would erase the only thing that can
     # explain why an earlier beat granted what the current mode refuses.
     "player_authority": SET_BY_HAND,
+    # Whether the layout tier lays this story's planned buildings out
+    # (`agents.director_layout.LAYOUT_TIER_STORY_KEY`): the story's own
+    # switch over the host's, set by hand to compare the tier in one story.
+    # A dial, like `living_world`: the plans it SOLVED are the story's and
+    # roll back with the registry.
+    "layout_solver_tier": SET_BY_HAND,
     # NOT a preference -- the one entry here preserved on a correctness
     # argument instead. The secret nonce that keys every viewer-scoped
     # anonymous `body:` id (web/story_view.py), minted lazily on first

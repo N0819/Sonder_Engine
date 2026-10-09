@@ -9,8 +9,10 @@ the World Browser and played:
 
 * each room at its storey, `extent` its rectangle, `site` its corner on the
   plan and its floor's height (`level` x `STOREY_M`);
-* each fixture, zone and window an anchor pinned to its cell (a zone and a
-  way keep a lane: they are floor, not furniture);
+* each fixture, zone and window an anchor pinned to its cell -- a fixture,
+  a zone and a way's first run with the whole rectangle it takes (`extent`,
+  read by `spatial_fov.anchor_extent`), a window at its one cell; a zone and
+  a way keep a lane: they are floor, not furniture;
 * each doorway an edge on both sides, bearing and offset along the wall;
 * each stair a vertical edge between its halls on consecutive storeys;
 * the grounds ONE open-air room whose cells are the site less every
@@ -34,7 +36,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from world.site_plan import STOREY_M  # noqa: E402
-from world.spatial import normalize_barrier  # noqa: E402
+from world.spatial import footprint_for_extent, normalize_barrier  # noqa: E402
 
 _UNIT = {"n": (0, -1), "s": (0, 1), "e": (1, 0), "w": (-1, 0)}
 _OPPOSITE = {"n": "s", "s": "n", "e": "w", "w": "e"}
@@ -88,14 +90,6 @@ def _parts(cells, ox, oy):
         else:
             merged.append(list(run))
     return [{"w": w, "d": d, "at": [x - ox, y - oy]} for x, y, w, d in merged]
-
-
-def _footprint(w, d):
-    if max(w, d) >= 3 and min(w, d) == 1:
-        return "run"
-    if w * d >= 4:
-        return "large"
-    return "small" if w * d > 1 else "point"
 
 
 def _offset(rect, side, cell):
@@ -155,7 +149,13 @@ def rooms_from_layout(layout: dict, plan: str, region: str = "") -> dict:
             return
         ox, oy = rooms[rid]["site"]["x"], rooms[rid]["site"]["y"]
         x, y, w, d = _rect(r)
-        rec = {"desc": desc, "cell": [x - ox, y - oy], "footprint": _footprint(w, d)}
+        # THE WHOLE RECTANGLE (`spatial_fov.anchor_extent`): the footprint
+        # word alone lays two cells east of the origin, so a bench along an
+        # east wall or a bed two by three landed on cells the solver did
+        # not choose (27 of the preferred shrine's 53 fixtures were laid
+        # where the solver put them, 2026-10-08).
+        rec = {"desc": desc, "cell": [x - ox, y - oy], "extent": {"w": w, "d": d},
+               "footprint": footprint_for_extent(w, d)}
         if height:
             rec["height"] = height
         if lane:

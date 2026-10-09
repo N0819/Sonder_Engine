@@ -331,6 +331,7 @@ Not scheduled and not committed to a phase. See the
 - [§2.38 — The room designer's shortcuts: what they leave (2026-09-27)](UNBUILT_WORLD.md#unbuilt-2-38)
 - [§2.39 — The site plan: sight with height, drops, flight, terrain](UNBUILT_WORLD.md#unbuilt-2-39)
 - [§2.40 — A level of detail for distant landscapes — BUILT 2026-10-05, what is left](UNBUILT_WORLD.md#unbuilt-2-40)
+- [§2.43 — Buildings from relations: the layout solver as a tier of the plan — first slice BUILT 2026-10-08, what is left](UNBUILT_WORLD.md#unbuilt-2-43)
 
 **4. Architecture gaps**
 

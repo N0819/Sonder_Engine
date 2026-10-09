@@ -65,7 +65,9 @@ against a diff, as a planned room's measurements already were
   composite open-air room carrying the features and ways. Measured on the
   preferred shrine (`layout-solver-test`, `tools/layout_lab/baselines`): 18
   rooms on four storeys, no overlaps, every doorway's two sides meeting across
-  the wall, every room reachable from the grounds.
+  the wall, every room reachable from the grounds. Since 2026-10-08 each
+  fixture carries its whole rectangle, and a planned building can be laid out
+  onto a plan in play by the layout tier ([`DESIGN_LAYOUT_TIER.md`](DESIGN_LAYOUT_TIER.md)).
 * Rooms may be 96 paces a side (`EXTENT_MAX_PACES`, the owner's number), after
   sight was measured cheap (`spatial_fov.room_grid`'s memo).
 

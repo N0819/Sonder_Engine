@@ -512,6 +512,19 @@ def get_scene(chat_id, chat=None):
     if created:
         _seed_scene_from_plan(chat_id, sc)
         _seed_scene_initial_attire(chat_id, sc, chat)
+    # A PROSE-FREE STUB STANDS ON ITS PLAN'S SOLVE from the moment the plan
+    # holds one (`structure.apply_solved_plans`): the layout tier writes the
+    # plan between commits, and the beat that follows reads it -- the
+    # install, the Director, perception -- exactly as its commit will merge
+    # onto it (`compose_beat_scene`). Inert for every story the tier never
+    # laid a building out in.
+    try:
+        from world.structure import apply_solved_plans
+        apply_solved_plans(chat_id, sc)
+    except Exception as exc:  # a scene that cannot read its plan is a scene
+        from core.logging_utils import logger
+        logger.warning("solved plans not laid onto the stubs of chat %s: %s",
+                       chat_id, exc)
     return sc
 
 

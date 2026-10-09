@@ -447,3 +447,31 @@ def test_upper_floor_no_room_takes_at_the_edge_is_roof_and_a_window_may_face_it(
 def test_a_towers_walls_rise_sheer_so_no_storey_of_it_has_roof():
     lay = solve(TOWER)
     assert not any(lay.roofs.values())
+
+
+TAPROOM = {"name": "tap", "front": "s", "entrance": {"room": "tap"},
+           "rooms": [{"id": "tap", "level": 0, "purpose": "common room", "joins": [{"to": "kitchen", "side": "n"}],
+                      "fixtures": [{"id": "bar", "kind": "bar", "at": "n"}, {"id": "t1", "kind": "table"},
+                                   {"id": "t2", "kind": "table"}]},
+                     {"id": "kitchen", "level": 0, "purpose": "kitchen",
+                      "fixtures": [{"id": "range", "kind": "stove", "at": "n"}]},
+                     {"id": "landing", "level": 1, "purpose": "corridor",
+                      "joins": [{"to": "r1", "side": "s"}, {"to": "r2", "side": "n"}]},
+                     {"id": "r1", "level": 1, "purpose": "guest room", "fixtures": [{"id": "b1", "kind": "bed"}]},
+                     {"id": "r2", "level": 1, "purpose": "guest room", "fixtures": [{"id": "b2", "kind": "bed"}]}],
+           "stairs": [{"id": "up", "name": "narrow stair", "from": "tap", "to": "landing", "enclosed": False}]}
+
+
+def test_a_quarter_turn_stair_stands_only_where_a_spec_names_one():
+    """The owner withdrew L stairs on 2026-10-03 ("I was wrong recommending
+    l shaped stairs"), and the fallback went on offering one right after a
+    straight flight, so the solver chose an L nobody asked for: this
+    taproom's stair was an L, as were both of the lab inn's. A spec that
+    names an L by its own word still gets one."""
+    from world.layout_solver import STAIR_FALLBACK
+
+    assert "l" not in STAIR_FALLBACK
+    unasked = {s["id"]: s["kind"] for s in solve(TAPROOM).stairwells}
+    assert unasked == {"up": "straight"}
+    asked = dict(TAPROOM, stairs=[dict(TAPROOM["stairs"][0], kind="l")])
+    assert {s["id"]: s["kind"] for s in solve(asked).stairwells} == {"up": "l"}

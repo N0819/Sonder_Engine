@@ -194,7 +194,10 @@ def wall_loads(scene, room_id) -> dict:
     or at an authored `offset`) takes the length it was laid at, whether it
     stands on the rim or one pace out in its `lane`; one pinned to a cell
     takes the cells of that wall's rim it covers, whatever its `dir` says,
-    since a cell pin lays it where the cell is (`spatial_fov._place_anchors`).
+    since a cell pin lays it where the cell is (`spatial_fov._place_anchors`) --
+    a bed the layout solver pinned two by three against a four-pace wall
+    takes the cells of it along that wall, not six paces of it (review of
+    2026-10-08, the layout tier's F7).
     Counted over every cell until 2026-10-08: of the 12 over-full walls the
     31 in-beat first drafts of that day's play database were told of, 9 fit
     counted this way (the elevator shaft's walls, the inn's west wall over

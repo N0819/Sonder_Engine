@@ -45,10 +45,13 @@ Schema, additive and optional, on each room anchor beside `desc` and `dir`:
     footprint   point | small | large | run     how many cells it takes
     height      floor | waist | head | full     what it blocks a line at
     opacity     opaque | see_through            whether it blocks sight at all
+    extent      {w, d}, with `cell` only        the exact rectangle it takes
 
 Three closed sets the ENGINE owns and can enumerate -- a schema, not a
 vocabulary table (CLAUDE.md's distinction). Unknown values fall to the
-default that subtracts least.
+default that subtracts least. `extent` is read only beside a pinned `cell`
+(`anchor_extent`): it is what code that PLACED a fixture writes, never a
+size anybody estimates, and an anchor without it lands where it always did.
 """
 
 from __future__ import annotations
@@ -205,6 +208,48 @@ def normalize_lane(value) -> bool:
     write reads as the default -- a fixture against its wall."""
     from story.character_schema import authored_bool
     return bool(authored_bool(value, DEFAULT_LANE))
+
+
+def anchor_extent(anchor) -> Optional[tuple]:
+    """A pinned anchor's own rectangle, `(w, d)` in cells -- east-west by
+    north-south, the axes a room's `extent` uses -- or None when it carries
+    none that reads as one: two whole numbers of at least one.
+
+    THE SOLVER'S RECTANGLE, KEPT WHOLE. A layout solver places a bench as
+    the three cells it stands on along an east wall and a bed as its two by
+    three (`world/layout_bridge`); the four footprint words cannot say
+    either -- `small` and `run` are two cells laid EAST of the origin and
+    `large` two by two. Measured on the owner's preferred shrine solve
+    (2026-10-08), the footprint words laid 27 of its 53 fixtures on the
+    cells the solver chose, and 5 of the lab inn's 17: every north-south
+    pair, every run and every large thing bigger than two by two landed
+    somewhere else. Read only beside a pinned `cell`, so every anchor
+    authored before this lands where it always did."""
+    raw = anchor.get("extent") if isinstance(anchor, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    out = []
+    for axis in ("w", "d"):
+        value = raw.get(axis)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        if value != value or value < 1:
+            return None
+        out.append(int(round(value)))
+    return tuple(out)
+
+
+def footprint_for_extent(w, d) -> str:
+    """The footprint word a `w` by `d` rectangle falls in -- one statement
+    of the mapping, for the solver's bridge and the converter alike: a
+    line one cell wide and three or more long is a `run`, four cells or
+    more a `large`, two or three a `small`, one a `point`."""
+    w, d = int(w), int(d)
+    if max(w, d) >= 3 and min(w, d) == 1:
+        return "run"
+    if w * d >= 4:
+        return "large"
+    return "small" if w * d > 1 else "point"
 
 
 def anchor_geometry(anchor: dict) -> dict:
@@ -640,7 +685,18 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
             x, y = grid.nearest(pinned)
             cells = [(x, y)]
             more = []
-            if fp in ("small", "run"):
+            rect = anchor_extent(anchor)
+            if rect is not None:
+                # THE WHOLE RECTANGLE THE PLACER CHOSE, laid from the origin
+                # east and south (`anchor_extent`), clipped to the room like
+                # every footprint; its footprint word is the one that
+                # rectangle falls in, so the record cannot disagree with its
+                # own cells.
+                w, d = min(rect[0], grid.w), min(rect[1], grid.d)
+                more = [(x + i, y + j) for j in range(d) for i in range(w)
+                        if (i, j) != (0, 0)]
+                fp = footprint_for_extent(*rect)
+            elif fp in ("small", "run"):
                 more = [(x + 1, y)]
             elif fp == "large":
                 more = [(x + 1, y), (x, y + 1), (x + 1, y + 1)]

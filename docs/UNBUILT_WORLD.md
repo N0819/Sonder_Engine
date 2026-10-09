@@ -2466,7 +2466,9 @@ leaves, in the order the owner agreed:
   its doorways and stacked by its stairs. Still open: one-storey groups get
   no plan (nothing for height to do, and no vista horizon from buildings);
   a group whose bearings cannot be drawn gets none; once placed, a room's
-  box is the plan's and a beat can no longer re-measure it.
+  box is the plan's and a beat can no longer re-measure it. A planned
+  building can also be laid out onto a plan by code before anyone has
+  described it (§2.43, off by default).
 * **A window between storeys is an anchor, not an edge**: an edge is one per
   pair of rooms, and the ground-floor door already holds it.
 
@@ -2554,6 +2556,122 @@ critic and a panel of three designs and three judges. Left:
   read pass; on a site plan about 17 ms a body on a 24-room plan of
   two-storey halls (every line to a far place is sampled four times a pace
   over the plan's slabs), against 2 ms off it -- the one cost left to cut.
+
+
+<a id="unbuilt-2-43"></a>
+### 2.43 Buildings from relations: the layout solver as a tier of the plan -- first slice BUILT 2026-10-08, what is left
+
+The owner's choice of 2026-10-08, the fourth procedural-generation item
+([`design/DESIGN_LAYOUT_TIER.md`](design/DESIGN_LAYOUT_TIER.md); Design.md, "A
+planned building is laid out from relations before its rooms are designed").
+Built: the solver never chooses an L stair; a pinned fixture keeps its whole
+rectangle; a plan carries `site`; the tier itself, off by default
+(`layout_solver_tier`, for one story or for every story), inside the job
+that builds the rooms in view or ahead of any actor; every reader of a beat
+and its commit read the scene through a solved plan; the commit's writes to a
+planned row prepared before the lock lay only their own fields onto it; a
+re-plan takes back only what a solve laid; a comparison page for the owner.
+Left, each with what it needs:
+
+- **The owner's comparison before any story.** The tier stays off until the
+  owner has compared its buildings with the designer's. The lab inn's liked
+  first floor stood on an L stair the fallback chose and now re-solves with
+  U stairs (15 room rectangles move): keep it, or put the L back into the
+  fallback -- the owner's call.
+- **An L asked for by name.** The lab's answers may still name an L and get
+  one; the tier never offers it to the model. Whether an answer may ask for
+  an L at all is the owner's, and either answer is a solver change: a round
+  of its own under the one-change-a-round rule.
+- **An incremental mode.** A building is laid out whole, and only while every
+  room of it is a stub nobody has described: one described room keeps the
+  whole building out. Needs the solver to hold standing rooms fixed and lay
+  out the rest around them.
+- **A stated proportion refuses the building.** A plan that states a long
+  room -- twelve paces by three -- is refused, because the solver aims each
+  room at its floor area and near square. Needs the solver to take a stated
+  proportion as a constraint: a solver change, for its own round.
+- **One building to a plan, so one to a street.** A building is laid out on a
+  plan of its own (`layout:<entrance room>`), only while none of its stubs
+  stands on a plan and no other room stands on that one. The engine's
+  derivation (`site_plan.derive_site_plans`) places what it can beside a
+  laid-out building on its plan -- the street it opens onto, a planned yard
+  behind it, the ground floor of the next planned building along the street
+  -- so that next building is left to the designer (tried: two planned
+  buildings on one street, the second refused, "stands on a plan already",
+  the commit after the first one's upper storey was minted). Where two are
+  laid out before the engine places their ground, a street both open onto is
+  derived with both plans' coordinates read as one and is placed on neither.
+  Needs a solve laid onto the plan its ground already stands on, moved to
+  where its doorway meets that ground, and then the town-fabric tier (survey
+  rank 7): streets, plots and footprints on one plan.
+- **Zones, stair halls, stores and grounds are not carried.** An anchor is the
+  engine's only floor place, so a zone holding cushions would read to the
+  designer's check as fixtures on one cell. The solver's stair hall is not a
+  room of the plan, so a stair is the plan's vertical edge pinned where each
+  room meets it, the hall's cells belong to no room, and an enclosed stair's
+  walls and door are not kept. Needs a floor-area record the check reads as
+  floor, and a ruling on whether a stairwell is a room.
+- **A moved fixture goes back to the model unpinned, not as a question.** It
+  is written on the wall the model named and laid along it, and the
+  designer's check shows what it crowds (live: the taproom's hearth laid
+  along its asked wall shares a cell with the pinned bar; the commit's
+  layout lint has no row for it); nothing asks the model to choose between
+  moving, shrinking and dropping it. Needs a designer step that reads the
+  solve's record (`planned.layout.moved`).
+- **A fixture the plan lists, given a new id, is two.** An answer that leaves
+  a listed fixture out has it kept as the plan holds it, unpinned; an answer
+  that gives it a new id as well leaves the plan's and the new one, because
+  code cannot tell a renamed thing from a second thing without reading the
+  model's words. The record lists every restored fixture
+  (`planned.layout.restored`), and the sort card asks for the plan's ids.
+- **The solver's stair-shape rule reads one planned room per storey as a
+  tower** and turns the stair in a spiral when no answer names a shape (the
+  first live run on scratch chat 165's inn; the second named it straight).
+  A plan is coarser than the lab's descriptions. Needs the rule to count
+  what a storey holds rather than its rooms -- a solver change, a round of
+  its own -- or the relate card to ask for the shape -- a card change. The
+  owner's call.
+- **Nothing holds a sited room's pinned fixtures but the designer's own
+  reading.** `spatial_merge` keeps a sited room's box, shape and storey, and a
+  designer may still re-pin a fixture by writing its `cell`, or give a pinned
+  one another wall's `dir`. Needs a rule in the room author's card or a merge
+  that keeps a solved pin.
+- **A room's `windows` bearings (vistas) are not carried** by planned
+  geometry; its window anchors are. Needs `windows` in `GEOMETRY_FIELDS`, once
+  the vista reader is checked against a solved building.
+- **A re-planned building is not laid out again where its ground stands.** Its
+  stubs give back what the solve laid on them -- their own record says what
+  (`laid_out`) -- but the street it opened onto stands where the old solve's
+  coordinates put it, so the building is left to the designer and the
+  engine's derivation places its stubs beside that street. A fixture the old
+  solve added that the new plan does not name stays on the stub, unpinned.
+  Needs a solve laid onto a standing plan (above), and a record of what a
+  solve added.
+- **A design made before the solve is dropped only by the run that solves.**
+  A design's fingerprint reads names, purposes and exits, never a site, so
+  the run that lays a building out drops every design filed for its rooms;
+  the in-beat designer never runs the tier, and a beat entering an unsolved
+  building designs it as today.
+- **The far layer meets a building only once an actor nears it.** Laid out in
+  the rooms-in-view job, a building nobody approaches has no site, so the
+  height-aware far readers (`site_plan.plan_sight`, the landscape) see it
+  only then. Planting time is where to move it, if that matters more than the
+  calls: a new trigger site, and two calls and a solve for every building
+  planted.
+- **Measured on the play database only.** Counting a pinned anchor as the
+  cells of its wall it stands on left `wall_overfull` at 8 rows before and 8
+  after over the play database's 139 scene rows (133 chats; 10 pinned
+  anchors there); the owner's own database, where the map editor pinned
+  anchors, was not measured: `room_layout_lint` over each chat's `scene`,
+  with and without the change.
+- **The sort card's newest clauses and the Japanese cards have not been run
+  live.** The sort card names every thing for what it is, never whose, and
+  asks an entry for several alike to name one of them; no model was asked
+  since, so whether answers follow is unmeasured (replayed, the second live
+  run's answer named its three box beds in the plural, and each bed carries
+  that name). The Japanese cards pass protocol parity and have never run.
+- **OR-Tools and Codex's plan lab** stay unread beyond the survey and unmerged
+  (the owner's hands-off ruling); the solver stays pure Python.
 
 ## 4. Architecture gaps
 

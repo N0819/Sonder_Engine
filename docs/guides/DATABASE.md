@@ -387,8 +387,22 @@ event list in the blob or a second table. Incidents live only on the existing
 
 `structures` is the authoring grammar/extent ledger for planned locations.
 Individual planned rooms use ordinary `room_registry` rows; their free-form
-`payload.planned` contains only structure key, purpose, access, adjacency and
-frontier labels. A planned row becomes resolved only when the live scene room
+`payload.planned` holds the structure key, purpose, access, adjacency and
+frontier labels, the plan's measurements and fixtures
+(`structure.GEOMETRY_FIELDS`, `planned_anchors`) and, for a building the
+layout tier laid out, its `site` and a `layout` record of the solve
+(`structure.write_planned_layout`, written out of band). The commit's two
+writes to these rows that are prepared before the write lock lay only what
+each owns onto the row as it stands inside the lock -- the projection
+`planned.resolved` and `region` (`commit_room_registry._apply_room_registry`),
+the frontier expansion the edges it drew, the axes it spent and what now
+stands in them (`structure.apply_frontier_mutations`) -- so a plan written
+meanwhile is never written back over. A prose-free stub the layout tier
+laid on its plan carries `laid_out` in the `scene` blob -- the plan it was
+laid on and the doorways and stairs the solve placed -- which only
+`structure.apply_planned_layout` writes and reads, and which takes nothing
+but that back when the plan is re-planned; it rides the `scene` blob whole,
+so archive, checkpoint and branch carry it without handling of their own. A planned row becomes resolved only when the live scene room
 has mapped prose. The full skeleton never lives in the scene blob: Charter
 composes it for pathing, while commit materializes only planned neighbours of
 occupied rooms as small scene stubs.

@@ -203,6 +203,12 @@ they answer different questions about it:
   them and floors at their heights (2026-10-03): a building standing in its
   grounds, the map drawing it storey by storey, and the order the rest comes
   in -- sight with height, drops as facts, flight. Step 1 built.
+- [`DESIGN_LAYOUT_TIER.md`](design/DESIGN_LAYOUT_TIER.md) — buildings from
+  relations (2026-10-08, first slice, off by default): the layout lab's
+  solver as a tier of the plan -- two calls say what each planned room holds
+  and how it relates, the solver places every room, stair, doorway, window and
+  fixture, and the solve is written as the plan's own geometry before the
+  designer dresses it; a moved fixture is never pinned silently.
 - [`DESIGN_STORY_PLANNER_AND_DRAMATURGE.md`](design/DESIGN_STORY_PLANNER_AND_DRAMATURGE.md)
   — design draft for one cross-system Writers' Room agent set: the Story
   Planner and Dramaturge share broad authorial sway, while a narrow Charter

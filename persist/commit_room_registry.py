@@ -361,6 +361,14 @@ def _prepare_room_registry(cid, canon_book_id, prev_scene, sc):
             "room_uid": rid, "owning_book_id": book_id,
             "parent_entity": owner, "name": name, "aliases": aliases,
             "payload": payload, "revive": revive,
+            # WHAT THE PROJECTION OWNS of the payload, applied onto the row as
+            # it stands inside the lock (`_apply_room_registry`): the rest of
+            # it is the plan's, and the plan is written out of band.
+            "projection": {
+                "resolved": bool(str(rdef.get("desc") or rdef.get("description")
+                                     or "").strip()),
+                "region": str(region) if region else None,
+            },
         })
 
     retire = sorted(
@@ -397,6 +405,20 @@ def _apply_room_registry(cid, turn_id, registry):
                                       (book,), one=True):
             row["owning_book_id"] = None
     for row in registry.get("upserts") or []:
+        payload = row.get("payload") or {}
+        if isinstance(row.get("projection"), dict):
+            # THE PAYLOAD AS IT STANDS NOW, NOT AS IT WAS READ. Preparation
+            # runs before the lock -- the slow part of a commit, embeddings
+            # included -- and the plan is written out of band meanwhile: the
+            # layout tier lays a building onto its rows between any two
+            # commits. Writing back the payload read before the lock took a
+            # solved building's site off every row this commit upserted,
+            # half a building on a plan (review of 2026-10-08, F5). So the
+            # projection lays only what it owns onto the row it finds here.
+            current = q("SELECT payload FROM room_registry WHERE chat_id=? "
+                        "AND room_uid=?", (cid, row["room_uid"]), one=True)
+            if current is not None:
+                payload = _projected(current["payload"], row["projection"])
         qi(
             "INSERT INTO room_registry"
             "(chat_id,room_uid,owning_book_id,parent_entity,name,aliases,"
@@ -411,8 +433,25 @@ def _apply_room_registry(cid, turn_id, registry):
             + (",retired_turn_id=NULL" if row.get("revive", True) else ""),
             (cid, row["room_uid"], row["owning_book_id"],
              row["parent_entity"], row["name"], json.dumps(row["aliases"]),
-             json.dumps(row.get("payload") or {}), turn_id),
+             json.dumps(payload), turn_id),
         )
+
+
+def _projected(stored, projection):
+    """A stored registry payload with the projection's own fields laid onto
+    it: `planned.resolved` where the row holds a plan, and `region`."""
+    try:
+        payload = dict(json.loads(stored or "{}"))
+    except (TypeError, ValueError):
+        payload = {}
+    planned = payload.get("planned")
+    if isinstance(planned, dict):
+        payload["planned"] = dict(planned, resolved=bool(projection.get("resolved")))
+    if projection.get("region"):
+        payload["region"] = str(projection["region"])
+    else:
+        payload.pop("region", None)
+    return payload
 
 def sync_room_registry_with_scene(cid, canon_book_id, prev_scene, scene):
     """Reconcile the room_registry projection with a scene blob replaced

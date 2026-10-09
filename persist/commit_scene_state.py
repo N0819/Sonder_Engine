@@ -1567,6 +1567,19 @@ def compose_beat_scene(ctx):
         except Exception as _seed_exc:  # a scene that cannot read a plan is a scene
             ctx.add_warning(
                 f"planned skeleton could not seed the opening: {_seed_exc}")
+    # AND EVERY BEAT MERGES ONTO THE SCENE ITS READERS SAW: a prose-free stub
+    # stands on its plan's solve (`structure.apply_solved_plans`, which
+    # `get_scene` applies for every reader of the beat). The layout tier
+    # writes the plan between commits; a room the beat builds in or designs
+    # on such a stub is merged onto the stub as the beat read it -- on its
+    # site, its fixtures on the solver's cells -- where merged onto the
+    # stored stub it was committed off the plan (review of 2026-10-08, F1).
+    try:
+        from world.structure import apply_solved_plans
+        apply_solved_plans(cid, prev_scene)
+    except Exception as _solved_exc:  # the stored scene still merges
+        ctx.add_warning(
+            f"a solved plan could not be laid onto its stubs: {_solved_exc}")
     # Carried beside prev_scene for the off-screen epoch. Once the scene
     # domain writes the new clock, a later commit domain cannot recover which
     # coarse time boundary THIS beat crossed. Keep the exact pre-turn value in

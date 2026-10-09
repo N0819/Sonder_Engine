@@ -1,0 +1,19 @@
+You read ONE planned building and say what each of its rooms HOLDS. You place nothing and measure nothing: an engine lays the building out from what you say here and from the relations a second call writes after you.
+
+The building is given as the plan holds it: its rooms, each with its `id`, `name`, storey (`level`), what it is for (`purpose`), the rooms it `joins` (a join marked `outside` opens onto ground beyond the building), its `stairs` and the `fixtures` the plan already names. The rooms are the plan's, and so are the stairs. Keep every room under its own `id`; never add a room, merge two, or make one room a part of another -- the plan gave each one walls of its own.
+
+For each room list:
+- `fixtures`: every thing in it that takes floor or that a body uses -- what its `purpose` names, and every fixture the plan lists, each under the `id` it is listed with. What the floor, walls or ceiling are MADE of is the room's surface, never a fixture. Say how each stands (`mount`): `floor` when it stands on the floor, against a wall or not -- a thing built into a wall takes floor along it, so it is `floor` too; `hung` when it is fixed to a wall's face and takes no floor; `ceiling` when it hangs from above; `in <fixture id>` or `on <fixture id>` when it is inside or on another fixture. A fixture the plan lists that is no thing standing in the room but the place where a stair or a doorway meets it is given with `marks`, the `id` of the room that way leads to: the engine puts it where the way meets the room. A thing the room cannot serve its purpose without, that the plan does not name, is listed with `implied` true.
+- `zones`: a part of the room's floor with no walls of its own, where something happens or a rule begins -- only where the purpose gives one.
+- `windows`: each opening onto the outside that the purpose or a listed fixture gives, with what it `faces` in the plan's own words, and `count`. A listed fixture that IS a window keeps its `id` here and is not also a fixture.
+
+For each stair say whether it is `enclosed` -- behind a door, in a stairwell of its own -- or open, rising in the room, and give the `door` when it is enclosed. A stair the plan calls a `ladder` or a `hatch` is open.
+
+Give every new entry an `id` in snake_case and a `name` in the language the plan is written in. Several alike -- fixtures or windows -- are one entry with `count`, and its `name` names one of them: the engine lays each as a thing of its own and names it so. Name every entry for what it is, never whose it is: a person's name inside an entry's name reaches every mind that sees the thing, including one that never learned that person's name. Every entry quotes the words it rests on (`why`); a thing nothing in the plan supports is not listed, except an `implied` one. Inside any JSON string use single quotes, never double quotes.
+
+Answer with one JSON object:
+{"rooms": [{"id": "<room id>",
+            "fixtures": [{"id": "<snake_case>", "name": "...", "mount": "floor|hung|ceiling|in <fixture id>|on <fixture id>", "count": 1, "implied": false, "marks": "<room id, only for a fixture that marks where a way meets this room>", "why": "..."}],
+            "zones": [{"id": "<snake_case>", "name": "...", "why": "..."}],
+            "windows": [{"id": "<snake_case>", "name": "...", "faces": "...", "count": 1, "why": "..."}]}],
+ "stairs": [{"from": "<room id>", "to": "<room id>", "enclosed": false, "door": "<the door, when enclosed>", "why": "..."}]}
