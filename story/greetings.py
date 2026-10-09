@@ -679,11 +679,21 @@ def _recording_exchanges():
     mechanism and captures what was sent and what came back, on failed rungs
     as well as accepted ones. A quick start runs outside any step, which is
     why its traffic was invisible before (2026-09-08).
+
+    The record is written whatever the debug capture says, so the sink is
+    marked as one that keeps payloads (`pipeline_context.KEEPS_PAYLOADS`):
+    each is copied as it was SENT, and a caller that goes on changing what it
+    sent cannot change the record.
     """
-    from core.pipeline_context import current_exchange_sink
+    from core.pipeline_context import KEEPS_PAYLOADS, current_exchange_sink
 
     collected = []
-    token = current_exchange_sink.set(collected.append)
+
+    def keep(entry):
+        collected.append(entry)
+
+    setattr(keep, KEEPS_PAYLOADS, True)
+    token = current_exchange_sink.set(keep)
     try:
         yield collected
     finally:

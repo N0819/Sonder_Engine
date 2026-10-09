@@ -182,32 +182,96 @@ def _cells_connected(cells) -> bool:
     return len(seen) == len(cells)
 
 
+def wall_loads(scene, room_id) -> dict:
+    """`{(wall, height): {anchor_id: paces}}`: what each fixture of the room
+    takes along each straight wall, at its own height.
+
+    A WALL IS COUNTED PER HEIGHT, ALONG ITS RIM. Two fixtures that stand at
+    different heights do not compete for a wall -- a head-height shelf over
+    a waist-height bartop is one stretch of wall holding two things -- and a
+    `large` fixture's inward row is floor in front of the wall, not more of
+    it. So a fixture laid along its wall (`spatial_fov._wall_slot`: seeded,
+    or at an authored `offset`) takes the length it was laid at, whether it
+    stands on the rim or one pace out in its `lane`; one pinned to a cell
+    takes the cells of that wall's rim it covers, whatever its `dir` says,
+    since a cell pin lays it where the cell is (`spatial_fov._place_anchors`).
+    Counted over every cell until 2026-10-08: of the 12 over-full walls the
+    31 in-beat first drafts of that day's play database were told of, 9 fit
+    counted this way (the elevator shaft's walls, the inn's west wall over
+    its bar, the main walk's east side), and so does the standing
+    `co_op_office` row -- a chair at floor height under a desk at waist
+    height on a four-pace wall -- copied into six chats. Doorways are not
+    counted: they are openings, `openings_overlap`'s."""
+    from world.spatial_fov import _seed, _wall_slot
+    from world.spatial_geometry import effective_anchors
+    grid = room_grid(scene, room_id)
+    placed = anchor_cells(scene, room_id)
+    anchors = effective_anchors(scene, room_id)
+    rims = {wall: set(grid.rim(wall)) for wall in _WALLS}
+    out = {}
+    for aid, rec in placed.items():
+        if rec["implicit"]:
+            continue
+        height = rec["height"]
+        bearing = rec.get("dir")
+        if bearing in _WALLS and rec.get("source") in ("seed", "offset"):
+            anchor = anchors.get(aid) if isinstance(anchors.get(aid), dict) else {}
+            _along, length, _offset, _source = _wall_slot(
+                grid, bearing, anchor, rec["footprint"], _seed(room_id, aid))
+            paces = min(length, len(rec["cells"]))
+            if paces:
+                out.setdefault((bearing, height), {})[aid] = paces
+            continue
+        if rec.get("source") == "cell":
+            for wall in _WALLS:
+                on = sum(1 for cell in rec["cells"] if tuple(cell) in rims[wall])
+                if on:
+                    out.setdefault((wall, height), {})[aid] = on
+    return out
+
+
+def _whole_side(rec) -> bool:
+    """An opening that is a whole open side (`width: "wall"`): an open way
+    between two unenclosed rooms, or a rail, spans the wall it is on."""
+    return rec.get("source") == "side"
+
+
 def _wall_rows(scene, rooms):
-    """A wall's anchors need more cells than the wall has, or two doorways
-    on one wall were placed on the same cells."""
+    """A wall's anchors need more paces at one height than the wall has, or
+    two doorways on one wall were placed on the same cells."""
     out = []
     for rid in sorted(rooms):
         grid = room_grid(scene, rid)
         placed = anchor_cells(scene, rid)
-        need = {}
         doors = {}
         for aid, rec in placed.items():
             bearing = rec.get("dir")
-            if bearing not in _WALLS:
-                continue
-            if rec["implicit"]:
-                doors.setdefault(bearing, []).append((aid, set(rec["cells"])))
-                continue
-            need[bearing] = need.get(bearing, 0) + len(rec["cells"])
-        for bearing, cells in sorted(need.items()):
+            if bearing in _WALLS and rec["implicit"]:
+                doors.setdefault(bearing, []).append(
+                    (aid, set(rec["cells"]), _whole_side(rec)))
+        for (bearing, height), paces in sorted(wall_loads(scene, rid).items()):
             have = len(grid.rim(bearing))
-            if cells > have:
+            needs = sum(paces.values())
+            if needs > have:
                 out.append({"kind": "wall_overfull", "room": rid,
-                            "wall": bearing, "needs": cells, "holds": have})
+                            "wall": bearing, "height": height,
+                            "needs": needs, "holds": have})
         for bearing, ways in sorted(doors.items()):
-            ways.sort()
-            for i, (a_id, a_cells) in enumerate(ways):
-                for b_id, b_cells in ways[i + 1:]:
+            ways.sort(key=lambda way: way[0])
+            for i, (a_id, a_cells, a_side) in enumerate(ways):
+                for b_id, b_cells, b_side in ways[i + 1:]:
+                    # A WHOLE OPEN SIDE HOLDS ANY OTHER OPENING. Under the
+                    # owner's 2026-09-15 rule an open way between two
+                    # unenclosed rooms spans the wall, so any other way out
+                    # through that wall stands within it, and no offset can
+                    # move either one off the other: the Gale house landing's
+                    # open stair and the reed staithe's open side each span
+                    # the low walk's south wall, and a designer spent the
+                    # last of its eight steps on a row nothing could clear
+                    # (chat 166, turn 22). Two narrow doorways on the same
+                    # cells are still two doors in one place.
+                    if a_side or b_side:
+                        continue
                     if a_cells & b_cells:
                         out.append({"kind": "openings_overlap", "room": rid,
                                     "wall": bearing,
@@ -227,6 +291,14 @@ def _declared_dir(rooms, room_id, to_id):
     return None
 
 
+def _declared_vertical(rooms, room_id, to_id):
+    room = rooms.get(room_id) or {}
+    for edge in room.get("adjacent") or []:
+        if isinstance(edge, dict) and str(edge.get("to")) == str(to_id):
+            return normalize_vertical(edge.get("vertical"))
+    return None
+
+
 def _bearing_rows(rooms):
     out = []
     for a_id in sorted(rooms):
@@ -236,6 +308,20 @@ def _bearing_rows(rooms):
             b_id = str(edge["to"])
             if b_id <= a_id or b_id not in rooms:
                 continue                    # one row per pair
+            # A WAY UP OR DOWN IS NOT A DOOR SEEN FROM TWO SIDES. Each end's
+            # bearing is the wall that floor's end of the stair, ladder or
+            # hatch sits on -- the same wall on every floor of a tower, or two
+            # different walls for a straight flight -- so the two need not be
+            # opposites, and the engine keeps both and gives a silent floor
+            # the other's (`spatial_orientation.normalize_scene_bearings`, the
+            # card's WHICH WALL A WAY OUT IS IN). Read as a door's, the pair
+            # was a row no answer could clear: the merge gives the far floor
+            # the same wall, and the row demanded its opposite -- a designer
+            # flipped the Gale house landing's stair between n and s for
+            # seven steps (chat 166, turn 22).
+            if normalize_vertical(edge.get("vertical")) \
+                    or _declared_vertical(rooms, b_id, a_id):
+                continue
             fwd = normalize_bearing(edge.get("dir"))
             back = _declared_dir(rooms, b_id, a_id)
             if fwd and back and opposite_bearing(fwd) != back:
@@ -274,6 +360,25 @@ def _beared_neighbours(scene, room_id, rooms):
     return sorted(out)
 
 
+def _laid_beside(scene, room_id, other, at):
+    """`(offset, cells)` where `other` lands when laid out from `room_id`
+    standing at `at`, by the observer field's rule -- beyond a one-cell band,
+    the two door cells aligned -- or None when the doorway has no cells to
+    lay it by (no bearing on either side). The ONE statement of the rule, for
+    `layout_rooms` and for `leaf_rows`, which lays a single new room against
+    the layouts `layout_rooms` already made."""
+    d1s, b1 = _door_cells(scene, room_id, other)
+    d2s, _b2 = _door_cells(scene, other, room_id)
+    if not d1s or not d2s or not b1:
+        return None
+    ux, uy = _UNIT[b1]
+    d1, d2 = d1s[0], d2s[0]
+    far = (d1[0] + ux + ux + at[0], d1[1] + uy + uy + at[1])
+    offset = (far[0] - d2[0], far[1] - d2[1])
+    return offset, [(x + offset[0], y + offset[1])
+                    for x, y in room_grid(scene, other).cells]
+
+
 def layout_rooms(scene, start) -> dict:
     """Place every room reachable from `start` over beared, non-wall edges
     with the observer field's rule -- the neighbour laid beyond a one-cell
@@ -292,10 +397,18 @@ def layout_rooms(scene, start) -> dict:
     it before the collision refused it -- so a map can draw the two rooms on
     one another rather than hide the one that lost. It is never an entry of
     ``offsets`` and places nothing.
+
+    ``expanded`` and ``blocked`` (added 2026-10-08 for `leaf_rows`) say WHEN
+    each thing happened: the rooms in the order the walk laid their
+    neighbours out, and for each entry of ``collisions`` the bearing it was
+    tried across and the offset it would have taken. A room added beside
+    one already laid out can change which room a later collision names, and
+    only the walk's order says whether it was there in time.
     """
     rooms = _rooms(scene)
     if str(start) not in rooms:
-        return {"offsets": {}, "collisions": [], "collided": {}, "parents": {}}
+        return {"offsets": {}, "collisions": [], "collided": {}, "parents": {},
+                "expanded": [], "blocked": []}
     offsets = {str(start): (0, 0)}
     collided = {}
     # `parents` (2026-09-05, the structure map's drag): the room each placed
@@ -306,27 +419,24 @@ def layout_rooms(scene, start) -> dict:
     for x, y in room_grid(scene, start).cells:
         occupied[(x, y)] = str(start)
     collisions = []
+    expanded, blocked = [], []
     frontier = [str(start)]
     while frontier:
         nxt = []
         for room_id in frontier:
+            expanded.append(room_id)
             ox, oy = offsets[room_id]
             for other, bearing in _beared_neighbours(scene, room_id, rooms):
                 if other in offsets:
                     continue
-                d1s, b1 = _door_cells(scene, room_id, other)
-                d2s, _b2 = _door_cells(scene, other, room_id)
-                if not d1s or not d2s or not b1:
+                laid = _laid_beside(scene, room_id, other, (ox, oy))
+                if laid is None:
                     continue
-                ux, uy = _UNIT[b1]
-                d1, d2 = d1s[0], d2s[0]
-                far = (d1[0] + ux + ux + ox, d1[1] + uy + uy + oy)
-                offset = (far[0] - d2[0], far[1] - d2[1])
-                cells = [(x + offset[0], y + offset[1])
-                         for x, y in room_grid(scene, other).cells]
+                offset, cells = laid
                 hit = sorted({occupied[c] for c in cells if c in occupied})
                 if hit:
                     collisions.append((other, hit[0], room_id))
+                    blocked.append((bearing, offset))
                     collided.setdefault(other, offset)
                     parents.setdefault(other, room_id)
                     continue
@@ -337,43 +447,262 @@ def layout_rooms(scene, start) -> dict:
                 nxt.append(other)
         frontier = sorted(nxt)
     return {"offsets": offsets, "collisions": collisions, "collided": collided,
-            "parents": parents}
+            "parents": parents, "expanded": expanded, "blocked": blocked}
 
 
-def _embedding_rows(scene, rooms, disagreeing=frozenset()):
-    """Lay out each connected component once, from its smallest id. A
-    collision across a doorway whose two bearings already disagree is that
-    row's consequence, not a second fact, and is not repeated here."""
-    from world.site_plan import room_site
-    out = []
+def _walks(scene, rooms):
+    """`(start, layout)` for each walk the whole check makes: each connected
+    part laid out once, from its smallest id no earlier walk reached. A room
+    a walk could not place (a collision) is reached all the same, and starts
+    no walk of its own. The ONE statement of the order, for `_embedding_rows`
+    and for `layout_index`, which `leaf_rows` reads in its place."""
     placed = set()
     for rid in sorted(rooms):
         if rid in placed:
             continue
         layout = layout_rooms(scene, rid)
         placed.update(layout["offsets"])
-        for other, onto, via in layout["collisions"]:
-            placed.add(other)
-            if frozenset((other, via)) in disagreeing:
-                continue
-            # Two rooms ONE SITE PLAN places are where the plan put them: a
-            # house in the hole of its garden is no contradiction, and the
-            # walk's one-cell wall band would call it one every time. The
-            # plan's own overlaps are `site_plan_overlap`.
-            a_site, b_site = room_site(scene, other), room_site(scene, onto)
-            if a_site and b_site and a_site["plan"] == b_site["plan"]:
-                continue
-            out.append({"kind": "rooms_overlap_when_placed",
-                        "rooms": [other, onto], "via": via,
-                        "names": [_name(rooms, other), _name(rooms, onto)]})
+        placed.update(other for other, _onto, _via in layout["collisions"])
+        yield rid, layout
+
+
+def _collision_rows(scene, rooms, layout, disagreeing=frozenset()):
+    """One walk's collisions as rows. A collision across a doorway whose two
+    bearings already disagree is that row's consequence, not a second fact,
+    and is not repeated here."""
+    from world.site_plan import room_site
+    out = []
+    for other, onto, via in layout["collisions"]:
+        if frozenset((other, via)) in disagreeing:
+            continue
+        # Two rooms ONE SITE PLAN places are where the plan put them: a
+        # house in the hole of its garden is no contradiction, and the
+        # walk's one-cell wall band would call it one every time. The
+        # plan's own overlaps are `site_plan_overlap`.
+        a_site, b_site = room_site(scene, other), room_site(scene, onto)
+        if a_site and b_site and a_site["plan"] == b_site["plan"]:
+            continue
+        out.append({"kind": "rooms_overlap_when_placed",
+                    "rooms": [other, onto], "via": via,
+                    "names": [_name(rooms, other), _name(rooms, onto)]})
     return out
+
+
+def _embedding_rows(scene, rooms, disagreeing=frozenset()):
+    """Lay out each connected component once, from its smallest id."""
+    out = []
+    for _start, layout in _walks(scene, rooms):
+        out += _collision_rows(scene, rooms, layout, disagreeing)
+    return out
+
+
+def layout_index(scene: dict) -> dict:
+    """The whole check's walks of the scene, as it walks them (`_walks`),
+    read ONCE by a caller that tries one new room in many places
+    (`leaf_rows`): for each walk its start, the offset of each room it
+    placed and the cells each holds, the order it laid rooms out in, and
+    each collision with the cells the colliding room would have taken; and
+    the rows those walks hold, as keys, so a row a new room brings can be
+    told from one already standing."""
+    rooms = _rooms(scene)
+    bearing_rows = _bearing_rows(rooms)
+    disagreeing = frozenset(frozenset(r["rooms"]) for r in bearing_rows)
+    walks, keys = [], set()
+    for start, layout in _walks(scene, rooms):
+        occupied = {}
+        for room_id, (ox, oy) in layout["offsets"].items():
+            for x, y in room_grid(scene, room_id).cells:
+                occupied.setdefault((x + ox, y + oy), room_id)
+        blocked = []
+        for (other, onto, via), (bearing, (ox, oy)) in zip(layout["collisions"],
+                                                           layout["blocked"]):
+            blocked.append((other, onto, via, bearing,
+                            {(x + ox, y + oy) for x, y in room_grid(scene, other).cells}))
+        walks.append({"start": start, "offsets": dict(layout["offsets"]),
+                      "occupied": occupied, "blocked": blocked,
+                      "rank": {rid: i for i, rid in enumerate(layout["expanded"])},
+                      "reach": set(layout["offsets"]) | {other for other, _onto, _via
+                                                         in layout["collisions"]}})
+        keys.update(_row_key(row) for row in
+                    _collision_rows(scene, rooms, layout, disagreeing))
+    return {"scene": scene, "walks": walks, "keys": keys,
+            "disagreeing": disagreeing, "from_host": {}}
+
+
+def _leaf_in_walk(scene, rooms, room_id, host, toward, walk, first, disagreeing):
+    """The rows one walk holds about `room_id`, a leaf on `host`, laid beside
+    the host where that walk put it: every room it lands on, and every later
+    collision whose room it now meets first. `first` is a walk that lays it
+    out before any other room (it starts there); otherwise it is laid out
+    with the host's other neighbours, in the walk's order."""
+    from world.site_plan import room_site
+    at = walk["offsets"].get(host)
+    laid = _laid_beside(scene, host, room_id, at) if at is not None else None
+    if laid is None:
+        return []
+    cells = set(laid[1])
+    site = room_site(scene, room_id)
+
+    def one_plan(other):
+        other_site = room_site(scene, other)
+        return bool(site and other_site and site["plan"] == other_site["plan"])
+
+    def row(a, b, via):
+        return {"kind": "rooms_overlap_when_placed", "rooms": [a, b], "via": via,
+                "names": [_name(rooms, a), _name(rooms, b)]}
+
+    # A room it lands on collides with it, whichever of the two the walk
+    # reaches first: either way a row names it.
+    out = [row(room_id, onto, host)
+           for onto in sorted({walk["occupied"][c] for c in cells if c in walk["occupied"]})
+           if not one_plan(onto)]
+    # A collision names the FIRST room in sorted order of those its room
+    # would land on (`layout_rooms`), so a room tried after this one is laid
+    # and landing on it as well now names it, when it sorts before the
+    # room the collision named.
+    rank = walk["rank"]
+    for other, onto, via, bearing, would in walk["blocked"]:
+        if not (cells & would) or not room_id < onto:
+            continue
+        if not first and not (rank.get(via, -1) > rank.get(host, -1) or (
+                via == host and (other, bearing) > (room_id, toward))):
+            continue
+        if frozenset((other, via)) in disagreeing or one_plan(other):
+            continue
+        out.append(row(other, room_id, via))
+    return out
+
+
+def leaf_rows(scene: dict, room_id, host, index=None):
+    """The whole check's VERDICT on `scene` -- the scene `index` was made of
+    (`layout_index`) with ONE room more, `room_id`, joined to it by one
+    doorway onto `host` -- read off the index's walks, or None when they
+    cannot say and only the whole check can.
+
+    A VERDICT, NOT THE CHECK'S ROWS. What comes back is None or a list, and
+    the list holds a row not about the room's own interior (`row["room"] !=
+    room_id`) exactly when the whole check holds one the index's scene does
+    not. Its rows are the walks' evidence for that verdict -- a collision as
+    the new room meets it, a standing collision as the room's own walk
+    re-reports it -- and may name a pair the other way round, or by another
+    room, or leave one of the check's rows out: on 1,184 judged trials of
+    random towns the two sets of rows differed on 326, and the verdict on
+    none (round two's review, 2026-10-09). A caller that wants the check's
+    own rows runs the check.
+
+    A LEAF ADDS ITSELF AND NOTHING ELSE, BUT ONLY WHERE THE WALK SAYS SO. Its
+    own walls and doorways and the host's doorway onto it are rows about it;
+    its bearing pair with the host is one more. Where the rooms land, the
+    check's walks decide (`_walks`: each connected part from its smallest id
+    nothing earlier reached), and there are three cases:
+    - THE HOST'S WALK STARTS BEFORE IT, or at the host itself: the leaf is
+      laid beside the host as that walk lays the host's other neighbours out
+      -- or first of all, the host's walk then being its own shifted by one
+      room -- and every room it lands on, and every LATER collision that now
+      lands on it first, refuses it, as a row naming it. Each walk that
+      re-lays the host does the same. Nothing else moves: a leaf leads
+      nowhere. (Laid out first, it also runs ahead of every walk that started
+      between it and the host; where one of those started from a room the
+      host's walk reaches, that walk would not run at all: None.)
+    - IT SORTS BEFORE A HOST'S WALK THAT STARTS ELSEWHERE, OR THE HOST STANDS
+      IN NO WALK (it collided where it was reached): the leaf starts a walk of
+      its own, and through the host re-lays the host's whole part in another
+      order, which can report a standing collision afresh -- reversed, or via
+      another room. That re-laying is the host's own walk shifted by one
+      room, the same for every wall and every shape the leaf could take, so
+      a standing collision it re-reports refuses all of them, its rows the
+      re-reported ones (`from_host`, read once per host). When it re-reports
+      none, which rooms the walks after it still reach is not the index's to
+      say: None.
+    - It is NOT A LEAF -- another room's doorway names it, it names a room
+      besides the host, or it stands on a site plan: None.
+
+    Measured on the 2026-10-08 play database: the search that took this for
+    exact in every case offered 7 walls of chat 160 turn 13's collided
+    corridor and 20 of the three rooms chat 166's town never places, each a
+    standing collision re-reported that the designer's own check then held
+    against it. For the doorway search (`director_rooms._doorways_that_fit`):
+    on chat 166's 33-room turn-22 checkpoint a whole check cost 53 ms, and
+    each try of the old search ran two of them beside a merge."""
+    from world.site_plan import room_site
+    from world.spatial_barriers import effective_adjacent
+    rooms = _rooms(scene)
+    room_id, host = str(room_id), str(host)
+    if room_id not in rooms:
+        return []
+    if index is None:
+        index = layout_index(dict(scene, rooms={rid: room for rid, room in rooms.items()
+                                                 if rid != room_id}))
+    ways = {str(e["to"]) for e in effective_adjacent(scene, room_id)
+            if isinstance(e, dict) and e.get("to")}
+    if ways != {host} or host not in rooms or room_site(scene, room_id):
+        return None
+    near = {rid: rooms[rid] for rid in (room_id, host)}
+    rows = [row for row in _wall_rows(scene, near)
+            if row.get("room") == room_id
+            or f"door:{room_id}" in (row.get("openings") or ())]
+    rows += _bearing_rows(near)
+    toward = next((bearing for other, bearing in _beared_neighbours(scene, host, rooms)
+                   if other == room_id), None)
+    if toward is None:
+        return rows                         # not laid out: it lands on nothing
+    walks = index["walks"]
+    first = next((i for i, walk in enumerate(walks) if host in walk["offsets"]), None)
+    if first is None or (room_id < walks[first]["start"] != host):
+        known = index["from_host"]
+        if host not in known:
+            base = index["scene"]
+            known[host] = [row for row in _collision_rows(
+                base, _rooms(base), layout_rooms(base, host), index["disagreeing"])
+                if _row_key(row) not in index["keys"]]
+        return rows + known[host] if known[host] else None
+    leads = room_id < walks[first]["start"]
+    if leads and any(room_id < walk["start"] < host and walk["start"] in walks[first]["reach"]
+                     for walk in walks):
+        # Laid out first, it takes the host's walk ahead of one that ran
+        # before it, from a room the host's walk reaches: that walk would not
+        # run, and what only it reached would be walked again from elsewhere.
+        return None
+    for i, walk in enumerate(walks[first:], start=first):
+        if host in walk["offsets"]:
+            rows += _leaf_in_walk(scene, rooms, room_id, host, toward, walk,
+                                  leads and i == first, index["disagreeing"])
+    return rows
+
+
+def layout_row_key(row) -> tuple:
+    """A row as a comparable key -- what `room_layout_lint`'s `prev_scene`
+    compares, for a caller comparing rows itself: the whole row, or for a
+    collision only its pair while `LAYOUT_COLLISIONS_COMPARED_BY_PAIR` is
+    on."""
+    return _row_key(row)
 
 
 # ---------------------------------------------------------------------------
 # The entry point
 # ---------------------------------------------------------------------------
 
+#: THE OWNER'S, NOT YET ANSWERED (round one's review, 2026-10-08): whether a
+#: collision found again is the SAME collision when it names the same two
+#: rooms -- either way round, and laid out through any room -- or, as today,
+#: only when the whole row is the same. A room added where the walks start
+#: anew (its id sorts first, or its host is a room the walk could not place)
+#: re-lays its part of the world in another order, and a collision the world
+#: already holds comes back reversed or via another room: a row about two
+#: rooms the draft does not hold, which the designer cannot clear and the
+#: commit's once-told warning reports as new (1 of 33 recorded final drafts
+#: of 2026-10-08: chat 165 turn 1). On, every comparison the check makes --
+#: the commit's (`prev_scene`), the designer's (`director_rooms._Reading`),
+#: the doorway search's and `leaf_rows`' -- keys a collision by its pair
+#: alone. A walk laid in another order can also move a standing collision
+#: onto another pair, which the pair does not catch. Off, the whole row.
+LAYOUT_COLLISIONS_COMPARED_BY_PAIR = False
+
+
 def _row_key(row):
+    if LAYOUT_COLLISIONS_COMPARED_BY_PAIR and row.get("kind") == "rooms_overlap_when_placed":
+        return (("kind", "rooms_overlap_when_placed"),
+                ("pair", tuple(sorted(str(rid) for rid in row.get("rooms") or ()))))
     return tuple(sorted((k, str(v)) for k, v in row.items()))
 
 
@@ -429,9 +758,10 @@ def layout_warning(row) -> str:
                 f"({', '.join(row['openings'])}) are placed on the same cells; "
                 f"give the wall an extent that holds both, or move one.")
     if kind == "wall_overfull":
-        return (f"Room {row['room']!r}: the {row['wall']} wall's anchors need "
-                f"{row['needs']} paces and the wall has {row['holds']}; the "
-                f"extent cannot hold them.")
+        at = f" at {row['height']} height" if row.get("height") else ""
+        return (f"Room {row['room']!r}: the {row['wall']} wall's anchors{at} "
+                f"need {row['needs']} paces and the wall has {row['holds']}; "
+                f"the extent cannot hold them.")
     if kind == "corner_in_round_room":
         return (f"Room {row['room']!r} is round and carries corner parts "
                 f"({', '.join(row['corners'])}); a round room has no corner.")
@@ -458,5 +788,5 @@ def layout_warning(row) -> str:
     return f"layout: {row!r}"
 
 
-__all__ = ["LAYOUT_LINT_KINDS", "layout_rooms", "layout_warning",
-           "room_layout_lint"]
+__all__ = ["LAYOUT_LINT_KINDS", "layout_index", "layout_row_key", "layout_rooms",
+           "layout_warning", "leaf_rows", "room_layout_lint", "wall_loads"]

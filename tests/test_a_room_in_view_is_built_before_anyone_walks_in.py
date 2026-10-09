@@ -507,10 +507,10 @@ def test_two_designs_that_contradict_each_other_build_the_first_met(
         for rid, room in (("lamp_gallery", GALLERY), ("watch_room", WATCH))})
     real = director_rooms._check
 
-    def check(scene_, draft, owed, rows_out=None):
+    def check(scene_, draft, owed, rows_out=None, **kw):
         if {"lamp_gallery", "watch_room"} <= set(draft.get("rooms") or {}):
             return {"clean": False, "errors": ["two doorways on one wall"]}
-        return real(scene_, draft, owed, rows_out=rows_out)
+        return real(scene_, draft, owed, rows_out=rows_out, **kw)
 
     monkeypatch.setattr(director_rooms, "_check", check)
     _, installed = director_rooms.install_prepared_rooms(
@@ -642,7 +642,7 @@ def test_a_design_refused_beside_another_is_taken_up_again_beside_it(
     real = director_rooms._check
     looks = []
 
-    def check(scene_, draft, owed, rows_out=None):
+    def check(scene_, draft, owed, rows_out=None, **kw):
         built = ((scene_.get("rooms") or {}).get("lamp_gallery") or {}).get("desc") \
             == GALLERY["desc"]
         looks.append((sorted(draft.get("rooms") or {}), built))
@@ -650,7 +650,7 @@ def test_a_design_refused_beside_another_is_taken_up_again_beside_it(
         if (rooms.get("lamp_gallery") or {}).get("desc") == GALLERY["desc"] \
                 and (rooms.get("watch_room") or {}).get("desc") == WATCH["desc"]:
             return {"clean": False, "errors": ["two doorways on one wall"]}
-        return real(scene_, draft, owed, rows_out=rows_out)
+        return real(scene_, draft, owed, rows_out=rows_out, **kw)
 
     monkeypatch.setattr(director_rooms, "_check", check)
     assert list(director_rooms.install_prepared_rooms(

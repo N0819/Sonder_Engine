@@ -288,9 +288,12 @@ from world.spatial_fov import (
 
 
 from world.spatial_lint import (
-    _cells_connected, LAYOUT_LINT_KINDS, layout_rooms, layout_warning,
-    room_layout_lint,
+    _cells_connected, LAYOUT_LINT_KINDS, layout_index, layout_row_key,
+    layout_rooms, layout_warning, leaf_rows, room_layout_lint, wall_loads,
 )
+
+
+from world.spatial_pack import doorway_places, pack_anchors
 
 
 from world.spatial_light_field import (

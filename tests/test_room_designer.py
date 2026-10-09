@@ -643,22 +643,26 @@ def test_a_new_id_with_an_owed_places_name_is_that_place():
 
 def test_an_overfull_wall_comes_with_its_arithmetic():
     """'needs 7, has 5' sent the yard's designer widening the wrong side
-    twice: a west wall runs north-south, so its length is the extent's d."""
+    twice: a west wall runs north-south, so its length is the extent's d.
+    The wall is counted at one height (a rack over a chest is not a full
+    wall), and the line says where the fixture that found no place would
+    fit -- the choice of wall stays the designer's."""
     draft = {"rooms": {"gallery": {"name": "Gallery", "desc": "x", "extent": {"w": 8, "d": 3},
                                    "adjacent": [{"to": "hall", "barrier": "open", "dir": "n"}],
                                    "anchors": {
                                        "rack": {"desc": "a rack", "dir": "w", "footprint": "large",
-                                                "height": "head"},
+                                                "height": "waist"},
                                        "chest": {"desc": "a chest", "dir": "w",
                                                  "footprint": "large", "height": "waist"}}}},
              "remove_rooms": [], "remove_adjacent": []}
     result = director_rooms._check(SCENE, draft, ["gallery"])
-    crowded = result["crowded_walls"]
-    assert crowded[0]["room"] == "gallery" and crowded[0]["wall"] == "w"
-    assert crowded[0]["length_paces"] == 3
-    assert crowded[0]["length_is"].startswith("the extent's d")
-    assert set(crowded[0]["fixtures_paces"]) == {"rack", "chest"}
-    assert sum(crowded[0]["fixtures_paces"].values()) > 3
+    (line,) = result["crowded_walls"]
+    assert line.startswith("gallery: the west wall is 3 paces long (the extent's d")
+    assert "at waist height its fixtures take 4 (rack 2, chest 2)" in line
+    assert "would fit on the" in line
+    gallery = draft["rooms"]["gallery"]["anchors"]
+    assert gallery["rack"]["dir"] == "w" and gallery["chest"]["dir"] == "w", \
+        "the check moves no fixture to another wall"
 
 
 def test_calls_past_the_step_cap_are_named_not_silently_dropped(monkeypatch):

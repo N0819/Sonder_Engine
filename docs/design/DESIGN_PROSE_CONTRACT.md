@@ -476,6 +476,153 @@ Addendum):
     walk's name to the walk (the player faced away from it).
 
 
+### Where along the wall, and where a place joins the world (2026-10-08)
+
+The owner's procedural-generation choice of 2026-10-08, lane one: a model
+decides what a place holds and which wall each thing stands against; code
+decides where along it. Built in `world/spatial_pack.py` (behind the
+`world/spatial.py` facade) and `agents/director_rooms.py`, inside the one
+`design_rooms` loop that the in-beat designer and the between-turn job that
+builds rooms in view (`_predevelop_run`) both run. The install
+(`install_prepared_rooms`) runs neither the packer nor the doorway rules: it
+checks a design the job already packed (`_install_test`), and one the world
+has since moved under fails that check and stays a seed -- for the beat that
+enters the room, or for the job's next run.
+- **The packer.** After each `draft_room`, and at every check, a fixture
+  the draft places keeps its seeded cell when that cell is free at its
+  height; otherwise it takes the free place nearest its seed ALONG ITS OWN
+  WALL (`offset`), or, for a corner or a fixture with no wall, the nearest
+  free cell (`cell`). Every place is tried by the engine's own placement, so
+  runs, large footprints, lanes, shaped rims and shared corners come out as
+  drawn. The longer fixture keeps its seed when two collide, fixtures drafted
+  together are laid end to end when a seed leaves no gap, and a fixture a
+  plan has shown is settled -- never moved for a later one (`_pack`'s
+  record). Standing fixtures and every place the designer wrote are
+  obstacles. A wall that cannot hold its fixtures at one height is never
+  emptied onto another wall: the check hands back ONE line per wall and
+  height with the arithmetic and where each stuck fixture would fit
+  (`crowded_walls`), and the choice stays the designer's. The card offers
+  `offset` for a fixture or doorway the prose fixes along its wall (en and ja).
+- **The wall count per height.** The check counts a wall per height along
+  its rim, a large fixture's inward row being floor (`wall_loads`;
+  `DESIGN_ROOM_FIDELITY.md` §3).
+- **Doorways.** A whole open side holds any other opening; two new doorways
+  seeded onto one cell get distinct places along their wall
+  (`doorway_places`), never a doorway the world holds and never one whose
+  place the designer wrote; a level doorway written from both rooms with
+  bearings that are not opposites takes the owed place's bearing on the far
+  side -- never a doorway the world already holds, from either side
+  (`_world_holds_doorway`: re-bearing the far copy made a one-sided
+  re-declaration of a settled door a matching two-sided one, which the
+  merge's shield lets through, and the door moved walls), never a far copy
+  whose place along its wall the designer wrote (turned to another wall, a
+  door a fifth of the way along a house's east wall became one a fifth of
+  the way along its north wall), and never where that would lay one room
+  onto another. Such a pair is left as written, and the merge keeps neither
+  bearing, as it always did. A way up or down written from both ends in the
+  same direction is NAMED, never resolved -- the merge keeps neither
+  direction, and the bearing row it left behind had a designer flipping n
+  and s. Whether code may give a doorway the world holds WITH NO BEARING its
+  first wall this way is the owner's (`DERIVE_FAR_SIDE_OF_A_HELD_BEARINGLESS_DOORWAY`,
+  off).
+- **The doorway search offers only what the check passes, and finishes.**
+  It reads the check's own walks of the world once (`layout_index`; the
+  world as the merge holds it, since what the merge does to the world itself
+  it does to every trial), lays each wall's new place against them
+  (`leaf_rows`), and confirms a wall that passes with one real merge, judged
+  the same way. `leaf_rows` gives the whole check's VERDICT -- whether the
+  room brings a row the world does not hold, but about its own interior --
+  or says it cannot and the whole check answers; its rows are the walks'
+  evidence for the verdict, which can name a pair the other way round or
+  leave one of the check's own rows out, never the check's rows. A place
+  whose id sorts before its host's walk starts a walk of its own and re-lays
+  the host's part of the world, and so does a doorway onto a room the walk
+  could not place: where the host's own walk re-reports a standing
+  collision, every wall of that host is refused at once, and where it
+  re-reports none, the whole check answers. A place laid first that would
+  run ahead of a walk started between it and its host, and a place another
+  room's doorway already names, are left to the whole check too. Taking
+  every row naming the place for the whole of what it adds -- the first
+  build -- offered walls the designer's check then refused with a row about
+  two standing rooms that no refit could clear. On a host standing on a
+  site plan the merge may stand the place on that plan as well, and two
+  rooms one plan places are where it put them, never a collision -- so a
+  wall the walks refuse there is put to the merge before it is refused. The
+  search tries first the rooms the draft and the prose name
+  (`_named_in_prose`), never offers the inside of a body or a thing, and
+  names the rooms it ran out of time before trying (`not_tried`).
+- **One reading of the world a run.** A design run reads the world's own
+  rows once, merges its draft once per change for every pass of every
+  check (`_Reading`), and takes a refused far side or doorway batch back
+  once, until the draft's layout changes (`_layout_key`).
+- **A draft the merge cannot take goes back to the designer.** Every pass of
+  code's own -- the far sides, the doorways, the packing, the plan drawn
+  after a draft or a look, an inspection -- does nothing to such a draft,
+  and the check hands the merge's error back, as it always did
+  (`_merge_or_none`). Raised out of a pass instead, it ended the whole
+  design run, and the beat lost every room the designer was building: a
+  doorway written as one object rather than a list of them, or a
+  `parent_entity` written as an object.
+- **A collision found again.** A place that starts a walk of its own
+  re-lays its part of the world, and a collision the world already holds
+  can come back reversed or via another room -- a row about two rooms the
+  draft does not hold. Whether that is the same collision, compared by the
+  two rooms it names alone, in every comparison the check makes (the
+  commit's once-told warning, the designer's check, the search), is the
+  owner's (`spatial_lint.LAYOUT_COLLISIONS_COMPARED_BY_PAIR`, off).
+
+**Measured, offline, on the 2026-10-08 play database** (the designer's 33
+in-beat runs of chats 154-166, replayed through the real loop with each
+run's recorded first answer and no model): clean first drafts 16 of 31 ->
+24 (11 places written by code in 8 runs; over-full wall rows 12 -> 3: the
+elevator shaft's west wall at full height, where two full-height runs --
+one of them the shaft's own concrete -- are reported rather than packed,
+and the inn's two walls the prose over-filled at waist height); clean final
+drafts 29 of 33 -> 32 (chat 160 turn 11's two corridor positions and chat
+165 turn 3's long table and bench separated along their walls, and chat 166
+turn 22's open-side rows gone). Loop time over those runs, the doorway
+search left out, measured under one load: 10.3-10.7 s before, 6.6-6.8 s now
+(14.4 s for the first build). A check's passes on chat 166's turn-22 final
+draft: 0.75 s for the first build; now 0.35 s for the first check, 0.005 s
+for the same draft again, 0.12 s after an edit that moves no room (the check
+alone, before: 0.18 s).
+
+The doorway search on chat 166's 33-room turn-22 checkpoint: 0.19 s a try
+and 2 of 12 walls offered before; now 2.6 ms a screened wall and 48 ms a
+confirming merge, all 13 walls in about 0.9 s with the Gale house (named in
+the prose) second, nothing left untried; the slowest of the seven recorded
+in-beat searches is that one and the median 0.37 s (chat 160's turn 2, whose
+one host of five stands on a site plan, 0.37 s against 0.32 s before its
+refused walls were put to the merge). Against the old search
+(every shape merged and put to the whole check), with no deadline: on the
+14 recorded searches, the old 343 walls exactly, plus 50 on chat 160's turn
+2, where the old search offered none at all; with every room of six
+checkpoints a host and place ids sorting first, last and as recorded (18
+searches), the old 1,169 walls exactly, plus 160 on chat 160's turn 2.
+There the world held a doorway onto the docked lift car's inside that the
+merge strips on its own, which read as a bearing every wall "lost". Every
+wall offered in all of these gives a clean designer check for every shape
+tried. The first build had offered 14 walls the check refused on the
+recorded searches, and 20-24 of chat 166's town with every room a host. On
+74 seeded random towns, every room a host and place ids sorting first, in
+the middle and last (the groundwork path), or a place drafted with a bench,
+half the time beside a standing room drafted at a new extent (the refit
+path): the old search's 5,674 walls exactly, none lost and none gained, each
+passing the designer's check. In 30 of those towns three ways in ten go up
+or down, and 8 of them stand on a site plan; judging a place without the
+site the merge would give it had lost 7 of those walls before a refused wall
+on a sited host was put to the merge.
+
+**Live, one replay** (chat 166 turn 22 on a database copy, OpenRouter
+`z-ai/glm-5.2`, 8 designer calls and 1 decision-model call, about $0.03
+by the ledger, before the review's fixes): the capture filed each step's
+own draft (4 distinct drafts in 8 steps; before, one draft hash for every
+step of all 29 multi-step runs); the groundwork offered 13 walls in 0.9 s;
+the packer had nothing to move; the design ended clean at the 8-step cap.
+Four of its steps went to a stair the designer wrote from both ends as
+going up, which the check then misread as a bearing row; that
+contradiction is now named instead.
+
 ## Playerless bubbles (2026-09-23, `tools/two_lives_drive.py`, rounds 2–8)
 
 Two characters, Emory Vane and Sal Weatherby, each live in their own

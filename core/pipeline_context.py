@@ -2,6 +2,8 @@
 """Typed context object carrying all pipeline state."""
 
 import contextvars
+import copy
+import json
 from dataclasses import dataclass, field
 from typing import Any, Optional
 from core.db import wget
@@ -75,17 +77,83 @@ current_exchange_sink: contextvars.ContextVar[Optional[Any]] = \
     contextvars.ContextVar("current_exchange_sink", default=None)
 
 
+def sent_payload(payload):
+    """A provider call's payload as it stood when it was SENT: a copy taken
+    at call time, for a record kept past the call.
+
+    WHY A COPY. Every sink an exchange lands in keeps it past the call that
+    made it -- a step's until the step saves (`runtime._flush_exchanges`), a
+    quick start's until its failed-setup record is written -- and only then
+    is the payload serialised and hashed (`llm_capture._payload_hashes`). A
+    caller is free to go on changing what it sent: the room designer hands
+    every step the same live `draft` and keeps building it. Kept by
+    reference, each step's capture was the draft as it stood when the step
+    SAVED, never what that step was sent: every one of the 29 multi-step
+    designer runs in the 2026-10-08 play database (chats 154-166) carried one
+    draft hash across all its steps. Taken here, at the moment the call is
+    recorded, a later change to the caller's object cannot reach the record.
+
+    A deep copy rather than a JSON round trip, so a reader of the entry gets
+    the structure it always did and the per-key hash is unchanged for every
+    payload nothing mutated. A payload that cannot be copied falls back to
+    its JSON form, and one that cannot be serialised either is kept as it
+    was: a diagnostic never fails the call it describes."""
+    if payload is None or isinstance(payload, (str, bytes, int, float, bool)):
+        return payload
+    try:
+        return copy.deepcopy(payload)
+    except Exception:
+        try:
+            return json.loads(json.dumps(payload, ensure_ascii=False,
+                                         default=str))
+        except Exception:
+            return payload
+
+
 def note_step_exchange(entry: dict) -> None:
     """Record one provider exchange on the running step. No-op outside a
     step; inside one the sink is armed unconditionally (`runtime._run_step`),
     and the debug-capture setting decides only whether what lands here is
-    persisted (review 2026-09-07 E5)."""
+    persisted (review 2026-09-07 E5). The payload is the one the call SENT,
+    copied now (`sent_payload`) whenever what the sink keeps will be
+    written: the capture is on, or the sink writes its record whatever the
+    capture says (`KEEPS_PAYLOADS`: a quick start's failed-setup record).
+    Every sink keeps the entry past the call. Otherwise -- a step's sink with
+    the capture off, which is the default -- nothing reads the payload again
+    and no copy is taken: the copy was 2.4 ms on the largest
+    `character_major` payload of the 2026-10-08 play database and 6.0 ms on
+    the largest `encoder` one, on every call of ordinary play (round one's
+    review)."""
     sink = current_exchange_sink.get()
     if sink is not None:
         try:
+            if isinstance(entry, dict) and "payload" in entry and (
+                    getattr(sink, KEEPS_PAYLOADS, False) or _capturing()):
+                entry = dict(entry, payload=sent_payload(entry["payload"]))
             sink(entry)
         except Exception:
             pass
+
+
+#: The mark of an exchange sink that WRITES what it keeps whatever the debug
+#: capture says -- set as an attribute on the sink -- so `note_step_exchange`
+#: copies each payload for it as it was sent. A quick start's failed-setup
+#: record is one (`greetings._recording_exchanges`): with the capture off, a
+#: payload its caller changed after the call was filed as changed (round
+#: two's review, 2026-10-09).
+KEEPS_PAYLOADS = "keeps_payloads"
+
+
+def _capturing() -> bool:
+    """Whether the debug capture will write what a sink holds
+    (`llm_capture.capture_enabled`, read where the capture reads it). When
+    that cannot be told, a copy is taken: a record that is right costs a
+    copy, and one that is wrong cannot be fixed afterwards."""
+    try:
+        from persist.llm_capture import capture_enabled
+        return capture_enabled()
+    except Exception:
+        return True
 
 
 def note_step_decision(kind: str, subject: str, verdict: str,

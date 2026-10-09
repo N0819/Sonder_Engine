@@ -2192,7 +2192,88 @@ dropped from the draft, and Jev says when a design is finished. Left:
 - **`doorways_that_fit` is one doorway at a time.** A place joined to two
   rooms must fit both at once, which only the check says; the second run on
   the yard spent five steps on exactly that before `drop` and the re-fit
-  existed. A pair search is not built.
+  existed. A pair search is not built (looked at again 2026-10-08, the
+  procedural-generation round: the one-doorway search is now cheap enough --
+  2.6 ms a screened wall, 48 ms a confirming merge on a 33-room town --
+  and whether a blind pair search over fixed trial shapes would close two
+  doorways at once is untested). What it needs: lay both rooms out by the
+  check's own walks (`layout_index`), find walls of the two that face each
+  other across a gap a place could fill, derive the place's extent and both
+  doorways' offsets from that gap, and confirm the pair with one real merge
+  and the whole check -- a constructive solve, about 150 lines and its
+  tests, and a case of its own when the two rooms lie in different walks.
+  A place with two doorways is no leaf, so `leaf_rows` cannot judge it.
+- **What the packer and the doorway rules of 2026-10-08 leave**
+  (`world/spatial_pack.py`, `director_rooms._pack`/`_place_doorways`/
+  `_doorways_that_fit`; `docs/design/DESIGN_PROSE_CONTRACT.md` § Where
+  along the wall):
+  - A wall's own surface filed as a fixture is the designer's content error,
+    and code cannot tell it from a floor-to-ceiling fixture without reading
+    its desc. The elevator shaft's first drafts (chat 160 turns 2 and 5):
+    where two full-height runs share a wall, the packer reports instead of
+    packing; where the heights do not collide (turn 2), the draft is now
+    clean with the shaft's lower walls still filed as an anchor. A card
+    clause naming the class is the owner's call.
+  - A full-height fixture and a waist-height one may share a cell: the
+    check, and so the packer, count one height at a time.
+  - A fixture laid end to end with others drafted beside it may stand at
+    one end of its wall; what a fixture is for relative to a doorway (a
+    doorstep at a door) is the prose's, and `offset` is the designer's lever.
+  - A level doorway written from both rooms whose far-side bearing would lay
+    one room onto another stays as the merge leaves it, bearingless: the
+    Gale house's door in chat 166 turn 22 -- the landing is up a stair but
+    written on the walk's storey, and the check lays every storey on one
+    plane. A storey-aware layout (the procedural-generation survey's item 6)
+    is what clears it. By turn 26 the world holds that door, with no
+    bearing, and code gives no doorway the world holds a wall: written `s`
+    from both rooms again, it stays as the merge leaves it. The narrower
+    rule -- a held doorway with no bearing derived like a new one -- is
+    built behind `director_rooms.DERIVE_FAR_SIDE_OF_A_HELD_BEARINGLESS_DOORWAY`,
+    off, for the owner; on, it changes none of the 33 recorded final
+    drafts: turn 26's door is tried and taken back, as turn 22's is.
+  - A level doorway whose two drafted copies are not opposites and that
+    code leaves as written -- a far copy whose place along its wall the
+    designer wrote, a doorway the world holds, a derivation taken back --
+    is merged with no wall, as before the round, and the check does not
+    say so. A sentence naming it would hold the Gale house's design unclean
+    at every check while the lint lays every storey on one plane.
+  - A doorway onto a room the check's walk could not place, or a new place
+    whose id sorts before its part of the world, starts a walk of its own
+    that re-lays that part in another order, and a standing collision comes
+    back reversed or via another room: a row about two rooms the draft does
+    not hold, which the designer cannot clear. The search no longer offers
+    such a wall, but a designer who writes one meets the row, and so does
+    the commit's once-told warning, since both compare rows by key. In the
+    recorded runs of 2026-10-08, 1 of 33 final drafts held a row about two
+    rooms its draft did not contain (chat 165 turn 1). Comparing a
+    collision by the two rooms it names clears it, and is built behind
+    `spatial_lint.LAYOUT_COLLISIONS_COMPARED_BY_PAIR`, off, for the owner.
+    Measured: it clears that final draft and the 6 of 150 recorded designer
+    checks that held such a row, leaves clean finals at 32 of 33 and clean
+    first drafts at 24 of 31, and over the 4,108 beats stored in the play
+    database's checkpoints it stops the commit's once-told warning
+    reporting 3 of its 12 new collisions (chat 27 turn 84, two rows; chat
+    165 turn 2, the chandlery and the boat shed). A walk laid in another
+    order can also move a standing collision onto another pair, which the
+    pair does not catch.
+  - Such a place is also the doorway search's slow case on a large town:
+    every wall the walks cannot judge goes to the whole check (every room of
+    chat 166's 33-room town a host, no deadline: 24-25 s for an id sorting
+    first, 8 s for one sorting last); inside the search's 1.5 s, the rooms
+    left are named (`not_tried`).
+  - On a host standing on a site plan, a wall the walks refuse is put to a
+    merge and the whole check before it is refused, since the merge may
+    stand the place on that plan. Of the seven recorded in-beat searches
+    only chat 160's turn 2 has such a host (one of five), and its searches
+    take 0.37 s against 0.32 s; a town whose every host stands on a plan
+    pays a merge for every wall the walks refuse.
+  - The install (`install_prepared_rooms`) runs neither the packer nor the
+    doorway rules: a design the world has moved under since the job made it
+    fails the install's check and stays a seed.
+  - `lane` is read by the engine and offered by no card.
+  - Fixtures other writers mint at the merge (the encoder, the Writers'
+    Room) are not packed; extending the packer to them waits until this
+    one is measured live.
 - **The layout lint does not lay out a neighbour behind a solid wall**, so
   a room placed on that side overlaps it unseen. The offered doorways never
   use a wall with any neighbour on it; the check itself still cannot see
@@ -2200,7 +2281,9 @@ dropped from the draft, and Jev says when a design is finished. Left:
   collision test and for nothing else), and it would add rows to standing
   scenes, so it wants a measurement first.
 - **One false hold remains**: `room_done_missing` reads 0.50-0.54 on the
-  finished osteria (one step). Its bar is the owner's to move.
+  finished osteria (one step), and 0.52 on the Gale house landing in the
+  2026-10-08 live replay of chat 166 turn 22, which held a design the check
+  had passed. Its bar is the owner's to move.
 - **The rooms chunk still tells the designer to furnish planned rooms "in
   view".** Written for the spatial hand ("the first time a body enters it or
   has it in view"), it ships verbatim in the designer's sheet, while the

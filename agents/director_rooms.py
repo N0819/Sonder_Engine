@@ -72,8 +72,24 @@ ROOM_INSPECT_CHARS = 16_000
 #: Standing rooms handed over already inspected -- `_inspect`'s own cap.
 ROOM_SURROUNDINGS = 6
 #: Wall seconds code may spend trying where a new place's doorway fits
-#: (about 13 ms a try on a six-room scene; each try is one merge and one
-#: layout check).
+#: (`_doorways_that_fit`), per search. Sized at first for "about 13 ms a try
+#: on a six-room scene"; by chat 166's 33-room turn-22 checkpoint a try cost
+#: 0.19 s (a copy and a merge of the town and two whole checks), and the
+#: search finished 10 of its 63 tries. Measured 2026-10-08 after the search
+#: was rebuilt: a wall is screened against the check's own walks in about
+#: 2.6 ms there and one that passes costs one real merge (about 48 ms); the
+#: slowest of the seven recorded in-beat searches -- that checkpoint, eight
+#: rooms tried, thirteen walls found -- finishes in about 0.9 s and the
+#: median in 0.37 s (re-measured after a wall the walks refuse on a host
+#: standing on a site plan was put to the merge as well: chat 160 turn 2, one
+#: such host of five, 0.32 s -> 0.37 s under one load). 1.5 s is kept, under
+#: twice the slowest, and is the owner's to set; when it runs out, the rooms
+#: not yet tried are named to the designer (`not_tried`), never left to read
+#: as "nothing fits". A place
+#: whose id sorts before its part of a large town is the slow case: every
+#: wall the walks cannot judge goes to the whole check (an unbounded search
+#: with every room of chat 166's town as a host took 24-25 s for such an
+#: id, 8 s for one that sorts last).
 ROOM_PLACEMENT_SECONDS = 1.5
 #: The decision model's stop: with the check clean, every completeness
 #: answer under its bar finishes the design; one at or over it keeps the
@@ -180,6 +196,111 @@ def _merged(scene, draft):
     return merge_scene_with_diff(copy.deepcopy(scene or {}), diff) if diff else copy.deepcopy(scene or {})
 
 
+class _Reading:
+    """ONE DESIGN RUN'S READING OF THE WORLD IT DESIGNS AGAINST: the world's
+    own check rows, read once, because the world does not change while a
+    design runs; the draft merged into it, merged again only when the draft
+    changed; and what the run has taken back (`withdrawn`).
+
+    Every pass of a check -- the far sides (`_derive_far_bearings`), the
+    doorways (`_place_doorways`), the packing (`_pack`), the size words
+    (`_agree_sizes`), the check itself (`_check`) -- asked for the same merge
+    and the world's rows afresh: on chat 166's 33-room turn-22 draft a
+    check's passes took 0.94 s against 0.28 s for the check alone, and a far
+    side the world refused was tried again at every check, two merges and
+    four whole checks each time (round one's review, 2026-10-08). A merge is
+    shared by readers only; none of them writes it."""
+
+    def __init__(self, scene):
+        self.scene = scene
+        self.withdrawn = set()
+        self._standing = None
+        self._kept = {}
+
+    def standing(self) -> set:
+        """The world's own rows, as keys (`layout_row_key`)."""
+        if self._standing is None:
+            from world.spatial import layout_row_key, room_layout_lint
+            self._standing = {layout_row_key(row) for row in room_layout_lint(self.scene)}
+        return self._standing
+
+    def _entry(self, draft) -> dict:
+        key = json.dumps(draft, sort_keys=True, ensure_ascii=False, default=str)
+        entry = self._kept.pop(key, None)
+        if entry is None:
+            entry = {"merged": _merged(self.scene, draft), "rows": None}
+        self._kept[key] = entry
+        while len(self._kept) > ROOM_MERGES_KEPT:
+            self._kept.pop(next(iter(self._kept)))
+        return entry
+
+    def merged(self, draft) -> dict:
+        """The draft merged into the world, as `_merged` makes it."""
+        return self._entry(draft)["merged"]
+
+    def rows(self, draft) -> list:
+        """The check's rows on the merged draft that the world does not
+        hold: `room_layout_lint(merged, prev_scene=world)`."""
+        entry = self._entry(draft)
+        if entry["rows"] is None:
+            from world.spatial import layout_row_key, room_layout_lint
+            standing = self.standing()
+            entry["rows"] = [row for row in room_layout_lint(entry["merged"])
+                             if layout_row_key(row) not in standing]
+        return entry["rows"]
+
+
+#: Merges of the draft one design run keeps (`_Reading`), newest last: the
+#: draft as it stands, the one before a trial change a pass may take back,
+#: and the trial itself -- so a change taken back finds its merge still
+#: there. A memory bound, not a behaviour: a merge not kept is made again.
+ROOM_MERGES_KEPT = 3
+
+
+def _merge_of(scene, draft, reading=None):
+    return reading.merged(draft) if reading is not None else _merged(scene, draft)
+
+
+def _merge_or_none(scene, draft, reading=None):
+    """The draft merged into the world, or None when the merge cannot take
+    it. A pass of code's own -- the far sides, the doorways, the packing --
+    does nothing to such a draft, and the check names the merge's error to
+    the designer, who can fix it (`_check`). Raised out of a pass, a draft
+    the merge could not take ended the whole design run, and the beat lost
+    every room the designer was building -- a doorway written as one object
+    instead of a list of them, or a `parent_entity` written as an object
+    (round two's review, 2026-10-09), where the run had always handed the
+    error back and the designer redrafted."""
+    try:
+        return _merge_of(scene, draft, reading)
+    except Exception:
+        return None
+
+
+def _layout_key(draft, merged) -> str:
+    """The drafted rooms as the layout reads them in the merged world: each
+    one's grid, its doorways, its exposure (an open side spans the wall),
+    its site and its storey -- and what the draft removes. Two drafts with
+    one key lay every room out alike: a fixture or a word moves no room
+    (`_derive_far_bearings`, `_place_doorways`)."""
+    from world.spatial import room_grid
+    rooms = (merged or {}).get("rooms") or {}
+    out = {}
+    for rid in sorted(str(key) for key in (draft.get("rooms") or {})):
+        room = rooms.get(rid)
+        if not isinstance(room, dict):
+            out[rid] = None
+            continue
+        anchors = room.get("anchors") if isinstance(room.get("anchors"), dict) else {}
+        out[rid] = {"grid": room_grid(merged, rid).key(), "adjacent": room.get("adjacent"),
+                    "exposure": room.get("exposure"), "site": room.get("site"),
+                    "level": room.get("level"),
+                    "doors": {aid: a for aid, a in anchors.items() if str(aid).startswith("door:")}}
+    return json.dumps({"rooms": out, "remove_rooms": draft.get("remove_rooms"),
+                       "remove_adjacent": draft.get("remove_adjacent")},
+                      sort_keys=True, ensure_ascii=False, default=str)
+
+
 def render_room(scene, room_id):
     """One room as a floor plan on the engine's grid, north at the top, and
     a legend of what the engine made of every fixture and doorway."""
@@ -261,15 +382,31 @@ def _inspect(scene, room_ids, whole=False):
     return out
 
 
-def _check(scene, draft, owed, rows_out=None):
+def _check(scene, draft, owed, rows_out=None, settled=(), reading=None):
     """The layout check over the draft merged into the world. `rows_out`, a
     list, receives the check's raw rows for code; the model reads only the
-    sentences."""
+    sentences. `settled` is the `(room, anchor)` pairs the design loop has
+    settled (`_pack`): a wall's report never fits a fixture by moving one.
+    `reading` is the design run's (`_Reading`), whose merge and world rows
+    the check reads instead of making its own."""
     from world.spatial import layout_warning, room_layout_lint
     try:
-        merged = _merged(scene, draft)
-        rows = room_layout_lint(merged, prev_scene=scene)
-        errors = [layout_warning(row) for row in rows]
+        if reading is not None:
+            merged = reading.merged(draft)
+            rows = list(reading.rows(draft))
+        else:
+            merged = _merged(scene, draft)
+            rows = room_layout_lint(merged, prev_scene=scene)
+        ways = _ways_both_ways(draft)
+        # The merge drops a way's direction when its two ends contradict each
+        # other, which leaves the pair level -- and the bearing row the check
+        # then holds about it is that contradiction's consequence, not a
+        # second fact (`_embedding_rows`' rule), so it is not repeated.
+        rows = [row for row in rows if not (
+            row.get("kind") == "reciprocal_bearing_disagrees"
+            and frozenset(row.get("rooms") or ()) in {frozenset(w[:2]) for w in ways})]
+        errors = [_way_sentence(merged, *way) for way in ways] \
+            + [layout_warning(row) for row in rows]
     except Exception as exc:
         return {"errors": [f"the draft could not be merged into the world: {exc}"]}
     if rows_out is not None:
@@ -277,6 +414,7 @@ def _check(scene, draft, owed, rows_out=None):
     drafted = set((draft.get("rooms") or {}))
     missing = [rid for rid in owed if rid not in drafted]
     unplaced, overlapping = [], []
+    clashing = {}
     try:
         from world.spatial import anchor_cells
         for rid in drafted:
@@ -291,6 +429,7 @@ def _check(scene, draft, owed, rows_out=None):
                     if key in held and held[key] != aid:
                         overlapping.append(f"{rid}: {held[key]} and {aid} share "
                                            f"{tuple(cell)} at height {key[1]}")
+                        clashing.setdefault(rid, set()).update((held[key], aid))
                     held.setdefault(key, aid)
     except Exception:
         pass
@@ -306,10 +445,49 @@ def _check(scene, draft, owed, rows_out=None):
                    "where it lies, building the way there if the world has none, or give "
                    "it a zone if no walk from here could reach it. Left joined to "
                    "nothing, the engine opens it onto the room the bodies stood in"}
-    crowded = _crowded_walls(merged, rows, drafted)
+    crowded = _crowded_walls(scene, draft, merged, rows, drafted, clashing, settled)
     if crowded:
         out["crowded_walls"] = crowded
     return out
+
+
+def _ways_both_ways(draft):
+    """`(a, b, way)` for every way the DRAFT writes from both of its rooms
+    with the same direction up or down at both ends -- each room saying the
+    other lies up, or both down. A way up from one room is a way down from
+    the other, so the merge keeps neither direction ("dropped rather than
+    guessed", `normalize_scene_bearings`), the way becomes level, and the
+    check then asked for opposite bearings: one designer flipped the Gale
+    house landing's stair between n and s for four steps over a direction it
+    had written twice (the 2026-10-08 replay of chat 166, turn 22). Which end
+    is right is the prose's, never code's -- there the landing's own end had
+    it backwards -- so it is named, not resolved."""
+    from world.spatial import normalize_vertical, opposite_vertical
+    rooms = draft.get("rooms") or {}
+    out = []
+    for a in sorted(rooms):
+        for edge in (rooms[a] or {}).get("adjacent") or () if isinstance(rooms[a], dict) else ():
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            b = str(edge["to"])
+            if b <= a or not isinstance(rooms.get(b), dict):
+                continue
+            back = next((e for e in rooms[b].get("adjacent") or ()
+                         if isinstance(e, dict) and str(e.get("to")) == a), None)
+            mine = normalize_vertical(edge.get("vertical"))
+            theirs = normalize_vertical((back or {}).get("vertical"))
+            if mine and theirs and opposite_vertical(mine) != theirs:
+                out.append((a, b, mine))
+    return out
+
+
+def _way_sentence(merged, a, b, way):
+    rooms = (merged or {}).get("rooms") or {}
+    name = lambda rid: (rooms.get(rid) or {}).get("name") or rid
+    return (f"{name(a)!r} and {name(b)!r} each say the other lies {way}: a way up "
+            f"from one room is a way down from the other, so the engine keeps "
+            f"neither direction. Write the way once, on the place you are designing, "
+            f"and its far end follows.")
 
 
 def _no_way_in(scene, draft, owed):
@@ -346,31 +524,445 @@ def _no_way_in(scene, draft, owed):
     return out
 
 
-def _crowded_walls(merged, rows, drafted):
-    """The arithmetic behind each overfull wall of a drafted room, the way
-    the check counted it: the wall's length and which side of the extent
-    that is, and the paces each fixture on it takes. A designer handed only
-    "needs 7, has 5" widened the wrong side twice (the 2026-09-27 yard: its
-    west wall runs north-south, so it is the extent's `d`)."""
-    from world.spatial import anchor_cells, room_grid
+def _new_anchor_ids(scene, draft, rid, merged) -> list:
+    """The fixtures the draft PLACES in `rid`, in the order they were
+    drafted: every drafted anchor the world does not already hold where the
+    draft leaves it -- a new one, or one the draft gives another wall, size,
+    height or room. A fixture the world holds on the same cells at the same
+    height is STANDING: an obstacle to the packer, never moved by it.
+
+    By the cells, not by the id: a planned room's stub carries the plan's
+    fixtures with a name and a desc and no wall at all, so the designer
+    developing the room places each of them for the first time -- the inn's
+    hearth, long table and barrel rack in chat 165's turn 3, all seven
+    rerolls of it."""
+    from world.spatial import anchor_cells
+    room = (draft.get("rooms") or {}).get(rid)
+    anchors = room.get("anchors") if isinstance(room, dict) else None
+    if not isinstance(anchors, dict):
+        return []
+    world = (scene or {}).get("rooms") or {}
+    before = anchor_cells(scene, rid) if isinstance(world.get(rid), dict) else {}
+    after = anchor_cells(merged, rid)
     out = []
-    for row in rows or ():
-        if row.get("kind") != "wall_overfull" or row.get("room") not in drafted:
+    for aid, anchor in anchors.items():
+        if not isinstance(anchor, dict):
             continue
-        rid, wall = row["room"], row.get("wall")
+        was, now = before.get(aid), after.get(aid)
+        if was is None or now is None or was["cells"] != now["cells"] \
+                or was["height"] != now["height"]:
+            out.append(aid)
+    return out
+
+
+def _crowded_walls(scene, draft, merged, rows, drafted, clashing=None, settled=()):
+    """ONE line for each wall of a drafted room that cannot hold its fixtures
+    at one height (`spatial_pack.pack_anchors`): the wall's length and which
+    side of the extent that is, what each fixture against it takes at that
+    height, which found no place along it, and where each of those would fit.
+    A designer handed only "needs 7, has 5" widened the wrong side twice (the
+    2026-09-27 yard: its west wall runs north-south, so it is the extent's
+    `d`). A wall gets its line when the check's count calls it overfull this
+    draft, or when a new fixture sharing a cell at its height (`clashing`)
+    finds no free place on it; moving a fixture to another wall is the
+    designer's call, never code's."""
+    from world.spatial import pack_anchors
+    out = []
+    for rid in sorted(drafted):
+        overfull = [(row.get("wall"), row.get("height")) for row in rows or ()
+                    if row.get("kind") == "wall_overfull" and row.get("room") == rid]
         try:
-            placed = anchor_cells(merged, rid) or {}
-            length = len(room_grid(merged, rid).rim(wall))
+            stuck = [aid for aid in _new_anchor_ids(scene, draft, rid, merged)
+                     if aid in (clashing or {}).get(rid, ()) and (rid, aid) not in settled]
+            out += pack_anchors(merged, rid, stuck, overfull=overfull)["full"]
         except Exception:
             continue
-        out.append({
-            "room": rid, "wall": wall, "length_paces": length,
-            "length_is": ("the extent's w (east-west)" if wall in ("n", "s")
-                          else "the extent's d (north-south)"),
-            "fixtures_paces": {aid: len(rec.get("cells") or ()) for aid, rec in placed.items()
-                               if rec.get("dir") == wall and not rec.get("implicit")},
-        })
     return out
+
+
+def _pin_shape(merged, rid, anchor):
+    """What a place code wrote was found FOR: the room's grid and the
+    fixture's wall, footprint, height and lane. Changed, the place no longer
+    answers the question it answered (`_pack`)."""
+    from world.spatial import anchor_geometry, normalize_bearing, room_grid
+    geo = anchor_geometry(anchor)
+    return (room_grid(merged, rid).key(), normalize_bearing(anchor.get("dir")),
+            geo["footprint"], geo["height"], geo["lane"])
+
+
+def _pack(scene, draft, placed_by_code, rooms=None, settle=False, reading=None):
+    """CODE STANDS EACH NEW FIXTURE ALONG THE WALL THE MODEL CHOSE
+    (`world/spatial_pack.py`, the owner's choice of 2026-10-08): a fixture
+    the draft adds keeps its seeded place when that place is free at its
+    height, and otherwise takes the nearest free place along its own wall --
+    written into the draft as `offset` (or `cell`, for a corner or a fixture
+    with no wall) ONCE, so a later fixture never moves an earlier one. The
+    world's standing fixtures and every place the model wrote are obstacles,
+    never moved. Returns what it placed, in words for the designer.
+
+    `placed_by_code` is this run's record of every fixture SETTLED --
+    `{(room, anchor): (field, value, shape)}`: each place code wrote, and,
+    with `settle` (a pass whose plan the designer is about to be shown: a
+    `draft_room` or `view_room` result), each new fixture that kept its
+    seeded place (`field` None) -- because a fixture a plan has shown is
+    where the designer believes it is, and is never moved for a later one. A
+    fixture only a check has read is not settled: the prepared design a
+    beat starts from was drawn for another run, and the low walk's doorstep,
+    kept at its seed by the first look, would have barred the twenty-two
+    pace drain drafted beside it (chat 166's turn 3). A settled
+    place stands only for the fixture it was found for: redrafted onto
+    another wall or at another size, or its room re-measured, the fixture is
+    placed again (`_pin_shape`); given a place the designer wrote itself,
+    that place wins and the record is dropped."""
+    from world.spatial import pack_anchors
+    drafted = draft.get("rooms") or {}
+    wanted = [rid for rid in (rooms if rooms is not None else list(drafted))
+              if isinstance(drafted.get(rid), dict)
+              and isinstance(drafted[rid].get("anchors"), dict)]
+    if not wanted:
+        return []
+    merged = _merge_or_none(scene, draft, reading)
+    if merged is None:
+        return []
+    retaken = False
+    settled = set()
+    for (rid, aid), (field, value, shape) in list(placed_by_code.items()):
+        if rid not in wanted or str(aid).startswith("edge:"):
+            continue                        # a doorway's place is `_place_doorways`'
+        anchor = drafted[rid]["anchors"].get(aid)
+        if not isinstance(anchor, dict) or (field and anchor.get(field) != value):
+            placed_by_code.pop((rid, aid))
+            continue
+        try:
+            same = _pin_shape(merged, rid, anchor) == shape
+        except Exception:
+            same = True
+        if same:
+            settled.add((rid, aid))
+            continue
+        if field:
+            drafted[rid]["anchors"][aid] = {k: v for k, v in anchor.items() if k != field}
+            retaken = True
+        placed_by_code.pop((rid, aid))
+    if retaken:
+        merged = _merge_or_none(scene, draft, reading)
+        if merged is None:
+            return []
+    notes = []
+    for rid in wanted:
+        movable = [aid for aid in _new_anchor_ids(scene, draft, rid, merged)
+                   if (rid, aid) not in settled]
+        if not movable:
+            continue
+        try:
+            result = pack_anchors(merged, rid, movable)
+        except Exception:
+            continue
+        anchors = drafted[rid]["anchors"]
+        for aid in result["kept"] if settle else ():
+            try:
+                placed_by_code[(rid, aid)] = (None, None,
+                                              _pin_shape(merged, rid, anchors[aid]))
+            except Exception:
+                pass
+        for aid, pin in result["pins"].items():
+            (field, value), = pin.items()
+            # A NEW record, never the model's own object: that one is the
+            # transcript's record of what the model wrote.
+            anchors[aid] = dict(anchors[aid], **pin)
+            try:
+                placed_by_code[(rid, aid)] = (field, value,
+                                              _pin_shape(merged, rid, anchors[aid]))
+            except Exception:
+                placed_by_code[(rid, aid)] = (field, value, None)
+            notes.append(f"{rid}: {aid}'s place was taken at its height, so the engine "
+                         f"set its {field} to {value}" + (
+                             " -- the same wall, the nearest free place along it"
+                             if field == "offset" else " -- the nearest free cell"))
+    return notes
+
+
+def _edge_shape(merged, rid, edge):
+    """What a doorway place code wrote was found FOR: the wall the edge
+    names and the two rooms' grids (`_place_doorways`)."""
+    from world.spatial import normalize_bearing, room_grid
+    to = str(edge.get("to"))
+    rooms = (merged or {}).get("rooms") or {}
+    return (room_grid(merged, rid).key(), normalize_bearing(edge.get("dir")),
+            room_grid(merged, to).key() if isinstance(rooms.get(to), dict) else None)
+
+
+def _world_holds_doorway(scene, a, b) -> bool:
+    """Whether the world already holds a doorway between `a` and `b`,
+    declared from either side. Code never moves one -- not along its wall
+    (`_place_doorways`), not to another wall (`_derive_far_bearings`) --
+    whatever the draft re-mentions of it: changing settled geometry is the
+    designer's, written from both sides (`_shield_standing_bearings`)."""
+    return bool(_held_doorway_edges(scene, a, b))
+
+
+def _held_doorway_edges(scene, a, b) -> list:
+    """The world's own edges between `a` and `b`, from either side."""
+    world = (scene or {}).get("rooms") or {}
+    return [edge for x, y in ((str(a), str(b)), (str(b), str(a)))
+            for edge in ((world.get(x) or {}).get("adjacent") or ())
+            if isinstance(edge, dict) and str(edge.get("to")) == y]
+
+
+#: THE OWNER'S, NOT YET ANSWERED (round two's review, 2026-10-09): whether code may
+#: give a doorway the world already holds WITH NO BEARING its first wall,
+#: when the designer writes it again from both rooms on walls that are not
+#: opposites (chat 166's turn 26: the Gale house door, held bearingless since
+#: turn 22, written `s` from the house and from its landing again). Off --
+#: today's rule -- the far-side derivation never touches a doorway the world
+#: holds, bearing or none (`_world_holds_doorway`), and the merge leaves it
+#: as it was. On, it skips only a held doorway that carries a bearing from
+#: either side, so a held bearingless one is derived like a new one -- and
+#: taken back, like any derivation, when that lays one room onto another.
+DERIVE_FAR_SIDE_OF_A_HELD_BEARINGLESS_DOORWAY = False
+
+
+def _settled_for_the_far_side(scene, a, b) -> bool:
+    """Whether the far-side derivation leaves the doorway between `a` and
+    `b` as the world holds it (`_derive_far_bearings`): any doorway the
+    world holds, or -- with `DERIVE_FAR_SIDE_OF_A_HELD_BEARINGLESS_DOORWAY`
+    -- only one the world holds with a bearing."""
+    from world.spatial import normalize_bearing
+    held = _held_doorway_edges(scene, a, b)
+    if not held or not DERIVE_FAR_SIDE_OF_A_HELD_BEARINGLESS_DOORWAY:
+        return bool(held)
+    return any(normalize_bearing(edge.get("dir")) for edge in held)
+
+
+def _placed_by_the_designer(edge, code_wrote=None) -> bool:
+    """Whether a doorway's place along its wall is the designer's own: an
+    `offset` or a `cell` on the edge that code did not write. `code_wrote`
+    is the `(field, value, shape)` `_place_doorways` recorded for this edge,
+    if any."""
+    from world.spatial import normalize_cell, normalize_offset
+    if normalize_cell(edge.get("cell")) is not None:
+        return True                     # code writes an offset, never a cell
+    if normalize_offset(edge.get("offset")) is None:
+        return False
+    return not (code_wrote and code_wrote[0] == "offset"
+                and edge.get("offset") == code_wrote[1])
+
+
+def _place_doorways(scene, draft, placed_by_code, reading=None):
+    """TWO DOORWAYS NEVER STAND ON ONE PLACE OF A WALL BY ACCIDENT. A doorway
+    the draft writes with no place of the designer's own sits at a seeded
+    cell of its wall, and two seeded onto the same cells were a check row the
+    designer spent a step moving (chat 166's turn 26: the Gale house
+    landing's door to the house and its stair to the low walk, one north
+    wall). Code gives the later one the free place along its wall nearest
+    where it stood (`spatial_pack.doorway_places`), written as the edge's
+    `offset` ONCE; an `offset` or `cell` the designer wrote always wins, a
+    doorway the world already holds is never moved, a whole open side holds
+    any other opening, and a place that would lay one room onto another is
+    not written. Recorded in `placed_by_code` under
+    `edge:<to>` and taken back when the edge's wall or either room's extent
+    changes. Returns what it placed, in words for the designer."""
+    from world.spatial import doorway_places, normalize_cell, normalize_offset
+    rooms = draft.get("rooms") or {}
+
+    def edge_at(rid, to):
+        for i, edge in enumerate((rooms.get(rid) or {}).get("adjacent") or ()):
+            if isinstance(edge, dict) and str(edge.get("to")) == to:
+                return i, edge
+        return None, None
+
+    merged = _merge_or_none(scene, draft, reading)
+    if merged is None:
+        return []
+    for (rid, key), (field, value, shape) in list(placed_by_code.items()):
+        if not str(key).startswith("edge:"):
+            continue
+        i, edge = edge_at(rid, str(key)[5:])
+        if edge is None or edge.get(field) != value:
+            placed_by_code.pop((rid, key))
+            continue
+        try:
+            same = _edge_shape(merged, rid, edge) == shape
+        except Exception:
+            same = True
+        if not same:
+            rooms[rid]["adjacent"][i] = {k: v for k, v in edge.items() if k != field}
+            placed_by_code.pop((rid, key))
+    movable = [(rid, str(edge["to"])) for rid, room in rooms.items() if isinstance(room, dict)
+               for edge in room.get("adjacent") or ()
+               if isinstance(edge, dict) and edge.get("to") and edge.get("drop") is not True
+               and normalize_offset(edge.get("offset")) is None
+               and normalize_cell(edge.get("cell")) is None
+               and not _world_holds_doorway(scene, rid, str(edge["to"]))]
+    if not movable:
+        return []
+    merged = _merge_or_none(scene, draft, reading)
+    if merged is None:
+        return []
+    try:
+        places = doorway_places(merged, movable)
+    except Exception:
+        return []
+    if not places:
+        return []
+    # TAKEN BACK ONCE, NOT AT EVERY CHECK: places the world refused are not
+    # tried again until the draft's layout changes (`_layout_key`).
+    tried = None
+    if reading is not None:
+        tried = ("doorways", tuple(sorted(places.items())), _layout_key(draft, merged))
+        if tried in reading.withdrawn:
+            return []
+    before = _plane_rows(scene, draft, reading)
+    applied = []
+    for (rid, to), frac in places.items():
+        i, edge = edge_at(rid, to)
+        if edge is None:
+            continue
+        rooms[rid]["adjacent"][i] = dict(edge, offset=frac)
+        applied.append((rid, to, i, edge))
+    merged = None if _plane_rows(scene, draft, reading) - before \
+        else _merge_or_none(scene, draft, reading)
+    if merged is None:
+        for rid, _to, i, edge in applied:
+            rooms[rid]["adjacent"][i] = edge
+        if tried is not None:
+            reading.withdrawn.add(tried)
+        return []
+    notes = []
+    for rid, to, i, _edge in applied:
+        edge = rooms[rid]["adjacent"][i]
+        try:
+            shape = _edge_shape(merged, rid, edge)
+        except Exception:
+            shape = None
+        placed_by_code[(rid, "edge:" + to)] = ("offset", edge["offset"], shape)
+        notes.append(f"{rid}: its doorway to {to} stood on the same cells as another "
+                     f"doorway of its wall, so the engine set that edge's offset to "
+                     f"{edge['offset']} -- the same wall, the nearest free place")
+    return notes
+
+
+#: Check rows that say rooms land on one another when laid out by their
+#: bearings: a far side's derived bearing that brings one is not written
+#: (`_derive_far_bearings`).
+_PLANE_ROWS = frozenset({"rooms_overlap_when_placed", "site_plan_overlap"})
+
+
+def _plane_rows(scene, draft, reading=None) -> set:
+    """The check's rows that lay a room onto another, as comparable keys."""
+    from world.spatial import room_layout_lint
+    try:
+        rows = reading.rows(draft) if reading is not None \
+            else room_layout_lint(_merged(scene, draft), prev_scene=scene)
+    except Exception:
+        return set()
+    return {json.dumps(row, sort_keys=True, default=str) for row in rows
+            if row.get("kind") in _PLANE_ROWS}
+
+
+def _derive_far_bearings(scene, draft, owed, reading=None, placed_by_code=None):
+    """THE FAR SIDE OF A DOORWAY FOLLOWS THE PLACE BEING DESIGNED. The card
+    says a doorway is written on the place being designed and never again on
+    the room it joins, because the engine derives the far side. When the draft
+    writes it on both, on a level way, with bearings that are not opposites,
+    the merge drops BOTH ("dropped rather than guessed",
+    `spatial_orientation.normalize_scene_bearings`) and the doorway has no
+    wall. So the far room's copy is set to the opposite of the owed place's
+    own, and the designer is told. A way up or down keeps each floor's wall
+    (the lint's rule), and a pair where both rooms or neither is owed is left
+    as written.
+
+    NEVER A DOORWAY THE WORLD ALREADY HOLDS (`_world_holds_doorway`). Re-bearing
+    the far copy turns a one-sided re-declaration of a settled doorway into a
+    matching two-sided one, which the merge's shield then lets through
+    (`_shield_standing_bearings` refuses only the one-sided kind): a parlour's
+    east door to the hall, drafted `s` from both rooms, became a south door
+    on the parlour and a north one on the hall -- every heading, sight line
+    and layout through it moved, even where the designer's own copy of the
+    far side agreed with the world (round one's review, 2026-10-08). Settled
+    geometry is the shield's to arbitrate. (Whether a doorway the world holds
+    with no bearing at all may be given its first wall this way is the
+    owner's: `DERIVE_FAR_SIDE_OF_A_HELD_BEARINGLESS_DOORWAY`, off.)
+
+    NEVER A FAR COPY THE DESIGNER PLACED. An `offset` or a `cell` the
+    designer wrote on the far room's copy is a place on THAT wall; turning
+    the copy to another wall carried it there, so a doorway placed a fifth of
+    the way along a house's east wall became one a fifth of the way along its
+    north wall (round two's review, 2026-10-09). Such a pair is left as
+    written, as `_place_doorways` leaves every place the designer wrote --
+    and the merge keeps neither bearing, as it always did. An offset code
+    wrote itself (`placed_by_code`) is no such place: it follows the wall.
+
+    NOT WHERE IT LAYS ONE ROOM ONTO ANOTHER. The Gale house's door, written
+    `s` from the house and from its landing in chat 166's turns 22 and 26,
+    was merged bearingless; given its wall, the one-plane layout puts the
+    landing -- up a stair from the low walk, though written on the walk's
+    storey -- onto the walk, a row the designer cannot clear while the lint
+    lays every storey on one plane. So a derivation that brings such a row is
+    taken back, and the doorway stays as the merge leaves it -- ONCE: with
+    the design run's `reading`, what was taken back is not tried again until
+    the draft's layout changes (`_layout_key`), where it had cost two merges
+    and four whole checks at every check of those two beats, about 0.6 s
+    each on the 33-room town. Returns what it set.
+
+    A draft the merge cannot take is left alone: the check names why
+    (`_merge_or_none`)."""
+    from world.spatial import normalize_bearing, normalize_vertical, opposite_bearing
+    rooms = draft.get("rooms") or {}
+    owed = {str(rid) for rid in owed or ()}
+    placed_by_code = placed_by_code if placed_by_code is not None else {}
+    changes = []
+    for rid in sorted(owed):
+        room = rooms.get(rid)
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or ():
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            to = str(edge["to"])
+            far = rooms.get(to)
+            mine = normalize_bearing(edge.get("dir"))
+            if to in owed or not isinstance(far, dict) or not mine \
+                    or normalize_vertical(edge.get("vertical")) \
+                    or _settled_for_the_far_side(scene, rid, to):
+                continue
+            edges = far.get("adjacent") or []
+            for i, back in enumerate(edges):
+                if not isinstance(back, dict) or str(back.get("to")) != rid:
+                    continue
+                theirs = normalize_bearing(back.get("dir"))
+                want = opposite_bearing(mine)
+                if theirs and want and theirs != want \
+                        and not normalize_vertical(back.get("vertical")) \
+                        and not _placed_by_the_designer(
+                            back, placed_by_code.get((to, "edge:" + rid))):
+                    changes.append((edges, i, back, dict(back, dir=want),
+                                    f"{to}'s doorway to {rid} set to {want}, opposite the "
+                                    f"{mine} that {rid} gives it: a doorway is written on "
+                                    f"the place being designed, and its far side follows",
+                                    (rid, to, mine, theirs)))
+                break
+    if not changes:
+        return []
+    merged = _merge_or_none(scene, draft, reading)
+    if merged is None:
+        return []
+    tried = None
+    if reading is not None:
+        tried = ("far sides", tuple(change[-1] for change in changes),
+                 _layout_key(draft, merged))
+        if tried in reading.withdrawn:
+            return []
+    before = _plane_rows(scene, draft, reading)
+    for edges, i, _old, new, _note, _pair in changes:
+        edges[i] = new
+    if _plane_rows(scene, draft, reading) - before:
+        for edges, i, old, _new, _note, _pair in changes:
+            edges[i] = old
+        if tried is not None:
+            reading.withdrawn.add(tried)
+        return []
+    return [note for _edges, _i, _old, _new, note, _pair in changes]
 
 
 def _fit(value, limit):
@@ -528,12 +1120,15 @@ def _trial_shapes(place):
     return shapes
 
 
-def _doorways_that_fit(scene, rid, place, hosts, deadline, draft=None):
+def _doorways_that_fit(scene, rid, place, hosts, deadline, draft=None, left=None,
+                       named=()):
     """Where a NEW place's doorway can go: each free wall of each host,
     tried by laying the place there alone and asking the engine's own
-    layout check. A wall is kept when the check names nothing new between
-    rooms and no bearing anywhere is lost (a doorway laid on a wall another
-    doorway holds can drop both bearings, and the check then reads clean).
+    layout check. A wall is kept when the check holds no row the world does
+    not, but about the place's own interior, and no bearing anywhere is lost
+    (a doorway laid on a wall another doorway holds can drop both bearings,
+    and the check then reads clean) -- so every wall offered is one the
+    designer's own check (`_check`) passes, the place standing there alone.
 
     Without `draft`, the place is tried at every shape `_trial_shapes`
     gives it. With `draft`, it is tried as DRAFTED -- its own extent and
@@ -541,9 +1136,38 @@ def _doorways_that_fit(scene, rid, place, hosts, deadline, draft=None):
     doorways -- which is what the check hands back when the place stopped
     fitting where its doorways put it.
 
+    A TRY COSTS ONE ROOM, NOT A TOWN, WHERE THE CHECK'S OWN WALKS SAY SO. The
+    check's walks of the scene are read ONCE a search (`layout_index`), and
+    each shape is laid against them with nothing but the place added
+    (`leaf_rows`), which answers exactly as the whole check would -- or says
+    it cannot, and the whole check answers instead: when the place would
+    start a walk of its own and re-lay its host's part of the world (its id
+    sorts first, or the host is a room the walk could not place), or it is
+    not a leaf. A wall that passes is put through the REAL merge, whose rules
+    have the last word -- a doorway the merge strips (onto the inside of a
+    body or a boat, whose way in is derived), or whose bearing it drops, is
+    no fit -- and judged on the merged world the same way: by the walks
+    where the merge changed nothing but the place, by the whole check
+    otherwise. On chat 166's 33-room turn-22 checkpoint the old try -- a
+    copy and a merge of the town and two whole checks -- cost about 0.19 s,
+    so the 1.5 s search finished 10 of its 63 tries and offered 2 of the 12
+    walls that fit. Taking every row naming the place for the whole of what
+    it adds (round one of 2026-10-08) offered walls the check then refused:
+    7 of chat 160 turn 13's 33, each a standing collision re-reported once a
+    doorway onto a room the walk never placed re-laid its corridors.
+
+    `hosts` is tried in order -- the caller puts the rooms the draft and the
+    prose name first -- and fits on a room in `named` come first, then a
+    straight wall before a corner. When the time runs out the rooms not yet
+    tried go into `left` (a list), so the search says it stopped instead of
+    reading as "nothing fits".
+
     Returns `[{"to", "dir", "their_wall"}]`, `dir` being the place's own
     wall -- the edge exactly as the place writes it."""
-    from world.spatial import merge_scene_with_diff, opposite_bearing, room_layout_lint
+    from world.site_plan import room_site
+    from world.spatial import (layout_index, layout_row_key, leaf_rows,
+                               merge_scene_with_diff, opposite_bearing,
+                               room_layout_lint)
     if draft is not None:
         alone = copy.deepcopy(draft)
         record = dict(alone["rooms"].get(rid) or {})
@@ -554,42 +1178,183 @@ def _doorways_that_fit(scene, rid, place, hosts, deadline, draft=None):
                 other["adjacent"] = [e for e in other["adjacent"] if not (
                     isinstance(e, dict) and str(e.get("to")) == rid)]
         base = _merged(scene, alone)
-        shapes = [None]             # the drafted record is already in `base`
+        drafted = dict((base.get("rooms") or {}).get(rid) or {})
+        shapes = [None]
     else:
-        base = scene or {}
+        # THE WORLD AS THE MERGE HOLDS IT. What the merge does to the world
+        # itself -- deriving a room's site, stripping a doorway written onto
+        # the inside of a body or a thing -- it does to every trial alike,
+        # so every trial is judged against the world it merges into. Judged
+        # against the world as stored, a bearing the merge drops on its own
+        # was a bearing "lost" by every wall: chat 160's turn-2 world held a
+        # doorway onto the lift car's inside, and the search offered no wall
+        # anywhere for either place it was asked about.
+        base = merge_scene_with_diff(scene or {}, {"rooms": {}})
+        drafted = None
         shapes = _trial_shapes(place)
+    rooms = base.get("rooms") or {}
     before = _bearings(base)
+    index = layout_index(base)
+    standing = []           # the world's rows as keys, read once, when first needed
     fits = []
-    for host in hosts:
+    hosts = [h for h in dict.fromkeys(hosts or ()) if h in rooms and h != rid]
+
+    def added(trial):
+        """The whole check's rows on `trial` that the world does not hold,
+        but those about the place's own interior: the designer's to arrange,
+        saying nothing about where it stands."""
+        if not standing:
+            standing.append({layout_row_key(row) for row in room_layout_lint(base)})
+        return [row for row in room_layout_lint(trial)
+                if row.get("room") != rid and layout_row_key(row) not in standing[0]]
+
+    def refused(trial, host):
+        """`(refused, by_the_walks)`: the check's verdict on `trial`, from the
+        walks when `leaf_rows` can give it, else from the whole check."""
+        rows = leaf_rows(trial, rid, host, index)
+        if rows is None:
+            return bool(added(trial)), False
+        return any(row.get("room") != rid for row in rows), True
+
+    def lost(merged, host, mine):
+        after = _bearings(merged)
+        return after.get((rid, host)) != mine \
+            or any(was and not after.get(key) for key, was in before.items())
+
+    def merge(record):
+        return merge_scene_with_diff(base, {"rooms": {rid: record}})
+
+    for i, host in enumerate(hosts):
+        # AN INSIDE HOLDS NO NEW DOORWAY: its way in is derived from the body
+        # or thing around it, and the merge strips any edge written onto it
+        # (the card's A ROOM PARENTED TO AN ENTITY). Its walls are not tried.
+        if (rooms.get(host) or {}).get("parent_entity"):
+            continue
         taken = _taken_walls(base, host)
+        # A HOST ON A SITE PLAN (`world/site_plan`): the merge may stand the
+        # place on that plan as well, and two rooms one plan places are where
+        # it put them, never a collision (`spatial_lint._collision_rows`).
+        # The screen lays the place out unmerged, with no site, so a wall it
+        # refuses there is put to the merge before it is refused: judged
+        # unmerged, a few walls the designer's check passes were lost (round
+        # two's review, 2026-10-09: 2 of 1,482 on seeded towns with storeys,
+        # 4 of 848 on the refit path). A site only ever spares a collision,
+        # so a wall the screen passes stands either way.
+        sited = bool(room_site(base, host))
         for wall in _WALLS_TRIED:
             if time.time() > deadline:
-                return fits
+                if left is not None:
+                    left.extend(hosts[i:])
+                return _ordered_fits(fits, named)
             if wall in taken:
                 continue
             mine = opposite_bearing(wall)
             edge = {"to": host, "barrier": "open", "dir": mine}
-            ok = True
-            for shape in shapes:
-                trial = dict(shape or {}, adjacent=[edge])
-                try:
-                    merged = merge_scene_with_diff(copy.deepcopy(base), {"rooms": {rid: trial}})
-                    rows = room_layout_lint(merged, prev_scene=base)
-                except Exception:
-                    ok = False
-                    break
-                # The place's own interior is the designer's to arrange; a
-                # row about it alone says nothing about where it stands.
-                rows = [row for row in rows if row.get("room") != rid]
-                after = _bearings(merged)
-                if rows or after.get((rid, host)) != mine \
-                        or any(was and not after.get(key) for key, was in before.items()):
-                    ok = False
-                    break
+            records = [dict(drafted if drafted is not None else shape or {},
+                            adjacent=[edge]) for shape in shapes]
+            merges = {}
+
+            def merged_trial(n):
+                if n not in merges:
+                    merges[n] = merge({"adjacent": [edge]} if drafted is not None
+                                      else records[n])
+                return merges[n]
+
+            try:
+                # Every shape laid against the check's walks first. Then ONE
+                # real merge, whose rules on the doorway itself -- stripped,
+                # or its bearing dropped -- do not depend on the shape; where
+                # it changed any room but the place, the walks the screen read
+                # are not the merged world's, and every shape is merged and
+                # put to the whole check.
+                ok, walked = True, True
+                for n, record in enumerate(records):
+                    no, by_walks = refused(dict(base, rooms=dict(rooms, **{rid: record})), host)
+                    if no and sited:
+                        trial = merged_trial(n)
+                        no, by_walks = lost(trial, host, mine) or bool(added(trial)), False
+                    walked = walked and by_walks
+                    if no:
+                        ok = False
+                        break
+                if ok:
+                    merged = merged_trial(0)
+                    if lost(merged, host, mine):
+                        ok = False
+                    elif walked and _only_the_place_changed(base, merged, rid):
+                        ok = not refused(merged, host)[0]
+                    else:
+                        ok = not added(merged)
+                        if ok and not _only_the_place_changed(base, merged, rid):
+                            for n in range(1, len(records)):
+                                other = merged_trial(n)
+                                if lost(other, host, mine) or added(other):
+                                    ok = False
+                                    break
+            except Exception:
+                ok = False
             if ok:
                 fits.append({"to": host, "dir": mine, "their_wall": wall})
-    # A straight wall before a corner, whichever room it is on.
-    return sorted(fits, key=lambda f: len(f["their_wall"]) > 1)
+    return _ordered_fits(fits, named)
+
+
+def _only_the_place_changed(base, merged, rid) -> bool:
+    """Whether the merge left every room but `rid`, and the passages the
+    rooms' doorways read through, as `base` holds them: the walks of `base`
+    are then the merged world's, but for the place."""
+    was = (base or {}).get("rooms") or {}
+    now = (merged or {}).get("rooms") or {}
+    if set(was) - {rid} != set(now) - {rid}:
+        return False
+    if (base or {}).get("passages") != (merged or {}).get("passages"):
+        return False
+    return all(now[key] == room for key, room in was.items() if key != rid)
+
+
+def _ordered_fits(fits, named=()):
+    """The rooms the draft and the prose name first, then -- whichever room
+    it is on -- a straight wall before a corner."""
+    named = set(named or ())
+    return sorted(fits, key=lambda f: (f["to"] not in named, len(f["their_wall"]) > 1))
+
+
+def _named_in_prose(scene, prose, owed=()):
+    """The standing rooms the prose names, by their name or their id, in the
+    order it first names them -- matched as the engine's own names, the way
+    `_owed_names` matches an owed place, never as words with a meaning. The
+    landing in chat 166's turn 22 stood between the low walk and the Gale
+    house, both named in the prose and neither among the six rooms the bodies'
+    positions put in `surroundings`, so neither was tried."""
+    import re
+    import unicodedata
+
+    def words(text):
+        text = unicodedata.normalize("NFKC", str(text or "")).casefold()
+        return re.findall(r"[^\W_]+", text)
+
+    said = words(prose)
+    if not said:
+        return []
+    flat = "".join(said)
+    owed = {str(rid) for rid in owed or ()}
+    found = {}
+    for rid, room in ((scene or {}).get("rooms") or {}).items():
+        if str(rid) in owed or not isinstance(room, dict):
+            continue
+        for name in (room.get("name"), str(rid).replace("_", " ")):
+            tokens = words(name)
+            if not tokens:
+                continue
+            if all(t.isascii() for t in tokens):
+                runs = [i for i in range(len(said) - len(tokens) + 1)
+                        if said[i:i + len(tokens)] == tokens]
+                at = len("".join(said[:runs[0]])) if runs else -1
+            else:
+                # A script written without spaces is one run of letters.
+                at = flat.find("".join(tokens))
+            if at >= 0:
+                found[str(rid)] = min(at, found.get(str(rid), at))
+    return sorted(found, key=lambda rid: (found[rid], rid))
 
 
 def _fold_name(text):
@@ -692,6 +1457,9 @@ def _groundwork(scene, payload, owed, record):
     reserved = payload.get("reserved_places") if isinstance(payload.get("reserved_places"), dict) else {}
     placing = {}
     deadline = t0 + ROOM_PLACEMENT_SECONDS
+    named = _named_in_prose(scene, payload.get("prose"), owed)
+    hosts = list(dict.fromkeys(named + list(around)))
+    untried = {}
     for rid, place in reserved.items():
         if rid in rooms:
             continue                        # standing: its doorways are in the world
@@ -700,23 +1468,35 @@ def _groundwork(scene, payload, owed, record):
         if floor:
             entry["size"] = str(place.get("size")).strip().casefold()
             entry["floor_square_paces"] = floor
+        left = []
         try:
             entry["doorways_that_fit"] = _doorways_that_fit(
-                scene, rid, place, around, deadline)
+                scene, rid, place, hosts, deadline, left=left, named=named)
         except Exception:
             entry["doorways_that_fit"] = []
+        if left:
+            entry["not_tried"] = {"rooms": left, "why": _NOT_TRIED}
+            untried[rid] = len(left)
         placing[rid] = entry
     if placing:
         out["placing"] = placing
     record["groundwork"] = {
-        "surroundings": around, "drawn": drawn,
+        "surroundings": around, "drawn": drawn, "named": named,
         "doorways_that_fit": {rid: len(e.get("doorways_that_fit") or ()) for rid, e in placing.items()},
         "seconds": round(time.time() - t0, 3)}
+    if untried:
+        record["groundwork"]["rooms_not_tried"] = untried
     if "rooms" in out:
         record["groundwork"]["records"] = sorted(out["rooms"])
         record["groundwork"]["records_left_on_the_map"] = len(ledger) - len(out["rooms"])
     return out
 
+
+#: What the designer is told when the doorway search stopped before trying
+#: every room: an untried room may hold a doorway as well as any offered.
+_NOT_TRIED = ("the engine's time for trying walls ran out before these rooms; "
+              "a doorway may fit on them too, so the walls offered are not all "
+              "the walls there are")
 
 #: Check rows about where rooms stand relative to one another -- the kinds a
 #: doorway in the wrong place produces.
@@ -740,32 +1520,39 @@ def _misplaced(rows, rid, hosts):
     return False
 
 
-def _refit(scene, draft, rows, places, hosts):
+def _refit(scene, draft, rows, places, hosts, named=(), left=None):
     """`{place: doorways that fit it as drafted}` for each new place the
     check says stands where it cannot -- the concrete way out of a
     contradiction a designer otherwise circles (the 2026-09-27 yard: five
-    steps round a placement the barracks already held)."""
+    steps round a placement the barracks already held). The rooms the draft
+    joins the place to are tried first, then the ones the prose names, then
+    the surroundings; `left`, a dict, receives the rooms a search ran out of
+    time before trying."""
     out = {}
     deadline = time.time() + ROOM_PLACEMENT_SECONDS
+    standing = (scene or {}).get("rooms") or {}
     for rid in places:
         if rid not in (draft.get("rooms") or {}):
             continue
         own = [str(e.get("to")) for e in (draft["rooms"][rid].get("adjacent") or ())
-               if isinstance(e, dict) and e.get("to")]
-        near = list(dict.fromkeys(list(hosts) + [to for to in own
-                                                 if to in ((scene or {}).get("rooms") or {})]))
+               if isinstance(e, dict) and e.get("to") and str(e.get("to")) in standing]
+        near = list(dict.fromkeys(own + list(named or ()) + list(hosts)))
         if not _misplaced(rows, rid, near):
             continue
+        untried = []
         try:
-            out[rid] = _doorways_that_fit(scene, rid, None, near, deadline, draft=draft)
+            out[rid] = _doorways_that_fit(scene, rid, None, near, deadline, draft=draft,
+                                          left=untried, named=own + list(named or ()))
         except Exception:
             continue
+        if untried and left is not None:
+            left[rid] = untried
     return out
 
 
 # ---- what code does after every step -------------------------------------------
 
-def _agree_sizes(scene, draft):
+def _agree_sizes(scene, draft, reading=None):
     """Set each drafted room's size word to the one its extent measures --
     the extent the WORLD will hold, read off the merge. The engine derives a
     room's size from its extent (`size_from_extent`), so the word is only
@@ -782,7 +1569,7 @@ def _agree_sizes(scene, draft):
     if not any(isinstance(r, dict) and (r.get("size") or r.get("extent")) for r in rooms.values()):
         return changed
     try:
-        held_rooms = _merged(scene, draft).get("rooms") or {}
+        held_rooms = _merge_of(scene, draft, reading).get("rooms") or {}
     except Exception:
         return changed
     for rid, room in rooms.items():
@@ -840,7 +1627,7 @@ def _record_text(scene, rid):
     return "\n".join(lines)
 
 
-def _finished(prose, scene, draft, owed, language, record):
+def _finished(prose, scene, draft, owed, language, record, reading=None):
     """`(finished, notes)`: the decision model's reading of whether every
     owed room holds what the prose puts in it -- a part of the place the
     record never mentions, or a feature someone is placed at that is not
@@ -855,7 +1642,9 @@ def _finished(prose, scene, draft, owed, language, record):
         texts = {key: prose_contract_text(key, language) for key in _DONE_QUESTIONS}
     except Exception:
         return False, []
-    merged = _merged(scene, draft)
+    merged = _merge_or_none(scene, draft, reading)
+    if merged is None:
+        return False, []
     rooms = merged.get("rooms") or {}
     if not owed or any(not str((rooms.get(rid) or {}).get("desc") or "").strip() for rid in owed):
         return False, []
@@ -909,22 +1698,51 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None,
     standing = (scene or {}).get("rooms") or {}
     new_places = [rid for rid in owed if rid not in standing]
     hosts = list((record.get("groundwork") or {}).get("surroundings") or [])
+    named = list((record.get("groundwork") or {}).get("named") or [])
     owed_names = _owed_names(scene, payload, owed)
+    # The places code wrote for new fixtures this run (`_pack`).
+    placed_by_code = {}
+    # The world's rows and the draft's merge, shared by every pass of every
+    # check of this run (`_Reading`).
+    reading = _Reading(scene)
+
+    def packed(rooms=None, settle=False):
+        notes = _pack(scene, draft, placed_by_code, rooms, settle, reading=reading)
+        if notes:
+            record["packed"] = record.get("packed", 0) + len(notes)
+        return notes
 
     def checked():
         # Every check sets the size words first: the extent decides a
         # room's size, so a disagreement is only ever the label's.
-        agreed = _agree_sizes(scene, draft)
+        agreed = _agree_sizes(scene, draft, reading)
+        derived = _derive_far_bearings(scene, draft, owed, reading, placed_by_code)
+        if derived:
+            record["bearings_derived"] = record.get("bearings_derived", 0) + len(derived)
+        doorways = _place_doorways(scene, draft, placed_by_code, reading)
+        if doorways:
+            record["doorways_placed"] = record.get("doorways_placed", 0) + len(doorways)
+        placed = packed() + doorways
         rows = []
-        result = _check(scene, draft, owed, rows_out=rows)
+        result = _check(scene, draft, owed, rows_out=rows, settled={
+            key for key in placed_by_code if not str(key[1]).startswith("edge:")},
+            reading=reading)
         if agreed:
             result = dict(result, sizes_agreed=agreed)
+        if derived:
+            result = dict(result, bearings_derived=derived)
+        if placed:
+            result = dict(result, placed_by_the_engine=placed)
         # A new place that stands where it cannot gets the walls where it
         # would stand, as drafted -- the way out, not only the problem.
-        refit = _refit(scene, draft, rows, new_places, hosts) if rows else {}
+        untried = {}
+        refit = _refit(scene, draft, rows, new_places, hosts, named, untried) if rows else {}
         if refit:
             result = dict(result, doorways_that_fit=refit)
             record["refits"] = record.get("refits", 0) + 1
+        if untried:
+            result = dict(result, doorways_not_tried={
+                rid: {"rooms": left, "why": _NOT_TRIED} for rid, left in untried.items()})
         return result
 
     # A PREPARED design may already be the answer: checked and read against
@@ -950,11 +1768,12 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None,
         if seed_check and last_check.get("clean"):
             last_check = dict(seed_check, clean=False)
         if last_check.get("clean") and prose:
-            finished, notes = _finished(prose, scene, draft, owed, language, record)
+            finished, notes = _finished(prose, scene, draft, owed, language, record,
+                                        reading)
             if finished:
                 record.update(steps=0, calls=0, stopped="complete",
                               seconds=round(time.time() - started, 3),
-                              final_check=_check(scene, draft, owed))
+                              final_check=_check(scene, draft, owed, reading=reading))
                 return draft
             if notes:
                 record["still_missing_said"] = 0
@@ -999,23 +1818,38 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None,
                             renamed, rid = rid, same
                     draft["rooms"][rid] = _merge_room(draft["rooms"].get(rid), args["room"])
                     touched = unchecked = True
+                    # Each new fixture stands along its own wall before the
+                    # plan is drawn, so the plan shows where it will stand.
+                    placed = packed([rid], settle=True)
                     # The plan comes back with every draft: seeing the room is
                     # part of drafting it, not a step spent asking to look.
                     try:
-                        plan = render_room(_merged(scene, draft), rid)
+                        plan = render_room(reading.merged(draft), rid)
                     except Exception as exc:
                         plan = {"refused": f"could not draw the room: {exc}"}
                     result = {"drafted": rid, "fields": sorted(draft["rooms"][rid]),
                               "plan": plan}
+                    if placed:
+                        result["placed_by_the_engine"] = placed
                     if renamed:
                         result["drafted_as"] = (f"{renamed!r} is the place you owe as {rid!r}: "
                                                 f"the id you were given is fixed")
             elif tool == "view_room":
-                result = render_room(_merged(scene, draft), str(args.get("room_id") or ""))
+                packed([str(args.get("room_id") or "")], settle=True)
+                try:
+                    result = render_room(reading.merged(draft), str(args.get("room_id") or ""))
+                except Exception as exc:
+                    result = {"refused": f"could not draw the room: {exc}"}
             elif tool == "inspect_rooms":
-                result = _fit_inspection(_inspect(
-                    _merged(scene, draft), args.get("room_ids") or [],
-                    whole=True))
+                # A draft the merge cannot take is the designer's to fix, never
+                # the end of the run: the check says why (`_merge_or_none`).
+                try:
+                    result = _fit_inspection(_inspect(
+                        reading.merged(draft), args.get("room_ids") or [],
+                        whole=True))
+                except Exception as exc:
+                    result = {"refused": f"the draft could not be merged into the "
+                                         f"world: {exc}"}
             elif tool == "check":
                 result = last_check = checked()
                 unchecked = False
@@ -1070,7 +1904,8 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None,
         # FINISHED IS THE DECISION MODEL'S CALL once the check is clean: no
         # step is spent saying so. Unfinished, what is missing comes back.
         if touched and clean and prose:
-            finished, notes = _finished(prose, scene, draft, owed, language, record)
+            finished, notes = _finished(prose, scene, draft, owed, language, record,
+                                        reading)
             if finished:
                 stopped = "complete"
                 break
@@ -1096,7 +1931,7 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None,
             transcript.append({"step": step, "tool": "done", "by": "engine", "args": {},
                                "result": dict(last_check, refused="not finished: the "
                                               "check is not clean")})
-    final = _check(scene, draft, owed)
+    final = _check(scene, draft, owed, reading=reading)
     record.update(steps=step, calls=sum(1 for entry in transcript if not entry.get("by")),
                   stopped=stopped, seconds=round(time.time() - started, 3),
                   final_check=final)

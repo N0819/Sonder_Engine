@@ -513,6 +513,49 @@ def _wall_cells(grid: RoomGrid, bearing: str, offset: int, length: int) -> list:
     return [rim[(offset + i) % len(rim)] for i in range(length)]
 
 
+def _wall_slot(grid: RoomGrid, bearing: str, anchor: dict, fp: str,
+               seed: int) -> tuple:
+    """`(along, length, offset, source)` of an anchor laid along the wall
+    `bearing` names: the wall's own length, the cells the anchor takes along
+    it, where along it its first cell stands, and what put it there --
+    "side" (an open side's whole wall), "offset" (an authored place along
+    the wall) or "seed" (the formula). The ONE statement of that arithmetic,
+    for `_place_anchors` and for every reader that must agree with it: the
+    packer that keeps a new fixture on its wall (`spatial_pack`) and the
+    lint's per-height wall count (`spatial_lint.wall_loads`)."""
+    # The wall's OWN length, not the grid's side: on a wide room the north
+    # anchor has the long wall to sit on and the east anchor the short one.
+    # For a square the two are the same number.
+    along = len(grid.rim(bearing)) if bearing in ("n", "s", "e", "w") \
+        else grid.side
+    length = {"point": 1, "small": 2, "large": 2,
+              "run": max(2, along - 2)}[fp]
+    # A doorway's `width` in paces (the passage record's,
+    # `DESIGN_ROOM_FIDELITY.md` §5, copied onto the implicit door anchor by
+    # `effective_anchors`) is its aperture: that many cells along the wall,
+    # never more than the wall has. Absent, the footprint's table above,
+    # byte for byte.
+    width = anchor.get("width")
+    if anchor.get("implicit") and isinstance(width, (int, float)) \
+            and not isinstance(width, bool) and width >= 1:
+        length = max(1, min(int(width), max(1, along)))
+    # AN OPEN SIDE: the aperture is the whole wall, from its start.
+    if bool(anchor.get("implicit")) and str(width or "") == "wall":
+        return along, max(1, along), 0, "side"
+    placed_at = normalize_offset(anchor.get("offset"))
+    if placed_at is not None and bearing not in ROOM_CORNERS:
+        # An authored place along the wall: the fraction of the positions
+        # the footprint leaves, from the wall's start (`RoomGrid.rim`'s
+        # order), never wrapping. Absent, the seeded placement below, byte
+        # for byte.
+        room_for = max(0, along - length)
+        return (along, length,
+                min(room_for, max(0, int(round(placed_at * room_for)))),
+                "offset")
+    offset = 1 + seed % max(1, along - 2 - (length - 1)) if along > 2 else 0
+    return along, length, offset, "seed"
+
+
 def _inward(bearing: str) -> tuple:
     """The unit step from a wall toward the room's centre."""
     dx, dy = _UNIT.get(opposite_bearing(bearing) or "s", (0, 1))
@@ -603,41 +646,8 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
                 more = [(x + 1, y), (x, y + 1), (x + 1, y + 1)]
             cells += [c for c in more if grid.contains(c)]
         elif bearing:
-            # The wall's OWN length, not the grid's side: on a wide room the
-            # north anchor has the long wall to sit on and the east anchor
-            # the short one. For a square the two are the same number.
-            along = len(grid.rim(bearing)) if bearing in ("n", "s", "e", "w") \
-                else grid.side
-            length = {"point": 1, "small": 2, "large": 2,
-                      "run": max(2, along - 2)}[fp]
-            # A doorway's `width` in paces (the passage record's,
-            # `DESIGN_ROOM_FIDELITY.md` §5, copied onto the implicit door
-            # anchor by `effective_anchors`) is its aperture: that many
-            # cells along the wall, never more than the wall has. Absent,
-            # the footprint's table above, byte for byte.
-            width = anchor.get("width")
-            if anchor.get("implicit") and isinstance(width, (int, float)) \
-                    and not isinstance(width, bool) and width >= 1:
-                length = max(1, min(int(width), max(1, along)))
-            # AN OPEN SIDE: the aperture is the whole wall, from its start.
-            whole_side = bool(anchor.get("implicit")) and str(width or "") == "wall"
-            if whole_side:
-                length = max(1, along)
-            placed_at = normalize_offset(anchor.get("offset"))
-            if whole_side:
-                offset = 0
-                source = "side"
-            elif placed_at is not None and bearing not in ROOM_CORNERS:
-                # An authored place along the wall: the fraction of the
-                # positions the footprint leaves, from the wall's start
-                # (`RoomGrid.rim`'s order), never wrapping. Absent, the
-                # seeded placement below, byte for byte.
-                room_for = max(0, along - length)
-                offset = min(room_for, max(0, int(round(placed_at * room_for))))
-                source = "offset"
-            else:
-                offset = 1 + seed % max(1, along - 2 - (length - 1)) \
-                    if along > 2 else 0
+            _along, length, offset, source = _wall_slot(grid, bearing, anchor,
+                                                        fp, seed)
             cells = _wall_cells(grid, bearing, offset, length)
             # A FIXTURE IS AGAINST ITS WALL UNLESS IT SAYS IT KEEPS A LANE
             # (`lane`, and the note on DEFAULT_LANE for what it replaced and

@@ -212,21 +212,32 @@ and always in the Room's `inspect_contradictions` under `layout`.
 
     kind                          what it read
     reciprocal_bearing_disagrees  A->B is `dir` x and B->A is `dir` y with
-                                  y != opposite(x): the pair `_shield_standing_bearings`
-                                  refuses to re-bear one-sidedly, reported when
-                                  a scene already holds it
-    openings_overlap              two doorways on one wall whose placed door
-                                  cells share a cell
-    wall_overfull                 one wall's anchors need more cells than the
-                                  wall has (point 1, small/large 2, run the
-                                  wall less two)
+                                  y != opposite(x) on a LEVEL way: the pair
+                                  `_shield_standing_bearings` refuses to re-bear
+                                  one-sidedly, reported when a scene already
+                                  holds it. A way up or down is not read: each
+                                  end names its own floor's wall (2026-10-08)
+    openings_overlap              two NARROW doorways on one wall whose placed
+                                  door cells share a cell; a whole open side
+                                  holds any other opening (2026-10-08)
+    wall_overfull                 one wall's anchors at ONE height take more
+                                  paces along its rim than the wall has: each
+                                  the length it is laid at (point 1, small/large
+                                  2, run the wall less two), a large one's
+                                  inward row being floor (2026-10-08; it summed
+                                  every cell of every height until then)
     corner_in_round_room          `parts` (corner-placed) on a `round` room
     l_part_redundant              an `l` whose one part contains the other
     shape_disconnected            a shape whose cells are not one component
+    parts_disconnected            an `l` whose parts stand apart and make no
+                                  one floor
     rooms_overlap_when_placed     placing rooms by bearing with the composite-
                                   field rule (door cells aligned beyond a one-
                                   cell band) lands two rooms on the same cells:
                                   the bearing set cannot be embedded on a plane
+    site_plan_overlap             two rooms of one site plan and storey on the
+                                  same ground (a building over open ground is
+                                  none)
     size_disagrees_with_extent    authored `size` is not the tier `extent` gives
     extent_unreadable             `extent` present and not `{w, d}` in paces
 
@@ -237,6 +248,62 @@ answers F3's class from the geometry side: a plan whose bearings cannot be
 drawn is a plan with a room in the wrong place, and the lint names the pair.
 Where a doorway's two bearings already disagree, the collision that follows
 is that row's consequence and is not reported twice.
+
+**Counted as the engine builds, 2026-10-08** (the procedural-generation round,
+the owner's choice of that day). Three rows fired on valid output and were
+cut after a measurement over every stored scene of the day's play database
+(139 scenes, 166 rows before, 148 after, none added):
+`wall_overfull` now counts a wall per height along its rim (`wall_loads`) --
+the six standing rows it removed are one room, `co_op_office`, copied into
+chats 153, 154 and 156-159: an office chair at floor height under a desk at
+waist height on a four-pace wall; `openings_overlap` holds a whole open side
+compatible with any other opening on its wall (the owner's rule of
+2026-09-15) -- the seven it removed are the low walk's south wall in chat 166
+(three scenes): the reed staithe's and the Gale house landing's open sides
+over each other and over the Gale house door; and `reciprocal_bearing_disagrees`
+no longer reads a way up or down, whose ends `normalize_scene_bearings`
+already lets name two walls -- the five it removed are two stairs: the
+elevator shaft over chat 160's crash site (chats 160-161) and the Turn Tide
+inn's stair to its rooms (chat 166, three scenes). Kept: four pairs of
+narrow doorways seeded onto one cell (chats 22, 27, 84, 165) and the upper
+hallway of chats 160 and 161, two corridor runs at floor height on a
+six-pace wall.
+
+A caller trying one new room in many places (the doorway search) reads the
+whole check's own walks once (`layout_index`: each connected part from its
+smallest id nothing earlier reached, breadth first) and asks `leaf_rows`
+what the room, joined by one doorway, adds. A leaf adds itself and nothing
+else only where the walks say so: laid out with its host's other
+neighbours, it lands on rooms or is landed on, and a later collision that
+now meets it first is renamed onto it (a collision names the first room in
+sorted order its room would land on); but a room whose id sorts before its
+host's walk starts a walk of its own, as does one joined to a room the walk
+could not place, and that walk re-lays the host's whole part in another
+order and can report a standing collision afresh, reversed or via another
+room. `leaf_rows` gives the whole check's VERDICT -- whether the room brings
+a row the scene does not hold, but about its own interior -- or returns None
+and leaves the answer to the check. A room that starts a walk of its own is
+refused where that walk re-reports a standing collision, and left to the
+check where it re-reports none; so is a room that, laid first, would run
+ahead of a walk started between it and its host, and a room that is not a
+leaf. Its rows are the walks' evidence, never the check's own: they
+can name a pair the other way round or by another room, or leave one of the
+check's rows out (326 of 1,184 judged random trials, the verdict agreeing on
+all). Taking the rows naming the room for the whole of what it adds offered
+7 of chat 160 turn 13's walls and 20 of chat 166's that the check then
+refused.
+
+Whether a collision found again -- reversed, or laid out through another
+room, by a walk re-laid in another order -- is the SAME collision is the
+owner's to rule (`LAYOUT_COLLISIONS_COMPARED_BY_PAIR`, off): on, every
+comparison the lint makes (`prev_scene`, `layout_row_key`) keys a collision
+by its two rooms alone, so the commit's once-told warning and the
+designer's check stop reporting one the world already holds; off, a whole
+row is compared, and such a row reads as new. Laid beat by beat over the
+4,108 beats stored in the 2026-10-08 play database's checkpoints, each
+checkpoint against the one before, the once-told warning finds 12 new
+collisions by the whole row and 9 by the pair (the three spared: chat 27
+turn 84, two, and chat 165 turn 2, the chandlery and the boat shed).
 
 ## 4. The backdrop brief (`dressing/backdrops.py`)
 
