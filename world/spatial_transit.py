@@ -281,6 +281,37 @@ def _closed_enclosure_barrier(ent):
     return "closed_door"
 
 
+def _under_way_barrier(ent, transit, phase, target, exterior):
+    """The doorway barrier for a vessel under way (`in_transit`, `arriving`).
+
+    Shut, as it always was, unless the transit itself says the hatch is
+    `open` and the doorway opens onto the room the vessel stands in: then it
+    is open as a docked vessel's is (`_open_enclosure_barrier`). An open boat
+    rowed along the channel it floats on is open to that channel; the
+    Grebe, rowed down it with her hatch written `open` (scratch story 166
+    turns 4598-4599, F92), had a shut door onto it. Deliberately narrow: a
+    hatch the write left unsaid stays shut, `sealed` is shut by its name,
+    and a destination not yet reached is behind a closed door whatever the
+    hatch says -- except that an open vessel `arriving` while it still
+    stands in a room the world holds keeps its doorway onto that room, the
+    dock rewrite's choice (review F7). Of every stored under-way write (176
+    in the play db, 171 in the owner's), 160 in each say `closed` and 11
+    leave the hatch unsaid -- every one a lift or the TARDIS -- and the 5
+    that say `open`, all in the play db, are the Grebe's."""
+    if phase not in _UNDER_WAY_PHASES or not target:
+        return "closed_door"
+    if _transit_hatch(transit) == "open" and _same_room(target, exterior):
+        return _open_enclosure_barrier(ent)
+    return "closed_door"
+
+
+def _transit_hatch(transit):
+    """The hatch word the transit itself carries, folded; "" when the write
+    left it unsaid -- which is not `open`, whatever a docked reader's
+    default is."""
+    return str((transit or {}).get("hatch") or "").strip().casefold()
+
+
 def _link_state(entity) -> Optional[dict]:
     """entity.state.link if present and well-formed: a traversable link
     (portal, gate, wormhole) {rooms: [a, b], phase: open|closed} that, when
@@ -644,7 +675,12 @@ def apply_transit_dock_edges(scene: dict) -> bool:
     - docked + hatch closed/locked -> same edge, barrier closed_door;
     - sealed / in_transit -> exterior edges severed (a closed_door edge to
       transit.route_room only, when one is set -- the shaft/ocean/sky);
-    - arriving -> closed_door edge to transit.destination_room.
+    - arriving -> closed_door edge to transit.destination_room;
+    - in_transit or arriving with the transit's own `hatch` written `open`
+      -> the doorway onto the room the vessel stands in is open as a docked
+      one's is (`_open_enclosure_barrier`): an open boat rowed along a
+      channel is open to the channel, nearing its landing too, which it sees
+      across that channel. A hatch left unsaid stays shut.
 
     Which interior room carries the doorway is remembered via a `dock_exit`
     marker stamped on any interior room seen with an exterior edge (rooms
@@ -762,12 +798,22 @@ def apply_transit_dock_edges(scene: dict) -> bool:
             # room whose ship stood in no room. The door opens once it exists.
             route = str(transit.get("route_room") or "")
             target = route if isinstance(rooms.get(route), dict) else None
-            barrier = "closed_door"
+            barrier = _under_way_barrier(ent, transit, phase, target, exterior)
         elif phase == "arriving":
             destination = str(transit.get("destination_room") or "")
             target = destination if isinstance(rooms.get(destination), dict) \
                 else exterior
-            barrier = "closed_door"
+            # AN OPEN BOAT NEARING ITS LANDING IS STILL ON THE WATER (review
+            # F7, 2026-10-09): with its own hatch written open it stays open
+            # to the room it stands in until it docks, and the landing ahead
+            # is seen across that room, as from any boat on it -- the Grebe,
+            # `arriving` at the stage through the channel, had its deck cut
+            # off from the channel and a shut door onto the stage.
+            if _transit_hatch(transit) == "open" and exterior \
+                    and isinstance(rooms.get(exterior), dict) \
+                    and not _same_room(exterior, destination):
+                target = exterior
+            barrier = _under_way_barrier(ent, transit, phase, target, exterior)
         else:  # docked, or an unrecognized phase read conservatively as docked
             target = exterior
             barrier = (_closed_enclosure_barrier(ent)
@@ -838,8 +884,11 @@ def apply_transit_dock_edges(scene: dict) -> bool:
 # ---------------------------------------------------------------------------
 # A journey's two ends (the owner's ruling, 2026-09-25): where a vehicle sets
 # off from is never where it arrives. Between them it is in the space it moves
-# through -- its route room -- for as long as it likes, and in no room only
-# when nothing has named that space, until the story brings it in.
+# through -- its route room -- for as long as it likes, and in no room when
+# nothing has named that space, until the story brings it in. A journey that
+# names NO OTHER SPACE moves within the room it set off from and stays in it
+# (the owner's ruling, 2026-10-09, D2); one bound for somewhere else is
+# leaving, and is not that.
 # ---------------------------------------------------------------------------
 
 #: Phases in which a vehicle is between its places: it is where its route
@@ -878,17 +927,36 @@ def settle_departures(before: dict, merged: dict) -> bool:
 
     - Setting off (`in_transit` or `arriving`), the room it stood in is kept
       as `transit.departed_from` for the whole journey.
-    - A `destination_room` or `route_room` naming that room is dropped, and a
-      destination's `eta_seconds` with it, so no timed arrival carries it
-      back. A vehicle sealed and not yet away is bound for nowhere it stands.
+    - A `destination_room` naming that room is dropped, and its
+      `eta_seconds` with it, so no timed arrival carries it back. A vehicle
+      sealed and not yet away is bound for nowhere it stands, and has no
+      route through where it stands either.
     - Under way it stands in its `route_room` when the world holds one, and
       the route holds through every later write of the transit that does not
       name another, as the place it left does: silence is not a move into
-      nowhere. In no room is the floor for a journey nothing has named a
-      space for -- a thing in transit is between places by construction
-      (`unplaced_mints_needing_a_room` already says so) -- and code never
-      invents one. Nothing asks it to arrive: with no destination it stays
-      in transit, beat after beat, until a write brings it in.
+      nowhere, and neither is naming the place it left, which is behind it
+      once it has crossed some other space.
+    - A position the same step gives it, in a room the world holds other
+      than the one it set off from and other than the one it is bound for,
+      names the space it is in: the route is that room (review F6). A
+      journey under way has not reached where it is bound, so a position
+      written there is not where it is (review N5).
+    - A JOURNEY THAT NAMES NO OTHER SPACE MOVES WITHIN THE ROOM IT SET OFF
+      FROM (the owner's ruling, 2026-10-09, D2, as worded): with no route of
+      its own, or one naming the place it left, no position in another
+      room, no destination elsewhere and no space crossed yet, its route is
+      `departed_from` and it stays in that room -- a boat working along the
+      channel it floats on is IN the channel.
+    - A journey BOUND ELSEWHERE is leaving the room it set off from, and is
+      not D2's: it is in the space it moves through when one is named, and
+      a route naming the room it left is dropped, so with none named it is
+      in no room (the 2026-09-25 rule) -- a lift called away to another
+      floor names the shaft, or is nowhere until it docks. Leaving a room
+      names the space it moves through (the transit cards say so), and a
+      route naming a space the world does not hold yet is the floor: in no
+      room, until a later step builds it, and code never invents the space.
+      Nothing asks it to arrive: with no destination it stays in transit,
+      beat after beat, until a write brings it in.
     - Docked, the journey is over: `departed_from` goes, and a vehicle docked
       with no room but a `destination_room` stands there, as the timed
       arrival already stands it. A position the story wrote itself stands.
@@ -903,7 +971,39 @@ def settle_departures(before: dict, merged: dict) -> bool:
     evening, three branches of that departure: 154 built a room for the space
     the ship crossed and held for the beats after; 157 named none, its next
     beat wrote the ship docked in no room, and the beat after that set it off
-    again with nothing remembering the beach."""
+    again with nothing remembering the beach.
+
+    And no room was wrong for the other kind of journey. Scratch story 166
+    turn 4600 (2026-10-07, F92): the Grebe, docked in the down-channel,
+    "noses into the reed and stops" -- written `arriving` with the channel as
+    its route, then `docked` -- and dropping the route that named the room
+    it set off from left the boat in no room for the seven beats after, and
+    turn 4605, rowing it back toward the stage through the same channel,
+    severed its deck's last doorway: the pilot and the player aboard stood
+    `separated` and `far` from the water they were crossing. Turn 4605 is
+    the other kind: bound back for the stage, naming only the channel it lay
+    in as its route, it is leaving the channel, and reads as the 09-25 rule
+    reads it -- in no room until it docks at the stage two beats later.
+
+    Measured over every stored under-way write (play db: 176 writes on 172
+    turns in 31 chats; the owner's db: 171 on 167 turns in 30 chats), the
+    ruling as worded moves 21 in the play db and 19 in the owner's from no
+    room to a room. The Grebe's two (turns 4600 and 4604): in the channel.
+    The TARDIS's 18, in chats 30, 56-59, 63, 64, 153, 154 and 157, each a
+    transit naming no other space, each now standing where it set off,
+    behind its shut door, instead of in no room: 11 set off with no route
+    and no destination (among them chat 157 turn 4480, and chat 154 turn
+    4398's interpret, which named the vortex only in a movement row -- a row
+    no transit reads, and one that cannot say whether the place it names is
+    the space crossed or the place bound for -- and whose resolve named it
+    as the route a moment later); 2 named the place they stood as the
+    destination, which is dropped (chat 153 turn 4374); and 5 were written
+    under way at a position from no room at all, which the merge reads as
+    the place set off from. And one freight elevator (chat 161 turn 4555),
+    set off from no room naming the shaft as its route, which a second pass
+    of the merge used to read as the place it left. No lift or turbolift
+    bound for another floor moves: round 2 had stood 35 such writes in the
+    corridor they left (review N4)."""
     entities = merged.get("entities") if isinstance(merged, dict) else None
     positions = merged.get("positions") if isinstance(merged, dict) else None
     if not isinstance(entities, dict) or not isinstance(positions, dict):
@@ -951,7 +1051,11 @@ def settle_departures(before: dict, merged: dict) -> bool:
             # Director's prose had read a ship in flight as "a ship that has
             # not landed clean" -- and docking erased the place it left, so
             # the next beat set it off with nothing remembering the beach. The
-            # journey stays as it was, and keeps its ends below.
+            # journey stays as it was, and keeps its ends below. That holds
+            # for a vessel in no room: one whose journey names no other space
+            # stands, under D2, in the room it set off from, and a `docked`
+            # docks it there -- 157 t4481's TARDIS re-docks on the beach it
+            # left, its `departed_from` spent (the owner's to rule on).
             transit["phase"] = phase = prior_phase
             changed = True
         stood = room_of_record(earlier, eid, earlier_entities.get(eid) or ent) \
@@ -974,14 +1078,70 @@ def settle_departures(before: dict, merged: dict) -> bool:
             # no route is silence, not a move into nowhere. Chat 157 turn 4482
             # wrote `{"phase": "in_transit"}` and nothing else, which on a
             # ship standing in its route room would have dropped it out of
-            # the world. Naming another space moves it there.
+            # the world. Naming another space moves it there; naming the place
+            # it left names no other space.
             kept = str(prior.get("route_room") or "").strip() if was_under_way else ""
-            if kept and not str(transit.get("route_room") or "").strip():
-                transit["route_room"] = kept
+            named = str(transit.get("route_room") or "").strip()
+            if _same_room(named, origin):
+                named = ""
+            if _same_room(kept, origin):
+                kept = ""
+            # WHERE IT IS BOUND, when that is somewhere else: a journey that
+            # names a destination elsewhere is LEAVING the room it set off
+            # from, so it is not D2's (below) -- it is in the space it moves
+            # through when one is named, and in no room when none is (the
+            # 2026-09-25 rule). A lift called away to another floor is this.
+            # A LATER WRITE THAT LEAVES THE DESTINATION OUT IS SILENCE ABOUT IT
+            # (review B1, 2026-10-09): every write replaces the transit whole,
+            # so a lift bound for deck 10, written `{"phase": "docked", "hatch":
+            # "open"}` on the next beat -- the shape chat 33 turn 696 stored --
+            # read as a journey naming no other space and stood back in the
+            # corridor it left, its door open onto it. Judged by the
+            # destination the journey carries; never written back.
+            destination = str(transit.get("destination_room") or "").strip() or (
+                str(prior.get("destination_room") or "").strip() if was_under_way else "")
+            elsewhere = destination if destination \
+                and not _same_room(destination, origin) else ""
+            # A POSITION THE SAME STEP GIVES IT NAMES THE SPACE IT IS IN: the
+            # beat rowed it there, so that room is where it moves, and the
+            # room it set off from is behind it (review F6, 2026-10-09: a
+            # boat docked at the stage, written into the channel with no
+            # route, was pulled back to the stage). Only a room the world
+            # holds and not one of its own -- and never the room it is bound
+            # for, which a journey under way has not reached (review N5: a
+            # ferry written at its far port half an hour out stood there, its
+            # deck open onto the quay).
+            placed = str(here or "").strip()
+            if not placed or _same_room(placed, stood) or _same_room(placed, origin) \
+                    or _same_room(placed, elsewhere) \
+                    or not isinstance(rooms.get(placed), dict) \
+                    or rooms[placed].get("parent_entity") == eid:
+                placed = ""
+            # AND A JOURNEY THAT NAMES NO OTHER SPACE STAYS IN THE ROOM IT SET
+            # OFF FROM (D2, the owner's ruling of 2026-10-09, as worded): no
+            # route elsewhere, none kept from crossing one, no position in
+            # another room and no destination elsewhere -- its route is
+            # `departed_from`, so it stays there: the Grebe working along the
+            # down-channel it floated in (scratch story 166 turn 4600), never
+            # a boat in no room.
+            route = named or placed or kept or (
+                "" if elsewhere else str(origin or "").strip())
+            if route:
+                if str(transit.get("route_room") or "").strip() != route:
+                    transit["route_room"] = route
+                    changed = True
+            elif str(transit.get("route_room") or "").strip():
+                # The route it wrote named the room it left, while it is bound
+                # elsewhere: that room is behind it (the 09-25 rule).
+                transit.pop("route_room", None)
                 changed = True
+            # Departure is never arrival: only a destination naming the place
+            # it left is dropped while it is under way.
+            dropped_here = ("destination_room",)
         else:  # sealed, or a phase not yet under way: where it stands
             origin = stood or here
-        for field in ("destination_room", "route_room"):
+            dropped_here = ("destination_room", "route_room")
+        for field in dropped_here:
             if _same_room(transit.get(field), origin):
                 transit.pop(field, None)
                 if field == "destination_room":

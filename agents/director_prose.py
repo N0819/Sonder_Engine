@@ -215,9 +215,20 @@ def already_happened(ctx):
     interp = getattr(ctx, "director_interpret", None) or {}
     if not isinstance(interp, dict):
         return ""
+    # A WALK THAT WAITS ON THE ONE SHE FOLLOWS HAS NOT HAPPENED
+    # (`director_movement.follow_walk_waits`): it is out of the world this
+    # stage is shown and in its `event_inputs`, so it is out of this too.
+    # The interpret's prose tells the whole declaration as done, so a beat
+    # with such a walk is told from its rows. Replayed on scratch story 166
+    # turn 4607 (2026-10-09) with the prose: "Tamsin walks a step behind
+    # Hester ... up the stair" here, and both of them still on the boat in
+    # the world, the author once stopped mid-sentence after 18,711
+    # characters of reasoning and once opened "The stair brought them up",
+    # and neither time resolved the pilot's own walk, line or knock.
+    waiting = _waiting_spans(interp)
     prose = (((interp.get("orchestration") or {}).get("prose_contract") or {})
              .get("prose"))
-    if prose:
+    if prose and not waiting:
         return str(prose)
     lines = []
     for row in interp.get("causal_ledger") or interp.get("ledgers") or []:
@@ -225,18 +236,73 @@ def already_happened(ctx):
             continue
         if str(row.get("commitment") or "asserted") != "asserted":
             continue
+        if str(row.get("chrono_id") or "") in waiting:
+            continue
         text = str(row.get("event") or "").strip()
         if text:
             lines.append(text)
     if not lines:
         for row in interp.get("sequence") or []:
-            if not isinstance(row, dict) or row.get("commitment") == "contestable":
+            if not isinstance(row, dict) or row.get("commitment") == "contestable" \
+                    or row.get("walks_with"):
                 continue
             text = str(row.get("text") or row.get("attempt")
                        or row.get("observable") or "").strip()
             if text:
                 lines.append(text)
     return " ".join(lines)
+
+
+def _waiting_spans(interp):
+    """The chrono ids of the interpret's steps that carry a walk waiting on
+    the one it follows (elements marked `walks_with`), as strings; the
+    interpret's ledger rows share those ids."""
+    waiting = {str(e.get("event_id")) for e in interp.get("sequence") or ()
+               if isinstance(e, dict) and e.get("walks_with") and e.get("event_id")}
+    if not waiting:
+        return set()
+    steps = (interp.get("state_assertions") or {}).get("causal_steps") or ()
+    return {str(step.get("chrono_id")) for step in steps
+            if isinstance(step, dict) and step.get("chrono_id") is not None
+            and waiting & {str(e) for e in step.get("events") or ()}}
+
+
+def waiting_spans_priced_again(interp, resolve_rows, identities, player_name):
+    """The waiting walk's interpret chrono ids (`_waiting_spans`) whose time
+    the resolve prices again, so the beat's clock must not count them twice
+    -- or the empty set, when it does not.
+
+    PRICED AGAIN only where the resolve's ledger prices a row of hers, or a
+    walk of the one she follows, which she rides (`director_movement.
+    follow_through_the_steps`): her walk is then inside that time. Where the
+    one she follows stays and nothing of hers is priced, the walk's own span
+    is the only price it has, and it stands (review N7: Mara stayed and only
+    spoke, and the waiting walk's 120 s dropped out of the beat)."""
+    waiting = _waiting_spans(interp)
+    if not waiting:
+        return set()
+    followed = {str(e.get("walks_with")).strip().casefold()
+                for e in interp.get("sequence") or ()
+                if isinstance(e, dict) and e.get("walks_with")}
+    folded = str(player_name or "").strip().casefold()
+    for row in resolve_rows or ():
+        if not isinstance(row, dict):
+            continue
+        try:
+            seconds = float(row.get("seconds") or 0)
+        except (TypeError, ValueError):
+            seconds = 0.0
+        if seconds <= 0:
+            continue
+        source = str(row.get("source_entity_id") or "").strip()
+        who = str((identities or {}).get(source) or source).strip().casefold()
+        if who == folded:
+            return waiting
+        moves = isinstance(row.get("movement"), dict) \
+            or "positions" in (row.get("categories") or ())
+        if moves and who in followed:
+            return waiting
+    return set()
 
 
 def pronouns_of_people(ctx):
@@ -1604,7 +1670,20 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
     Director resolves it), or a hold, a carry or an inside joins the two.
     An event recorded as the moved mind's OWN conduct is dropped whole --
     it is a step, and a decision, nobody declared; otherwise only that
-    mind's position and station leave the event."""
+    mind's position and station leave the event.
+
+    AND A FOLLOW IS ITS FOLLOWER'S (the owner's ruling, 2026-10-09, D1). A
+    follow carries the follower wherever the one followed goes
+    (`director_movement._apply_following_movement`), so a `following_ops`
+    op is a walk's intent and takes the same rule, with no exemption: a
+    follow is never involuntary, so neither the world nor a hold makes one.
+    A registered mind's op stands only on an event of that mind's own
+    declaration (`source_event_id`, else the event's `source_entity_id`);
+    the player's span cannot start the pilot following her, nor the pilot's
+    span start the player following the pilot. Measured before it landed:
+    every one of the 19 stored interpret follows made the player the
+    follower, and no stored resolve encoder wrote one, so on the stored
+    beats it refuses nothing."""
     owner = {}
     declarers = set()
     for entry in event_inputs or []:
@@ -1630,12 +1709,15 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
         key = key_of.get(str(label or "").strip().casefold())
         return key if key and _MIND_KEY.match(key) else None
 
-    out, kept_out, refused_all = [], [], set()
+    out, kept_out, refused_all, unfollowed = [], [], set(), []
     for event in events or []:
         if not isinstance(event, dict):
             out.append(event)
             continue
         source = owner.get(str(event.get("source_event_id") or "").strip())
+        event, dropped = _follows_of_the_declarer(
+            event, source or mind(event.get("source_entity_id")), mind)
+        unfollowed.extend(names.get(k) or k for k in dropped)
         if not source:
             out.append(event)
             continue
@@ -1688,7 +1770,45 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
         warn("a walk is its owner's: %s kept their room -- moved by another's "
              "declaration, with no hold, carry or declaration of their own"
              % ", ".join(sorted(set(kept_out))))
+    if unfollowed and warn:
+        warn("a follow is its follower's: dropped the follow written for %s "
+             "on an event that was not their own declaration"
+             % ", ".join(sorted(set(unfollowed))))
     return out
+
+
+def _follows_of_the_declarer(event, declarer, mind):
+    """`(event, refused)`: the event with every `following_ops` op whose
+    follower is a registered mind other than `declarer` taken out of its
+    transforms, and those minds' keys. A follower that is no registered
+    mind -- a figure -- is the world's, and its op stands. Returns the event
+    unchanged when nothing is refused."""
+    refused = []
+    transforms, changed = [], False
+    for transform in event.get("transforms") or []:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        ops = patch.get("following_ops") if isinstance(patch, dict) else None
+        if not isinstance(ops, list):
+            transforms.append(transform)
+            continue
+        kept = []
+        for op in ops:
+            who = mind(op.get("follower")) if isinstance(op, dict) else None
+            if who and who != declarer:
+                refused.append(who)
+                changed = True
+                continue
+            kept.append(op)
+        patch = dict(patch)
+        if kept:
+            patch["following_ops"] = kept
+        else:
+            patch.pop("following_ops", None)
+        if patch:
+            transforms.append(dict(transform, patch=patch))
+    if not changed:
+        return event, []
+    return dict(event, transforms=transforms), refused
 
 
 def _near_the_kept(events, scene, kept):
@@ -1846,6 +1966,22 @@ def entity_keys_name_held_things(events, scene, warn=None):
             warn(f"entities under {sorted(set(unheld))}: no thing the world holds "
                  "and no name to mint one; filed as written")
     return out
+
+
+def rooms_built(ctx):
+    """The ids of every room this stage's encoded beat builds -- the room
+    author's places, folded in on the beat's first event, and any room the
+    encoder wrote itself -- read off the stage's transforms while they are
+    still on `ctx` (between `run` and `attach_record`). A walk that ends in
+    one of them ends in a room the world holds by the time the beat lands."""
+    held = ctx.get(CTX_KEY) if hasattr(ctx, "get") else None
+    built = set()
+    for rows in ((held or {}).get("transforms") or {}).values():
+        for transform in rows or ():
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if isinstance(patch, dict) and isinstance(patch.get("rooms"), dict):
+                built.update(str(room) for room in patch["rooms"] if str(room).strip())
+    return built
 
 
 def declared_moves(*records):

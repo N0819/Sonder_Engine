@@ -13,6 +13,7 @@ is `kind="crossing", channel="sight"` about a BODY. An object's movement is
 an object's movement; whatever it deserves, it is not a figure.
 """
 
+import pytest
 import json
 import time
 
@@ -24,8 +25,10 @@ PLAYER = "Hinami"
 WATCHER = "The Doctor"
 
 
-def _two_room_ctx(temp_db, *, entities, positions, moved):
-    """Watcher in the hall; something crosses in from the storeroom."""
+def _two_room_ctx(temp_db, *, entities, positions, moved, steps=None):
+    """Watcher in the hall; something crosses in from the storeroom. `steps`,
+    when given, are the beat's causal steps in order, one positions patch
+    each."""
     persona = default_persona_data(PLAYER)
     persona_id = temp_db.qi(
         "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
@@ -82,9 +85,15 @@ def _two_room_ctx(temp_db, *, entities, positions, moved):
         "sequence": [], "speech": None, "speech_volume": "normal",
         "flow": {"reactors": [char_id]},
     }
+    diff = {"positions": dict(moved)}
+    if steps:
+        diff["causal_steps"] = [
+            {"stage": "resolve", "chrono_id": n, "events": [],
+             "patch": {"positions": dict(patch)}}
+            for n, patch in enumerate(steps, 1)]
     ctx.director_resolve = {
         "resolved_event": "Something comes through the doorway.",
-        "state_diff": {"positions": dict(moved)},
+        "state_diff": diff,
         "dialogue_log": [], "dialogue_order": []}
     return ctx, char_id
 
@@ -123,6 +132,96 @@ def test_a_body_crossing_rooms_still_arrives(temp_db):
 
     assert "comes in" in view.casefold(), (
         f"a body crossing into the observer's room was dropped: {view!r}")
+
+
+def _crossing_together(temp_db, steps=None):
+    """The watcher and a porter both come from the storeroom into the hall,
+    where the player stands, in the order `steps` gives."""
+    return _two_room_ctx(
+        temp_db,
+        entities={"porter_1": {"name": "a porter", "kind": "person",
+                               "desc": "A porter in grey."}},
+        positions={PLAYER: "hall", WATCHER: "store", "porter_1": "store"},
+        moved={WATCHER: "hall", "porter_1": "hall"}, steps=steps)
+
+
+def test_a_body_that_came_with_you_does_not_come_in(temp_db):
+    """Two bodies that cross in the same causal step walked it side by side,
+    and neither came in on the other. Scratch story 166 turn 4607, replayed
+    with the follow carrying her (2026-10-09), told the player "Hester Gale
+    comes in." on the stair they had climbed together. A body arriving where
+    the observer already stood still comes in -- to the player, both do."""
+    ctx, char_id = _crossing_together(
+        temp_db, steps=[{WATCHER: "hall", "porter_1": "hall"}])
+    views = _views(ctx)
+    watcher = (views[str(char_id)] or "").casefold()
+    player = (views["player"] or "").casefold()
+    assert "comes in" not in watcher, (
+        f"the porter walked in beside him, and was told he came in: {watcher!r}")
+    assert "comes in" in player, (
+        f"bodies crossing into where the player stood were dropped: {player!r}")
+
+
+def test_a_body_that_came_in_after_you_comes_in(temp_db):
+    """Review F4: the same crossing is not the same moment. Scratch story
+    166 idx 5 (turn 4590): the player went up the rise at the onset and the
+    pilot followed at the resolve, and "Hester Gale comes in." was true --
+    the page said "Hester came up the rise". The observer crossed first, so
+    the mover came in on them."""
+    ctx, char_id = _crossing_together(
+        temp_db, steps=[{WATCHER: "hall"}, {"porter_1": "hall"}])
+    watcher = (_views(ctx)[str(char_id)] or "").casefold()
+    assert "comes in" in watcher, watcher
+
+
+def test_a_body_that_was_there_first_does_not_come_in(temp_db):
+    """The porter crossed first and was standing in the hall when the
+    watcher came through: nobody came in on him."""
+    ctx, char_id = _crossing_together(
+        temp_db, steps=[{"porter_1": "hall"}, {WATCHER: "hall"}])
+    watcher = (_views(ctx)[str(char_id)] or "").casefold()
+    assert "comes in" not in watcher, watcher
+
+
+def test_a_beat_with_no_steps_keeps_its_crossing_lines(temp_db):
+    """Where the beat records no steps the order is unknown, and the line
+    stands as it always did: dropping it would be a guess."""
+    ctx, char_id = _crossing_together(temp_db)
+    watcher = (_views(ctx)[str(char_id)] or "").casefold()
+    assert "comes in" in watcher, watcher
+
+
+def _from_the_yard(temp_db, steps):
+    """The watcher comes into the hall from a yard; a porter comes in from
+    the storeroom; the player stands in the hall throughout."""
+    ctx, char_id = _two_room_ctx(
+        temp_db,
+        entities={"porter_1": {"name": "a porter", "kind": "person",
+                               "desc": "A porter in grey."}},
+        positions={PLAYER: "hall", WATCHER: "yard", "porter_1": "store"},
+        moved={WATCHER: "hall", "porter_1": "hall"}, steps=steps)
+    scene = temp_db.wget(ctx.chat.id, "scene")
+    scene["rooms"]["yard"] = {"name": "Yard", "desc": "A yard.",
+                              "adjacent": [{"to": "hall", "barrier": "open", "distance": "near"}]}
+    scene["rooms"]["hall"]["adjacent"].append({"to": "yard", "barrier": "open", "distance": "near"})
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    return ctx, char_id
+
+
+@pytest.mark.parametrize("porter_first", [True, False])
+def test_a_body_there_before_you_came_in_from_elsewhere_does_not_come_in(
+        temp_db, porter_first):
+    """Review N8: the rule is about who was in the room first, not which
+    doorway each came by. The porter came in from the storeroom a step
+    before the watcher came in from the yard: the watcher found him there.
+    Came in the other way round, the porter came in on the watcher; and to
+    the player, who stood there throughout, he comes in either way."""
+    steps = [{"porter_1": "hall"}, {WATCHER: "hall"}]
+    ctx, char_id = _from_the_yard(temp_db, steps if porter_first else steps[::-1])
+    views = _views(ctx)
+    watcher = (views[str(char_id)] or "").casefold()
+    assert ("comes in" in watcher) is not porter_first, watcher
+    assert "comes in" in (views["player"] or "").casefold(), views["player"]
 
 
 # --- The mirror composes the beat from the room the body is in AT ITS END ---

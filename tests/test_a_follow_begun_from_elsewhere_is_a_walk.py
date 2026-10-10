@@ -57,6 +57,14 @@ def test_no_open_route_leaves_the_follower_and_the_relation(
             edge["barrier"] = "locked_door"
     temp_db.wset(ctx.chat.id, "scene", scene)
     ctx.director_interpret["movement"] = None
+    # He calls through the door, so she knows where he is: a follow goes
+    # only toward what its follower perceived (a silent body behind a
+    # locked door is not followed at all, and says so -- review N1,
+    # tests/test_a_declared_follow_carries_the_player.py). What stops her
+    # here is the door.
+    ctx.director_interpret["sequence"] = [{
+        "type": "speech", "text": "Mara?", "volume": "normal",
+        "visibility": "overt", "conceal_from": []}]
     mara_id = ctx.cast[0]["id"]
     ctx.character_results[mara_id] = _quiet_character_result(
         {"op": "start", "target": "The Stranger", "reason": "go to him"})

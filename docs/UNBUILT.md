@@ -200,6 +200,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.185 — A quiet beat still weighs as much as a loud one, and the card is not the lever (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-185)
 - [§1.187 — The encoder repair's continuation: what is not measured (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-187)
 - [§1.188 — Encoder payload scope: residuals (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-188)
+- [§1.195 — Two defects found replaying a follow (2026-10-09)](UNBUILT_PIPELINE.md#unbuilt-1-195)
 
 **2. Roadmap**
 
@@ -319,6 +320,8 @@ Not scheduled and not committed to a phase. See the
 - [§1.166 — `state_diff.time.mode` has two readers and no writer](UNBUILT_WORLD.md#unbuilt-1-166)
 - [§1.168 — A crossing written at the resolve was refused at every shut door — FIXED 2026-09-26, residuals open](UNBUILT_WORLD.md#unbuilt-1-168)
 - [§1.169 — A player one open stair away is neither seen nor seen to leave — a lead, unclassified](UNBUILT_WORLD.md#unbuilt-1-169)
+- [§1.193 — A declared follow carries the player — BUILT 2026-10-09, residuals open](UNBUILT_WORLD.md#unbuilt-1-193)
+- [§1.194 — A vessel moving within one room stays in it — BUILT 2026-10-09, residuals open](UNBUILT_WORLD.md#unbuilt-1-194)
 
 **2. Roadmap**
 

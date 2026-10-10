@@ -1143,6 +1143,115 @@ still says "The doors behind stand open to the night beach": minted before
   doorway (the rewrite had drawn `{"to": "the vortex"}` from a console room
   whose ship was in no room). In no room remains the floor; code never
   invents the space.
+- **A vessel moving within one room stays in it -- the owner's ruling D2,
+  2026-10-09, as worded.** No room was right for a ship leaving a beach and
+  wrong for a boat working along the water it floats on. Scratch story 166
+  turn 4600 (F92): the Grebe, docked in the down-channel, "noses into the
+  reed and stops" -- `arriving` with the channel as its route, then `docked`
+  -- and dropping the route that named the room it set off from put the boat
+  in no room for the beats after. `settle_departures` now gives a journey
+  that names no other space -- no route, or one naming the place it left, no
+  position in another room, no destination elsewhere, no other space crossed
+  yet -- its route at `departed_from`, so it stays in the room it set off
+  from. A journey bound elsewhere is leaving, and is not that case: it is in
+  the space it moves through when one is named and in no room when none is,
+  a route naming the room it left dropped as before. Round 2 had read the
+  bound-elsewhere case as D2's too, and stood 35 stored lift and turbolift
+  writes in the corridors they had left, behind shut doors, for the whole
+  ride (review N4). A position the same step gives it in another room the
+  world holds is the space it moves in (review F6: docked at the stage and
+  rowed into the channel with no route, the boat had been pulled back onto
+  the stage), never the room it is bound for (review N5: a ferry written at
+  its far port half an hour out stood there, its deck open onto the quay).
+  The destination rule is unchanged -- never the place it left -- and a route
+  naming a space the world does not hold yet is still no room. And an open
+  vessel under way is open to the room it stands in, nearing its landing
+  too (review F7): the transit's own `hatch: open` opens that doorway as a
+  docked one's is (`_under_way_barrier`), where every phase under way had
+  been a shut door; a hatch the write leaves unsaid stays shut. Of every
+  stored under-way write (the play db's 176, the owner's 171), 160 in each
+  say `closed`, 11 leave the hatch unsaid -- lifts and the TARDIS -- and the
+  5 that say `open` are the Grebe's. The ruling moves 21 and 19 of those
+  writes from no room into a room: the Grebe's two; eighteen of the
+  TARDIS's, which now stand where they set off -- set off naming nothing,
+  named the place they stood as the destination, or written under way at a
+  position from no room -- among them chat 157 turn 4480, and chat 154 turn
+  4398's interpret, which named the vortex only in a movement row (no
+  transit reads one, and a movement row cannot say whether the place it
+  names is the space crossed or the place bound for) and whose resolve named
+  it as the route a moment later; and a freight elevator set off from no
+  room naming its shaft. Turn 4605, the Grebe bound back for the stage
+  naming only the channel it lay in, is leaving, and is in no room until it
+  docks. The encoder's transit part says the other half in the class's own
+  words, en and ja: leaving never names the place left as the space, and a
+  thing moving within the place it is already in stays there, whether it
+  names that place or none.
+- **A player's declared follow carries her -- the owner's ruling D1,
+  2026-10-09.** The monolithic interpret card asked for `follow_op` and went
+  with the causal Director's redesign (2026-09-12); under this contract the
+  player's follow reaches the encoder's `following_ops` (19 stored
+  interprets) and nothing read it back onto the field the follow readers
+  take her decision from (8 of 4,214 stored interprets, all older).
+  `director_movement.declared_follow_op` puts her own span's last op there.
+  Scratch story 166 turn 4607 (F101) shows the rest of the class in one
+  beat: the walk's last leg named the landing the room author built that
+  beat and `director._final_movement` cut it at the stage it started from
+  (a room the stage builds now counts as one the world holds, and with it
+  her walk and the pilot's end on the same landing, so the follow floor no
+  longer reads her walk as one away from the pilot); and her walk ran at the
+  onset, before the pilot moved, so the pilot's words on the way were graded
+  from where the onset had put her (F88). A walk with the one she follows
+  waits on theirs, settled before anyone perceives the beat
+  (`follow_walk_waits`): its elements become a `continuation` phase -- out
+  of the onset preview and the cast's act views, told after the others
+  answer -- and the resolve is where it happens: its author is handed the
+  walk as her input (`_causal_event_inputs`), never in `already_happened`,
+  and where its encoder writes no step of hers `follow_through_the_steps`
+  walks her in the steps that move them (review F3: walked only in the
+  committed steps, the cast had declared from an onset where she was
+  already gone). It waits only when it moves nobody but her (review N3: a
+  dog at her heel, written in the same step, was taken out of the beat with
+  it); its time leaves the interpret's sum only where the resolve prices it
+  again (review N7: the one followed stayed and spoke, and the walk's 120 s
+  dropped out of the beat); and riding their steps she is never moved ahead
+  of an act of her own -- she rides only their steps after her last act
+  (review N2, F2's class: following a porter her own span walked up the
+  trail, she had been put on the trail before her hand lifted the latch of
+  the gate she still stood at). The author's half was found by replaying
+  turn 4607 from the onset: with the interpret's prose in `already_happened`
+  telling the walk as done and both bodies still aboard in the world it was
+  shown, the author once stopped mid-sentence after 18,711 characters of
+  reasoning and once opened "The stair brought them up", and neither time
+  walked the pilot. Handed the walk as an input, it wrote the pilot's line
+  aboard, her step off, and the two along the low walk a step apart, the
+  encoder interleaving the two walks -- and then parted them at the stair
+  onto two landings for one door, the player's outside the Gale house and
+  the pilot's at her brother's door on the high walk, against both
+  declarations. Live, the follow floor would have ended the follow there;
+  the replay kept it only through the patch's spelling of her movement, and
+  its outputs were not kept. The pilot, declaring from the onset, saw the
+  player beside her on the gunwale and declared "keeping half a stride ahead
+  of Coyle". Her own ops on that walk come after her declaration's in the
+  ledger: the interpret's `follow_op` and the onset's start used to be
+  appended after the resolve's, and undid a stop it wrote. A place she
+  declared is hers: when the one she follows ends elsewhere the follow ends
+  and her walk stands, with every act she did at its end (review F2; round
+  1's exemption for a follow declared that beat walked her down a path
+  nobody declared). A follow goes only where its follower perceived the one
+  it follows: where a mind last saw them, or heard a sound they made --
+  their own lines at their own volume, their footfalls, a noise sourced to
+  their body -- on this beat or the one before (`_perceived_room`). Round 2
+  counted a channel a voice COULD cross, and walked a mind to a silent body
+  behind a curtain or in a dark doorway (review N1). With nothing perceived
+  it moves nobody and says so, and beside the one followed, a mind that
+  loses them in the dark, gone without a sound, stays where it is. A follow
+  is its follower's: `a_walk_is_its_owners` refuses an op one span writes
+  for another mind. The encoder's `following_ops` part states start as going
+  wherever another leads, with the decision model's own line that two going
+  together with neither leading are not following, says nothing short of
+  going another way or staying behind ends a follow, and gives a follower a
+  walk of their own only to a place their declaration names (reviews F5 and
+  N10).
 - **A moving room's doorway keeps no passage record** (chats 156 and 157). A
   World Browser edit to the TARDIS's doorway on the beach minted one, and
   `sync_scene_passages` -- after the dock rewrite -- minted the beach edge

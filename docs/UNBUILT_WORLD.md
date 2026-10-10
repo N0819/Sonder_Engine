@@ -1958,6 +1958,129 @@ an open vertical connection should be perceived (§1.131's vertical
 residuals; the geometry note's "no elevation ... a pit ... not modelled").
 Read every stage of that turn before forming a view.
 
+<a id="unbuilt-1-193"></a>
+
+### 1.193 A declared follow carries the player — BUILT 2026-10-09, residuals open
+
+The owner's ruling D1 (`Design.md`, "A player's declared follow carries her"):
+`director_interpret.follow_op` is restored from her own span, a walk she
+declares with the one she follows waits on theirs and reaches the resolve's
+author as her input, a place she declares wins over the follow, and a follow
+goes only where its follower last saw the one it follows or heard a sound
+they made. What it leaves, measured on the Brackwater run (scratch story
+166, `docs/experiments/PLAY_2026_10_07_brackwater.md`) and over the play
+db's 19 stored player follows -- two wait (166 turn 4607, 160 turn 4552),
+fifteen are a follow with no walk of hers, and two follow someone in another
+room:
+
+- **A follow begun across rooms still walks at the onset.**
+  `director_movement.follow_walk_waits` acts only where the two began in one
+  room. Turn 4598 -- the player in the chapel, the pilot rejoined from her
+  bubble on the low walk, "follows her back over the bridge and down to the
+  landing stage" -- still walks the player at the onset, so the pilot's
+  whisper "as they pass the counting-house junction" (F88's first case) was
+  graded with the player already aboard. The two walks would need one clock
+  to meet on.
+- **An act of hers after the walk keeps the walk at the onset.** "I follow
+  her to the door and knock": a step of her own after the walk that does
+  anything but walk happened where the walk ended, so the walk is hers at
+  the onset, where the cast perceives it, and the words on the way are
+  graded from the door. No stored follow has one.
+- **An act of hers along the way is done where she stood.** Where the
+  resolve's encoder writes no step of hers, she rides only the steps that
+  move the one she follows after her last act of her own
+  (`follow_through_the_steps`), so an act left behind -- a latch lifted at
+  the gate before she goes up after them -- is done at the gate. An act done
+  along the way with them -- a hand on the rail of the stair they climb
+  together, which turn 4607's stored resolve sourced to her -- is then done
+  where she started as well: telling the two apart needs the act's place,
+  which a ledger row does not carry. No stored beat reaches the carry: on
+  every one where the player followed a body beside her that changed room
+  in a step (18 in the play db, 14 in the owner's), a step also wrote her
+  room.
+- **What a follower heard is graded, not recorded.** A follow toward someone
+  in another room goes where she last saw them or heard a sound they made
+  (`_perceived_room`): their own lines at their own volume, their footfalls,
+  a noise the diff sources to their body, graded as the outcome grades them
+  but without a live channel or the addressed rescue, neither of which
+  places a body. The beat before is read from its committed resolve, and
+  only a sound made where both still stand (`_FOLLOW_HEARD_BEATS_BACK`, one
+  beat). A sound a thing made in their hands (a knock sourced to the door),
+  a line from two beats back, and where she saw them go are not read, so a
+  follow begun after they left her sight and hearing moves nobody unless her
+  declaration names the way, and says so ("nothing perceived to follow").
+- **Lost in the dark.** Beside the one followed, a mind that neither saw
+  them when the beat began nor heard them go stays where it is. A walker's
+  footfalls are graded where its walk ends, through a room's sound field
+  only, so in rooms with no sound geometry, and in a large dark room, a body that walks off in the dark is not heard going. A follow reads the follower's own senses: a blind mind sees nothing, a deaf one hears nothing. On every stored beat where the one followed left a
+  mind's side (31 in the play db, 26 in the owner's), the follower saw them
+  when the beat began.
+- **A character following the player still arrives at the end of the
+  beat.** The relation carry lands a character's position on the engine's
+  closing step or its own last write; moving it into the player's onset
+  steps would put the character's own resolve acts, made where it stood, at
+  the destination.
+- **Other human players** get `follow_op`, but neither the wait nor the
+  chronology carry, which read the primary player's follow only.
+- **A follow toward someone who then stays put** leaves her own walk
+  standing and the follow with it: she goes on alone after their answer
+  (160 turn 4552), and the floor, which needs a place the one followed
+  reached, does not end it.
+- **Where the resolve's encoder writes her walk, it times it.** Handed the
+  waiting walk as her input, the encoder may write her steps itself, and
+  then they stand as written rather than riding the steps of the one she
+  follows; on the turn 4607 replay it interleaved the two walks a step
+  apart, and then parted them at the stair onto two landings for one door.
+- **The decision model's follow question** (`jev_questions/following_ops.txt`)
+  says to answer no where bodies "move together without one following the
+  other"; whether that loses a walk "a step behind" someone is unmeasured
+  (turn 4607's was kept). The encoder's part now says the same, so the two
+  agree.
+
+<a id="unbuilt-1-194"></a>
+
+### 1.194 A vessel moving within one room stays in it — BUILT 2026-10-09, residuals open
+
+The owner's ruling D2 as worded (`Design.md`, "A vessel moving within one
+room stays in it"; `spatial_transit.settle_departures`). What it leaves:
+
+- **A departure that names no space now stands where it set off.** Eighteen
+  stored TARDIS writes, the same in both databases (chats 30, 56-59, 63, 64,
+  153, 154 and 157), now stand under way where they set off, behind a shut door, and a later untimed `docked` lands them there -- the stored next beat does, chat 157 turn 4481, which re-docks the TARDIS on the beach it left, its `departed_from` spent; among them chat
+  157 turn 4480, written before the transit card asked a departure to name
+  its space. The card is the guard; the one stored dematerialisation written
+  after it (chat 159) named `new:the time vortex`.
+- **A journey bound elsewhere through the room it left is in no room.** Turn
+  4605: the Grebe, lying in the down-channel, set off back for the stage
+  naming the channel as its route -- the room it set off from. Bound
+  elsewhere, it is leaving, and the 2026-09-25 rule drops that route, so the
+  boat is in no room, its deck's doorway severed, until it docks at the
+  stage two beats later. It is the one stored write of this shape in either
+  database.
+- **A departure named only in a movement row.** Chat 154 turn 4398's
+  interpret wrote the ship's movement to `new:in the time vortex` and a
+  transit with no route. No transit reads a movement row, and a row cannot
+  say whether the place it names is the space crossed or the place bound
+  for -- read as the route, a car heading for a town the world holds would
+  be stood in the town -- so the ship stands on the beach for that step; its
+  resolve named the vortex as the route a moment later.
+- **A mooring written as state, not transit.** In round 1's replay of turn
+  4607 the encoder wrote the pilot making the Grebe fast as `state.moored:
+  true` and no `transit`, so the boat stayed `in_transit`, bound for the
+  stage, with its line on the stage cleat -- and, bound elsewhere, in no
+  room, not docked. A later write brings it in; nothing reads `moored`.
+- **`sealed` with no route severs the doorway** (F37 in
+  `UNBUILT_PLANNING.md`); a sealed carrier whose route the world holds keeps
+  a shut door onto it. The opening card's `transit_note` fragment still says
+  a route is set "only if occupants could perceive or exit into it".
+- **The hatch is not carried** through a later write that omits it, as the
+  route and `departed_from` are, so such a write reads as shut while under
+  way (`_under_way_barrier`).
+- **The light (the owner's D3, wave 2).** At turn 4601 the Grebe now stands in
+  the channel with its deck open onto it, and the coat a boat's length off
+  still reads `none`: the channel is `dark` and the lantern lights the deck.
+  Lit `dim`, the same scene grades the coat at `conduct`.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

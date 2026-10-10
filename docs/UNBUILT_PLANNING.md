@@ -776,9 +776,17 @@ patch in a file another hand was editing that day:
 
 - **A transit interior's doorway is derived, and the derivation says nothing
   when it overrides the Director (F37).** `world/spatial_transit.
-  apply_transit_dock_edges` severs an interior room's exits when the carrier's
-  `transit.phase` is `in_transit`/`sealed` with no `route_room`, and strips
-  any edge the same beat's diff wrote on that room, silently. Chat 115 (copy):
+  apply_transit_dock_edges` severs an interior room's exits when the carrier
+  is `sealed` with no `route_room`, or `in_transit` with no route the world
+  holds, and strips any edge the same beat's diff wrote on that room,
+  silently. (A sealed carrier whose route the world holds keeps a shut door
+  onto it. And since the owner's ruling D2, 2026-10-09, a carrier under way
+  whose transit names no other space -- no route elsewhere and no
+  destination elsewhere -- stays in the room it set off from, behind a shut
+  door onto it (`spatial_transit.settle_departures`), so the chat-115 lift
+  below, set off with no destination, would now keep its doorway onto its
+  own floor, shut; one bound for another floor with no route named is
+  still in no room, its exits severed. The silent override stands.) Chat 115 (copy):
   the objects hand answered "is this lift going down or up?" with `phase:
   in_transit, destination_room: null`; the lift lost its only exit, the next
   beat's Director minted a phantom corridor, the movement was refused as

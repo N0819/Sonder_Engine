@@ -7090,6 +7090,21 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     from world.causal_completion import event_execution_statuses
     execution_statuses = event_execution_statuses(
         getattr(_composed, "causal_worlds", None), beat_events, action=True)
+    # WHEN EACH BODY CAME INTO A ROOM: the index of the causal step in which
+    # it crossed into it, or None where the beat records no steps or no such
+    # crossing. The crossing percepts below are ordered by it.
+    _step_worlds = list(getattr(_composed, "causal_worlds", None) or ())
+    _arrivals = {}
+
+    def _arrival_step(body, room):
+        key = (str(body), str(room))
+        if key not in _arrivals:
+            _arrivals[key] = next((
+                index for index, world in enumerate(_step_worlds)
+                if isinstance(world, dict)
+                and room_of(world.get("after") or {}, body) == room
+                and room_of(world.get("before") or {}, body) != room), None)
+        return _arrivals[key]
 
     # WHERE EACH BODY WAS WHEN EACH EVENT HAPPENED. The stream above is
     # causally ordered and says so; until 2026-09-09 nothing downstream asked
@@ -7903,11 +7918,34 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 if percept:
                     percepts.append(percept)
                 order += 1
+            # A BODY THAT WAS THERE WHEN YOU CAME IN DID NOT COME IN. An
+            # observer who came into the room this beat, in the same causal
+            # step as the mover -- the two walked it side by side -- or after
+            # them, from whichever room, found them already there; only a
+            # mover who came in after the observer, or on one who was there
+            # all along, came in on them. Read off the beat's causal worlds;
+            # where the beat records no steps the order is unknown and the
+            # line stands. Scratch story 166 turn 4607, replayed with the
+            # follow carrying her (2026-10-09), told the player "Hester Gale
+            # comes in." on the stair they climbed together; turn 4590 (idx
+            # 5), where the player went up the rise at the onset and the
+            # pilot followed at the resolve, rightly told her the pilot came
+            # in (review F4); and a watcher coming in from the yard was told
+            # a porter who had come in from the store a step before him "comes
+            # in" (review N8).
+            _own_from = room_of(prev_scene, name) if prev_scene else None
             for mover, from_room, to_room in moves:
                 if same_subject(sc, mover, name):
                     continue
                 if p.get("room") not in (from_room, to_room):
                     continue
+                if _own_from and _own_from != to_room \
+                        and p.get("room") == to_room and from_room != to_room:
+                    _mine = _arrival_step(name, to_room)
+                    _theirs = _arrival_step(mover, to_room)
+                    if _mine is not None and _theirs is not None \
+                            and _theirs <= _mine:
+                        continue
                 _graded = (lambda scene: composer._sense_graded(
                     visual_level_between(scene, name, mover,
                                          p.get("sense_card")),

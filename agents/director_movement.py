@@ -11,6 +11,7 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
+import copy
 import hashlib
 import json
 import re
@@ -725,6 +726,828 @@ def _following_record(following, name):
     return None, None
 
 
+def declared_follow_op(assertions, mover):
+    """`{op, target?, reason}`: the follow `mover` declared in its own span
+    this stage -- the last `following_ops` op the encoder filed for it as
+    follower -- or None.
+
+    THE INTERPRET'S `follow_op` IS THIS, RESTORED. The monolithic interpret
+    card asked for `follow_op` itself ("FOLLOWING STATE ... Emit follow_op
+    ONLY when this beat changes it") and went whole with the causal
+    Director's redesign (2026-09-12, c452a50d); under the prose contract a
+    player's follow reaches the encoder's `following_ops` channel instead,
+    and nothing read it back onto the field every follow reader takes the
+    player's decision from -- `_collect_following_ops`, the follow floor
+    below, and the resolve's `player_declaration`. Measured: `follow_op` on 8
+    of 4,214 stored interprets, all before 2026-09-12; the encoder's player
+    follow on 19, none of them on the field. `a_walk_is_its_owners` has
+    already refused any op a span wrote for a mind other than its own, so
+    an op for `mover` here is the mover's."""
+    folded = str(mover or "").strip().casefold()
+    if not folded or not isinstance(assertions, dict):
+        return None
+    found = None
+    for raw in assertions.get("following_ops") or ():
+        if not isinstance(raw, dict) \
+                or str(raw.get("follower") or "").strip().casefold() != folded:
+            continue
+        op = str(raw.get("op") or "").strip().casefold()
+        if op == "start" and str(raw.get("target") or "").strip():
+            found = {"op": "start", "target": str(raw["target"]).strip(),
+                     "reason": str(raw.get("reason") or "").strip()}
+        elif op == "stop":
+            found = {"op": "stop", "reason": str(raw.get("reason") or "").strip()}
+    return found
+
+
+def _canonical_following_ops(ops, cast, player_name, turn_idx=None, scene=None):
+    """This beat's following ops with each body spelled as the scene keys
+    it, and the beat that wrote them on every one.
+
+    The encoder names a body as the beat names it, and now and then by the
+    id of its scene record: scratch story 166 turn 4598 filed the player's
+    follow of the pilot as target `char_hester_gale`, the pilot's entity id,
+    which no positions key answers to, so the ledger dropped it without a
+    word (`apply_following_ops` folds case only). Folded with the one
+    spelling policy positions use (`common.cast_spelling_policy`), and an
+    entity id read as its record's name only where that name is a cast
+    member's or the player's -- a thing is keyed by its id, and stays so; a
+    spelling nobody registered is left as written."""
+    from .common import cast_spelling_policy
+    canonical, forms = cast_spelling_policy(cast, player_name, aliases=False)
+    entities = (scene or {}).get("entities") if isinstance(scene, dict) else None
+    entities = entities if isinstance(entities, dict) else {}
+
+    def spelled(label):
+        folded = canonical(label)
+        if folded != label:
+            return folded
+        record = entities.get(label)
+        name = str((record or {}).get("name") or "").strip() \
+            if isinstance(record, dict) else ""
+        return forms.get(name.casefold(), label) if name else label
+
+    out = []
+    for raw in ops or ():
+        if not isinstance(raw, dict):
+            continue
+        op = dict(raw)
+        for field in ("follower", "target"):
+            if str(op.get(field) or "").strip():
+                op[field] = spelled(str(op[field]).strip())
+        if op.get("turn") is None and turn_idx is not None:
+            op["turn"] = turn_idx
+        out.append(op)
+    return out
+
+
+def _last_follow_ops(ops):
+    """`{folded follower: its last op word}` over this beat's ops: what each
+    follower declared last, so a start taken back in the same beat is not a
+    follow declared."""
+    last = {}
+    for raw in ops or ():
+        if isinstance(raw, dict) and str(raw.get("follower") or "").strip():
+            last[str(raw["follower"]).strip().casefold()] = \
+                str(raw.get("op") or "").strip().casefold()
+    return last
+
+
+#: The channels a body's own walk writes about it: which room, where in it,
+#: how it stands. Not a cap -- the engine's own channel names. A walk that
+#: WAITS on the one it follows (`follow_walk_waits`) is a run of steps that
+#: write nothing else about the follower; anything else she did happened
+#: where she did it, and keeps the walk where she took it.
+_WALK_CHANNELS = ("positions", "stations", "poses")
+
+
+def _keys_naming(table, scene, who):
+    """Every key of `table` that names the body `who`."""
+    from world.spatial import same_subject
+    folded = str(who or "").strip().casefold()
+    return [key for key in (table or {})
+            if str(key).strip().casefold() == folded
+            or same_subject(scene, str(key), str(who))]
+
+
+#: How many beats back a follower's ear reaches for the one it follows: the
+#: beat it decided on, and the one before -- the last thing a mind took in
+#: before it declared. One, because that beat's record still says where both
+#: bodies stood when the sound was made (a sound counts only where neither
+#: has moved since, `_heard_last_beat`); an older sound has had a beat of
+#: moves since it was made, and whether it still says where its maker is
+#: would be the engine's guess, not anything the follower perceived.
+_FOLLOW_HEARD_BEATS_BACK = 1
+
+
+def _sees_body(scene, observer, body, senses=None):
+    """Whether `observer` SEES `body` in `scene`, by the engine's one rule
+    for whether a mind saw a body (`sighted_level`: the pair's graded sight,
+    the observer's card senses -- a blind follower sees nothing -- and its
+    rear blind spot). A body the scene places nowhere is seen by nobody.
+    Graded by the pair alone until 2026-10-09 (review B2), a blind mind was
+    walked toward a lit body in the next room."""
+    from world.spatial import sighted_level
+    if not isinstance(scene, dict) or not room_of(scene, observer) \
+            or not room_of(scene, body):
+        return False
+    return sighted_level(scene, observer, body, senses) != "none"
+
+
+def _heard_through(pairs, senses):
+    """Whether any of `heard_events`' ``(event, level)`` pairs reaches a
+    listener with `senses`: the level after its hearing acuity
+    (`sense_adjusted`), so a deaf follower hears no footfalls (review B2)."""
+    from world.spatial import sense_adjusted
+    return any(sense_adjusted(level, "hearing", senses) != "none"
+               for _event, level in pairs or ())
+
+
+def _source_bodies(ctx, player_name):
+    """`{folded source_entity_id: body name}` for every mind a beat's ledger
+    rows can be sourced to: the player (`persona:<id>` and `persona:primary`),
+    each other human player, each cast member (`character:<id>`). A charter
+    figure's handle is its name already (`causal_world_index(figures=)`)."""
+    index = {"persona:primary": str(player_name or "")}
+    chat = getattr(ctx, "chat", None)
+    persona_id = chat.get("persona_id") if isinstance(chat, dict) \
+        else getattr(chat, "persona_id", None)
+    if persona_id is not None:
+        index[f"persona:{persona_id}".casefold()] = str(player_name or "")
+    for extra in getattr(ctx, "extra_players", None) or ():
+        if isinstance(extra, dict) and extra.get("persona_id") is not None:
+            index[f"persona:{extra['persona_id']}".casefold()] = str(extra.get("name") or "")
+    for row in getattr(ctx, "cast", None) or ():
+        try:
+            index[f"character:{row['id']}".casefold()] = \
+                character_name_from_text(row["sheet"])
+        except Exception:
+            continue
+    return index
+
+
+def _spoken_by(row, sources, scene, body):
+    """Whether ledger `row` is a line `body` itself spoke."""
+    from world.spatial import same_subject
+    if not isinstance(row, dict) or "speech" not in (row.get("categories") or ()):
+        return False
+    source = str(row.get("source_entity_id") or "").strip()
+    speaker = sources.get(source.casefold()) or source
+    return bool(speaker) and (speaker.casefold() == str(body).casefold()
+                              or same_subject(scene, speaker, str(body)))
+
+
+def _follower_id(ctx, follower):
+    """The cast id of `follower`, for a concealment list that names it so."""
+    for row in getattr(ctx, "cast", None) or ():
+        try:
+            if character_name_from_text(row["sheet"]).strip().casefold() \
+                    == str(follower).strip().casefold():
+                return row["id"]
+        except Exception:
+            continue
+    return None
+
+
+def _voice_reaches(ctx, world, listener, speaker, row, senses):
+    """Whether the line ledger `row` records `speaker` saying, in `world`,
+    reaches `listener` THROUGH THE AIR -- at the line's own volume, through
+    the field and the barriers between their rooms (`spatial_rel_between`,
+    `hear_level`, the measured proximity), over the standing noise the
+    outcome's field holds -- the story's crowds among it -- through the
+    listener's card senses, and not concealed from them. (A beat's one-off
+    sounds are moments, never a floor a line is heard over:
+    `tests/test_one_off_sounds_are_moments.py`.) The relation carries no live
+    channel and no addressed rescue: a voice on a radio, or one named across
+    a wall a device must be carrying, says nothing about where its speaker
+    stands. The same grading the outcome's speech percepts make (`composer.
+    speech_percept`), less the two channels that do not place a body."""
+    from world.spatial import (hear_level, measured_proximity_rel,
+                               sense_adjusted, sound_field, spatial_rel_between)
+    from agents.composer import concealed_from_observer
+    if not room_of(world, listener) or not room_of(world, speaker):
+        return False
+    if concealed_from_observer(row, listener, _follower_id(ctx, listener)):
+        return False
+    try:
+        field = sound_field(world, listener,
+                            turn_idx=getattr(getattr(ctx, "turn", None), "idx", None),
+                            crowds=_sound_crowds(ctx))
+        rel = spatial_rel_between(world, listener, speaker, sound=field)
+        level = hear_level(rel, str(row.get("volume") or "normal"),
+                           proximity=measured_proximity_rel(world, listener, speaker),
+                           level_db=row.get("level_db"))
+    except Exception:
+        return False
+    if senses:
+        level = sense_adjusted(level, "hearing", senses)
+    return level != "none"
+
+
+def _sound_crowds(ctx):
+    """The story's crowd ledger, as the perception stage reads it for its
+    sound fields (`perception._sound_field_for`): a crowd's murmur is noise a
+    voice is heard over."""
+    crowds = ctx.get("_sound_crowds") if hasattr(ctx, "get") else None
+    if crowds is None:
+        try:
+            from core.db import wget
+            from .common import CROWDS_KEY
+            crowds = wget(ctx.chat.id, CROWDS_KEY, []) or []
+        except Exception:
+            crowds = []
+        try:
+            ctx["_sound_crowds"] = crowds
+        except (TypeError, AttributeError):
+            pass
+    return crowds
+
+
+def _treads_reach(ctx, world, listener, body, pace, senses=None):
+    """Whether `body`'s footfalls at `pace`, where `world` stands it, reach
+    `listener` in another room (`tread_events`, `heard_events`: the field
+    the outcome grades the beat's treads through), through the listener's
+    hearing (`_heard_through`)."""
+    from world.spatial import heard_events, tread_events
+    if not room_of(world, listener) or not room_of(world, body):
+        return False
+    try:
+        return _heard_through(heard_events(
+            world, listener, tread_events(world, {str(body): pace}),
+            room=room_of(world, listener),
+            turn_idx=getattr(getattr(ctx, "turn", None), "idx", None),
+            crowds=_sound_crowds(ctx)), senses)
+    except Exception:
+        return False
+
+
+def _sounds_reach(ctx, world, listener, body, events, senses=None):
+    """Whether one of `events` -- `sensory_events` rows whose `source` is
+    `body` itself -- reaches `listener` where `world` stands them, through
+    the listener's hearing (`_heard_through`)."""
+    from world.spatial import heard_events, normalize_sensory_event, same_subject
+    records = []
+    for event in events or ():
+        if not isinstance(event, dict):
+            continue
+        source = str(event.get("source") or "").strip()
+        if not source or not (source.casefold() == str(body).casefold()
+                              or same_subject(world, source, str(body))):
+            continue
+        record = normalize_sensory_event(event, rooms=world.get("rooms") or {})
+        if record:
+            records.append(dict(record, desc=record.get("detail")))
+    if not records or not room_of(world, listener):
+        return False
+    try:
+        return _heard_through(heard_events(
+            world, listener, records, room=room_of(world, listener),
+            turn_idx=getattr(getattr(ctx, "turn", None), "idx", None),
+            crowds=_sound_crowds(ctx)), senses)
+    except Exception:
+        return False
+
+
+#: The order a beat's stages run in (`causal_program.program_from_history`
+#: and its closing engine step): the declaration's onset, then the resolve,
+#: then what the engine writes after both. Not a cap.
+_STAGE_ORDER = {"interpret": 0, "resolve": 1, "engine": 2}
+
+
+def _moment_of(steps, stage, chrono):
+    """The index of the first of `steps` (a beat's causal steps, or the
+    worlds merged from them, in program order) that `stage`'s span `chrono`
+    happened at or before: its own step, or -- a span that wrote nothing has
+    none -- the next one. `len(steps)` when it came after them all."""
+    try:
+        key = (_STAGE_ORDER.get(str(stage), 1), int(chrono))
+    except (TypeError, ValueError):
+        return None
+    for i, step in enumerate(steps):
+        try:
+            here = (_STAGE_ORDER.get(str(step.get("stage")), 1),
+                    int(step.get("chrono_id") or 0))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if here >= key:
+            return i
+    return len(steps)
+
+
+def _unplaced_lines(record, stage, scene, body, player_name):
+    """The lines `body` spoke in a stage record that keeps no ledger: the
+    declaration's own `speech` elements when `body` is the player, and the
+    resolve's `dialogue_log` lines spoken by `body`."""
+    from world.spatial import same_subject
+    if stage == "interpret":
+        if str(body).casefold() != str(player_name or "").casefold():
+            return []
+        return [e for e in record.get("sequence") or ()
+                if isinstance(e, dict) and e.get("type") == "speech"]
+    return [line for line in record.get("dialogue_log") or ()
+            if isinstance(line, dict) and str(line.get("speaker") or "").strip()
+            and (str(line["speaker"]).strip().casefold() == str(body).casefold()
+                 or same_subject(scene, str(line["speaker"]).strip(), str(body)))]
+
+
+def _walked_at(travel, body):
+    """`body`'s pace when the travel record walked it any paces, else None."""
+    for entry in ((travel or {}).get("advanced") or ()) \
+            if isinstance(travel, dict) else ():
+        if not isinstance(entry, dict) \
+                or str(entry.get("subject") or "").strip().casefold() \
+                != str(body).strip().casefold():
+            continue
+        try:
+            if float(entry.get("paces") or 0) > 0:
+                return str(entry.get("pace") or "walk").strip().casefold() or "walk"
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _heard_this_beat(ctx, scene, state_diff, interp, out, follower, target,
+                     senses, player_name):
+    """The room `target` was in when the LAST sound it made this beat that
+    reached `follower` was made, or None.
+
+    A SOUND THE BODY MADE, never a channel one could cross: its own lines
+    (the ledger rows spoken from its span, at their own volume, graded in the
+    world of the moment they were said in -- `_moment_of`), its footfalls
+    where the beat walked it (`travel`, graded where the walk ended, as the
+    outcome grades a beat's treads), and the noises the beat's diff sources
+    to its body (graded where the outcome grades them: in the step they came
+    from, else where the beat ends). A silent body that does not move made
+    nothing to hear. The follower has not moved: a follower the beat moved
+    is not walked after anyone."""
+    sources = _source_bodies(ctx, player_name)
+    worlds = []
+    try:
+        end = merge_scene_with_diff(scene, state_diff, causal_worlds=worlds)
+    except Exception:
+        return None
+    worlds = [w for w in worlds if isinstance(w, dict)]
+    heard = []                                   # (moment, room)
+    stayed = room_of(scene, target) == room_of(end, target)
+    for stage, record in (("interpret", interp), ("resolve", out)):
+        if not isinstance(record, dict):
+            continue
+        if not isinstance(record.get("causal_ledger"), list):
+            # A record with no ledger (an older shape) gives its lines no
+            # moment, so a line counts only where the speaker never changed
+            # room: then where it spoke is where it stands.
+            if stayed and any(
+                    _voice_reaches(ctx, scene, follower, target, line, senses)
+                    for line in _unplaced_lines(record, stage, scene, target,
+                                                player_name)):
+                heard.append((0, room_of(scene, target)))
+            continue
+        for row in record["causal_ledger"]:
+            if not _spoken_by(row, sources, scene, target):
+                continue
+            moment = _moment_of(worlds, stage, row.get("chrono_id"))
+            if moment is None:
+                continue
+            world = (worlds[moment].get("before") if moment < len(worlds)
+                     else end) or {}
+            if _voice_reaches(ctx, world, follower, target, row, senses):
+                heard.append((moment, room_of(world, target)))
+    pace = _walked_at((out or {}).get("travel") if isinstance(out, dict) else None,
+                      target)
+    if pace and _treads_reach(ctx, end, follower, target, pace, senses):
+        moved = [i for i, w in enumerate(worlds)
+                 if room_of(w.get("before") or {}, target)
+                 != room_of(w.get("after") or {}, target)]
+        heard.append((moved[-1] if moved else len(worlds), room_of(end, target)))
+    events = state_diff.get("sensory_events") if isinstance(state_diff, dict) else None
+    if events:
+        at = {str(w.get("chrono_id")): i for i, w in enumerate(worlds)
+              if str(w.get("stage") or "") == "resolve"}
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            moment = at.get(str(event.get("from_event")))
+            world = (worlds[moment].get("after") or {}) if moment is not None else end
+            if _sounds_reach(ctx, world, follower, target, [event], senses):
+                heard.append((len(worlds) if moment is None else moment,
+                              room_of(world, target)))
+    heard = [(moment, room) for moment, room in heard if room]
+    return max(heard, key=lambda pair: pair[0])[1] if heard else None
+
+
+def _heard_last_beat(ctx, scene, follower, target, senses, player_name):
+    """The room `target` stands in when a sound it made on the beat before
+    this one reached `follower`, or None -- read from that beat's committed
+    resolve, as `common.widen_reactors_to_engaged` reads it.
+
+    Only a sound made where both bodies still stand: a step after it that
+    moved either of them means it was made, or heard, somewhere the scene no
+    longer says, so it is not read (nor is a beat that recorded no steps,
+    nor one whose diff left either body in a room other than the one it
+    stands in now). What is left is graded in the scene this beat began in,
+    which is where that beat left them both."""
+    try:
+        idx = int(getattr(getattr(ctx, "turn", None), "idx", None))
+    except (TypeError, ValueError):
+        return None
+    if idx - _FOLLOW_HEARD_BEATS_BACK < 0:
+        return None
+    try:
+        from core.db import q
+        rows = q("SELECT s.key AS key, v.content AS content FROM turns t "
+                 "JOIN steps s ON s.turn_id=t.id "
+                 "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+                 "WHERE t.chat_id=? AND t.idx=? AND t.frame_id IS ? "
+                 "AND s.key IN ('director_interpret','director_resolve')",
+                 (ctx.chat.id, idx - _FOLLOW_HEARD_BEATS_BACK,
+                  getattr(ctx.turn, "frame_id", None)))
+        stored = {row["key"]: json.loads(row["content"]) for row in rows}
+    except Exception:
+        return None
+    resolved = stored.get("director_resolve")
+    if not isinstance(resolved, dict):
+        return None
+    diff = resolved.get("state_diff") if isinstance(resolved.get("state_diff"), dict) else {}
+    steps = [s for s in diff.get("causal_steps") or () if isinstance(s, dict)]
+    if not steps or not room_of(scene, follower) or not room_of(scene, target):
+        return None
+    left = diff.get("positions") if isinstance(diff.get("positions"), dict) else {}
+    for who in (follower, target):
+        if any(str(left[key]) != room_of(scene, who)
+               for key in _keys_naming(left, scene, who)):
+            return None
+
+    def moved(i, who):
+        table = (steps[i].get("patch") or {}).get("positions")
+        return bool(_keys_naming(table if isinstance(table, dict) else {},
+                                 scene, who))
+
+    still = max((i for i in range(len(steps))
+                 if moved(i, follower) or moved(i, target)), default=-1)
+    sources = _source_bodies(ctx, player_name)
+    for stage, record in (("interpret", stored.get("director_interpret")),
+                          ("resolve", resolved)):
+        for row in (record or {}).get("causal_ledger") or () \
+                if isinstance(record, dict) else ():
+            moment = _moment_of(steps, stage, row.get("chrono_id"))
+            if moment is not None and moment > still \
+                    and _spoken_by(row, sources, scene, target) \
+                    and _voice_reaches(ctx, scene, follower, target, row, senses):
+                return room_of(scene, target)
+    pace = _walked_at(resolved.get("travel"), target)
+    walked = [i for i in range(len(steps)) if moved(i, target)]
+    if pace and walked and not any(moved(i, follower)
+                                   for i in range(walked[-1] + 1, len(steps))) \
+            and _treads_reach(ctx, scene, follower, target, pace, senses):
+        return room_of(scene, target)
+    at = {str(s.get("chrono_id")): i for i, s in enumerate(steps)
+          if str(s.get("stage") or "") == "resolve"}
+    late = [event for event in diff.get("sensory_events") or ()
+            if isinstance(event, dict)
+            and at.get(str(event.get("from_event")), len(steps)) > still]
+    if late and _sounds_reach(ctx, scene, follower, target, late, senses):
+        return room_of(scene, target)
+    return None
+
+
+def _mind_senses(ctx, name, player_name):
+    """`(is_mind, senses)` for a follower: whether `name` is a mind -- the
+    player, another human player, a registered cast member -- and that mind's
+    structured card senses (None where the card gives none or cannot be
+    read). Any other body is a figure, whose walk is the world's to carry
+    (the charter ruling: pure code off screen): `(False, None)`."""
+    folded = str(name or "").strip().casefold()
+    if not folded:
+        return False, None
+    if folded == str(player_name or "").strip().casefold():
+        try:
+            from story.character_schema import persona_senses
+            from story.scene import persona_of
+            return True, persona_senses(persona_of(ctx.chat)) or None
+        except Exception:
+            return True, None
+    try:
+        extras = list(ctx.extra_players or ())
+    except Exception:
+        extras = []
+    if any(isinstance(extra, dict)
+           and str(extra.get("name") or "").strip().casefold() == folded
+           for extra in extras):
+        return True, None
+    try:
+        cast = list(ctx.cast or ())
+    except Exception:
+        cast = []
+    for row in cast:
+        try:
+            if character_name_from_text(row["sheet"]).strip().casefold() != folded:
+                continue
+        except Exception:
+            continue
+        try:
+            from story.character_schema import (character_senses,
+                                                normalized_character_from_text)
+            return True, character_senses(
+                normalized_character_from_text(row["sheet"])) or None
+        except Exception:
+            return True, None
+    return False, None
+
+
+def _perceived_room(ctx, scene, end_scene, follower, target, destination,
+                    senses, *, state_diff=None, interp=None, out=None,
+                    player_name=None):
+    """Where a follower goes after `target`: the room where it LAST
+    perceived them, latest first -- seen there once the beat's moves are
+    made (`end_scene`, the follower still where it stood); heard there this
+    beat, the last sound of theirs that reached it (`_heard_this_beat`);
+    seen there when the beat began; heard there on the beat before
+    (`_heard_last_beat`) -- else None, nothing perceived to follow.
+
+    PERCEIVED, NEVER PERCEIVABLE (review N1, 2026-10-09). Round 2 asked
+    whether a NORMAL VOICE WOULD carry between the rooms, never whether the
+    one followed made a sound: a silent body behind a curtain, or standing
+    in a dark doorway, was walked to, because a voice could have crossed.
+    A body that makes no sound is heard by nobody, so only sight and a
+    sound it made count -- and never the room the world alone knows it to
+    be in."""
+    start = room_of(scene, target)
+    if destination and destination != start \
+            and _sees_body(end_scene, follower, target, senses):
+        return destination
+    heard = _heard_this_beat(ctx, scene, state_diff, interp, out, follower,
+                             target, senses, player_name)
+    if heard:
+        return heard
+    if start and _sees_body(scene, follower, target, senses):
+        return start
+    return _heard_last_beat(ctx, scene, follower, target, senses, player_name)
+
+
+def follow_walk_waits(sequence, assertions, scene, follower, follow):
+    """The event ids of the declaration's elements whose walk WAITS ON THE
+    ONE IT FOLLOWS, or [] when the walk is hers to take at the onset.
+
+    A follow is a walk WITH someone, so it happens when theirs does, and
+    that has to be settled before anybody perceives the beat: the cast
+    declares from the onset, where the player's declaration has already
+    happened (`perception_act`, `loops._beat_onset_scene`, the resolve's
+    preview). Walked at the onset, a player who "walks a step behind the
+    pilot along the low walk and up the stair" (scratch story 166 turn 4607)
+    had gone up the stair before the pilot moved, and the pilot declared
+    from a world where she was gone, while the committed beat walked them
+    up together (review F3, 2026-10-09). Marked a `continuation` phase, the
+    walk is what the engine already makes of a phase that waits for the
+    others' answer: the onset preview and the cast's act views leave it out
+    (`common.sequence_onset_elements`, the interpret's phase floor), the
+    outcome and the page tell it after the answer (`perception.
+    _outcome_event_stream`, the narrator's deferred lines), and the resolve
+    is where it happens: its author is handed the walk as her input, never
+    as done (`director._causal_event_inputs`, `director_prose.
+    already_happened`), and where its encoder writes no step of hers she
+    walks in the steps that move the one she follows
+    (`follow_through_the_steps`).
+
+    Deferred only when all of it holds: her own span declared the follow
+    this beat (`follow`, a `start`); the one she follows stands in her room
+    when the beat begins, and does not move inside her declaration; and
+    every step from the first that changes her room to the end of her
+    declaration writes her room and nothing but her walk channels and the
+    follow itself -- and those about her alone (`_writes_only`: a dog her
+    span walks at her heel in the same step would wait with her, and be
+    left out of the beat when the walk was taken from the onset, review
+    N3). A line, an act or a hand on something after the walk happened where
+    the walk took her, so that walk stays where she took it, and so does
+    every walk under a follow from an earlier beat: a walk she declares on
+    her own is hers at the onset."""
+    if not isinstance(follow, dict) or follow.get("op") != "start":
+        return []
+    target = str(follow.get("target") or "").strip()
+    origin = room_of(scene, follower)
+    if not target or not origin or room_of(scene, target) != origin:
+        return []
+    steps = assertions.get("causal_steps") if isinstance(assertions, dict) else None
+    if not isinstance(steps, list) or not steps:
+        return []
+
+    def her_room(step):
+        patch = step.get("patch") if isinstance(step, dict) else None
+        table = patch.get("positions") if isinstance(patch, dict) else None
+        keys = _keys_naming(table if isinstance(table, dict) else {}, scene, follower)
+        return str(table[keys[-1]]) if keys else None
+
+    first = next((i for i, step in enumerate(steps)
+                  if her_room(step) and her_room(step) != origin), None)
+    if first is None:
+        return []
+    # The one she follows moving inside her own declaration -- a figure her
+    # span walks, or one she holds -- walks in its chronology already, and
+    # her walk beside them with it.
+    if any(_keys_naming(((step.get("patch") or {}).get("positions") or {})
+                        if isinstance(step, dict) else {}, scene, target)
+           for step in steps):
+        return []
+    walked, before = set(), set()
+    for i, step in enumerate(steps):
+        events = {str(e) for e in (step.get("events") or ())} \
+            if isinstance(step, dict) else set()
+        if i < first:
+            before |= events
+            continue
+        patch = step.get("patch") if isinstance(step, dict) else None
+        if not isinstance(patch, dict) or not her_room(step) \
+                or any(channel not in _WALK_CHANNELS + ("following_ops",)
+                       for channel in patch) \
+                or not _writes_only(patch, scene, follower):
+            return []
+        walked |= events
+    elements = {str(e.get("event_id")) for e in sequence or ()
+                if isinstance(e, dict) and e.get("event_id")}
+    waits = (walked & elements) - before
+    # An element that also carried an act before the walk cannot wait
+    # without taking that act with it.
+    if not waits or (walked & elements) & before:
+        return []
+    return sorted(waits)
+
+
+def _writes_only(patch, scene, follower):
+    """Whether every body a step's walk channels write -- each `positions`,
+    `stations` and `poses` key, and each `following_ops` row's follower --
+    is `follower`: a walk that is hers alone, which can wait on the one she
+    follows without taking anybody else's move out of the beat."""
+    for channel in _WALK_CHANNELS:
+        table = patch.get(channel)
+        if table is None:
+            continue
+        if not isinstance(table, dict):
+            return False
+        hers = set(_keys_naming(table, scene, follower))
+        if any(key not in hers for key in table):
+            return False
+    ops = patch.get("following_ops")
+    for op in (ops if isinstance(ops, list) else [ops] if ops else []):
+        if not isinstance(op, dict) or not _keys_naming(
+                {str(op.get("follower") or ""): True}, scene, follower):
+            return False
+    return True
+
+
+def _waiting_walk_poses(interp, scene, follower):
+    """Her poses from the walk that waited on the one she follows (the
+    elements `follow_walk_waits` marked `walks_with`), in order, read off
+    the interpret's whole record -- the onset preview lost them with the
+    walk."""
+    interp = interp if isinstance(interp, dict) else {}
+    waiting = {str(e.get("event_id")) for e in interp.get("sequence") or ()
+               if isinstance(e, dict) and e.get("walks_with") and e.get("event_id")}
+    if not waiting:
+        return []
+    out = []
+    for step in ((interp.get("state_assertions") or {}).get("causal_steps") or ()):
+        if not isinstance(step, dict) \
+                or not waiting & {str(e) for e in step.get("events") or ()}:
+            continue
+        table = (step.get("patch") or {}).get("poses")
+        table = table if isinstance(table, dict) else {}
+        out.extend(table[key] for key in _keys_naming(table, scene, follower))
+    return out
+
+
+def _own_conduct(ctx, interp, out, player_name):
+    """`(event ids, resolve chrono ids, walk ids)` of the player's own
+    conduct this beat: her declaration's elements and its raw input; the
+    resolve's ledger rows sourced from her; and, of those elements, the
+    ones that are her walk waiting on the one she follows (`walks_with`)."""
+    interp = interp if isinstance(interp, dict) else {}
+    elements = [e for e in interp.get("sequence") or ()
+                if isinstance(e, dict) and e.get("event_id")]
+    ids = {str(e["event_id"]) for e in elements}
+    turn_id = getattr(getattr(ctx, "turn", None), "id", None)
+    if turn_id is not None:
+        ids.add(f"turn:{turn_id}:primary:raw")
+    walk = {str(e["event_id"]) for e in elements if e.get("walks_with")}
+    folded = str(player_name or "").strip().casefold()
+    sources = {key for key, name in _source_bodies(ctx, player_name).items()
+               if str(name or "").strip().casefold() == folded}
+    chronos = {str(row.get("chrono_id"))
+               for row in (out or {}).get("causal_ledger") or ()
+               if isinstance(row, dict)
+               and str(row.get("source_entity_id") or "").strip().casefold() in sources}
+    return frozenset(ids), frozenset(chronos), frozenset(walk)
+
+
+def follow_through_the_steps(state_diff, scene, follower, target, poses=(),
+                             own=None):
+    """A FOLLOWER WALKS WHEN THE ONE SHE FOLLOWS WALKS -- in the beat's
+    chronology as well as at its end. Writes the follower into the causal
+    steps in which the one she follows changes room, beside them, and
+    returns True when it did.
+
+    The beat runs the player's declaration first (interpret's steps, the
+    onset) and everyone else's after it (resolve's), so a player who
+    declared "a step behind the pilot along the low walk and up the stair"
+    was walked there at the onset, before the pilot had even stepped off the
+    boat; every word the pilot said on the way was graded from where the
+    onset had put the player. Scratch story 166 (F88): turn 4598's whispered
+    "eyes on the boards, not them" came from two rooms away, and turn 4607's
+    directions "a step behind" her came through as fog fragments. A follow
+    is a walk WITH someone, so at each step where the one followed changes
+    room she changes room with them, her last pose (`poses`, from the walk
+    that waited) arriving with them.
+
+    ONLY WHERE NO STEP OF THE BEAT MOVES HER ALREADY. A walk taken at the
+    onset happened where the cast perceived it and declared from it -- a
+    walk of her own under a follow from an earlier beat, a walk with a line
+    or an act after it -- so it stays where she took it; the walk that waits
+    is settled before anyone perceives the beat (`follow_walk_waits`) and
+    reaches the resolve as her input, so the steps its encoder writes for
+    her are the chronology its author gave the walk, and stand. A walk the
+    encoder wrote no step for, and a follow with no walk of her own at all,
+    ride the steps of the one she follows. Nor where they change no room.
+
+    AND NEVER AHEAD OF AN ACT OF HER OWN (review N2, F2's class): an act of
+    hers later in the beat -- a step carrying one of her declaration's
+    elements or its raw input, or a resolve row sourced from her (`own`,
+    `_own_conduct`), other than the walk itself and the steps that move the
+    one she follows -- happened where she stood, so she rides only their
+    steps after her last such act. Where none is left, she lands where they
+    ended when the beat does, as before: a standing follow of a porter her
+    own span walked up the trail, then her hand lifting the latch of the
+    gate she still stood at, had put her on the trail before she touched
+    the gate.
+
+    The steps are COPIED before they are written: the onset's are the
+    interpret's own record's, shared by reference with `ctx.
+    director_interpret` (`common.merge_player_state_assertions`), and
+    written in place the interpret lost its own steps (review F8,
+    2026-10-09)."""
+    steps = state_diff.get("causal_steps") if isinstance(state_diff, dict) else None
+    if not isinstance(steps, list) or not steps:
+        return False
+
+    def positions_of(step):
+        patch = step.get("patch") if isinstance(step, dict) else None
+        table = patch.get("positions") if isinstance(patch, dict) else None
+        return table if isinstance(table, dict) else {}
+
+    if any(_keys_naming(positions_of(step), scene, follower) for step in steps):
+        return False
+    theirs = []
+    for i, step in enumerate(steps):
+        keys = _keys_naming(positions_of(step), scene, target)
+        if keys:
+            theirs.append((i, str(positions_of(step)[keys[-1]])))
+    ids, chronos, walk = own if own else (frozenset(), frozenset(), frozenset())
+    moving = {i for i, _ in theirs}
+
+    def an_act_of_hers(i, step):
+        if i in moving or not isinstance(step, dict):
+            return False
+        mine = {str(e) for e in step.get("events") or ()} & ids
+        if mine and not mine <= walk:
+            return True
+        return str(step.get("stage") or "") == "resolve" \
+            and str(step.get("chrono_id")) in chronos \
+            and not ({str(e) for e in step.get("events") or ()} & walk)
+
+    last_act = max((i for i, step in enumerate(steps) if an_act_of_hers(i, step)),
+                   default=-1)
+    theirs = [(i, room) for i, room in theirs if i > last_act]
+    if not theirs:
+        return False
+    steps = copy.deepcopy(steps)
+    last = theirs[-1][0]
+    for i, room in theirs:
+        patch = steps[i].get("patch")
+        if not isinstance(patch, dict):
+            patch = steps[i]["patch"] = {}
+        patch.setdefault("positions", {})[follower] = room
+        patch.setdefault("stations", {})[follower] = {"near": [target]}
+        if i == last and poses:
+            patch.setdefault("poses", {})[follower] = copy.deepcopy(list(poses)[-1])
+    state_diff["causal_steps"] = steps
+    return True
+
+
+def _walk_was_the_follow(out, follower, room):
+    """The travel record of a body the follow carried: it went where the one
+    it follows went, and it is not under way on its own -- the follow
+    carries it on, beat by beat, as long as it lasts. Its footfalls stay on
+    the record (`perception._beat_movers` reads its paces), and its own
+    approach is retired (`arrived`), so silence never walks it on alone,
+    ahead of the one it follows, toward a place they have not reached."""
+    travel = _travel_record(out)
+    for entry in travel["advanced"]:
+        if isinstance(entry, dict) and \
+                str(entry.get("subject") or "").strip().casefold() == follower.casefold():
+            entry["to"] = room
+            entry["destination"] = room
+            entry["underway"] = False
+    if follower not in travel["arrived"]:
+        travel["arrived"].append(follower)
+
+
 #: The postures nobody walks in (`spatial_fov.posture_word_class`'s classes):
 #: the one half of the evidence a follower stayed where they were.
 _RESTING_POSTURES = frozenset({"sitting", "kneeling", "crouching", "lying"})
@@ -816,6 +1639,27 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
     fleeing leaves the follower behind with the relation still active, so they
     may choose to chase or stop on their next decision. Actor-owned stop ops
     take effect before any carry.
+
+    THE PLAYER IS CARRIED BY A FOLLOW OF HER OWN (the owner's ruling,
+    2026-10-09, D1). "A mind moves only by its own declaration" is honoured
+    by a declared follow, not overridden: the follow IS her declaration. She
+    goes where they go when she declared no place of her own, and goes when
+    they go (`follow_walk_waits`, `follow_through_the_steps`). A place she
+    did declare is hers, and wins over a follow declared in the same breath:
+    when the one she follows ends somewhere else, the floor below ends the
+    follow and her walk stands, with every act she did at its end (review
+    F2, 2026-10-09). Scratch story 166 turn 4607 (F101) needed no exemption
+    from that floor: once a room the beat builds counts as one the world
+    holds (`director._final_movement`), her walk and the pilot's end on the
+    same landing. A FOLLOW IS WALKED ALONG WHAT ITS FOLLOWER PERCEIVED: one
+    begun toward a body in another room goes where the follower last saw
+    them or heard a sound they made, this beat or the one before, and with
+    nothing perceived it moves nobody and says so (review F1 and N1) -- the
+    world knowing where a body is gives no mind a way to it, and nor does a
+    wall a voice could have crossed. A follow nobody declared never moves
+    anyone: every op here is its follower's own (`a_walk_is_its_owners`
+    refuses one any other span wrote), and pace, barriers and a sprint bound
+    her as they bound everyone.
     """
     from world.spatial import apply_following_ops
 
@@ -830,6 +1674,14 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
     # ledger nor an op. The three that do merge exactly as before.
     if not (scene.get("following") or ops):
         return False
+    ops = _canonical_following_ops(
+        ops, getattr(ctx, "cast", None) or (), player_name,
+        getattr(getattr(ctx, "turn", None), "idx", None), scene=scene)
+    if ops:
+        state_diff["following_ops"] = ops
+    # What each follower declared LAST this beat: a start taken back in the
+    # same beat is no follow declared.
+    declared_now = {who for who, op in _last_follow_ops(ops).items() if op == "start"}
     relation_scene = merge_scene_with_diff(scene, {"following_ops": ops})
     following = relation_scene.get("following") or {}
     if not following:
@@ -857,6 +1709,15 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
     # the player's declared movement somewhere other than the followed target,
     # the physical contradiction itself ends following. NPC autonomy is NOT
     # inferred from resolver positions; NPCs own it through their follow_op.
+    # HER OWN DECLARED PLACE WINS, a follow declared in the same breath
+    # included (D1 with review F2, 2026-10-09): a walk to a place she named,
+    # and every act she did at its end, stand where she put them when the
+    # one she follows goes somewhere else. Stored firings: scratch story 166
+    # idx 6 (turn 4591), the player reaching the chapel while the pilot she
+    # had followed since idx 3 was still on the rope bridge; and idx 22
+    # (turn 4607, F101), where the landing built that beat, counted as held
+    # (`director._final_movement`), ends both walks on one landing, so the
+    # floor no longer fires there.
     p_follow_key, p_follow = _following_record(following, player_name)
     player_move = interp.get("movement")
     if p_follow and isinstance(player_move, dict) \
@@ -874,6 +1735,10 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             apply_following_ops(relation_scene, [stop])
             following = relation_scene.get("following") or {}
             state_diff["following_ops"] = ops
+            ctx.add_warning(
+                f"Follow: {p_follow_key}'s own walk ends in {player_dest!r} and "
+                f"{target} went to {target_dest!r}; the place declared stands, "
+                "and the follow ends.")
 
     def _carried(raw_follower, record, all_positions):
         """`(follower, target, origin, destination)` when this beat's carry
@@ -914,6 +1779,37 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
                 grew = True
         if not grew:
             break
+
+    # AND A MIND KEEPS UP ONLY WITH WHAT IT PERCEIVES (review N1,
+    # 2026-10-09): one it saw beside it when the beat began it sees go, and
+    # goes with; one it could not see is followed only where the last sound
+    # it made that reached the follower came from the room it went to
+    # (`_perceived_room`). Lost in the dark to a body that slipped away
+    # without a sound, the follower stays where it is, the relation stands,
+    # and the beat says so. A figure's carry is the world's, as it was.
+    # Measured before it landed: on every stored beat where a mind stood
+    # beside the one it followed and that one changed room -- 31 in the play
+    # db, 26 in the owner's -- the follower saw them when the beat began, so
+    # it refuses none of them.
+    _tracked = {}
+
+    def _keeps_track(follower, target, target_dest):
+        key = (str(follower).casefold(), str(target).casefold())
+        if key not in _tracked:
+            is_mind, senses = _mind_senses(ctx, follower, player_name)
+            _tracked[key] = (not is_mind) \
+                or _sees_body(scene, follower, target, senses) \
+                or _perceived_room(
+                    ctx, scene, route_scene, follower, target, target_dest,
+                    senses, state_diff=state_diff, interp=interp, out=out,
+                    player_name=player_name) == target_dest
+            if not _tracked[key]:
+                ctx.add_warning(
+                    f"Follow: {follower} lost {target}, who went from beside "
+                    f"them to {target_dest!r} with nothing of it seen or "
+                    "heard; nothing perceived to follow, so the relation "
+                    "stands and the body stays.")
+        return _tracked[key]
 
     changed = False
     # A short fixed-point handles A follows B follows C without making cycles
@@ -957,6 +1853,19 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
                 continue
             if positions.get(follower) == target_dest:
                 continue
+            # THE PLAYER'S ROOM THIS BEAT IS HER OWN DECLARATION'S, or the
+            # hold of whoever carries her: the carry never replaces a room
+            # the beat already gave her (review F2, 2026-10-09). The floor
+            # above has ended a follow her own walk leaves; a walk it could
+            # not read as hers -- one with no movement row, one continuing
+            # from an earlier beat, a carry -- is not overwritten either,
+            # and `program_steps` would have written the overwrite back into
+            # the step she walked in, before the one she follows had moved.
+            if positions.get(follower) and positions[follower] != origin \
+                    and follower.casefold() == str(player_name or "").casefold():
+                continue
+            if not _keeps_track(follower, target, target_dest):
+                continue
             positions[follower] = target_dest
             # BESIDE THE ONE FOLLOWED: a body carried through a doorway
             # with somebody stands next to them, not on the door's cell.
@@ -987,7 +1896,26 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
     # when the beat ends if an open route reaches it; a route that does not
     # exist, a target that is running, or a follower moved this beat by
     # something else leaves the relation standing and the body where it is.
-    # The player is never carried: their walk is their own declaration.
+    # The player is carried only by a follow she declared this beat: then
+    # going to the one she follows is her own walk (D1). A walk of her own
+    # elsewhere this beat still wins below, as anybody's does.
+    #
+    # AND A MIND GOES ONLY WHERE IT PERCEIVES THE ONE IT FOLLOWS (review F1,
+    # 2026-10-09). The route and the room came from the objective scene, so
+    # a follow toward someone out of sight and earshot walked the follower
+    # straight to them -- code choosing a mind's conduct from a fact it had
+    # no channel to, and teaching it where a hidden body was by putting it
+    # beside them. A mind (the player, another human player, a registered
+    # character) walks toward the room where it last perceived them: SAW
+    # them, or HEARD A SOUND THEY MADE, this beat or the one before
+    # (`_perceived_room`) -- never a channel a voice could have crossed, so a
+    # silent body behind a curtain or in a dark doorway is not walked to
+    # (review N1). With nothing perceived the relation stands, the body
+    # stays, and the beat says so. A figure's walk is the world's, as it
+    # always was. Measured before it landed: no stored beat in the play db or
+    # the owner's db walks a follower this way at all, so it refuses nothing
+    # measured.
+    approached = set()
     for raw in ops:
         if not isinstance(raw, dict) \
                 or str(raw.get("op") or "").strip().casefold() != "start":
@@ -999,7 +1927,13 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
         if not follower or not target \
                 or follower.casefold() == target.casefold():
             continue
-        if follower.casefold() == str(player_name or "").casefold():
+        # One start, however many records of it the beat carries (the
+        # interpret's `follow_op` and the onset's own op are two).
+        if (follower.casefold(), target.casefold()) in approached:
+            continue
+        approached.add((follower.casefold(), target.casefold()))
+        if follower.casefold() == str(player_name or "").casefold() \
+                and follower.casefold() not in declared_now:
             continue
         origin = room_of(scene, follower)
         target_room = positions.get(target) or room_of(scene, target)
@@ -1015,6 +1949,22 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             continue
         if target.casefold() in rapid:
             continue
+        where_they_are = target_room
+        is_mind, senses = _mind_senses(ctx, follower, player_name)
+        if is_mind:
+            target_room = _perceived_room(
+                ctx, scene, route_scene, follower, target, positions.get(target),
+                senses, state_diff=state_diff, interp=interp, out=out,
+                player_name=player_name)
+            if target_room is None:
+                ctx.add_warning(
+                    f"Follow: {follower} started following {target} from "
+                    f"{origin!r} with nothing of them seen or heard there; "
+                    "nothing perceived to follow, so the relation stands and "
+                    "the body stays.")
+                continue
+            if target_room == origin:
+                continue
         if not passable_route_exists(route_scene, origin, target_room,
                                      body=follower):
             ctx.add_warning(
@@ -1024,7 +1974,9 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             continue
         # OVER THE CELLS, AS FAR AS THE PACES CARRY (`spatial_walk.walk`):
         # the follower is beside the target when the budget reaches them,
-        # else mid-way with the walk recorded as under way.
+        # else mid-way with the walk recorded as under way. Beside them only
+        # in the room they are in: a walk to where they were seen last ends
+        # there.
         from world.spatial import standing_cell
         landed = walk(route_scene, follower, target_room,
                       paces=paces_for(beat_seconds(ctx, state_diff)),
@@ -1036,7 +1988,8 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
         station = state_diff.setdefault("stations", {})
         entry = station.get(follower) if isinstance(
             station.get(follower), dict) else {}
-        if landed["arrived"]:
+        beside = landed["arrived"] and target_room == where_they_are
+        if beside:
             near = [n for n in (entry.get("near") or []) if n]
             if target not in near:
                 near.append(target)
@@ -1044,7 +1997,7 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             entry.pop("cell", None)
         else:
             entry["cell"] = list(landed["cell"])
-            if isinstance(out, dict):
+            if not landed["arrived"] and isinstance(out, dict):
                 _travel_record(out)["advanced"].append({
                     "subject": follower, "from": origin, "to": landed["room"],
                     "destination": target_room, "paces": landed["paces"],
@@ -1055,9 +2008,41 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             f"Approach: {follower} started following {target} from another "
             f"room and walks {landed['paces']} paces toward "
             f"{target_room!r}, "
-            + ("arriving beside them." if landed["arrived"]
+            + ("arriving beside them." if beside
+               else "arriving where they were last seen or heard."
+               if landed["arrived"]
                else f"ending the beat in {landed['room']!r}.")
             + " A follow begun from elsewhere is a walk to the one followed.")
+
+    # AND THE PLAYER WHO WENT WITH THEM WENT WHEN THEY DID. Her follow --
+    # declared now or standing from an earlier beat, either way her own --
+    # took her from the room she shared with the one she follows to where
+    # they ended, with no walk of hers at the onset (her walk waited on
+    # theirs, `follow_walk_waits`, or she declared none); her walk is theirs,
+    # in the beat's chronology (`follow_through_the_steps`) and on the
+    # travel record (`_walk_was_the_follow`).
+    all_positions = {**(scene.get("positions") or {}), **positions}
+    p_follow_key, p_follow = _following_record(
+        relation_scene.get("following") or {}, player_name)
+    follower = _ci_mapping_key(all_positions, p_follow_key) if p_follow else None
+    target = _ci_mapping_key(all_positions, (p_follow or {}).get("target"))
+    if follower and target:
+        origin = room_of(scene, follower)
+        target_dest = positions.get(target)
+        ended = positions.get(follower) or origin
+        if origin and origin == room_of(scene, target) and target_dest \
+                and target_dest != origin and ended == target_dest \
+                and follow_through_the_steps(
+                    state_diff, scene, follower, target,
+                    poses=_waiting_walk_poses(interp, scene, follower),
+                    own=_own_conduct(ctx, interp, out, player_name)):
+            changed = True
+            ctx.add_warning(
+                f"Follow: {follower} walks with {target} from {origin!r} "
+                f"to {target_dest!r}, room by room as they do; the "
+                "declaration was to follow, so the walk is theirs.")
+            if isinstance(out, dict):
+                _walk_was_the_follow(out, follower, target_dest)
     if changed:
         # `positions` may be a fresh dict when the diff carried an empty one
         # (`state_diff.get("positions") or {}`), so a carry must be attached.

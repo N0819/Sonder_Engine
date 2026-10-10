@@ -195,6 +195,11 @@ from .director_movement import (
     _collect_following_ops,
     _following_record,
     _apply_following_movement,
+    declared_follow_op,
+    follow_through_the_steps,
+    follow_walk_waits,
+    _canonical_following_ops,
+    _voice_reaches,
     _unreachable_position_writes,
     _resolve_movement_mover,
     _LONG_EDGE_DISTANCES,
@@ -1066,7 +1071,7 @@ def _route_doorway_rows(sc, out, room_ids):
     return routed
 
 
-def _final_movement(rows, scene=None, warn=None):
+def _final_movement(rows, scene=None, warn=None, built=()):
     """The beat's relocation: the LAST movement row that arrives.
 
     Rows are in chronological order, so the last arrival is where the body
@@ -1084,9 +1089,21 @@ def _final_movement(rows, scene=None, warn=None):
     yard was thrown away with it, so the page left her at the gate. A beat
     whose only arrivals are unknown keeps its last one, so the planning
     need for a genuinely new place still fires.
+
+    AND A ROOM THE BEAT ITSELF BUILDS IS ONE THE WORLD HOLDS (`built`, the
+    room ids this stage's encoded beat writes -- `director_prose.
+    rooms_built`): the room author builds a new place beside the encoder,
+    and the walk into it is the walk the beat declared. Read against the
+    scene alone, it was refused: scratch story 166 turn 4607 (F101), "walks
+    a step behind the pilot along the low walk and up the stair to the
+    landing outside Abel Gale's door" -- the landing built that beat as
+    `the_gale_house_landing` -- ended the player's walk at the landing
+    stage she started from, the follow floor read that as a walk away from
+    the pilot, and the page walked her to a door the world never reached.
     """
     final = None
     known = None
+    built = {str(room) for room in built or ()}
     for row in rows or []:
         if not isinstance(row, dict) or not isinstance(row.get("movement"), dict):
             continue
@@ -1095,7 +1112,8 @@ def _final_movement(rows, scene=None, warn=None):
             continue
         if scene is not None and final is not None:
             to_room = str(movement.get("to_room") or "").strip()
-            if to_room and not _room_the_world_holds(scene, to_room):
+            if to_room and to_room not in built \
+                    and not _room_the_world_holds(scene, to_room):
                 if warn is not None:
                     warn(f"movement to {to_room!r} names no room the world "
                          f"holds; the walk ends at {final.get('to_room')!r}, "
@@ -1806,7 +1824,8 @@ def director_interpret(ctx, nonce):
     # in the study, `movement` said hall, and the commit left him in the
     # hall while the page described the study he never reached.
     _last_movement = _final_movement(out.get("causal_ledger"), scene=sc,
-                                     warn=ctx.add_warning)
+                                     warn=ctx.add_warning,
+                                     built=director_prose.rooms_built(ctx))
     if _last_movement is not None:
         out["movement"] = _last_movement
     _canonicalize_interior_movements(sc, out, _interpret_identities)
@@ -2361,6 +2380,49 @@ def director_interpret(ctx, nonce):
     # not a not-yet-resolved destination — otherwise onset perception
     # treats the player as having already arrived before anyone (the
     # player included) has moved.
+
+    # THE PLAYER'S FOLLOW, ON THE FIELD EVERY FOLLOW READER TAKES IT FROM
+    # (`director_movement.declared_follow_op`): her own span's last
+    # `following_ops` op, after the authority dial has had its say over the
+    # span that wrote it. Each other human player's the same way.
+    _own_follows = {"following_ops": _canonical_following_ops(
+        (out.get("state_assertions") or {}).get("following_ops"), ctx.cast,
+        p_name, ctx.turn.idx, scene=sc)}
+    _follow_now = declared_follow_op(_own_follows, p_name)
+    if not out.get("follow_op") and _follow_now:
+        out["follow_op"] = _follow_now
+    for _extra in ctx.extra_players or []:
+        _entry = (out.get("other_players") or {}).get(str(_extra.get("persona_id")))
+        if isinstance(_entry, dict) and not _entry.get("follow_op"):
+            _follow = declared_follow_op(_own_follows, _extra.get("name"))
+            if _follow:
+                _entry["follow_op"] = _follow
+
+    # AND HER WALK WITH THE ONE SHE FOLLOWS WAITS ON THEIRS
+    # (`director_movement.follow_walk_waits`, review F3, 2026-10-09). Settled
+    # here, before anybody perceives the beat, so the cast, the resolve's
+    # author and the committed steps read one chronology: the walk's
+    # elements become a `continuation` phase -- out of the onset preview and
+    # the cast's act views, told after the others answer -- and the resolve
+    # walks her in the steps that move the one she follows. Run after the
+    # authority dial, on the record it left.
+    _waits = follow_walk_waits(out.get("sequence"), out.get("state_assertions"),
+                               sc, p_name, _follow_now)
+    if _waits:
+        for _elem in out.get("sequence") or []:
+            if isinstance(_elem, dict) and str(_elem.get("event_id") or "") in _waits:
+                _elem["phase"] = "continuation"
+                _elem["walks_with"] = _follow_now["target"]
+        _onset = out.get("onset_state_assertions")
+        if isinstance(_onset, dict):
+            prune_blocked_phase_changes(
+                _onset, [{"event_id": _id, "status": "blocked"} for _id in _waits])
+            if _onset.get("causal_steps") is not None:
+                out["onset_contact_assertions"] = _onset.get("contact_ops", [])
+        ctx.add_warning(
+            f"Follow: {p_name}'s walk waits on {_follow_now['target']}'s -- "
+            f"{len(_waits)} element(s) told after the others answer, walked "
+            "in the steps that move them.")
 
     _span_coherency_report(ctx, out, "interpret", _idispatch, _iview)
 
@@ -4052,8 +4114,9 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
     Already asserted human-controlled events are deliberately absent: they
     entered the preview world during interpret and sending them through
     resolve would ask a model to decide them twice. Only contestable events
-    from those sources remain. Autonomous sources contribute their declared
-    events because resolve is their first causal pass.
+    from those sources remain, and a player's walk that waits on the one she
+    follows, which never entered it. Autonomous sources contribute their
+    declared events because resolve is their first causal pass.
     """
     groups = []
 
@@ -4071,10 +4134,15 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
         if not isinstance(ctx.chat, dict) else ctx.chat.get("persona_id")
     primary_id = f"persona:{primary_id}" if primary_id is not None \
         else "persona:primary"
+    # And a walk that waits on the one she follows: it has not entered the
+    # preview world (`director_movement.follow_walk_waits`), so this is the
+    # stage it happens in, and the author is the one who knows when the one
+    # she follows moves.
     unresolved = [
         event for event in (interp.get("sequence") or [])
         if isinstance(event, dict)
-        and str(event.get("commitment") or "").casefold() == "contestable"
+        and (str(event.get("commitment") or "").casefold() == "contestable"
+             or event.get("walks_with"))
     ]
     add_group(primary_id, interp.get("authority_mode") or "world_author",
               unresolved)
@@ -6048,8 +6116,20 @@ def director_resolve(ctx, nonce, _corrections=None):
     # Following is actor-owned. Never trust director_resolve to invent or end
     # it: project only the player's interpreted decision and each NPC's own
     # character result into the objective diff.
-    sd["following_ops"] = list(sd.get("following_ops") or []) + \
-        _collect_following_ops(ctx, sc, interp, p_name)
+    # A HUMAN PLAYER'S OWN OP COMES FIRST, the rest after: hers is her
+    # declaration's, made at the onset, and the only ops of hers this
+    # stage's encoder can write are on her own events here -- the walk that
+    # waited on the one she follows -- which happen later in the beat. Last
+    # in the list wins, so appended after them her declaration's start undid
+    # the stop the resolve wrote when she went a way the one she followed
+    # did not (scratch story 166 turn 4607, replayed 2026-10-09).
+    _collected = _collect_following_ops(ctx, sc, interp, p_name)
+    _humans = {str(p_name or "").casefold(), *(
+        str(_x.get("name") or "").casefold() for _x in ctx.extra_players or [])}
+    _theirs_first = [op for op in _collected
+                     if str(op.get("follower") or "").casefold() in _humans]
+    sd["following_ops"] = _theirs_first + list(sd.get("following_ops") or []) + [
+        op for op in _collected if op not in _theirs_first]
 
     # HOW LONG THE BEAT TOOK, summed from what the author priced its own
     # steps at. Engine-owned for the same reason `following_ops` above is:
@@ -6081,10 +6161,18 @@ def director_resolve(ctx, nonce, _corrections=None):
     # `setdefault`, not assignment: a saved variant or a legacy monolith
     # output that already carries a readable block keeps it, and a beat whose
     # rows named no number is left to the floor exactly as before.
+    # A walk that waits on the one she follows is re-cut here the same way:
+    # it reached this stage's author as an input, and its span is theirs to
+    # price beside the walk of the one she follows -- where they priced it
+    # (a row of hers, or a walk of the one she follows), and only there
+    # (`director_prose.waiting_spans_priced_again`, review N7).
+    _waiting_rows = director_prose.waiting_spans_priced_again(
+        interp, out.get("causal_ledger"), _identity_index, p_name)
     _beat_time = beat_time_from_spans(
         [row for row in (interp.get("causal_ledger") or [])
          if isinstance(row, dict)
-         and str(row.get("commitment") or "").casefold() != "contestable"]
+         and str(row.get("commitment") or "").casefold() != "contestable"
+         and str(row.get("chrono_id") or "") not in _waiting_rows]
         + list(out.get("causal_ledger") or []))
     if _beat_time and not time_diff_claims(sd.get("time")):
         sd["time"] = dict(sd.get("time") or {}, **_beat_time)
@@ -6159,6 +6247,14 @@ def director_resolve(ctx, nonce, _corrections=None):
             onset_state, sd, p_name,
             report=lambda note: ctx.add_warning(f"player state: {note}"),
         ))
+        # The onset's follow ops are the declaration's too, and come first
+        # for the reason given where the ops were assembled above; the merge
+        # appends a list channel's items after the resolve's.
+        _onset_follows = [op for op in (onset_state.get("following_ops") or [])
+                          if op in (sd.get("following_ops") or [])]
+        if _onset_follows:
+            sd["following_ops"] = _onset_follows + [
+                op for op in sd["following_ops"] if op not in _onset_follows]
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
 

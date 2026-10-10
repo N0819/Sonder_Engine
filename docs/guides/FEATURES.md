@@ -342,9 +342,13 @@ legitimately perceive, learn, remember or infer.
 - **Following by choice** — Players and characters can deliberately follow a
   particular person across ordinary travel. The relation persists until the
   follower chooses incompatible conduct or stops, and characters know whom
-  they are following. It grants no extra speed or access: a sprint can leave a
-  follower behind, a closed barrier still blocks them, and catching up requires
-  a real later movement decision.
+  they are following. A follow you declare is your walk: from beside them you
+  go where they go, and when they go, so what they say on the way reaches you
+  from beside them; a place you name yourself is where you go; and you go
+  after someone only toward where you last saw them or heard them make a
+  sound. It grants no extra speed or access: a sprint can leave a follower
+  behind, a closed barrier still blocks them, and catching up requires a
+  real later movement decision.
 - **Stepping through a doorway** — A body part-way through stays visible to the
   room it is leaving for a beat rather than vanishing.
 - **Up and down** — Stairs and ladders read as above and below, not as another
@@ -429,8 +433,10 @@ legitimately perceive, learn, remember or infer.
 - **Being carried** — You can be in someone's hand, pocket or pack, and go where
   they go; getting out is an explicit act.
 - **Vehicles** — Interior rooms, a hatch that opens or seals, and journeys with
-  an arrival time; under way its doors lead nowhere, and on arrival the doorway
-  opens onto wherever it docked — including a car on a ferry.
+  an arrival time; under way it is in the space it moves through -- the room it
+  set off from, when it moves within that -- and an open boat stays open to the
+  water it is crossing, nearing its landing too; on arrival the doorway opens
+  onto wherever it docked — including a car on a ferry.
 - **Portals** — Two rooms joined by a link that opens and closes, with the
   doorway appearing and disappearing with it.
 - **Bodiless voices** — A ship's computer or building PA can be present and

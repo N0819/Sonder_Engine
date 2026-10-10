@@ -1862,6 +1862,31 @@ Open:
     fails open the same way. Whether the room author's places should be
     exempt is the owner's call.
 
+<a id="unbuilt-1-195"></a>
+
+### 1.195 Two defects found replaying a follow (2026-10-09)
+
+(a) A rerun from a stage plans the turn with the cast its own commit left.
+    `runtime._run_pipeline` reads `cast_rows` before `_restore_and_refresh`
+    puts the turn's checkpoint back, and the normal path builds the plan
+    from `cast_rows`, not the refreshed `ctx.cast`. When the turn's commit
+    moved a character out of the frame (into a bubble, `chat_chars`
+    `dormant`), a rerun from `director_resolve` plans no interaction loop,
+    hydrates none, and the resolve's author is sent no declaration of that
+    character's. Measured on a copy of scratch story 166 turn 4607: two
+    reruns from the resolve after a committed rerun sent the author no
+    event of the pilot's; one after an uncommitted rerun sent all three.
+    Building the plan from `ctx.cast` once the restore has run is the
+    likely repair; unbuilt.
+(b) A prose Director answer that stops mid-sentence is accepted. On the
+    same replay the resolve's author returned `{"prose":"Hester Gale
+    speaks over her shoulder, low and already turning: "}` after 18,711
+    characters of reasoning. Only an empty answer raises
+    (`director_prose.author`), so the beat went on with the pilot's walk,
+    line and knock unresolved and the engine only warned ("no event
+    carries declared act(s)"). The owner's D5 (one fresh attempt before a
+    malformed beat aborts, wave 2) is the nearest seam.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

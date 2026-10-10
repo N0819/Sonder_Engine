@@ -15,6 +15,15 @@ departure (chats 154, 156 and 157, the same evening) measured it as a place
 to stand rather than a floor: 154 built a room for the space the ship
 crossed and held together for the beats after; 157 named none, and the next
 beat wrote it docked in no room at all.
+
+The owner's ruling of 2026-10-09 (D2) replaced that floor: a journey that
+names no other space moves within the room it set off from and stays in it
+(route = `departed_from`), because scratch story 166's Grebe, rowed along the
+channel it floated in, was in no room for seven beats. Leaving a room still
+names the space it moves through; a destination is still never the place it
+left; and a route naming a space the world does not hold yet is still no
+room, until it is built. `tests/test_a_vessel_moving_within_one_room.py`
+holds the boat's side.
 """
 
 from __future__ import annotations
@@ -49,15 +58,18 @@ def _setting_off(before, **transit):
     return merged
 
 
-def test_setting_off_the_place_left_is_neither_destination_nor_route():
+def test_setting_off_the_place_left_is_never_where_it_arrives():
     before = _world({"phase": "sealed", "hatch": "closed"})
     merged = _setting_off(before, destination_room="beach", eta_seconds=5, route_room="beach")
     assert settle_departures(before, merged)
     transit = merged["entities"]["tardis"]["state"]["transit"]
-    # No destination, so no timed arrival carries it back; no route.
-    assert transit == {"phase": "in_transit", "hatch": "closed", "departed_from": "beach"}
-    # Under way with no route, it is in no room -- and has no station there.
-    assert "tardis" not in merged["positions"] and "tardis" not in merged["stations"]
+    # No destination, so no timed arrival carries it back. A route naming
+    # the place it left names no other space: it moves within that room
+    # (D2), so the route is where it set off from.
+    assert transit == {"phase": "in_transit", "hatch": "closed",
+                       "departed_from": "beach", "route_room": "beach"}
+    assert merged["positions"]["tardis"] == "beach"
+    assert merged["stations"]["tardis"] == {"at": "tideline", "near": []}
     assert merged["positions"]["Hinami"] == "console_room"
     # Idempotent: a second pass changes nothing.
     assert not settle_departures(before, merged)
@@ -75,17 +87,20 @@ def test_a_real_destination_is_kept_and_a_route_is_where_it_is():
 
 def test_the_departure_holds_for_the_whole_journey():
     """A later step or beat copying the beach back in is still the place it
-    left, and the vehicle already in no room stays there."""
+    left: never its destination, and, once the ship has crossed another
+    space, no route either -- it stays in the space it was crossing."""
     before = _world()
-    first = _setting_off(before)
+    first = _setting_off(before, route_room="vortex")
     settle_departures(before, first)
+    assert first["positions"]["tardis"] == "vortex"
     later = copy.deepcopy(first)
     later["entities"]["tardis"]["state"]["transit"]["route_room"] = "beach"
     later["entities"]["tardis"]["state"]["transit"]["destination_room"] = "beach"
     settle_departures(first, later)
     transit = later["entities"]["tardis"]["state"]["transit"]
-    assert "route_room" not in transit and "destination_room" not in transit
-    assert "tardis" not in later["positions"]
+    assert transit["route_room"] == "vortex" and "destination_room" not in transit
+    assert transit["departed_from"] == "beach"
+    assert later["positions"]["tardis"] == "vortex"
 
 
 def test_the_departure_survives_a_transit_written_again():
@@ -134,7 +149,10 @@ def test_docked_the_journey_is_over_and_a_destination_is_where_it_stands():
     assert merged["positions"]["tardis"] == "beach"
 
 
-def test_the_merge_carries_it_and_the_door_opens_onto_nothing():
+def test_the_merge_carries_it_and_naming_no_other_space_keeps_it_where_it_was():
+    """Through the merge: the beach is never the destination (no timed
+    arrival back onto it), and a journey that names no other space stands
+    in the room it set off from, behind its shut door (D2)."""
     scene = _world()
     diff = {"entities": {"tardis": {"state": {"transit": {
         "phase": "in_transit", "hatch": "closed", "destination_room": "beach",
@@ -142,10 +160,12 @@ def test_the_merge_carries_it_and_the_door_opens_onto_nothing():
     merged = merge_scene_with_diff(scene, diff)
     transit = merged["entities"]["tardis"]["state"]["transit"]
     assert transit.get("departed_from") == "beach"
-    assert not transit.get("destination_room") and not transit.get("route_room")
-    assert "tardis" not in merged["positions"]
-    assert not [e for e in merged["rooms"]["console_room"].get("adjacent") or []
-                if e.get("to") == "beach"]
+    assert not transit.get("destination_room") and not transit.get("eta_seconds")
+    assert transit.get("route_room") == "beach"
+    assert merged["positions"]["tardis"] == "beach"
+    [door] = [e for e in merged["rooms"]["console_room"].get("adjacent") or []
+              if e.get("to") == "beach"]
+    assert door["barrier"] == "closed_door"
     # The world the beat started from is untouched.
     assert scene["positions"]["tardis"] == "beach"
 
@@ -184,15 +204,18 @@ def test_nothing_arrives_nowhere():
     or route. Docking cleared `departed_from`, so turn 4482 set it off again
     with nothing remembering the beach, and a later beat could have landed
     it back there. An arrival is AT somewhere; one that names nowhere leaves
-    the journey as it was."""
-    before = _world({"phase": "in_transit", "hatch": "closed", "departed_from": "beach"})
+    the journey as it was. Since D2 a ship is in no room only while the
+    space it named is not built yet, so that is the case held here."""
+    vortex = "new:the time vortex"
+    before = _world({"phase": "in_transit", "hatch": "closed", "departed_from": "beach",
+                     "route_room": vortex})
     del before["positions"]["tardis"]
     del before["stations"]["tardis"]
     merged = copy.deepcopy(before)
     merged["entities"]["tardis"]["state"]["transit"] = {"phase": "docked"}
     assert settle_departures(before, merged)
     assert merged["entities"]["tardis"]["state"]["transit"] == {
-        "phase": "in_transit", "departed_from": "beach"}
+        "phase": "in_transit", "departed_from": "beach", "route_room": vortex}
     assert "tardis" not in merged["positions"]
     assert not settle_departures(before, merged)
     # Through the merge, the door stays shut on nothing, and the beach is
@@ -265,10 +288,20 @@ def test_a_passage_record_never_holds_a_moving_rooms_door():
     assert door["barrier"] == "closed_door" and "passage" not in door
     assert (door["name"], door["material"], door["width"], door["dir"], door["offset"]) \
         == ("the police-box doors", "wood", 1, "s", 0.6)
-    # In no room, no doorway at all -- the beach's included.
-    nowhere = merge_scene_with_diff(scene, _transit(phase="in_transit", hatch="closed"))
+    # In no room -- bound through a space not built yet -- no doorway at
+    # all, the beach's included.
+    nowhere = merge_scene_with_diff(scene, _transit(
+        phase="in_transit", hatch="closed", route_room="new:the time vortex"))
     assert not nowhere.get("passages")
     assert _exits(nowhere) == [] and "console_room" not in _exits(nowhere, "beach")
+    # Naming no other space, it stays on the beach behind its own shut door,
+    # still itself, and the record is still not what holds it.
+    stays = merge_scene_with_diff(scene, _transit(phase="in_transit", hatch="closed"))
+    assert not stays.get("passages")
+    [door] = stays["rooms"]["console_room"]["adjacent"]
+    assert (door["to"], door["barrier"], door["name"]) == (
+        "beach", "closed_door", "the police-box doors")
+    assert "console_room" not in _exits(stays, "beach")
     # Landing somewhere new, the same door opens there, still itself.
     landed = merge_scene_with_diff(away, {**_transit(phase="docked", hatch="open"),
                                           "positions": {"tardis": "shrine"}})
