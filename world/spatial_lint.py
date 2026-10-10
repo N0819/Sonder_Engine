@@ -48,6 +48,7 @@ LAYOUT_LINT_KINDS = (
     "shape_disconnected",
     "rooms_overlap_when_placed",
     "site_plan_overlap",
+    "site_plan_unplaced",
     "size_disagrees_with_extent",
     "extent_unreadable",
 )
@@ -378,6 +379,15 @@ def _laid_beside(scene, room_id, other, at):
     d1, d2 = d1s[0], d2s[0]
     far = (d1[0] + ux + ux + at[0], d1[1] + uy + uy + at[1])
     offset = (far[0] - d2[0], far[1] - d2[1])
+    # Where one site plan holds both rooms, the walk lays the neighbour where
+    # the plan put it, beyond the same band (`site_plan.plan_offset`, the
+    # observer field's rule too): an open side the plan slid along stands
+    # where it stands. Wherever the plan laid it by its doorway, unchanged.
+    if b1 in _WALLS:
+        from world.site_plan import plan_offset
+        planned = plan_offset(scene, room_id, other)
+        if planned is not None:
+            offset = (at[0] + planned[0] + ux, at[1] + planned[1] + uy)
     return offset, [(x + offset[0], y + offset[1])
                     for x, y in room_grid(scene, other).cells]
 
@@ -709,12 +719,31 @@ def _row_key(row):
     return tuple(sorted((k, str(v)) for k, v in row.items()))
 
 
-def room_layout_lint(scene: dict, prev_scene: dict = None) -> list:
+def room_layout_lint(scene: dict, prev_scene: dict = None, *,
+                     plan_rows: bool = False) -> list:
     """Every layout row the scene holds, or -- with `prev_scene` -- only the
     rows that were not already standing there, which is how the commit
     reports a contradiction the beat it APPEARS rather than every beat it
     stands (`contradictory_sight_edges`' rule). `prev_scene=None` asks for
     everything, which is what the Room's `inspect_contradictions` wants.
+
+    `plan_rows` adds `site_plan_unplaced`: each room a derived site plan
+    could not hold because, laid out by its doorways, it lands on a room the
+    plan holds or a doorway of it does not meet (`site_plan.plan_refused`),
+    `stands` False where what the plan laid out without it stands on one
+    storey, so no plan is written at all -- a clash the derivation could
+    not resolve, for the readers whose job is to tell the Room and the host
+    what the world holds that does not agree: the Room's
+    `inspect_contradictions`, the commit's layout warnings and the World
+    Browser. The room designer's own check and the doorway search never ask
+    for it. The plan lays rooms wall to wall and this check one band apart,
+    so the plan can refuse a room this check lets stand, and a design judged
+    by it would be held unclean for a room its own rule places. Measured on
+    the play database's 139 stored scenes after one merge (2026-10-09): 22
+    rooms stand off a derived plan, 21 of them already named by this check's
+    own collision rows; the one that is not -- chat 40's stair to the roost,
+    whose refusal leaves its building on one storey and with no plan -- is
+    a room the band rule lets stand.
     """
     rooms = _rooms(scene)
     rows = []
@@ -729,8 +758,18 @@ def room_layout_lint(scene: dict, prev_scene: dict = None) -> list:
     rows += [{"kind": "site_plan_overlap", "plan": plan, "level": level,
               "rooms": [a, b], "names": [_name(rooms, a), _name(rooms, b)]}
              for plan, level, a, b in site_overlaps(scene)]
+    if plan_rows:
+        from world.site_plan import plan_refused
+        rows += [{"kind": "site_plan_unplaced", "plan": r["plan"], "stands": r["stands"],
+                  "room": r["room"], "lands_on": list(r["lands_on"]),
+                  "misses": list(r["misses"]), "via": r["via"],
+                  "names": [_name(rooms, r["room"])] + [_name(rooms, o) for o in r["lands_on"]],
+                  "astray": [_name(rooms, o) for o in r["misses"]],
+                  "via_name": _name(rooms, r["via"])}
+                 for r in plan_refused(scene)]
     if prev_scene is not None:
-        standing = {_row_key(r) for r in room_layout_lint(prev_scene)}
+        standing = {_row_key(r) for r in room_layout_lint(prev_scene,
+                                                          plan_rows=plan_rows)}
         rows = [r for r in rows if _row_key(r) not in standing]
     return rows
 
@@ -756,6 +795,28 @@ def layout_warning(row) -> str:
         return (f"On the site plan {row.get('plan')!r}, storey {row.get('level')}, "
                 f"{a!r} and {b!r} stand on the same ground; move one, or "
                 f"shrink it, so the plan holds together.")
+    if kind == "site_plan_unplaced":
+        names = list(row.get("names") or [row.get("room")])
+        why = []
+        if names[1:]:
+            why.append("it lands on " + ", ".join(repr(n) for n in names[1:]))
+        if row.get("astray"):
+            why.append("its doorway onto " + ", ".join(repr(n) for n in row["astray"])
+                       + " does not meet theirs")
+        laid = (f"laid out by its doorway onto {row.get('via_name') or row.get('via')!r}, "
+                f"{' and '.join(why) or 'it cannot stand there'}")
+        mend = ("Measure one of the rooms, or move a doorway along its wall or to "
+                "another wall, so every doorway meets and the rooms stand side by side.")
+        if row.get("stands") is False:
+            # The plan itself is not written: the rooms laid out without this
+            # one stand on one storey, and a plan of one storey is none.
+            return (f"{names[0]!r} cannot stand on a site plan with the rooms it "
+                    f"is joined to: {laid}. The rooms laid out without it stand on "
+                    f"one storey, so they have no plan, and sight across storeys, "
+                    f"drops and the far view over a plan reach none of them. {mend}")
+        return (f"{names[0]!r} stands off the site plan {row.get('plan')!r}: {laid}, "
+                f"so sight across storeys, drops and the far view over the plan do "
+                f"not reach it. {mend}")
     if kind == "openings_overlap":
         return (f"Room {row['room']!r}: two doorways on the {row['wall']} wall "
                 f"({', '.join(row['openings'])}) are placed on the same cells; "

@@ -10,8 +10,10 @@ put the Back Row and its four siblings on the cross walk's north wall, the
 doorway spread (`spatial_orientation._spread_along_wall`) gave the five of
 them five fractions of one six-pace wall, and the planar layout laid them on
 one another: 8 of that town's 19 standing plane-embedding rows. One clash
-refuses a whole connected group its site plan (`site_plan.derive_site_plans`),
-and none of the play database's 957 rooms carries one.
+then refused a whole connected group its site plan
+(`site_plan.derive_site_plans`, room by room since 2026-10-09, where such a
+sibling stands off the plan and is named), and none of the play database's
+957 rooms carried one.
 
 CODE FINISHES WHAT CODE STARTED, AND DECIDES ONLY WHERE. A split room stands
 along the wall of the street its parent fronts, at the free stretch nearest
@@ -301,11 +303,12 @@ class _Plane:
       the neighbour beyond a one-cell wall band; a room the layout refused
       stands where it WOULD have landed. Its overlaps are the
       `rooms_overlap_when_placed` rows the owner reads.
-    * The site plan's (`site_plan.plan_frames`): the growth
+    * The site plan's (`site_plan.plan_frames`): the layout
       `derive_site_plans` writes a plan with, doorways meeting across the
-      wall, storeys stacked; its overlaps are the clashes that refuse a
-      whole group its plan (`site_plan.plan_clashes`: one storey, and a
-      building standing on open ground is none).
+      wall, storeys stacked, a room it refuses standing where its first
+      doorway would have put it; its overlaps are the rooms the plan leaves
+      off (one storey, and a building standing in ground it opens onto is
+      none -- `site_plan._stands_on`).
 
     Review 2026-10-08, M4: the frontage compared runs along the street's one
     wall, so a sibling was moved off its parent onto the side room laid

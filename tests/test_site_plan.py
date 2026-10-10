@@ -105,16 +105,27 @@ def test_the_map_draws_a_plan_where_it_stands_storey_by_storey():
     sc = _garden_round_a_house()
     sc["rooms"]["lane"] = {"name": "Lane", "desc": "A lane.", "adjacent": [
         {"to": "garden", "barrier": "open", "dir": "n"}]}
+    sc["rooms"]["shed"] = {"name": "Shed", "desc": "A shed.", "adjacent": [
+        {"to": "yard", "barrier": "open_door", "dir": "e"}]}
+    sc["rooms"]["yard"] = {"name": "Yard", "desc": "A yard.", "exposure": "open", "adjacent": [
+        {"to": "shed", "barrier": "open_door", "dir": "w"}]}
     comps = map_view(sc, [])["components"]
     plan = [c for c in comps if c.get("plan") == "manor"]
     assert [c["level"] for c in plan] == [0, 1]        # ground first, then up
     ground = {r["id"]: r for r in plan[0]["rooms"]}
     assert ground["garden"]["offset"] == [0, 0] and ground["hall"]["offset"] == [3, 3]
-    assert plan[0]["collisions"] == []
-    # a room on no plan is laid out by bearing as before, and never draws a
-    # plan's room a second time
+    # a room the plan cannot hold is drawn on its storey where its doorway
+    # would put it, with what it lands on -- the lane's doorway onto the
+    # ring, at the cell the engine seeds for it, lays it on the hall -- since
+    # the plan of decided sites stands (`site_plan.plan_refused`'s `stands`)
+    assert ground["lane"]["collided"] and ground["lane"]["onto"] == "hall"
+    assert plan[0]["collisions"] == [{"room": "lane", "onto": "hall", "via": "garden"}]
+    # a room on no plan is laid out by bearing as before, and no room is
+    # drawn twice
     drawn = [r["id"] for c in comps for r in c["rooms"]]
-    assert drawn.count("garden") == 1 and "lane" in drawn
+    assert all(drawn.count(rid) == 1 for rid in sc["rooms"])
+    (walk,) = [c for c in comps if not c.get("plan")]
+    assert {r["id"] for r in walk["rooms"]} == {"shed", "yard"}
 
 
 LAYOUT = {

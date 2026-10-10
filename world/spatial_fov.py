@@ -1323,6 +1323,17 @@ def _room_field(scene, room_id, through, derive):
         band = (d1[0] + ux, d1[1] + uy)
         anchor_far = (band[0] + ux, band[1] + uy)
         offset = (anchor_far[0] - d2[0], anchor_far[1] - d2[1])
+        # WHERE ONE PLAN HOLDS BOTH ROOMS, THE NEIGHBOUR STANDS WHERE THE PLAN
+        # PUT IT (`site_plan.plan_offset`), beyond the same one-cell band: an
+        # open side the plan slid along to stand clear (`site_plan._spots`)
+        # is seen where it stands, not flush with the wall's start. Wherever
+        # the plan laid the room by its doorway this is the offset above,
+        # cell for cell.
+        if b1 in ("n", "s", "e", "w"):
+            from world.site_plan import plan_offset
+            planned = plan_offset(scene, room_id, other)
+            if planned is not None:
+                offset = (planned[0] + ux, planned[1] + uy)
         far = room_grid(scene, other)
         # The neighbour's ACTUAL cells, so two small rooms off one long wall
         # of a wide room can both be laid out where two squares could not.

@@ -2593,7 +2593,9 @@ function wbRenderStructureMap(host, data, ctx, selectedId) {
       const w = r.w * S, d = r.d * S;
       const notes = [r.name];
       if (r.region) notes.push(`${regionWord} ${r.region}`);
-      if (r.collided) notes.push(`${onTopOf} ${r.onto} (${reachedThrough} ${r.via})`);
+      // A room a site plan could not hold for a doorway that does not meet
+      // lands on nothing (`onto` null): its layout rows say why.
+      if (r.collided && r.onto) notes.push(`${onTopOf} ${r.onto} (${reachedThrough} ${r.via})`);
       if (r.lint) notes.push(t(`${r.lint} layout rows`));
       const hue = r.region ? regions.indexOf(r.region) % 6 : null;
       const g = wbSvg("g", {

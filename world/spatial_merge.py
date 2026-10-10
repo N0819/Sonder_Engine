@@ -263,8 +263,14 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
     # A ROOM ON A SITE PLAN STANDS WHERE THE PLAN PUT IT (`world/site_plan`):
     # its box, its shape and its storey are the plan's, so a beat that
     # re-measures it would lay it over its neighbours. Described, never
-    # re-measured; the plan itself moves it.
-    if isinstance(existing.get("site"), dict):
+    # re-measured; the plan itself moves it. A DECIDED plan only -- one the
+    # layout tier solved, the lab converted or a host placed. A site the
+    # derivation wrote is its reading of the rooms, recomputed every merge
+    # (`site_plan.DERIVED_KEY`): the plan follows a room a beat re-measures,
+    # where held it would keep a guessed square's corner under a measured
+    # room.
+    from world.site_plan import site_is_derived
+    if isinstance(existing.get("site"), dict) and not site_is_derived(existing["site"]):
         _planned_geometry |= {"extent", "shape", "parts", "size", "level",
                               "site"}
     for key, value in incoming.items():
@@ -2435,7 +2441,9 @@ def merge_scene_with_diff(
     _report_unsourced_light(merged, light_report)
     # A BUILDING OF STOREYS STANDS ON A PLAN (`world/site_plan`): what the
     # room designer wrote -- storeys, boxes, doorways, stairs -- is laid
-    # out and stacked, so height reaches it. Only rooms with no plan yet.
+    # out and stacked, so height reaches it. Every derived site is read
+    # again from the rooms as this beat left them, starting from where they
+    # stood; a decided site (solved, converted, a host's) is never moved.
     from world.site_plan import derive_site_plans
     derive_site_plans(merged)
 

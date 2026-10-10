@@ -821,7 +821,7 @@ def _t_inspect_contradictions(cid, frame_id):
     # placed cells; never prose.
     try:
         from world.spatial import room_layout_lint
-        out["layout"] = _one_row_per_contradiction(room_layout_lint(scene))
+        out["layout"] = _one_row_per_contradiction(room_layout_lint(scene, plan_rows=True))
     except Exception as exc:
         out["layout"] = [{"kind": "layout_unreadable", "error": str(exc)}]
     try:

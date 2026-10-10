@@ -391,8 +391,39 @@ def apply_solved_plans(cid, scene):
     (`director_rooms._predevelop_run`) all read the scene through this, the
     way the opening's readers and its merge both read the planted skeleton
     (`story.scene.seed_scene_from_plan`). No model writes a `site`, and
-    nothing here makes one."""
-    return apply_planned_layout(scene, _planned_specs(cid))
+    nothing here makes one.
+
+    AND WHAT STANDS BESIDE A SOLVE IS READ AGAIN AGAINST IT. A room the
+    derivation laid out beside a solved building stands where the last merge
+    put it (`site_plan.DERIVED_KEY`), against the solve that merge saw; a
+    solve laid onto the stubs since, or taken off them by a re-plan, leaves
+    it in the other solve's frame until the next merge. So where this laid
+    or took back a solve that the stubs did not already carry, the derived
+    plan is recomputed here too (`derive_site_plans`, which never moves a
+    solved site). A stub already carrying its solve -- every read after the
+    commit that laid it -- is laid again unchanged and costs no derivation."""
+    rooms = (scene or {}).get("rooms") or {}
+    specs = _planned_specs(cid)
+    before = {uid: _layout_print(rooms[uid]) for uid, (_name, spec) in specs.items()
+              if isinstance(rooms.get(uid), dict)
+              and (LAID_OUT_KEY in rooms[uid] or (isinstance(spec, dict) and spec.get("site")))}
+    touched = apply_planned_layout(scene, specs)
+    if any(_layout_print(rooms.get(uid)) != before.get(uid) for uid in touched):
+        from world.site_plan import derive_site_plans
+        derive_site_plans(scene)
+    return touched
+
+
+def _layout_print(room) -> str:
+    """What a solve lays on a stub, as one comparable string: its site, its
+    box, its storey, the solve's record and where its doorways stand."""
+    room = room if isinstance(room, dict) else {}
+    edges = [{key: edge.get(key) for key in ("to",) + LAYOUT_EDGE_FIELDS}
+             for edge in room.get("adjacent") or () if isinstance(edge, dict)]
+    return json.dumps({"site": room.get("site"), "extent": room.get("extent"),
+                       "shape": room.get("shape"), "level": room.get("level"),
+                       "laid_out": room.get(LAID_OUT_KEY), "edges": edges},
+                      sort_keys=True, default=str)
 
 
 def write_planned_layout(cid, rooms, *, expected, job=None):
@@ -1348,6 +1379,14 @@ def materialize_planned_fringe(cid, scene):
     # carries its offset and is left alone thereafter.
     from world.frontage import lay_frontages
     lay_frontages(scene, {uid: spec for uid, (_name, spec) in planned.items()})
+    # AND THE PLAN IS READ AGAIN ONCE ALL OF THAT HAS LANDED. The merge laid
+    # the derived plan out before this pass minted its stubs, laid a solve
+    # onto them and moved what the closure split, and the scene this returns
+    # is what the next beat's readers see before their own merge: derived
+    # where everything now stands (`site_plan.derive_site_plans`, which
+    # recomputes only the sites it derives).
+    from world.site_plan import derive_site_plans
+    derive_site_plans(scene)
     return scene, added
 
 

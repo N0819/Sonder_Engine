@@ -371,37 +371,49 @@ def test_the_walks_answer_as_the_whole_check_does_on_seeded_random_towns():
     assert judged > 1000
 
 
-#: A seeded town with a way down (seed 21, the second, ways up or down at
-#: 0.3): the merge stands the whole group on one site plan, and a shed joined
-#: to it is stood on that plan as well.
+#: A seeded town with ways up or down (`_seeded_town` with them at 0.3, seed
+#: 75, its second town): the merge stands all six rooms on one site plan, and
+#: a shed joined to it is stood on that plan as well. Until 2026-10-09 this
+#: was seed 21's second town, two of whose rooms have doorways no plane lets
+#: both meet; a plan now leaves such a room off (`site_plan._layout`), and
+#: the walls it pinned with them.
 STOREYS = {
-    "cf_yard": _r("cf_yard", 8, 4, ("hd_lane", "open_door", "e"), ("lf_room", "open", "s")),
-    "hd_lane": _r("hd_lane", 7, 9, ("vq_lane", "closed_door", "n"),
-                  ("lf_room", "closed_door", "s")),
-    "lf_room": _r("lf_room", 5, 4),
-    "ly_hall": dict(_r("ly_hall", 8, 9, exposure="open"), adjacent=[
-        {"to": "hd_lane", "barrier": "closed_door", "dir": "e", "offset": 0.69},
-        {"to": "cf_yard", "barrier": "closed_door", "dir": "n"}]),
-    "ul_hall": _r("ul_hall", 6, 6, exposure="open"),
-    "vq_lane": _r("vq_lane", 8, 3, ("ul_hall", "closed_door", "sw", "down"),
-                  ("ly_hall", "closed_door", "n")),
+    "bb_hall": dict(_r("bb_hall", 5, 4), adjacent=[
+        {"to": "dq_hall", "barrier": "closed_door", "dir": "w", "vertical": "up",
+         "offset": 0.43},
+        {"to": "tf_lane", "barrier": "open_door", "dir": "e", "vertical": "down",
+         "offset": 0.17},
+        {"to": "pw_yard", "barrier": "closed_door", "dir": "s"}]),
+    "dq_hall": _r("dq_hall", 7, 4),
+    "gi_lane": _r("gi_lane", 6, 5, ("dq_hall", "closed_door", "w", "up"),
+                  ("pw_yard", "closed_door", "n"), ("wf_yard", "open", "ne"),
+                  ("tf_lane", "closed_door", "n"), exposure="open"),
+    "pw_yard": _r("pw_yard", 2, 8),
+    "tf_lane": _r("tf_lane", 4, 3),
+    "wf_yard": _r("wf_yard", 5, 4, ("bb_hall", "closed_door", "e"), exposure="open",
+                  shape="round"),
 }
 
 
 def test_a_wall_a_site_plan_makes_good_is_offered():
-    """A shed whose doorway is on its south wall into the yard, or on its
-    north wall into the room: laid out unmerged, with no site, the walks lay
-    it onto another room of the plan. Merged, it stands on the plan beside
-    them, which is no collision, and the designer's check passes either wall
-    at every shape. Judged by the unmerged screen alone, both were lost
-    (round two's review)."""
+    """A shed whose doorway is on its south or west wall into the lane, or on
+    its east wall into the yard: laid out unmerged, with no site, the walks
+    lay it onto another room of the plan. Merged, it stands on the plan
+    beside them, which is no collision, and the designer's check passes
+    every one of those walls at every shape. Judged by the unmerged screen
+    alone, they were lost (round two's review)."""
     from world.site_plan import room_site
     scene = _world(STOREYS)
-    assert room_site(scene, "cf_yard") and room_site(scene, "lf_room")
+    assert all(room_site(scene, rid) for rid in STOREYS)
     fits = director_rooms._doorways_that_fit(scene, "a_00", SHED, sorted(scene["rooms"]),
                                              time.time() + 60)
     offered = {(fit["to"], fit["dir"]) for fit in fits}
-    assert {("cf_yard", "s"), ("lf_room", "n")} <= offered
+    assert {("tf_lane", "s"), ("tf_lane", "w"), ("wf_yard", "e")} <= offered
+    for to, way in (("tf_lane", "s"), ("tf_lane", "w"), ("wf_yard", "e")):
+        record = dict(SHED, desc="A shed.", adjacent=[{"to": to, "barrier": "open", "dir": way}])
+        trial = dict(scene, rooms=dict(scene["rooms"], a_00=record))
+        assert [row for row in room_layout_lint(trial, prev_scene=scene)
+                if row.get("room") != "a_00"], ("the unmerged screen loses it", to, way)
     _every_offer_passes(scene, "a_00", fits, director_rooms._trial_shapes(SHED))
 
 

@@ -2466,14 +2466,85 @@ leaves, in the order the owner agreed:
   not list them (it gets them through the view), and the visibility table is
   the engine's, not the owner's, until the owner rules on it.
 * **Ground is flat**: no slope, no cliff, no bank between two cells.
-* **A plan is derived in play since 2026-10-04** (`site_plan.derive_site_plans`,
-  every merge): a group of rooms spanning two storeys or more is laid out by
-  its doorways and stacked by its stairs. Still open: one-storey groups get
-  no plan (nothing for height to do, and no vista horizon from buildings);
-  a group whose bearings cannot be drawn gets none; once placed, a room's
-  box is the plan's and a beat can no longer re-measure it. A planned
-  building can also be laid out onto a plan by code before anyone has
-  described it (§2.43, off by default).
+* **A plan is derived in play since 2026-10-04, room by room since
+  2026-10-09** (`site_plan.derive_site_plans`, every merge;
+  [`design/DESIGN_SITE_PLAN.md`](design/DESIGN_SITE_PLAN.md), "A plan
+  derived room by room"): a group of rooms spanning two storeys or more is
+  laid out by its doorways and stacked by its stairs, a room that cannot
+  stand is left off and named (`site_plan_unplaced`), an open side slides
+  along its wall, a plan is written only where the rooms it lays out span
+  two storeys, and a derived site is recomputed every merge from where its
+  rooms stood: a room keeps its ground against a room that comes onto it
+  while its doorway keeps it there, a room whose place a beat moved is read
+  again as one reading lays it, a room is reached through an edge either
+  room declares, what no chain of doorways reaches is laid where it stood,
+  and a join stands whole or each plan keeps its own. So a beat may
+  re-measure its room, a room added later never takes the ground of one still standing where it stood (an open side nobody stands in slides along its wall for a room with one place; one somebody stands in never does), and a town whose joining walk is lost keeps
+  both halves. Measured on the play database: 54 rooms sited after one merge
+  before, 163 after; played forward through the stored checkpoints, as
+  commits store sites, 173 (laying whatever stood first, as the round before
+  did, 158: chat 165 held 7 of 30 rooms, chat 27 3 of 13). Still open:
+  - **One-storey groups get no plan.** On one, the landscape would hide far
+    places behind their buildings and measure them by the plan; off one it
+    walks the graph. Measured: 156 groups of 659 rooms, 87 of which would
+    hold a plan of 227 rooms between them (most of them two rooms), 7 rooms
+    refused; and three groups of two storeys whose other storey the plan
+    refuses or cannot reach lay out on one (chats 40, 160 and 161, 8 rooms),
+    so they hold none either. A change to far sight in every one-storey
+    world: the owner's call. (A group of one storey that stood on a plan of
+    two -- the half of a town cut off when its lane was lost -- keeps where
+    it stood.)
+  - **A room whose doorways carry no bearing stands on no plan** -- a plan
+    never guesses a wall (chat 166: 10 of 34 rooms, the closure's pile
+    houses among them; the beach of chats 150-159 places one room of each
+    group of 21 to 23).
+  - **An unmeasured stub street too short for the stubs the plan hangs on
+    it** is measured longer only for the rooms the closure split
+    (`frontage.FRONTAGE_MEASURES_STREETS`): chat 165's opening town keeps 10
+    of its 30 rooms refused off its plan, the Back Row's four siblings among
+    them, and the stubs on its designed main walk. A doorway at its seeded
+    place is never slid by the plan (only an open side is), so two guessed
+    squares on one wall stay refused until somebody measures them.
+  - **The layout is greedy.** Of two rooms that cannot both stand, the first
+    the frontier lays keeps its place -- a room still standing where it
+    stood, then the measured before the guessed, a building before open
+    ground -- which on a loose rectangle of open ground can be the wrong one
+    (chat 166's reed flats yield to the Blackreed channel, its drying racks
+    to the chandlery and the walks).
+  - **Only a stack slides along an open side**, and only for a room with one
+    place: an open side carrying rooms laid from it by doorways holds where
+    it is, and so does the room a plan is grown from. Carrying the rooms
+    laid from it too, played forward, stood two more of chat 166's rooms in
+    each frame (19 where 17 stand), and slid chat 165's whole town three to
+    six paces at five of its six checkpoints (60 room moves where a stack
+    alone makes 5).
+  - **A room a beat moves onto another storey, where its column on that
+    storey is taken, leaves the plan named by no row**: no doorway was tried
+    for it. The room it would land on, which the beat did not move, keeps
+    its site. Chained through chat 160's stored checkpoints, its crash site,
+    put on the elevator shaft's storey where the shaft stands, is the case
+    (and chat 161's); the level doorway joining two storeys that put it
+    there is named by no check either.
+  - **A plan played forward can hold what one reading would not**: chats 160
+    and 161 keep five rooms each on two storeys that one reading of their
+    last scene lays out on one.
+  - **The raw scene editor writes what the host typed** (`world_put`): a
+    derived site in it is read into the plan at the next merge, where the
+    World Browser's field edits are read at once (`_write_scene`).
+  - **A stair between two rooms of one storey places nothing**, so a landing
+    written on its walk's storey (chat 166's Gale house landing) stands off
+    the plan; a stair still lands over where it left, whatever the plan.
+  - **A town with two solved buildings** is laid on the plan holding more of
+    their rooms, and the other building stands on its own (§2.43).
+  - **The far layer's eye in a closed room on a plan** stands at the room's
+    cell nearest the place it looks at, not at the opening it looks out
+    through, and its own walls are no obstacle: from deep in chat 165's
+    taproom the landing stage is said hidden by the houses behind the
+    taproom's south wall (`landscape._eye_on_plan`, the far layer's own
+    lane). Replayed on every perception step of chats 165 and 166, 14 of 119
+    far views change once the plans stand, each by a building in the line.
+  A planned building can also be laid out onto a plan by code before anyone
+  has described it (§2.43, off by default).
 * **A window between storeys is an anchor, not an edge**: an edge is one per
   pair of rooms, and the ground-floor door already holds it.
 
@@ -2740,9 +2811,17 @@ Left, each with what it needs:
   behind it, the ground floor of the next planned building along the street
   -- so that next building is left to the designer (tried: two planned
   buildings on one street, the second refused, "stands on a plan already",
-  the commit after the first one's upper storey was minted). Where two are
-  laid out before the engine places their ground, a street both open onto is
-  derived with both plans' coordinates read as one and is placed on neither.
+  the commit after the first one's upper storey was minted). Since
+  2026-10-09 a derived site keeps a building out only where it lies in
+  another building's solve: a building whose own solve a re-plan took back
+  is laid out again, its ground re-derived from the rooms -- and one the
+  answers cannot solve (a stated proportion, above) costs the tier's two
+  calls each time its wait runs out (2 beats, then 4, 8 and every 16 while
+  it keeps failing on the same plan), where the stale ground refused it
+  before any call. Where two are laid out before the engine places their
+  ground, the group is laid on the plan holding more of their rooms, and
+  the other building stands on its own plan, apart from the street it
+  opens onto.
   Needs a solve laid onto the plan its ground already stands on, moved to
   where its doorway meets that ground, and then the town-fabric tier (survey
   rank 7): streets, plots and footprints on one plan.

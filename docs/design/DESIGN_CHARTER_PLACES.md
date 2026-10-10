@@ -31,9 +31,11 @@ workplace's overflow off it as ANNEXES. It finished none of that work:
   the cross walk's north wall; the doorway spread gave five fractions of one
   six-pace wall; the planar layout stacked all five. Measured on the stored
   scene: **19 standing plane-embedding rows, 8 naming a sibling**, and
-  `site_plan.derive_site_plans`, which refuses a whole connected group on any
-  clash, refused the town on **33 clashing pairs** (chat 166: 5). None of the
-  play database's 957 rooms carries a site.
+  `site_plan.derive_site_plans`, which then refused a whole connected group
+  on any clash, refused the town on **33 clashing pairs** (chat 166: 5). None
+  of the play database's 957 rooms carries a site. (Since 2026-10-09 a plan
+  is laid room by room: `DESIGN_SITE_PLAN.md`, "A plan derived room by
+  room".)
 * **No name.** A sibling or an annex took an ordinal ("the Back Row 2" .. "5";
   "The Plank Walk Spine 2" .. "30" in chat 164), and a frontier stub took its
   axis label. Chat 165's grammar carries eight `{name}` frames and nothing
@@ -125,9 +127,9 @@ reads the marks from the plan:
   on no room at all, read both ways a plane is drawn (`_Plane`): the layout
   lint's (`layout_rooms`, group by group from the smallest unplaced id, a
   refused room standing where it would have landed) and the site plan's
-  (`site_plan.plan_frames` and `plan_clashes`, the growth and the clash rule
-  `derive_site_plans` writes a plan with -- refactored out of it, unchanged,
-  so there is one copy). A choice looks past the rooms still waiting to be
+  (`site_plan.plan_frames`, the layout `derive_site_plans` writes a plan
+  with, so there is one copy -- since 2026-10-09 room by room, a room it
+  refuses standing in the frame where its first doorway would have put it). A choice looks past the rooms still waiting to be
   laid in the same pass, which may yet move. A room alone on its wall but
   standing on another room is never written down where it stands; the plane
   is read again once everything has moved, and a moved room that lands on

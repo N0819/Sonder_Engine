@@ -310,12 +310,18 @@ def test_the_commit_and_the_room_both_surface_the_rows():
     from persist import commit_scene_state
     from story import room_tools
     commit_src = inspect.getsource(commit_scene_state)
-    assert "room_layout_lint(sc, prev_scene if _layout_told else None)" in commit_src
+    assert "room_layout_lint(sc, prev_scene if _layout_told else None,\n" in commit_src
     assert '"layout_lint_told"' in commit_src
     tool_src = inspect.getsource(room_tools._t_inspect_contradictions)
     # The Room asks for EVERYTHING (`prev_scene=None`); the pair rows are
     # then collapsed to one row per contradiction, because the lint walks a
     # pair from each end and the Room read one overlap as two (PS6,
     # 2026-09-05).
-    assert 'room_layout_lint(scene)' in tool_src
+    assert 'room_layout_lint(scene, plan_rows=True)' in tool_src
     assert '_one_row_per_contradiction(' in tool_src
+    # Both, and the World Browser, read a room a derived site plan could not
+    # hold (`site_plan_unplaced`, 2026-10-09); the room designer's check and
+    # the doorway search never ask for it.
+    assert "plan_rows=True)" in commit_src
+    from agents import director_rooms
+    assert "plan_rows" not in inspect.getsource(director_rooms)

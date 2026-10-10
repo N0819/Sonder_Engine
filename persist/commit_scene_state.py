@@ -2717,7 +2717,10 @@ def prepare_scene_commit(ctx):
     # `sight_contradictions_told` plays above, so a scene already
     # contradictory before this check existed is told once, not never.
     _layout_told = wget(cid, "layout_lint_told", False)
-    for _row in room_layout_lint(sc, prev_scene if _layout_told else None):
+    # `plan_rows`: and a room the derived site plan could not hold -- told
+    # here and to the Room, never to the room designer's own check.
+    for _row in room_layout_lint(sc, prev_scene if _layout_told else None,
+                                 plan_rows=True):
         ctx.warnings.append("[layout] " + layout_warning(_row))
     if not _layout_told:
         _world_flags["layout_lint_told"] = True

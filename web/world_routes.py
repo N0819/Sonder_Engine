@@ -89,7 +89,10 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   edges, laid out from its smallest id. A room the bearings land on another
   is DRAWN at the offset it would have had (``collided`` true, ``onto`` the
   room it lands on, ``via`` the doorway it was reached through), never
-  hidden.
+  hidden. A site plan's storey is one component (``plan``, ``level``), and a
+  room the plan could not hold is drawn in it where its first doorway would
+  have put it, ``collided`` the same way -- ``onto`` None where its only
+  fault is a doorway that does not meet.
 
 Writes, each host-only and era-scoped exactly like the reads, each refused
 with 409 while any pipeline of the chat runs (the same guard `world_put`
@@ -309,6 +312,7 @@ LINT_FIELDS = {
     "reciprocal_bearing_disagrees": "exits",
     "rooms_overlap_when_placed": "exits",
     "site_plan_overlap": "extent",
+    "site_plan_unplaced": "exits",
     "openings_overlap": "exits",
     "wall_overfull": "anchors",
     "corner_in_round_room": "shape",
@@ -402,7 +406,7 @@ def _lint_rows(scene):
     can file it, the card field it concerns (`LINT_FIELDS`) and its sentence
     (`layout_warning`)."""
     out = []
-    for row in room_layout_lint(scene):
+    for row in room_layout_lint(scene, plan_rows=True):
         named = [str(r) for r in (row.get("rooms") or [])]
         if row.get("room") is not None:
             named.append(str(row["room"]))
@@ -1108,7 +1112,7 @@ def _map_component(scene, rooms_, occupants, lint_rows, start, layout, *,
                           if passage_of(scene, edge) else None,
                           "placed": to in offsets or to in collided})
         exits.sort(key=lambda e: e["to"])
-        onto, via = landed.get(rid, (None, None))
+        onto, via = landed.get(rid, (None, (layout.get("via") or {}).get(rid)))
         rows.append({
             "id": rid, "name": _room_name(scene, rid),
             "offset": [int(offset[0]), int(offset[1])],
@@ -1159,21 +1163,43 @@ def map_view(scene, lint_rows, charter=None):
     # stand in the hole of the garden around it -- which the walk by bearings
     # below can only report as a collision. Rooms on no plan are laid out
     # exactly as before.
-    from world.site_plan import room_site, site_overlaps, site_plans
+    #
+    # AND A ROOM THE PLAN COULD NOT HOLD IS DRAWN ON IT, where its first
+    # doorway would have put it (`site_plan.plan_refused`), flagged
+    # `collided` with the room it lands on and the doorway it was reached
+    # through, as the walk draws a collision: the host told a room stands off
+    # the plan (`site_plan_unplaced`) sees where it would stand and what is
+    # in its way. Drawn by the walk instead, chat 165's ten refused rooms
+    # were a cluster of their own, apart from the plan they clash on (review
+    # of 2026-10-09). One whose only fault is a doorway that does not meet
+    # lands on nothing: `onto` is None.
+    from world.site_plan import plan_refused, room_site, site_overlaps, site_plans
     overlaps = site_overlaps(scene)
+    off_plan = {}
+    for refusal in plan_refused(scene):
+        if refusal["stands"] and refusal["room"] in rooms_:
+            off_plan.setdefault((refusal["plan"], refusal["level"]), {})[
+                refusal["room"]] = refusal
     on_plan = set()
     for plan, levels in sorted(site_plans(scene).items()):
         for level in sorted(levels):        # cellar first, roof last
             ids = [rid for rid in levels[level] if rid in rooms_]
+            refused = off_plan.get((plan, level), {})
             placed.update(ids)
+            placed.update(refused)
             on_plan.update(ids)
+            on_plan.update(refused)
             offsets = {rid: (room_site(scene, rid)["x"], room_site(scene, rid)["y"])
                        for rid in ids}
             components.append(_map_component(
                 scene, rooms_, occupants, lint_rows, ids[0] if ids else plan,
-                {"offsets": offsets, "collided": {}, "collisions": [
-                    (b, a, None) for p_, lv, a, b in overlaps
-                    if p_ == plan and lv == level], "parents": {}},
+                {"offsets": offsets,
+                 "collided": {rid: r["at"] for rid, r in refused.items()},
+                 "collisions": [(b, a, None) for p_, lv, a, b in overlaps
+                                if p_ == plan and lv == level]
+                 + [(rid, r["lands_on"][0], r["via"])
+                    for rid, r in sorted(refused.items()) if r["lands_on"]],
+                 "parents": {}, "via": {rid: r["via"] for rid, r in refused.items()}},
                 plan=plan, level=level))
     for start in sorted(rooms_):
         if start in placed:
@@ -1551,6 +1577,13 @@ def _write_scene(cid, chat, before, scene):
     sync_scene_passages(scene, before)
     scene.setdefault("stations", {})
     normalize_scene_stations(scene)
+    # A derived site is the engine's reading of the rooms, recomputed by
+    # every merge (`site_plan.DERIVED_KEY`): a host's new box or doorway is
+    # read into the plan here, as the merge's own tail reads a beat's, rather
+    # than left standing on a plan drawn from the old one until the next
+    # commit. A decided site is never moved.
+    from world.site_plan import derive_site_plans
+    derive_site_plans(scene)
     with transaction():
         wset(cid, "scene", scene)
         sync_room_registry_with_scene(cid, chat.get("lorebook_id"), before, scene)

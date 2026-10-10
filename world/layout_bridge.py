@@ -300,6 +300,29 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
     return sorted(out, key=lambda b: b["key"])
 
 
+def _on_a_plan(live, normalize_site, solved):
+    """A live room's site when it stands on a plan a building may not be laid
+    over: one decided -- solved, converted, placed by a host -- or one the
+    derivation laid on a plan a decided site holds (`solved`), the frame of
+    another building's solve. None for no site, or a derived one on a plan
+    no decided site holds: the derivation's own reading of the stubs,
+    recomputed every merge (`site_plan.site_is_derived`), which a solve laid
+    onto the building replaces."""
+    from world.site_plan import site_is_derived
+    site = normalize_site(live.get("site"))
+    if site is not None and site_is_derived(live.get("site")) and site["plan"] not in solved:
+        return None
+    return site
+
+
+def _solved_plans(rooms, normalize_site) -> set:
+    """The plans a decided site stands on, read off the live rooms."""
+    from world.site_plan import site_is_derived
+    return {normalize_site(room.get("site"))["plan"] for room in rooms.values()
+            if isinstance(room, dict) and normalize_site(room.get("site"))
+            and not site_is_derived(room.get("site"))}
+
+
 def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
               normalize_site, normalize_level):
     from world.spatial import opposite_bearing
@@ -308,6 +331,7 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
     plan = {uid: copy.deepcopy(specs[uid][1] or {}) for uid in members}
     building = {"key": "+".join(members), "rooms": members, "names": names,
                 "specs": plan, "structure": structure, "refusal": None}
+    solved = _solved_plans(rooms, normalize_site)
     # the storeys: stated where the plan or the scene states them, the rest
     # along the stairs from those
     levels = {}
@@ -405,7 +429,15 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
         elif isinstance(live, dict) and str(live.get("desc") or live.get("description") or "").strip():
             refusal = f"{uid} is described: a room the story has seen is never re-measured"
         elif normalize_site(plan[uid].get("site")) or (isinstance(live, dict)
-                                                       and normalize_site(live.get("site"))):
+                                                       and _on_a_plan(live, normalize_site,
+                                                                      solved)):
+            # A SITE THE DERIVATION WROTE IS NO PLAN ALREADY: it is the
+            # engine's reading of the stubs, recomputed every merge
+            # (`site_plan.DERIVED_KEY`), and a solve laid onto the building's
+            # rooms replaces it -- unless it stands in another solve's frame,
+            # where a second solve would pull the ground that building opens
+            # onto off its plan. A decided site -- a solve, the lab's
+            # converter, a host -- keeps the building out, as before.
             refusal = f"{uid} stands on a plan already"
         elif plan[uid].get("parent_entity") or (isinstance(live, dict) and live.get("parent_entity")):
             refusal = f"{uid} is the inside of something"
@@ -420,10 +452,15 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
         # coordinates put it; a new solve's are its own, and written onto the
         # same plan the two would be read as one frame. Laying a solve onto a
         # standing plan, where its ground already stands, is the town fabric's
-        # work (survey rank 7); until then the building fails open.
+        # work (survey rank 7); until then the building fails open. A room
+        # the derivation put on a plan no decided site holds any more is no
+        # holder: since 2026-10-09 its site is recomputed every merge from
+        # the decided sites, so it never keeps an old solve's coordinates
+        # (`site_plan.DERIVED_KEY`) -- a re-planned building, whose stubs gave
+        # their solve back, is laid out again.
         holder = next((rid for rid, live in sorted(rooms.items())
                        if rid not in building["rooms"] and isinstance(live, dict)
-                       and (normalize_site(live.get("site")) or {}).get("plan")
+                       and (_on_a_plan(live, normalize_site, solved) or {}).get("plan")
                        == building["plan"]), None)
         if holder is not None:
             refusal = (f"{holder} already stands on {building['plan']}, placed beside "

@@ -86,18 +86,30 @@ room already stands on the plan it would be written on
 in that solve's coordinates, and a new solve on the same plan would read two
 frames as one.
 
-A stub's site the engine DERIVED keeps its building out too. Derivation
-(`site_plan.derive_site_plans`) places every room it can beside one already
-on a plan on that plan, so once a laid-out building's upper storey stands in
-the scene, the street it opens onto and the ground floor of the next planned
-building along that street stand on its plan, and that building is left to
-the designer (tried: two planned buildings on one street, the second refused
-"stands on a plan already" the commit after the first's upper storey was
-minted). A building already in reach before then is laid out on a plan of
-its own, and a street both buildings open onto is then placed on neither
-(review V3-1). Laying a solve onto a plan its ground already stands on --
-translated to where the doorway meets it -- is the town fabric's first step
-(survey rank 7).
+A stub's site the engine DERIVED keeps its building out only where it lies
+in another building's solve. Derivation (`site_plan.derive_site_plans`)
+places every room it can beside one already on a plan on that plan, so once
+a laid-out building's upper storey stands in the scene, the street it opens
+onto and the ground floor of the next planned building along that street
+stand on its plan, and that building is left to the designer (tried: two
+planned buildings on one street, the second refused "stands on a plan
+already" the commit after the first's upper storey was minted) -- a second
+solve there would pull the ground the first opens onto off its plan. A
+derived site on a plan no solve holds is the engine's reading of the stubs,
+recomputed every merge (`site_plan.DERIVED_KEY`, 2026-10-09), and keeps
+nothing out: a building whose own solve a re-plan took back is laid out
+again, the ground beside it re-derived from the rooms -- until then it was
+left to the designer for good, its street keeping the old solve's
+coordinates. A re-plan the answers cannot solve (a hall re-planned 12 by 3)
+is attempted too: its two calls, the bridge's refusal of the solve, and the
+wait every refused solve waits (`director_rooms.predevelop_retry_beats`: 2
+beats, then 4, 8 and every 16 while it keeps failing on the same plan) --
+where the stale street had refused it before any call. A building already
+in reach before its neighbour's upper storey stands is laid out on a plan
+of its own, and the group is then laid on the plan holding more of their
+rooms, the other building standing on its own (review V3-1). Laying a
+solve onto a plan its ground already stands on -- translated to where the
+doorway meets it -- is the town fabric's first step (survey rank 7).
 
 **Two calls, the lab's split, narrowed to what a plan leaves open.**
 `prose_contract.layout_sort` says what each planned room holds (fixtures and

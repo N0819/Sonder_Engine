@@ -1906,3 +1906,32 @@ class TestTheGridSeesFromABody:
         assert set(verdict) == {"visible", "sector", "tier", "occluded_by", "basis", "hears"}
         assert verdict["hears"] in ("full", "fragment", "none")
         assert "from" not in view["bodies"]["Alice"]
+
+
+def test_a_host_edit_is_read_into_the_derived_site_plan_at_once(client, temp_db):
+    """A derived site is the engine's reading of the rooms, recomputed by
+    every merge (`site_plan.DERIVED_KEY`). A host who moves a doorway along
+    its wall in the World Browser has the plan read again in the same write
+    (`_write_scene`): the chandler's stands where its moved doorway meets the
+    street's -- not where the old doorway put it until the next commit."""
+    import copy
+    from tests.test_a_plan_stands_room_by_room import SHOPS, _merged
+    from world.site_plan import plan_offset, room_site, site_is_derived
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Shops", "", time.time()))
+    canon = temp_db.qi("INSERT INTO lorebooks(name,chat_id,book_type) VALUES(?,?,?)",
+                       ("Canon", cid, "general"))
+    temp_db.qi("UPDATE chats SET lorebook_id=? WHERE id=?", (canon, cid))
+    scene = _merged(copy.deepcopy(SHOPS))
+    stood = room_site(scene, "shop_a")
+    assert stood and plan_offset(scene, "street", "shop_a") is not None
+    temp_db.wset(cid, "scene", scene)
+    r = client.patch(f"/api/chats/{cid}/rooms/shop_a", json={"exits": [
+        {"to": "street", "barrier": "closed_door", "dir": "n", "offset": 0.0}]})
+    assert r.status_code == 200, r.text
+    stored = temp_db.wget(cid, "scene")
+    site = stored["rooms"]["shop_a"]["site"]
+    assert site_is_derived(site)
+    assert (site["x"], site["y"]) == (stood["x"] + 2, stood["y"]), "where its doorway now meets"
+    assert plan_offset(stored, "street", "shop_a") is not None
+    assert room_site(stored, "hall") == room_site(scene, "hall"), "and nothing else moves"

@@ -1188,28 +1188,41 @@ def _laid_out_and_walked(temp_db):
 def test_a_neighbour_the_engine_placed_beside_a_solved_building_keeps_what_it_holds(temp_db):
     """ONLY WHAT A SOLVE LAID IS TAKEN BACK. The engine's derivation places a
     planned yard behind the solved kitchen on the building's own plan; the
-    yard was never solved, so it keeps that site commit after commit, and a
-    beat that measures it and places its gate -- without describing it --
-    keeps both (review of 2026-10-08, R2-1: read off the plan's name, the
-    re-plan rule took all three off the yard every commit)."""
+    yard was never solved, so it keeps standing on that plan commit after
+    commit, and a beat that measures it and places its gate -- without
+    describing it -- keeps both (review of 2026-10-08, R2-1: read off the
+    plan's name, the re-plan rule took all three off the yard every commit).
+
+    WHERE IT STANDS FOLLOWS WHAT IT IS (2026-10-09). The yard's site is the
+    derivation's reading of its doorways (`site_plan.DERIVED_KEY`), so once
+    the beat has measured it and moved its gate, the next merge lays it out
+    again where that gate now meets the kitchen's door -- never left at the
+    corner its unmeasured square was given."""
+    from world.site_plan import plan_offset, site_is_derived, site_overlaps
     from world.structure import apply_solved_plans
     cid, sc = _laid_out_and_walked(temp_db)
     yard = sc["rooms"]["yard"]
     assert not yard.get("desc") and yard.get("planned")
     assert yard["site"]["plan"] == "layout:hall", yard.get("site")
-    assert "laid_out" not in yard
+    assert site_is_derived(yard["site"]) and "laid_out" not in yard
     assert sc["rooms"]["kitchen"]["laid_out"]["plan"] == "layout:hall"
     placed = yard["site"]
     sc = _commit_like(cid, sc)
     assert sc["rooms"]["yard"]["site"] == placed, "and the next commit keeps it"
     gate = {"rooms": {"yard": {"extent": {"w": 3, "d": 3},
                                "adjacent": [{"to": "kitchen", "offset": 0.5}]}}}
+    moved = None
     for diff in (gate, None):
         sc = _commit_like(cid, sc, diff)
         yard = sc["rooms"]["yard"]
-        assert yard["site"] == placed
         assert yard["extent"] == {"w": 3, "d": 3}
         assert next(e for e in yard["adjacent"] if e["to"] == "kitchen")["offset"] == 0.5
+        assert yard["site"]["plan"] == "layout:hall" and site_is_derived(yard["site"])
+        assert plan_offset(sc, "kitchen", "yard") is not None, "its gate meets the kitchen"
+        assert site_overlaps(sc) == []
+        moved = moved or yard["site"]
+        assert yard["site"] == moved, "and stands there commit after commit"
+    assert moved != placed, "laid out again where its measured gate puts it"
     read = copy.deepcopy(sc)
     apply_solved_plans(cid, read)
     assert read["rooms"]["yard"] == sc["rooms"]["yard"], "nor does any reader of a beat"
@@ -1245,38 +1258,103 @@ def test_a_re_plan_takes_back_only_the_doorways_the_solve_placed():
     assert hall["anchors"]["hearth"] == {"desc": "a stone hearth", "dir": "w"}
 
 
-def test_a_re_planned_building_whose_ground_stands_on_its_old_plan_is_left_to_the_designer(
-        temp_db):
-    """A solve is written only onto a plan nothing else stands on. The street
-    a laid-out building opens onto is placed on the building's plan by the
-    engine's derivation; once the Room re-plans the building, its stubs give
-    the solve back, but the street still stands where the OLD solve's
-    coordinates put it, and a new solve on the same plan would read the two
-    frames as one. So the building fails open to the designer -- no call is
-    made -- and no stub keeps anything the old solve laid."""
+def test_a_re_planned_building_is_laid_out_again_and_its_ground_with_it(temp_db):
+    """A solve is written only onto a plan nothing else stands on, and the
+    ground the derivation laid beside an old solve is not something: once the
+    Room re-plans the building, its stubs give the solve back, and the street
+    the engine placed beside it is read again from the rooms
+    (`structure.apply_solved_plans` recomputes the derived plan wherever it
+    lays or takes back a solve; `site_plan.DERIVED_KEY`). Until 2026-10-09
+    the street kept the OLD solve's coordinates, the tier read it as a room
+    standing on the plan, and the re-planned building was left to the
+    designer for good. Now it is laid out again, and the commit that follows
+    stores the new solve with the street beside it, its door meeting the
+    hall's. A re-plan the answers cannot solve is attempted too, and waits as
+    every refused solve does (the test below)."""
     from agents.director_layout import lay_out_buildings
+    from world.site_plan import plan_offset, site_is_derived, site_overlaps
     from world.structure import (_planned_specs, apply_solved_plans, plant_structure,
                                  provisional_room_ids)
     cid, sc = _laid_out_and_walked(temp_db)
     assert sc["rooms"]["street"]["site"]["plan"] == "layout:hall"
+    assert site_is_derived(sc["rooms"]["street"]["site"])
     rooms = {uid: dict(spec, name=name) for uid, (name, spec) in copy.deepcopy(SPECS).items()}
     for room in rooms.values():
         room.pop("structure", None)
-    rooms["hall"]["extent"] = {"w": 12, "d": 3}
+    rooms["hall"]["purpose"] = "a hall with a hearth, a long table and a settle"
     plant_structure(cid, {"key": "town", "name": "Town"}, rooms)
     # the job between turns reads the scene through the plan, as it does
     job_copy = copy.deepcopy(sc)
     apply_solved_plans(cid, job_copy)
     for uid in ("hall", "kitchen", "loft"):
         room = job_copy["rooms"][uid]
-        assert "site" not in room and "laid_out" not in room, uid
+        assert "laid_out" not in room, uid
+        assert (room.get("site") or {}).get("plan") != "layout:hall", uid
         assert not any("extent" in a for a in (room.get("anchors") or {}).values()), uid
+    assert (job_copy["rooms"]["street"].get("site") or {}).get("plan") != "layout:hall", \
+        "the ground beside the old solve is read again from the rooms"
     (b,) = lb.plan_buildings(_planned_specs(cid), job_copy,
                              held_open=provisional_room_ids(cid))
-    assert b["refusal"] and "street already stands on layout:hall" in b["refusal"]
+    assert b["refusal"] is None, b["refusal"]
     calls = []
     _scene, laid = lay_out_buildings(None, cid, job_copy, ["hall"], "en", call=_answers(calls))
-    assert calls == [] and laid == set()
+    assert calls and laid == {"hall", "kitchen", "loft"}, (calls, laid)
+    # and the commit that follows stores the new solve, the street beside it
+    sc = _commit_like(cid, sc)
+    for uid in ("hall", "kitchen", "loft"):
+        assert sc["rooms"][uid]["laid_out"]["plan"] == "layout:hall", uid
+    street = sc["rooms"]["street"]
+    assert street["site"]["plan"] == "layout:hall" and site_is_derived(street["site"])
+    assert plan_offset(sc, "hall", "street") is not None, "the street's door meets the hall's"
+    assert site_overlaps(sc) == []
+
+
+
+def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db):
+    """A re-planned building the derivation no longer keeps out (above) is
+    attempted even where the answers cannot solve it: the hall re-planned 12
+    by 3, the relations the model gives cannot hold that measurement, and
+    the bridge refuses the solve after its two calls -- where, until
+    2026-10-09, the street's stale site refused it before any call. The
+    refusal is filed, the building waits as every refused solve waits
+    (`director_rooms.predevelop_retry_beats`: 2 beats, then 4, 8 and every
+    16 while it keeps failing on the same plan), and no stub keeps anything
+    the old solve laid: the designer builds the rooms as it always has."""
+    import types
+    from agents.director_layout import LAYOUT_RUNS_KEY, lay_out_buildings
+    from agents.director_rooms import predevelop_retry_beats
+    from core.db import wget
+    from world.structure import (_planned_specs, apply_solved_plans, plant_structure,
+                                 provisional_room_ids)
+    cid, sc = _laid_out_and_walked(temp_db)
+    rooms = {uid: dict(spec, name=name) for uid, (name, spec) in copy.deepcopy(SPECS).items()}
+    for room in rooms.values():
+        room.pop("structure", None)
+    rooms["hall"]["extent"] = {"w": 12, "d": 3}
+    plant_structure(cid, {"key": "town", "name": "Town"}, rooms)
+    job_copy = copy.deepcopy(sc)
+    apply_solved_plans(cid, job_copy)
+    (b,) = lb.plan_buildings(_planned_specs(cid), job_copy,
+                             held_open=provisional_room_ids(cid))
+    assert b["refusal"] is None, b["refusal"]
+    calls = []
+    job = types.SimpleNamespace(base_turn=1)
+    _scene, laid = lay_out_buildings(job, cid, job_copy, ["hall"], "en", call=_answers(calls))
+    assert len(calls) == 2 and laid == set(), (calls, laid)
+    run = wget(cid, LAYOUT_RUNS_KEY)[b["key"]]
+    assert run["failed"] == 1 and run["reasons"], run
+    # within the wait, no call at all
+    for turn in range(1, 1 + predevelop_retry_beats(1)):
+        lay_out_buildings(types.SimpleNamespace(base_turn=turn), cid, copy.deepcopy(job_copy),
+                          ["hall"], "en", call=_answers(calls))
+    assert len(calls) == 2, calls
+    # once the wait is over it is tried again -- two calls -- and fails again,
+    # and the next wait is twice as long: the cost of a building nobody can
+    # solve, the same for every building the tier attempts
+    lay_out_buildings(types.SimpleNamespace(base_turn=1 + predevelop_retry_beats(1)), cid,
+                      copy.deepcopy(job_copy), ["hall"], "en", call=_answers(calls))
+    assert len(calls) == 4, calls
+    assert wget(cid, LAYOUT_RUNS_KEY)[b["key"]]["failed"] == 2
     # and the commit that follows stores no stub with the old solve on it
     sc = _commit_like(cid, sc)
     for uid in ("hall", "kitchen", "loft"):
@@ -1284,7 +1362,6 @@ def test_a_re_planned_building_whose_ground_stands_on_its_old_plan_is_left_to_th
         assert "laid_out" not in room, uid
         assert not any("extent" in a for a in (room.get("anchors") or {}).values()), uid
     assert sc["rooms"]["hall"]["extent"] == {"w": 12, "d": 3}
-
 
 def test_the_tier_can_be_turned_on_for_one_story_and_a_rewind_keeps_the_dial(temp_db):
     """The owner compares the tier in a story before it publishes to any: the
