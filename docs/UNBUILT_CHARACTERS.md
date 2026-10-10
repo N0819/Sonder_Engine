@@ -159,7 +159,20 @@ strain never moving a drive, not success moving it).
 
 <a id="unbuilt-1-56"></a>
 
-### 1.56 The project tier's occasion now arrives, and is declined
+### 1.56 The project tier: a way to its end is read back as one, but the circularity gate refuses most journeys; nothing yet seen forming live
+
+**2026-10-09, under the bare contract** (`docs/experiments/PROJECT_ADOPTION_2026_10_09.md`). The failure moved again: the tier was entered, by the wrong things. All fifteen distinct adoptions the bare contract made in play were errands or readings of someone, held one to seven beats, while characters' lasting aims lived as intentions (Hester Gale's "Protect Abel", given up at turn 3 with the tactic that served it) or as `changes` lines, which can only become intentions. Built that day, on the owner's line (`CLAUDE.md`, psychology: "take the injured one to a doctor, go home, go to the bar"): the read-back's deliberation (`character_jev.commitment_lasts`: an entry that ends on arriving where it leads, a place or the last of its stages, is offered a slot; one thing to do or find out, done in one go, is an intention), reminders for the aims an intention ledger has no room for (`notebook.kept_when_no_room`, against what the notebook holds after the beat) and closing ops filed ahead of new aims, the review's invitation to a mind with a free slot (`character_bare.project_take_up`), the card's `changes` sentence sending what a mind means to see through to the notebook, a dormant intention as a boundary, and the drift marker on the notebook with its escalation. What is still open:
+
+- **The circularity gate decides the owner's journeys** (`affect._CRITERION_RESTATES_SIM` 0.4). A journey's end names where it goes ("down to the Anchor" / "I'm at the Anchor"), and the gate reads that as a task restating itself. Of 49 phrasings of everyday journeys -- going home, to the bar and the injured to a doctor fourteen ways each, and seven others, written into their speakers' captured beats -- the deliberation keeps 47 and the gate refuses 32 (in Japanese 44 and 26), so 17 of 49 become projects (19 in Japanese) and the rest are intentions. What the gate is for still holds: of 12 tasks whose end restates them ("Understand the symbols / I understand the symbols") the deliberation reads 9 as ways to an end and the gate refuses 10; without it 29 more English journeys and 8 of those 12 tasks would be projects. In play it refused 17 adoptions, 4 distinct: chat 84's "Establish stable, humane containment for Hinami" and two single-session rejuvenation arcs (branch copies in chats 85-92 and 98-113), ways to an end by the owner's line, and a single feed. Keep the word overlap, exempt an end that is arriving where the way leads, or ask the decision model whether the end lies outside the doing: the owner's.
+- **Which route `character_major` runs on.** Chat 166's turns 1-24 were played on NanoGPT `z-ai/glm-5.3:thinking` (3-15 thousand characters of reasoning a call); the story moved to OpenRouter `z-ai/glm-5.3` at `medium` at 21:34 on 2026-10-07 and its own later turns reasoned 0.3-1.7 thousand. Replayed there, no mind took anything up in 25 calls; at `high` one adoption in twelve, in a counterfactual that dropped the turn-3 errand rather than filing it as an intention, and none in two faithful reruns. The route and its effort are the owner's.
+- **An adoption that restates a held intention is not reconciled across tiers.** The one adoption replayed at `high` ("See her paid out as a foundering ...") restates Hester's `ia1` and a held concern under both similarity gates, so the same aim stood at two tiers.
+- **Where the line still misses.** In English an end that is one act at a place ("A drink at the Anchor before I face Coyle again" / "I've had a drink at the Anchor", 0.17) and a deadline taken to a doctor (0.49); two many-step procedures read as ways ("ring the duty officer and report the breach", "write up the incident report"), and among the stored adoptions so does the three-minute observation window in the lift, whose end is reaching the shelter gate (0.88); an investigation whose end is one fact learned can read as one thing to find out (2 of 6 written long investigations, 0.39 and 0.46), the price of keeping the corpus's investigations out. In Japanese five of the 49 journeys miss and three errands sent, left or fetched read as ways, and `note_kind` reads seven of the 49 journeys as something other than a commitment before the deliberation is asked.
+- **Japanese is probed only on its own batteries**, never in situ (no Japanese story has played on the bare card).
+- **A kept reminder does not steer.** An aim with no room among a mind's intentions is kept in its notebook in its own words; it is not offered back as an intention when a slot frees.
+- **Probation and service are unmeasured under the bare contract**: nothing has yet been held long enough to establish or lapse, and the restored drift marker has never fired in the corpus.
+
+The record below is the state before 2026-10-09.
+
 
 v4 made the review beat reachable (`Design.md`'s project row has the diagnosis:
 one condition written twice, so the only moment a first project could be
@@ -1705,10 +1718,13 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   adoption refused as circular was lost (kept as an intention,
   `affect.adoption_refusal`). Open: about half of what the check still
   calls confirmation told the mind nothing new (by the probe's labels);
-  notes still drift into a log of what happened, less in round ten; an
-  errand can take a project slot when its end sounds external ("the
-  wounded man is on my cot" held one to the chain's end -- the residue
-  adoption leaves to probation); no note struck in play yet; the knobs
+  notes still drift into a log of what happened, less in round ten; a
+  commitment whose end sounds external took a project slot whatever it was
+  ("the wounded man is on my cot" held one to the chain's end -- a way to
+  its end by the owner's line, the injured carried to care -- while in play
+  every adoption through 2026-10-07 was an errand); since 2026-10-09 the
+  read-back asks whether it ends on arriving where it leads or is one thing
+  to do or find out, done in one go (§1.56); no note struck in play yet; the knobs
   (`mind/notebook.py`, the kinds for things in `theory_of_mind`) are the
   owner's.
 - **An act read as cutting someone off when it only walks away** (the
@@ -1720,7 +1736,8 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   have kept both misreads.
 
 Not carried yet: material effects. (Adopting a project is carried by the
-notebook's `until` since 2026-09-27.) Restored 2026-09-27 from what the full
+notebook's `until` since 2026-09-27, and read back as a way to its end or a
+one-go errand since 2026-10-09.) Restored 2026-09-27 from what the full
 card said on every beat: seven gated sections (a silence that is someone's
 act, an answer owed, an offer, the speech budget, a crisis, tell variety,
 tell payoff), an act's `look` and `interrupts`, the signed `somatic_echo`,

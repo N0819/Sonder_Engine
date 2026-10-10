@@ -1,0 +1,2 @@
+YOU WROTE IN YOUR NOTEBOOK: {text}
+What will it take to finish it?

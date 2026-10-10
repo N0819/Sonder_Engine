@@ -38,6 +38,11 @@ _AT_STEP = "_at_step"
 #: How many times the reply is put to the decision model before the beat
 #: stands on code alone.
 READ_BACK_ATTEMPTS = 2
+#: The intention ops that end an aim's hold on its slot -- given up,
+#: finished, closed by the world (`affect.apply_intent_ops`: `abandon`,
+#: `satisfy`, `nonviable`) -- filed ahead of the beat's new aims, so a slot
+#: freed this beat is free for them (`compile_bare`).
+_CLOSING_INTENT_OPS = ("abandon", "satisfy", "nonviable")
 
 
 # --- what this mind holds, from its own payload -----------------------------------
@@ -372,8 +377,32 @@ def modules_for(payload, *, disputed=(), rupture_open=False, rupture_forced=Fals
         out.append("drive_rupture")
         if rupture_forced:
             out.append("drive_rupture_forced")
+    # WHAT THIS MIND IS ABOUT. The review beat (`affect.project_boundary`:
+    # a task of its own closed or went dormant, the scene or the frame
+    # changed, it arrived where its work points) asks two things, each said
+    # only to the mind it applies to: work it holds -- serve it, finish it or
+    # set it aside -- and, while a slot is free, whether there is something
+    # it means to see through to take up. The section used to speak only of
+    # "the work you have taken on", so the invitation v4 made reachable for a
+    # mind with nothing standing (the boundary fires without a project,
+    # precisely so a first one can be adopted) arrived with no words for it:
+    # chat 166's two minds were shown it on 13 calls over 11 of its 31 beats
+    # (Hester 9, Abel 4), 9 of the calls to a mind holding nothing -- among
+    # them the beat after Hester's authored aim to protect her brother was
+    # abandoned with the tactic that served it.
+    about = [e for e in ((self_.get("notebook") or {}).get("what_you_are_about") or [])
+             if isinstance(e, dict)]
     if self_.get("project_review"):
-        out.append("project_review")
+        if about:
+            out.append("project_review")
+        if len(about) < affect.PROJECT_CAP:
+            out.append("project_take_up")
+    # Work held that nothing lately has served (`agents.character.
+    # _annotate_project_drift`, carried onto the notebook by `mind.notebook`
+    # as `lately`, or `long` past a dozen beats): the marker a probation's
+    # lapse is meant never to arrive before.
+    if any(e.get("adrift") for e in about):
+        out.append("project_adrift")
     if self_.get("still_waiting_for"):
         out.append("still_waiting")
     if perception.get("impossible_knowledge"):
@@ -398,6 +427,11 @@ def prompt(name, modules, language=None, fill=None):
         text = (head + "\n\n" + "\n\n".join(extra) + sep + tail) if sep else text + "\n\n" + "\n\n".join(extra)
     for key, value in (fill or {}).items():
         text = text.replace("{" + key + "}", str(value))
+    # How much a mind may be about at once is the engine's cap
+    # (`affect.PROJECT_CAP`), stated from the constant on every path -- the
+    # plain card each repair rung sends carries no `fill` -- never written
+    # into the pack.
+    text = text.replace("{project_cap}", str(affect.PROJECT_CAP))
     # Whether this mind's thinking carries over is the setting's to say
     # (`mind/thoughts.py`): the card is never allowed to promise what the
     # packet does not hold, either way.
@@ -453,13 +487,21 @@ def _compile_notebook(reply, answers, h, out, warnings):
       on -- into `mind_model_updates` (by note id);
     - a reminder into `notebook_ops`;
     - a worry into the concerns, what would settle it carried in its words;
-    - a commitment into `project_ops` (adoption: an end outside the doing,
-      two at most, on trial until lived into) -- or, with no end to name,
-      an intention, because a commitment with no end is a task. One that
-      adoption would refuse as circular or crowded out
-      (`affect.adoption_refusal`) is kept as an intention too, what would
-      finish it in its words: a commitment refused a slot was lost in the
-      round-8 chains, and adoption's own warning says to serve it as one.
+    - a commitment into `project_ops` when it is A WAY TO ITS END (the
+      decision model's `nb:<j>:lasts`: it ends on arriving where it leads, a
+      place or the last of its stages -- the owner's "take the injured one to
+      a doctor, go home, go to the bar"; adoption: an end outside the doing,
+      two at most, on trial until lived into) -- or an intention: with no end to
+      name, because a commitment with no end is a task, and as an errand one
+      go settles, because a slot held by an errand is the tier filled with
+      what it exists to tell apart (every adoption the bare contract made in
+      play until 2026-10-09 was one). One that adoption would refuse as
+      circular or crowded out (`affect.adoption_refusal`) is kept as an
+      intention too, what would finish it in its words: a commitment refused
+      a slot was lost in the round-8 chains, and adoption's own warning says
+      to serve it as one. An intention the ledger has no room for is kept
+      as a reminder in the same words at commit
+      (`notebook.kept_when_no_room`), so none of these is ever dropped.
 
     A note about someone or something needs a subject and rests on something
     this mind was given, as every reading does; a thought with neither is not
@@ -516,7 +558,17 @@ def _compile_notebook(reply, answers, h, out, warnings):
             concerns.append(_fill_concern(glue, entry))
         elif kind == "commitment":
             refused = affect.adoption_refusal(live, entry["note"], entry["until"])
-            if entry["until"] and refused is None:
+            # A way to its end, not an errand: the deliberation the decision
+            # model was asked (`nb:<j>:lasts`, `jev.after_questions`). An
+            # errand -- one thing to do or find out, done in one go -- is an
+            # intention, as a commitment adoption refuses already is. That
+            # includes a way to its end whose `until` restates it, which a
+            # journey's arrival usually does ("down to the Anchor" / "I'm at
+            # the Anchor"): the circularity gate refused 32 of 49 phrasings
+            # of the owner's own journeys, measured 2026-10-09, and whether
+            # it should hold for them is the owner's (UNBUILT §1.56).
+            lasting = jev.pick(answers, f"nb:{j}:lasts") == "lasting"
+            if entry["until"] and lasting and refused is None:
                 out["project_ops"].append({"op": "adopt", "project": entry["note"],
                                            "satisfied_when": entry["until"], "about": ""})
                 live.append({"id": "", "project": entry["note"]})
@@ -525,8 +577,11 @@ def _compile_notebook(reply, answers, h, out, warnings):
             else:
                 intent = (jev._fill(glue["until"], {"text": entry["note"], "until": entry["until"]})
                           if entry["until"] else entry["note"])
+                # `about` rides along for the one case the ledger has no
+                # room: commit then keeps the aim as a reminder about it
+                # (`notebook.kept_when_no_room`), never drops it.
                 out["intent_ops"].append({"op": "add", "intent": intent, "why": entry["note"],
-                                          "evidence": evidence})
+                                          "evidence": evidence, "about": about})
         elif kind == "keep" or not about or not evidence:
             ops.append({"op": "add", "about": about, "note": entry["note"]})
         else:
@@ -847,6 +902,15 @@ def compile_bare(reply, answers, h):
         if op and evidence:
             out["intent_ops"].append({"op": op, "id": aim["id"], "why": hinge or _text(aim["text"]),
                                       "evidence": evidence})
+    # WHAT CLOSES LANDS BEFORE WHAT TAKES ITS PLACE, as a struck project's
+    # slot is free for the adoption beside it (`_compile_notebook`). The ops
+    # above are filed in the order the reply is read -- the notebook, then
+    # `changes`, then the held aims -- and the ledger applies them in order,
+    # so an aim given up or finished in the same beat as a new one was taken
+    # up still held its slot when the new one asked for it: at a full ledger
+    # the new aim was turned away by the very beat that made room for it.
+    # A stable sort, so each group keeps the reply's order.
+    out["intent_ops"].sort(key=lambda op: 0 if op.get("op") in _CLOSING_INTENT_OPS else 1)
     # HELD BELIEFS, BY THE NOTEBOOK'S RULE: the mind changes a belief in its
     # own words -- a `changes` line aimed at it, resting on something this
     # mind was given -- and the decision model's check of the moment only

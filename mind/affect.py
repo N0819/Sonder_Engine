@@ -1317,12 +1317,22 @@ def _intent_named_by_text(intentions, text):
 
 
 def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
-                     intent_cap=None, barren_beat=False):
+                     intent_cap=None, barren_beat=False, refused=None):
     """Apply a turn's intention operations under deterministic guards.
 
     `intent_cap` is this character's attentional capacity (see
     `capacity_caps`); omitted it is the `ordinary` rung, which is the constant
     this has always used, so every existing caller and story is unchanged.
+
+    `refused`, when a list, receives every `add` turned away because the
+    ledger already held `intent_cap` active aims -- the op itself, so the
+    caller can keep what it said somewhere the mind still sees it
+    (`commit_memory`: a reminder in its notebook, in its own words). The
+    warning alone kept nothing: the aim the mind wrote was gone, and nothing
+    told it. Measured 2026-10-09 over the play database's active commits:
+    38 adds turned away in 17 chats, 18 of them in the 75 commits of the
+    four bare-contract chats (chat 165: five adds over four of its seven
+    beats).
 
     Enforced floors: at most `intent_cap` active intentions -- 2 at the
     `narrow` rung through 6 at `wide`, and 4 at `ordinary`, which is the
@@ -1380,6 +1390,8 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
             if active >= _cap:
                 warnings.append(
                     f"intent add rejected (cap {_cap} active): {text!r}")
+                if isinstance(refused, list):
+                    refused.append(op)
                 continue
             result.append({
                 "id": _next_intent_id(result),
@@ -2085,6 +2097,18 @@ def goal_slot_currency(prev_active, goal_text, named_rooms, here_rid,
     return out
 
 
+#: The statuses in which an intention has stopped steering -- finished, given
+#: up, closed by the world, or gone dormant (stalled at full progress, or
+#: untouched past the sweep). An intention ENTERING one is a task ending, the
+#: boundary `project_boundary` re-asks what a mind is about on. `dormant` was
+#: missing while `apply_intent_ops` revives dormant and blocked alike: Sal
+#: Weatherby's only aim (two_lives v7, 2026-09-19) died dormant and nothing
+#: asked her what she was about next. Measured over play.db's 4,340 active
+#: commits (2026-10-09): 61 dormancies (50 stalls, 11 sweeps), 19 of them in
+#: the 302 commits since the bare contract.
+_TASK_CLOSED = ("satisfied", "abandoned", "blocked", "dormant")
+
+
 def project_boundary(projects, intentions, before_status, new_room,
                      prev_room, scene_marker, location, frame_id,
                      named_rooms=None):
@@ -2100,7 +2124,9 @@ def project_boundary(projects, intentions, before_status, new_room,
         a project's own text names, over their own place-graph names;
       * a task ending -- an intention entered satisfied/abandoned/blocked
         this commit (the closing ops are the one lifecycle edge commit can
-        observe without trusting a self-report);
+        observe without trusting a self-report), or went dormant (the stall
+        or the sweep: it stopped steering, the same class as blocked, which
+        `apply_intent_ops` already revives alongside it);
       * the scene or frame changing -- against the scene_marker persisted
         last beat; no marker (first beat) is silence, never a boundary.
 
@@ -2136,14 +2162,16 @@ def project_boundary(projects, intentions, before_status, new_room,
                 reasons.append("you have arrived where your project "
                                f"{str(p.get('id') or '')} points")
                 break
-    closed = ("satisfied", "abandoned", "blocked")
     for intent in intentions or []:
         if not isinstance(intent, dict):
             continue
         sid = str(intent.get("id") or "")
-        if intent.get("status") in closed \
-                and (before_status or {}).get(sid) not in closed:
-            reasons.append(f"your task {sid} closed this beat")
+        status = intent.get("status")
+        if status in _TASK_CLOSED \
+                and (before_status or {}).get(sid) not in _TASK_CLOSED:
+            reasons.append(f"your task {sid} went dormant this beat"
+                           if status == "dormant"
+                           else f"your task {sid} closed this beat")
             break
     if isinstance(scene_marker, dict):
         if str(location or "") != str(scene_marker.get("location") or ""):

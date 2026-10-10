@@ -69,6 +69,14 @@ NUDGE_TOWARD = {"bore_out": 0.85, "doubted": 0.3, "contradicted": 0.1}
 SHOWN_FLOOR = 0.05
 NOTE_CHARS = 300
 ABOUT_CHARS = 120
+#: Beats a held project may go unserved before its drift reads `long`
+#: rather than `lately` on the notebook: the design's "past a dozen beats it
+#: is no longer drift, it is a choice you have not admitted"
+#: (docs/design/DESIGN_LONG_TERM_GOALS.md, Decided v2), which the full card's
+#: PROJECTS block said of the `adrift` count and the bare card lost with
+#: `self.projects`. Wording only: the word ends nothing (a probation's lapse
+#: is still `affect.settle_probation`'s, at three times the drift threshold).
+ADRIFT_LONG_AFTER = 12
 
 #: How the view scores a note: a subject in play outranks everything, a note
 #: naming someone in play comes next, a freshly touched note next, and
@@ -135,6 +143,40 @@ def concern_text(concern):
     return "" if text == "None" else text
 
 
+def _drift_word(adrift):
+    """The payload's drift count (`agents.character._annotate_project_drift`:
+    beats since anything the mind did served the project) as the word the
+    notebook carries: `lately` once it is marked at all, `long` past
+    `ADRIFT_LONG_AFTER` -- "" when it is not marked."""
+    if not adrift:
+        return ""
+    if isinstance(adrift, bool):
+        return "lately"
+    try:
+        beats = int(adrift)
+    except (TypeError, ValueError):
+        return "lately"
+    return "long" if beats > ADRIFT_LONG_AFTER else "lately"
+
+
+def _about_entries(projects):
+    """`what_you_are_about`, one entry a held project: its words, what would
+    finish it (`until`), `on_trial` while on probation, and `adrift` once
+    nothing the mind did lately served it -- the payload's own marker
+    (`agents.character._annotate_project_drift`, `_ADRIFT_AFTER` beats),
+    carried as a word because the bare payload gives this view in place of
+    `self.projects`, and with it went the one fact a probation's lapse is
+    built never to arrive before (`affect.settle_probation`: "a lapse is
+    never the first notice"). The word grows, the mechanism never does:
+    `lately`, then `long` past a dozen beats, the design's escalation
+    (`ADRIFT_LONG_AFTER`). ONE READER for the view and the full view."""
+    return [{"id": str(p.get("id") or ""), "note": _text(p.get("project")),
+             **({"until": _text(p["satisfied_when"])} if str(p.get("satisfied_when") or "").strip() else {}),
+             **({"on_trial": True} if p.get("probation") else {}),
+             **({"adrift": _drift_word(p.get("adrift"))} if _drift_word(p.get("adrift")) else {})}
+            for p in projects or [] if isinstance(p, dict) and str(p.get("project") or "").strip()]
+
+
 def view(state, turn_idx, *, present=(), texts=(), absorption=0.0, elapsed_seconds=None,
          concerns=(), projects=()):
     """The notebook as the character reads it this beat, in four sections --
@@ -143,8 +185,9 @@ def view(state, turn_idx, *, present=(), texts=(), absorption=0.0, elapsed_secon
     - `on_your_mind`: its concerns, each carrying what would settle it in its
       own words (`concerns`: the engine's strings);
     - `what_you_are_about`: its projects, each with what would finish it
-      (`until`) and `on_trial` while still on probation (`projects`: the live
-      ledger);
+      (`until`), `on_trial` while still on probation and `adrift` once
+      nothing it did lately served it (`projects`: the live ledger, as the
+      payload annotated it);
     - `people_and_things`: what it thinks of people and things, and what it
       thinks they think, grouped by subject with those in play first
       (`sure`: how sure, in a word);
@@ -159,10 +202,7 @@ def view(state, turn_idx, *, present=(), texts=(), absorption=0.0, elapsed_secon
     minding = [{"id": concern_id(t), "note": _text(t)} for t in held[:CONCERNS_SHOWN]]
     if minding:
         out["on_your_mind"] = minding
-    about = [{"id": str(p.get("id") or ""), "note": _text(p.get("project")),
-              **({"until": _text(p["satisfied_when"])} if str(p.get("satisfied_when") or "").strip() else {}),
-              **({"on_trial": True} if p.get("probation") else {})}
-             for p in projects or [] if isinstance(p, dict) and str(p.get("project") or "").strip()]
+    about = _about_entries(projects)
     if about:
         out["what_you_are_about"] = about
     notes = _people_and_things(state, turn_idx, present, texts, absorption, elapsed_seconds)
@@ -187,10 +227,7 @@ def full_view(state, turn_idx, *, elapsed_seconds=None, concerns=(), projects=()
     held = [t for t in (concern_text(c) for c in concerns or []) if t]
     if held:
         out["on_your_mind"] = [{"id": concern_id(t), "note": _text(t)} for t in held]
-    about = [{"id": str(p.get("id") or ""), "note": _text(p.get("project")),
-              **({"until": _text(p["satisfied_when"])} if str(p.get("satisfied_when") or "").strip() else {}),
-              **({"on_trial": True} if p.get("probation") else {})}
-             for p in projects or [] if isinstance(p, dict) and str(p.get("project") or "").strip()]
+    about = _about_entries(projects)
     if about:
         out["what_you_are_about"] = about
     notes = []
@@ -314,6 +351,54 @@ def apply_notebook_ops(state, ops, turn_idx):
     state["notebook"] = book
     state["notebook_seq"] = seq
     return state
+
+
+def kept_when_no_room(state, refused, beat_ops=(), turn_idx=None):
+    """The reminders that keep the aims the intention ledger had no room for
+    this beat (`affect.apply_intent_ops`'s `refused`), as `apply_notebook_ops`
+    adds, to be applied after the beat's own notebook ops (`beat_ops`): each
+    in the mind's own words -- an errand's end rides in them as
+    "(until: ...)" -- about whatever the aim named, and each once: never
+    beside a reminder in the same words that the notebook will still hold
+    after this beat.
+
+    An aim turned away at the cap used to leave a commit warning and
+    nothing else, so what the mind wrote was gone and the mind was never
+    told. A reminder is what the notebook holds for "one errand of your own"
+    (the read-back's own `keep`), and it is where the mind looks for what it
+    meant to do: it can take the aim up again once a slot is free, or strike
+    it.
+
+    Held is read AFTER the beat's own adds, changes and strikes (applied to a
+    copy, by the one reader that applies them), never before: a mind that
+    takes up a kept aim again strikes or rewrites the reminder holding it in
+    the same beat it writes the aim, and when the ledger is still full, a
+    reminder held at the start of the beat but struck or reworded by it
+    stood in for the aim, and the strike then removed it -- the aim was in
+    neither the ledger nor the notebook."""
+    def norm(text):
+        return " ".join(str(text or "").split()).casefold()
+
+    book = [dict(r) for r in (state or {}).get("notebook") or [] if isinstance(r, dict)]
+    if turn_idx is None:
+        # The beat's own entries are its newest; only the reminder store's
+        # own cap (`REMINDERS_KEPT`) reads the turn.
+        turn_idx = 1 + max((int(r.get("last_turn") or 0) for r in book), default=0)
+    after = apply_notebook_ops({"notebook": book, "notebook_seq": (state or {}).get("notebook_seq")},
+                               beat_ops, turn_idx)
+    held = {norm(r.get("note")) for r in after.get("notebook") or [] if isinstance(r, dict)}
+    out = []
+    for op in refused or []:
+        if not isinstance(op, dict):
+            continue
+        note = " ".join(str(op.get("intent") or "").split())
+        # Compared as the reminder list will hold it (`_text` cuts a long
+        # note), so an aim turned away again next beat is not kept twice.
+        if not note or norm(_text(note)) in held:
+            continue
+        held.add(norm(_text(note)))
+        out.append({"op": "add", "about": " ".join(str(op.get("about") or "").split()), "note": note})
+    return out
 
 
 def find_reminder(state, ref):

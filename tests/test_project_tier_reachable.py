@@ -68,6 +68,16 @@ class TestABoundaryReachesACharacterWithNoProjects:
                         before_status={"i3": "active"})
         assert why and "i3" in why
 
+    def test_a_task_going_dormant_is_a_boundary(self):
+        """Stalled at full progress or untouched past the sweep, an intention
+        stops steering exactly as a blocked one does -- `apply_intent_ops`
+        revives the two alike -- and the boundary left it out: Sal Weatherby's
+        only aim died dormant (two_lives v7) and nothing asked her what she
+        was about next."""
+        why = _boundary([], intentions=[{"id": "i2", "status": "dormant"}],
+                        before_status={"i2": "active"})
+        assert why == "your task i2 went dormant this beat"
+
     def test_none_of_this_changed_for_a_character_who_holds_one(self):
         assert _boundary(HELD, location="Lantern Path")
         assert _boundary(HELD, frame_id="frame-2")
@@ -90,6 +100,11 @@ class TestWhatIsStillNotABoundary:
     def test_a_task_that_was_already_closed_does_not_re_fire(self):
         assert _boundary([], intentions=[{"id": "i3", "status": "satisfied"}],
                          before_status={"i3": "satisfied"}) is None
+        # ...and one that had already stopped steering is not a new ending
+        # when it is finished or given up later, dormant as blocked.
+        for before in ("dormant", "blocked"):
+            assert _boundary([], intentions=[{"id": "i3", "status": "abandoned"}],
+                             before_status={"i3": before}) is None, before
 
     def test_arrival_still_requires_a_project_to_arrive_at(self):
         """It compares the new room against what a held project NAMES, so with

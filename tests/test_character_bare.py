@@ -79,6 +79,9 @@ def test_a_section_ships_only_when_the_moment_calls_for_it():
     assert quiet == []
     loud = character_bare.modules_for(
         {"self": {"project_review": {"id": "p1"}, "still_waiting_for": [{"what": "rope"}],
+                  "notebook": {"what_you_are_about": [{"id": "p1", "note": "keep the mill turning",
+                                                       "until": "the miller's son is of age",
+                                                       "adrift": "lately"}]},
                   "crisis": True, "recent_tells": ["a swallow"],
                   "tell_grounds": [{"cue": "a swallow", "because": "the key"}],
                   "recent_self_refrain": {"opening": {"word": "listen", "lines": 4, "of": 5}}},
@@ -90,8 +93,8 @@ def test_a_section_ships_only_when_the_moment_calls_for_it():
         disputed=[{"ref": "event:a", "text": "x"}], rupture_open=True, rupture_forced=True)
     assert loud == ["their_silence", "answer_owed", "offers", "speech_budget", "crisis",
                     "tell_variety", "tell_payoff", "repetition", "dispute", "drive_rupture",
-                    "drive_rupture_forced", "project_review", "still_waiting", "impossible_knowledge",
-                    "carried_reports", "ways_on"]
+                    "drive_rupture_forced", "project_review", "project_take_up", "project_adrift",
+                    "still_waiting", "impossible_knowledge", "carried_reports", "ways_on"]
     # Each restored section is the old card's clause, said when it applies,
     # and names the payload key it explains.
     for module, key in (("their_silence", "decision.they_said_nothing"),
@@ -99,6 +102,7 @@ def test_a_section_ships_only_when_the_moment_calls_for_it():
                         ("offers", "decision.comes_to_you"), ("speech_budget", "decision.speech_budget"),
                         ("crisis", "self.crisis"), ("tell_variety", "self.recent_tells"),
                         ("tell_payoff", "self.tell_grounds"), ("repetition", "self.recent_self_refrain"),
+                        ("project_take_up", "self.project_review"), ("project_adrift", "self.notebook"),
                         ("ways_on", "perception.spatial_frame")):
         for lang in ("en", "ja"):
             assert f"`{key}`" in character_bare.prompt("Wren", [module], lang), (module, lang)
@@ -164,7 +168,8 @@ def test_every_question_reads_only_this_minds_own_holding():
     pack = set()
     for name in ("volume", "yesno", "act_kind", "grade", "miss", "channel", "signed", "fit", "tone", "change_kind",
                  "reading_kind", "aim_moved", "belief_touched", "impact", "certain",
-                 "agency", "ability", "choices", "note_kind", "note_touched", "strike_kind", "echo_body",
+                 "agency", "ability", "choices", "note_kind", "commitment_lasts", "note_touched", "strike_kind",
+                 "echo_body",
                  "cue_held", "part_seen"):
         pack.update(character_jev_options(name, "en").values())
     held = ({e["text"] for e in h.events} | {m["text"] for m in h.memories} | set(h.people) | set(h.known)
@@ -203,7 +208,7 @@ def _answer(script):
         for neutral in ("no", "none", "nothing", "neither", "same", "normal", "nobody",
                         "nothing_now", "nothing_remembered", "no_memory", "no_belief",
                         "no_aim", "no_promise", "no_target", "no_strategy", "other",
-                        "situational", "follow_neither"):
+                        "situational", "follow_neither", "one_stretch"):
             if neutral in criteria:
                 return neutral
         return next(iter(criteria))
@@ -590,13 +595,14 @@ def test_what_the_character_writes_in_its_notebook_lands_where_it_belongs():
     assert out["notebook_ops"] == [{"op": "strike", "id": "r1"}]
     assert out["active_state"]["active_concerns"] == [
         "whether Tomas tells Father (settled when: Father comes home)"]
-    # A project finished; a commitment with an end is taken up as a project,
-    # and one with no end to name is an intention.
-    assert out["project_ops"] == [
-        {"op": "satisfy", "id": "p1", "why": "the winter is over"},
-        {"op": "adopt", "project": "get the key back before dark",
-         "satisfied_when": "the key is in my hand", "about": ""}]
-    assert any(op["op"] == "add" and op["intent"] == "learn the knot Mara ties" for op in out["intent_ops"])
+    # A project finished; a commitment with no end to name is an intention,
+    # and so is one the decision model reads as an errand -- one thing done
+    # in one go (unscripted here, so the neutral answer) -- what would finish
+    # it carried in its words.
+    assert out["project_ops"] == [{"op": "satisfy", "id": "p1", "why": "the winter is over"}]
+    added = [op["intent"] for op in out["intent_ops"] if op["op"] == "add"]
+    assert "learn the knot Mara ties" in added
+    assert "get the key back before dark (until: the key is in my hand)" in added
 
 
 def test_a_struck_note_needs_no_evidence_and_survives_grounding():
@@ -722,7 +728,7 @@ def test_a_commitment_adoption_would_refuse_is_kept_as_an_intention():
         {"note": "count the hits", "until": "I have counted the hits"},
         {"note": "find a new place to hide things", "until": "the thaw comes"},
         {"note": "keep the family together", "until": "spring"}]}
-    script = [(f"nb:{j}:kind", "commitment") for j in range(3)]
+    script = [(f"nb:{j}:{q}", a) for j in range(3) for q, a in (("kind", "commitment"), ("lasts", "lasting"))]
     out, warnings = character_bare.compile_bare(reply, _answer(script)(_both_batteries(h, reply)), h)
     assert out["project_ops"] == []
     assert [op["intent"] for op in out["intent_ops"] if op["op"] == "add"] == [
@@ -739,7 +745,7 @@ def test_a_slot_freed_in_the_same_beat_takes_the_new_project():
     reply = {**_reply(), "notebook": [
         {"id": "p1", "strike": "the winter is over"},
         {"note": "find a new place to hide things", "until": "the thaw comes"}]}
-    script = [("nb:0:strike", "done"), ("nb:1:kind", "commitment")]
+    script = [("nb:0:strike", "done"), ("nb:1:kind", "commitment"), ("nb:1:lasts", "lasting")]
     out, _ = character_bare.compile_bare(reply, _answer(script)(_both_batteries(h, reply)), h)
     assert out["project_ops"] == [
         {"op": "satisfy", "id": "p1", "why": "the winter is over"},
@@ -750,6 +756,228 @@ def test_a_slot_freed_in_the_same_beat_takes_the_new_project():
     projects, _, project_warnings = affect.apply_project_ops(held, [], out["project_ops"], 10)
     assert project_warnings == [] and [p["project"] for p in projects] == [
         "learn who took the key", "find a new place to hide things"]
+
+
+def test_a_one_go_errand_is_an_intention_and_a_way_to_its_end_a_project():
+    """THE ADOPTION DELIBERATION, read back. `note_kind`'s commitment ("you
+    mean to bring about yourself, and will keep at until it is done") is true
+    of an errand too, and every one of the fifteen distinct adoptions the bare
+    contract made in play was one -- "Ringer or workman -- find out which
+    before Coyle asks him anything", satisfied three beats later (chat 166).
+    The decision model's second reading draws the owner's line (CLAUDE.md:
+    projects carry "the ordinary long intentions a life has -- take the
+    injured one to a doctor, go home, go to the bar"): a way to its end,
+    ending on arriving at a place or at the last of its stages, is a project
+    slot; one thing to do or find out, done in one go, is an intention, its
+    end in its words."""
+    h = _holding()
+    reply = {**_reply(), "notebook": [
+        {"note": "find out who is at the rope before Coyle gets there", "until": "I have seen their face and heard why"},
+        {"about": "Tomas", "note": "get Tomas down to the infirmary in the lower town",
+         "until": "a physician has set his leg"}]}
+    script = [("nb:0:kind", "commitment"), ("nb:0:lasts", "one_stretch"),
+              ("nb:1:kind", "commitment"), ("nb:1:lasts", "lasting")]
+    out, warnings = character_bare.compile_bare(reply, _answer(script)(_both_batteries(h, reply)), h)
+    assert out["project_ops"] == [{"op": "adopt", "project": "get Tomas down to the infirmary in the lower town",
+                                   "satisfied_when": "a physician has set his leg", "about": ""}]
+    assert [op["intent"] for op in out["intent_ops"] if op["op"] == "add"] == [
+        "find out who is at the rope before Coyle gets there (until: I have seen their face and heard why)"]
+    assert not any("already held" in w for w in warnings)
+
+
+#: The deliberation exactly as it was probed, 2026-10-09, each pack on its own
+#: battery (docs/experiments/PROJECT_ADOPTION_2026_10_09.md). Every rate the
+#: docs give for the line -- Design.md, UNBUILT §1.56, EXPECTED_DIVERGENCE and
+#: the experiment doc -- belongs to these words and no others.
+_PROBED_DELIBERATION = {
+    "en": ("YOU WROTE IN YOUR NOTEBOOK: {text}\nWhat will it take to finish it?",
+           {"lasting": "Getting there: it ends when you arrive where it leads -- a place, or the last of its "
+                       "stages -- however many steps it takes.",
+            "one_stretch": "One thing to do or find out, done in one go."}),
+    "ja": ("あなたがノートに書いたこと: {text}\nそれを終えるには何が要りますか？",
+           {"lasting": "たどり着くこと：自分か連れて行く人が向かう先に着いたときに終わる――ある場所か、段階の最後。何歩かかっても。",
+            "one_stretch": "ひとつの用事：することか確かめることを、一度やればそれで終わる。"}),
+}
+
+
+def test_the_deliberation_is_asked_in_the_words_that_were_measured():
+    """A Jev option is read by its words, so a relabel is a new wording: the
+    line's measured rates describe the shipped card only while the card asks
+    these exact words. Round one's "over days or more, on many separate
+    occasions" read chat 99's p1, the corpus's only established project, at
+    0.10. Round two's way "you will keep going along ... past setbacks and
+    changes of plan" kept 35 of 49 phrasings of everyday journeys -- the
+    owner's own, going home, to the bar and the injured to a doctor, fourteen
+    ways each, and seven others -- in their speakers' captured beats (the
+    doctor 7 of 14), losing each one that had a deadline or waited on
+    something; these words keep 47 of 49 and the corpus's errands
+    out as before, and Japanese, probed on its own, 44 of 49 where round two's
+    kept 26. An edit fails here until it is measured again."""
+    for lang, (instructions, criteria) in _PROBED_DELIBERATION.items():
+        h = _holding(language=lang)
+        reply = {**_reply(), "notebook": [{"note": "x", "until": "y"}]}
+        question = jev.after_questions(h, reply)["nb:0:lasts"]
+        text = jev.note_text({"about": "", "note": "x", "until": "y"}, lang)
+        assert question["criteria"] == criteria, lang
+        assert question["instructions"] == instructions.replace("{text}", text), lang
+
+
+def _aims_at_the_cap(n=4):
+    return [{"id": f"i{k}", "intent": f"standing aim {k}", "status": "active", "formed_turn": 0,
+             "last_progress_turn": 1, "progress": 0.2} for k in range(1, n + 1)]
+
+
+def test_an_aim_with_no_room_among_the_minds_aims_is_kept_in_its_notebook(story, monkeypatch):
+    """An errand is filed as an intention, and the intention ledger has its
+    own cap (four at the `ordinary` rung). An add over it was turned away
+    with a commit warning and nothing else: the aim the mind wrote was gone,
+    and nothing told it. Replayed on the bare-contract adoption beats, the
+    errand the read-back files as an intention was lost outright at chat 165
+    turns 3 and 4 (Hester Gale holding four aims) and pushed another aim out
+    at chat 166 turn 9 and the lookout story's turn 5; over the play
+    database's active commits 38 adds were turned away, 18 of them in the
+    four bare-contract chats. What has no room is kept as a reminder, in the
+    mind's own words with its end, and shown in the next call's notebook."""
+    import agents.character as character
+    char_id, context, commit = story
+    previous = {"interior": {"intentions": _aims_at_the_cap()}}
+    errand = {"about": "the visitor", "note": "find out who sent the visitor before dark",
+              "until": "the visitor names who sent them"}
+    reply = {**_bare_reply(), "notebook": [errand]}
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: _answer(
+        [("nb:0:kind", "commitment"), ("nb:0:lasts", "one_stretch")])(questions))
+    monkeypatch.setattr(character, "_agent_json", lambda *a, **k: deepcopy(reply))
+    ctx = context(previous, 2)
+    result = character.character_step(ctx, char_id, 1)
+    kept = "find out who sent the visitor before dark (until: the visitor names who sent them)"
+    assert [op["intent"] for op in result["intent_ops"] if op["op"] == "add"] == [kept]
+    state, _ = commit(result, previous=previous, index=3)
+    held = state["interior"]["intentions"]
+    assert [i["intent"] for i in held if i.get("status") == "active"] == [
+        f"standing aim {k}" for k in range(1, 5)], "the cap holds"
+    assert [(r["about"], r["note"]) for r in state["notebook"]] == [("the visitor", kept)]
+    captured = {}
+
+    def model_again(role, step_key, system, payload, **kwargs):
+        captured.update(deepcopy(payload))
+        return deepcopy(_bare_reply())
+
+    monkeypatch.setattr(character, "_agent_json", model_again)
+    character.character_step(context(state, 4), char_id, 1)
+    assert [r["note"] for r in captured["self"]["notebook"]["to_keep"]] == [kept]
+
+
+def test_an_aim_taken_up_again_while_there_is_still_no_room_is_kept_once_more(story, monkeypatch):
+    """The mind takes a kept aim up again the way it can: it strikes the
+    reminder and writes the aim, in the same beat. With the ledger still
+    full the aim is turned away again, and the reminder held at the start of
+    the beat used to stand in for it -- then the strike removed that
+    reminder, and the aim was in neither the ledger nor the notebook, with
+    only the cap's warning left. What stands in for an aim is what the
+    notebook holds after the beat."""
+    import agents.character as character
+    char_id, context, commit = story
+    previous = {"interior": {"intentions": _aims_at_the_cap()}}
+    errand = {"about": "the visitor", "note": "find out who sent the visitor before dark",
+              "until": "the visitor names who sent them"}
+    kept = "find out who sent the visitor before dark (until: the visitor names who sent them)"
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: _answer(
+        [("nb:0:kind", "commitment"), ("nb:0:lasts", "one_stretch")])(questions))
+    monkeypatch.setattr(character, "_agent_json", lambda *a, **k: deepcopy({**_bare_reply(), "notebook": [errand]}))
+    state, _ = commit(character.character_step(context(previous, 2), char_id, 1), previous=previous, index=3)
+    [held] = state["notebook"]
+    assert held["note"] == kept
+    # The next beat: the reminder is struck and the aim written again.
+    again = {**_bare_reply(), "notebook": [{"id": held["id"], "strike": "taking it up again"}, errand]}
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: _answer(
+        [("nb:1:kind", "commitment"), ("nb:1:lasts", "one_stretch")])(questions))
+    monkeypatch.setattr(character, "_agent_json", lambda *a, **k: deepcopy(again))
+    result = character.character_step(context(state, 4), char_id, 1)
+    assert ("strike", held["id"]) in [(op["op"], op.get("id")) for op in result["notebook_ops"]]
+    assert [op["intent"] for op in result["intent_ops"] if op["op"] == "add"] == [kept]
+    after, _ = commit(result, previous=state, index=5)
+    assert [i["intent"] for i in after["interior"]["intentions"] if i.get("status") == "active"] == [
+        f"standing aim {k}" for k in range(1, 5)], "the cap holds"
+    assert [(r["about"], r["note"]) for r in after["notebook"]] == [("the visitor", kept)]
+    assert after["notebook"][0]["id"] != held["id"]
+
+
+def test_an_aim_given_up_frees_its_slot_for_the_one_taken_up_beside_it():
+    """What closes lands before what takes its place, as a struck project's
+    slot is free for the adoption beside it: the read-back files the
+    notebook first, then `changes`, then the held aims, and the ledger
+    applies them in order -- so at a full ledger the new aim was turned
+    away by the very beat that gave the old one up."""
+    from mind import affect
+    h = _holding()
+    reply = {**_reply(), "changes": ["I stop trying to recover the key."], "notebook": [
+        {"note": "find out who is at the rope before Coyle gets there", "until": "I have seen their face"}]}
+    script = [("nb:0:kind", "commitment"), ("nb:0:lasts", "one_stretch"),
+              ("change:0:kind", "give_up"), ("change:0:aim", "a0"), ("change:0:now", "e0")]
+    out, _ = character_bare.compile_bare(reply, _answer(script)(_both_batteries(h, reply)), h)
+    assert [(op["op"], op.get("id")) for op in out["intent_ops"]] == [("abandon", "i3"), ("add", None)]
+    ledger = [{**aim, "id": f"i{k}", "intent": f"aim {k}"} for k, aim in
+              zip((1, 2, 4), _aims_at_the_cap(3))] + [
+        {"id": "i3", "intent": "recover the key", "status": "active", "formed_turn": 0,
+         "last_progress_turn": 1, "progress": 0.2}]
+    refused = []
+    after, _ = affect.apply_intent_ops(ledger, out["intent_ops"], 9, lambda op: True, intent_cap=4,
+                                       refused=refused)
+    assert refused == []
+    assert [i["intent"] for i in after if i["status"] == "active"][-1] == (
+        "find out who is at the rope before Coyle gets there (until: I have seen their face)")
+
+
+def test_the_deliberation_is_asked_of_each_new_entry_written_with_an_end():
+    """Asked in the read-back's own request, of every new entry carrying an
+    `until` (every new entry did: 57 of 57 in the play database's four
+    bare-contract chats, 67 of 67 with the live database's two), so the kind
+    and the deliberation come back together; never of a held entry or a
+    strike, and never of a note with no end to name."""
+    h = _holding(notebook=_notebook_view())
+    reply = {**_reply(), "notebook": [
+        {"note": "keep Tomas clear of the inquiry", "until": "the inquiry is closed"},
+        {"note": "learn the knot Mara ties"},
+        {"id": "n1", "note": "Mara keeps secrets for someone she fears"},
+        {"id": "p1", "strike": "the winter is over"}]}
+    questions = jev.after_questions(h, reply)
+    assert [k for k in questions if k.endswith(":lasts")] == ["nb:0:lasts"]
+    asked = questions["nb:0:lasts"]
+    assert set(asked["criteria"]) == {"lasting", "one_stretch"}
+    assert "keep Tomas clear of the inquiry" in asked["instructions"]
+    assert "the inquiry is closed" in asked["instructions"]
+
+
+def test_the_review_asks_a_mind_with_a_free_slot_whether_to_take_work_up():
+    """v4 made the review beat fire for a mind with nothing standing, as the
+    occasion to adopt a first project, and the bare card's section then spoke
+    only of "the work you have taken on": chat 166's two minds were shown it
+    on 13 calls over 11 of its 31 beats (Hester 9, Abel 4), 9 of them to a mind
+    holding nothing, with no words for taking anything up. Held work hears
+    the review; a free slot hears the invitation, stated from the engine's own
+    cap; work gone unserved hears its own section, and how long."""
+    from mind import affect
+    held = [{"id": f"p{i}", "note": f"work {i}", "until": "spring"} for i in range(affect.PROJECT_CAP)]
+
+    def modules(about, review=True):
+        own = {"notebook": {"what_you_are_about": about}} if about else {}
+        if review:
+            own["project_review"] = {"why": "your task i1 closed this beat"}
+        return character_bare.modules_for({"self": own, "perception": {}})
+
+    assert modules([]) == ["project_take_up"]
+    assert modules(held[:1]) == ["project_review", "project_take_up"]
+    assert modules(held) == ["project_review"]
+    assert modules(held[:1], review=False) == []
+    for word in ("lately", "long"):
+        assert modules([{**held[0], "adrift": word}], review=False) == ["project_adrift"]
+    for lang in ("en", "ja"):
+        card = character_bare.prompt("Wren", ["project_take_up"], lang)
+        assert "{project_cap}" not in card and str(affect.PROJECT_CAP) in card, lang
+        assert "`until`" in card, lang
+        # The escalation is said where the marker is explained: `long` is
+        # drift that has become a choice not admitted.
+        assert "`long`" in character_bare.prompt("Wren", ["project_adrift"], lang), lang
 
 
 def test_a_worry_written_twice_is_one_concern():

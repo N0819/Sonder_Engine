@@ -1550,9 +1550,13 @@ def prepare_memory_commit(ctx, *, scene=None):
                     str(i.get("id")): i.get("status")
                     for i in intentions if isinstance(i, dict)
                 }
+                # An aim the ledger has no room for is kept, not dropped: it
+                # goes to the notebook below as a reminder in the mind's own
+                # words (`notebook.kept_when_no_room`).
+                _no_room = []
                 intentions, _iwarn = affect.apply_intent_ops(
                     intentions, own_result.get("intent_ops") or [], turn.idx,
-                    _evidence_ok, intent_cap=_intent_cap,
+                    _evidence_ok, intent_cap=_intent_cap, refused=_no_room,
                     # Set by the character stage when this beat repeated an
                     # earlier move and the screen did not judge the repetition
                     # warranted -- i.e. the beat the engine already paid a full
@@ -1889,9 +1893,22 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # wants to keep track of, kept until it strikes them. What it
                 # thinks of people and things is merged below with the
                 # mind-model updates, by note id.
-                _nb_ops = own_result.get("notebook_ops") or []
+                #
+                # An aim the intention ledger turned away this beat because
+                # the mind already held as many as it can is kept here too, as
+                # a reminder in its own words: the commit warning alone left
+                # nothing the mind could see, so what it meant to do was gone
+                # and it was never told.
+                from mind.notebook import apply_notebook_ops, kept_when_no_room
+                _nb_ops = list(own_result.get("notebook_ops") or [])
+                _kept_aims = kept_when_no_room(st, _no_room, _nb_ops, turn_idx=turn.idx)
+                for _kept in _kept_aims:
+                    ctx.add_warning(
+                        f"{cname}: intention -- no room among its aims "
+                        f"({_intent_cap} held); kept in its notebook as a "
+                        f"reminder: {_kept['note'][:120]!r}")
+                _nb_ops += _kept_aims
                 if _nb_ops:
-                    from mind.notebook import apply_notebook_ops
                     st = apply_notebook_ops(st, _nb_ops, turn.idx)
                 # --- Project service ledger + boundary review (Tier 1.5).
                 # A held project stopped failing by being outranked and

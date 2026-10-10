@@ -49,7 +49,14 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 282   # +2 (2026-10-08): `prose_contract.layout_sort` and
+PART_COUNT = 285   # +3 (2026-10-09): `character_jev.commitment_lasts`, the
+                   # adoption deliberation read back of a commitment (a way
+                   # to its end, ending on arriving where it leads, or one
+                   # thing to do or find out, done in one go), and the
+                   # `character_bare` sections `project_take_up` (a free
+                   # slot at the review beat) and `project_adrift` (work
+                   # nothing lately served) (agents/character_bare.py).
+                   # +2 (2026-10-08): `prose_contract.layout_sort` and
                    # `prose_contract.layout_relate`, the layout tier's two
                    # calls -- what each room of a planned building holds and
                    # how it relates, for the solver to place

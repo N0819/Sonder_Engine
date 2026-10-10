@@ -660,6 +660,46 @@ def after_questions(h, reply):
         if not entry["note"]:
             continue  # a strike of an entry this mind was not shown
         qs[f"nb:{j}:kind"] = _choice("note_kind", lang, _set("note_kind", lang), text=text)
+        # THE ADOPTION DELIBERATION, asked of anything written with an end:
+        # does it end on arriving where it leads -- a place, or the last of
+        # its stages -- or is it one thing to do or find out, done in one go?
+        # Read only when the kind above is a commitment
+        # (`character_bare._compile_notebook`): a way to its end is offered a
+        # project slot, a one-go errand is an intention. The line is the
+        # owner's (CLAUDE.md, psychology): projects carry "the ordinary long
+        # intentions a life has -- take the injured one to a doctor, go home,
+        # go to the bar", durable but not eternal, able to name a place, and
+        # immune to being satisfied by one instance, decayed by a barren
+        # stretch or abandoned along with the tactic that served it.
+        # `note_kind`'s commitment -- "something you mean to bring about
+        # yourself, and will keep at until it is done" -- is true of an errand
+        # too, so every one of the fifteen distinct adoptions the bare
+        # contract made in play (chats 160, 161, 165 and 166, and the lookout
+        # story; 2026-09-27 to 2026-10-07) was an errand or a reading of
+        # someone, held 1 to 7 beats.
+        # Each pack's wording is the one its own probes chose, never a
+        # translation (docs/experiments/PROJECT_ADOPTION_2026_10_09.md). What
+        # the probes taught, 2026-10-09:
+        # - "over days or more, on many separate occasions" (round one) read
+        #   chat 99's p1, the corpus's only established project, at 0.10;
+        # - a way "you will keep going along ... past setbacks and changes of
+        #   plan" (round two) read the owner's own short journeys as one go
+        #   whenever they had a deadline or waited on something: 35 of 49
+        #   phrasings of everyday journeys kept in their speakers' captured
+        #   beats (going home, to the bar and the injured to a doctor
+        #   fourteen ways each, and seven others), the doctor 7 of 14;
+        # - naming the end as arriving keeps 47 of 49 (home 14, the bar 13,
+        #   the doctor 13 of 14 each) and the corpus's ways to an end (14 of
+        #   14), and the errand side's "find out" keeps the corpus's
+        #   investigations out: 2 of 28 stored errands read lasting, as under
+        #   round two's wording, and 2 of 36 written ones (two many-step
+        #   procedures);
+        # - naming what the errand side risks ("whether it comes off or not")
+        #   pulled 19 of 24 errands to the way side.
+        # Asked in the same request because every new entry carries an `until`
+        # in practice and Jev answers each question on its own.
+        if entry["until"]:
+            qs[f"nb:{j}:lasts"] = _choice("commitment_lasts", lang, _set("commitment_lasts", lang), text=text)
         if subjects and not entry["about"]:
             qs[f"nb:{j}:about"] = _choice("note_about", lang, _options(subjects, "something_else", lang, "p"),
                                           text=text)

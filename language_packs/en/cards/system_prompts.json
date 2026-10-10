@@ -879,6 +879,12 @@
     "project_review": {
       "$text": "character_bare/project_review.txt"
     },
+    "project_take_up": {
+      "$text": "character_bare/project_take_up.txt"
+    },
+    "project_adrift": {
+      "$text": "character_bare/project_adrift.txt"
+    },
     "still_waiting": {
       "$text": "character_bare/still_waiting.txt"
     },
@@ -1109,6 +1115,9 @@
     "note_kind": {
       "$text": "character_jev/note_kind.txt"
     },
+    "commitment_lasts": {
+      "$text": "character_jev/commitment_lasts.txt"
+    },
     "note_about": {
       "$text": "character_jev/note_about.txt"
     },
@@ -1323,6 +1332,10 @@
         "worry": "Something that weighs on you, and that the world will settle one way or the other.",
         "commitment": "Something you mean to bring about yourself, and will keep at until it is done.",
         "keep": "A fact to remember, or one errand of your own."
+      },
+      "commitment_lasts": {
+        "lasting": "Getting there: it ends when you arrive where it leads -- a place, or the last of its stages -- however many steps it takes.",
+        "one_stretch": "One thing to do or find out, done in one go."
       },
       "note_touched": {
         "neither": "No -- nothing here clearly bears on it.",

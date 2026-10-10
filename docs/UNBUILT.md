@@ -389,7 +389,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.29 — Parallel reaction chains, and the isolated wave that is shelved for them](UNBUILT_CHARACTERS.md#unbuilt-1-29)
 - [§1.37 — The aversive half of the stress model is live and unobserved](UNBUILT_CHARACTERS.md#unbuilt-1-37)
 - [§1.41 — Surface-affect habituation ships default-off; flipping it is a decision this entry exists to force](UNBUILT_CHARACTERS.md#unbuilt-1-41)
-- [§1.56 — The project tier's occasion now arrives, and is declined](UNBUILT_CHARACTERS.md#unbuilt-1-56)
+- [§1.56 — The project tier: a way to its end is read back as one, but the circularity gate refuses most journeys; nothing yet seen forming live](UNBUILT_CHARACTERS.md#unbuilt-1-56)
 - [§1.76 — `recall_confidence` measures distribution shape, and absence has the same shape as presence](UNBUILT_CHARACTERS.md#unbuilt-1-76)
 - [§1.85 — A memory's age off a per-beat estimate, not a per-beat record](UNBUILT_CHARACTERS.md#unbuilt-1-85)
 - [§1.99g — Memories the player owns, and the one thing that must be true first](UNBUILT_CHARACTERS.md#unbuilt-1-99g)

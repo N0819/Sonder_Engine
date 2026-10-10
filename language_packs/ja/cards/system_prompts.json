@@ -879,6 +879,12 @@
     "project_review": {
       "$text": "character_bare/project_review.txt"
     },
+    "project_take_up": {
+      "$text": "character_bare/project_take_up.txt"
+    },
+    "project_adrift": {
+      "$text": "character_bare/project_adrift.txt"
+    },
     "still_waiting": {
       "$text": "character_bare/still_waiting.txt"
     },
@@ -1109,6 +1115,9 @@
     "note_kind": {
       "$text": "character_jev/note_kind.txt"
     },
+    "commitment_lasts": {
+      "$text": "character_jev/commitment_lasts.txt"
+    },
     "note_about": {
       "$text": "character_jev/note_about.txt"
     },
@@ -1323,6 +1332,10 @@
         "worry": "あなたの気にかかっていて、世の中がいずれ何らかの形で決着をつけること。",
         "commitment": "自分で実現させるつもりで、終わるまで続けること。",
         "keep": "覚えておく事実、または自分の用事ひとつ。"
+      },
+      "commitment_lasts": {
+        "lasting": "たどり着くこと：自分か連れて行く人が向かう先に着いたときに終わる――ある場所か、段階の最後。何歩かかっても。",
+        "one_stretch": "ひとつの用事：することか確かめることを、一度やればそれで終わる。"
       },
       "note_touched": {
         "neither": "いいえ――はっきり関わることは何もない。",

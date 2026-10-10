@@ -10,7 +10,16 @@ Tests: `tests/test_projects.py`. Goal-slot currency (the last Decided
 bullet): `affect.goal_slot_currency`,
 `agents/character._annotate_goal_currency`, tests in
 `tests/test_goal_currency.py`. Boundary review is prompt-normative in v1,
-not engine-gated — see below. Measurements that motivated it:
+not engine-gated — see below. Under the bare contract (v5, 2026-10-09):
+adoption is read back by the decision model's deliberation -- a way to its
+end, ending on arriving where it leads, or one thing to do or find out, done in
+one go (`character_jev.commitment_lasts`, `character_bare._compile_notebook`)
+-- and still passes the circularity gate; an aim the intention ledger has no
+room for is kept as a reminder (`notebook.kept_when_no_room`), the review beat
+invites a mind with a free slot (`character_bare.project_take_up`), a dormant
+intention is a boundary (`affect._TASK_CLOSED`) and drift rides the notebook
+with its escalation (`notebook._about_entries`, `character_bare.project_adrift`)
+-- see [The bare contract](#the-bare-contract-v5). Measurements that motivated it:
 [`MAZE_ARMS.md`](../experiments/MAZE_ARMS.md) A11–A13 for the raw observations and
 [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](DESIGN_PSYCHOLOGY_AS_PRESSURE.md) for
 the prior art this revives.
@@ -323,6 +332,119 @@ replaced.
   from where you are going has cost you ground at speed"; "for a body
   whose craft or drive is getting THERE"), so the run-affirming
   affordances were not the cause either.
+
+## The bare contract (v5)
+
+Since 2026-09-27 the bare card is the only character contract, and the
+`project_ops` the full card wrote are compiled from the character's NOTEBOOK
+(`agents/character_bare._compile_notebook`): an entry written with an `until`
+that the decision model reads back as a `commitment` is offered a slot; a
+strike of a held project with its reason closes one. Measured 2026-10-09
+([`PROJECT_ADOPTION_2026_10_09.md`](../experiments/PROJECT_ADOPTION_2026_10_09.md)):
+the tier was no longer empty but full of errands -- all fifteen distinct
+adoptions in play were scene-scale errands or readings of someone, satisfied or
+displaced within one to seven beats -- because the task/project line the full
+card's PROJECTS block drew was in no text the bare contract's models read.
+`note_kind`'s commitment ("something you mean to bring about yourself, and will
+keep at until it is done") is true of an errand; every new entry carried an
+`until` (57 of 57 in the play database's four bare chats), so the field told
+nothing apart; and the circularity gate admits an errand whose end sounds
+external, which is the residue v3 left to probation.
+
+**The line is the owner's.** `CLAUDE.md` (psychology) says what the tier carries: "the
+ordinary long intentions a life has -- take the injured one to a doctor, go
+home, go to the bar", durable but not eternal, able to name a place, and
+immune to the three ways the courier's aims died -- satisfied by one
+instance, decayed by a barren stretch, abandoned along with the tactic that
+served it -- and that projects were what made NPCs pass the maze. So a
+journey, the injured carried to a doctor and a single-session arc that runs
+until its end comes about are projects; a one-instance errand ("Ringer or
+workman -- find out which before Coyle asks him anything") stays an
+intention. Property 1 above ("'reach the shrine' is a task wearing the
+word") is superseded for adoption by that ruling; what it guarded against --
+a per-occasion aim satisfied by its first instance -- is still what
+`satisfied_when` is for: a journey ends where it was going, a commission
+for every run ends only when the commission does.
+
+- **The deliberation, read back.** Every new entry written with an end is also
+  asked `commitment_lasts`: does it end on arriving where it leads -- a place,
+  or the last of its stages -- or is it one thing to do or find out, done in
+  one go? A commitment is adopted only as a way to its end; an errand is filed
+  as an intention with its end in its words, exactly as a refused adoption
+  already is. Measured on 49 phrasings of everyday journeys -- the owner's
+  three, going home, to the bar and the injured to a doctor, fourteen ways
+  each (deadlines, deferrals, someone taken, first person, terse), and seven
+  others, each written into a captured beat of its speaker -- against 36
+  one-instance errands, 16 of them sharing a journey's words: this wording
+  keeps 47 of 49 (home 14, the bar 13, the injured to a doctor 13, of 14 each)
+  and reads 2 of the 36 errands as ways (two many-step procedures). A way "you will keep going along ... past
+  setbacks and changes of plan" kept 35 (the doctor 7), losing each phrasing
+  that carried a deadline or waited on something; a first wording asking for
+  work "over days or more, on many separate occasions" read chat 99's p1 at
+  0.10. On the corpus's own entries it keeps 14 of 14 ways to an end and reads
+  2 of 28 errands as ways, as before. Japanese is probed on its own words: 44
+  of 49 journeys where the old wording kept 26, 3 of 36 errands.
+- **The circularity gate decides the journeys.** It stays: the decision model
+  reads a task whose end restates it as a way to its end ("understand the
+  symbols / I understand the symbols" 0.93, 9 of 12 such tasks), and the gate
+  refuses 10 of those 12. But a journey's end names where it goes ("down to the
+  Anchor" / "I'm at the Anchor"), so the gate also refuses 32 of the 49
+  English phrasings and 26 of the 49 Japanese ones as circular: end to end,
+  with the note's kind read as a commitment, 17 of 49 become projects in
+  English (13 under the old wording) and 19 of 49 in Japanese (14). Whether
+  the gate should hold for a way to a place is the owner's question; until it
+  is answered, those journeys are intentions.
+- **No aim is dropped for want of room.** Errands go to the intention ledger,
+  which has its own cap (`capacity_caps`: four at `ordinary`), and an add over
+  it was turned away with a commit warning and nothing else -- 38 adds in 17
+  chats of the play corpus, 18 in the four bare chats, Hester Gale's errands
+  among them. `apply_intent_ops` now reports what it turned away and commit
+  keeps each as a reminder in the mind's own words (`notebook.kept_when_no_room`),
+  where the mind sees it next beat -- once, against what its notebook will
+  hold after the beat, so a reminder the same beat strikes or rewrites does not
+  stand in for it; and the compile files an aim given up or finished ahead of
+  the beat's new ones, so a slot freed this beat is free for them
+  (`character_bare._CLOSING_INTENT_OPS`).
+- **The occasion has words.** v4 made the review beat fire for a mind with
+  nothing standing, as the moment to adopt a first project, and the bare
+  section then spoke only of "the work you have taken on" (chat 166: 13 calls
+  over 11 beats, 9 of them to a mind holding nothing). The review now asks
+  two things, each of the mind it applies to: work held (`project_review`:
+  serve it, finish it, set it aside) and, while a slot is free,
+  `project_take_up` -- ask what you are about now; whatever you mean to see
+  through to its end, what a task that just ended was serving if you still
+  mean it, belongs in the notebook with an end outside the doing. The cap is
+  stated from `PROJECT_CAP`. The card's `changes` sentence sends what a mind
+  means to see through to its end to the notebook, because a `changes` line
+  can only become an intention and lasting aims were being written there.
+- **A dormant task is a boundary.** An intention that stalls at full progress
+  or passes the sweep has stopped steering exactly as a blocked one has
+  (`apply_intent_ops` revives the two alike); `project_boundary` now reviews
+  on it. 61 of 4,340 commits in the play corpus.
+- **Drift reaches the bare mind, with its escalation.** `_annotate_project_drift`
+  marked `self.projects`, and the bare payload replaces `self.projects` with
+  the notebook, so the marker never arrived and a probation could lapse as the
+  first notice -- the one thing `settle_probation`'s fuse was sized never to
+  allow. The notebook's `what_you_are_about` carries `adrift` as a word:
+  `lately`, then `long` past a dozen beats (`notebook.ADRIFT_LONG_AFTER`), and
+  `project_adrift` says the Decided bullet's escalation in the bare card's
+  words -- drift that has become a choice not admitted. Wording only: the word
+  ends nothing, and a probation's lapse is still `settle_probation`'s, at three
+  times the drift threshold.
+
+Nothing has yet been measured forming in a faithful replay. Round one's
+replays ran on OpenRouter `z-ai/glm-5.3`, where the beats had been played on
+NanoGPT's `z-ai/glm-5.3:thinking` (3-15 thousand characters of reasoning a
+call; the story moved to OpenRouter at 21:34 on 2026-10-07 and its own turns
+25-30 reasoned 0.3-1.7 thousand). At `medium` nothing was taken up in 25
+calls; at `high`, once in twelve -- at Hester Gale's turn 4, in a
+counterfactual that removed her turn-3 errand without filing the intention
+this engine files in its place, and the entry adopted ("See her paid out as a
+foundering ...") restates an intention she already held (`ia1`, steer the
+inspection toward a natural foundering) and a held concern, under both
+similarity gates, with nothing to reconcile the two tiers. Rerun with the
+errand present as that intention, same route and effort, it did not recur in
+two calls: she kept the errand in her own bell reminder.
 
 ## Not yet decided
 

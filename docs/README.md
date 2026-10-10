@@ -366,6 +366,13 @@ modes each one documents.
   — a 30-beat harsh play run with the Writers' Room at full authority: what
   broke, the fifty commits it took, the ranked open findings (companion travel
   first), and the decisions left for the owner.
+- [`PROJECT_ADOPTION_2026_10_09.md`](experiments/PROJECT_ADOPTION_2026_10_09.md)
+  — what took the project slots under the bare contract (errands, every one)
+  and what never reached them: the corpus measured, aims lost at the
+  intention cap, the owner's errand/project line probed in two languages and
+  in situ, the owner's everyday journeys measured as classes and the
+  circularity gate that decides them, and review beats replayed -- on a
+  different route from the one they were played on, which is still open.
 
 ## `archive/` — superseded
 

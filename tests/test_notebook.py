@@ -181,3 +181,77 @@ def test_concerns_and_projects_come_with_their_ids_and_what_would_end_them():
     assert shown["what_you_are_about"] == [{"id": "p1", "note": "clear Kit's name",
                                             "until": "the magistrate rules", "on_trial": True}]
     assert set(nb.entries(shown)) == {nb.concern_id(worry), "p1"}
+
+
+def test_work_nothing_lately_served_is_marked_adrift_in_the_notebook():
+    """The payload's drift marker (`agents.character._annotate_project_drift`)
+    reached the full card on `self.projects`; the bare payload gives this view
+    in place of `self.projects`, and the marker was dropped with it -- so a
+    probation could lapse as the first notice, which `affect.settle_probation`
+    is built never to let happen. Carried as a word, in both views, and the
+    word grows as the design's escalation did: `lately`, then `long` past a
+    dozen beats ("no longer drift, it is a choice you have not admitted")."""
+    held = [{"id": "p1", "project": "clear Kit's name", "satisfied_when": "the magistrate rules",
+             "probation": True, "adrift": 9},
+            {"id": "p2", "project": "keep the forge lit", "satisfied_when": "the guild takes it back"},
+            {"id": "p3", "project": "see the bridge rebuilt", "satisfied_when": "carts cross it again",
+             "adrift": nb.ADRIFT_LONG_AFTER + 1}]
+    for shown in (nb.view({}, 30, projects=held), nb.full_view({}, 30, projects=held)):
+        about = {e["id"]: e for e in shown["what_you_are_about"]}
+        assert about["p1"]["adrift"] == "lately" and about["p1"]["on_trial"] is True
+        assert "adrift" not in about["p2"]
+        assert about["p3"]["adrift"] == "long"
+    edge = nb.view({}, 30, projects=[{**held[2], "adrift": nb.ADRIFT_LONG_AFTER}])
+    assert edge["what_you_are_about"][0]["adrift"] == "lately", "past a dozen, not at it"
+
+
+def test_an_aim_the_ledger_turned_away_is_kept_once_in_its_own_words():
+    """`affect.apply_intent_ops` turns an add away when the mind already holds
+    as many aims as it can, and that used to keep nothing. Each one it turns
+    away becomes a reminder in the mind's own words, about what it named --
+    and only once: never beside a reminder already kept, or added this beat,
+    in the same words."""
+    state = {"notebook": [{"id": "r1", "about": "", "note": "Check the tide table", "turn": 1, "last_turn": 1}]}
+    refused = [{"op": "add", "intent": "check the  tide table"},
+               {"op": "add", "intent": "get the boat out (until: the fog lifts)", "about": "Abel"},
+               {"op": "add", "intent": "get the boat out (until: the fog lifts)"},
+               {"op": "add", "intent": "ask Petch for the books"},
+               {"op": "add", "intent": ""}]
+    beat = [{"op": "add", "about": "Petch", "note": "Ask Petch for the books"}]
+    assert nb.kept_when_no_room(state, refused, beat) == [
+        {"op": "add", "about": "Abel", "note": "get the boat out (until: the fog lifts)"}]
+    kept = nb.apply_notebook_ops(state, beat + nb.kept_when_no_room(state, refused, beat), 5)["notebook"]
+    assert [r["note"] for r in kept] == [
+        "Check the tide table", "Ask Petch for the books", "get the boat out (until: the fog lifts)"]
+    # An aim longer than a reminder holds is kept cut, and turned away again
+    # the next beat it is not kept a second time.
+    long_aim = {"op": "add", "intent": "walk the whole north shore " * 20}
+    state = nb.apply_notebook_ops(state, nb.kept_when_no_room(state, [long_aim]), 6)
+    assert nb.kept_when_no_room(state, [long_aim]) == []
+
+
+def test_what_stands_in_for_an_aim_with_no_room_is_what_the_notebook_holds_after_the_beat():
+    """A mind takes a kept aim up again by striking or rewriting the reminder
+    that holds it and writing the aim, in one beat. With the ledger still
+    full the aim is turned away again -- and the reminder the beat strikes or
+    rewords used to stand in for it, so the aim was in neither the ledger nor
+    the notebook once the beat's ops landed. A reminder left standing still
+    stands in for it: the aim is never kept twice."""
+    aim = "get Abel's version of that night (until: he has told it through)"
+    refused = [{"op": "add", "intent": aim, "about": "Abel"}]
+
+    def held():
+        return {"notebook": [{"id": "r1", "about": "Abel", "note": aim, "turn": 3, "last_turn": 3}],
+                "notebook_seq": 1}
+
+    struck = [{"op": "strike", "id": "r1"}]
+    kept = nb.kept_when_no_room(held(), refused, struck)
+    assert kept == [{"op": "add", "about": "Abel", "note": aim}]
+    assert [(r["id"], r["note"]) for r in nb.apply_notebook_ops(held(), struck + kept, 4)["notebook"]] == [
+        ("r2", aim)]
+    reworded = [{"op": "change", "id": "r1", "note": "Abel's version can wait for morning"}]
+    kept = nb.kept_when_no_room(held(), refused, reworded)
+    assert [r["note"] for r in nb.apply_notebook_ops(held(), reworded + kept, 4)["notebook"]] == [
+        "Abel's version can wait for morning", aim]
+    assert nb.kept_when_no_room(held(), refused, []) == []
+    assert nb.kept_when_no_room(held(), refused, [{"op": "change", "id": "r1", "note": aim}]) == []
