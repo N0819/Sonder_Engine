@@ -290,11 +290,23 @@ legitimately perceive, learn, remember or infer.
   as one.
 - **Their inventions are claims** — A detail an extra invents is recorded as
   hearsay for the Director to confirm, contradict or let expire.
+- **A character's invented people stay claims** — A person a character names
+  whom nobody planned stays that character's claim, true or not. The Writers'
+  Room sees the claims made near the story, a name nobody holds first, and may
+  make such a person real when it plans -- its choice, never automatic; making
+  real a person a lie invented makes the lie true. The quick planning pass
+  hands such a person to the full planner, which can say who already knows
+  them. Your own character's claims reach it only when your story lets you
+  author the world.
 - **Promotion into a real character** — An extra can become a full character
   with a sheet, psychology and memory — on request, or automatically after a
   number of turns of deliberate interaction that you set. Automatic promotion
   is off unless you switch it on, and extras chattering to each other never
-  count toward it.
+  count toward it. A person the Writers' Room planned is offered once the story
+  has turned to them twice, and promoted on the same dial when automatic is on,
+  with a sheet written from the work, home and look the Room gave them, who knew
+  them from before, and the body the story showed -- never from what the Room
+  planned to be true of them, which they may never have been told.
 - **Full characters can share the place's past** — Greeting launch handles its
   selected card, while Story Quick Start offers the same choice separately for
   every character in the starting cast. A resident is placed in a

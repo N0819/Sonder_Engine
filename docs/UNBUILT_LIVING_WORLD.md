@@ -2791,6 +2791,7 @@ Most of the rest of §3 shipped in alpha 4.0. What did not:
   player's addressee, or the player naming them. `AUTO_PROMOTE_DIALOGUE_THRESHOLD
   = 3` still counts manager conduct, but it no longer decides, so an
   `ambient_turns` counter is no longer the thing wanted.
+  Measured 2026-10-10 on a copy of story 166 (Abel Gale's draft at idx 24): the sheet's author still reads the whole events record, so two drafts gave the promoted man what Hester said on the Grebe at idx 19, a boat he was not on -- one put her "So either my brother lied to me, or he never knew the man was on that barge" in his public history, the other "I have handed him a hundred of them myself" in his own private history. What of the Room's plan the person lives and others see (`importers.PLAN_FIELDS_FOR_SHEET`) and the body the scene holds now ride the sheet call too (`importers._plan_for_sheet`, `_seen_body`); the evidence pack itself is unchanged.
 - **Interim filler on return (§3.9)** — no `interim` field, no `last_seen_clock`.
 - **Canon-referenced blurbs (§3.8.1)** — no `canon_ref` field; substituted by a
   style-guide-level canon licence.

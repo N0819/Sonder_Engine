@@ -608,11 +608,43 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
                    "seconds_left": round(max(0.0, seconds_left), 1),
                    **({"spend": spend} if spend else {})},
     }
+    # WORDS SAID ALOUD NEAR THE STORY WITH NO REPORT BEHIND THEM (the
+    # owner's ruling on D6, 2026-10-09): a person a character invents stays
+    # that character's claim, and the Room MAY make them real when it plans.
+    # The Room is shown the claims -- the invented person's first
+    # (`carriers.unbacked_claims`), and the player's own only where their
+    # authority grants them the world; deciding is its own (the card's WHAT
+    # PEOPLE CLAIM), and nothing in code plants anybody from one. Absent when
+    # there is none, so an ordinary payload is unchanged.
+    claims = memo_part(memo, "unbacked_claims",
+                       lambda: _claims_near(cid, frame_id, payload["frontier"]))
+    if claims.get("rows"):
+        payload["unbacked_claims"] = claims["rows"]
+        if claims.get("more"):
+            payload["unbacked_claims_more"] = claims["more"]
     if text is not None:
         payload["player_says"] = text
     if task is not None:
         payload["task"] = task
     return payload
+
+
+def _claims_near(cid, frame_id, frontier):
+    """``{"rows", "more"}``: the unbacked claims somebody within the
+    frontier's reach holds (`story.carriers.unbacked_claims`), the player's
+    wherever they stand. A frontier that could not be measured still carries
+    the player's own."""
+    from story.carriers import unbacked_claims
+    frontier = frontier if isinstance(frontier, dict) else {}
+    rooms = [r for r in [frontier.get("player_room"),
+                         *(frontier.get("reachable") or ())] if r]
+    try:
+        rows, total = unbacked_claims(cid, frame_id, rooms)
+    except Exception as exc:
+        logger.info("planner: the claims near the story are unavailable: %s",
+                    exc)
+        return {"rows": [], "more": 0}
+    return {"rows": rows, "more": max(0, total - len(rows))}
 
 
 # ---------------------------------------------------------------------------

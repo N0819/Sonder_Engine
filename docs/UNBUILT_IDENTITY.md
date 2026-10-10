@@ -963,6 +963,13 @@ answer and would become the fallback rather than the mechanism.
 `background_config` and `dialogue_config` both have entries -- so a threshold
 set by hand is rolled back by any restore or reroll.
 
+**2026-10-09, the owner on the Brackwater run's D7: "Yes but automatic should remain a setting."** The sweep stays, behind the same switch and dial, and since 2026-10-10 reaches a person the Writers' Room planned on the player's engagement alone (`commit_background.presence_person_plan`, `PLANNED_PROMOTION_ADDRESSED_THRESHOLD`), so retiring the sweep and its setting is off the table. Four things stay open:
+
+- **The Story Planner still holds nothing here.** It plans the person and cannot propose the promotion; the offer reaches the host through the panel and the turn's warnings, not the room thread.
+- **The "planned" bar rides `promotion_thresholds`**, so a value set by hand is rolled back by a restore, as the paragraph above says of the other three.
+- **The panel does not say a person was planned.** The `/promotable` row carries `planned` and `addressed_turns`; `static/js/settings.js`'s presences row still reads lines and mentions only, so a planned person offered on engagement shows "1 line(s), 0 mention(s)" beside the button.
+- **A planned person's own history does not reach their sheet.** The draft is handed the plan's work, home, look and who knew them (`importers.PLAN_FIELDS_FOR_SHEET`), never its truths or purpose, because a plan truth carries no mark of whose head it is in. Story 166's Abel Gale was planned behind on his boat's loan to Selwick, a fact of his own, and it reached neither of two replayed drafts. A per-truth `known_by` on plan truths, as package truths carry, would let the ones the person holds through ([§1.198](UNBUILT_PLANNING.md#unbuilt-1-198)).
+
 ## 5. Deferred backlog
 
 <a id="unbuilt-5-5"></a>

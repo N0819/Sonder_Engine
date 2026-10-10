@@ -70,6 +70,23 @@ ones the player's sentence asked for -- that is a reading, and it stays the
 Planner's, under the standing clause "only what they said, never what would be
 convenient".
 
+<a id="unbuilt-1-198"></a>
+
+### 1.198 A person someone claims, and a planned person's mind — residuals (2026-10-10)
+
+The owner's D6 and D7 rulings (2026-10-09) landed as `story/carriers.unbacked_claims` with the cards' WHAT PEOPLE CLAIM, and as promotion on engagement for a person the Room planned (`Design.md`'s two rows of 2026-10-10). Open:
+
+- **A claim is only words with no report behind them.** A happening on screen is not a world event, so a telling of what both speakers just saw is filed as a `claim:` exactly as a lie is: at least four of story 166's eight claims are true of the record. The payload says that and no more; telling a report from a lie needs a channel that carries on-screen happenings as reports, and none does.
+- **Which names nobody holds depends on the encoder introducing them.** `carriers.names_nobody_holds` reads the encoder's `introductions`; a claimed person the encoder never introduced is shown in their claim's turn, as before, not first. Measured once: story 166's one invented person was introduced at idx 19, the beat he was first named. The recall over other stories is unmeasured -- the owner's database holds no claims at all.
+- **A head is whatever the encoder wrote, so a mark is only as precise as that.** The encoder's card lets `learns` be a name, a title or a short descriptor, and `carriers._name_head` cuts only at punctuation: of the 43 heads nobody holds across play.db's 85 chat-frames with introductions, 16 are a person's name alone, 13 are whole clauses ("Tommy Reyes is a patient at Blackwood Sanatorium", "Tamamo is Kaa Sama's real name"), one is a name with its description run on ("Captain Jean-Luc Picard of the Enterprise") and the rest titles, descriptors, places and institutions ("the inspector", "night orderly", "Argosy Compact"). Since review RP2-N1 a row is marked only where its words say a head whole (`carriers._said_whole`), so a clause marks only a claim that repeats all of it; but a title or descriptor said whole still marks a claim that says it, whoever is meant, and a claim naming a person by part of the name ("Elver" for "Tam Elver") is not marked -- the surname alone is read only by the sketch's floor (`room_sketch._claimed`). Story 166's three Tam Elver rows each say his name whole, so its rows and their order are what the last-word reading gave; and tried against its eight claims, only his of the 43 heads marks any, where the last-word reading also let chats 72-74's "Tamamo is Kaa Sama's real name" mark the player's "it has a name on it". An encoder that declared the people each `claim` names would answer both.
+- **A sketch hands a claimed person on, and the loop may leave them a claim.** The sketch's card escalates a claimed person the story would be the better for meeting, and `room_sketch._claimed` refuses one it plants; either sends the question to the full loop (about 17 calls a fill averaged on the Brackwater run; story 166's own last three fills ran 28, 137 and 39, at turns 23, 26 and 29). Nothing records that the loop declined, so a later planting sketch may escalate the same person again. Measured at story 166's checkpoint 24: one of two sketch samples handed Tam Elver on. A record of the claims the full planner has weighed would stop the repeat -- the owner's call.
+- **A claim reaches the Room only when it plans.** A story whose frontier holds no shortfall and no open need runs no fill, so a person named in such a stretch waits for the next fill or the player's own line to the room. Whether a fresh claim should itself ask a fill -- code asking, not answering -- is the owner's.
+- **Only people.** The cards name a PERSON as what the Room may make real, as ruled; a place or a thing a claim invents stays a claim.
+- **The claims' reach is the frontier's, and the inside of a body.** A claim held only by a body beyond `FRONTIER_DEPTH_HOPS` of the player rides when the player or somebody near holds a copy, and not before.
+- **A plan made from a claim does not cite it.** Nothing records that a claim was ratified.
+- **The reply rule is a card's.** Both cards forbid a reply that says whether a character's words are true or only a claim, unless the player asked, and the full planner's reply names what it planted spoiler-safe where the package is sealed; no code reads a reply.
+- **A planned person's own truths do not reach their sheet.** `importers.PLAN_FIELDS_FOR_SHEET` withholds a plan's truths and purpose from the promotion draft because they carry no mark of whose head they are in; a per-truth `known_by` on plan truths, as package truths carry, would let the person's own through. The owner's to decide.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-9"></a>
@@ -717,6 +734,7 @@ deliberately does not do:
   measurement was: six of seven mints bind, the seventh (the bridge
   watchman: the watchman post's three seats held) enrols as a householder.
   The live rate under a new run is unmeasured.
+- **An authored plan's look does not bind its render.** `settle_rendered_plans` refuses a render only where it contradicts a dealt axis of a plan's `surface`, and a Room plan carries a prose `look` and no axes: story 166's Abel Gale was planned "big, raw-boned" with "his sister's flat grey eyes" and rendered "narrow-faced", "shorter than the doorframe", "one eye milky". A promotion follows the render (`importers._seen_body`), which is what the player saw; the plan's look is left contradicting it.
 
 <a id="unbuilt-2-35"></a>
 

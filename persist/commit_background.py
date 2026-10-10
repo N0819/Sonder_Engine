@@ -29,6 +29,19 @@ from persist.commit_common import (_player_name_or_none,
 # via the `promotion_thresholds` world key (see scene.promotion_config).
 BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD = 2
 BACKGROUND_PROMOTION_MENTION_THRESHOLD = 4
+# A PERSON THE WRITERS' ROOM PLANNED IS OFFERED ON ENGAGEMENT, NOT ON VOICE
+# (the owner's ruling on D7, 2026-10-09). The two bars above, and the sweep's
+# voice bar below, exist to tell an extra who has BECOME somebody from one who
+# talked twice -- and a person the Room planned was somebody before anyone met
+# them: the plan says who they are, what they are for and who they belong to.
+# So what is left to measure is the player's engagement: the beats the story
+# deliberately turned to them (`addressed_turns`). Two, the offer bar a
+# passer-by's voice is held to, counted in that engagement instead. Measured
+# on every plan-bound presence in the scratch db (2026-10-10): Abel Gale (story
+# 166) turned to at idx 23 and 24 -- the beat a human promoted him by hand,
+# having spoken once -- Murren (166) at 8 and 9, Abel Gale (165) at 4 and 6.
+# Overridable per chat as `promotion_thresholds`' "planned".
+PLANNED_PROMOTION_ADDRESSED_THRESHOLD = 2
 
 
 def promotion_thresholds(chat_id):
@@ -41,7 +54,41 @@ def promotion_thresholds(chat_id):
             "dialogue": BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
             "mention": BACKGROUND_PROMOTION_MENTION_THRESHOLD,
             "auto_dialogue": AUTO_PROMOTE_DIALOGUE_THRESHOLD,
+            "planned": PLANNED_PROMOTION_ADDRESSED_THRESHOLD,
         }
+
+
+def _person_plans(chat_id):
+    """``{uid: plan}`` for every PERSON the Writers' Room planned in this
+    story (`world.planned_entities`) -- read once per caller, because the
+    readers below walk every tracked presence."""
+    try:
+        from world.planned_entities import planned_entities
+        return {uid: plan for uid, plan in planned_entities(chat_id).items()
+                if plan.get("kind") == "person"}
+    except Exception:
+        return {}
+
+
+def presence_person_plan(chat_id, record, plans=None):
+    """The person plan the Writers' Room filed for this tracked presence, or
+    None.
+
+    The binding is the record's own `plan_ref`, written by
+    `track_background_presences` when the identity floor bound the Director's
+    mint to an authored plan -- never a name match, so a passer-by who shares
+    a planned person's name is not taken for them. A plan for a thing or a
+    creature makes nobody a planned PERSON. A charter body's `charter:` ref is
+    a plan the charter simulates, not one the Room authored, and is not this.
+    """
+    uid = str((record or {}).get("plan_ref") or "")
+    if not uid.startswith("plan:"):
+        return None
+    if plans is None:
+        plans = _person_plans(chat_id)
+    plan = plans.get(uid)
+    return plan if isinstance(plan, dict) else None
+
 
 _BACKGROUND_NAME_TITLE_WORDS = {
     "dr", "mr", "mrs", "ms", "the", "a", "an", "captain", "commander",
@@ -4595,8 +4642,15 @@ def _propose_promotions(ctx, presences, scene):
     refusal said so and nothing more -- the Director had no other channel
     to reach for and no signal that the engine already held one. Returns
     the display names proposed this beat.
+
+    A PERSON THE WRITERS' ROOM PLANNED crosses on engagement instead: the
+    beats the story deliberately turned to them, at the chat's "planned"
+    bar (`PLANNED_PROMOTION_ADDRESSED_THRESHOLD`). The plan already says
+    who they are, so the voice a passer-by must accrue is not what is
+    measured (D7, 2026-10-09; `_planned_promotable`).
     """
     limits = promotion_thresholds(ctx.chat.id)
+    plans = _person_plans(ctx.chat.id)
     turn_idx = ctx.turn.idx
     out = []
     for key, record in (presences or {}).items():
@@ -4605,7 +4659,9 @@ def _propose_promotions(ctx, presences, scene):
             continue
         dialogue = len(record.get("dialogue_turns") or [])
         mentions = len(record.get("mention_turns") or [])
-        if dialogue < limits["dialogue"] and mentions < limits["mention"]:
+        planned = presence_person_plan(ctx.chat.id, record, plans) is not None
+        if (dialogue < limits["dialogue"] and mentions < limits["mention"]
+                and not (planned and _planned_promotable(record, limits))):
             continue
         name = presence_display_name(key, record)
         if presence_is_unnamed(key, record):
@@ -4615,16 +4671,25 @@ def _propose_promotions(ctx, presences, scene):
         record["promotion_proposed_turn"] = turn_idx
         out.append(name)
         addressed = len(record.get("addressed_turns") or [])
-        msg = ("%s has spoken on %d beat%s and been turned to on %d; the "
+        msg = ("%s%s has spoken on %d beat%s and been turned to on %d; the "
                "engine has proposed them for promotion to a character, "
                "which the owner confirms from the presences panel. Until "
                "then they stay a presence: voice them through the "
                "background stage, and never name them in cast_changes, "
                "which attaches nobody."
-               % (name, dialogue, "" if dialogue == 1 else "s", addressed))
+               % (name, ", whom the Writers' Room planned," if planned else "",
+                  dialogue, "" if dialogue == 1 else "s", addressed))
         ctx.tell_director(msg)
         ctx.add_warning("promotion proposed: " + msg)
     return out
+
+
+def _planned_promotable(record, limits):
+    """Has the story deliberately turned to this planned person on enough
+    beats (`limits["planned"]`) to offer them a mind? Engagement only: the
+    plan answered the question a passer-by's voice is counted for."""
+    bar = int(limits.get("planned") or PLANNED_PROMOTION_ADDRESSED_THRESHOLD)
+    return len((record or {}).get("addressed_turns") or []) >= bar
 
 
 def promotable_background_presences(chat_id):
@@ -4632,12 +4697,18 @@ def promotable_background_presences(chat_id):
     presences = _fold_duplicate_presences(
         wget(chat_id, "background_presences", {}) or {}, sc)
     limits = promotion_thresholds(chat_id)
+    plans = _person_plans(chat_id)
     out = []
     for key, record in presences.items():
         name = presence_display_name(key, record)
+        # A person the Writers' Room planned is offered on the story's
+        # engagement with them (`_planned_promotable`) as well as on the
+        # passer-by's bars, which a planned person may cross too.
+        planned = presence_person_plan(chat_id, record, plans) is not None
         promotable = (
             len(record.get("dialogue_turns") or []) >= limits["dialogue"]
             or len(record.get("mention_turns") or []) >= limits["mention"]
+            or (planned and _planned_promotable(record, limits))
         )
         # Promotion mints a MIND -- a sheet, memories, a psychology -- and a
         # thing cannot hold one, however much history its record accrued
@@ -4677,6 +4748,8 @@ def promotable_background_presences(chat_id):
             "last_turn": record.get("last_turn"),
             "dialogue_turns": record.get("dialogue_turns") or [],
             "mention_turns": record.get("mention_turns") or [],
+            "addressed_turns": record.get("addressed_turns") or [],
+            "planned": planned,
             "promotable": promotable,
         })
     out.sort(key=lambda r: (-r["promotable"], -(r["last_turn"] or 0)))
@@ -5183,6 +5256,14 @@ def select_auto_promotion(ctx):
     with an LLM call, and any remaining qualifiers stay tracked and promote
     on a later beat. Gated by setting('auto_promote'), which is OFF unless
     the host turns it on -- see `_auto_promote_enabled`.
+
+    A PERSON THE WRITERS' ROOM PLANNED (`presence_person_plan`) is promoted
+    under the same engagement rule -- the host's `promote_after_addressed`,
+    present this beat, and the same switch -- and the voice gate is not
+    asked of them: it measures whether an extra has become somebody, and the
+    plan answered that before anyone met them (the owner's ruling on D7,
+    2026-10-09: "Yes but automatic should remain a setting"). Of two
+    qualifiers on one beat the planned person is drafted first.
     """
     if not _auto_promote_enabled():
         return None, ""
@@ -5191,6 +5272,7 @@ def select_auto_promotion(ctx):
     presences = wget(cid, "background_presences", {}) or {}
     if not presences:
         return None, ""
+    plans = _person_plans(cid)
 
     promotable = {
         r["id"] for r in promotable_background_presences(cid) if r["promotable"]
@@ -5234,7 +5316,15 @@ def select_auto_promotion(ctx):
         # closes the mentions-only route: `promotable` is satisfied by
         # `mention_turns` ALONE, so without this a presence who has never once
         # spoken could be handed a mind.
-        if len(dialogue_turns) < _dialogue_min:
+        #
+        # NOT ASKED OF A PERSON THE ROOM PLANNED. Salience is what the plan
+        # already is; what such a person speaks is rationed by the background
+        # reactor -- one line a beat, and only when picked -- so the gate
+        # counted that ration, not them: the brother the Room planned as
+        # story 166's centre had spoken once at the beat a human promoted
+        # him, the player at his door for the second beat running.
+        planned = presence_person_plan(cid, record, plans) is not None
+        if not planned and len(dialogue_turns) < _dialogue_min:
             continue
         # "Present/addressed this beat": their record was touched this turn
         # (spoke / mentioned), the gate picked them, a character's address
@@ -5248,8 +5338,8 @@ def select_auto_promotion(ctx):
         )
         if not active:
             continue
-        candidates.append(
-            (len(dialogue_turns), record.get("last_turn") or -1, key, name))
+        candidates.append((planned, len(dialogue_turns),
+                           record.get("last_turn") or -1, key, name))
 
     if not candidates:
         return None, ""

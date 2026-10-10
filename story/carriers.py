@@ -36,11 +36,13 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 
 from world import crowds as crowds_model
 from world import degradation
 from story.character_schema import character_identity
 from core.db import q
+from core.logging_utils import logger
 from story.scene import extant_cast, set_char_state
 from world.spatial import room_of
 
@@ -690,6 +692,397 @@ def carried_reports_view(cid, frame_id, scene, chat=None, cap=PAYLOAD_CAP,
                 "retellings": report.get("retellings", 0),
             })
     return out
+
+
+#: How many claims the Writers' Room is shown at once (`unbacked_claims`),
+#: the rest counted beside them. A PER-CALL cap guarding the payload of
+#: every planning step, never the claims themselves: nothing is dropped from
+#: any mind's ledger. The slots go first to the rows whose words carry a
+#: name nobody the world holds answers to (`names_nobody_holds`) -- the case
+#: the owner's D6 ruling is about -- and only then, newest first, to the
+#: rest, so an invented person is not pushed out by eight later tellings of
+#: what everybody saw. Eight is every distinct claim the Brackwater run made
+#: in thirty beats (scratch story 166, 2026-10-10: eight ids across fifteen
+#: held rows), so an ordinary story is shown all of its own; a claim's words
+#: are at most 320 characters (`_invented_claim`), so the section stays near
+#: 3k characters.
+ROOM_CLAIMS_SHOWN = 8
+#: Hearers named beside one claim, the rest counted -- a market's worth of
+#: listeners is a number, not a list, to an author deciding whether a
+#: person exists.
+ROOM_CLAIM_HEARERS_SHOWN = 4
+#: A claim's words as the Room is shown them: the length every report's
+#: words are written at in the first place (`_invented_claim`, and the
+#: witnessed surfaces `advance_carriers` copies), so nothing a ledger holds
+#: is cut -- a bound only for a row some other writer stored longer.
+ROOM_CLAIM_CHARS = 320
+
+#: Where an introduction's `learns` stops naming and starts describing, when
+#: the description is set off: the first comma, semicolon, colon, opening
+#: bracket or set-off dash, as English and Japanese prose write them.
+#: Punctuation, not vocabulary -- the same posture as
+#: `agents/impossible_knowledge`'s sentence bounds. Measured on story 166,
+#: idx 19: "Tam Elver, tallyman at the bonded store for the Marsh Agency" is
+#: a name and then its bearer's work; read whole, it answered to the room its
+#: description named, and the man nobody holds was held. A description NOT
+#: set off stays in the head ("Tommy Reyes is a patient at Blackwood
+#: Sanatorium" is one head), and so does a `learns` that is no name at all --
+#: the encoder's card allows "a name, a title, or a short descriptor" -- so a
+#: head marks a claim only where the claim says it whole (`_said_whole`).
+_NAME_HEAD_END = re.compile(r"\s*(?:[,;:(\[，、；：（「]|\s[-–—]{1,2}\s|[–—])")
+
+
+def _name_head(learns):
+    """An introduction's `learns` up to any set-off description: the name,
+    when the encoder wrote one, and otherwise whatever it did write."""
+    text = " ".join(str(learns or "").split())
+    return _NAME_HEAD_END.split(text, maxsplit=1)[0].strip() if text else ""
+
+
+def _said_whole(head, words):
+    """Do these words say this head WHOLE -- as the encoder wrote it, or
+    without a leading article ("The Doctor" is said "Doctor",
+    `commit_common._ADDRESS_ARTICLES`) -- at a name boundary in either pack
+    (`commit_common._form_in`)?
+
+    Never by a part of it. A head is whatever an introduction's `learns`
+    began with, and its last word is a surname only when the head is a name:
+    read by their last words and last two, the clauses and descriptors
+    play.db holds as heads mark claims that name nobody -- "days ago" from
+    "something escaped from the bio wing three days ago", "name" from
+    "Tamamo is Kaa Sama's real name", "inspector" from "health-board
+    inspector" (review RP2-N1, 2026-10-10: of the 43 heads nobody holds
+    across play.db's 85 chat-frames with introductions, 16 are a person's
+    name alone and 13 whole clauses). The surname alone is read where the
+    name is known to be one -- a person a model chose to plant
+    (`room_sketch._claimed`)."""
+    from persist.commit import _ADDRESS_ARTICLES, _form_in
+    head = str(head or "").strip()
+    if not head:
+        return False
+    forms = [head]
+    folded = head.casefold()
+    for article in _ADDRESS_ARTICLES:
+        rest = head[len(article):].strip()
+        if folded.startswith(article) and rest:
+            forms.append(rest)
+    body = str(words or "")
+    return any(_form_in(form, body) for form in forms)
+
+
+def _held_identity_roster(cid, frame_id, scene, chat):
+    """Every name an identity the world holds answers to, in its own
+    spelling: the registered cast and their aliases, the player and theirs,
+    every charter body and every plan with its aliases
+    (`plot_packages.reserved_identities`, the Room's one answer to who the
+    world holds), every tracked presence the story has a name for, every
+    scene entity and every room. What `names_nobody_holds` resolves against,
+    so "nobody holds this name" means nobody, not nobody registered."""
+    from core.db import wget_for_frame
+    from story.character_schema import (character_identity_from_text,
+                                        persona_name)
+    from story.plot_packages import reserved_identities
+    from story.scene import persona_of
+
+    names = []
+
+    def add(value):
+        value = str(value or "").strip()
+        if value and value not in names:
+            names.append(value)
+
+    identities = reserved_identities(cid, frame_id)
+    for row in identities.get("cast") or ():
+        add(row.get("name"))
+    # The per-story card over the reusable one, as `scene.active_cast`
+    # resolves it: an alias the story's own card gives is a name it holds.
+    for row in q("SELECT COALESCE(cc.sheet, c.sheet) AS sheet FROM chat_chars cc "
+                 "JOIN characters c ON c.id=cc.char_id WHERE cc.chat_id=?", (cid,)):
+        identity = character_identity_from_text(row["sheet"])
+        add(identity.get("name"))
+        for alias in identity.get("aliases") or ():
+            add(alias)
+    for bodies in (identities.get("charter_bodies") or {}).values():
+        for body in bodies:
+            add(body)
+    for plan in (identities.get("plans") or {}).values():
+        add(plan.get("name"))
+        for alias in plan.get("aliases") or ():
+            add(alias)
+    if chat:
+        try:
+            persona = persona_of(dict(chat))
+            add(persona_name(persona))
+            for alias in ((persona or {}).get("identity") or {}).get("aliases") or ():
+                add(alias)
+        except Exception:
+            pass
+    try:
+        from persist.commit import presence_display_name, presence_is_unnamed
+        # The frame's own tracked people: `background_presences` is a
+        # frame-scoped key, read for the frame asked, not the ambient one.
+        presences = wget_for_frame(cid, "background_presences", frame_id, {}) or {}
+        for key, record in presences.items():
+            if isinstance(record, dict) and not presence_is_unnamed(key, record):
+                add(presence_display_name(key, record))
+    except Exception:
+        pass
+    for eid, entity in ((scene or {}).get("entities") or {}).items():
+        if isinstance(entity, dict):
+            add(entity.get("name"))
+            for alias in entity.get("aliases") or ():
+                add(alias)
+    for rid, room in ((scene or {}).get("rooms") or {}).items():
+        add(rid)
+        if isinstance(room, dict):
+            add(room.get("name"))
+    return names
+
+
+def names_nobody_holds(cid, frame_id, scene=None, chat=None):
+    """``{head: first beat}``: what the story has heard given to someone as
+    who they are that no identity the world holds answers to.
+
+    READ FROM THE ENCODER'S OWN RECORD, NEVER FROM PROSE. Which words of a
+    claim are a name is not something code can read in every language this
+    engine writes: `agents/impossible_knowledge.naming_tokens` reads a name
+    from where it is capitalised, and says itself that a script with no
+    letter case yields none, so in the Japanese pack it would find nothing;
+    and the engine's identity resolution (`commit_common._resolve_roster_name`
+    and the address forms under it) answers in both packs but only "which
+    name the world HOLDS does this text say", never "what name does it say
+    that nobody holds". The one record of who somebody was revealed to be is
+    the encoder's `introductions` -- `{who, learns}`, "identity or name
+    knowledge explicitly exchanged or revealed in this beat" -- on each
+    beat's committed diff. So the heads are the `learns` of every
+    introduction this frame's beats recorded, up to any set-off description
+    (`_name_head`), and nobody holds one when neither of the engine's two
+    readings of a name answers to it over every identity the world holds
+    (`_held_identity_roster`): `agents.common._recognizes`, a title or a part
+    of a held name ("Mrs Gale" is Hester Gale, "Sabine" is Sabine Oyelaran),
+    and `commit_common._resolve_roster_name`, the one `commit_mapping` gives
+    this same field (a held name inside it, an honorific attached in the
+    Japanese pack). The description after a head is never read: "Tam Elver,
+    tallyman at the bonded store" read whole answered to the room named "the
+    bonded store" (story 166). `commit_mapping` drops such an introduction,
+    because nobody is there to be known; this keeps the head. When in doubt
+    it is HELD -- a held row is shown in its turn, as it always was, where an
+    unheld one is put first.
+
+    A HEAD IS NOT ALWAYS A NAME. The encoder's card lets `learns` be "a name,
+    a title, or a short descriptor", and play.db holds whole clauses too
+    ("Tamamo is Kaa Sama's real name"): of the 43 heads this returned across
+    play.db's 85 chat-frames with introductions, 16 are a person's name
+    alone and 13 whole clauses, the rest titles, descriptors, places and
+    institutions and one name with its description run on (review RP2-N1,
+    2026-10-10). So a head marks a claim only where the claim says it whole
+    (`unbacked_claims`, `_said_whole`), and whether a marked head is a
+    person stays the Room's to read.
+
+    Read afresh each time, so a person the Room has since planted under that
+    name is held and drops out. A pure read: the active variant of each
+    beat's Director stage, as `impossible_knowledge.already_aired` reads it.
+    """
+    from agents.common import _recognizes
+    from persist.commit import _address_index, _resolve_roster_name
+
+    if scene is None:
+        from story.room_slice import read_scene
+        scene = read_scene(cid, frame_id) or {}
+    if chat is None:
+        row = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+        chat = dict(row) if row else None
+    rows = q("SELECT t.idx AS idx, v.content AS content FROM turns t "
+             "JOIN steps s ON s.turn_id=t.id "
+             "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+             "WHERE t.chat_id=? AND t.frame_id IS ? "
+             "AND s.key IN ('director_resolve','director_establish') "
+             "AND (v.content LIKE '%\"introductions\": [{%' "
+             "OR v.content LIKE '%\"introductions\":[{%') ORDER BY t.idx",
+             (cid, frame_id))
+    heard = []
+    for row in rows:
+        try:
+            diff = (json.loads(row["content"]) or {}).get("state_diff") or {}
+        except (TypeError, ValueError, AttributeError):
+            continue
+        for intro in diff.get("introductions") or ():
+            if isinstance(intro, dict) and str(intro.get("learns") or "").strip():
+                heard.append((row["idx"], str(intro["learns"])))
+    if not heard:
+        return {}
+    roster = _held_identity_roster(cid, frame_id, scene, chat)
+    index = _address_index(roster)
+    held = set(roster)
+    out = {}
+    for idx, learns in heard:
+        head = _name_head(learns)
+        if not head or head in out:
+            continue
+        if _recognizes(head, held) or _resolve_roster_name(head, roster, index):
+            continue
+        out[head] = idx
+    return out
+
+
+def unbacked_claims(cid, frame_id, rooms, scene=None, chat=None,
+                    cap=ROOM_CLAIMS_SHOWN):
+    """Words said aloud near the story with no report behind them, for the
+    Writers' Room: ``(rows, total)``.
+
+    WHAT CODE KNOWS, AND NOTHING FINER. A `claim:` id (`_invented_claim`)
+    means the Director's telling cited no report its speaker carried -- and a
+    happening on screen is not a world event, so most of what a character
+    tells another about what both just saw is filed so too (story 166: at
+    least four of its eight claims are true of the record, the coat on the
+    stake among them). Some of it is a lie or a mistake; nothing here can say
+    which, and nothing here says it. The owner's ruling on D6 (2026-10-09):
+    an invented townsperson stays the character's claim, and the Room MAY
+    ratify it when it plans -- so the Room is shown the claims, and nothing
+    here plans anybody.
+
+    THE SLOTS GO TO THE INVENTED PERSON FIRST: a row whose words say WHOLE a
+    head nobody the world holds answers to (`names_nobody_holds`,
+    `_said_whole`) is shown before any other, and carries those heads as
+    ``unheld_names``; the rest follow newest first. Whole, because a head is
+    whatever the encoder wrote down -- a name, a title, a descriptor, now and
+    then a clause -- and read by its last word, a clause's "ago" or "name"
+    marked claims that named nobody (review RP2-N1). Whether a marked head
+    is a person or a place stays the Room's to read.
+
+    A CLAIM THE PLAYER MADE rides only when the story's player authority
+    grants the player the world (`scene.PLAYER_AUTHORITY_GRANTS`'s `world`,
+    which the default `world_author` does): what the world does with a
+    player's assertion belongs to the authority settings (the owner,
+    2026-10-09), and making real a person the player's character only said
+    exists is the world granting that assertion. Under a stricter mode it is
+    left out -- uncounted, because it is not the Room's to consider.
+
+    WITHIN REACH means somebody there holds it: the player wherever they
+    stand, and any body standing in ``rooms`` (the frontier's reach, the
+    player's own room among them). A room that is the inside of a body
+    stands where that body stands (`room_slice.holder_room`), both ways: a
+    pilot on the deck of a boat moored at the quay is near a player on the
+    quay, and near a player on the same deck -- which the frontier, planning
+    only places a plan can hold, leaves out of its reach (story 166's player
+    and pilot stood on the Grebe's deck from beat 13). Each row is
+    ``{said, by, turn, heard_by[, unheld_names]}``:
+
+    * ``said`` -- the words as their maker holds them, the fullest copy, when
+      the maker's own row survives anywhere; else the least-retold copy;
+    * ``by`` -- whoever made it up (their row says `invented`), else whoever
+      told a first-hand hearer, else "" when no record names a maker;
+    * ``turn`` -- when it was first said, as far as any row knows;
+    * ``heard_by`` -- ``[{who, from}]``, the hearers within reach, at most
+      `ROOM_CLAIM_HEARERS_SHOWN` (``heard_by_more`` counts the rest).
+
+    A maker's `invented` is private to its maker everywhere a MIND reads
+    (`apply_tellings`); the Room is an author, which reads minds by design
+    (`room_tools.inspect_minds`), and its only readers are the two payload
+    builders (`tests/test_a_claimed_person_is_the_rooms_to_make_real.py`).
+    A pure read.
+    """
+    from story.character_schema import persona_name
+    from story.scene import (PLAYER_AUTHORITY_GRANTS, persona_of,
+                             player_authority)
+
+    if scene is None:
+        from story.room_slice import read_scene
+        scene = read_scene(cid, frame_id) or {}
+    if chat is None:
+        row = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+        chat = dict(row) if row else None
+    from story.room_slice import containment, holder_room
+    inside = containment(scene)
+    try:
+        player = str(persona_name(persona_of(dict(chat))) or "") if chat else ""
+    except Exception:
+        player = ""
+    player_authors_world = "world" in PLAYER_AUTHORITY_GRANTS.get(
+        player_authority(cid)["mode"], frozenset())
+
+    def stands(room):
+        """A room and, when it is the inside of a body, the room that body
+        stands in, outward to the first room that is nobody's inside."""
+        room, out = str(room or ""), set()
+        while room and room not in out:
+            out.add(room)
+            room = str(holder_room(scene, inside[room]) or "") \
+                if room in inside else ""
+        return out
+
+    near = set()
+    for room in rooms or ():
+        near |= stands(room)
+    held = {}
+    for entry in _carriers(cid, frame_id, scene, chat=chat):
+        state = entry.get("state")
+        if not isinstance(state, dict):
+            continue
+        here = bool(entry.get("persona")) or bool(stands(entry.get("room")) & near)
+        for report in state.get(STATE_KEY) or ():
+            if not isinstance(report, dict):
+                continue
+            rid = str(report.get("world_event_id") or "")
+            if not rid.startswith("claim:") or not str(report.get("claim") or "").strip():
+                continue
+            slot = held.setdefault(rid, {"made": None, "copies": [], "near": False})
+            if report.get("provenance") == "invented":
+                slot["made"] = (entry, report)
+            else:
+                slot["copies"].append((entry, report, here))
+            slot["near"] = slot["near"] or here
+    unheld = {}
+    if any(slot["near"] for slot in held.values()):
+        try:
+            unheld = names_nobody_holds(cid, frame_id, scene=scene, chat=chat)
+        except Exception as exc:
+            logger.info("claims: the names nobody holds are unavailable: %s", exc)
+    rows = []
+    for rid, slot in held.items():
+        if not slot["near"]:
+            continue
+        copies = sorted(slot["copies"],
+                        key=lambda c: int(c[1].get("retellings") or 0))
+        # The earliest beat any copy was heard: a maker's row a charter
+        # mind projects carries no beat of its own (`charter_runtime.
+        # carrier_entries`), and the claim is at least that old.
+        heard = [c[1].get("acquired_turn") for c in copies
+                 if isinstance(c[1].get("acquired_turn"), int)]
+        if slot["made"] is not None:
+            maker, made = slot["made"]
+            said, by = made.get("claim"), str(maker.get("name") or "")
+            by_player = bool(maker.get("persona"))
+            turn = made.get("acquired_turn")
+            if not isinstance(turn, int):
+                turn = min(heard) if heard else None
+        else:
+            said = copies[0][1].get("claim")
+            first_hand = [c for c in copies
+                          if int(c[1].get("retellings") or 0) == 1]
+            by = str(first_hand[0][1].get("told_by") or "") if first_hand else ""
+            by_player = bool(player) and by.casefold() == player.casefold()
+            turn = min(heard) if heard else None
+        if by_player and not player_authors_world:
+            continue
+        said = " ".join(str(said or "").split())[:ROOM_CLAIM_CHARS]
+        hearers = [{"who": str(entry.get("name") or ""),
+                    "from": str(report.get("told_by") or "")}
+                   for entry, report, here in copies if here]
+        row = {"said": said, "by": by, "turn": turn,
+               "heard_by": hearers[:ROOM_CLAIM_HEARERS_SHOWN]}
+        if len(hearers) > ROOM_CLAIM_HEARERS_SHOWN:
+            row["heard_by_more"] = len(hearers) - ROOM_CLAIM_HEARERS_SHOWN
+        # Each head said WHOLE, never by its last words (`_said_whole`).
+        found = [name for name in unheld if _said_whole(name, said)]
+        if found:
+            row["unheld_names"] = found
+        rows.append((rid, row))
+    rows.sort(key=lambda item: (
+        0 if item[1].get("unheld_names") else 1,
+        -(item[1]["turn"] if isinstance(item[1]["turn"], int) else -1),
+        item[0]))
+    return [row for _rid, row in rows[:max(0, int(cap))]], len(rows)
 
 
 def _cast_index(cid, frame_id, scene, chat=None, ctx=None):

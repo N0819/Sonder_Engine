@@ -168,6 +168,8 @@ from persist.commit_background import (beat_reactions, BACKGROUND_PROMOTION_DIAL
     pick_background_reactor, pick_background_reactors, pick_voice_demand,
     addressed_rooms,
     promotable_background_presences, _refuse_name_collision,
+    PLANNED_PROMOTION_ADDRESSED_THRESHOLD, _person_plans,
+    presence_person_plan, _planned_promotable,
     promote_background_character, AUTO_PROMOTE_DIALOGUE_THRESHOLD,
     _promote_after_addressed, _auto_promote_enabled,
     auto_promote_background_characters, select_auto_promotion,

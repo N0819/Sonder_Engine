@@ -485,6 +485,7 @@ Not scheduled and not committed to a phase. See the
 **1. Known defects**
 
 - [§1.134 — What the campaign-3 plan/structure/tools wave left open (2026-09-05)](UNBUILT_PLANNING.md#unbuilt-1-134)
+- [§1.198 — A person someone claims, and a planned person's mind — residuals (2026-10-10)](UNBUILT_PLANNING.md#unbuilt-1-198)
 
 **2. Roadmap**
 

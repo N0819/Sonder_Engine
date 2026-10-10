@@ -591,6 +591,29 @@ def sketch_payload(cid, frame_id, report, *, turn_idx=None):
         "player_said": said,
         "event": event,
     }
+    # WORDS SAID ALOUD NEAR THE STORY WITH NO REPORT BEHIND THEM (the
+    # owner's ruling on D6, 2026-10-09): a person a character invents stays
+    # their claim, and the Room MAY make them real when it plans. Not this
+    # tier: who knows a claimed person, and what the plans already say that
+    # bears on them, are the full planner's to read and to write, so a
+    # sketch is shown the claims to hand such a person on, and code refuses
+    # one it plants anyway (`_plan`, `_claimed`). The same reader and reach
+    # as the full Planner's payload (`story_planner._claims_near`). Absent
+    # when there is none.
+    try:
+        from story.carriers import unbacked_claims
+        # The player's own room even when it is the inside of a body, which
+        # `reach` leaves out because a plan cannot be filed there; a claim
+        # held by somebody beside them is near all the same.
+        claim_rows, claims_total = unbacked_claims(
+            cid, frame_id, [here, *reach] if here else reach, scene=scene)
+    except Exception as exc:
+        logger.info("sketch: the claims near the story are unavailable: %s", exc)
+        claim_rows, claims_total = [], 0
+    if claim_rows:
+        payload["unbacked_claims"] = claim_rows
+        if claims_total > len(claim_rows):
+            payload["unbacked_claims_more"] = claims_total - len(claim_rows)
     # FAR LOOKS FOR WHAT ALREADY STANDS: the nearest places and parts of the
     # map far eyes read by their ground alone, under their grant
     # (`room_frontier.looks_wanted`, `looks_offered`). Absent when none is
@@ -607,6 +630,9 @@ def sketch_payload(cid, frame_id, report, *, turn_idx=None):
         "contained": contained, "axes": axes, "unheld": unheld,
         "held_folded": held_folded, "held_names": held_names,
         "reserved": reserved, "grants": grants,
+        # The words of every claim this payload shows, and only those: what
+        # the sketch was shown is what it can be held to.
+        "claim_words": [row["said"] for row in claim_rows],
         "event_kinds": kinds if event_may else [], "actors": actors,
         "looks": look_kinds, "look_names": look_names,
         "room_structure": {uid: str((entry.get("planned") or {}).get("structure") or "")
@@ -927,6 +953,23 @@ def _plan(cid, context, answer):
         if name.casefold() in context["reserved"] or name.casefold() in seen_people:
             refusals.append("%r is a name the world already holds" % name)
             continue
+        # A PERSON A CLAIM NAMES IS THE FULL PLANNER'S (review RP-3,
+        # 2026-10-10). A sketch's person is a name, a role, a room and a
+        # look, so it can neither tie them to the people who already know
+        # them nor read what the plans already say that bears on them: the
+        # one measured ratification (story 166, checkpoint 24) planted "Tam
+        # Elver" as "the Corvina's missing hand", a stranger to both Gales
+        # who know him and against the Room's own published truth that Abel
+        # was the only hand aboard. So it lands nothing, and the question
+        # goes to the loop, which can read the plans and write `known_by` --
+        # the card asks for that hand-off, and this holds when a model does
+        # not.
+        if _claimed(name, context.get("claim_words")):
+            refusals.append(
+                "%r is a person named in what people near the story claim; "
+                "who knows them, and what the plans already say that bears on "
+                "them, is the full planner's to read and say" % name)
+            continue
         seen_people.add(name.casefold())
         where = _room_ref(context, raw.get("where"), new)
         if not where:
@@ -1018,6 +1061,20 @@ def _plan(cid, context, answer):
             "authority": {"may_schedule_harm": bool(harms)},
             "names": [spec["name"] for _j, spec in planted.values()]
             + [op["name"] for op in ops if op["op"] == "plan_entity"]}
+
+
+def _claimed(name, claim_words):
+    """Is this planned person named in the words of a claim the sketch was
+    shown? Read as the engine reads a name said aloud
+    (`commit_common._address_forms` and `_form_in`): the whole name, its last
+    word and its last two, each at a name boundary in either pack -- so
+    "Elver" planted is the "Tam Elver" a claim named."""
+    if not name or not claim_words:
+        return False
+    from persist.commit import _address_forms, _form_in
+    forms = _address_forms([name]).get(name) or {name}
+    return any(_form_in(form, str(words or ""))
+               for words in claim_words for form in forms)
 
 
 # ---------------------------------------------------------------------------

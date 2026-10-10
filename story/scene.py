@@ -2639,14 +2639,21 @@ def promotion_config(chat_id):
     `mention`       passing mentions that do the same.
     `auto_dialogue` lines before hands-off auto-promotion fires (gated
                     separately by the global `auto_promote` setting).
+    `planned`       beats the story deliberately turns to a person the
+                    Writers' Room planned before the UI offers them
+                    promotion -- engagement, not voice, because the plan
+                    already says who they are (`commit_background.
+                    PLANNED_PROMOTION_ADDRESSED_THRESHOLD`).
     """
     from persist.commit import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
                         BACKGROUND_PROMOTION_MENTION_THRESHOLD,
-                        AUTO_PROMOTE_DIALOGUE_THRESHOLD)
+                        AUTO_PROMOTE_DIALOGUE_THRESHOLD,
+                        PLANNED_PROMOTION_ADDRESSED_THRESHOLD)
     config = {
         "dialogue": BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
         "mention": BACKGROUND_PROMOTION_MENTION_THRESHOLD,
         "auto_dialogue": AUTO_PROMOTE_DIALOGUE_THRESHOLD,
+        "planned": PLANNED_PROMOTION_ADDRESSED_THRESHOLD,
     }
     stored = wget(chat_id, "promotion_thresholds", None) or {}
     for key in config:

@@ -736,6 +736,77 @@ def _presence_conduct_tail(chat_id, name):
         if isinstance(item, dict) and str(item.get("text") or "").strip()
     ]
 
+#: WHAT OF A WRITERS' ROOM PLAN REACHES A PROMOTED PERSON'S SHEET, and the
+#: whole of it: what the person LIVES and what others SEE of them -- their
+#: work (`role`), the room they live in (`home`, by its name), how they were
+#: meant to look (`look`) and who has known them since before the story
+#: (`known_by`). Never the brief's `truths` or `purpose`, and never its
+#: `station`: truths are facts about the WORLD and purpose is the Room's
+#: intent, both written under the Room's own card's promise that nothing it
+#: writes is placed in anybody's head, and neither carries a mark of which
+#: mind already holds it. The sheet is what the promoted mind reads every
+#: beat -- `scene.private_knowledge_for` hands an owner each entry of their
+#: own private history -- so a truth handed to the sheet's author is a truth
+#: placed in that head, with no review between them once the automatic sweep
+#: lands the draft. A deterministic floor, never a request to the model:
+#: measured in review (2026-10-10, two calls with the whole plan on the
+#: sheet call, under a card that also said public history holds only what
+#: the scene established), a laundress planned as "the late baron's
+#: legitimate daughter ... she has never been told" came back holding
+#: exactly that as her own private history.
+PLAN_FIELDS_FOR_SHEET = ("role", "home", "look", "known_by")
+
+
+def _plan_for_sheet(plan, scene, player=""):
+    """The Writers' Room's plan for a person, as the promotion's sheet author
+    may read it: `PLAN_FIELDS_FOR_SHEET` and nothing else. `home` is the
+    room's name, not its id; a `known_by` entry that is the truths'
+    audience word for the player's own character is the player's name, so
+    the sheet is never handed a word to copy where a person belongs. Never
+    handed to the seed call: a plan is the author's, not something this
+    person witnessed.
+    """
+    from story.plot_packages import TRUTH_AUDIENCE_PLAYER
+
+    brief = plan.get("brief") or {}
+    where = str(brief.get("where") or "")
+    room = ((scene or {}).get("rooms") or {}).get(where) if where else None
+    home = str((room or {}).get("name") or where) if isinstance(room, dict) \
+        else where
+    out = {key: str(value).strip() for key, value in (
+        ("role", plan.get("role")), ("home", home),
+        ("look", plan.get("look"))) if str(value or "").strip()}
+    known_by = []
+    for who in plan.get("known_by") or ():
+        who = str(who or "").strip()
+        if who.casefold() == TRUTH_AUDIENCE_PLAYER:
+            who = str(player or "").strip()
+        if who and who not in known_by:
+            known_by.append(who)
+    if known_by:
+        out["known_by"] = known_by
+    return {key: out[key] for key in PLAN_FIELDS_FOR_SHEET if key in out}
+
+
+def _seen_body(scene, name, record=None, plan=None):
+    """The body the story has shown, as the scene holds it: the entity's own
+    committed description (`persist.commit._presence_scene_entity` -- the
+    record's entity binding first), else the render the plan settled when the
+    Director first stood them up. What everyone who looked at them saw, so
+    the sheet's appearance must agree with it."""
+    from persist.commit import _presence_scene_entity
+    from world.planned_entities import SURFACE_CHARS
+
+    try:
+        _eid, ent = _presence_scene_entity(scene, name, record)
+    except Exception:
+        ent = None
+    text = str((ent or {}).get("description") or "").strip()
+    if not text and isinstance(plan, dict):
+        text = str((plan.get("rendered") or {}).get("render") or "").strip()
+    return " ".join(text.split())[:SURFACE_CHARS]
+
+
 def draft_promoted_character(chat_id, name):
     """Generate a character sheet + starter memories for a recurring
     background presence (see commit.py's track_background_presences),
@@ -752,10 +823,19 @@ def draft_promoted_character(chat_id, name):
     authoring is tooling, not a mind), while `memory_seeds` come from a
     second call whose payload holds only what this presence itself said and
     did. See the comment at the seed call.
+
+    WHAT THE WORLD ALREADY HOLDS OF THEM rides the sheet call too: `plan`,
+    what of the Writers' Room's plan the person lives and others see
+    (`_plan_for_sheet`, `PLAN_FIELDS_FOR_SHEET` -- never its truths or
+    purpose), and `seen`, the body the scene holds (`_seen_body`). Neither
+    reached the author before 2026-10-10, and the one promoted planned
+    person on record shows the cost (scratch story 166, char 83): the card
+    lost "bargeman", and the body the story had shown with one milky eye was
+    written with two red-rimmed dark ones.
     """
     from core.db import wget
     from persist.commit import (_presence_lookup, presence_display_name,
-                                presence_is_unnamed)
+                                presence_is_unnamed, presence_person_plan)
 
     # `name` may be the tracked record's uid (the promotion routes pass the
     # id) or a display name. Resolve it before gathering evidence: the
@@ -787,16 +867,35 @@ def draft_promoted_character(chat_id, name):
             )
 
     evidence = _promotion_evidence(chat_id, name)
-    if not evidence:
+    scene = wget(chat_id, "scene", {}) or {}
+    plan = presence_person_plan(chat_id, _prec) if _prec is not None else None
+    # A PLAN IS A BRIEF. A person the Room planned has a life to write the
+    # sheet from even when no event has recorded their words yet -- they are
+    # offered on the story turning to them, not on their speaking -- where a
+    # passer-by with no record has nothing, and is refused as before.
+    if not evidence and plan is None:
         raise ValueError(
             f"No recorded turns mention {name!r} in this chat's events"
         )
+    sheet_pack = {"name": name, "evidence": evidence}
+    if plan is not None:
+        player = ""
+        try:
+            from story.scene import persona_of
+            chat_row = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+            player = persona_name(persona_of(dict(chat_row))) if chat_row else ""
+        except Exception:
+            player = ""
+        sheet_pack["plan"] = _plan_for_sheet(plan, scene, player)
+    seen = _seen_body(scene, name, _prec, plan)
+    if seen:
+        sheet_pack["seen"] = seen
 
     with _silent_provider_stream():
         raw = chat_complete(
             "utility",
             get_prompt("promote_character"),
-            json.dumps({"name": name, "evidence": evidence}, ensure_ascii=False),
+            json.dumps(sheet_pack, ensure_ascii=False),
             temperature=0.4,
             max_tokens=AUTHORING_MAX_TOKENS,
         )
@@ -834,7 +933,9 @@ def draft_promoted_character(chat_id, name):
     # words. The name-mention floor above proves the person was NAMED in a
     # beat, never that they perceived any of it. So the seed-producing call
     # gets a second, SUBTRACTED evidence pack: their own quoted lines plus
-    # their own recorded conduct tail, and nothing else. Fail closed by
+    # their own recorded conduct tail, and nothing else -- not the Room's
+    # plan, which is the author's account of their life and never something
+    # they were seen to witness, and not the body the scene holds. Fail closed by
     # construction -- an omniscient fact cannot reach a seed because it never
     # reaches the call, and the full-record call's own memory_seeds are
     # discarded no matter how good they look. A presence with no speech and
