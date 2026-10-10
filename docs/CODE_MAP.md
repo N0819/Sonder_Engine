@@ -19,7 +19,7 @@
 | `agents/director_evidence.py` | 3963 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2450 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/director_layout.py` | 255 |  | — |
+| `agents/director_layout.py` | 293 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 3242 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
@@ -37,7 +37,7 @@
 | `agents/perception.py` | 8398 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1881 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 3247 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 3252 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3076 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -410,14 +410,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `lay_out_buildings()` | 183 | 73 lines |
-| `layout_tier_enabled()` | 94 | 20 lines |
-| `_file_run()` | 137 | 14 lines |
-| `_waiting()` | 153 | 13 lines |
-| `lay_out()` | 168 | 13 lines |
-| `_plan_specs()` | 116 | 7 lines |
-| `_default_call()` | 125 | 4 lines |
-| `_read_runs()` | 131 | 4 lines |
+| `lay_out_buildings()` | 221 | 73 lines |
+| `lay_out_opening_ground()` | 186 | 33 lines |
+| `layout_tier_enabled()` | 97 | 20 lines |
+| `_file_run()` | 140 | 14 lines |
+| `_waiting()` | 156 | 13 lines |
+| `lay_out()` | 171 | 13 lines |
+| `_plan_specs()` | 119 | 7 lines |
+| `_default_call()` | 128 | 4 lines |
 
 ### `agents/director_lingua.py`
 
@@ -635,12 +635,12 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `run_planner()` | 1045 | 390 lines |
-| `run_fill()` | 2880 | 167 lines |
-| `deliberate()` | 2038 | 162 lines |
-| `schedule_room_work()` | 3103 | 145 lines |
-| `run_location_plan()` | 1793 | 136 lines |
-| `run_dramaturge_pass()` | 2222 | 112 lines |
-| `_dramaturge_pass()` | 2347 | 108 lines |
+| `run_fill()` | 2885 | 167 lines |
+| `deliberate()` | 2043 | 162 lines |
+| `schedule_room_work()` | 3108 | 145 lines |
+| `run_location_plan()` | 1798 | 136 lines |
+| `run_dramaturge_pass()` | 2227 | 112 lines |
+| `_dramaturge_pass()` | 2352 | 108 lines |
 | `_payload()` | 527 | 103 lines |
 
 ### `core/db.py`

@@ -281,14 +281,19 @@ def _registry(cid):
 
 
 def test_the_layout_tier_is_off_unless_the_host_turns_it_on(temp_db):
-    """Off by default -- the owner compares the tier's buildings before it
-    publishes to a story -- and off it reads nothing and calls nothing."""
-    from agents.director_layout import lay_out_buildings, layout_tier_enabled
+    """Off by default until the bridge lays a real Room plan cleanly (the
+    owner, 2026-10-10: "Bridge lane now, then on") -- and off it reads
+    nothing and calls nothing; turned off explicitly, the same."""
+    from agents.director_layout import (LAYOUT_TIER_SETTING, lay_out_buildings,
+                                        layout_tier_enabled)
+    from core.db import set_setting
     cid = _chat(temp_db)
     _plant(cid)
     calls = []
     scene = _scene()
     before = copy.deepcopy(scene)
+    assert not layout_tier_enabled(), "off where the host has said nothing"
+    set_setting(LAYOUT_TIER_SETTING, "off")
     assert not layout_tier_enabled()
     got, laid_out = lay_out_buildings(None, cid, scene, ["hall"], "en", call=_answers(calls))
     assert got is scene and laid_out == set()
@@ -644,7 +649,8 @@ def test_a_design_filed_before_its_building_was_laid_out_is_made_again_on_the_pl
     plant_structure(cid, {"key": "town", "name": "Town"}, rooms)
     calls = []
     monkeypatch.setattr(common, "_agent_json", _job_answers(calls))
-    _wait(director_rooms.schedule_room_predevelopment(ctx))      # the tier is off
+    set_setting(LAYOUT_TIER_SETTING, "off")                      # the tier is off
+    _wait(director_rooms.schedule_room_predevelopment(ctx))
     assert "director_rooms_layout_sort" not in calls
     before = temp_db.wget(cid, director_rooms.PREPARED_KEY)["hall"]
     assert before["clean"] is True
@@ -1375,6 +1381,8 @@ def test_the_tier_can_be_turned_on_for_one_story_and_a_rewind_keeps_the_dial(tem
     from core.db import set_setting, wset
     from persist.checkpoints import ensure_checkpoint, restore_checkpoint
     one, other = _chat(temp_db), _chat(temp_db)
+    # the host turned it off, so a story's own switch is what turns it on
+    set_setting(LAYOUT_TIER_SETTING, "off")
     assert not layout_tier_enabled(one) and not layout_tier_enabled(other)
     # a checkpoint of the story as it stood before the dial was turned...
     _plant(one)
@@ -1396,3 +1404,45 @@ def test_the_tier_can_be_turned_on_for_one_story_and_a_rewind_keeps_the_dial(tem
     assert layout_tier_enabled(one) and not layout_tier_enabled(other)
     third = _chat(temp_db)
     assert layout_tier_enabled(third), "the host's switch where a story states none"
+
+
+
+def test_the_building_the_opening_stands_in_is_laid_out_before_anything_is_described(temp_db):
+    """A story that OPENS inside a planned building had it refused forever:
+    the tier ran only in the job after a beat, the opening had described the
+    room the player woke in by then, and the tier never re-measures a room
+    the story has seen -- the owner's shrine (chat 164, 2026-10-10) was built
+    with no solve at all. The opening plan lays out the building its bodies
+    stand in before turn 0 describes any of it."""
+    from agents.director_layout import lay_out_opening_ground
+    from core.db import wset
+    from story.opening_plan import record_placement
+    from agents.director_layout import LAYOUT_TIER_SETTING
+    from core.db import set_setting
+    cid = _chat(temp_db)
+    _plant(cid)
+    set_setting(LAYOUT_TIER_SETTING, "on")
+    wset(cid, "scene", _scene())
+    record_placement(cid, None, "Nia", "hall")
+    calls = []
+    laid = lay_out_opening_ground(cid, None, call=_answers(calls))
+    assert laid == {"hall", "kitchen", "loft"}
+    assert calls, "the two calls were made"
+    assert all((p or {}).get("site") for uid, p in _registry(cid).items()
+               if uid in laid), "the plan holds the solve the opening reads"
+
+
+def test_an_opening_placed_nowhere_lays_nothing_out_and_never_raises(temp_db):
+    from agents.director_layout import lay_out_opening_ground
+    cid = _chat(temp_db)
+    _plant(cid)
+    assert lay_out_opening_ground(cid, None, call=_answers([])) == set()
+
+
+def test_the_opening_plan_lays_out_its_ground_after_the_room_has_placed_it():
+    import inspect
+    from agents import story_planner
+    source = inspect.getsource(story_planner.run_opening_plan)
+    assert "lay_out_opening_ground(" in source
+    assert source.index("run_planner(") < source.index("lay_out_opening_ground(")
+    assert source.index("lay_out_opening_ground(") < source.index("record_opening_plan(cid")

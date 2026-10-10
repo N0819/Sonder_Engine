@@ -1642,6 +1642,11 @@ def run_opening_plan(cid, frame_id=None, *, passage, first_beat=""):
     except Exception as exc:
         logger.info("opening plan failed for chat %s: %s", cid, exc)
         fields["error"] = "%s: %s" % (type(exc).__name__, str(exc)[:300])
+    # THE GROUND THE OPENING STANDS ON IS LAID OUT NOW, before turn 0
+    # describes any of it (`director_layout.lay_out_opening_ground`): a
+    # building the story opens inside is never laid out afterwards.
+    from agents.director_layout import lay_out_opening_ground
+    fields["laid_out"] = sorted(lay_out_opening_ground(cid, frame_id))
     fields["trace"] = trace
     row = record_opening_plan(cid, frame_id, **fields)
     tools = ", ".join(

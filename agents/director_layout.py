@@ -1,6 +1,10 @@
 """The layout tier: a planned building of several storeys is laid out by code
 before any of its rooms is designed. OFF unless the host or the story turns
-it on (`LAYOUT_TIER_SETTING`, `LAYOUT_TIER_STORY_KEY`).
+it on (`LAYOUT_TIER_SETTING`, `LAYOUT_TIER_STORY_KEY`). The owner's ruling of
+2026-10-10, after their shrine (chat 164) was built with no solve at all:
+ON BY DEFAULT once the bridge lays a real Room plan cleanly -- the shrine's
+own plan, replicated, against the layout lab's -- and not before, so no
+story pays for refused attempts meanwhile.
 
 THE OWNER'S CHOICE (2026-10-08, survey rank 6, first slice): the layout lab's
 solver as an out-of-band tier for planned buildings -- "a model decides what
@@ -55,10 +59,9 @@ from __future__ import annotations
 import time
 
 #: The host's switch, in the settings table. OFF unless set to
-#: `1`/`on`/`true`/`yes` -- the owner compares the tier's buildings with the
-#: designer's before it publishes to any story (the brief of 2026-10-08), and
-#: the owner's comparison protocol for the layout lab applies
-#: (`tools/layout_lab/baselines`).
+#: `1`/`on`/`true`/`yes` -- until the bridge lays a real Room plan cleanly
+#: (the owner, 2026-10-10: "Bridge lane now, then on"); the owner's comparison
+#: protocol for the layout lab applies (`tools/layout_lab/baselines`).
 LAYOUT_TIER_SETTING = "layout_solver_tier"
 #: The STORY's switch: a world key of the chat, read before the host's, so
 #: the tier can be turned on for one story to compare it there and nowhere
@@ -178,6 +181,41 @@ def lay_out(building, call, language_id):
     spec = layout_bridge.spec_from_answers(building, inventory, relate_answer)
     layout = layout_bridge.solve_spec(spec)
     return spec, layout, inventory, layout_bridge.refusals(building, spec, layout)
+
+
+def lay_out_opening_ground(cid, frame_id=None, *, call=None):
+    """THE BUILDING THE OPENING STANDS IN IS LAID OUT BEFORE ANY OF IT IS
+    DESCRIBED. Returns the ids of the rooms laid out; never raises.
+
+    The tier's own run is the rooms-in-view job, after a beat -- and a story
+    that OPENS inside a planned building never got one there: the opening
+    had described the room the player woke in by then, and a room the story
+    has seen is never re-measured (`layout_bridge.plan_buildings` refuses the
+    building). The owner's shrine, chat 164 (2026-10-10), was built with no
+    solve at all for exactly that, with Hinami waking on its second floor.
+    So the opening plan (`story_planner.run_opening_plan`), once the Room has
+    placed the opening's bodies, lays out the buildings their rooms belong
+    to -- the tier's planting-time option, taken for the one building the
+    first beat is sure to stand in -- and turn 0 describes rooms that
+    already stand on their solve (`structure.apply_solved_plans`)."""
+    from core.logging_utils import logger
+    try:
+        from core.db import wget_for_frame
+        from language_runtime import story_language
+        from story.opening_plan import opening_placements
+        rooms = sorted({str(spot.get("room"))
+                        for spot in (opening_placements(cid, frame_id) or {}).values()
+                        if isinstance(spot, dict) and spot.get("room")})
+        if not rooms:
+            return set()
+        scene = wget_for_frame(cid, "scene", frame_id) or {}
+        _scene, laid = lay_out_buildings(None, cid, scene, rooms,
+                                         story_language(cid), call=call)
+        return set(laid)
+    except Exception as exc:
+        logger.info("layout tier: chat=%s could not lay out the opening's "
+                    "ground: %s", cid, str(exc)[:300])
+        return set()
 
 
 def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
