@@ -70,3 +70,25 @@ def test_an_honorific_in_the_name_is_not_the_bodys_noun():
     charter["bodies"]["skipper:featured:1"] = {"name": "Jory Trewin", "title": "Skipper",
                                                "home_post": "skipper"}
     assert member_noun(charter, "skipper:featured:1") == "skipper"
+
+
+def test_a_post_title_that_opens_the_formal_name_is_an_address_not_the_noun():
+    """The naming profile can title a POST with an honorific, and the address
+    form reached the noun by that road: chat 167 (validation story,
+    2026-10-10) titled the landlord, the clerks, the storekeepers and the
+    chapel keepers "Mr", and every one of them was "the middle-aged square
+    mr", the inn's crowd "a handful of mrs and potmen" (`_plural("mr")`). A
+    title the formal name opens with is how the person is addressed, wherever
+    the title came from; the noun is the post's."""
+    from world.charter_crowd import composition_of, member_noun
+    charter = {"bodies": {
+        "landlord:0001": {"name": "Llanarfryn Eigalyn", "home_post": "landlord",
+                          "given_name": "Llanarfryn", "family_name": "Eigalyn"},
+        "potman:0001": {"name": "Rhiinwyr Llanelias", "home_post": "potman",
+                        "given_name": "Rhiinwyr", "family_name": "Llanelias"}},
+        "watch": {},
+        "naming": {"formal_format": "{title} {given} {family}",
+                   "titles": {"posts": {"landlord": "Mr"}, "ranks": {}}}}
+    assert member_noun(charter, "landlord:0001") == "landlord"
+    crowd = composition_of(["landlord:0001", "potman:0001"], charter).split()
+    assert "mr" not in crowd and "mrs" not in crowd, crowd

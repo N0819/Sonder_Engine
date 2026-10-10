@@ -226,26 +226,30 @@ def member_noun(charter, body_key, held=None):
     "engineers" while the one engineer standing out of it reads as an
     unfamiliar person is a description of two different rooms.
     """
-    from .charter_identity import title_for
+    from .charter_identity import display_name, title_for
 
     held = _held_posts(charter) if held is None else held
     body = (charter.get("bodies") or {}).get(str(body_key)) or {}
     roles = sorted(held.get(str(body_key)) or ())
     if not roles and body.get("home_post"):
         roles = [str(body["home_post"])]
-    # AN HONORIFIC IS HOW A PERSON IS ADDRESSED, NOT WHAT THEY ARE. A body
-    # the planner named "Mrs Dacre" with `title: "Mrs"` carries its own
-    # address in its name, and reading that title as the noun composed
-    # "the elderly wiry miss with grey locks" and a crowd of "mrs"
-    # (scratch play 2026-09-14, chat 9). The same test `display_name`
-    # makes: a title the name already opens with is an address form, and
-    # the noun is the post's.
-    explicit = str(body.get("title") or "").strip()
-    name = str(body.get("name") or "").strip()
-    if explicit and name.casefold().startswith(explicit.casefold() + " "):
-        body = {k: v for k, v in body.items() if k != "title"}
-    noun = str(title_for(body, roles, charter.get("naming"))
-               or "").strip().casefold()
+    # AN HONORIFIC IS HOW A PERSON IS ADDRESSED, NOT WHAT THEY ARE: a title
+    # the body's formal name opens with is an address form, and the noun is
+    # the post's. Wherever the title came from -- the body's own (a body
+    # the planner named "Mrs Dacre" with `title: "Mrs"` composed "the
+    # elderly wiry miss with grey locks" and a crowd of "mrs", scratch play
+    # 2026-09-14, chat 9) or the naming profile's title for its post (chat
+    # 167, 2026-10-10: the landlord, clerks, storekeepers and chapel keepers
+    # titled "Mr" were each "the middle-aged square mr", the inn's crowd "a
+    # handful of mrs and potmen"). Measured over every charter body: 13 of
+    # 638 nouns in play.db change, all chat 167's, all to their post ("the
+    # reverend" -> "minister" among them); 0 of 146 in the owner's.
+    naming = charter.get("naming")
+    title = str(title_for(body, roles, naming) or "").strip()
+    formal = str(display_name(body, roles, naming) or "").strip()
+    if title and formal.casefold().startswith(title.casefold() + " "):
+        title = ""
+    noun = title.casefold()
     if not noun and roles:
         noun = _role_noun(roles[0])
     return noun
