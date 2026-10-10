@@ -16,7 +16,7 @@
 | `agents/composer.py` | 6074 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 7552 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 3811 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
+| `agents/director_evidence.py` | 3880 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2450 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_layout.py` | 255 |  | — |
@@ -371,14 +371,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_evidence_present()` | 2074 | 359 lines |
-| `normalize_causal_ledger()` | 2649 | 265 lines |
-| `causal_world_index()` | 2966 | 248 lines |
-| `beat_event_ledger()` | 1287 | 123 lines |
-| `beat_timeline()` | 1174 | 111 lines |
-| `_fold_derived_manifest_events()` | 3723 | 89 lines |
-| `_span_items()` | 3350 | 86 lines |
-| `span_slices()` | 1922 | 85 lines |
+| `_evidence_present()` | 2075 | 359 lines |
+| `normalize_causal_ledger()` | 2718 | 265 lines |
+| `causal_world_index()` | 3035 | 248 lines |
+| `beat_event_ledger()` | 1288 | 123 lines |
+| `restore_declared_quotes()` | 2575 | 122 lines |
+| `beat_timeline()` | 1175 | 111 lines |
+| `_fold_derived_manifest_events()` | 3792 | 89 lines |
+| `_span_items()` | 3419 | 86 lines |
 
 ### `agents/director_fanout.py`
 

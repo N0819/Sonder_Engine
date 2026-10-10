@@ -13,6 +13,7 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
+import collections
 import copy
 import json
 import re
@@ -2544,7 +2545,31 @@ def authority_by_entity(event_inputs):
     return modes
 
 
-_QUOTED_SPAN = re.compile(r'"([^"\n]{2,}?)"|\u201c([^\u201d\n]{2,}?)\u201d')
+_QUOTED_SPAN = re.compile(r'"([^"\n]{2,}?)"|\u201c([^\u201d\n]{2,}?)\u201d'
+                          r'|\u300c([^\u300d\n]{2,}?)\u300d')
+
+#: THE SHARE OF A QUOTED LINE'S WORDS THE BEAT'S SPEECH ROWS MUST SAY for the
+#: line to count as carried; below it the line was dropped and is restored.
+#: Words, not exact text, so a line carried with its punctuation normalised
+#: or split across two rows is never said twice. Measured over every stored
+#: prose-contract interpretation with a quoted span (2026-10-10): 992 spans
+#: (536 play, 456 owner); every carried line scored 0.8 or 1.0 (975 at 1.0,
+#: two at 0.8), every dropped one 0.0 (15). 0.6 sits in the empty gap.
+QUOTED_LINE_CARRIED = 0.6
+
+
+def _line_words(text):
+    """A line's words, case-folded, punctuation and quote marks gone."""
+    return re.findall(r"[^\W_]+", str(text or "").casefold())
+
+
+def _carried_share(span, spoken):
+    """How much of a quoted span the beat's speech rows say, 0..1, by word
+    (`spoken` a Counter of those rows' words)."""
+    words = _line_words(span)
+    if not words:
+        return 1.0
+    return sum(1 for word in words if spoken[word] > 0) / len(words)
 
 
 def restore_declared_quotes(out, raw_input, warn=None):
@@ -2564,7 +2589,8 @@ def restore_declared_quotes(out, raw_input, warn=None):
     ledgers = (out or {}).get("ledgers")
     if not isinstance(ledgers, list) or not str(raw_input or "").strip():
         return out
-    spans = [m.group(1) or m.group(2) for m in _QUOTED_SPAN.finditer(raw_input)]
+    spans = [m.group(1) or m.group(2) or m.group(3)
+             for m in _QUOTED_SPAN.finditer(raw_input)]
     spans = [sp.strip() for sp in spans if sp and sp.strip()]
     if not spans:
         return out
@@ -2618,12 +2644,55 @@ def restore_declared_quotes(out, raw_input, warn=None):
                                  " ", obs, count=1, flags=re.IGNORECASE)
                 kept["observable"] = re.sub(r"\s+", " ", obs).strip(" ,;:") or residual
             rebuilt.append(kept)
-    if restored:
+    # AND A LINE NO ROW CARRIES AT ALL IS STILL HER LINE. The lift above
+    # mends a line filed under the wrong row; a line the interpretation
+    # dropped outright reached no view, and the cast answered the silence --
+    # chat 167 turn 4631 (2026-10-10): the Director's prose stopped after the
+    # player's first sentence, her two quoted lines were "uncovered", and the
+    # coverage check, rightly unable to grade paraphrase, repaired nothing.
+    # A quoted span is not paraphrase: it is the player's words, so each one
+    # no row carries stands as her line after her last row, in the order she
+    # wrote them -- from the primary input's own rows when they say whose
+    # they are, addressed to whoever she last attended to (never a room).
+    rows_now = [r for r in rebuilt if isinstance(r, dict)]
+    spoken = collections.Counter(
+        word for r in rows_now if carries_speech(r)
+        for word in _line_words(r.get("event")))
+    dropped = [sp for sp in spans if sp.casefold() not in said
+               and _carried_share(sp, spoken) < QUOTED_LINE_CARRIED]
+    own = [r for r in rows_now
+           if ":primary:" in str(r.get("source_event_id") or "")] or rows_now
+    appended = []
+    if dropped and own:
+        anchor = own[-1]
+        heard = next((r for r in reversed(own)
+                      if "positions" not in (r.get("categories") or [])), None)
+        chrono = max([int(r.get("chrono_id") or 0) for r in rows_now] + [0])
+        for sp in dropped:
+            chrono += 1
+            line = {k: v for k, v in anchor.items()
+                    if k not in ("event", "act", "observable", "categories",
+                                 "category", "targets", "item_id", "chrono_id")}
+            line.update({
+                "chrono_id": chrono, "item_id": next_item, "event": sp,
+                "act": "", "observable": "speaks", "categories": ["speech"],
+                "category": "speech", "volume": "normal",
+                "targets": list((heard or {}).get("targets") or []),
+            })
+            next_item += 1
+            rebuilt.append(line)
+            said.add(sp.casefold())
+            appended.append(sp)
+    if restored or appended:
         out["ledgers"] = rebuilt
-        if callable(warn):
+        if callable(warn) and restored:
             warn("player speech restored: %d quoted line(s) the ledger had "
                  "filed as action now stand as speech rows: %s"
                  % (len(restored), "; ".join(f'"{r}"' for r in restored)))
+        if callable(warn) and appended:
+            warn("player speech restored: %d quoted line(s) no row carried "
+                 "now stand as her lines after her last row: %s"
+                 % (len(appended), "; ".join(f'"{r}"' for r in appended)))
     return out
 
 
