@@ -568,10 +568,16 @@ def director_establish(ctx, nonce):
     # rest reached the commit's orphan pass with nothing between -- so the
     # opening's own merge, and everything composed from it, read a thing as
     # nowhere that the commit then stood in the player's room (review
-    # 2026-09-07 B15). The opening has no scene before it, so its own diff is
-    # the whole world the placement can read.
+    # 2026-09-07 B15). It reads the ground the opening stands on: a launch
+    # lays the plan's rooms, and the charter's bodies in them, BEFORE the
+    # first beat, so the stored scene is the world before this diff -- empty
+    # only for a story with no plan, where it is the empty scene. Read as an
+    # empty world, every planned room the opening lists as a stub was an
+    # island to the placement's own merge (chat 167 turn 4616), and a body the
+    # launch had placed was a mint with no room.
     _opening_room = _mint_fallback_room(out["state_diff"], player_name, None)
-    for _eid in place_unplaced_mints({}, out["state_diff"], _opening_room):
+    for _eid in place_unplaced_mints(get_scene(chat["id"], chat),
+                                     out["state_diff"], _opening_room):
         _note = (
             "%r was minted with no room, so the opening stood it where the "
             "opening is (%s). A thing in no room can be seen, reached and "

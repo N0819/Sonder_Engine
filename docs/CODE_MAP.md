@@ -14,7 +14,7 @@
 | `agents/character_tools.py` | 732 |  | `core.db` |
 | `agents/common.py` | 12538 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 6074 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 7546 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 7552 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3811 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -236,7 +236,7 @@
 | `world/spatial_light.py` | 848 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_light_field.py` | 1474 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 856 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2708 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2718 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 432 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_pack.py` | 422 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_lint` |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
@@ -345,14 +345,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4970 | 2543 lines |
-| `director_interpret()` | 1387 | 1043 lines |
-| `_reconcile_resolution()` | 2783 | 521 lines |
-| `_run_specialists()` | 3361 | 425 lines |
-| `director_establish()` | 378 | 205 lines |
-| `_reconcile_interpretation()` | 2457 | 172 lines |
-| `_ground_public_evidence()` | 3925 | 116 lines |
-| `_require_complete_entity_interiors()` | 3788 | 95 lines |
+| `director_resolve()` | 4976 | 2543 lines |
+| `director_interpret()` | 1393 | 1043 lines |
+| `_reconcile_resolution()` | 2789 | 521 lines |
+| `_run_specialists()` | 3367 | 425 lines |
+| `director_establish()` | 378 | 211 lines |
+| `_reconcile_interpretation()` | 2463 | 172 lines |
+| `_ground_public_evidence()` | 3931 | 116 lines |
+| `_require_complete_entity_interiors()` | 3794 | 95 lines |
 
 ### `agents/director_contact.py`
 
@@ -2932,12 +2932,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1618 | 833 lines |
+| `merge_scene_with_diff()` | 1618 | 843 lines |
 | `_expire_transient_entity_state()` | 627 | 116 lines |
 | `_merge_room()` | 190 | 112 lines |
 | `_shield_standing_bearings()` | 909 | 107 lines |
 | `_shield_minted_edges()` | 1170 | 95 lines |
-| `beat_movement_cuts()` | 2579 | 94 lines |
+| `beat_movement_cuts()` | 2589 | 94 lines |
 | `sync_scene_passages()` | 1432 | 90 lines |
 | `_mirror_symmetric_barriers()` | 1080 | 88 lines |
 

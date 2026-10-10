@@ -1714,6 +1714,16 @@ def merge_scene_with_diff(
     # preparation.  Scene merges are correctness boundaries, so pay the small
     # cost of a real copy here.
     merged = copy.deepcopy(scene)
+    # AND OF THE DIFF, for the same reason the other way round: a room or a
+    # thing new to this merge is stood into `merged` as the diff's own record,
+    # so every repair made to it below -- the orphan pass's exit, a name, a
+    # normalized barrier -- was made to the caller's diff too, and a merge run
+    # only to LOOK at a beat wrote its answer into the beat. Chat 167 turn
+    # 4616: the opening's placement preview, on an empty scene, gave fourteen
+    # planned stubs an exit to the inn through the shared lists, and the
+    # commit merged them onto the launched town -- the common room opened onto
+    # sixteen places, three of them galleries underground.
+    diff = copy.deepcopy(diff)
 
     merged["rooms"] = dict(merged.get("rooms") or {})
     merged["entities"] = dict(merged.get("entities") or {})
