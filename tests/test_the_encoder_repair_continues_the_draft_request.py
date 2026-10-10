@@ -101,6 +101,15 @@ class _Response:
     def iter_lines(self):
         return iter(self._lines)
 
+    def json(self):
+        # What a plain (unstreamed) post reads: the write beside a call, where
+        # the host has turned that on, which reports the prefix it wrote --
+        # the count the next call's marker waits on.
+        return {"model": GEMINI, "choices": [{"finish_reason": "length"}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 1,
+                          "prompt_tokens_details": {"cached_tokens": 9,
+                                                    "cache_write_tokens": 9}}}
+
     def close(self):
         pass
 
@@ -368,10 +377,13 @@ def _resolve(temp_db, monkeypatch, prov, model):
 
 
 def _by_kind(wire):
-    draft = [b for b in wire.bodies if not any(m["role"] == "assistant" for m in b["messages"])
+    """The draft calls and the repair calls on the wire; a cache write beside
+    the draft (unstreamed, `providers._write_prefix_beside`) is neither."""
+    calls = [b for b in wire.bodies if b.get("stream")]
+    draft = [b for b in calls if not any(m["role"] == "assistant" for m in b["messages"])
              and "granted_tools" in json.loads(_user_text(b["messages"][1]))
              and "jobs" not in json.loads(_user_text(b["messages"][1]))]
-    repairs = [b for b in wire.bodies if b not in draft
+    repairs = [b for b in calls if b not in draft
                and (any(m["role"] == "assistant" for m in b["messages"])
                     or "jobs" in json.loads(_user_text(b["messages"][1])))]
     return draft, repairs
@@ -400,6 +412,41 @@ def test_the_repair_continues_the_draft_request_byte_for_byte(temp_db, monkeypat
     assert sent["draft"][0]["ref"] == "e1" and "granted_tools" in sent
     # And the answer it got is applied as before.
     assert [row["chrono_id"] for row in out["ledgers"]] == [1, 2]
+    assert out["orchestration"]["prose_contract"]["repair"]["applied"]["applied"] == ["j1"]
+
+
+def test_where_the_host_writes_beside_the_repair_continues_the_written_request(
+        temp_db, monkeypatch):
+    """Where the host has the cache written beside the call
+    (`prompt_cache_write_beside`, pinned in
+    tests/test_a_cache_write_rides_beside_the_call_only_where_the_host_asks.py),
+    the draft goes plain and the breakpoint rides on the write beside it --
+    and the repair continues THAT request byte for byte, which is what the
+    cache holds."""
+    temp_db.set_setting("prompt_cache_write_beside", "openrouter")
+    # In line, so the wire holds the write in order; the engine runs it on a
+    # thread of its own.
+    monkeypatch.setattr(providers, "_run_beside", lambda fn: fn())
+    monkeypatch.setattr(providers, "_PREFIX_WRITTEN", {})
+    monkeypatch.setattr(providers, "_BESIDE_REFUSED", set())
+    out, wire = _resolve(temp_db, monkeypatch, OPENROUTER, GEMINI)
+    (draft,), (fix,) = _by_kind(wire)
+    (write,) = [b for b in wire.bodies if not b.get("stream")]
+    # The write: the draft's request, its payload the breakpoint with one
+    # line after it, cut short...
+    assert len(write["messages"]) == 3 and _is_marked(write["messages"][1])
+    assert write["messages"][2] == {"role": "user",
+                                    "content": prose_contract_text("encoder_cue", "en")}
+    assert write["max_tokens"] == providers.CACHE_WRITE_BESIDE_TOKENS
+    # ...while the draft itself goes plain, its messages otherwise the same.
+    assert draft["messages"][1] == {"role": "user",
+                                    "content": write["messages"][1]["content"][0]["text"]}
+    assert draft["messages"][0] == write["messages"][0]
+    assert draft["messages"][2:] == write["messages"][2:]
+    # The repair: the written request byte for byte, the draft's answer, the turn.
+    assert len(fix["messages"]) == 5
+    assert json.dumps(fix["messages"][:3]) == json.dumps(write["messages"][:3])
+    assert fix["messages"][3]["role"] == "assistant"
     assert out["orchestration"]["prose_contract"]["repair"]["applied"]["applied"] == ["j1"]
 
 

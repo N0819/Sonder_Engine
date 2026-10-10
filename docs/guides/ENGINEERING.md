@@ -721,13 +721,26 @@ the turn, a worse outcome than not caching. The host reaches all of it through a
 per-provider checkbox in ⚙ API rather than by hand-editing a settings row, and
 the UI reads its state from the predicate rather than re-deriving it.
 
-One caller marks its USER message. The encoder's draft call is a breakpoint
-with a cue after it, and its repair continues that request byte for byte, so
-the repair reads the draft's whole sheet and payload from cache (Gemini through
-OpenRouter, measured 2026-10-08: write billed $0.1167/M, read $0.075/M,
-uncached $0.75/M). A cache here is a cost saving, never a speed one: a write
-delays the first token by 0.6-1.0 s. The rebuild and fallback rungs of
-complete_validated_json never continue anything.
+One caller marks its USER message. The encoder's draft call asks for a
+breakpoint with a cue after it, and its repair continues the request that wrote
+the cache byte for byte -- the draft's own, or the write's where the host has
+it made beside the call (below) -- so the repair reads the draft's whole sheet
+and payload from cache (Gemini through OpenRouter, measured 2026-10-08: write
+billed $0.1167/M, read $0.075/M, uncached $0.75/M). A cache here is a cost
+saving, never a speed one: a write costs the call that makes it its first
+token, 4.56 s against 2.11 s unmarked on the encoder's 30-50k-token drafts (n=4
+each, 2026-10-10), about 2.45 s a draft and 5 s a beat. So the host may have
+the write made beside the call, per provider, from a second box next to the
+cache box (`write beside`, the `prompt_cache_write_beside` setting, offered
+where it was measured: Gemini through OpenRouter): the first call on a prefix
+goes plain and a copy of it, cut to sixteen output tokens, writes the cache on
+its own thread (`writes_cache_beside`); the draft starts in 1.80 s (n=10), and
+a later call marks the prefix, and reads it, only once the write has landed. It
+is off by default, because it is a trade: the draft is then billed its whole
+prompt at the input price, about $0.026 more a draft at a 35k-token draft,
+about $0.05 a beat, and 3 of 11 writes beside wrote nothing in the replays (0
+of 10 inside), each leaving its stage to pay full price. The rebuild and
+fallback rungs of complete_validated_json never continue anything.
 
 ---
 

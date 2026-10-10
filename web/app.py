@@ -3162,6 +3162,11 @@ def _provider_public(pid):
     d["prompt_cache"] = providers.prompt_cache_enabled_for(row)
     d["prompt_cache_default"] = providers.prompt_cache_supported_for(row)
     d["prompt_cache_locked"] = not providers.PROMPT_CACHE_ENABLED
+    # Where a cache write goes, by the same rule: offered only on the kinds it
+    # was measured on, off until the host turns it on, and reported off while
+    # caching itself is off for the provider.
+    d["prompt_cache_write_beside"] = providers.cache_write_beside_enabled_for(row)
+    d["prompt_cache_write_beside_offered"] = providers.cache_write_beside_offered_for(row)
     return d
 
 @app.post("/api/providers")
@@ -3188,7 +3193,8 @@ def put_provider(pid: int, body: dict = Body(...)):
     return _provider_public(pid)
 
 def _cache_list(key):
-    """`prompt_cache_allow`/`_deny` as an ordered list of casefolded tokens."""
+    """`prompt_cache_allow`/`_deny`/`_write_beside` as an ordered list of
+    casefolded tokens."""
     raw = get_setting(key) or ""
     seen, out = set(), []
     for part in str(raw).split(","):
@@ -3200,7 +3206,11 @@ def _cache_list(key):
 
 @app.put("/api/providers/{pid}/prompt_cache")
 def put_provider_prompt_cache(pid: int, body: dict = Body(...)):
-    """Turn prompt caching on or off for one provider.
+    """Turn prompt caching on or off for one provider, and -- with
+    `write_beside` -- whether its cache writes go beside the call or inside
+    it (`providers.cache_write_beside_enabled_for`). A body carrying only
+    `write_beside` changes nothing else; one without it, the caching switch
+    alone, exactly as before.
 
     The stored form is two comma-separated settings shared by every provider,
     so a per-provider switch has to edit them without disturbing anyone else.
@@ -3215,11 +3225,15 @@ def put_provider_prompt_cache(pid: int, body: dict = Body(...)):
     row = q("SELECT * FROM providers WHERE id=?", (pid,), one=True)
     if not row:
         raise HTTPException(404, "Provider not found")
-    enabled = bool(body.get("enabled"))
     name, kind = providers.cache_tokens(row)
     token = name or kind
     if not token:
         raise HTTPException(400, "Provider has neither a name nor a kind")
+    if "write_beside" in body:
+        _set_cache_write_beside(pid, bool(body.get("write_beside")), token, kind)
+        if "enabled" not in body:
+            return _provider_public(pid)
+    enabled = bool(body.get("enabled"))
 
     deny, allow = _cache_list("prompt_cache_deny"), _cache_list("prompt_cache_allow")
     if enabled:
@@ -3242,6 +3256,32 @@ def put_provider_prompt_cache(pid: int, body: dict = Body(...)):
     set_setting("prompt_cache_deny", ",".join(deny))
     set_setting("prompt_cache_allow", ",".join(allow))
     return _provider_public(pid)
+
+def _set_cache_write_beside(pid, on, token, kind):
+    """Name this provider in `prompt_cache_write_beside`, or stop naming it.
+    The list opts IN, so the care runs the other way from the deny list's: a
+    KIND-level entry covers every connection of that kind, and turning one of
+    them off by dropping it would turn off the others too. It is expanded into
+    per-connection names for the rest instead, as a kind-level deny is when
+    one connection is enabled. A connection that keeps its default name, its
+    kind, therefore names every connection of that kind: ticking it turns
+    writing beside on for all of them, and while it stays ticked no sibling
+    can be unticked, because the expansion writes its name -- the kind --
+    back. Unticking it, or renaming it, frees them. The cache box's deny list
+    has had the same name-equals-kind gap."""
+    beside = _cache_list("prompt_cache_write_beside")
+    if on:
+        if token not in beside:
+            beside.append(token)
+    else:
+        if kind and kind in beside:
+            others = [providers.cache_tokens(r)[0]
+                      for r in q("SELECT * FROM providers WHERE id<>?", (pid,))
+                      if providers.cache_tokens(r)[1] == kind]
+            beside = [t for t in beside if t != kind]
+            beside += [t for t in others if t and t != token and t not in beside]
+        beside = [t for t in beside if t != token]
+    set_setting("prompt_cache_write_beside", ",".join(beside))
 
 @app.delete("/api/providers/{pid}")
 def del_provider(pid: int):

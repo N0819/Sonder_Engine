@@ -11,7 +11,7 @@ shards) never reached it, in the replay or in a live turn's usage.
 
 from __future__ import annotations
 
-import requests
+from types import SimpleNamespace
 
 from llm import decisions, providers
 
@@ -33,7 +33,9 @@ def test_every_shard_of_a_large_battery_reaches_the_callers_ledger(monkeypatch):
         posted.append(len(json["questions"]))
         return Response(json["questions"])
 
-    monkeypatch.setattr(requests, "post", post)
+    # The decision seam posts on the thread's kept-alive session
+    # (`decisions._http`); the stub stands in for it.
+    monkeypatch.setattr(decisions, "_http", lambda: SimpleNamespace(post=post))
     monkeypatch.setattr(decisions, "_provider",
                         lambda: {"api_key": "k", "kind": "openrouter", "base_url": "https://example.invalid/api/v1"})
     size = decisions.MAX_QUESTIONS_PER_REQUEST * 2 + 5

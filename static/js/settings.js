@@ -2190,6 +2190,41 @@ function renderFullApiSettings(b) {
           type: "checkbox", ...(p.prompt_cache ? { checked: "" } : {}),
           ...(p.prompt_cache_locked ? { disabled: "" } : {}),
         });
+        // WHERE A CACHE WRITE GOES, per connection, offered only where it was
+        // measured to cost the call its first token. Off by default: the call
+        // writes its own cache, the cheaper way. Ticked, the first call on a
+        // prompt goes without the marker and a short request of its own
+        // writes the cache beside it -- the call starts sooner and is billed
+        // its prompt in full. Disabled while caching itself is off, since
+        // there is then no write to move.
+        let besideBox = null;
+        let besideLabel = null;
+        if (p.prompt_cache_write_beside_offered) {
+          besideBox = el("input", {
+            type: "checkbox", ...(p.prompt_cache_write_beside ? { checked: "" } : {}),
+            ...((p.prompt_cache_locked || !p.prompt_cache) ? { disabled: "" } : {}),
+          });
+          besideBox.onchange = async () => {
+            const want = besideBox.checked;
+            try {
+              const r = await api("PUT", "/api/providers/" + p.id + "/prompt_cache", { write_beside: want });
+              // The server's answer again: caching off reports this off too.
+              besideBox.checked = !!r.prompt_cache_write_beside;
+              p.prompt_cache_write_beside = !!r.prompt_cache_write_beside;
+              await boot();
+              toast(r.prompt_cache_write_beside
+                ? `Cache writes go beside the call for ${p.name || p.kind}: sooner, and billed in full.`
+                : `Cache writes stay inside the call for ${p.name || p.kind}.`, "ok");
+            } catch (e) {
+              besideBox.checked = !want;
+              toast(`Could not change where cache writes go: ${e.message}`, "err");
+            }
+          };
+          besideLabel = el("label", {
+            class: "small",
+            title: "Write the cache beside the call: a call that asks for a cache goes without the marker, and a short request of its own writes the cache beside it. The call starts sooner (the encoder's draft by about 2.5 s, measured on Gemini 3.8 Flash) and is billed its whole prompt at the full input price, where writing inside bills that prompt at the cheaper write price. It moves calls to Gemini models only: a call to any other model on this connection goes as it would unticked. Unticked, the call writes its own cache and waits for the write.",
+          }, besideBox, " write beside");
+        }
         cacheBox.onchange = async () => {
           const want = cacheBox.checked;
           try {
@@ -2199,6 +2234,11 @@ function renderFullApiSettings(b) {
             // rather than what happened would show a state that is not real.
             cacheBox.checked = !!r.prompt_cache;
             p.prompt_cache = !!r.prompt_cache;
+            if (besideBox) {
+              besideBox.disabled = !r.prompt_cache || !!r.prompt_cache_locked;
+              besideBox.checked = !!r.prompt_cache_write_beside;
+              p.prompt_cache_write_beside = !!r.prompt_cache_write_beside;
+            }
             await boot();
             toast(`Prompt caching ${(r.prompt_cache ? "on" : "off")
               + " for " + (p.name || p.kind) + "."}`, "ok");
@@ -2216,6 +2256,7 @@ function renderFullApiSettings(b) {
               : "Off by default — this provider is not known to forward a cache breakpoint, and one that rejects it fails the turn instead of just not caching. Tick to opt it in."),
         }, cacheBox, " cache");
         provBox.append(el("div", { class: "card row" }, nm, kd, bu, ak, cacheLabel,
+          ...(besideLabel ? [besideLabel] : []),
           el("button", { onclick: async () => { await api("PUT", "/api/providers/" + p.id, { name: nm.value, kind: kd.value, base_url: bu.value, api_key: ak.value }); delete S.models[p.id]; await boot(); toast("Provider saved.", "ok"); } }, "Save"),
           el("button", { onclick: async () => { if (!await confirmModal("Delete provider?", { danger: true, confirmLabel: "Delete" })) return; await api("DELETE", "/api/providers/" + p.id); await boot(); closeModal(); $("#b-api").click(); } }, "✕"),
           el("button", { title: "Fetch models", onclick: async e => { e.target.textContent = "…"; await fetchModels(p.id); e.target.textContent = "✓"; } }, "↻ models")));
@@ -2229,6 +2270,14 @@ function renderFullApiSettings(b) {
       + "the marker on to it: the box is ticked by default wherever that is known to "
       + "hold, and any other connection can be opted in by ticking it. Untick it if you "
       + "suspect caching is costing you latency rather than saving it."));
+    if ((S.boot.providers || []).some(p => p.prompt_cache_write_beside_offered)) {
+      b.append(el("div", { class: "small", style: "margin:2px 0 8px" },
+        el("b", {}, "write beside"), " decides where the cache is written for a call that "
+        + "asks to be continued from cache. Off, the call writes its own cache and waits "
+        + "for the write before it starts answering: the cheaper way. On, the call goes "
+        + "without the marker and a short request of its own writes the cache beside it: "
+        + "the call starts sooner and is billed its whole prompt in full."));
+    }
     const nk = el("select", {}, Object.keys(S.boot.provider_presets).map(k => el("option", { value: k }, k)));
     b.append(el("div", { class: "row", style: "margin:6px 0" }, nk,
       el("button", { onclick: async () => { await api("POST", "/api/providers", { kind: nk.value }); await boot(); closeModal(); $("#b-api").click(); } }, "+ Provider")));

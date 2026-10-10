@@ -2294,7 +2294,13 @@ def _call_encoder(ctx, channels, payload, parts):
     last message (32,706 prompt tokens, 0 cached, 2026-10-08) -- and
     `exchange` is that request as sent with the answer it got, for the
     repair to continue (`director_repair.continuation`). Elsewhere the
-    request is exactly what it always was, and `exchange` is None.
+    request is exactly what it always was, and `exchange` is None. Where the
+    host has the cache written beside the call (`providers.writes_cache_beside`,
+    off by default), the transport sends the first request on a prefix plain
+    and its breakpoint on a short request beside it, and marks a later request
+    on that prefix only once that write has landed; `exchange` holds the same
+    messages either way, so the repair continues whichever request wrote the
+    cache.
 
     `attempt` is which attempt of the validated ladder the answer came from
     (`llm_quality.answered_by`: "first", "rebuild", "fresh", ...), or "" when
@@ -2843,46 +2849,75 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     # beat. A place the Director invented is reserved, a planned room entered
     # is developed; an unforeseen one the encoder names `new:` still gets the
     # serial run below.
+    t_rooms = time.time()
+    room_done = {}
     if rooms_elsewhere and (reserved or develop):
         pool = ThreadPoolExecutor(max_workers=1)
+
+        def _rooms_then_mark(*args):
+            # When the author itself finished, for `seconds` and `waited`:
+            # collected after the repair, the future's own wait is not it.
+            try:
+                return author_rooms(*args)
+            finally:
+                room_done["at"] = time.time()
+
         room_future = pool.submit(_isolated(contextvars.copy_context()),
-                                  author_rooms, ctx, sc, prose, model_payload,
+                                  _rooms_then_mark, ctx, sc, prose, model_payload,
                                   view, extras, reserved, develop, room_record,
                                   prepared)
         room_record["ran"] = "parallel"
     encoder_channels = ([c for c in channels if c not in ROOM_AUTHOR_CHANNELS]
                         if rooms_elsewhere else channels)
-    # The repair pass checks the draft sentence by sentence (off by default).
+    # The repair pass checks the draft sentence by sentence (on unless the
+    # host turns it off: `director_repair.enabled`).
     from . import director_repair
     units = director_repair.sentences(prose) if director_repair.enabled() else None
-    t_rooms = time.time()
+    # THE REPAIR DOES NOT WAIT FOR THE ROOM AUTHOR. It reads the draft, the
+    # sentences and the places the encoder may place into -- all known before
+    # the author answers -- and nothing the author writes; the binding of new
+    # places below is what needs both, and it runs after both. Waiting first
+    # put the author's overhang on the beat ahead of the repair: on the
+    # Brackwater run (chat 166) the author outlasted the encoder's draft in 10
+    # of the 12 stages it ran beside it (median overhang 17.5 s across the 12,
+    # 25.2 s across those 10), and starting the repair the moment the draft
+    # was in would have saved a median 6.3 s (up to 46 s, about 104 s in all)
+    # on those 10 -- an upper bound, since the repair's own decision calls
+    # come before its first encoder call. Chats 165 and 160 had 4 and 6
+    # stages where a repair waited on an author that outlasted its draft:
+    # medians 8.4 s and 3.2 s.
     try:
         answer, encoder_channels, encoding, exchange = encode(
             ctx, stage, sc, prose, model_payload, view, extras,
             encoder_channels, facts, rooms_elsewhere=rooms_elsewhere,
             new_places=new_places if rooms_elsewhere else None,
             parts=jev.get("parts"))
+        events = entity_keys_name_held_things(list(answer.get("events") or []), sc,
+                                              warn=ctx.add_warning)
+        repair_record = None
+        if units is not None:
+            events, repair_record = director_repair.check_and_repair(
+                ctx, stage, sc, units, events, encoder_channels,
+                encoding.get("parts") or [], model_payload, view, extras, facts=facts,
+                rooms_elsewhere=rooms_elsewhere,
+                new_places=new_places if rooms_elsewhere else None, held=exchange)
+            # A repaired write copies ids out of the same payload, and can slip
+            # one the same way (`entity_keys_name_held_things`).
+            events = entity_keys_name_held_things(events, sc, warn=ctx.add_warning)
     finally:
         if room_future is not None:
+            ready = time.time()
             try:
                 rooms_answer = room_future.result()
             except Exception as exc:
                 room_record["failed"] = str(exc)
                 ctx.add_warning(f"{stage}: room author failed (fail-open): {exc}")
-            room_record["seconds"] = round(time.time() - t_rooms, 3)
+            done = room_done.get("at") or time.time()
+            room_record["seconds"] = round(done - t_rooms, 3)
+            # What the stage waited on the author once its own encoding was
+            # done: the author's seconds that were the beat's.
+            room_record["waited"] = round(max(0.0, done - ready), 3)
             pool.shutdown(wait=True)
-    events = entity_keys_name_held_things(list(answer.get("events") or []), sc,
-                                          warn=ctx.add_warning)
-    repair_record = None
-    if units is not None:
-        events, repair_record = director_repair.check_and_repair(
-            ctx, stage, sc, units, events, encoder_channels,
-            encoding.get("parts") or [], model_payload, view, extras, facts=facts,
-            rooms_elsewhere=rooms_elsewhere,
-            new_places=new_places if rooms_elsewhere else None, held=exchange)
-        # A repaired write copies ids out of the same payload, and can slip
-        # one the same way (`entity_keys_name_held_things`).
-        events = entity_keys_name_held_things(events, sc, warn=ctx.add_warning)
     if rooms_elsewhere:
         events = doorway_edits_only(events, sc, set(new_places), warn=ctx.add_warning)
         events = unheld_places_are_new(events, sc, set(new_places), warn=ctx.add_warning)

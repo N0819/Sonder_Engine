@@ -126,12 +126,26 @@ def _url(prov) -> str:
     return root + DECISIONS_PATH
 
 
+def _http():
+    """The session a decision is posted on: the calling thread's own, kept
+    alive (`providers._session`), as every other provider call in the engine
+    is, where each went out on a fresh connection (`requests.post`). A PROBE
+    RESULT, not a measured beat: back to back on one thread against
+    OpenRouter's decisions endpoint (2026-10-10) a request took a median
+    0.295 s fresh (n=12) against 0.248 s kept alive (n=6), about 0.05 s each;
+    in the replayed beats the decision calls took the same before and after
+    (a median 0.317 s, n=122, against 0.319 s, n=24). A battery split into
+    shards (`decide`'s pool) and the room author's pool ask on threads made
+    for the one call, whose session is never used again."""
+    from llm.providers import _session
+    return _session()
+
+
 def _post(prov, model, state, questions):
-    import requests
     from llm.providers import _headers, record_llm_call
 
     t0 = time.time()
-    resp = requests.post(
+    resp = _http().post(
         _url(prov),
         headers=_headers(prov) if prov else {"Content-Type": "application/json"},
         json={"model": model, "state": state, "questions": questions},

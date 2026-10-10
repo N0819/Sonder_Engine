@@ -1794,14 +1794,36 @@ Open:
   rate, writes per channel): the repair now reads the draft call's whole
   sheet, payload and answer. Three probe samples matched 2 of 3 verdicts,
   and the third recovered an event the original had declined.
-- Turn-latency measurement: draft-call writes cost +0.6-1.0 s TTFT, from
-  single samples.
-- Inert while the owner's `prompt_cache_deny` lists openrouter.
+- Turn latency, MEASURED 2026-10-10 (§1.187a): a draft that writes its own
+  prefix starts 2.45 s later (4.56 s against 2.11 s, n=4 each), twice a
+  beat. Writing the cache beside the draft is built and OFF unless the host
+  turns it on for a provider (`prompt_cache_write_beside`, the `write beside`
+  box in the API settings): the draft then starts in 1.80 s (n=10) and is
+  billed its whole prompt at the input price, about $0.026 a draft at
+  Brackwater's median 35k-token draft, about $0.05 a beat; 3 of 11 writes
+  beside wrote nothing (0 of 10 inside), and the stage where two did cost
+  more than uncached ($0.141 against $0.077). Whether to turn it on is the
+  owner's.
+- Live since the owner took openrouter off `prompt_cache_deny` (2026-10-09).
 - Alternative B (mark every encoder call, repairs on their own sheet plus a
   cue) is -84% at today's billing but +6% at the documented price; it is the
   owner's choice.
 - The same breakpoint plus cue for other Gemini-routed roles is untested
   below Gemini's minimum cache size.
+
+<a id="unbuilt-1-187a"></a>
+
+### 1.187a Turn speed: where a beat's seconds go, and what is not built (2026-10-10)
+
+Measured read-only on stored step times and call timelines (`variants.created`, `llm_capture`), and on replays of chat 166 on a copy of the play database through OpenRouter. Brackwater (chat 166, 23 single-run beats, before the 2026-10-08 fixes): median 178 s; on the critical path, character 55.6 s a beat, narrator 32.6, prose Director 31.9, encoder 30.1, room author 6.1, engine time (code, decision model, embeddings) 27.8. Sarah Moon (chat 161, the owner's play, 7 beats): median 81 s. Replayed on today's code: beat 24 in 60 s, beat 26 in 142 s; the narrator now 2-3 s and the character 6-8 s a call. Built 2026-10-10 (Design.md rows): the encoder's repair beside the room author; decisions on a kept-alive connection (a probe result: no change was measured in the replayed beats); and writing the encoder's cache beside its draft, OFF unless the host turns it on (§1.187). Open:
+
+1. **The decision model is a chain.** 20-42 requests a beat at about 0.3 s, nearly all in a row: about ten around each character call (memory routing and recall before it, the read-back and appraisal after), six to eight around each Director stage's repair pass. Batching independent questions into one request, or overlapping the requests that do not read each other, is unbuilt; the dependency map between them is not written down.
+2. **A cut and re-asked call is the worst beat.** On the stored runs 15.6% of character calls (chat 166) and 13.3% (chat 160) were cut and asked again, a median 69 and 60 s each; replayed, one character call of five lost 12.6 s to an attempt that ended with no log line, and its retry wrote 6,332 tokens for 31 s. A route that holds a JSON-mode answer back until it is whole re-learns that after every restart (`_NO_JSON_OBJECT` is process-local; the grammar's suspension is persisted for 24 h): two 30 s holds a restart on each such route (OpenRouter `z-ai/glm-5.3` and `deepseek/deepseek-v4.1-flash` on 2026-10-07). Persisting the hold as a suspension, or keeping a held stream open beside its retry instead of cutting it, is unbuilt.
+3. **The prose Director's reasoning does not stream on its current host.** Through OpenRouter on Together, `z-ai/glm-5.2` at `high` sent its first delta only when its thinking was done (first token 0.6-13.3 s, then the rest in 0.2-3.5 s, 12 calls), so the 30 s first-token clock (`PROVIDER_FIRST_TOKEN_SECONDS`, the owner's) is the ceiling on its thinking: a longer think is cut and asked again from nothing (chat 166's stored run lost 58.6 s to one cut Director call; what cut it was not recorded). The clock is the owner's number.
+4. **Order for the cache, not built.** The GLM roles read only their card's head across beats (Director 704-5,376 tokens, narrator 2,112, character 863), because each payload or card changes early: the character card's gated sections sit before its identity line and its payload opens with the volatile half of `self`; the Director's opens with `event_inputs`; the narrator's sheet interleaves gated sections with static ones. Moving the stable parts first changes no word a mind is told but changes the order it reads them in, and the measured prefill gain is small (the room author's cached steps start in 0.4-0.8 s against 0.8-1.4 s for its first); not worth a salience risk without an A/B.
+5. **The room author is still the beat's when it outlasts the encoder.** Its repair overlap is built; its own steps are sequential tool rounds (up to `MAX_ROOM_STEPS` = 8, 15.7 s on the replayed beat 22).
+6. **A write beside that writes nothing** (with writing beside on: 3 of 11 replayed, against 0 of 10 writes inside the call). Why is not known -- the write's upstream is not recorded, and the 3 took 2.0-2.5 s where landed writes took 3.1-5.0 s. After one, the next call on the prefix writes it beside itself again; on beat 24's resolve that write wrote nothing too and both repairs went plain ($0.141 for the stage). Writing inside on the next call instead (the rule this was first built with) costs its first token about 1-2 s (3.1 and 3.8 s measured, against about 2 s) and would have saved about $0.07 there; the choice belongs with the owner's on writing beside at all.
+7. **A connection that keeps its default name names every connection of its kind.** `+ Provider` names a new connection after its kind, and a name that is the kind is the kind-level token in the cache settings. Ticking `write beside` on such a connection turns writing beside on for every connection of that kind, and while it stays ticked no sibling can be unticked: the expansion that keeps the others as they were (`_set_cache_write_beside`) writes its name, the kind, back. Unticking or renaming it frees them. The cache box's deny list has had the same gap since before 2026-10-10: while such a connection's caching is off, a sibling's cannot be turned back on. Refusing the tick, or asking the host to rename the connection, while another of its kind exists is unbuilt; the owner's database has one OpenRouter connection, so neither has bitten.
 
 <a id="unbuilt-1-188"></a>
 

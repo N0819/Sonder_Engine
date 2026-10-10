@@ -56,6 +56,41 @@ def test_cache_write_is_reported_separately():
     assert counts["cache_read"] == 0
 
 
+def test_an_aggregators_cache_write_is_read_where_it_reports_it():
+    """OpenRouter reports a Gemini cache write under `prompt_tokens_details`,
+    beside the read count -- and on the writing call the read count holds
+    the written tokens too (probed 2026-10-10: cached 14,926, written 14,926;
+    a later call on the prefix: cached 14,924, written 0). Read from one field
+    only, every write looked like a read and every log line said
+    `cache_write_tokens=0`."""
+    writing = providers._normalize_usage({
+        "prompt_tokens": 14931, "completion_tokens": 12,
+        "prompt_tokens_details": {"cached_tokens": 14926, "cache_write_tokens": 14926}})
+    assert writing["cache_write"] == 14926 and writing["cache_read"] == 14926
+    reading = providers._normalize_usage({
+        "prompt_tokens": 14934, "completion_tokens": 30,
+        "prompt_tokens_details": {"cached_tokens": 14924, "cache_write_tokens": 0}})
+    assert reading["cache_write"] == 0 and reading["cache_read"] == 14924
+
+
+def test_the_ledger_says_when_a_call_wrote_the_cache(monkeypatch):
+    from llm.providers import call_ledger_sink
+    seen = []
+    token = call_ledger_sink.set(seen.append)
+    try:
+        providers._log_usage("encoder", "google/gemini-3.8-flash", 0.0, {
+            "prompt_tokens": 14931, "completion_tokens": 12,
+            "prompt_tokens_details": {"cached_tokens": 14926,
+                                      "cache_write_tokens": 14926}})
+        providers._log_usage("encoder", "google/gemini-3.8-flash", 0.0, {
+            "prompt_tokens": 14934, "completion_tokens": 30,
+            "prompt_tokens_details": {"cached_tokens": 14924}})
+    finally:
+        call_ledger_sink.reset(token)
+    assert seen[0]["written"] == 14926
+    assert "written" not in seen[1], "a call that wrote nothing grows no key"
+
+
 def test_aggregator_mixed_dialect():
     """An aggregator fronting Anthropic may pass either dialect through, so
     both are always checked."""

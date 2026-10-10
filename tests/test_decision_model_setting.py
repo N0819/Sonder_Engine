@@ -10,6 +10,8 @@ effort or a response format, so neither row offers one.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import re
 from pathlib import Path
 
@@ -89,13 +91,14 @@ class _Answer:
 
 
 def _capture_posts(monkeypatch):
-    import requests
     sent = []
 
     def post(url, headers=None, json=None, timeout=None):
         sent.append({"url": url, "headers": dict(headers or {})})
         return _Answer()
-    monkeypatch.setattr(requests, "post", post)
+    # The decision seam posts on the thread's kept-alive session
+    # (`decisions._http`); the stub stands in for it.
+    monkeypatch.setattr(decisions, "_http", lambda: SimpleNamespace(post=post))
     return sent
 
 
@@ -130,12 +133,13 @@ def test_a_one_alternative_choice_is_answered_here_and_never_sent(temp_db, monke
     1.13 answers it with certainty. Answered locally in Jev's own shape."""
     temp_db.set_setting("jev_url", SELF_HOSTED)
     sent = []
-    import requests
 
     def post(url, headers=None, json=None, timeout=None):
         sent.append(json["questions"])
         return _Answer()
-    monkeypatch.setattr(requests, "post", post)
+    # The decision seam posts on the thread's kept-alive session
+    # (`decisions._http`); the stub stands in for it.
+    monkeypatch.setattr(decisions, "_http", lambda: SimpleNamespace(post=post))
     only = {"type": "choice", "instructions": "?", "criteria": {"situational": "none of them"}}
     got = decisions.decide("state", {"serves": only, "q": {"type": "noul", "instructions": "?"}})
     assert set(sent[0]) == {"q"}

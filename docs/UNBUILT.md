@@ -199,6 +199,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.183 — A story with no scenario opens on a line nobody can answer (2026-10-07)](UNBUILT_PIPELINE.md#unbuilt-1-183)
 - [§1.185 — A quiet beat still weighs as much as a loud one, and the card is not the lever (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-185)
 - [§1.187 — The encoder repair's continuation: what is not measured (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-187)
+- [§1.187a — Turn speed: where a beat's seconds go, and what is not built (2026-10-10)](UNBUILT_PIPELINE.md#unbuilt-1-187a)
 - [§1.188 — Encoder payload scope: residuals (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-188)
 - [§1.195 — Two defects found replaying a follow (2026-10-09)](UNBUILT_PIPELINE.md#unbuilt-1-195)
 - [§1.196 — One fresh attempt before a malformed beat aborts: what it leaves (2026-10-09)](UNBUILT_PIPELINE.md#unbuilt-1-196)

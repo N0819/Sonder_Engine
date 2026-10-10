@@ -197,6 +197,49 @@ def test_the_room_author_never_streams(temp_db, monkeypatch):
     assert observed["director_rooms"] is None
 
 
+def test_the_encoders_repair_runs_while_the_room_author_is_still_drafting(
+        temp_db, monkeypatch):
+    """The repair reads the encoder's draft, the beat's sentences and the
+    places the encoder may place into -- nothing the room author writes -- so
+    it starts the moment the draft is in, not when the author is done. On the
+    Brackwater run the author outlasted the draft in 10 of the 12 stages it
+    ran beside it (median overhang 17.5 s across the 12, 25.2 s across those
+    10); starting the repair beside it would have saved a median 6.3 s (up to
+    46 s, about 104 s in all) on those 10, an upper bound.
+
+    Here the author is still drafting until the repair has begun (it gives
+    up after a few seconds, so the old order fails rather than hangs), and
+    the stage still binds the author's room: the wait moved, the join did
+    not."""
+    import threading
+
+    from agents import director_repair
+
+    repair_began = threading.Event()
+    order = []
+
+    def still_drafting(payload):
+        order.append(("author done", repair_began.wait(timeout=3)))
+        return _DRAW_THE_GALLERY
+
+    calls = []
+    ctx = _planned_room_beat(temp_db, monkeypatch, still_drafting, calls)
+
+    def repair(ctx_, stage, sc, units, events, *args, **kwargs):
+        order.append("repair began")
+        repair_began.set()
+        return events, {"sentences": len(units)}
+
+    monkeypatch.setattr(director_repair, "enabled", lambda: True)
+    monkeypatch.setattr(director_repair, "check_and_repair", repair)
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert order == ["repair began", ("author done", True)]
+    assert "lamp_gallery" in out["state_diff"]["rooms"]
+    rooms = out["orchestration"]["prose_contract"]["room_author"]
+    assert rooms["ran"] == "parallel" and rooms["waited"] >= 0.0
+
+
 def test_the_stage_variant_carries_the_room_authors_call(temp_db, monkeypatch):
     """The ledger defect the per-call ledger first found (variant v26648):
     a worker does not inherit the submitting thread's contextvars, so a copy

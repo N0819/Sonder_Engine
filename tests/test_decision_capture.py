@@ -11,6 +11,8 @@ shard; and a capture that cannot be written never costs the decision.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import json
 import os
 
@@ -35,13 +37,14 @@ class _Answer:
 
 
 def _posts(monkeypatch):
-    import requests
     sent = []
 
     def post(url, headers=None, json=None, timeout=None):
         sent.append(json)
         return _Answer(json["questions"])
-    monkeypatch.setattr(requests, "post", post)
+    # The decision seam posts on the thread's kept-alive session
+    # (`decisions._http`); the stub stands in for it.
+    monkeypatch.setattr(decisions, "_http", lambda: SimpleNamespace(post=post))
     return sent
 
 

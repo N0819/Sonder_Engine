@@ -154,3 +154,97 @@ def test_unknown_provider_id_is_a_404(client):
                       json={"enabled": False}).status_code == 200
     r = client.put("/api/providers/9999/prompt_cache", json={"enabled": False})
     assert r.status_code == 404
+
+
+# ---- where a cache write goes: the host's trade, per connection ----
+
+GEMINI = "google/gemini-3.8-flash"
+
+
+def _beside(client, pid, on):
+    r = client.put(f"/api/providers/{pid}/prompt_cache", json={"write_beside": on})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_writing_beside_is_offered_where_it_was_measured_and_off_until_ticked(client):
+    """The trade -- about 2.45 s off each encoder draft's first token, billed
+    its prompt at the full input price (about $0.026 a draft at a 35k-token
+    draft) -- is the host's, so it ships off and is reached from the box
+    beside the provider's cache box, never by hand-editing a settings row.
+    Offered only on the kind it was measured on."""
+    router = _add(client, "openrouter")
+    nano = _add(client, "nanogpt")
+    assert router["prompt_cache_write_beside_offered"] is True
+    assert router["prompt_cache_write_beside"] is False
+    assert nano["prompt_cache_write_beside_offered"] is False
+    row = {"id": router["id"], "kind": "openrouter", "name": "openrouter"}
+    assert not providers.writes_cache_beside(row, GEMINI)
+
+    on = _beside(client, router["id"], True)
+    assert on["prompt_cache_write_beside"] is True
+    assert on["prompt_cache"] is True, "the caching switch is untouched"
+    assert providers.writes_cache_beside(row, GEMINI), "the request path agrees"
+
+    off = _beside(client, router["id"], False)
+    assert off["prompt_cache_write_beside"] is False
+    assert not providers.writes_cache_beside(row, GEMINI)
+
+
+def test_ticking_one_connection_leaves_its_siblings_as_they_were(client):
+    """Both directions, as with the deny list: a name ticks one connection,
+    and unticking one that a KIND-level entry covers expands that entry into
+    the other connections' names instead of turning them all off."""
+    a = _add(client, "openrouter", name="or-a")
+    b = _add(client, "openrouter", name="or-b")
+    on = _beside(client, a["id"], True)
+    assert on["prompt_cache_write_beside"] is True
+    by_id = {r["id"]: r for r in client.get("/api/bootstrap").json()["providers"]}
+    assert by_id[b["id"]]["prompt_cache_write_beside"] is False
+
+    set_setting("prompt_cache_write_beside", "openrouter")
+    off = _beside(client, a["id"], False)
+    assert off["prompt_cache_write_beside"] is False
+    by_id = {r["id"]: r for r in client.get("/api/bootstrap").json()["providers"]}
+    assert by_id[b["id"]]["prompt_cache_write_beside"] is True
+    assert get_setting("prompt_cache_write_beside") == "or-b"
+
+
+def test_with_caching_off_there_is_no_write_to_move(client):
+    """Trust the server, not the click: a provider whose caching is off
+    reports writing beside off too, whatever the list says, and turning the
+    cache back on restores the host's choice."""
+    p = _add(client, "openrouter")
+    _beside(client, p["id"], True)
+    off = _set(client, p["id"], False)
+    assert off["prompt_cache"] is False and off["prompt_cache_write_beside"] is False
+    on = _set(client, p["id"], True)
+    assert on["prompt_cache_write_beside"] is True
+
+
+def test_each_switch_moves_only_its_own_setting(client):
+    """The old body -- `enabled` alone -- does exactly what it did; a body
+    with `write_beside` alone touches neither the deny nor the allow list."""
+    p = _add(client, "openrouter")
+    set_setting("prompt_cache_write_beside", "openrouter")
+    _set(client, p["id"], True)
+    assert get_setting("prompt_cache_write_beside") == "openrouter"
+    set_setting("prompt_cache_deny", "mypc")
+    set_setting("prompt_cache_allow", "my-gateway")
+    _beside(client, p["id"], False)
+    assert get_setting("prompt_cache_deny") == "mypc"
+    assert get_setting("prompt_cache_allow") == "my-gateway"
+
+
+def test_the_api_settings_reach_the_write_beside_switch():
+    """A switch the copy names must be one the page has: the provider card
+    sends `write_beside` to this route, shows the server's answer, and says
+    which calls it moves -- Gemini's only (`writes_cache_beside`), so a host
+    routing other models through the connection expects nothing of it."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "static/js/settings.js").read_text(
+        encoding="utf-8")
+    assert "{ write_beside: want }" in js
+    assert "p.prompt_cache_write_beside_offered" in js
+    assert "!!r.prompt_cache_write_beside" in js
+    assert "It moves calls to Gemini models only" in js

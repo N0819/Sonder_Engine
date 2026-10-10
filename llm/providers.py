@@ -1264,12 +1264,251 @@ def _openai_user_message(user, prov, model, mark=False):
     -- the encoder's repair continues the encoder's own request
     (`agents/director_repair.call_repair`) -- and then puts a message after
     this one, since Gemini through OpenRouter writes nothing for a breakpoint
-    on the last message."""
+    on the last message. Where the host has the write made beside the call
+    (`writes_cache_beside`, off unless turned on for the provider), the first
+    call on a prefix is sent plain and this breakpoint rides on a short write
+    of its own beside it (`_chat_complete_once`); the later calls carry it."""
     if mark and user and cache_breakpoint_honoured(prov, model):
         return {"role": "user",
                 "content": [{"type": "text", "text": user,
                              "cache_control": {"type": "ephemeral"}}]}
     return {"role": "user", "content": user}
+
+
+# ---- A cache write may ride BESIDE the call that asks for it ----------------
+#
+# A BREAKPOINT'S FIRST WRITE COSTS THE CALL ITS FIRST TOKEN. Measured 2026-10-10
+# on the encoder's drafts (google/gemini-3.8-flash through OpenRouter, chat
+# 166 beats 24 and 26, interpret and resolve, on a copy of the play database):
+# a draft carrying the breakpoint began answering 4.56 s after its request
+# (4.32-4.77, n=4) against 2.11 s for the same draft unmarked (1.91-2.49,
+# n=4): about 2.45 s a draft, two drafts a beat. The repair that continues
+# the draft read what was written (85-91% of its prompt) and was no slower
+# for it.
+#
+# So a host may send the write BESIDE the call (`prompt_cache_write_beside`):
+# the call goes plain, and the same request, its user message the
+# breakpoint, cut to `CACHE_WRITE_BESIDE_TOKENS`, goes on a thread of its own.
+# Probed the same day: a request that short writes the prefix (a continuation
+# sent after it read 14,924 of 14,934 tokens) and is billed the write's own
+# price -- $0.1167/M for 14,926 tokens plus 12 output tokens. Every later call
+# on the same prefix -- the repairs, a re-ask of the draft -- goes marked and
+# reads it, ONCE THE WRITE HAS LANDED: the write's own usage says so (a count
+# written, or read where the prefix already stood). Before that a call on the
+# prefix goes plain too, and one whose write wrote nothing writes it beside
+# itself again: a marker on a prefix nobody wrote is a write inside the call,
+# the wait this exists to keep off the beat. Replayed with the write beside
+# (chat 166 beats 21-24 and 26, 2026-10-10): the draft began in 1.80 s
+# (1.48-2.87, n=10), and 8 of 11 writes landed, their repairs reading the
+# prefix (77-88% of their prompts). The other 3 came back billed in full and
+# having written nothing (writes inside the call: 0 of 10; why is not known,
+# since a write's upstream is not recorded). When the first of them came
+# back, the 2 repairs it was meant for went marked and wrote the prefix
+# themselves, 3.1 and 3.8 s to their first tokens -- which is why a call is
+# now marked only once its write has landed. Nothing any model is told
+# changes: the marker is transport, and the messages are the same either way.
+#
+# IT IS A TRADE, AND THE HOST'S, SO IT IS OFF UNTIL THE HOST TURNS IT ON for a
+# provider (the box beside a provider's cache box in the API settings, which
+# writes the setting by name or by kind, the `prompt_cache_deny` idiom). By
+# default the call writes its own prefix, as it always did, and is billed the
+# write's price for it ($0.1167/M). Beside it, the call pays the full input
+# price ($0.75/M) for its prompt and the write pays the write's price, so the
+# surcharge is the draft's prompt at the input price: about $0.026 a draft at
+# Brackwater's median 35k-token draft (chat 166, n=59 stages), about $0.05 a
+# beat, for about 2.45 s of each draft's first token, about 5 s a beat. On the
+# A/B beats writing inside cut the encoder's spend by about 70% against
+# uncached ($0.021 a stage against $0.068); by that arithmetic beside cuts it
+# by about a quarter (about $0.050 a stage). Measured on two of those stages
+# with the write beside: beat 26's interpret, whose write landed, $0.047 (the
+# arithmetic's $0.046), its draft's first token 1.71 s; beat 24's resolve,
+# whose write and its repair's both wrote nothing, $0.141 -- dearer than
+# uncached ($0.077) -- its draft's first token 1.83 s. A write that writes
+# nothing, or a repair that starts while its write is in flight, pays the
+# full input price on its prompt.
+#
+# Offered on these kinds, and for Gemini, only, because that is what was
+# measured: Claude through an aggregator writes inside the call whatever the
+# setting says. A route that refuses the short request outright is told once
+# and writes inside for the rest of the process (`_BESIDE_REFUSED`), and a
+# write that cannot be started at all leaves its call to write inside, as
+# before.
+_CACHE_WRITE_BESIDE_KINDS = ("openrouter",)
+
+#: The write-beside request's output budget: the fewest tokens for which
+#: OpenRouter's answer still reports usage, so the write's price reaches the
+#: ledger. A one-token request wrote the prefix but came back with no usage at
+#: all (probed 2026-10-10); sixteen came back with usage and twelve tokens.
+CACHE_WRITE_BESIDE_TOKENS = 16
+
+#: How long a prefix written beside a call is taken to stand: the five minutes
+#: of storage OpenRouter bills a Gemini cache write for (`_GEMINI_BREAKPOINT_
+#: KINDS`'s measurement). Past it the next marked call would write inside, so
+#: it is written beside again instead.
+CACHE_WRITE_TTL_SECONDS = 300.0
+
+#: Prefixes this process has written beside a call: key -> `[landed, until]`,
+#: `landed` False while the write is in flight (`_claim_prefix_write`).
+_PREFIX_WRITTEN: dict = {}
+_PREFIX_WRITTEN_LOCK = threading.Lock()
+#: (provider id, model) pairs whose host refused the short write request: their
+#: breakpoints are written inside the call, as before, for the process.
+_BESIDE_REFUSED: set = set()
+
+
+def _run_beside(fn):
+    """Start `fn` on a daemon thread. A seam, so a test can run it in line."""
+    threading.Thread(target=fn, daemon=True, name="cache-write-beside").start()
+
+
+def cache_write_beside_offered_for(prov) -> bool:
+    """Whether writing a cache beside the call is offered for this provider:
+    its kind is one where it was measured (`_CACHE_WRITE_BESIDE_KINDS`). The
+    settings UI shows the box only there."""
+    kind = str(_prov_field(prov, "kind") or "").strip().casefold()
+    return kind in _CACHE_WRITE_BESIDE_KINDS
+
+
+def cache_write_beside_enabled_for(prov) -> bool:
+    """Whether a breakpoint's first write goes beside the call for this
+    provider, as far as the provider decides it: the host named it, by name or
+    by kind, in `prompt_cache_write_beside`; it is offered there
+    (`cache_write_beside_offered_for`); and caching is on for it
+    (`prompt_cache_enabled_for`). The one question the settings UI asks, so
+    the box shows what the request path does. Unset, nothing is written
+    beside anything: every call writes its own prefix, as before."""
+    if prov is None or not cache_write_beside_offered_for(prov):
+        return False
+    if not prompt_cache_enabled_for(prov):
+        return False
+    name, kind = cache_tokens(prov)
+    return bool({kind, name} & _setting_name_set("prompt_cache_write_beside"))
+
+
+def writes_cache_beside(prov, model) -> bool:
+    """Whether this call's breakpoint is written beside it: the host turned
+    it on for the provider (`cache_write_beside_enabled_for`), the route
+    honours the breakpoint, the model is the measured family, and the host has
+    not refused the short request. Otherwise the call writes its own prefix
+    and waits for it -- the default, cheaper by about the draft's prompt at
+    the input price and about 2.45 s slower to start."""
+    if not cache_breakpoint_honoured(prov, model) or not _model_is_gemini(model):
+        return False
+    if (_prov_field(prov, "id"), str(model or "")) in _BESIDE_REFUSED:
+        return False
+    return cache_write_beside_enabled_for(prov)
+
+
+def _prefix_key(prov, model, system, user) -> str:
+    """The breakpoint's prefix, as the cache sees it: the route, the model,
+    and the system and user messages up to the marker."""
+    import hashlib
+    raw = json.dumps([_prov_field(prov, "id"), str(model or ""), system, user],
+                     ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _claim_prefix_write(key, now=None) -> str:
+    """What a call on the prefix `key` does, decided under one lock: "write"
+    when no write of it stands in this process (it is now this caller's to
+    make, beside itself), "wait" while one is in flight (go plain: the cache
+    is not there to read yet), "read" once one has landed (go marked)."""
+    now = time.time() if now is None else float(now)
+    with _PREFIX_WRITTEN_LOCK:
+        for stale in [k for k, (_landed, until) in _PREFIX_WRITTEN.items()
+                      if until <= now]:
+            _PREFIX_WRITTEN.pop(stale, None)
+        entry = _PREFIX_WRITTEN.get(key)
+        if entry is None:
+            _PREFIX_WRITTEN[key] = [False, now + CACHE_WRITE_TTL_SECONDS]
+            return "write"
+        return "read" if entry[0] else "wait"
+
+
+def _prefix_write_landed(key, now=None):
+    """The write of `key` is in the cache: its storage runs from now."""
+    now = time.time() if now is None else float(now)
+    with _PREFIX_WRITTEN_LOCK:
+        _PREFIX_WRITTEN[key] = [True, now + CACHE_WRITE_TTL_SECONDS]
+
+
+def _forget_prefix_write(key):
+    with _PREFIX_WRITTEN_LOCK:
+        _PREFIX_WRITTEN.pop(key, None)
+
+
+def _write_prefix_beside(url, headers, body, prov, role, model, key) -> bool:
+    """Send `body` -- the call's own request with its user message the
+    breakpoint -- cut to `CACHE_WRITE_BESIDE_TOKENS`, on a thread of its own,
+    in a copy of the caller's context: its spend lands on the caller's step
+    ledger as a `cache_write`, an abort reaches it, and nothing it does is
+    seen by the call it rides beside. Never raises: True once the write is on
+    its way; False when it could not be started -- no thread to be had, a
+    request that would not copy -- and then the prefix's claim is forgotten
+    and the caller writes it inside itself, as before."""
+    try:
+        warm = json.loads(json.dumps(body))
+        warm["max_tokens"] = CACHE_WRITE_BESIDE_TOKENS
+        for field in ("stream", "stream_options", "response_format"):
+            warm.pop(field, None)
+        context = contextvars.copy_context()
+    except Exception as exc:  # noqa: BLE001 -- the call goes on, writing inside
+        return _beside_not_started(key, model, exc)
+
+    def run():
+        t0 = time.time()
+        try:
+            response = _post_abortable(url, headers=headers, json=warm)
+            if response.status_code == 400:
+                refusal = LLMError(f"HTTP 400: {str(response.text)[:300]}", 400, False)
+                if _disabled_reasoning_refused(refusal, warm):
+                    # The same once-per-pair lesson the streamed send learns.
+                    _REASONING_MANDATORY.add(_reasoning_key(prov, model))
+                    warm.pop("reasoning", None)
+                    warm.pop("reasoning_effort", None)
+                    _apply_reasoning_effort(warm, prov, role, effort_override="low")
+                    response = _post_abortable(url, headers=headers, json=warm)
+            if response.status_code >= 400:
+                _forget_prefix_write(key)
+                if 400 <= response.status_code < 500 and response.status_code != 429:
+                    _BESIDE_REFUSED.add((_prov_field(prov, "id"), str(model or "")))
+                    _logger.info(
+                        "providers: %s refused a cache write beside the call for %s "
+                        "(HTTP %s); writing inside the call for the rest of this process",
+                        _prov_field(prov, "name") or "provider", model,
+                        response.status_code)
+                return
+            parsed = response.json()
+            usage = parsed.get("usage")
+            _log_usage(role, model, t0, usage,
+                       served=parsed.get("model"), kind="cache_write")
+            # Landed only when the write's own count says the prefix is in
+            # the cache -- written now, or already standing and read.
+            counts = _normalize_usage(usage)
+            if counts["cache_write"] or counts["cache_read"]:
+                _prefix_write_landed(key)
+            else:
+                _forget_prefix_write(key)
+        except Exception:  # noqa: BLE001 -- the call it rides beside is unaffected
+            _forget_prefix_write(key)
+
+    try:
+        _run_beside(lambda: context.run(run))
+    except Exception as exc:  # noqa: BLE001 -- "can't start new thread", and the like
+        return _beside_not_started(key, model, exc)
+    return True
+
+
+def _beside_not_started(key, model, exc) -> bool:
+    """A write beside that never started: its claim is forgotten, so the
+    caller writes the prefix inside itself, as before, and no later call on
+    the prefix goes plain waiting for a write nobody is making (the next one
+    is free to try beside again)."""
+    _forget_prefix_write(key)
+    _logger.warning(
+        "providers: could not start a cache write beside the call for %s (%s); "
+        "the call writes its own prefix", model, exc)
+    return False
 
 # OpenRouter provider routing. One OpenRouter model id is served by several
 # upstream providers (Anthropic direct, Amazon Bedrock, Azure, Google Vertex,
@@ -3902,7 +4141,12 @@ def _normalize_usage(usage):
                        or usage.get("output_tokens")),
         "cache_read": _int(usage.get("cache_read_input_tokens")
                            or details.get("cached_tokens")),
-        "cache_write": _int(usage.get("cache_creation_input_tokens")),
+        # OpenRouter reports a Gemini write beside the read, and on the
+        # writing call the read count holds the written tokens as well
+        # (probed 2026-10-10): read from the Anthropic field alone, every
+        # write logged `cache_write_tokens=0` and looked like a read.
+        "cache_write": _int(usage.get("cache_creation_input_tokens")
+                            or details.get("cache_write_tokens")),
     }
 
 
@@ -4020,6 +4264,11 @@ def _log_usage(role, model, t0, usage, served=None, kind="chat", tier=None):
         "duration": round(time.time() - t0, 3),
         "kind": kind,
     }
+    # A call that WROTE the cache says so: on OpenRouter's Gemini the read
+    # count of a writing call holds the written tokens too, so `cached` alone
+    # cannot tell a write from a read (`_normalize_usage`). Absent otherwise.
+    if counts["cache_write"]:
+        entry["written"] = counts["cache_write"]
     if tier:
         asked, got = tier
         entry["tier_asked"] = str(asked)
@@ -4205,6 +4454,24 @@ def _chat_complete_once(
 
     url = base + "/chat/completions"
     headers = _headers(prov)
+
+    # WHERE THE HOST HAS THE CACHE WRITTEN BESIDE THE CALL
+    # (`writes_cache_beside`; off unless turned on for the provider), the
+    # first call on a prefix goes plain -- as does any call on the prefix
+    # while that write is in flight -- and the breakpoint's request goes on
+    # its own thread, cut short. Once the write has landed, every later call
+    # on the prefix reads it marked. A write that could not be started leaves
+    # this call marked: it writes its own prefix, as every call does by
+    # default.
+    if (cache_user and user and not tools
+            and writes_cache_beside(prov, model)):
+        _key = _prefix_key(prov, model, body["messages"][0].get("content"), user)
+        _claim = _claim_prefix_write(_key)
+        if _claim == "write" and not _write_prefix_beside(
+                url, headers, body, prov, role, model, _key):
+            _claim = "inside"
+        if _claim in ("write", "wait"):
+            body["messages"][1] = {"role": "user", "content": user}
 
     if streaming:
         try:
