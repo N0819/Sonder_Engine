@@ -2563,6 +2563,60 @@ def _line_words(text):
     return re.findall(r"[^\W_]+", str(text or "").casefold())
 
 
+def _input_in_order(raw_input):
+    """The player's input as she wrote it, in order: ``("line", words)`` for
+    each quoted span and ``("act", sentence)`` for each sentence between them
+    -- split at the engine's own sentence marks, both packs'."""
+    units, pos = [], 0
+    text = str(raw_input or "")
+    for match in _QUOTED_SPAN.finditer(text):
+        units.extend(("act", sentence) for sentence in _sentences(text[pos:match.start()]))
+        units.append(("line", (match.group(1) or match.group(2) or match.group(3) or "").strip()))
+        pos = match.end()
+    units.extend(("act", sentence) for sentence in _sentences(text[pos:]))
+    return units
+
+
+_SENTENCE_END = re.compile(r"(?<=[.!?\u3002\uff01\uff1f])\s*")
+
+
+def _sentences(text):
+    return [part.strip() for part in _SENTENCE_END.split(str(text or ""))
+            if _line_words(part)]
+
+
+def _rows_before_line(rows, units, line_index, carries_speech):
+    """How many of her rows come before the line at ``units[line_index]``.
+
+    Her rows keep the input's order but say it in their own words, so no
+    single row can be pinned to a sentence. The split of the ordered rows is
+    the one that agrees best with the input: every row before it scored on
+    the sentences written before the line, every row after it on those
+    written after -- a row's score on a side being the most of any one of
+    that side's sentences it says (a speech row against the lines, any other
+    row against the acts). A row that says neither side counts for neither;
+    a tie goes to the later split, since what an interpretation drops is
+    most often its tail."""
+    def said_of(row, low, high):
+        words = set(_line_words(row.get("event")))
+        want = "line" if carries_speech(row) else "act"
+        top = 0.0
+        for kind, text in units[low:high]:
+            unit_words = _line_words(text)
+            if kind == want and unit_words:
+                top = max(top, sum(1 for word in unit_words if word in words)
+                          / len(unit_words))
+        return top
+    before = [said_of(row, 0, line_index) for row in rows]
+    after = [said_of(row, line_index + 1, len(units)) for row in rows]
+    split, best = len(rows), None
+    for index in range(len(rows) + 1):
+        score = sum(before[:index]) + sum(after[index:])
+        if best is None or score >= best:
+            split, best = index, score
+    return split
+
+
 def _carried_share(span, spoken):
     """How much of a quoted span the beat's speech rows say, 0..1, by word
     (`spoken` a Counter of those rows' words)."""
@@ -2650,10 +2704,18 @@ def restore_declared_quotes(out, raw_input, warn=None):
     # chat 167 turn 4631 (2026-10-10): the Director's prose stopped after the
     # player's first sentence, her two quoted lines were "uncovered", and the
     # coverage check, rightly unable to grade paraphrase, repaired nothing.
-    # A quoted span is not paraphrase: it is the player's words, so each one
-    # no row carries stands as her line after her last row, in the order she
-    # wrote them -- from the primary input's own rows when they say whose
-    # they are, addressed to whoever she last attended to (never a room).
+    # THE LAST RESORT: the account is asked again first, before anything is
+    # encoded (`director_prose.carry_every_quoted_line`), so her lines come
+    # out in the Director's own order with spans of their own; this places
+    # only what an account asked twice still left out. A quoted span is not
+    # paraphrase: it is the player's words, so each one no row carries
+    # stands as her line WHERE SHE SAID IT -- after the last
+    # of her rows that comes before it in the input, in that row's span (as
+    # the lift above shares a span), and before the rows that come after it
+    # -- the split of her ordered rows that agrees best with the input
+    # (`_rows_before_line`). Addressed to whoever she was
+    # attending to by then (never a room). Her rows are the primary input's
+    # own, where the ledger says whose they are.
     rows_now = [r for r in rebuilt if isinstance(r, dict)]
     spoken = collections.Counter(
         word for r in rows_now if carries_speech(r)
@@ -2664,25 +2726,46 @@ def restore_declared_quotes(out, raw_input, warn=None):
            if ":primary:" in str(r.get("source_event_id") or "")] or rows_now
     appended = []
     if dropped and own:
-        anchor = own[-1]
-        heard = next((r for r in reversed(own)
-                      if "positions" not in (r.get("categories") or [])), None)
-        chrono = max([int(r.get("chrono_id") or 0) for r in rows_now] + [0])
+        units = _input_in_order(raw_input)
+        anchors = {}                 # id(anchor row) or None -> [line rows]
+        taken = set()
         for sp in dropped:
-            chrono += 1
-            line = {k: v for k, v in anchor.items()
+            at = next((i for i, (kind, text) in enumerate(units)
+                       if kind == "line" and i not in taken
+                       and text.casefold() == sp.casefold()), None)
+            if at is not None:
+                taken.add(at)
+            split = (len(own) if at is None
+                     else _rows_before_line(own, units, at, carries_speech))
+            before = own[:split]
+            anchor = before[-1] if before else None
+            heard = next((r for r in reversed(before)
+                          if "positions" not in (r.get("categories") or [])), None)
+            template = anchor or own[0]
+            line = {k: v for k, v in template.items()
                     if k not in ("event", "act", "observable", "categories",
-                                 "category", "targets", "item_id", "chrono_id")}
+                                 "category", "targets", "item_id")}
             line.update({
-                "chrono_id": chrono, "item_id": next_item, "event": sp,
-                "act": "", "observable": "speaks", "categories": ["speech"],
-                "category": "speech", "volume": "normal",
+                "chrono_id": template.get("chrono_id"), "item_id": next_item,
+                "event": sp, "act": "", "observable": "speaks",
+                "categories": ["speech"], "category": "speech",
+                "volume": "normal",
                 "targets": list((heard or {}).get("targets") or []),
             })
             next_item += 1
-            rebuilt.append(line)
+            anchors.setdefault(id(anchor) if anchor is not None else None, []).append(line)
             said.add(sp.casefold())
             appended.append(sp)
+        first_own = id(own[0])
+        woven = []
+        for row in rebuilt:
+            if id(row) == first_own:
+                woven.extend(anchors.pop(None, []))
+            woven.append(row)
+            woven.extend(anchors.pop(id(row), []))
+        for leftover in anchors.values():
+            woven.extend(leftover)
+        rebuilt = woven
     if restored or appended:
         out["ledgers"] = rebuilt
         if callable(warn) and restored:
@@ -2691,7 +2774,7 @@ def restore_declared_quotes(out, raw_input, warn=None):
                  % (len(restored), "; ".join(f'"{r}"' for r in restored)))
         if callable(warn) and appended:
             warn("player speech restored: %d quoted line(s) no row carried "
-                 "now stand as her lines after her last row: %s"
+                 "now stand as her lines where she said them: %s"
                  % (len(appended), "; ".join(f'"{r}"' for r in appended)))
     return out
 

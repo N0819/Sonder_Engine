@@ -359,6 +359,63 @@ def author(ctx, stage, model_payload):
     return prose, (places if isinstance(places, list) else [])
 
 
+#: How many times the interpretation's account is asked afresh when it
+#: leaves out a line the player quoted, before anything is encoded. One: the
+#: drop is the author's sampling -- chat 167 turn 4631 stopped after the
+#: player's first sentence, and the same request rerun carried every line --
+#: and the re-ask costs one prose call only on a beat that left her words
+#: out; over 992 stored quoted spans 15 were dropped. Whatever is still out
+#: after it is placed by the ledger's floor
+#: (`director_evidence.restore_declared_quotes`).
+CARRIED_SHORT_REASKS = 1
+
+
+def quoted_lines_left_out(raw_input, prose):
+    """The player's quoted lines the account does not say, in her order: by
+    word share against the whole account, whatever quote marks it wrote them
+    in (the Director quotes in single quotes as readily as double)."""
+    from collections import Counter
+    from .director_evidence import (QUOTED_LINE_CARRIED, _QUOTED_SPAN,
+                                    _carried_share, _line_words)
+    said = Counter(_line_words(prose))
+    spans = [(match.group(1) or match.group(2) or match.group(3) or "").strip()
+             for match in _QUOTED_SPAN.finditer(str(raw_input or ""))]
+    return [span for span in spans
+            if span and _carried_share(span, said) < QUOTED_LINE_CARRIED]
+
+
+def carry_every_quoted_line(raw_input, prose, places, ask,
+                            reasks=CARRIED_SHORT_REASKS):
+    """`(prose, places, record)`: THE ACCOUNT CARRIES HER WORDS BEFORE ANYTHING
+    IS ENCODED. A line inserted into the ledger afterwards can only guess at
+    the beat's order (the owner, 2026-10-10: "the deterministic floor isn't
+    great as it doesn't care about event order"); a line the account carries
+    is encoded in the Director's own order, with a span of its own. So an
+    account that leaves out a line the player quoted is asked afresh
+    (``ask()`` -> ``(prose, places)``) up to ``reasks`` times, and the one
+    carrying the most of her lines goes on. ``record`` is empty when nothing
+    was left out."""
+    left = quoted_lines_left_out(raw_input, prose)
+    if not left:
+        return prose, places, {}
+    record = {"left_out": list(left)}
+    best = (prose, places, left)
+    for _attempt in range(max(0, int(reasks))):
+        try:
+            again, again_places = ask()
+        except Exception as exc:  # the first account still stands
+            record["error"] = str(exc)[:200]
+            break
+        still = quoted_lines_left_out(raw_input, again)
+        if len(still) < len(best[2]):
+            best = (again, again_places, still)
+        if not still:
+            break
+    record["reasked"] = True
+    record["still_left_out"] = list(best[2])
+    return best[0], best[1], record
+
+
 # ---- 2. the decision model picks the tools -------------------------------
 
 def _jev_state(prose, model_payload, owed=None):
@@ -2808,6 +2865,20 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         model_payload = dict(model_payload, pronouns=pronouns)
     t0 = time.time()
     prose, places = author(ctx, stage, model_payload)
+    carried_short = {}
+    if stage == "interpret":
+        prose, places, carried_short = carry_every_quoted_line(
+            getattr(ctx, "input", None) or ctx.get("input"), prose, places,
+            lambda: author(ctx, stage, model_payload))
+        if carried_short:
+            ctx.add_warning(
+                "interpretation: the account left out %d line(s) the player "
+                "quoted and was asked again; %d still out after it (the "
+                "ledger's floor places those): %s"
+                % (len(carried_short["left_out"]),
+                   len(carried_short.get("still_left_out") or ()),
+                   "; ".join('"%s"' % line[:60]
+                             for line in carried_short["left_out"])))
     author_seconds = round(time.time() - t0, 3)
     reserved = reserve_places(places, sc)
     planned = extras.get("planned_rooms") if isinstance(extras, dict) else None
@@ -3002,6 +3073,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         "stage": stage,
         "prose": prose,
         "author_seconds": author_seconds,
+        **({"carried_short": carried_short} if carried_short else {}),
         "jev": jev,
         "channels": channels,
         "encoder": encoding,

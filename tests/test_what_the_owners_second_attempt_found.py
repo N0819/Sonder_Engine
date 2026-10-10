@@ -102,8 +102,10 @@ def test_a_quoted_line_no_row_carries_is_still_the_players_line():
         assert row["categories"] == ["speech"]
         assert row["source_entity_id"] == "persona:22"
         assert row["authority_mode"] == "world_author"
-        assert row["chrono_id"] > look["chrono_id"]
-    assert lines[0]["chrono_id"] < lines[1]["chrono_id"]
+        assert row["targets"] == ["Ffion Rees"]
+        # said after the look and nothing of hers after it was carried:
+        # each rides the look's span, in the order she wrote them
+        assert row["chrono_id"] == look["chrono_id"]
     assert len({r["item_id"] for r in rows}) == len(rows)
     assert warnings and "Thank you" in warnings[-1]
 
@@ -131,3 +133,53 @@ def test_a_line_carried_in_other_punctuation_or_split_is_not_said_twice():
          "categories": ["speech"], "targets": ["Ffion Rees"]}]}
     restore_declared_quotes(out, raw)
     assert len(out["ledgers"]) == 2
+
+
+def test_a_restored_line_stands_where_she_said_it_not_after_everything_she_did():
+    """A line dropped from the MIDDLE of a declaration goes back where she
+    said it: after the act before it, in that act's span, and before the act
+    after it -- never after the knock at a door she walked to once she had
+    spoken."""
+    raw = ('Nell stops at the corner and looks at Ffion. "Go home to your boy, '
+           'Mrs Rees." She walks on alone to the cottage door and knocks.')
+    look = {"chrono_id": 1, "item_id": 1, "object_name": "Nell Hartley",
+            "source_entity_id": "persona:22", "authority_mode": "world_author",
+            "source_event_id": "turn:4631:primary:raw",
+            "event": "Nell stops at the corner and looks at Ffion Rees.",
+            "categories": ["attention"], "targets": ["Ffion Rees"]}
+    knock = {"chrono_id": 2, "item_id": 2, "object_name": "Nell Hartley",
+             "source_entity_id": "persona:22", "authority_mode": "world_author",
+             "source_event_id": "turn:4631:primary:raw",
+             "event": "Nell walks on alone to the cottage door and knocks.",
+             "categories": ["positions"], "targets": ["cottage_door"]}
+    out = {"ledgers": [look, knock]}
+    restore_declared_quotes(out, raw)
+    rows = out["ledgers"]
+    assert [r["event"] for r in rows] == [
+        look["event"], "Go home to your boy, Mrs Rees.", knock["event"]]
+    line = rows[1]
+    assert line["chrono_id"] == look["chrono_id"], "the line rides the span she said it in"
+    assert line["targets"] == ["Ffion Rees"]
+
+
+def test_a_line_before_everything_she_did_comes_first():
+    raw = '"Wait." She takes the lamp from its hook.'
+    lamp = {"chrono_id": 1, "item_id": 1, "source_entity_id": "persona:22",
+            "source_event_id": "turn:1:primary:raw",
+            "event": "takes the lamp from its hook", "categories": ["entities"], "targets": []}
+    out = {"ledgers": [lamp]}
+    restore_declared_quotes(out, raw)
+    assert [r["event"] for r in out["ledgers"]] == ["Wait.", lamp["event"]]
+    assert out["ledgers"][0]["chrono_id"] == 1
+
+
+def test_the_coverage_check_reports_a_dropped_line_as_her_words():
+    """The interpret coverage check reads the input in its own units -- the
+    quoted spans and the clauses -- and names what no row covers in her words
+    (a later helper of the same name once shadowed its splitter at import)."""
+    from agents.director import _uncovered_declarations
+    raw = 'Nell looks at Ffion. "Go home to your boy, Mrs Rees."'
+    out = {"ledgers": [{"event": "Nell looks at Ffion Rees.", "categories": ["attention"]}]}
+    uncovered = _uncovered_declarations(raw, out)
+    assert "Go home to your boy, Mrs Rees." in uncovered
+    assert all(isinstance(unit, str) for unit in uncovered)
