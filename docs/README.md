@@ -366,6 +366,11 @@ modes each one documents.
   — a 30-beat harsh play run with the Writers' Room at full authority: what
   broke, the fifty commits it took, the ranked open findings (companion travel
   first), and the decisions left for the owner.
+- [`PLAY_2026_10_10_cwm_du.md`](experiments/PLAY_2026_10_10_cwm_du.md)
+  — the immersion round's validation run: 15 beats down a slate mine with
+  everything new on, the three defects fixed during it (the opening's
+  sixteen-way inn, honorific nouns, a body presented twice), and the open
+  findings by class (the player's declared speech and conveyance rides first).
 - [`PROJECT_ADOPTION_2026_10_09.md`](experiments/PROJECT_ADOPTION_2026_10_09.md)
   — what took the project slots under the bare contract (errands, every one)
   and what never reached them: the corpus measured, aims lost at the
