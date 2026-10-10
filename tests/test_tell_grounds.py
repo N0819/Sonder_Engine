@@ -139,6 +139,11 @@ def _run_character_step(temp_db, monkeypatch, cstate, agent_out):
         return dict(agent_out)
 
     monkeypatch.setattr(character_module, "_agent_json", fake_agent_json)
+    # The read-back vouches that the tell names nothing besides its giver:
+    # a tell it cannot vouch for is not shown (`character_bare.compile_bare`).
+    from mind import character_jev
+    monkeypatch.setattr(character_jev, "ask_after", lambda holding, reply: {
+        "tell:0:outside": {"type": "choice", "probabilities": {"no": 1.0}}})
     out = character_module.character_step(ctx, char_id, nonce=0)
     return ctx, out, captured
 

@@ -974,6 +974,9 @@
     "tell_when": {
       "$text": "character_jev/tell_when.txt"
     },
+    "tell_outside": {
+      "$text": "character_jev/tell_outside.txt"
+    },
     "demeanor_changed": {
       "$text": "character_jev/demeanor_changed.txt"
     },
@@ -1188,10 +1191,10 @@
         "strong": "Strongly."
       },
       "miss": {
-        "plain": "It is plain to see.",
-        "noticeable": "Someone paying attention would catch it.",
-        "subtle": "Only a close observer would catch it.",
-        "hidden": "Almost no one would catch it."
+        "plain": "Anyone near you would notice it, even with poor eyes or ears.",
+        "noticeable": "Anyone who can see or hear you would notice it, even a stranger looking elsewhere.",
+        "subtle": "Only someone watching you, or who knows you, would notice it.",
+        "hidden": "Only someone who knows you and is watching you would notice it."
       },
       "channel": {
         "seen": "By sight.",

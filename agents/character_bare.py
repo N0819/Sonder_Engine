@@ -1011,8 +1011,31 @@ def compile_bare(reply, answers, h):
     if carried and demeanor and jev.pick(answers, "demeanor:changed") == "no":
         demeanor = carried
     manifest = {"surface_demeanor": demeanor, "tells": []}
-    for j, tell in enumerate(jev.lines_of(reply, "tells", jev.MAX_TELLS)):
-        subtlety = jev.graded(answers, f"tell:{j}:miss", jev.MISS)
+    for j, tell in enumerate(jev.lines_of(reply, "tells", jev.tells_asked())):
+        if len(manifest["tells"]) >= jev.MAX_TELLS:
+            break
+        # THE OBSERVABLE FLOOR FOR A SIGN (`jev.TELL_SCENE_FLOOR`, kept on
+        # until a play run reads its live rate; `tell:<j>:outside`): a cue
+        # goes to every observer the gate admits word for word, so one that
+        # names something besides the giver -- a place, an event, someone
+        # else's words -- is not shown, and the next tell asked stands in
+        # for it (`jev.tells_asked`): a valid sign the same reply wrote
+        # beside it is not lost with it. FAILS CLOSED: an unanswered
+        # question is no vouching, and the floor must not lean on the
+        # decision model answering.
+        if jev.TELL_SCENE_FLOOR:
+            outside = jev.pick(answers, f"tell:{j}:outside")
+            if outside != "no":
+                warnings.append(
+                    f"a tell names something besides its giver, and is not shown: {tell[:80]!r}"
+                    if outside == "yes" else
+                    f"a tell the read-back could not vouch for is not shown: {tell[:80]!r}")
+                continue
+        # The grade chosen, never the expectation across the four: the
+        # gate compares it with a reach an ordinary eye puts on the grade
+        # points, and each grade's option names the observer its point
+        # admits (`jev.grade_point`, `jev.MISS`).
+        subtlety = jev.grade_point(answers, f"tell:{j}:miss", jev.MISS)
         subtlety = 0.5 if subtlety is None else subtlety
         if h.crisis:
             # COMPOSURE FAILING SHOWS: the full card asked the model for a

@@ -49,7 +49,10 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 285   # +3 (2026-10-09): `character_jev.commitment_lasts`, the
+PART_COUNT = 286   # +1 (2026-10-10): `character_jev.tell_outside`, the
+                   # observable floor for a sign: does the tell name
+                   # anything besides its giver (agents/character_bare.py).
+                   # +3 (2026-10-09): `character_jev.commitment_lasts`, the
                    # adoption deliberation read back of a commitment (a way
                    # to its end, ending on arriving where it leads, or one
                    # thing to do or find out, done in one go), and the

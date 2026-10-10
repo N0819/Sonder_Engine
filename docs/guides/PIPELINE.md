@@ -748,8 +748,13 @@ this mind was given or items it holds: whom each line is said to and how loud,
 what a watcher could tell of an act, which aim a want serves and how urgent it
 is, what kind of change each `changes` line is, the appraisal, and which held
 beliefs, cues, aims, concerns, promises and relationships the moment moved --
-and, of a reply's one tell (`MAX_TELLS`), which of its own lines or acts it
-shows at, and of a new `demeanor`, whether someone watching would see a change
+and, of the first tells a reply wrote (two while the scene floor is on,
+`tells_asked`), how hard each is to miss -- kept as the grade chosen, each
+grade's option naming the observer it reaches (`grade_point`) -- whether it
+names anything besides its giver, and which of its own lines or acts it shows
+at: the one shown (`MAX_TELLS`) is the first the floor passes, and one it
+withholds or could not vouch for is not shown; and of a new `demeanor`,
+whether someone watching would see a change
 from the one last shown (kept in its state as `carriage`; a plain no keeps the
 shown words, so the standing ledger can suppress them). Perception places each
 delivered cue just before the step it showed at, or before its giver's last

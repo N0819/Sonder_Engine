@@ -542,6 +542,15 @@ policy.
   standard-tier retry of the same call. Flex latency on a full-size encoder
   call is unmeasured.
 
+<a id="unbuilt-1-197"></a>
+
+### 1.197 An active prompt preset masks every later change to the card it replaces (2026-10-09)
+
+The owner's play on chats 160-166 ran with `active_preset` = `tes`, a preset whose one entry replaces `character_bare` whole: the card as it stood on 2026-09-27 (5dd8b65a) with "You know nothing else: what never reached you stays unknown," taken out. `llm/prompts.py` `_preset_override` hands that text to every bare character call, so no change to the pack's bare card after 2026-09-27 reached that play -- the context and kept-thinking sentences (2026-10-05, 2026-10-06), the tells cadence and the observable floor (2026-10-08), the project wording and a sign without its reading (2026-10-09), and the sign alone (2026-10-10). Measured on the stored captures: all 102 `character_major` calls on chats 160, 161, 163, 165 and 166 (2026-10-02 to 2026-10-07) carried the preset's text, the one on chat 159 (2026-09-30) the pack's; the Brackwater run's prose findings and the 2026-10-08 tells A/B were taken against the preset. **Switched off by the owner on 2026-10-10:** the owner's database runs `active_preset` = `Default`, with `tes` kept among its stored presets. A copy taken before then still runs `tes` -- the scratch play database copied on 2026-10-07 does -- so a validation run on such a copy sets `active_preset` to `Default` first, or it measures the 2026-09-27 card. Nothing in the engine says whether an override is stale: it keeps no record of the pack text a preset was written against, so neither the prompt editor nor a log can tell a kept override from a stale one.
+
+- **Owner decision, still open:** `tes` took "You know nothing else: what never reached you stays unknown," out of the bare card -- whether the pack card should lose it too.
+- **What would make it visible (not built):** keep, beside each prompt a preset replaces, the pack text (or its hash) it was saved against, and flag the override in the prompt editor, and once per process in the log, when the pack text has changed since.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-5"></a>

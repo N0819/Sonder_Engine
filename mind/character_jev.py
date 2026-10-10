@@ -69,6 +69,38 @@ MAX_ACT_PARTS = 6
 #: track". It bounds the per-beat delivery, never what a mind may feel; the
 #: owner's number.
 MAX_TELLS = 1
+#: THE OWNER'S, OPEN UNTIL THE NEXT PLAY RUN: WHETHER A TELL THAT NAMES
+#: SOMETHING BESIDES ITS GIVER IS WITHHELD -- the scene floor
+#: (`tell:<j>:outside`, `character_bare.compile_bare`). ON, by the owner's
+#: ruling of 2026-10-10 ("Keep it on"): kept, the valid sign beside a
+#: withheld one shown (`tells_asked`), and its live firing rate read in the
+#: next play run, to be cut or narrowed if it withholds valid cues there --
+#: one switch, so that ruling is one line. The step's warnings name every
+#: tell it withholds ("a tell names something besides its giver, and is not
+#: shown"), which is how the live rate is read. Why on: a cue reaches every
+#: observer the gate admits word for word (`perception._delivered_manifest`),
+#: so the scene a giver saw rode along with the sign -- on the 2026-10-09
+#: replay of chat 166 turn 4598 a cue naming the counting-house door was the
+#: only mention of it the narrator was handed, and the page drew one -- and a
+#: leak is the engine's to stop (CLAUDE.md). What it costs: it is a
+#: decision-model reading of free prose that removes text, and the question
+#: it asks is not the firewall's, which is whether the OBSERVER had the thing
+#: through a channel of her own. Of the 22 deliveries it withholds on the
+#: stored tells of chats 159-166, 12 named only what their observer said,
+#: did, held or shared, 9 carried a reading and at most 1 a scene she lacked
+#: (`docs/UNBUILT_CHARACTERS.md` §1.184). Off, the read-back asks no floor
+#: question and only `MAX_TELLS` tells, and the compile shows the first, as
+#: it did before the floor (an unanswered read-back at subtlety 0.5).
+TELL_SCENE_FLOOR = True
+#: How many of a reply's tells the read-back asks about while the scene
+#: floor is on, so the one shown is the FIRST THE FLOOR PASSES, not the
+#: first written: a valid sign beside a withheld one is shown -- the
+#: owner's "recover a valid second cue beside a dropped one" (2026-10-10)
+#: -- and the floor still withholds every tell it withheld. TWO; the
+#: measurement, and what a third would add, are at `tells_asked`. Each tell
+#: asked is up to four questions more in the same request -- its channel,
+#: grade, floor and moment -- and only on a reply that wrote that many.
+TELLS_ASKED = 2
 #: How much of the model's reasoning trace the decision model reads.
 REASONING_CHARS = 6000
 #: How long an item may run in a question or an option before it is cut.
@@ -128,7 +160,42 @@ CERTAIN = {"done": 0.9, "may": 0.5, "unclear": 0.3}
 #: observer whose acuity, familiarity and attention reach this far). One
 #: grade every 0.25, the scale the observer's reach is counted on too: an
 #: ordinary eye reaches "noticeable", and each advantage over a stranger
-#: glancing elsewhere one grade further (`affect.TELL_ADVANTAGE`).
+#: glancing elsewhere one grade further (`affect.TELL_ADVANTAGE`). A tell
+#: is placed at the grade the decision model chose (`grade_point`), never at
+#: the expectation over the four, which the gate would read across a grade.
+#:
+#: SO EACH GRADE'S OPTION NAMES THE OBSERVER THE GATE ADMITS AT ITS POINT
+#: (`character_jev.options.miss`, both packs), worked out from
+#: `affect.tell_gate` and `perception._tell_acuity`: "plain" reaches even
+#: poor eyes and ears (0.2-0.25) with no advantage; "noticeable" an ordinary
+#: eye or ear with none -- a stranger looking elsewhere; "subtle" one
+#: advantage -- someone watching the giver, or who knows them; "hidden" both.
+#: A keen eye (0.65) counts as one advantage and an exceptional one (0.9) as
+#: two, which the options leave out: the giver cannot know them. The labels
+#: they replaced read "noticeable" as "Someone paying attention would catch
+#: it" -- one advantage -- while the gate admitted a stranger looking
+#: elsewhere at that grade. Re-graded 2026-10-10 on the 128 stored tells of
+#: chats 159-166 that keep their call, each against its own read-back state:
+#: the old labels chose "noticeable" for 20 and "subtle" for 108, these
+#: "noticeable" for 2 and "subtle" for 126 (127 of 128 alike when asked
+#: again); on seventeen made-up signs from a sob to a pulse at the throat
+#: they still put the blatant ones at "plain" or "noticeable" and the small
+#: ones at "subtle", in both packs. Of the 102 of those tells given outside
+#: a composure crisis, a stranger looking elsewhere would be shown 16 at the
+#: old labels' chosen grade, 2 at their expectation and 1 at these.
+#:
+#: WHAT THEY GIVE UP, the owner's to rule on: they choose "plain" far less.
+#: Nine blatant made-up signs asked against three real states, 27 answers:
+#: the old labels "plain" 15 and "noticeable" 12; these "plain" 5,
+#: "noticeable" 20 and "subtle" 2 ("her voice cracks audibly on his name",
+#: "she flinches hard when the door bangs", on one state, 0.40 over
+#: 0.35-0.37 -- near ties `grade_point` commits to). In Japanese, on a
+#: name-only state, "plain" 7 of 9 -> 0. Only "plain" reaches an impaired or
+#: poor eye or ear (0.2-0.25) with no advantage, so a sob or a shattered cup
+#: from a stranger now misses a poor-sighted bystander looking elsewhere,
+#: and a crack graded "subtle" an ordinary one. The stored comparison
+#: cannot show it: no stored tell was graded "plain" under either set, and
+#: no replayed observer's reach was below 0.4.
 MISS = {"plain": 0.15, "noticeable": 0.4, "subtle": 0.65, "hidden": 0.9}
 REL_AXES = ("trust", "warmth", "fear", "respect", "suspicion")
 
@@ -183,6 +250,33 @@ def steps(reply):
 
 def lines_of(reply, key, cap):
     return [_text(x) for x in ((reply or {}).get(key) or []) if str(x or "").strip()][:cap]
+
+
+def tells_asked():
+    """How many of a reply's tells the read-back asks about and the compile
+    may show from (`after_questions`, `character_bare.compile_bare`): while
+    the scene floor is on, `TELLS_ASKED` and never fewer than `MAX_TELLS`;
+    off, `MAX_TELLS` -- with nothing withheld, the first are the ones shown.
+
+    WHY TWO: under one tell a reply, a first tell the floor withheld silenced
+    the beat even where the same reply wrote a valid sign beside it. Measured
+    2026-10-10 on the 68 stored replies of chats 159-166 that keep their
+    call (written before the card asked for the sign alone), each read back
+    in the engine's own request shape and compiled from the same answers:
+    a tell was shown on 68 with the floor off, 47 with it asking the first
+    tell alone, and 63 asking two; delivered to the observers each could
+    reach in a replay of `perception_outcome`, 53, 39 and 51. Of the 21
+    replies whose first tell it withheld, 19 had written a second and it
+    passed on 16, among them chat 166 turn 4603's in a composure crisis --
+    "the knuckles on the scull loom go white" beside "the hum cuts off
+    mid-note as Coyle's eyes finish the second pass". Of the five left, two
+    wrote one tell, two had their second withheld too and wrote no third,
+    and one (turn 4601) wrote a third that passed when asked: a third would
+    have shown one more tell in 68, at four more questions on every reply
+    that writes three (23 of these 68; one in nine on the card that asks for
+    the sign alone). On that card's own replies the first tell passed on all
+    five that wrote one."""
+    return max(MAX_TELLS, TELLS_ASKED) if TELL_SCENE_FLOOR else MAX_TELLS
 
 
 #: The punctuation that separates the parts of one act: dashes, semicolons,
@@ -617,9 +711,46 @@ def after_questions(h, reply):
             qs[f"{key}:serves"] = _choice("want_serves", lang, serve_options, want=text)
             qs[f"{key}:urgency"] = _choice("want_urgency", lang, grade, want=text)
     outward = [(index, kind, row) for index, kind, row in steps(reply) if kind in ("say", "do")]
-    for j, tell in enumerate(lines_of(reply, "tells", MAX_TELLS)):
+    for j, tell in enumerate(lines_of(reply, "tells", tells_asked())):
         qs[f"tell:{j}:channel"] = _choice("tell_channel", lang, _set("channel", lang), tell=tell)
         qs[f"tell:{j}:miss"] = _choice("tell_subtlety", lang, _set("miss", lang), tell=tell)
+        # THE OBSERVABLE FLOOR FOR A SIGN (`TELL_SCENE_FLOOR`, kept on until
+        # a play run reads its live rate): the cue reaches every observer the
+        # gate admits word for word (`perception._delivered_manifest`), so a
+        # event or someone else's words written into it reached them as part
+        # of what they saw -- "the hand on the guide rope tightens until the
+        # knuckles pale as the counting house door slides past" (chat 166
+        # idx 13; on the 2026-10-09 replay of that beat a tell naming the
+        # counting-house door was the only mention of it the narrator was
+        # handed, and the page drew one). The compile withholds a cue unless
+        # this answers no, and shows the first of the tells asked that
+        # passes (`tells_asked`, `character_bare.compile_bare`). When it
+        # shows is asked on its own (`tell_when`, below), so a clause saying
+        # so adds nothing the engine needs.
+        # Probed 2026-10-10 on one reader's labels, each cue against its own
+        # read-back state: of the stored cues on chats 159-166 that name a
+        # place, a thing looked toward, an event or another's words, 32 of
+        # 44 withheld, and 1 of 49 that give the sign alone (what the body
+        # holds or touches counts as the body); of thirteen made-up leaks 12
+        # (the Japanese wording, probed on its own on them translated, 9).
+        # That label is not the firewall's test, which asks whether the
+        # OBSERVER had the thing through a channel of her own: the 12 kept
+        # are cues she had (her own words, acts or face, or the room they
+        # share), and of the 22 deliveries withheld 12 were likewise hers
+        # (`TELL_SCENE_FLOOR`). Other wordings: "does it name anything
+        # besides what your own body and voice show?" caught 5 of 79 cues
+        # naming anything (readings included) and dropped none of the 49;
+        # allowing "what you hold or touch" with the causes named caught 64
+        # and dropped 34; one naming where you look, what you hear, what
+        # happens around you or what it means caught 39 and dropped 9; "could
+        # someone watching you tell all of it?" caught 76 and dropped 48. A
+        # reading written into the sign is not floored here: no wording
+        # separated it on the read-back state, which reads a habit the sheet
+        # names as its meaning (13 of 49 signs dropped); the card states it
+        # instead. The causes are named bare, as the probes chose: the bare
+        # class caught almost nothing.
+        if TELL_SCENE_FLOOR:
+            qs[f"tell:{j}:outside"] = _choice("tell_outside", lang, yesno, tell=tell)
         # WHEN IT SHOWS: perception places the cue just before the step
         # picked (`agents.perception._cue_slots`), where it used to number
         # every cue after the whole beat -- so a sign named "at the coat
@@ -836,6 +967,38 @@ def graded(answers, key, scale):
     if mass <= 0:
         return None
     return sum(scale[k] * p for k, p in probs.items() if k in scale) / mass
+
+
+def grade_point(answers, key, scale):
+    """The point on `scale` of the grade the model chose, or None when it
+    chose none of them.
+
+    FOR A SCALE A GATE COMPARES AGAINST ITS OWN POINTS. `graded` is an
+    expectation, right for a quantity that is continuous (urgency,
+    salience). A tell's subtlety is not: it is a grade, and the tell gate
+    (`affect.tell_gate`) compares it with an observer's reach, which for an
+    ordinary or keen eye sits exactly on the grade points -- "noticeable" or
+    "subtle", one grade further for each advantage. Each grade's option
+    names the observer its point admits (`MISS`), so the grade chosen is
+    the set of observers the model said would notice the sign. An
+    expectation lands BETWEEN the points and admits a set no option named:
+    a tell called "subtle" with a tail toward "hidden" fell just past the
+    point and missed the observer one advantage past a stranger, while the
+    same grade with its tail the other way reached them. For an answer
+    massed on one grade and its neighbour the point only adds deliveries:
+    no reach the senses and advantages sum to (`perception._tell_acuity`
+    plus `affect.TELL_ADVANTAGE`) falls between a grade's point and an
+    expectation leaning below it. Measured 2026-10-09: 42 of the 144 tells
+    stored on chats 159-166 sat above their nearest grade point (24 of 98
+    "subtle", 18 of 46 "noticeable"); on the 2026-10-09 replay of chat 166
+    turn 4608 both of Hester's tells, called "subtle" (0.88 and 0.83), were
+    graded 0.652 to 0.665 and missed Tamsin, one advantage past a stranger
+    (reach 0.65). Measured 2026-10-10 on the observers each stored tell
+    actually reached, replaying `perception_outcome` (102 pairs, 128 tells):
+    the expectation over the old options delivered 99, and the grade chosen
+    100 on the old options or on these, the same one pair added."""
+    chosen = pick(answers, key)
+    return scale.get(chosen) if chosen in scale else None
 
 
 def indexed(answers, key, prefix, items):

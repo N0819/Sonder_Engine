@@ -24,6 +24,25 @@ given. So each fix is at the source:
   * the carriage: a demeanor the read-back says did not change keeps the
     words already shown, so the standing ledger can suppress it -- all 34
     demeanors were distinct strings, so one was re-delivered every beat.
+
+And two found on 2026-10-09, replaying chats 160, 161 and 166 on the pack card:
+
+  * the grade: a tell is placed at the grade the read-back chose, never at
+    the expectation between two, which the gate read across a grade -- 42 of
+    144 stored tells sat above their nearest grade point -- and each grade's
+    option names the observer its point admits, which the options it
+    replaced did not ("Someone paying attention would catch it" was the
+    grade a stranger looking elsewhere is admitted at);
+  * the reading: in `demeanor` and `tells` a sign's meaning is no part of
+    it -- the replies kept the meaning by saying it as a watcher would, 8 of
+    14 tells -- and `how` stays how the words sound;
+  * the scene: a cue goes to every observer the gate admits word for word,
+    so one that names something besides its giver -- "as the counting house
+    door slides past" -- is not shown, and the card asks for the sign alone,
+    its moment being asked on its own. The tell shown is the first the
+    floor passes, so a valid sign written beside a withheld one is not lost
+    with it; and the floor is one switch (`jev.TELL_SCENE_FLOOR`), kept on
+    by the owner until a play run measures its live firing rate.
 """
 
 from __future__ import annotations
@@ -37,7 +56,7 @@ import pytest
 from agents import character_bare
 from agents.common import STEP_MARK, assign_event_ids, fuse_speech_run, norm_sequence
 from agents.perception import _cue_slots, _delivered_manifest, _tell_acuity
-from llm.prompts import bare_character_prompt, character_bare_module
+from llm.prompts import bare_character_prompt, character_bare_module, character_jev_options, character_jev_text
 from mind import affect
 from mind import character_jev as jev
 from tests.helpers import forbid_model_calls
@@ -68,10 +87,8 @@ def _answers(script):
 def test_a_reply_gives_at_most_one_tell():
     assert jev.MAX_TELLS == 1
     h, reply = _holding(), _reply()
-    asked = {key for key in jev.after_questions(h, reply) if key.startswith("tell:")}
-    assert asked == {"tell:0:channel", "tell:0:miss", "tell:0:when"}, "the second is never asked about"
-    out, _ = character_bare.compile_bare(reply, {}, h)
-    assert [t["cue"] for t in out["manifest"]["tells"]] == ["a tight jaw"]
+    out, _ = character_bare.compile_bare(reply, _answers({"tell:0:outside": "no", "tell:1:outside": "no"}), h)
+    assert [t["cue"] for t in out["manifest"]["tells"]] == ["a tight jaw"], "both pass: the first, alone"
 
 
 _TELLS_ONLY_WHEN = {
@@ -120,6 +137,174 @@ def test_everything_another_person_is_given_holds_only_what_could_be_seen_or_hea
     assert concealment in paragraph and retired not in card
 
 
+_NO_READING = {
+    "en": ("In `demeanor` and `tells`, a sign's meaning is no part of it",
+           "give the sign itself, as it shows or sounds, and stop there",
+           "reads it for themselves, and may read it wrong"),
+    "ja": ("`demeanor`と`tells`では、しるしの意味はしるしの一部ではありません",
+           "見えるまま、聞こえるままのしるしだけを書いて、そこで止めてください",
+           "自分で読み取り、読み違えることもあります"),
+}
+
+
+@pytest.mark.parametrize("language", ("en", "ja"))
+def test_a_sign_is_given_without_its_reading(language):
+    """The floor said "never what it means to you", and the replies kept the
+    meaning by saying it from outside: "-- betraying that the distance of
+    her abduction registered harder than expected", "-- the only residue of
+    the fall she permits", "as if the stillness itself is the comfort she
+    chose" (current-card replies on the Sarah Moon story, chats 160/161,
+    2026-10-09; 5 of 10 tells written carried one). The narrator renders a
+    delivered reading as delivered -- 24 of 33 did on the stored pages -- so
+    a watcher was handed what only the giver could know. A sign's meaning is
+    the watcher's to read, and to misread.
+
+    SAID OF THE SIGNS, NEVER OF `how`: a line's `how` renders in the voice
+    slot for every observer who can see the speaker, ungated
+    (`perception._inject_dialogue`), and stated of all four fields the
+    sentence moved signs into it -- `how` carrying gaze, posture or a sign
+    went from 7 of 12 to 11 of 13 on the same ten replayed beats; scoped to
+    the signs, 14 of 29, 9 of 15 leaving out one reply that ran to fourteen
+    lines (2026-10-10, one sample a beat, one reader)."""
+    head = _FLOOR[language][0]
+    card = bare_character_prompt(language)
+    paragraph = next(p for p in card.split("\n\n") if p.startswith(head))
+    for phrase in _NO_READING[language]:
+        assert phrase in paragraph, phrase
+
+
+# --- the scene: a cue names nothing besides its giver -------------------------------
+
+_SIGN_ALONE = {
+    "en": ("Write the sign alone, as it shows on you or sounds in your voice",
+           "when it shows is asked of you separately"),
+    "ja": ("しるしだけを、あなたの体に表れるまま、声に響くままに書いてください", "それがいつ表れるかは、別にたずねます"),
+}
+
+
+@pytest.mark.parametrize("language", ("en", "ja"))
+def test_the_card_asks_for_the_sign_alone_because_its_moment_is_asked_separately(language):
+    """A cue tied its sign to the moment it came at, and named the moment by
+    what the giver saw: "the left thumb worries the rope callus once as the
+    counting-house door comes up on the right" (the 2026-10-09 replay of
+    chat 166 turn 4598, on the pack card). When a tell shows is asked of the
+    read-back on its own (`tell_when`); with this sentence the same beat
+    wrote "the left thumb rubs once, slow, across the rope callus on her
+    palm" (2026-10-10)."""
+    card = bare_character_prompt(language)
+    moves = next(p for p in card.split("\n\n") if "`want`" in p and "`tells`" in p)
+    for phrase in _SIGN_ALONE[language]:
+        assert phrase in moves, phrase
+
+
+_OUTSIDE = {
+    "en": ("WHAT GIVES YOU AWAY: {tell}\nDoes it name anything besides you and what you are doing -- "
+           "something happening around you, a sight or a sound, or someone else's words or doings?"),
+    "ja": ("本心を漏らすもの: {tell}\nあなた自身のほかに、何か・誰かのことが書かれていますか"
+           "（周りの出来事、見えるもの、聞こえる音、ほかの人の言葉や動き）？"),
+}
+
+
+@pytest.mark.parametrize("language", ("en", "ja"))
+def test_the_floor_question_is_the_wording_the_probes_chose(language):
+    """Pinned verbatim: each pack's wording is the one its own probe chose
+    (`jev.after_questions`, the comment at `tell:<j>:outside`). The English
+    caught 12 of 13 made-up leaks and 32 of 44 stored cues naming something
+    besides their giver, dropping 1 of 49 that gave the sign alone; the
+    Japanese, asked of the same thirteen leaks translated, 9 (the English
+    there 11), dropping none of ten."""
+    assert character_jev_text("tell_outside", language).strip() == _OUTSIDE[language]
+
+
+def test_a_sign_that_names_something_besides_its_giver_is_not_shown():
+    """A cue reaches every observer the gate admits word for word
+    (`perception._delivered_manifest`), so the scene a giver saw rode along
+    with the sign: on the 2026-10-09 replay of chat 166 turn 4598 a tell
+    naming the counting-house door was the only mention of one in the
+    narrator's input, and the page drew it -- the player acquired the
+    giver's view through no channel of her own. The read-back asks of each
+    tell whether it names anything besides its giver; the compile shows it
+    only on a no, and an unanswered question vouches for nothing."""
+    h = _holding()
+    leak = "the hand on the guide rope tightens until the knuckles pale as the counting house door slides past"
+    reply = _reply(tells=[leak])
+    question = jev.after_questions(h, reply)["tell:0:outside"]
+    assert leak in question["instructions"] and set(question["criteria"]) == {"yes", "no"}
+    named, warnings = character_bare.compile_bare(reply, _answers({"tell:0:outside": "yes"}), h)
+    assert named["manifest"]["tells"] == []
+    assert any("names something besides its giver" in w for w in warnings), warnings
+    kept, warnings = character_bare.compile_bare(reply, _answers({"tell:0:outside": "no"}), h)
+    assert [t["cue"] for t in kept["manifest"]["tells"]] == [leak] and warnings == []
+    unread, warnings = character_bare.compile_bare(reply, {}, h)
+    assert unread["manifest"]["tells"] == [], "fails closed"
+    assert any("could not vouch" in w for w in warnings), warnings
+
+
+def test_the_tell_shown_is_the_first_the_floor_passes_not_the_first_written():
+    """With one tell a reply (`MAX_TELLS`), a first tell the floor withheld
+    silenced the beat even when the same reply wrote a valid sign beside it.
+    On the 68 stored replies of chats 159-166 that keep their call, read
+    back in the engine's request shape, the floor withheld the first tell of
+    21 and 19 of those had written another, which passed on 16: chat 166
+    turn 4603, a beat in a composure crisis -- the one case the card
+    requires a tell -- lost "the hum cuts off mid-note as Coyle's eyes
+    finish the second pass" and had written "the knuckles on the scull loom
+    go white, the loom creaking faintly under the grip" beside it. The
+    read-back asks the floor, and what a shown tell needs, of the reply's
+    first `TELLS_ASKED`, inside the same request; the compile shows the
+    first that passes, still at most `MAX_TELLS` (the owner, 2026-10-10:
+    "recover a valid second cue beside a dropped one"). A tell is shown on
+    63 of those 68 replies where it was 47. A leak is withheld exactly as
+    before."""
+    h = _holding()
+    leak = "the hum cuts off mid-note as Coyle's eyes finish the second pass"
+    sign = "the knuckles on the scull loom go white, the loom creaking faintly under the grip"
+    reply = _reply(tells=[leak, sign, "a third, never asked"])
+    asked = {key for key in jev.after_questions(h, reply) if key.startswith("tell:")}
+    assert jev.TELLS_ASKED == 2
+    assert asked == {f"tell:{j}:{part}" for j in range(jev.TELLS_ASKED)
+                     for part in ("channel", "miss", "outside", "when")}
+    answers = _answers({"tell:0:outside": "yes", "tell:0:channel": "heard", "tell:0:miss": "plain",
+                        "tell:1:outside": "no", "tell:1:channel": "seen", "tell:1:miss": "noticeable",
+                        "tell:1:when": "s1"})
+    out, warnings = character_bare.compile_bare(reply, answers, h)
+    (shown,) = out["manifest"]["tells"]
+    assert shown["cue"] == sign, "the valid sign beside the withheld one"
+    assert (shown["channel"], shown["subtlety"], shown[character_bare._AT_STEP]) == (
+        "seen", jev.MISS["noticeable"], 1), "placed by its own answers, never the withheld one's"
+    assert any("names something besides its giver" in w and "Coyle" in w for w in warnings), warnings
+    # Two withheld: nothing past the number asked stands in.
+    neither, _ = character_bare.compile_bare(reply, _answers({"tell:0:outside": "yes", "tell:1:outside": "yes"}),
+                                             h)
+    assert neither["manifest"]["tells"] == []
+    # A first that passes is the one shown, whatever was asked beside it.
+    first, warnings = character_bare.compile_bare(
+        reply, _answers({"tell:0:outside": "no", "tell:1:outside": "no"}), h)
+    assert [t["cue"] for t in first["manifest"]["tells"]] == [leak] and warnings == []
+
+
+def test_the_scene_floor_is_one_switch_and_off_the_first_tell_shows_unasked(monkeypatch):
+    """The scene floor is a decision-model reading of free prose that
+    removes text, and of the 22 deliveries it withholds on the stored tells
+    of chats 159-166, 12 named only what their observer said, did, held or
+    shared. The owner kept it on (2026-10-10), to be cut or narrowed if the
+    next play run shows it withholding valid cues -- so it is one switch
+    (`jev.TELL_SCENE_FLOOR`), and that ruling is one line. Off, the read-back
+    asks no floor question and only `MAX_TELLS` tells, and the compile shows
+    the first, as it did before the floor -- an unanswered read-back at 0.5."""
+    assert jev.TELL_SCENE_FLOOR is True, "on, by the owner's ruling of 2026-10-10"
+    monkeypatch.setattr(jev, "TELL_SCENE_FLOOR", False)
+    h = _holding()
+    leak = "the hand on the guide rope tightens until the knuckles pale as the counting house door slides past"
+    reply = _reply(tells=[leak, "a quick breath"])
+    asked = {key for key in jev.after_questions(h, reply) if key.startswith("tell:")}
+    assert asked == {"tell:0:channel", "tell:0:miss", "tell:0:when"}
+    out, warnings = character_bare.compile_bare(reply, _answers({"tell:0:outside": "yes"}), h)
+    assert [t["cue"] for t in out["manifest"]["tells"]] == [leak] and warnings == []
+    unread, warnings = character_bare.compile_bare(reply, {}, h)
+    assert [(t["cue"], t["subtlety"]) for t in unread["manifest"]["tells"]] == [(leak, 0.5)] and warnings == []
+
+
 # --- the gate: the observer's reach on the scale the tell is graded on -------------
 
 _CUE = "a hand that goes still on the rail"
@@ -161,6 +346,73 @@ def test_a_hidden_tell_takes_two_advantages():
     hidden = jev.MISS["hidden"]
     assert _delivered(hidden, known=True) == [] and _delivered(hidden, focus="Bo") == []
     assert _delivered(hidden, known=True, focus="Bo") == [_CUE]
+
+
+_MISS_LABELS = {
+    "en": {"plain": "Anyone near you would notice it, even with poor eyes or ears.",
+           "noticeable": "Anyone who can see or hear you would notice it, even a stranger looking elsewhere.",
+           "subtle": "Only someone watching you, or who knows you, would notice it.",
+           "hidden": "Only someone who knows you and is watching you would notice it."},
+    "ja": {"plain": "目や耳が弱い人でも、近くにいれば誰でも気づく。",
+           "noticeable": "あなたが見えるか聞こえる人なら誰でも気づく。よそを見ている見知らぬ人でも。",
+           "subtle": "あなたを見ている人か、あなたを知っている人だけが気づく。",
+           "hidden": "あなたを知っていて、しかもあなたを見ている人だけが気づく。"},
+}
+
+
+@pytest.mark.parametrize("language", ("en", "ja"))
+def test_each_grade_names_the_observer_its_point_admits(language):
+    """The read-back's options and the gate are two representations of one
+    scale, and they disagreed: "noticeable" read "Someone paying attention
+    would catch it" -- the observer one advantage past a stranger -- while
+    the gate admits a stranger looking elsewhere at that grade, so with the
+    grade chosen in place of the expectation 16 of 102 stored tells would
+    have reached such a stranger where the model had named someone paying
+    attention (chats 159-166, re-graded 2026-10-10). Each option now names
+    the observer the gate admits at its point; on the same tells the
+    read-back chose "noticeable" for 2 of 128, and on seventeen made-up
+    signs it still put a sob or a shattered cup at "plain" or "noticeable".
+    Pinned verbatim: the wording is the one probed in each pack."""
+    assert character_jev_options("miss", language) == _MISS_LABELS[language]
+    poor = {"senses": [{"channel": "vision", "acuity": "poor"}]}
+    assert _delivered(jev.MISS["plain"], sheet=poor) == [_CUE], "plain: even poor eyes"
+    assert _delivered(jev.MISS["noticeable"], sheet=poor) == []
+    assert _delivered(jev.MISS["noticeable"]) == [_CUE], "noticeable: a stranger looking elsewhere"
+    assert _delivered(jev.MISS["subtle"]) == []
+    assert _delivered(jev.MISS["subtle"], focus="Bo") == [_CUE], "subtle: someone watching"
+    assert _delivered(jev.MISS["subtle"], known=True) == [_CUE], "subtle: someone who knows them"
+    assert _delivered(jev.MISS["hidden"], known=True) == []
+    assert _delivered(jev.MISS["hidden"], known=True, focus="Bo") == [_CUE], "hidden: both"
+
+
+def _graded_tell(probabilities):
+    """The subtlety a compiled tell carries for the read-back's answer."""
+    h, reply = _holding(), _reply(tells=["a hand that goes still on the rail"])
+    answers = {"tell:0:miss": {"type": "choice", "probabilities": dict(probabilities)},
+               **_answers({"tell:0:outside": "no"})}
+    out, _ = character_bare.compile_bare(reply, answers, h)
+    return out["manifest"]["tells"][0]["subtlety"]
+
+
+def test_a_tell_is_placed_at_the_grade_chosen_not_between_two():
+    """The gate compares a subtlety with a reach that sits ON the grade
+    points, so a subtlety between them decided delivery by the answer's
+    tail: on the 2026-10-09 replay of chat 166 turn 4608 both of Hester's
+    tells, called "subtle" (0.88, with 0.09 on "hidden"), came out
+    0.652-0.665 and missed Tamsin one advantage past a stranger (0.65). In
+    the stored run the old gate had delivered both."""
+    subtle = _graded_tell({"noticeable": 0.03, "subtle": 0.88, "hidden": 0.09})
+    assert subtle == jev.MISS["subtle"]
+    assert _delivered(subtle, known=True) == [_CUE] and _delivered(subtle, focus="Bo") == [_CUE]
+    assert _delivered(subtle) == [], "and still not a stranger glancing elsewhere"
+    # The tail the other way changes nothing either: the grade is the grade.
+    assert _graded_tell({"noticeable": 0.2, "subtle": 0.8}) == jev.MISS["subtle"]
+    # An ordinary eye catches what the model called "noticeable", whatever
+    # it put on "subtle" beside it.
+    noticeable = _graded_tell({"noticeable": 0.7, "subtle": 0.3})
+    assert noticeable == jev.MISS["noticeable"] and _delivered(noticeable) == [_CUE]
+    # Unanswered stays where it was.
+    assert _graded_tell({}) == 0.5
 
 
 # --- the order: a cue shows at the step it went with --------------------------------
@@ -229,7 +481,8 @@ def test_the_step_a_tell_shows_at_survives_normalization_as_its_event_id():
                              {"do": "holds out a hand to Mara", "why": "x"}],
                    tells=["a tight jaw"])
     for picked, element in (("s0", 0), ("s1", 0), ("s2", 1), ("all_through", None)):
-        out, _ = character_bare.compile_bare(reply, _answers({"tell:0:when": picked, "do:2:seen": "outward"}), h)
+        out, _ = character_bare.compile_bare(reply, _answers({"tell:0:when": picked, "tell:0:outside": "no",
+                                                              "do:2:seen": "outward"}), h)
         norm_sequence(out)
         fuse_speech_run(out)
         out["sequence"] = assign_event_ids(out["sequence"], "turn:9:character:7")
@@ -358,7 +611,8 @@ def test_the_step_reads_the_stored_carriage_and_anchors_its_tell(temp_db, monkey
 
     def read_back(holding, out):
         seen["carriage"] = holding.carriage
-        return _answers({"tell:0:when": "s1", "do:1:seen": "outward", "demeanor:changed": "no"})
+        return _answers({"tell:0:when": "s1", "tell:0:outside": "no", "do:1:seen": "outward",
+                         "demeanor:changed": "no"})
 
     monkeypatch.setattr(jev, "ask_before", lambda holding: {})
     monkeypatch.setattr(jev, "ask_after", read_back)

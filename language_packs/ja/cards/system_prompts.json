@@ -974,6 +974,9 @@
     "tell_when": {
       "$text": "character_jev/tell_when.txt"
     },
+    "tell_outside": {
+      "$text": "character_jev/tell_outside.txt"
+    },
     "demeanor_changed": {
       "$text": "character_jev/demeanor_changed.txt"
     },
@@ -1188,10 +1191,10 @@
         "strong": "強く。"
       },
       "miss": {
-        "plain": "はっきり見て取れる。",
-        "noticeable": "注意している人なら気づく。",
-        "subtle": "よく見ている人だけが気づく。",
-        "hidden": "ほとんど誰も気づかない。"
+        "plain": "目や耳が弱い人でも、近くにいれば誰でも気づく。",
+        "noticeable": "あなたが見えるか聞こえる人なら誰でも気づく。よそを見ている見知らぬ人でも。",
+        "subtle": "あなたを見ている人か、あなたを知っている人だけが気づく。",
+        "hidden": "あなたを知っていて、しかもあなたを見ている人だけが気づく。"
       },
       "channel": {
         "seen": "目で。",

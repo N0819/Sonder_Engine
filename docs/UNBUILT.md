@@ -399,7 +399,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.85 — A memory's age off a per-beat estimate, not a per-beat record](UNBUILT_CHARACTERS.md#unbuilt-1-85)
 - [§1.99g — Memories the player owns, and the one thing that must be true first](UNBUILT_CHARACTERS.md#unbuilt-1-99g)
 - [§1.107 — `generalization_tags` promises a mechanism that does not exist](UNBUILT_CHARACTERS.md#unbuilt-1-107)
-- [§1.184 — The tell and carriage changes are measured on pressing beats only](UNBUILT_CHARACTERS.md#unbuilt-1-184)
+- [§1.184 — The tell and carriage changes: quiet beats measured (2026-10-09), and what is still open](UNBUILT_CHARACTERS.md#unbuilt-1-184)
 
 **2. Roadmap**
 
@@ -518,6 +518,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.171 — A failed model attempt leaves no trace in the ledger or the log](UNBUILT_PLATFORM.md#unbuilt-1-171)
 - [§1.172 — Every memory write scans the whole retrieval index](UNBUILT_PLATFORM.md#unbuilt-1-172)
 - [§1.186 — The format ladder after a hold, and service tiers (2026-10-08)](UNBUILT_PLATFORM.md#unbuilt-1-186)
+- [§1.197 — An active prompt preset masks every later change to the card it replaces (2026-10-09)](UNBUILT_PLATFORM.md#unbuilt-1-197)
 
 **2. Roadmap**
 

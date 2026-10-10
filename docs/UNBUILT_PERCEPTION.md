@@ -2094,6 +2094,53 @@ production caller; see §1.45's dead family.)*
 - **F7 — `known_pronouns` releases pronouns on unverified mind-model keys.**
   `agents/character.py` keys off `set(relationships) | set(mind_models)`, which
   is the unvalidated set.
+- **What another mind is given of a body carried what its giver saw — floored
+  in the cue 2026-10-10, not in `how` or `demeanor`.** Every field another
+  mind receives word for word carries the class: a tell's cue reaches every
+  observer the gate admits (`perception._delivered_manifest`), and a line's
+  `how` (rendered as its tone, ungated, by `common._inject_dialogue`) and the
+  `demeanor` reach every observer who can see the giver -- so the scene a
+  giver wrote into any of them rode along. Evidence: on the 2026-10-09 replay
+  of chat 166 turn 4598 the delivered cue read "the left thumb worries the
+  rope callus once as the counting-house door comes up on the right" -- the
+  only mention of a counting-house in the narrator's whole input -- and the
+  page drew "A door, a shape in the fog ... A counting-house, maybe": the
+  player acquired the giver's view through no channel of her own (the stored
+  beat's own cue named the same door). On the 2026-10-10 card's replies a
+  `how` read "low and even, eyes held on the stake and the coat, not turning
+  to her" (4603) and a demeanor "everything in her aimed at the coat on the
+  boards" (4605): an observer who sees Hester but not the stake in fog is
+  handed the stake. **Floored for the cue alone:** the read-back asks of a
+  reply's first two tells whether each names anything besides its giver and
+  what she is doing (`tell:<j>:outside`), and the compile shows the first
+  that answers no, failing closed (`character_bare.compile_bare`,
+  `jev.tells_asked`); the card asks for the sign alone. Kept on by the
+  owner's ruling of 2026-10-10, its live firing rate to be read in the next
+  play run and the floor cut or narrowed if it withholds valid cues there;
+  one switch, `jev.TELL_SCENE_FLOOR`. **Its cost**, on stored tells
+  written before the sign-alone clause: it withholds 22 of 100 deliveries,
+  and its question is not the firewall's (did the observer have the thing
+  through a channel of her own?) -- 12 of the 22 named only what their
+  observer said, did, held or shared, one of Hester's two tells on each of
+  chat 166's four boat beats, turns 4600-4603, among them; 9 carried a
+  reading and at most 1 a scene she lacked. It withholds 3 of the 26 crisis
+  tells, each its reply's first, though a crisis is the one case the card
+  requires a tell. The 12 stored cues naming something besides the giver
+  that it keeps are not misses -- 7 name the observer's own words, acts or
+  face, 5 the room they share. A stricter wording probed caught 39 of 79
+  cues naming anything besides the giver and dropped 9 of 49 signs alone.
+  Asking the first tell alone, it left 21 of 68 stored replies without one,
+  4601-4603 and 2 of 13 crisis replies among them; showing the first of two
+  that passes, a tell is shown on 63 of 68, against 47 asking the first
+  alone and 68 with no floor, both crisis replies and 4602-4603 given back.
+  On this card's own replies it withholds 0 of the 8 tells asked with each
+  character's sheet (round two's 0 of 9 was probed on states built without
+  it). `docs/UNBUILT_CHARACTERS.md` §1.184 has the rows. **Still open:**
+  `how` and `demeanor` are not floored, nor a reading written into a sign;
+  and the floor is a decision-model reading -- both packs kept a made-up
+  hand going to the pocket "where the receipt is", and the Japanese a gaze
+  "to the safe behind the painting". How to floor what is left is the
+  owner's question, not whether.
 
 <a id="unbuilt-3-8"></a>
 
