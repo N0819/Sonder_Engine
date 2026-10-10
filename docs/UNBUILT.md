@@ -201,6 +201,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.187 — The encoder repair's continuation: what is not measured (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-187)
 - [§1.188 — Encoder payload scope: residuals (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-188)
 - [§1.195 — Two defects found replaying a follow (2026-10-09)](UNBUILT_PIPELINE.md#unbuilt-1-195)
+- [§1.196 — One fresh attempt before a malformed beat aborts: what it leaves (2026-10-09)](UNBUILT_PIPELINE.md#unbuilt-1-196)
 
 **2. Roadmap**
 

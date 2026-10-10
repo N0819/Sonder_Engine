@@ -75,6 +75,10 @@ from world.spatial import (
     entity_side,
     feature_visibility,
     has_visual,
+    anchor_cells,
+    beam_light_on,
+    beam_lit_cells,
+    beam_sent_into,
     effective_light,
     room_has_geometry,
     sense_adjusted,
@@ -86,6 +90,7 @@ from world.spatial import (
     light_shape,
     measured_proximity_rel,
     merge_scene_with_diff,
+    neighbour_cells_in_view,
     neighbour_feature_visibility,
     normalize_barrier,
     normalize_bearing,
@@ -5360,7 +5365,13 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
             if at not in seen_anchors:
                 continue                                    # rule 5, placed
             place = seen_anchors[at]
-        elif not lit:
+        elif not lit and _is_dark(beam_light_on(sc, str(eid)) or "dark"):
+            # A POINTED LIGHT LIGHTS WHAT IT POINTS AT (the owner's ruling,
+            # 2026-10-09): a thing with no place, in a dark room, that a beam
+            # is aimed at and reaches -- from this room or through a doorway
+            # -- is seen by its light, by everyone in the room with it, the
+            # way a thing at a lit anchor is. Any other unplaced thing in the
+            # dark stays unseen.
             continue                                        # rule 5, unplaced
         else:
             place = ""
@@ -5486,7 +5497,21 @@ def _visible_openings(sc, name, room, *, sweep=False, gate=None,
             row["state"] = "bare"
             out.append(row)
             continue
-        if _is_dark(effective_light(sc, to_room)):
+        # WHAT A POINTED LIGHT LIGHTS IN A DARK ROOM IS SEEN THROUGH THE WAY
+        # INTO IT (the owner's ruling, 2026-10-09, D3 of the Brackwater run: a
+        # pointed carried light lights what it points at in the next room, and
+        # minds see what it shows). The darkness test below reads the far
+        # room's TYPICAL light, its median cell, so a lantern aimed through
+        # the doorway left the whole room "only darkness" while its beam lit
+        # the threshold. Where a BEAM pointed into the room lights some of it
+        # (`_beam_lit_view`), the room is seen by that light alone: named, its
+        # furniture admitted only where the beam falls, and never its notes --
+        # the room as a whole stays dark. No other light admits a dark room:
+        # the contrast rule below stands for a lit room's spill and for every
+        # lamp that is not pointed in.
+        far_dark = _is_dark(effective_light(sc, to_room))
+        lit_cells = _beam_lit_view(sc, name, room, to_room) if far_dark else None
+        if far_dark and lit_cells is None:
             # DARKNESS IS ONLY WORTH SAYING WHERE IT IS A CONTRAST. A lit room
             # with an unlit way out of it has a black doorway in it, and that
             # is a thing a body sees. Standing in the dark yourself, every
@@ -5510,14 +5535,53 @@ def _visible_openings(sc, name, room, *, sweep=False, gate=None,
         # else desc. Reading `notes` alone here handed a freshly minted room
         # through its doorway as a bare name -- chat 123 turn 9, the TARDIS
         # interior the spatial hand had just described at length.
-        notes = room_prose(far)
+        notes = "" if far_dark else room_prose(far)
         row["room_name"] = far_name
         row["room_notes"] = gate(notes) if gate is not None else notes
         rows = neighbour_feature_visibility(sc, name, to_room, sweep=bool(sweep))
+        if rows and far_dark:
+            # The anchors as the LIGHT field lays them out (`derive`), the
+            # frame `beam_lit_cells` answers in.
+            placed = anchor_cells(sc, to_room, derive=True)
+            rows = [r for r in rows if any(
+                tuple(c) in lit_cells
+                for c in (placed.get(r["anchor"]) or {}).get("cells") or ())]
         if rows:
             row["features"] = rows
         out.append(row)
     return out
+
+
+def _beam_lit_view(sc, name, room, to_room):
+    """What a BEAM POINTED INTO the dark room `to_room` lets this observer,
+    standing in `room`, see of it through the way between: the cells of
+    `to_room` (its own frame) the beams light that the observer's straight
+    line through the gap reaches; an empty set when the room is to be named
+    and nothing in it can be placed; None when no beam shows anything, and
+    the black doorway stands.
+
+      * The far room has a light field (`spatial.beam_lit_cells`): what the
+        beams pointed into it light -- an aim naming it or something in it,
+        or a compass aim whose beam proper falls in it, on its way through
+        or not -- line-tested from where the observer stands
+        (`neighbour_cells_in_view`), so a bystander whose line does not
+        reach the lit patch is shown nothing.
+      * Sight cannot place the far room (a doorway with no bearing), so
+        there is no line to test: only the beams sent through THIS opening
+        count -- a lamp standing in the observer's own room -- as below.
+      * The far room has no field: no cells and no line. A beam lights only
+        the body it names, never the room, and the room is named to an
+        observer looking through the opening the beam is sent through
+        (`spatial.beam_sent_into`), and to nobody else."""
+    lit = beam_lit_cells(sc, to_room)
+    if lit is None:
+        return set() if beam_sent_into(sc, to_room, room) else None
+    if not lit:
+        return None
+    in_view = neighbour_cells_in_view(sc, name, to_room, lit)
+    if in_view is not None:
+        return in_view or None
+    return beam_lit_cells(sc, to_room, from_room=room) or None
 
 
 def _was_hearing_this_room(prev_standing, room):

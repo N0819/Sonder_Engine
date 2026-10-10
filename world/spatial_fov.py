@@ -1831,6 +1831,39 @@ def neighbour_feature_visibility(scene: dict, observer: str, to_room,
     return rows
 
 
+def neighbour_cells_in_view(scene: dict, observer: str, to_room, cells):
+    """The subset of `cells` (in `to_room`'s own frame) the observer's straight
+    line reaches through the doorway, or None when `to_room` is not placed in
+    the observer's field -- an unbeared doorway, a window -- and there is no
+    line to test.
+
+    The same single line `neighbour_feature_visibility` draws to a far
+    room's furniture: `_occluders_on` answers `__wall__` when it crosses the
+    wall anywhere but the gap, and names what stands in the way otherwise. A
+    cell is a patch of floor, so it is tested at half a rank, the height that
+    function gives a floor-level anchor. Unmeasured, the line runs from the
+    room's centre, as it does there. Used to ask whether a lit patch of a
+    dark room is one this observer can actually see
+    (`perception._visible_openings`)."""
+    field = observer_field(scene, observer)
+    if field is None or to_room not in field.offsets:
+        return None
+    room_id = room_of(scene, observer)
+    if not room_id or str(to_room) == str(room_id):
+        return None
+    origin, _how = _observer_cell(scene, observer)
+    eye = eye_rank(scene, observer)
+    out = set()
+    for cell in cells or ():
+        target = field.cell_of(to_room, tuple(cell))
+        if field.inside.get(target) != to_room:
+            continue
+        blocker, _t, _tid = _occluders_on(field, origin, target, eye, 0.5)
+        if blocker is None:
+            out.add(tuple(cell))
+    return out
+
+
 def body_visibility(scene: dict, observer: str, target: str) -> dict:
     """How one body's line reaches another, or does not.
 

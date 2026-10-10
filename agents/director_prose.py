@@ -55,6 +55,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from core.db import get_setting
 from llm import decisions
+from llm.providers import Aborted
 from llm.schemas import NON_ENTITY_FIELD_KEYS, _hoist_misplaced_entity_siblings
 from llm.prompts import (
     ENCODER_PART_SEP,
@@ -2286,14 +2287,19 @@ def _extension_sections(channels):
 
 
 def _call_encoder(ctx, channels, payload, parts):
-    """`(answer, exchange)`. Where the encoder's route caches a prefix
+    """`(answer, exchange, attempt)`. Where the encoder's route caches a prefix
     (`providers.role_caches_prefix`), the request goes as one -- its user
     message a cache breakpoint, and one line after it (`encoder_cue`),
     because Gemini through OpenRouter writes nothing for a breakpoint on the
     last message (32,706 prompt tokens, 0 cached, 2026-10-08) -- and
     `exchange` is that request as sent with the answer it got, for the
     repair to continue (`director_repair.continuation`). Elsewhere the
-    request is exactly what it always was, and `exchange` is None."""
+    request is exactly what it always was, and `exchange` is None.
+
+    `attempt` is which attempt of the validated ladder the answer came from
+    (`llm_quality.answered_by`: "first", "rebuild", "fresh", ...), or "" when
+    the call did not say -- a stand-in for the model call, in a test."""
+    from llm import llm_quality
     from llm.providers import role_caches_prefix
     sheet = unified_specialist_prompt(channels, ctx.language, parts,
                                       extensions=_extension_sections(channels))
@@ -2303,15 +2309,20 @@ def _call_encoder(ctx, channels, payload, parts):
         prefix = {"user": json.dumps(sent, ensure_ascii=False),
                   "after": [{"role": "user", "content": prose_contract_text(
                       "encoder_cue", ctx.language)}]}
-    answer = _agent_json(
-        "encoder",
-        "director_specialist",
-        sheet,
-        sent,
-        temperature=0.2,
-        max_tokens=None,
-        **({"prefix": prefix} if prefix else {}),
-    ) or {}
+    token = llm_quality.answered_by.set("")
+    try:
+        answer = _agent_json(
+            "encoder",
+            "director_specialist",
+            sheet,
+            sent,
+            temperature=0.2,
+            max_tokens=None,
+            **({"prefix": prefix} if prefix else {}),
+        ) or {}
+        attempt = llm_quality.answered_by.get()
+    finally:
+        llm_quality.answered_by.reset(token)
     exchange = None
     if prefix is not None and isinstance(answer, dict):
         try:
@@ -2323,7 +2334,7 @@ def _call_encoder(ctx, channels, payload, parts):
             exchange = None
     if isinstance(answer, dict) and isinstance(answer.get("events"), list):
         answer = dict(answer, events=transforms_as_written(answer["events"]))
-    return answer, exchange
+    return answer, exchange, attempt
 
 
 def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=None,
@@ -2368,8 +2379,15 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     payload["new_places"] = dict(new_places or {})
     payload["requestable_tools"] = requestable()
     t0 = time.time()
-    answer, exchange = _call_encoder(ctx, channels, payload, parts)
+    answer, exchange, attempt = _call_encoder(ctx, channels, payload, parts)
     record["seconds"] = round(time.time() - t0, 3)
+    # WHICH ATTEMPT THE BEAT'S EVENTS CAME FROM (D5, the owner's ruling of
+    # 2026-10-09): the first answer, a local mend, the rebuild, or the one
+    # fresh asking a malformed repair earns before the beat would abort
+    # (`llm_quality.MALFORMED_REASKS`). Every rung after the first spoke only
+    # as an unattributed warning, so a kept beat could not say it.
+    if attempt:
+        record["attempt"] = attempt
     missing = lacking(answer.get("missing_tools"))
     # CODE CLOSES THE KNOWN DEPENDENCIES; the decision model only predicts.
     # An event's `movement` is core row shape, written whatever was granted,
@@ -2416,13 +2434,34 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
             # and the replacement dropped every later step of the beat.
             payload["previous_events"] = list(first.get("events") or [])
             t1 = time.time()
-            answer, exchange = _call_encoder(ctx, channels, payload, parts)
+            try:
+                answer, exchange, widen_attempt = _call_encoder(
+                    ctx, channels, payload, parts)
+            except Aborted:
+                raise
+            except Exception as exc:
+                # A BEAT WITH A VALID ANSWER IS NEVER LOST TO ITS WIDENING. The
+                # widened request is a second, optional asking; when its own
+                # ladder fails to the end -- a malformed answer, its repair and
+                # the fresh attempt included -- the stage raised and aborted a
+                # beat whose first answer had validated. The first answer
+                # stands, as it does when the widened one comes back thinner,
+                # and the tools it lacked are said to be unencoded.
+                answer, exchange, widen_attempt = first, first_exchange, ""
+                record["widen_failed"] = str(exc)[:300]
+                ctx.add_warning(f"{stage}: the widened encoder request failed "
+                                f"({str(exc)[:160]}); kept the first answer, "
+                                f"{missing} unencoded")
             record["widened_to"] = list(channels) + list(parts)
             record["widen_seconds"] = round(time.time() - t1, 3)
+            if widen_attempt:
+                record["widen_attempt"] = widen_attempt
             # A replacement, never a merge -- so a thinner replacement must
             # not win. Fewer events than the first answer means the beat was
             # not re-encoded whole; keep the first and report the tool.
-            if len(answer.get("events") or []) < len(first.get("events") or []):
+            if "widen_failed" in record:
+                channels, parts = first_channels, first_parts
+            elif len(answer.get("events") or []) < len(first.get("events") or []):
                 record["widen_rejected"] = (
                     f"{len(answer.get('events') or [])} events against the "
                     f"first answer's {len(first.get('events') or [])}")
@@ -2432,7 +2471,8 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
                 answer, channels, parts = first, first_channels, first_parts
                 exchange = first_exchange
             still = lacking(answer.get("missing_tools"))
-            if still and "widen_rejected" not in record:
+            if still and "widen_rejected" not in record \
+                    and "widen_failed" not in record:
                 record["unmet_tools"] = still
                 ctx.add_warning(f"{stage}: encoder still lacked {still} after "
                                 "widening; those changes are unencoded")

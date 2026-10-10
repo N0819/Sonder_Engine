@@ -218,7 +218,7 @@ from world.spatial_geometry import (
 
 from world.spatial_light import (
     _brighter, _LIGHT_ALIASES, _LIGHT_ORDER, _light_radius, _LIGHT_SIGHT,
-    _sky_light,
+    _sky_light, aim_into, aim_of, beam_light_on, beam_sent_into,
     effective_light, light_at, light_blocks_sight, LIGHT_LEVELS,
     normalize_light, room_light, SIGHT_LEVELS, source_light,
     unsourced_light_notices, unsourced_light_rooms,
@@ -275,7 +275,7 @@ from world.spatial_fov import (
     bearing_between, body_cell, body_cell_source, body_visibility,
     cover_between, eye_rank,
     feature_visibility, footprint_for_extent, grid_side, height_rank,
-    neighbour_feature_visibility, normalize_footprint,
+    neighbour_cells_in_view, neighbour_feature_visibility, normalize_footprint,
     normalize_height, normalize_opacity, normalize_part_at, normalize_parts,
     normalize_shape,
     observer_field, part_box, parts_box, posture_class, posture_word_class,
@@ -302,7 +302,8 @@ from world.spatial_light_field import (
     cone_factor, CONE_GAIN, CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD,
     ambient_floor_word, DEFAULT_LIGHT_SHAPE, DEFAULT_STEADINESS, DIM_T,
     emitted_level,
-    FAIL_RATE, fails_on, failing_sources_out, field_effective_light,
+    beam_lit_cells, FAIL_RATE, fails_on, failing_sources_out, field_beam_on,
+    field_effective_light,
     field_light_at, field_rows, FLICKER_RATE, flickers_on, FLOOR_SPILL,
     held_beam_falls_on, light_field,
     light_geometry_exists, light_passes, light_shape, light_sources,

@@ -1884,8 +1884,41 @@ Open:
     characters of reasoning. Only an empty answer raises
     (`director_prose.author`), so the beat went on with the pilot's walk,
     line and knock unresolved and the engine only warned ("no event
-    carries declared act(s)"). The owner's D5 (one fresh attempt before a
-    malformed beat aborts, wave 2) is the nearest seam.
+    carries declared act(s)"). The owner's D5 landed (§ 1.196) and does
+    not reach it: this answer parsed and validated, and nothing was
+    malformed. Asking afresh on a cut sentence means reading prose for an
+    ending, which is the owner's call.
+
+<a id="unbuilt-1-196"></a>
+
+### 1.196 One fresh attempt before a malformed beat aborts: what it leaves (2026-10-09)
+
+**Built:** the owner's D5 (Design.md, 'An answer that never parsed, or a
+repair that came back malformed, is asked for afresh before the stage
+fails'). Left:
+
+- **A content failure whose every answer parsed is still not asked
+  afresh.** The 2026-10-08 design called it the repair rungs' own case ("re-
+  asked from scratch it would only fail the same way"), unmeasured; D5's
+  reason -- an aborted beat is the worst break, one call only on a beat that
+  would otherwise fail -- reads on it too. The owner's call.
+- **The fresh ask is every validated step's, not only the encoder's** (the
+  class, as the 2026-10-08 landing scoped it): a narrator, character or room
+  author failure with a malformed answer in it is asked afresh as well.
+- **Only three rungs' answers are mended locally.** The first answer, the
+  rebuild and the fresh answer are offered to `json_mend` before another
+  call is made; the re-asks of the same request (with room, and after an
+  empty object) and the fallback candidates go to the next rung unmended.
+  True before D5; found scripting the re-ask with room's malformed answer
+  into the fresh ask.
+- **The capture does not name a call's rung.** `llm_capture` rows carry
+  `ok` and `error`, not which attempt they were; the prose-contract record
+  says which attempt the encoder's answer came from (`encoder.attempt`), and
+  the fresh ask's warning names its step. Other roles' kept answers name
+  their attempt nowhere.
+- **No live provocation was run.** A malformed encoder answer is rare (2 of
+  464 captured); the rule is pinned by scripted ladders and by turn 4601's
+  two captured answers replayed through the ladder (`mended`, one call).
 
 ## 2. Roadmap
 

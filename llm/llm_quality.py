@@ -1,5 +1,6 @@
 """Strict JSON completion, semantic validation, and repair retries."""
 
+import contextvars
 import json
 import re
 import time
@@ -426,7 +427,34 @@ def _targeted_field_patch(parsed, errors, *, validate=None):
     return out if touched else None
 
 
-def _accepted(report):
+#: WHICH ATTEMPT AN ACCEPTED ANSWER CAME FROM, for the caller that keeps a
+#: record of the call (`director_prose.encode` files it on the stage's
+#: prose-contract record as `encoder.attempt`). Set by `_accepted` on every
+#: accepted answer of `complete_validated_json`, read by the caller right
+#: after the call returns, on the same thread: one of
+#:   first           the request's own answer
+#:   mended          that answer with its brackets mended locally, no call
+#:   stall_reask     the request asked again after an empty object
+#:   room_reask      asked again with more room after a cut answer
+#:   runaway_reask   asked again at the same budget after a runaway
+#:   field_patch     the failing fields patched by the repair model
+#:   rebuild         the temperature-0 rebuild of the broken answer
+#:   rebuild_mended  that rebuild with its brackets mended locally
+#:   fallback:N      fallback candidate N rebuilding it
+#:   first_pruned    the request's own answer with only its failing fields
+#:                   taken out, kept because the rung that repaired it
+#:                   answered with less (`_unshrunk`) -- the events the beat
+#:                   commits are the first answer's, whichever rung ran
+#:   fresh           the request asked afresh after a malformed answer
+#:   fresh_mended    that fresh answer with its brackets mended locally
+#: The trace said none of this before (D5, 2026-10-09): every rung after
+#: the first spoke only as an unattributed "llm second call" warning, so a
+#: beat's record could not say which attempt its encoding came from.
+answered_by: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "llm_quality_answered_by", default="")
+
+
+def _accepted(report, rung="first"):
     """Return an accepted output, saying out loud what it cost to accept it.
 
     `ValidationReport.warnings` is written on the SUCCESS path. A malformed
@@ -441,7 +469,10 @@ def _accepted(report):
 
     A caller with no pipeline step in scope (importers, generators, jobs)
     still gets its output; `note_step_warning` is a no-op there.
+
+    `rung` is the attempt the answer came from (`answered_by`).
     """
+    answered_by.set(str(rung or "first"))
     for warning in (report.warnings or []):
         note_step_warning(f"llm validation: {warning}")
     return report.output
@@ -718,13 +749,20 @@ REBUILD_FORMAT = "json_schema"
 #: rebuilt a parseable answer came back with fewer writes.
 REBUILD_KEEPS_SHEET = frozenset({"director_specialist", "director_repair"})
 
-#: How many times a request whose every answer FAILED TO PARSE is asked
-#: afresh -- the original request, its own sheet and sampler, no broken draft
-#: attached -- before the stage fails. One: the slip it answers is rare
-#: (2 of 386 encoder answers in the Brackwater run, both one beat's) and the
-#: same request asked again parsed, while each re-ask costs a whole first
-#: call (an encoder request there ran ~35k input tokens, ~10 s). Named per
-#: the owner's ask-before-limiting rule.
+#: How many times a request is asked AFRESH -- the original request, its own
+#: sheet and sampler, no broken draft attached -- when a malformed answer is
+#: in its failure (none parsed, or any rung's own answer came back malformed
+#: and was not cut for room) before the stage fails; never when the
+#: request's own answer was cut, which is the re-ask with room's. One, and
+#: the owner ruled it (2026-10-09, D5 of the Brackwater run: "one fresh
+#: encoder attempt before a beat with a malformed repair aborts" -- an
+#: aborted beat is the worst break in immersion, and the attempt costs one
+#: call only on a beat that would otherwise fail). The slip it answers is
+#: rare: 2 of 464 captured encoder answers in the scratch play database,
+#: both the one lost beat's (turn 4601), and no kept prose-contract beat of
+#: either database (338 and 236) reached the ladder at all; the same request
+#: asked again parsed, while each re-ask costs a whole first call (an
+#: encoder request there ran ~35k input tokens, ~10 s).
 MALFORMED_REASKS = 1
 
 
@@ -775,8 +813,12 @@ def _without_paths(obj, paths):
 
 
 def _unshrunk(step_key, original, original_errors, rebuilt, payload, rung):
-    """The report to accept for a rebuilt answer: `rebuilt`, unless it
-    carries fewer events or writes than the answer it was asked to repair.
+    """`(report, kept_first)`: the report to accept for a rebuilt answer --
+    `rebuilt`, unless it carries fewer events or writes than the answer it
+    was asked to repair -- and whether that report is the FIRST answer kept
+    with its failing fields taken out, which the caller files as
+    `first_pruned` (`answered_by`): the beat's events are then the first
+    answer's, and naming the rung that was refused would say otherwise.
 
     FIXING BY DELETION is the rebuild's quiet failure: an answer made valid
     by dropping what it could not fix. Measured on the retired hands, the
@@ -789,7 +831,7 @@ def _unshrunk(step_key, original, original_errors, rebuilt, payload, rung):
     before = _content_size(step_key, original)
     after = _content_size(step_key, rebuilt.output)
     if before is None or after is None or all(a >= b for a, b in zip(after, before)):
-        return rebuilt
+        return rebuilt, False
     kept = _without_paths(original, _error_paths(original_errors))
     kept_report = validate_llm_output_strict(step_key, kept, source_payload=payload)
     kept_size = _content_size(step_key, kept_report.output) if kept_report.valid else None
@@ -799,12 +841,12 @@ def _unshrunk(step_key, original, original_errors, rebuilt, payload, rung):
             f"repaired ({before[0]} -> {after[0]} entries, {before[1]} -> "
             f"{after[1]} writes); kept that answer with only its failing "
             "fields taken out")
-        return kept_report
+        return kept_report, True
     note_step_warning(
         f"{step_key}: the {rung} answered with less than the answer it "
         f"repaired ({before[0]} -> {after[0]} entries, {before[1]} -> "
         f"{after[1]} writes); accepted, as nothing else validates")
-    return rebuilt
+    return rebuilt, False
 
 
 def complete_validated_json(
@@ -1034,6 +1076,19 @@ def complete_validated_json(
             note_step_warning(
                 f"{step_key}: the answer came as bare prose without its JSON "
                 "envelope; the prose is the answer")
+    # Whether any answer this request got came back MALFORMED -- text that
+    # did not parse, and not an outage, a parsed answer that failed
+    # validation, or an answer cut off for want of room (that one is the
+    # re-ask with room's case, below). It decides the fresh ask at the foot
+    # of the ladder (`MALFORMED_REASKS`), and is set again by every rung
+    # below whose own answer does not parse. `any_parsed` is its other half:
+    # whether any answer, on any rung, parsed at all -- which is what the
+    # fresh ask's warning says of the failure, and the last rung alone
+    # cannot (a malformed answer, a rebuild that parsed and failed, and a
+    # malformed fallback is not "no answer parsed").
+    malformed_seen = (parse_error is not None and not provider_errored
+                      and not output_ran_out_of_room(raw))
+    any_parsed = parse_error is None and not provider_errored
 
     report = validate_llm_output_strict(
         step_key,
@@ -1063,11 +1118,12 @@ def complete_validated_json(
         if mended is not None:
             parsed, report, edits = mended
             parse_error = None
+            any_parsed = True
             if report.valid:
                 note_step_warning(
                     f"{step_key}: the answer's JSON was mended locally "
                     f"({'; '.join(edits)}); no model call")
-                return _accepted(report)
+                return _accepted(report, "mended")
             note_step_warning(
                 f"{step_key}: the answer's JSON was mended locally "
                 f"({'; '.join(edits)}) and still fails validation; the "
@@ -1113,7 +1169,7 @@ def complete_validated_json(
                 error="" if again_report.valid
                 else "; ".join(again_report.errors[:3]))
             if again_report.valid:
-                return _accepted(again_report)
+                return _accepted(again_report, "stall_reask")
         else:
             note_provider_exchange(
                 role=role, system=_asked_system, payload=_asked_payload,
@@ -1215,6 +1271,17 @@ def complete_validated_json(
                     + f" ({time.monotonic() - _t0:.1f}s)")
                 max_tokens = _budget
                 parsed, parse_error = _parse_or_bare(step_key, raw)
+                # The re-ask's own answer is a rung like any other: one that
+                # comes back malformed, and not cut again, earns the fresh
+                # ask below exactly as the stall re-ask's and the rebuild's
+                # do. Unset, an answer cut for want of room, re-asked with
+                # room into a malformed one whose rebuild then parsed and
+                # failed, lost the beat with no fresh attempt (scripted,
+                # 2026-10-09).
+                malformed_seen = malformed_seen or (
+                    parse_error is not None
+                    and not output_ran_out_of_room(raw))
+                any_parsed = any_parsed or parse_error is None
 
                 report = validate_llm_output_strict(
                     step_key,
@@ -1233,7 +1300,8 @@ def complete_validated_json(
                            else "; ".join(report.errors[:3])))
 
                 if report.valid:
-                    return _accepted(report)
+                    return _accepted(report, "runaway_reask" if ran_away
+                                     else "room_reask")
 
                 ran_out_of_room = output_ran_out_of_room(raw)
                 ran_away = ran_out_of_room and answer_ran_away()
@@ -1289,6 +1357,10 @@ def complete_validated_json(
                 "llm second call: empty-object reply treated as a stall; "
                 f"re-asked the original request ({time.monotonic() - _t0:.1f}s)")
             previous_parsed, parse_error = _parse_or_bare(step_key, previous_raw)
+            malformed_seen = malformed_seen or (
+                parse_error is not None
+                and not output_ran_out_of_room(previous_raw))
+            any_parsed = any_parsed or parse_error is None
             # The request asked again: whether ITS answer was cut is what the
             # rungs after this one read (`_original_cut`, the final message).
             ran_out_of_room = output_ran_out_of_room(previous_raw)
@@ -1303,7 +1375,7 @@ def complete_validated_json(
                 started=_wall0,
                 error="" if report.valid else "; ".join(report.errors[:3]))
             if report.valid:
-                return _accepted(report)
+                return _accepted(report, "stall_reask")
 
     # THE CHEAP RUNG FIRST. One malformed field does not need the whole beat
     # re-authored on the stage's own model; the validator already said which
@@ -1338,7 +1410,7 @@ def complete_validated_json(
                     f"{str((report.errors or [''])[0])[:120]!r}); repaired by "
                     f"a targeted field patch on the repair model "
                     f"({time.monotonic() - _t0:.1f}s) -- no rebuild")
-                return _accepted(_patched_report)
+                return _accepted(_patched_report, "field_patch")
             previous_parsed = _patched
 
     # What the rebuild and the fallbacks are repairing, kept for the check
@@ -1411,9 +1483,11 @@ def complete_validated_json(
                 previous_raw
             )
             parse_error = None
+            any_parsed = True
         except Exception as exc:
             previous_parsed = {}
             parse_error = str(exc)
+            malformed_seen = malformed_seen or not ran_out_of_room
 
         report = validate_llm_output_strict(
             step_key,
@@ -1431,8 +1505,9 @@ def complete_validated_json(
             error="" if report.valid else "; ".join(report.errors[:3]))
 
         if report.valid:
-            return _accepted(_unshrunk(step_key, _original, _original_errors,
-                                       report, payload, "rebuild"))
+            kept, pruned = _unshrunk(step_key, _original, _original_errors,
+                                     report, payload, "rebuild")
+            return _accepted(kept, "first_pruned" if pruned else "rebuild")
 
         # The rebuild's own punctuation, mended before another candidate is
         # asked (one retired hand's rebuild in the capture was itself a
@@ -1443,8 +1518,10 @@ def complete_validated_json(
                 note_step_warning(
                     f"{step_key}: the rebuild's JSON was mended locally "
                     f"({'; '.join(mended[2])}); no further call")
-                return _accepted(_unshrunk(step_key, _original, _original_errors,
-                                           mended[1], payload, "rebuild"))
+                kept, pruned = _unshrunk(step_key, _original, _original_errors,
+                                         mended[1], payload, "rebuild")
+                return _accepted(kept, "first_pruned" if pruned
+                                 else "rebuild_mended")
 
     candidate_count = role_candidate_count(role)
 
@@ -1502,12 +1579,14 @@ def complete_validated_json(
         except Exception as exc:
             report.errors.append(str(exc))
             parse_error = str(exc)
+            malformed_seen = malformed_seen or not ran_out_of_room
             note_provider_exchange(
                 role=role, system=_fallback_system, payload=fallback_payload,
                 response=fallback_raw, ok=False, started=_wall0,
                 error=str(exc))
             continue
         parse_error = None
+        any_parsed = True
 
         fallback_report = validate_llm_output_strict(
             step_key,
@@ -1523,9 +1602,11 @@ def complete_validated_json(
                    else "; ".join(fallback_report.errors[:3])))
 
         if fallback_report.valid:
-            return _accepted(_unshrunk(step_key, _original, _original_errors,
-                                       fallback_report, payload,
-                                       f"fallback candidate {candidate_offset}"))
+            kept, pruned = _unshrunk(step_key, _original, _original_errors,
+                                     fallback_report, payload,
+                                     f"fallback candidate {candidate_offset}")
+            return _accepted(kept, "first_pruned" if pruned
+                             else f"fallback:{candidate_offset}")
 
         report = fallback_report
 
@@ -1542,9 +1623,35 @@ def complete_validated_json(
     # parsed and failed validation is the repair rungs' own case, and a
     # truncation is the re-ask with room above, so a cut answer is not asked
     # again here).
-    if (parse_error is not None and not _original and not ran_out_of_room
-            and not _original_cut
+    #
+    # AND A MALFORMED REPAIR IS ASKED AFRESH TOO (the owner's ruling,
+    # 2026-10-09, D5 of the Brackwater run: "one fresh encoder attempt
+    # before a beat with a malformed repair aborts"). The rule above fired
+    # only when NOTHING had parsed, so an answer that parsed and failed
+    # validation, whose rebuild then came back malformed, lost the beat with
+    # no fresh attempt -- and so did a malformed answer whose rebuild parsed
+    # and still failed, and an answer cut for room whose re-ask with room
+    # came back malformed. Each way a malformed answer is in the failure, and
+    # a fresh asking is what recovers a slip. A beat whose every answer
+    # parsed and none validated is still the repair rungs' own case.
+    #
+    # WHETHER THE REQUEST WAS CUT IS ITS OWN ANSWER'S, NEVER A REPAIR'S
+    # (`_original_cut`). A request whose own answer ran out of room is not
+    # asked again here -- it had its re-ask with room, and the same request
+    # would only be cut again. A rebuild or a fallback cut off says nothing
+    # about it: those are other requests, carrying the broken draft, and the
+    # gate that also read the LAST rung's cut lost the beat when an
+    # unmendable first answer's rebuild was cut, or a malformed rebuild's
+    # last fallback (scripted on the D5 landing's second round).
+    if (malformed_seen and not _original_cut
             and not provider_errored and last_provider_error is None):
+        if not any_parsed:
+            _fresh_why = "no answer parsed"
+        elif parse_error is not None:
+            _fresh_why = "the repair came back malformed"
+        else:
+            _fresh_why = ("the answer came back malformed and its repair did "
+                          "not validate")
         for _attempt in range(MALFORMED_REASKS):
             _t0 = time.monotonic()
             _wall0 = time.time()
@@ -1563,12 +1670,13 @@ def complete_validated_json(
                     role=role, system=_asked_system, payload=_asked_payload, response="",
                     ok=False, started=_wall0, error=str(exc))
                 note_step_warning(
-                    "llm second call: re-ask after every answer failed to "
-                    f"parse errored after {time.monotonic() - _t0:.1f}s ({exc})")
+                    f"llm second call: {_fresh_why}; the fresh ask of the "
+                    f"original request errored after "
+                    f"{time.monotonic() - _t0:.1f}s ({step_key}: {exc})")
                 break
             note_step_warning(
-                "llm second call: no answer parsed; asked the original "
-                f"request afresh ({time.monotonic() - _t0:.1f}s)")
+                f"llm second call: {_fresh_why}; asked the original request "
+                f"afresh ({step_key}, {time.monotonic() - _t0:.1f}s)")
             fresh_parsed, fresh_error = _parse_or_bare(step_key, fresh)
             fresh_report = validate_llm_output_strict(
                 step_key, fresh_parsed, source_payload=payload)
@@ -1588,7 +1696,7 @@ def complete_validated_json(
             if stalled:
                 break
             if fresh_report.valid:
-                return _accepted(fresh_report)
+                return _accepted(fresh_report, "fresh")
             ran_out_of_room = output_ran_out_of_room(fresh)
             if fresh_error and not ran_out_of_room:
                 mended = _mended(step_key, fresh, payload)
@@ -1596,7 +1704,7 @@ def complete_validated_json(
                     note_step_warning(
                         f"{step_key}: the fresh answer's JSON was mended "
                         f"locally ({'; '.join(mended[2])}); no further call")
-                    return _accepted(mended[1])
+                    return _accepted(mended[1], "fresh_mended")
             previous_raw, report = fresh, fresh_report
             if not fresh_error or ran_out_of_room:
                 break

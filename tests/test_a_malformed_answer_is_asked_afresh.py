@@ -154,17 +154,19 @@ class TestTheFreshAsk:
             _run()
         assert len(llm.calls) == 3
 
-    def test_a_content_failure_is_not_asked_afresh(
+    def test_a_content_failure_whose_repair_also_parses_is_not_asked_afresh(
             self, monkeypatch, warnings):
-        """An answer that PARSED and failed validation is the repair rungs'
-        own case: re-asked from scratch it would only fail the same way."""
+        """Every answer PARSED and none validated: the repair rungs' own case,
+        with no malformed answer anywhere in it -- a fresh asking of the same
+        request has nothing to recover. (The owner's D5 ruling of 2026-10-09
+        is about a MALFORMED repair; see `TestAMalformedRepair`.)"""
         invalid = json.loads(GOOD)
         invalid["events"][0]["seconds"] = "soon"
         assert not llm_quality.validate_llm_output_strict(
             "director_specialist", invalid).valid
         monkeypatch.setattr(llm_quality, "_targeted_field_patch",
                             lambda *a, **k: None)
-        llm = _ladder(monkeypatch, [json.dumps(invalid), UNMENDABLE])
+        llm = _ladder(monkeypatch, [json.dumps(invalid), json.dumps(invalid)])
         with pytest.raises(RuntimeError):
             _run()
         assert len(llm.calls) == 2

@@ -1895,6 +1895,106 @@ re-measured in the light note's § 9.6 and the sound note's § 9a. Left:
     -- the tier and side phrases it needs are language data with their own
     reading rules -- and registered.
 
+**A pointed light lights what it points at (built 2026-10-09; the owner's
+D3, `design/DESIGN_LIGHT_FIELD.md` § 10).** Left:
+
+  * **Only a beam pointed into a dark room admits it through a doorway** --
+    D3's case and no wider. A lit room's floor spill, a lamp burning all
+    round by the doorway, a cone following its holder's facing and a beam
+    aimed at something beside the doorway all leave the doorway black, as
+    before D3, though each can light the far threshold: measured on built
+    rooms, spill 0.75 and 1.5 on a shelf beside the doorway, an all-round
+    torch held in the doorway 1.2, a beam held on a bench beside it 2.18,
+    against `DIM_T` 0.5. The facing cone is the nearest: held in a dark
+    landing by a body facing the yard, it has the same axis (90 degrees)
+    and puts the same 2.18 on the yard's threshold as the same lantern
+    pointed `e`, yet its holder's doorway names nothing beyond it
+    (`bare`) where the pointed one shows the yard and its rack. A lamp
+    held INSIDE the dark room shows it when aimed at something there --
+    a `lit` torch in a dark storeroom sixteen paces square, aimed at its
+    shelf, at a crate or by compass word, names the storeroom to the lit
+    hall -- and not when it follows its holder's facing toward the
+    doorway. Whether any of them should show what it lights beyond is
+    the owner's question, never ruled. Counting every source's direct
+    light was built first and gave one hall two answers by whether its
+    light was written as a word or a fixture (the note's § 10).
+  * **At turn 4601 the coat's own record still does not reach the page.**
+    The beam now reaches it (`none` -> `conduct`) and the doorway shows the
+    channel, but three things outside the light model keep it at
+    `conduct` while a close look reads a thing only at `full`
+    (`perception._things_read_by`): the lantern was turned low (`dim`); the
+    deck is laid beside the channel through one doorway with a wall band,
+    Tamsin pinned at its middle, so the coat is three paces off -- her lean
+    over the gunwale moves neither her nor the lantern; and an unplaced
+    thing across a vast room is capped at `conduct` through an opening
+    (`spatial_senses._opening_view_cap`, the owner's 2026-10-05 fallback).
+    Two owner questions: should a beam's goal stand the unmeasured thing it
+    is aimed at for the doorway cone too (today it does for LIGHT only), and
+    does a lean over an edge bring the leaning body's reach to that edge?
+    The replayed page then filled the gap the other way ("Reed pressed
+    close around the base, black and dry" against reed cut in a circle):
+    UNBUILT_PIPELINE's narrator-answers-what-the-view-does-not class (F96).
+  * **An open vessel's deck reads `enclosed`.** `weather._derive_exposure`
+    makes every room with `parent_entity` enclosed whatever it declares (the
+    TARDIS rule), so the Grebe's open deck read `lit` by the fail-open at a
+    foggy dusk while the channel round it read dark. An open boat is not
+    the inside of a thing; the rule wants the declared `open` to stand for
+    an interior open to the sky. Unbuilt.
+  * **A thing in the next room is never listed through an opening**, lit or
+    not: `_visible_openings` lists the far room's anchors, and
+    `_visible_things` covers the observer's own room. A thing a beam picks
+    out beyond a doorway reaches its holder only through a declared look.
+  * **The map editor's `pointed_at` check** (`web/world_routes.py`) accepts
+    a bearing, an anchor of the room or an entity; `aim_of` also reads a
+    room and another room's feature. Widen the check with `aim_of`, and its
+    message in both packs, when it is next touched.
+  * **The encoder card says an unreadable aim falls back to the holder's
+    facing** (`encoder/entities__emits.txt`, both packs); since chat 117 the
+    field leaves it all round. Harmless -- it discourages phrases -- and to
+    be corrected at the next edit of that part.
+  * **Where neither room has a field the beam has no distance.** The body a
+    beam names reads what the lamp emits whatever the edge's distance word;
+    wherever the lamp's own room has a field, its cast decides
+    (`_lamp_reach`).
+  * **Without geometry a compass aim names no room** (`aim_into`), so a beam
+    pointed by compass word lights nothing next door at the room level,
+    where the field reads its beam proper. The edge's `dir` could answer it.
+  * **An aim at a room two doorways off is read in the middle room's field
+    only.** The lamp's own room's field cannot place the target and leaves
+    the cone all round there, while the field of the room between points it
+    through -- the split a body at a measured cell two rooms off has had
+    since the field was built.
+  * **A beam aimed at something two doorways off lights the room between,
+    and that room's doorway stays black.** Three rooms five paces square
+    in a row, doorways aligned, a `bright` cone held in the first and
+    aimed at the third (by its id, or at a body in it): the middle room's
+    field points it through (axis 95.7 degrees) and 11 of its cells, all
+    inside the beam proper, take at least `DIM_T` (4.24 at its
+    threshold), but its median stays dark and the holder's doorway onto
+    it shows only darkness, where the same lamp pointed `e` shows the
+    room. `_beam_into` counts a named aim only for the room `aim_into`
+    names, and a compass aim for every room its beam proper falls in;
+    treating a named aim that leaves the lamp's room as a compass aim is
+    treated, for each room its beam proper crosses, would close it. The
+    stored corpus never met it: the one aim written at something beyond
+    the next room (chat 166 idx 14-15, the boat's lantern aimed at Murren
+    in the chapel, six rooms off) is resolved by no field, and its cone
+    lights all round.
+  * **The two tiers part on a small room a beam floods.** Measured, the cell
+    off the long hall's doorway, lit by a torch aimed into it from beside
+    the doorway, reads its median `dim` and arrives with its notes;
+    unmeasured, the same cell stays dark and is named without them -- the
+    room-level model has no cells to say how much of it the beam covers.
+  * **An evenly lit room names no source in view.** A light shape speaks
+    only where the room is uneven, and a `lit` room's flat sentence says
+    nothing. The cone's gain on its holder's cell had made such rooms
+    uneven: the Grebe's deck at chat 166 idx 18-20 (nine cells the
+    fail-open reads `lit`, Tamsin's alone `bright`) told her and Hester
+    "The light from a brass storm lantern falls on a small sheltered space
+    at the bow ...", and with the gain off her hands tells them nothing
+    of the light (6 views). Whether an evenly lit room should still name
+    a source in view is the owner's question.
+
 <a id="unbuilt-2-36"></a>
 
 ### 2.36 The sound field — PROTOTYPE, what is left

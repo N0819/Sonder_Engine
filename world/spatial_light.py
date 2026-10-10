@@ -2,9 +2,17 @@
 """Illumination: the light ladder, source aggregation with radius falloff,
 per-room and per-position light, and the light-to-sight ceiling."""
 
-from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
-from world.spatial_geometry import proximity_rel
-from world.spatial_identity import PositionsIndex, room_of, room_of_record
+from typing import Optional
+
+from world.scene_memo import scene_memo
+from world.spatial_barriers import (
+    _SIGHT_BARRIERS, effective_adjacent, normalize_barrier)
+from world.spatial_geometry import (
+    _DOOR_ANCHOR_PREFIX, door_anchor_id, effective_anchors, proximity_rel)
+from world.spatial_identity import (
+    PositionsIndex, normalize_room_id, room_of, room_of_record,
+    room_spellings, same_subject)
+from world.spatial_orientation import _BEARING_DEG, normalize_bearing
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +365,329 @@ def source_light(scene: dict, room_id: str, *, filling_only=False) -> str:
     return best
 
 
+# ---------------------------------------------------------------------------
+# WHERE A LIGHT POINTS -- read here once, for both tiers of the light model.
+#
+# A POINTED LIGHT LIGHTS WHAT IT POINTS AT (the owner's ruling, 2026-10-09,
+# D3 of the Brackwater run, `docs/experiments/PLAY_2026_10_07_brackwater.md`
+# F95). A cone's aim is its `state.pointed_at`, which the encoder's
+# `entities__emits` part writes as "the entity, anchor, BODY or compass
+# bearing a cone is aimed at". The light field read four shapes of it -- a
+# number, a bearing word, a body or thing standing at a MEASURED cell, an
+# anchor of the lamp's OWN room -- and left the cone all round for anything
+# else, so a beam sent through a doorway at something with no measured place
+# lit nothing it was pointed at. Measured over every checkpoint of both
+# databases (2026-10-09): five distinct aims were ever written, all in scratch
+# story 166, and three of the five were shapes nothing read -- a ROOM (the
+# down-channel, aimed into from the boat), a thing with no measured place in
+# the NEXT room (the coat on the stake), and a person with no measured place
+# in the lamp's own room (Murren in the chapel).
+#
+# `aim_of` says what an aim NAMES, in the engine's own terms and nothing
+# else; the field turns that into an axis and a cell
+# (`spatial_light_field._resolve_pointed_at`), and the room-level readers
+# below, which have no cells, turn it into which body and which room the beam
+# reaches. One reading of the aim, so the two tiers cannot disagree about
+# what a lamp is pointed at.
+# ---------------------------------------------------------------------------
+
+def _room_named(scene: dict, text: str) -> Optional[str]:
+    """The room `text` is the id or the folded name of, or None. Exact
+    spellings only (`room_spellings`): an aim is a NAME the scene holds, and
+    a phrase that merely shares a word with a room is not one -- the card
+    says so, and `test_an_aim_the_engine_cannot_read_is_all_round_not_the_
+    chest` pins a phrase as unreadable."""
+    rooms = (scene or {}).get("rooms") or {}
+    if not isinstance(rooms, dict) or not text:
+        return None
+    if text in rooms:
+        return str(text)
+    folded = normalize_room_id(text)
+    if not folded:
+        return None
+    hits = [str(rid) for rid, rdef in rooms.items()
+            if folded in room_spellings(rid, rdef)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def aim_of(scene: dict, eid, entity, src_room=None) -> Optional[dict]:
+    """What a source's `state.pointed_at` names, or None when it names
+    nothing the scene holds (unset, empty, a phrase).
+
+    One of:
+      {"degrees": float}               a number, or a compass word
+      {"body": spelling, "room": id}   a body or thing the scene places --
+                                       with "anchor" beside it when the
+                                       lamp's own room also has an anchor of
+                                       that id, which then answers for a
+                                       body that has no measured cell
+      {"anchor": id, "room": id}       a feature of the lamp's own room
+                                       (its doorways included) or of exactly
+                                       one other room
+      {"room": id}                     a room, by id or name -- or the
+                                       doorway of a room the lamp is not in
+
+    The order is the field's order of old -- a body first, then the lamp's
+    own room's anchor -- with the three new shapes after them, so every aim
+    that resolved before resolves to what it did. `src_room` is the room the
+    caller already placed the lamp in; absent, it is read from the scene."""
+    if not isinstance(entity, dict):
+        return None
+    state = entity.get("state") if isinstance(entity.get("state"), dict) else {}
+    pointed = state.get("pointed_at")
+    if pointed is None or isinstance(pointed, bool):
+        return None
+    if isinstance(pointed, (int, float)):
+        return {"degrees": float(pointed) % 360.0}
+    text = str(pointed or "").strip()
+    if not text:
+        return None
+    bearing = normalize_bearing(text)
+    if bearing in _BEARING_DEG:
+        return {"degrees": float(_BEARING_DEG[bearing])}
+    rooms = (scene or {}).get("rooms") or {}
+    if src_room is None:
+        src_room = room_of_record(scene, eid, entity)
+    own = effective_anchors(scene, src_room) if src_room in rooms else {}
+    if text not in rooms:
+        where = room_of(scene, text)
+        if where:
+            aim = {"body": text, "room": str(where)}
+            if text in own:
+                aim["anchor"] = text
+            return aim
+    if text in own:
+        return {"anchor": text, "room": str(src_room)}
+    named = _room_named(scene, text)
+    if named:
+        return {"room": named}
+    holders = [str(rid) for rid, rdef in rooms.items() if isinstance(rdef, dict)
+               and text in (rdef.get("anchors") or {})]
+    if len(holders) == 1:
+        return {"anchor": text, "room": holders[0]}
+    # A doorway written from the far side: `door:<room>` is the implicit
+    # anchor every room beside <room> holds for the way into it, so from a
+    # lamp standing in one of those rooms it is the lamp's own anchor (above),
+    # and from anywhere else it names the room the doorway opens into.
+    if text.startswith(_DOOR_ANCHOR_PREFIX):
+        into = _room_named(scene, text[len(_DOOR_ANCHOR_PREFIX):])
+        if into:
+            return {"room": into}
+    return None
+
+
+def aim_into(scene: dict, aim: Optional[dict], src_room) -> Optional[str]:
+    """The room a beam with this aim is SENT INTO, or None: the room of the
+    body, feature or room it names -- and for a doorway of the lamp's own
+    room, the room that doorway opens onto. A compass aim names no room."""
+    if not aim or "room" not in aim:
+        return None
+    anchor = str(aim.get("anchor") or "")
+    if "body" not in aim and anchor.startswith(_DOOR_ANCHOR_PREFIX) \
+            and aim["room"] == str(src_room or ""):
+        return _room_named(scene, anchor[len(_DOOR_ANCHOR_PREFIX):]) or aim["room"]
+    return aim["room"]
+
+
+def _is_lit_switch(entity) -> bool:
+    state = entity.get("state") if isinstance(entity.get("state"), dict) else {}
+    return state.get("lit", True) not in (False, 0, "off", "false", "no",
+                                          "doused", "out")
+
+
+def _beams(scene: dict):
+    """`[(eid, entity, room, aim)]` for every lit CONED source that names
+    what it is pointed at -- the beams of the room-level readers below. A
+    cone with no aim follows its holder's facing, which only the field can
+    read; with no geometry it is the pool it always was. Derived once per
+    read pass (`world/scene_memo.py`): `light_at` asks it per body per
+    observer pair."""
+    return scene_memo(scene, ("light_beams",), lambda: _derive_beams(scene))
+
+
+def _derive_beams(scene: dict):
+    from world.spatial_light_field import normalize_light_shape
+    entities = (scene or {}).get("entities") or {}
+    if not isinstance(entities, dict):
+        return []
+    index = PositionsIndex((scene or {}).get("positions") or {})
+    out = []
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict) or not entity.get("light_source"):
+            continue
+        if normalize_light_shape(entity.get("light_shape")) != "cone":
+            continue
+        if not _is_lit_switch(entity):
+            continue
+        if normalize_light(entity.get("light_source")) == "dark":
+            continue
+        aim = aim_of(scene, eid, entity)
+        if not aim or "room" not in aim:
+            continue
+        where = room_of_record(scene, eid, entity, index=index)
+        if where:
+            out.append((eid, entity, str(where), aim))
+    return out
+
+
+def _light_crosses(scene: dict, a, b) -> bool:
+    """Does an edge between rooms `a` and `b` let light across -- the same
+    barriers sight crosses, which is what `spatial_light_field.light_passes`
+    places a neighbour by. Either side's record of the edge answers
+    (`effective_adjacent`)."""
+    if not a or not b or str(a) == str(b):
+        return False
+    for edge in effective_adjacent(scene, a) or ():
+        if isinstance(edge, dict) and str(edge.get("to") or "") == str(b) \
+                and normalize_barrier(edge.get("barrier")) in _SIGHT_BARRIERS:
+            return True
+    return False
+
+
+def _lamp_reach(scene: dict, eid, lamp_room, room_id):
+    """HOW FAR A BEAM CARRIES IS THE LAMP'S OWN FIELD'S TO SAY, wherever the
+    lamp's room has one. `(lf, {cell: the lamp's own light there})` over
+    the cells of `room_id` the lamp's cast reaches in the field over
+    `lamp_room` -- or, where that field does not place `room_id`, over the
+    lamp room's own doorway onto it -- an empty dict when the cast reaches
+    none of them: the end of its reach, a wall, an occluder at or above the
+    lamp. None where the lamp's room has no field, and only the aim's name
+    can answer.
+
+    The room-level readers below are asked about a room WITHOUT a field.
+    Answering them by name whenever that room has none, whatever the lamp's
+    own room measures, gives one fiction two answers by whether the FAR
+    room was measured. The case that showed it, built to test the reader
+    (2026-10-09): a hall laid out 4 by 24 paces, the lamp at its far end
+    aimed at a body in a cell off the hall's north doorway. The hall's
+    field had the cone dead about seven cells out; with the cell given no
+    size the name lit the body `lit`, and the lamp's holder saw it at
+    `conduct` from 24 paces in the dark, while the same cell given a size
+    read `dark` and `none`."""
+    from world.spatial_light_field import light_field
+    lf = light_field(scene, lamp_room)
+    if lf is None:
+        return None
+    contrib = lf.per_source.get(str(eid)) or {}
+    field = lf.field
+    if str(room_id) in field.offsets:
+        cells = lf.room_cells(str(room_id))
+    else:
+        placed = (field.anchors.get(lamp_room) or {}).get(
+            door_anchor_id(room_id)) or {}
+        cells = [field.cell_of(lamp_room, tuple(c))
+                 for c in placed.get("cells") or ()]
+    return lf, {c: contrib[c] for c in cells if contrib.get(c, 0.0) > 0.0}
+
+
+def _measured_beam_level(scene: dict, lf, eid, name, room_id, reached):
+    """The level where a measured beam falls on body `name` in `room_id`
+    (`_lamp_reach`'s `lf` and `reached`), or None when it does not reach
+    it. Read as `spatial_light_field._beam_on` reads a body: at its own
+    measured cell where it has one, and it must be one the cast reaches;
+    having none, where the beam enters its room -- the cell the aim resolved
+    to when the cast reaches it, else the reached cell the lamp lights
+    most."""
+    if not reached:
+        return None
+    from world.spatial_fov import body_cell
+    cell = body_cell(scene, name)
+    if cell is not None and str(room_id) in lf.field.offsets:
+        at = lf.field.cell_of(str(room_id), tuple(cell))
+        return lf.level(at) if at in reached else None
+    src = next((s for s in lf.sources if s["id"] == str(eid)), None) or {}
+    goal = src.get("goal")
+    at = goal if goal in reached else max(
+        reached, key=lambda c: (reached[c], -c[0], -c[1]))
+    return lf.level(at)
+
+
+def _room_beam_on(scene: dict, name: str, room_id) -> Optional[str]:
+    """The level a beam AIMED AT this body gives it where the body's room
+    has no light field, or None when no beam names it or none reaches it.
+
+    From a lamp in the same room, or in a room beside it whose edge lets
+    light across. Where the lamp's own room has a field, that field answers
+    (`_lamp_reach`): the light where its cast falls on the body, and nothing
+    where the cast ends first. Only where NEITHER room has a field does the
+    name answer alone: the body the beam is pointed at stands in its pool and
+    reads what the lamp emits -- the room-level model's own rule for a hand
+    light ("held by this body, or standing in its pool: fully lit"), which
+    has no distance to decay it by.
+
+    A room with no field is never lifted by a beam (`effective_light`): it
+    lights what it is pointed at. A room the field measures counts a beam's
+    light in its median like any other, so the two tiers part on a small
+    room a beam floods (UNBUILT_PERCEPTION § 2.34)."""
+    best = None
+    for eid, entity, where, aim in _beams(scene):
+        if "body" not in aim or not same_subject(scene, aim["body"], name):
+            continue
+        if where != room_id and not _light_crosses(scene, where, room_id):
+            continue
+        reach = _lamp_reach(scene, eid, where, room_id)
+        if reach is None:
+            level = normalize_light(entity.get("light_source"))
+        else:
+            level = _measured_beam_level(scene, reach[0], eid, name, room_id,
+                                         reach[1])
+            if level is None:
+                continue
+        best = _brighter(best or "dark", level)
+    return best
+
+
+def beam_sent_into(scene: dict, room_id, from_room) -> bool:
+    """Is a beam from `from_room` sent INTO `room_id` and lighting it: a lit
+    cone standing in `from_room` whose aim names `room_id`, the doorway onto
+    it, a feature of it or a body in it (`aim_into`), across an edge light
+    crosses -- and, where `from_room` has a light field, whose own cast
+    lights a cell of `room_id` (or the doorway onto it, where the field does
+    not place it) to at least `DIM_T` (`_lamp_reach`)?
+
+    THE ROOM-LEVEL HALF OF WHAT A POINTED LIGHT SHOWS THROUGH A DOORWAY
+    (D3). A room with no field has no cells for a beam to light and no line
+    to test, so the beam lights only the body it names (`_room_beam_on`),
+    never the room, and the room is NAMED -- without its notes -- only to an
+    observer looking through the opening the beam is sent through
+    (`perception._visible_openings`). Lifting the room's own light instead
+    hands its notes and its onward record (`visible_adjacent_rooms`) to
+    every mind beside it, a bystander on its far side who carries no light
+    included -- measured on a landing, a vault and a back stair built with
+    no geometry (2026-10-09), where the same three rooms laid out gave the
+    lamp's holder the name alone and the bystander nothing."""
+    from world.spatial_light_field import DIM_T
+    for eid, _entity, where, aim in _beams(scene):
+        if where != str(from_room) or where == str(room_id):
+            continue
+        if aim_into(scene, aim, where) != str(room_id):
+            continue
+        if not _light_crosses(scene, where, room_id):
+            continue
+        reach = _lamp_reach(scene, eid, where, room_id)
+        if reach is None:
+            return True
+        if reach[1] and max(reach[1].values()) >= DIM_T:
+            return True
+    return False
+
+
+def beam_light_on(scene: dict, name: str) -> Optional[str]:
+    """The level a beam POINTED AT this body or thing gives it, or None
+    when no lamp's aim names it or none reaches it -- through the light field
+    where its room has one (`spatial_light_field.field_beam_on`), else the
+    room-level answer. For a reader that gates on a ROOM's light and must
+    still see what a beam picks out of the dark
+    (`perception._visible_things`, rule 5)."""
+    room_id = room_of(scene, name)
+    if not room_id:
+        return None
+    from world.spatial_light_field import field_beam_on, light_geometry_exists
+    if light_geometry_exists(scene, room_id):
+        return field_beam_on(scene, name)
+    return _room_beam_on(scene, name, room_id)
+
+
 # How far a source throws. A hand light makes a pool; a hearth or a ceiling
 # fixture fills the space. Portable things default to a pool, because that is
 # what carrying a light is actually like -- and the difference is the whole
@@ -417,6 +748,13 @@ def light_at(scene: dict, name: str) -> str:
             level = _brighter(level, emitted)
         else:
             level = _brighter(level, "dim" if emitted != "dark" else "dark")
+    # A POINTED LIGHT LIGHTS WHAT IT POINTS AT, from this room or through a
+    # doorway (D3, the section above `_light_radius`). The loop above reads
+    # only the lamps standing in this body's room, so a beam sent from the
+    # next room at a body in this one left it in the dark.
+    beam = _room_beam_on(scene, name, room_id)
+    if beam:
+        level = _brighter(level, beam)
     return level
 
 
