@@ -387,7 +387,10 @@ legitimately perceive, learn, remember or infer.
   own look writes it. *(partial: it reads only rooms that declare
   their exposure, which the planner does from 2026-10-05; a place has a far
   look only where a plan, the planting sketch, a beat or the host wrote
-  one, from 2026-10-08, and older worlds rarely do; and a place's own name
+  one, from 2026-10-08 -- and from 2026-10-09 the Room gives a look to a
+  place that already stands and reads by its ground, a few nearest the
+  story each pass where the player's grants allow, never over a look
+  somebody else wrote; and a place's own name
   written into its own far look is said as the word for what the place is
   wherever nothing marks it as a name -- in a script without capitals that
   takes in a coined name the card told the planner to leave out.)*

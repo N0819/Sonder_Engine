@@ -14,6 +14,7 @@ from mind.memory import add_lorebook_link
 from story.character_schema import character_name_from_text, persona_name
 from story.provenance_text import strip_engine_provenance
 from world.beat_ledger import record_beat_events
+from world.landscape import WRITTEN_LOOKS_KEY
 from world.structure import LAID_LOOKS_KEY
 from world.weather import advance_weather, normalize_weather
 from world.spatial import (BEARING_MANNERS, contradictory_sight_edges, derived_room_name,
@@ -700,11 +701,13 @@ def _entity_labels(eid, ent):
 #: entity. (`scents` is room-keyed too, and so is the record of the far look
 #: each planned stub last took from its plan, `structure.LAID_LOOKS_KEY`:
 #: re-keyed onto an entity, its stub read as never laid and took the plan's
-#: look over a host's clear -- review 2026-10-08, R2-6; `rooms`/
+#: look over a host's clear -- review 2026-10-08, R2-6; so is its sibling,
+#: the Room's word on a standing place, `landscape.WRITTEN_LOOKS_KEY`, whose
+#: re-keying would read a host's clear as never made; `rooms`/
 #: `remove_rooms`/`remove_adjacent` are the room ledger's own, and
 #: `_apply_room_renames` is what rewrites those.)
 _ENTITY_RENAME_SKIP = ("rooms", "remove_rooms", "remove_adjacent", "scents",
-                       LAID_LOOKS_KEY)
+                       LAID_LOOKS_KEY, WRITTEN_LOOKS_KEY)
 
 
 def _apply_entity_renames(node, renames, *, top=True):

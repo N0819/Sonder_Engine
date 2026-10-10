@@ -177,7 +177,8 @@ def test_a_planting_question_is_one_call_that_files_one_package(temp_db, scripte
     assert shown["area"]["rooms"][0]["state"] == "here"
     assert shown["frontier"]["rooms_short"] == rf.FRONTIER_ROOMS_MIN
     assert shown["frontier"]["identities_short"] == rf.FRONTIER_IDENTITIES_MIN
-    assert shown["granted"] == {"rooms": True, "people": True, "harm": False}
+    assert shown["granted"] == {"rooms": True, "people": True, "looks": False,
+                                "harm": False}
     assert shown["event"]["may"] is False
     published = _packages(cid, "published")
     assert len(published) == 1 and published[0]["title"] == "The rope and the tar"

@@ -632,9 +632,18 @@ rides the frame-scoped `regions` key beside its picture `look`, with
 the far look each prose-free planned stub last took from its plan, read and
 written by `world.structure.materialize_planned_fringe` alone (the entity-rename
 walk leaves it, as it leaves every room-keyed ledger) and absent from a scene
-whose plans carry none -- rides the scene blob. Archive, checkpoint and branch
+whose plans carry none -- rides the scene blob. So, from 2026-10-09, does
+`scene.far_looks_written` (`world.landscape.WRITTEN_LOOKS_KEY`): the far look
+the Room's `set_far_looks` last wrote on each standing room, "" where a host
+wrote or cleared one by hand, room-keyed and left alone by the entity-rename
+walk; and a region entry's `far_look_written` beside `far_look_laid`, the same
+record for a part of the map: a plan's new word for the region is laid on its
+`far_look` over the Room's unchanged word, and `far_look_written` keeps the
+Room's word, so the Room's operation reads the region as changed and leaves the
+plan's word standing. Archive, checkpoint and branch
 carry all of them with no code of their own, and `tests/test_far_looks.py`
-proves the archive and checkpoint round trips.
+and `tests/test_standing_far_looks.py` prove the archive and checkpoint round
+trips.
 
 ## Runtime database selection
 

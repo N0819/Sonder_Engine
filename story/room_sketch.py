@@ -19,7 +19,9 @@ the plan already holds ahead, the last few beats as the player saw them,
 and the grants. It answers with LIGHT PLANS -- rooms (a name, what it is
 for, the room and the way it joins, how much sky it stands under and how it
 reads from far off -- `_seen_from_afar`), people (a name, a role, where they
-belong) and, only when a grant allows one and the pacing has run
+belong), far looks for places that already stand and read from far off by
+their ground alone (`looks_offered`, through `plot_packages.set_far_looks`)
+and, only when a grant allows one and the pacing has run
 (`room_frontier.LOCAL_EVENT_BEATS`), at most one local event near the
 actors through the engine's own local-drama kinds. Code validates every
 name, join, room and grant (`_plan`) and files ONE package through the
@@ -78,6 +80,19 @@ _LIGHTER_EFFORTS = ("off", "minimal", "low")
 #: for an exit into nothing and a chain of two without asking the loop.
 SKETCH_ROOMS_CAP = 4
 SKETCH_PEOPLE_CAP = 3
+#: FAR LOOKS ONE PASS WRITES, AT MOST (the owner's go-ahead, 2026-10-09: "at
+#: most a named number per pass, under the same back-off as planting"): the
+#: nearest this many standing places and parts of the map that far eyes read
+#: by their ground (`room_frontier.looks_wanted`), parts of the map first --
+#: one of their looks stands for every place of them a far eye reaches at
+#: the outline. A PER-PASS cap guarding one call's payload and answer, never
+#: the work: the rest are offered at the next pass, which a pass that landed
+#: looks reaches after `room_frontier.FILL_RETRY_BEATS`. Eight is three
+#: passes for chat 166's twenty standing places and its one part of the map,
+#: and one for Kirinoura's seven and its one (measured 2026-10-09); chat
+#: 166's live pass was shown 2.9k characters for its eight and answered in
+#: 0.9k, about the size of the rooms the sketch already plans.
+SKETCH_LOOKS_CAP = 8
 
 #: What the sketch is shown, each a size the payload is held to. The
 #: payload is the sketch's whole world -- it has no tools -- so these are
@@ -109,6 +124,12 @@ SKETCH_PACKAGES_SHOWN = 12
 SKETCH_NAME_SAMPLES = 12
 #: Rooms an event may be placed in, listed by id.
 SKETCH_EVENT_ROOMS_SHOWN = 40
+#: Characters of what the story has said of a place a far look is asked
+#: for (its description, else its plan's purpose): enough to see the place
+#: whole, never the whole room's text.
+SKETCH_LOOK_SOURCE_CHARS = 300
+#: Rooms of a part of the map named beside it, so its look is of the whole.
+SKETCH_REGION_ROOMS_SHOWN = 12
 #: Characters of the reason an escalation carries into the loop's task.
 SKETCH_ESCALATE_CHARS = 600
 
@@ -122,7 +143,7 @@ SKETCH_EVENT_KINDS = ("arrival", "errand", "incident", "summons",
 SKETCH_CLOCK_ID = "sketch_due"
 
 #: The keys an answer may carry; an answer carrying none is not one.
-ANSWER_KEYS = ("rooms", "people", "event", "escalate", "reply", "title")
+ANSWER_KEYS = ("rooms", "people", "looks", "event", "escalate", "reply", "title")
 
 #: What a deferred event's `due_in_turns` means, as the sketch is told it
 #: in place of the package clock it cannot name (`_event_fields`).
@@ -261,6 +282,107 @@ def _event_room_field(kind):
     return (ROOM_FIELDS.get(kind) or ("room",))[0]
 
 
+def looks_offered(wanted):
+    """The nearest `SKETCH_LOOKS_CAP` of what the frontier says wants a far
+    look (`room_frontier.looks_wanted`): ``{"regions": [...], "places":
+    [...]}``, parts of the map first. The one cut the sketch and the fill's
+    full loop share, so both are asked about the same places."""
+    wanted = wanted if isinstance(wanted, dict) else {}
+    regions = [r for r in wanted.get("regions") or () if isinstance(r, dict)]
+    places = [p for p in wanted.get("places") or () if isinstance(p, dict)]
+    regions = regions[:SKETCH_LOOKS_CAP]
+    places = places[:max(0, SKETCH_LOOKS_CAP - len(regions))]
+    return {"regions": regions, "places": places}
+
+
+def _fold_name(text):
+    return " ".join(str(text or "").split()).casefold()
+
+
+def _looks_payload(cid, frame_id, scene, offered):
+    """What the sketch is shown of each place and part of the map it is
+    asked to give a far look: its name, what kind of ground it is, what the
+    story has said of it, what the far layer already says standing on it,
+    and the part of the map it is in -- a building from outside only, with
+    the look made for another side of it where this side reads that one now
+    -- and, for a part of the map, what it holds. ``(payload section,
+    {offered id: "room" | "region"}, {folded name: offered id})`` -- the
+    last for an answer that names a place by the name it was shown rather
+    than its id, a name two offered places share naming neither."""
+    from world.landscape import big_things, building_height, building_of, far_look_of
+    from world.regions import region_name, region_registry
+    rooms = (scene or {}).get("rooms") or {}
+    try:
+        registry = region_registry(cid, frame_id)
+    except Exception:
+        registry = {}
+    places, kinds = [], {}
+    for item in offered["places"]:
+        rid = str(item.get("room") or "")
+        room = rooms.get(rid)
+        if not isinstance(room, dict):
+            continue
+        said = str(room.get("desc") or room.get("description") or "").strip() \
+            or str(room.get("purpose") or "").strip()
+        entry = {"id": rid, "name": str(room.get("name") or rid),
+                 "ground": str(item.get("ground") or "")}
+        if item.get("ground") == "building":
+            # A BUILDING IS SEEN FROM OUTSIDE ONLY (review 2026-10-09, F5).
+            # What the story has said of its front room, and the names of
+            # its rooms, are what a body INSIDE it meets -- "crates to the
+            # rafters" -- and a far look is told to every far eye, which no
+            # far layer floor stops at what is inside. So they ride as its
+            # inside, by name, and the card says nothing of an inside shows
+            # from far off; what does show is said beside them -- how high
+            # its mass stands, the words its look is said in place of.
+            if said:
+                entry["said_within"] = _head(said, SKETCH_LOOK_SOURCE_CHARS)
+            members = [m for m in item.get("members") or () if m != rid and m in rooms]
+            if members:
+                entry["rooms_within"] = [str((rooms.get(m) or {}).get("name") or m)
+                                         for m in members]
+            entry["height"] = building_height(building_of(scene, rid)[1])
+            # A SIDE THAT READS ANOTHER SIDE'S LOOK (review 2026-10-09, N1):
+            # far eyes on this side are told, for want of its own, the look
+            # made for another side of it -- shown, so this side's look is
+            # its own and the two agree in what the building is.
+            other = far_look_of(scene, str(item.get("reads_look_of") or ""))
+            if other:
+                entry["another_sides_look"] = other
+        else:
+            if said:
+                entry["the_story_says"] = _head(said, SKETCH_LOOK_SOURCE_CHARS)
+            beside = big_things(scene, rid)
+            if beside:
+                entry["said_beside_it"] = beside
+        region = str(room.get("region") or "")
+        if region:
+            entry["part_of_the_map"] = region_name(registry, region)
+        places.append(entry)
+        kinds[rid] = "room"
+    regions = []
+    for item in offered["regions"]:
+        region = str(item.get("region") or "")
+        entry = registry.get(region)
+        if not isinstance(entry, dict):
+            continue
+        out = {"id": region, "name": str(entry.get("name") or region)}
+        if str(entry.get("brief") or "").strip():
+            out["brief"] = _head(entry["brief"], SKETCH_LOOK_SOURCE_CHARS)
+        held = [str((rooms.get(r) or {}).get("name") or r)
+                for r in item.get("rooms") or () if r in rooms]
+        if held:
+            out["places_in_it"] = held[:SKETCH_REGION_ROOMS_SHOWN]
+        regions.append(out)
+        kinds[region] = "region"
+    section = {"most": SKETCH_LOOKS_CAP, "places": places, "regions": regions}
+    named = {}
+    for entry in places + regions:
+        named.setdefault(_fold_name(entry["name"]), set()).add(entry["id"])
+    return section, kinds, {name: next(iter(ids)) for name, ids in named.items()
+                            if name and len(ids) == 1}
+
+
 def sketch_payload(cid, frame_id, report, *, turn_idx=None):
     """``(context, payload)``: what the sketch is shown, and what code holds
     its answer to. ``report`` is the fill's own `frontier_report`.
@@ -353,6 +475,7 @@ def sketch_payload(cid, frame_id, report, *, turn_idx=None):
             return False
     grants = {"rooms": granted("plan_rooms"),
               "people": granted("plan_entity", "create_people"),
+              "looks": granted("set_far_looks"),
               "harm": granted("schedule_harm")}
 
     # WHO IS IN THE STORY, and where an event may arrive: within the
@@ -468,6 +591,16 @@ def sketch_payload(cid, frame_id, report, *, turn_idx=None):
         "player_said": said,
         "event": event,
     }
+    # FAR LOOKS FOR WHAT ALREADY STANDS: the nearest places and parts of the
+    # map far eyes read by their ground alone, under their grant
+    # (`room_frontier.looks_wanted`, `looks_offered`). Absent when none is
+    # wanted or the grants do not let the Room write one.
+    look_kinds, look_names = {}, {}
+    if grants["looks"] and report.get("looks_wanted"):
+        section, look_kinds, look_names = _looks_payload(
+            cid, frame_id, scene, looks_offered(report["looks_wanted"]))
+        if section["places"] or section["regions"]:
+            payload["looks"] = section
     held_folded, held_names = _held_spellings(cid, scene)
     context = {
         "scene": scene, "here": here, "reach": reach, "names": names,
@@ -475,6 +608,7 @@ def sketch_payload(cid, frame_id, report, *, turn_idx=None):
         "held_folded": held_folded, "held_names": held_names,
         "reserved": reserved, "grants": grants,
         "event_kinds": kinds if event_may else [], "actors": actors,
+        "looks": look_kinds, "look_names": look_names,
         "room_structure": {uid: str((entry.get("planned") or {}).get("structure") or "")
                            for uid, entry in registry.items()},
         "unsketchable": [what for what, short, allowed in (
@@ -575,12 +709,101 @@ def _structure_for(cid, context, joins):
             "name": place.split(",")[0].strip() or key or "story"}
 
 
+def _looks_read(raw):
+    """The answer's far looks as ``[(place, look)]`` in its order, and
+    whether any of it could not be read. The card's shape is a list of
+    ``{place, far_look}``; a map ``{place: look}``, and the operation's own
+    ``{rooms: {...}, regions: {...}}`` that the Planner's sheet shows, say the
+    same thing and are read as it."""
+    if raw in (None, "", [], {}):
+        return [], False
+    if isinstance(raw, dict):
+        split = set(raw) <= {"rooms", "regions"} and all(
+            isinstance(v, dict) or v in (None, "", []) for v in raw.values())
+        maps = [raw.get("rooms"), raw.get("regions")] if split else [raw]
+        return [(place, look) for m in maps if isinstance(m, dict)
+                for place, look in m.items()], False
+    if not isinstance(raw, list):
+        return [], True
+    pairs, unread = [], False
+    for item in raw:
+        if isinstance(item, dict):
+            pairs.append((item.get("place") or item.get("id"),
+                          item["far_look"] if "far_look" in item else item.get("look")))
+        else:
+            unread = True
+    return pairs, unread
+
+
+def _looks_op(context, raw, notes):
+    """``[set_far_looks op]`` for the answer's "looks", or [] when it gives
+    none.
+
+    NEVER A REFUSAL (review 2026-10-09, F2). A far look plans nothing and
+    nothing else in the package leans on it, so each one stands alone: a
+    look for a place the payload did not offer -- under an id or a name --
+    or one that cannot be read is left out and said in ``notes``, and the
+    offered looks beside it land. Refused, one look for the warehouse's own
+    loft threw away the two offered looks with it and handed a one-call
+    question to the full loop, which averaged about seventeen calls a fill
+    on the Brackwater run. A place a look named that wants one is offered
+    at a later pass, with what it is. A place the answer left out, or gave
+    null, gets no look now and is offered again too. An offered place may
+    be named by the name it was shown (`_looks_payload`). More looks than
+    were offered cannot land, so the cap needs no check of its own."""
+    from world.landscape import FAR_LOOK_CHARS, normalize_far_look
+    pairs, unread = _looks_read(raw)
+    if not pairs:
+        if unread:
+            notes.append("the answer's looks could not be read and were left out")
+        return []
+    offered = context.get("looks") or {}
+    if not offered:
+        # Not offered now -- no grant, or nothing wants one -- so nothing
+        # the sketch wrote here is filed, and nothing else is refused for it.
+        notes.append("far looks were not asked for now and were left out")
+        return []
+    names = context.get("look_names") or {}
+    rooms, regions, left = {}, {}, []
+    for place, value in pairs:
+        place = _text(place, 120)
+        if value is not None and not isinstance(value, str):
+            unread = True
+            continue
+        look = normalize_far_look(_given(value, FAR_LOOK_CHARS * 2))
+        if not place or not look:
+            continue
+        ident = place if place in offered else names.get(_fold_name(place))
+        if ident is None:
+            left.append(place)
+            continue
+        target = rooms if offered[ident] == "room" else regions
+        target.setdefault(ident, look)
+    if unread:
+        notes.append("some of the answer's looks could not be read and were left out")
+    if left:
+        shown = ", ".join(repr(p) for p in left[:SKETCH_LOOKS_CAP])
+        more = len(left) - SKETCH_LOOKS_CAP
+        notes.append("far looks for %s%s were left out: not offered now"
+                     % (shown, " and %d more" % more if more > 0 else ""))
+    if not rooms and not regions:
+        return []
+    op = {"op": "set_far_looks"}
+    if rooms:
+        op["rooms"] = rooms
+    if regions:
+        op["regions"] = regions
+    return [op]
+
+
 def _plan(cid, context, answer):
     """What code would file for this answer: ``{"ops", "clocks",
     "authority", "event", "notes", "names"}``. Raises `Refused` naming
     every reason it would not -- one bad item refuses the whole sketch,
     because a package lands all of it or none, and the full loop it is
-    handed to can fix what a sketch could not."""
+    handed to can fix what a sketch could not. A far look is the exception
+    (`_looks_op`): it plans nothing and nothing leans on it, so one that
+    cannot land is left out and said in the notes."""
     from story.plot_packages import (DRAMA_DUE_TURNS_CAP, OPERATIONS,
                                      operation_harms)
     from story.room_frontier import FRONTIER_DEPTH_HOPS
@@ -683,6 +906,16 @@ def _plan(cid, context, answer):
         bucket[1][uid] = spec
     for structure, rooms in by_structure.values():
         ops.append({"op": "plan_rooms", "structure": structure, "rooms": rooms})
+
+    # FAR LOOKS for places that already stand, each one the payload offered
+    # (`looks_offered`), as ONE `set_far_looks`. A place left out, or given
+    # null, is a place the sketch could not see whole: no look, and it is
+    # offered again at the next pass; a look for a place not offered is left
+    # out and noted, never a refusal (`_looks_op`). What a look may say is
+    # the card's, and what a mind is told of it the far layer's floor
+    # (`landscape._admit_look`); what the operation may write over is its
+    # own rule.
+    ops.extend(_looks_op(context, answer.get("looks"), notes))
 
     # PEOPLE.
     seen_people = set()
@@ -899,6 +1132,8 @@ def run_sketch(cid, frame_id, report, *, role, actor, base_turn=None, job=None,
                                 % exc, SKETCH_ESCALATE_CHARS)
         return out
     out["notes"].extend(plan["notes"])
+    for note in plan["notes"]:
+        logger.info("sketch for chat %s: %s", cid, note)
     if not plan["ops"]:
         return out
     if _cancelled(job):

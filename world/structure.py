@@ -560,6 +560,39 @@ def _lay_planned_looks(scene, stubs, specs):
         scene.pop(LAID_LOOKS_KEY, None)
 
 
+def seed_planned_far_look(cid, uid, look, *, unless=None):
+    """Write a planned room's far look INTO ITS PLAN -- the Room's look
+    operation on a room the plan holds and no beat has described
+    (`plot_packages.set_far_looks`): the plan seeds what its stub reads by,
+    and the fringe lays it by the plan's own rule (`_lay_planned_looks`), in
+    every frame and on a room the scene does not hold yet.
+
+    Written only where the plan says no far look, or says ``unless`` -- the
+    word this operation seeded before -- so a look the plan was given by
+    `plan_rooms` is the plan's to change. Returns True when written."""
+    from core.db import q, qi
+    from world.landscape import normalize_far_look
+    look = normalize_far_look(look)
+    row = q("SELECT payload FROM room_registry WHERE chat_id=? AND room_uid=? "
+            "AND retired_turn_id IS NULL", (cid, str(uid)), one=True)
+    if not look or not row:
+        return False
+    payload = _payload(row)
+    planned = payload.get("planned") if isinstance(payload, dict) else None
+    if not isinstance(planned, dict):
+        return False
+    said = normalize_far_look(planned.get("far_look"))
+    if said and said != normalize_far_look(unless):
+        return False
+    if said == look:
+        return True
+    planned["far_look"] = look
+    qi("UPDATE room_registry SET payload=? WHERE chat_id=? AND room_uid=? "
+       "AND retired_turn_id IS NULL",
+       (json.dumps(payload, ensure_ascii=False), cid, str(uid)))
+    return True
+
+
 def _payload(row):
     try:
         return json.loads(row["payload"] or "{}")
@@ -2501,6 +2534,7 @@ __all__ = [
     "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "LAID_LOOKS_KEY",
     "LAYOUT_ANCHOR_FIELDS", "LAYOUT_EDGE_FIELDS", "LAYOUT_PLAN_PREFIX",
     "PLAN_SEEDED_FIELDS", "STRUCTURES_KEY", "apply_planned_layout",
+    "seed_planned_far_look",
     "apply_solved_plans", "planned_anchors", "planned_seed",
     "write_planned_layout",
     "apply_frontier_mutations", "claim_frontier_spaces",

@@ -287,6 +287,56 @@ def _bodies_ahead(cid, frame_id):
     return out
 
 
+def _actor_rooms(cid, scene, contained):
+    """The rooms the story's people stand in -- the player and every
+    attached cast member, by their `positions` rows -- each the room a body
+    inside another stands in where that is where it is held. The minds a far
+    line is told to; a charter's off-stage bodies perceive nothing."""
+    from core.db import q
+    from story.room_slice import holder_room
+    rows = q("SELECT c.name FROM chat_chars cc JOIN characters c ON c.id=cc.char_id "
+             "WHERE cc.chat_id=?", (cid,))
+    names = [str(r["name"]) for r in rows if r["name"]]
+    rooms = (scene or {}).get("rooms") or {}
+    positions = (scene or {}).get("positions") or {}
+    folded = {str(k).strip().casefold(): str(v) for k, v in positions.items() if v}
+    out = []
+    player = _player_room(cid, scene)
+    for room in [player] + [positions.get(n) or folded.get(n.strip().casefold())
+                            for n in names]:
+        room = str(room or "")
+        if room in contained:
+            room = str(holder_room(scene, contained[room]) or "")
+        if room and room in rooms and room not in out:
+            out.append(room)
+    return out
+
+
+def looks_wanted(cid, frame_id, scene, contained=None):
+    """THE PLACES A FAR EYE NEAR THE STORY READS BY THEIR GROUND
+    (`landscape.standing_looks_wanted`, 2026-10-09): the standing places and
+    parts of the map within the far layer's reach of where the player and
+    the cast stand that no far look describes and the Room may give one --
+    ``{"places": [{room, ground, hops, members?}], "regions": [{region,
+    hops, rooms}]}``, nearest first, or None when there are none. A pure
+    read, counted beside the shortfall: it is what the fill gives looks to,
+    under the same back-off as planting (`fill_signature`). A registry that
+    cannot be read offers no region, as the far layer reads none."""
+    from story.room_slice import containment
+    from world.landscape import REGIONS_UNREAD, standing_looks_wanted
+    contained = containment(scene) if contained is None else contained
+    starts = _actor_rooms(cid, scene, contained)
+    if not starts:
+        return None
+    try:
+        from world.regions import region_registry
+        regions = region_registry(cid, frame_id)
+    except Exception:
+        regions = REGIONS_UNREAD
+    wanted = standing_looks_wanted(scene, starts, regions=regions)
+    return wanted if wanted["places"] or wanted["regions"] else None
+
+
 def _rooms_short(reachable, stubs, unheld):
     """How many rooms the frontier is short of: the planned rooms it wants
     ahead and does not have (`FRONTIER_ROOMS_MIN` less the stubs within
@@ -342,6 +392,7 @@ def frontier_report(cid, frame_id=None, scene=None):
     things = [{"uid": p["uid"], "name": p["name"], "kind": p["kind"],
                "where": (p.get("brief") or {}).get("where") or ""}
               for p in plans if p["kind"] != "person"]
+    looks = looks_wanted(cid, frame_id, scene, contained)
     needs = open_planning_needs(cid, frame_id)
     by_kind = {}
     by_reason = {}
@@ -381,6 +432,11 @@ def frontier_report(cid, frame_id=None, scene=None):
         # first did not.
         "open_needs_by_reason": by_reason,
         "open_need_uids": [n["uid"] for n in needs],
+        # The standing places a far eye near the story reads by their ground
+        # alone, and the parts of the map that would describe them, nearest
+        # first (`looks_wanted`): what a fill gives far looks to. Present
+        # only when there are some.
+        **({"looks_wanted": looks} if looks else {}),
     }
 
 
@@ -499,7 +555,7 @@ def fills_this_hour(cid, frame_id, turn_idx=None, *, needs_only=False):
 # The fill memo: a question is asked once, then backs off
 # ---------------------------------------------------------------------------
 
-def fill_signature(report, mandate_uids=()):
+def fill_signature(report, mandate_uids=(), looks=False):
     """WHAT A FILL WOULD ANSWER, as one short hash: the open needs, the
     frontier's shortfall, the grants it would answer under (a new grant is a
     new question -- the fill that could not build without it can now), and
@@ -535,6 +591,18 @@ def fill_signature(report, mandate_uids=()):
         "identities_short": int(report.get("identities_short") or 0),
         "mandates": sorted(str(u) for u in (mandate_uids or ())),
     }
+    # WHETHER THE FILL GIVES PLACES NEAR THE STORY THEIR FAR LOOKS (``looks``:
+    # the frontier wants some, `looks_wanted`, and the grants let the Room
+    # write them), as a yes and never as a list (2026-10-09): the places a
+    # far eye reaches change with every step, and a list in the question
+    # re-asked it at every step whatever the answer was -- the R2-1 lesson
+    # above. So looks ride planting's back-off: a pass that lands looks is
+    # asked again after `FILL_RETRY_BEATS`, and one that lands nothing waits
+    # longer each time. Absent while none is asked for, so a story with
+    # nothing to look at, or no grant to write a look, keeps the question it
+    # had.
+    if looks:
+        parts["looks"] = True
     blob = json.dumps(parts, sort_keys=True, ensure_ascii=False)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
 

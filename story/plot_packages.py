@@ -98,6 +98,12 @@ HISTORY_CAP = 40
 #: Rooms one `plan_rooms` operation may plant (the structure's own
 #: `max_planned` still applies underneath).
 PLAN_ROOMS_CAP = 200
+#: Places and parts of the map one `set_far_looks` may give a far look --
+#: the same ceiling as `PLAN_ROOMS_CAP`, because a plan may plant that many
+#: places and so may describe that many from afar. A safety ceiling on one
+#: operation, never a quota: the planting sketch asks for far fewer at once
+#: (`room_sketch.SKETCH_LOOKS_CAP`).
+FAR_LOOKS_CAP = PLAN_ROOMS_CAP
 #: Turns ahead a `schedule_event` may be due (the seam re-queues past it).
 EVENT_DUE_CAP = 200
 #: Story hours one `presimulate` may ask for at once.
@@ -2088,6 +2094,224 @@ def _apply_set_vistas(cid, frame_id, op, turn_idx):
     return {"vistas": [v["id"] for v in op["vistas"]]}
 
 
+# -- set_far_looks ------------------------------------------------------------
+#
+# HOW A PLACE THAT ALREADY STANDS READS FROM FAR OFF (the owner's go-ahead,
+# 2026-10-09, "far looks everywhere"). A plan writes a far look for the
+# places it plants (`plan_rooms`), and refuses a room the story has
+# described as a retcon -- so a room the Director minted in a beat, and every
+# place of a story planned before 2026-10-08, read by their ground ("open
+# ground", "a building") to every far eye, and no operation could give them
+# a look. This is that operation: an op of its own, because it plans
+# nothing -- it says how a standing place, or a part of the map, reads from
+# afar, and nothing else about it.
+#
+# THE SEED-ONLY RULE HOLDS (`structure.PLAN_SEEDED_FIELDS`, the region
+# registry's `far_look_laid`): a look is written where the place reads by
+# its ground, or over the Room's own earlier word that nobody has changed
+# since; a look the plan seeded, a beat or the opening wrote, or a host
+# wrote or cleared stands (`landscape.room_look_writable`,
+# `region_look_writable`). A place the plan holds that no beat has described
+# takes the look into its plan as well, so the fringe's own rule keeps it
+# (`structure.seed_planned_far_look`). What a look may say is the card's and
+# `plan_rooms`'; what a mind is told of it is decided where it is read
+# (`landscape._admit_look`), never here.
+
+def _look_entries(raw, field, key_of):
+    """`{id: look}` and `{id: chars written}` for one of `set_far_looks`'
+    maps, each look in the one spelling (`landscape.normalize_far_look`).
+    A look the engine cut is recorded with its written length, for the
+    preview to say (`plan_rooms`' `far_look_cut_from`)."""
+    from world.landscape import normalize_far_look
+    if raw in (None, "", {}, []):
+        return {}, {}
+    if not isinstance(raw, dict):
+        raise ValueError("set_far_looks' %s is an object: {<id>: <far look>}" % field)
+    looks, cut = {}, {}
+    for key, value in raw.items():
+        ident = key_of(key)
+        if not ident:
+            raise ValueError("set_far_looks' %s names %r, which is no id" % (field, key))
+        look = normalize_far_look(value)
+        if not look:
+            raise ValueError("%r is given no far look: a look says how the place "
+                             "reads from far off" % key)
+        looks[ident] = look
+        written = " ".join(str(value or "").split())
+        if len(written) > len(look):
+            cut[ident] = len(written)
+    return looks, cut
+
+
+def _shape_set_far_looks(op):
+    from world.regions import normalize_region_id
+    rooms, rooms_cut = _look_entries(op.get("rooms"), "rooms",
+                                     lambda k: _text(k, 120))
+    regions, regions_cut = _look_entries(op.get("regions"), "regions",
+                                         normalize_region_id)
+    if not rooms and not regions:
+        raise ValueError("set_far_looks gives a far look to at least one room "
+                         "or part of the map: {rooms: {<room_id>: <far look>}, "
+                         "regions: {<region id>: <far look>}}")
+    if len(rooms) + len(regions) > FAR_LOOKS_CAP:
+        raise ValueError("set_far_looks gives at most %d far looks at once"
+                         % FAR_LOOKS_CAP)
+    out = {"rooms": rooms, "regions": regions}
+    if rooms_cut or regions_cut:
+        out["cut_from"] = {"rooms": rooms_cut, "regions": regions_cut}
+    return out
+
+
+#: What a place that keeps its look is told, by the reason the rule gave
+#: (`landscape.room_look_writable`); the preview's words, for the author.
+_LOOK_KEPT = {
+    "host": "the host wrote or cleared its far look by hand, and that stands",
+    "changed": "its far look was changed since the room wrote it -- by a beat "
+               "or by hand -- and that stands",
+    "standing": "it already reads by a far look the plan, a beat or the host "
+                "wrote, and that stands; a planned room's look is changed by "
+                "planning it again",
+    "cleared": "its far look was cleared since the plan laid it, and the "
+               "clear stands",
+    "undeclared": "it declares no exposure -- how much sky reaches it -- so no "
+                  "far eye sees it, and a look there would never be said",
+}
+
+
+def _planned_look_target(cid, uid):
+    """``(spec, why)`` for a planned room the scene does not hold yet: its
+    plan when that plan may take a look -- it says how much sky reaches the
+    room and no far look yet -- else None with the reason."""
+    from world.landscape import normalize_far_look
+    from world.structure import registry_rows
+    spec = (registry_rows(cid).get(uid) or {}).get("planned")
+    if not isinstance(spec, dict):
+        return None, "absent"
+    if not str(spec.get("exposure") or "").strip():
+        return None, "undeclared"
+    if normalize_far_look(spec.get("far_look")):
+        return None, "standing"
+    return spec, "none"
+
+
+def _preview_set_far_looks(cid, frame_id, op, world):
+    from world.landscape import FAR_LOOK_CHARS, room_look_writable, region_look_writable
+    from world.regions import region_registry
+    errors, warnings = [], []
+    scene = world.get("scene") or {}
+    contained = world.get("containment") or {}
+    written, kept = {}, {}
+    for rid, look in op["rooms"].items():
+        if rid in contained:
+            errors.append("room %r is the inside of a body (%s); the inside of a "
+                          "body is seen from no far off" % (rid, contained[rid]))
+            continue
+        if rid in world["rooms"]:
+            may, why = room_look_writable(scene, rid)
+        elif rid in world["planned"]:
+            spec, why = _planned_look_target(cid, rid)
+            may = spec is not None
+        else:
+            errors.append("room %r exists nowhere" % rid)
+            continue
+        if may:
+            written[rid] = look
+        else:
+            kept[rid] = why
+            warnings.append(("room %r takes no far look: %s" if why == "undeclared"
+                             else "room %r keeps the far look it has: %s")
+                            % (rid, _LOOK_KEPT.get(why, why)))
+    registry = region_registry(cid, frame_id)
+    regions_written = {}
+    for region, look in op["regions"].items():
+        entry = registry.get(region)
+        if not isinstance(entry, dict):
+            errors.append("part of the map %r exists nowhere" % region)
+            continue
+        may, why = region_look_writable(entry)
+        if may:
+            regions_written[region] = look
+        else:
+            kept[region] = why
+            warnings.append("part of the map %r keeps the far look it has: %s"
+                            % (region, _LOOK_KEPT.get(why, why)))
+    for field, cuts in sorted((op.get("cut_from") or {}).items()):
+        for ident, chars in sorted(cuts.items()):
+            warnings.append(
+                "%r's far look was %d characters and at most %d are kept: %r"
+                % (ident, int(chars), FAR_LOOK_CHARS,
+                   (op.get(field) or {}).get(ident, "")))
+    change = {"kind": "far_looks", "rooms": written, "regions": regions_written}
+    if kept:
+        change["kept"] = kept
+    return {"changes": [change], "errors": errors, "warnings": warnings}
+
+
+def _apply_set_far_looks(cid, frame_id, op, turn_idx):
+    """Each look lands where the rule still lets it -- read again here,
+    inside the publish, because the world may have moved since the preview:
+    a beat that described a place, or a host's edit, between the two stands.
+    A live room's look and the Room's record of it ride the scene
+    (`landscape.WRITTEN_LOOKS_KEY`); a planned room no beat has described
+    takes it into its plan too (`structure.seed_planned_far_look`), so the
+    fringe's record agrees and another frame's stub reads it; a region's
+    rides the frame's registry (`regions.write_region_far_look`)."""
+    from core.db import active_frame_id, q, wset
+    from story.scene import get_scene
+    from world.landscape import WRITTEN_LOOKS_KEY, room_look_writable
+    from world.regions import write_region_far_look
+    from world.structure import is_planned_stub, registry_rows, seed_planned_far_look
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    token = active_frame_id.set(frame_id) if frame_id is not None else None
+    out = {"rooms": {}, "regions": {}, "kept": {}, "plans": []}
+    try:
+        scene = get_scene(cid, chat) or {}
+        rooms = scene.get("rooms") or {}
+        registry = registry_rows(cid)
+        ledger = scene.get(WRITTEN_LOOKS_KEY)
+        ledger = dict(ledger) if isinstance(ledger, dict) else {}
+        changed = False
+        for rid, look in op["rooms"].items():
+            planned = (registry.get(rid) or {}).get("planned")
+            if rid not in rooms:
+                spec, why = _planned_look_target(cid, rid)
+                if spec is not None and seed_planned_far_look(cid, rid, look):
+                    out["plans"].append(rid)
+                    out["rooms"][rid] = look
+                else:
+                    out["kept"][rid] = why if spec is None else "standing"
+                continue
+            may, why = room_look_writable(scene, rid)
+            if not may:
+                out["kept"][rid] = why
+                continue
+            before = ledger.get(rid)
+            rooms[rid]["far_look"] = look
+            ledger[rid] = look
+            changed = True
+            out["rooms"][rid] = look
+            if isinstance(planned, dict) and is_planned_stub(scene, rid) \
+                    and seed_planned_far_look(cid, rid, look, unless=before):
+                out["plans"].append(rid)
+        if changed:
+            scene[WRITTEN_LOOKS_KEY] = {k: v for k, v in ledger.items() if k in rooms}
+            wset(cid, "scene", scene)
+    finally:
+        if token is not None:
+            active_frame_id.reset(token)
+    for region, look in op["regions"].items():
+        entry, why = write_region_far_look(cid, frame_id, region, look)
+        if entry is not None:
+            out["regions"][region] = look
+        else:
+            out["kept"][region] = why
+    if not out["kept"]:
+        out.pop("kept")
+    if not out["plans"]:
+        out.pop("plans")
+    return out
+
+
 # -- request_location (LONG: a model call; runs in prepare) -------------------
 
 def _shape_request_location(op):
@@ -2886,6 +3110,12 @@ OPERATIONS = {
     "set_vistas": {"shape": _shape_set_vistas, "preview": _preview_set_vistas,
                    "apply": _apply_set_vistas, "long": False,
                    "seam": "world.vistas (scene['vistas'])"},
+    "set_far_looks": {"shape": _shape_set_far_looks,
+                      "preview": _preview_set_far_looks,
+                      "apply": _apply_set_far_looks, "long": False,
+                      "seam": "scene.rooms[].far_look + landscape.WRITTEN_LOOKS_KEY | "
+                              "structure.seed_planned_far_look | "
+                              "regions.write_region_far_look"},
     "close_need": {"shape": _shape_close_need, "preview": _preview_close_need,
                    "apply": _apply_close_need, "long": False,
                    "seam": "world.planning_needs.close_planning_need"},
@@ -3071,6 +3301,9 @@ OPERATION_FIELDS = {
                   "book_id?": "lorebook id"},
     "answer_need": {"need_uid": "an open need", "fill": "{...what fills it}"},
     "close_need": {"need_uid": "an open need", "reason": "why it closes unanswered"},
+    "set_far_looks": {
+        "rooms?": "{<room_id>: <far look>} -- how a place that ALREADY STANDS reads from far off: open ground, or a building as its outside shows. A far look is what plan_rooms' far_look is -- one short phrase a stranger's eye would compose of what stands there, seen whole; it names nothing and no one, and holds what the place is, never the light, the hour, who is there or what is happening -- and it agrees with what the story has already said of the place. A building is seen from outside only: what the story has said of its rooms is what a body inside them meets, and nothing of an inside shows from far off -- take only what its outside shows, what it is built of and how it stands, never what it holds or what goes on in it. It is written where the place reads by its ground, or over a far look you wrote before that nobody has changed since: a look the plan, a beat or the host wrote stands, and a planned room's own look is changed by planning it again. A room that declares no exposure is seen from no far off and takes none",
+        "regions?": "{<region id>: <far look>} -- how a whole part of the map reads from far off, written only where that is true of every place in it: a place of it with no look of its own reads by it from five or more rooms away. The same rules"},
     "set_vistas": {"vistas": "[{name, bearing: n|ne|e|se|s|sw|w|nw, distance_km, "
                              "height_m, desc?: how it looks from here by day -- its "
                              "look, not its direction, which the bearing already "
@@ -3153,6 +3386,7 @@ OPERATION_FIELDS = {
 ROOM_FIELDS = {
     "plan_creature": ("lair", "hunts"),
     "plan_rooms": ("rooms",),
+    "set_far_looks": ("rooms",),
     "plan_entity": ("brief.where",),
     "post_artifact": ("room",),
     "file_lore": ("knowledge_locations",),
@@ -3497,6 +3731,12 @@ def _package_checks(pkg, world):
     return errors, warnings
 
 
+#: KINDS WHOSE ROOMS ARE SEEN, NOT REACHED: a far look is for a place a mind
+#: is told about from far off, so a place far from where the story stands is
+#: its point, and the reach warning (`_reach_warning`) does not read them.
+SEEN_NOT_REACHED = ("set_far_looks",)
+
+
 def _reach_warning(cid, world, pkg):
     """THE STORY CANNOT REACH THIS FROM WHERE IT STANDS. When a package
     plants or names rooms and NONE of them is within
@@ -3537,6 +3777,8 @@ def _reach_warning(cid, world, pkg):
     planted = []
 
     for op in pkg.get("operations") or ():
+        if op.get("op") in SEEN_NOT_REACHED:
+            continue
         named |= operation_rooms(op)
         if op.get("op") == "plan_rooms":
             for rid, room in (op.get("rooms") or {}).items():

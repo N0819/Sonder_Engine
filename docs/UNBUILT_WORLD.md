@@ -2601,17 +2601,80 @@ critic and a panel of three designs and three judges. Left:
   a region reads from far off -- and the far layer says it in place of the
   ground word, never the name of another place or of a region the mind has
   not learned. What is left:
-  * **Places nobody planned have none.** A room the Director mints in a beat,
-    and every place of a story planned before 2026-10-08, reads by its ground
-    as before: `plan_rooms` refuses a room the story has described (a retcon,
-    not a plan), and no Room operation writes a far look onto a place that
-    already stands. Whether the Room should have one is the owner's call;
-    the in-beat room author (`agents/director_rooms.py`) is not asked for one
-    either.
-  * **A town drafted through `draft_location` carries none.** Its room shape
-    (`charter_generate._PLAN_SYSTEM`) does not ask; a drafted room's
-    `far_look` would already travel (`plant_structure` keeps it), so the fix
-    is one field in that shape.
+  * **What is left of looks on places that already stand** (Design.md, "A
+    place that already stands takes a far look": the Room's `set_far_looks`,
+    the fill's bounded pass, a drafted town's room shape and the room
+    author's card, 2026-10-09):
+    - **Most of a story's places are in no far view at all**, and no look
+      can reach them: the far layer reads declared exposure only, and on the
+      owner's db 582 of 809 rooms outside bodies (72%), across 135 scene
+      rows, declare none (2026-10-09, read by `landscape.declared_ground`;
+      chat 165, a second Brackwater, 25 of 30). Declaring exposure on a
+      place that already stands would change its weather, light and sound
+      too (the keyword fallback stops reading it), and is the owner's call;
+      nothing writes it today but a plan, the sketch for what it plants, a
+      beat and the host.
+    - **A look written at publish can be lost to a beat's commit** that
+      prepared its scene before the publish landed, as `set_vistas`' can: a
+      described room's comes back as wanted and the next pass offers it
+      again; a stub's is laid again from its plan.
+    - **A host's edit or clear is recorded from 2026-10-09 only**: one made
+      in the World Browser before then, on a room no plan laid a look on,
+      reads as never made, and the next pass may write one there. The raw
+      world editor (`world_put`) marks nothing.
+    - **The live pass wrote no region's look**: offered chat 166's one part
+      of the map beside seven places, it wrote the seven and not the region.
+      A place with no look of its own then reads by its ground at the
+      outline until a pass gives it one.
+    - **A sketch that hands its question on files nothing, its looks
+      included**: re-run on chat 166, the answer gave the seven places it
+      was offered their looks and asked for the full planner over a person
+      it could not place, so none of them landed. The full loop's task names
+      the same places, so they are written there, at the loop's cost.
+    - **A pass waits while planting has spent the hour's fills**: a pass
+      that only gave looks is not counted against planting's hour
+      (`FILLS_PER_STORY_HOUR`) in either tier, but no fill is queued at all
+      once planting has spent it, so in a story whose clock moves slowly the
+      looks wait with the planting.
+    - **The opening writes no look for the places it describes**
+      (`director_establish`); the next pass offers them, a beat or more
+      after the story opens.
+    - **A side of a building whose look would be read from another side in
+      place of a look already written there is never offered**
+      (`landscape._look_lands_clear`): the far layer reads a mass's first
+      look in order from the front a walk reaches, so that side reads as "a
+      building" until a host writes it. The Room's own look counts: where a
+      pass gave one street door of a two-level building its look and not
+      the terrace side, and the stair up to the terrace room comes before
+      that door in another street door's reading order, the terrace side
+      waits for good. None stands in the stored corpora (2026-10-09: the
+      check withholds none of the 35, 19 and 16 fronts that reach it in the
+      play, live and owner's dbs). The operation itself checks the room it
+      writes, never the rest of its building, so the Planner's own
+      `set_far_looks` is not held to this.
+    - **A side that reads the look made for another side waits a pass**: a
+      pass that gave one side of a building its look and not the other --
+      the cap cut the farther front, or the answer left it out -- leaves the
+      other side reading the first side's look, a one-storey side's word
+      said of a two-storey mass, until a later pass gives it its own
+      (`landscape._made_for_another_side`). The full loop is told such sides
+      are among the places it is handed, never which, and its room slices
+      show no look, so it writes one without the other side's in view; the
+      sketch is shown it (`another_sides_look`).
+    - **One mass can carry two of the Room's looks**: a second door of a
+      mass whose own view reaches the other side's room before the first
+      door's is offered at a later pass, so one mass can carry two of the
+      Room's looks, and the sketch is shown the other side's look rather
+      than the first door's, so the two may differ in wording (review B2,
+      2026-10-09). A look made for another side is not one the check
+      protects: a door that reads it is offered its own (B1).
+    - **An annex the closure mints for a drafted building carries no look**
+      until a pass offers it or a beat describes it: unlike a split
+      dwelling's sibling, it is not the same kind of room as its parent.
+    - **Unmeasured live**: the room author's look on a place nobody planned,
+      a drafted town's looks, the sketch's looks in Japanese and a side of a
+      building shown another side's look (no stored scene holds one) -- no
+      model call was spent on any of them.
   * **A flood or a fire that is not a destruction does not rewrite a look by
     itself.** The encoder may (`RoomDef.far_look`, one clause in its `rooms`
     part, en and ja) when a beat shows the place changed for good, and the
@@ -2660,8 +2723,10 @@ critic and a panel of three designs and three judges. Left:
     259.2 characters against 126.2 (longest 473); with the cap at 2 it would
     average 252.8 (longest 447), at 1 239.8 (longest 395), the same 414 places
     told.
-  * **The planner cannot see which planned rooms lack one**: its room slices
-    show a stub's purpose and exits, never its geometry or its look.
+  * **The planner sees which places lack one only in the frontier it is
+    shown** (`looks_wanted`, the nearest few, and only under the grant
+    that lets it write one); its room slices still show a stub's purpose
+    and exits, never its geometry or its look.
 - **Off a site plan a height is inferred from the graph** -- and since
   2026-10-07 what stands between is tested there too (Design.md "What stands
   between hides what is behind it, by height"): the ground of every open

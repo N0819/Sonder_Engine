@@ -78,6 +78,14 @@ MANDATE_CAPABILITIES = (
     # What stands on the horizon (`world/vistas`): set by the opening and by
     # any grant that may plan the world.
     "set_vistas",
+    # HOW A PLACE THAT ALREADY STANDS READS FROM FAR OFF (`plot_packages.
+    # set_far_looks`, 2026-10-09): a far look on a room the story has
+    # described or the Director minted, or on a part of the map. Its own
+    # grant, beside `plan_rooms`, because it plans nothing -- it describes
+    # what stands, and only where nothing describes it yet -- and a player
+    # may want one without the other; the total grant covers it, as it
+    # covers every kind.
+    "set_far_looks",
     "presimulate",
     "create_people", "author_prehistory", "schedule_harm",
     # Reach the web (`story/room_research.py`): a query leaves the machine,

@@ -113,6 +113,14 @@ def normalize_regions(stored):
         # plan says something new. Kept whenever it was written, "" included.
         if isinstance(value.get("far_look_laid"), str):
             entry["far_look_laid"] = normalize_far_look(value["far_look_laid"])
+        # `far_look_written`: the far look the Room's look operation last
+        # wrote on this region (`write_region_far_look`, for a part of the map
+        # that already stands), or "" once a HOST has written or cleared one
+        # by hand (`set_region_far_look`) -- so the operation replaces only its
+        # own word, unchanged since, and never a host's (`landscape.
+        # region_look_writable`). Kept whenever it was written, "" included.
+        if isinstance(value.get("far_look_written"), str):
+            entry["far_look_written"] = normalize_far_look(value["far_look_written"])
         # `name_set`: a host renamed this region (`set_region_name`), so the
         # name stands even over a planted structure's own (`region_registry`).
         if value.get("name_set") is True:
@@ -229,7 +237,10 @@ def set_region_far_look(cid, frame_id, region_id, far_look):
     The HOST's writer, from the World Browser's room card
     (`web/world_routes.region_patch`): it leaves what the plan last laid
     alone (`far_look_laid`), so a plan restating its old word does not undo
-    the edit. The plan writes through `lay_planned_region_far_look`."""
+    the edit, and marks the entry as a host's word (`far_look_written` ""),
+    so the Room's look operation never writes over it, the clear included.
+    The plan writes through `lay_planned_region_far_look`, the Room's look
+    operation through `write_region_far_look`."""
     from core.db import wget_for_frame, wset_for_frame
     from world.landscape import normalize_far_look
 
@@ -247,9 +258,42 @@ def set_region_far_look(cid, frame_id, region_id, far_look):
         entry["far_look"] = text
     else:
         entry.pop("far_look", None)
+    entry["far_look_written"] = ""
     stored["items"][rid] = entry
     wset_for_frame(cid, REGIONS_KEY, stored, frame_id)
     return dict(entry)
+
+
+def write_region_far_look(cid, frame_id, region_id, far_look):
+    """Write the far look the Room's look operation gives a part of the map
+    that already stands (`plot_packages.set_far_looks`), by the one rule
+    `landscape.region_look_writable` states: only where the region reads by
+    no look, or by the operation's own word nobody has changed since -- a
+    look the plan laid, a host's edit or clear and anything written since
+    stand. A region the frame's registry does not hold (planted structures
+    included) is not entered. Returns ``(entry, why)``: the stored entry when
+    written, else None, and the rule's reason either way."""
+    from core.db import wget_for_frame, wset_for_frame
+    from world.landscape import normalize_far_look, region_look_writable
+
+    rid = normalize_region_id(region_id)
+    text = normalize_far_look(far_look)
+    standing = region_registry(cid, frame_id).get(rid) if rid else None
+    if not text or not isinstance(standing, dict):
+        return None, "absent"
+    may, why = region_look_writable(standing)
+    if not may:
+        return None, why
+    stored = normalize_regions(
+        wget_for_frame(cid, REGIONS_KEY, frame_id, {}) or {})
+    entry = dict(stored["items"].get(rid) or {})
+    if not entry:
+        entry = {"name": str(standing.get("name") or region_id), "brief": ""}
+    entry["far_look"] = text
+    entry["far_look_written"] = text
+    stored["items"][rid] = entry
+    wset_for_frame(cid, REGIONS_KEY, stored, frame_id)
+    return dict(entry), why
 
 
 def lay_planned_region_far_look(cid, frame_id, region_id, said):
@@ -264,7 +308,15 @@ def lay_planned_region_far_look(cid, frame_id, region_id, said):
       region reads now -- a host's edit or clear -- stands;
     * the plan says something new: its word is laid;
     * the plan has laid nothing on this region yet: its word is laid only
-      where the region has no far look, so a host's earlier one stands.
+      where the region has no far look, so a host's earlier one stands --
+      or where it reads by the Room's own look, written by `set_far_looks`
+      on a part of the map that read by its ground and unchanged since
+      (`far_look_written`). That word only filled a silence, as the Room's
+      look on a planned stub fills its plan's (`structure.
+      seed_planned_far_look`), and a plan saying the whole of it anew
+      replaces it there too (review 2026-10-09, F4: kept behind the Room's
+      word, the plan's look was recorded as laid and never landed, against
+      what the plan's own preview said).
 
     A plan that names no far look on its structure is not asked here: a
     publish that adds a room restates the structure's key and name and is
@@ -285,7 +337,11 @@ def lay_planned_region_far_look(cid, frame_id, region_id, said):
         seed = region_registry(cid, frame_id).get(rid) or {}
         entry = {"name": str(seed.get("name") or region_id), "brief": ""}
     laid = entry.get("far_look_laid")
-    if (laid is not None and said != laid) or (laid is None and not entry.get("far_look")):
+    written = entry.get("far_look_written")
+    rooms_own = bool(isinstance(written, str) and written
+                     and normalize_far_look(entry.get("far_look")) == written)
+    if (laid is not None and said != laid) \
+            or (laid is None and (not entry.get("far_look") or rooms_own)):
         entry["far_look"] = said
     entry["far_look_laid"] = said
     if entry != before:
@@ -694,5 +750,6 @@ __all__ = [
     "region_name", "region_registry", "registry_room_regions",
     "registry_row_region", "room_pieces", "room_region", "scene_anchors",
     "scene_rooms", "lay_planned_region_far_look", "set_region_far_look",
+    "write_region_far_look",
     "set_region_look", "set_region_name",
 ]

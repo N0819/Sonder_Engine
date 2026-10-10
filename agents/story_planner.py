@@ -555,9 +555,20 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
 
     def _frontier():
         try:
-            return frontier_report(cid, frame_id)
+            report = frontier_report(cid, frame_id)
         except Exception as exc:
             return {"error": str(exc)[:200]}
+        # THE PLACES WANTING A FAR LOOK, as the fill's task names them -- the
+        # nearest few, ids and ground -- and only under the grant that lets
+        # the room write one: the whole list rode every step of every reply.
+        if report.get("looks_wanted"):
+            listed = (_looks_listed(report)
+                      if _looks_asked(cid, frame_id, report, turn_idx) else None)
+            if listed:
+                report["looks_wanted"] = listed
+            else:
+                report.pop("looks_wanted")
+        return report
 
     # One line per cast member -- the drive's essence and each held project's
     # aim -- so the Planner knows what `inspect_minds` would answer before it
@@ -2678,19 +2689,63 @@ def _fill_task(cid, frame_id, report):
     for key in ("rooms_unheld", "rooms_unmeasured"):
         if report.get(key):
             frontier[key] = report[key]
+    # THE STANDING PLACES THAT WANT A FAR LOOK, when the grants let the Room
+    # write one: the nearest `room_sketch.SKETCH_LOOKS_CAP` of them, ids only
+    # -- the loop reads any of them with its tools, and the sketch is handed
+    # the same few (`room_sketch.looks_offered`).
+    looks = _looks_listed(report) if _looks_asked(cid, frame_id, report) else None
+    if looks:
+        frontier["looks_wanted"] = looks
     return {"kind": "fill", "needs": needs, "frontier": frontier}
 
 
-def _fill_wanted(report):
+def _looks_asked(cid, frame_id, report, turn_idx=None):
+    """Whether the fill gives places near the story their far looks: the
+    frontier wants some (`room_frontier.looks_wanted`) and a standing grant
+    lets the Room write one (`set_far_looks`). Without the grant they are
+    nobody's question: the fill neither runs for them nor asks for a grant
+    on their account -- the status row's ask stays the planting one."""
+    if not report.get("looks_wanted"):
+        return False
+    try:
+        from story.mandates import coverage
+        return bool(coverage(cid, frame_id, ["set_far_looks"], turn_idx=turn_idx)["ok"])
+    except Exception:
+        return False
+
+
+def _looks_listed(report):
+    """The nearest places and parts of the map wanting a far look, as ids
+    (a place's with its ground), at most `room_sketch.SKETCH_LOOKS_CAP` in
+    all, parts of the map first."""
+    from story.room_sketch import looks_offered
+    offered = looks_offered(report.get("looks_wanted"))
+    return ({"regions": [r["region"] for r in offered["regions"]],
+             "places": [{"room": p["room"], "ground": p["ground"]}
+                        for p in offered["places"]]}
+            if offered["places"] or offered["regions"] else None)
+
+
+def _fill_wanted(report, looks=False):
     """Whether the frontier report leaves a fill anything to answer: an open
     need, or a shortfall -- fewer planned rooms or people ahead than the
-    frontier wants, or an exit into nothing (`room_frontier.frontier_report`).
-    A developed area with nothing open still wants one: planting ahead is
-    the fill's standing work (owner ruling, 2026-10-08), and
-    `room_frontier.fill_due` is what keeps an unchanged question from being
-    asked every beat."""
+    frontier wants, or an exit into nothing (`room_frontier.frontier_report`)
+    -- or, with ``looks`` (`_looks_asked`), standing places near the story
+    that far eyes read by their ground alone (2026-10-09). A developed area
+    with nothing open still wants one: planting ahead is the fill's standing
+    work (owner ruling, 2026-10-08), and `room_frontier.fill_due` is what
+    keeps an unchanged question from being asked every beat."""
     return bool(report.get("open_need_uids") or report.get("rooms_short")
-                or report.get("identities_short"))
+                or report.get("identities_short") or looks)
+
+
+def _signature(cid, frame_id, report, mandate_uids, turn_idx=None):
+    """The fill's question for this report (`room_frontier.fill_signature`),
+    with whether it gives far looks -- read the same way wherever a question
+    is asked or filed, so the memo matches what was asked."""
+    from story.room_frontier import fill_signature
+    return fill_signature(report, mandate_uids,
+                          looks=_looks_asked(cid, frame_id, report, turn_idx))
 
 
 def _mandate_uids(cid, frame_id, turn_idx):
@@ -2737,6 +2792,45 @@ def _needs_answered(cid, frame_id, package_uids):
     return out
 
 
+def _only_looks(cid, frame_id, package_uids):
+    """Whether every package a fill published only gave standing places
+    their far looks (`plot_packages.set_far_looks`): planted nothing and
+    answered no need. Read off the packages as filed, whichever tier filed
+    them -- the sketch's or the full loop's -- so the hour's rule is one rule
+    (review 2026-10-09, F2: the loop's looks-only pass was counted against
+    planting's hour and the sketch's was not). False for no package, or for
+    one that cannot be read."""
+    from story.plot_packages import get_package
+    if not package_uids:
+        return False
+    for uid in package_uids:
+        try:
+            ops = (get_package(cid, uid, frame_id=frame_id) or {}).get("operations") or ()
+        except Exception:
+            return False
+        if not ops or any(not isinstance(op, dict) or op.get("op") != "set_far_looks"
+                          for op in ops):
+            return False
+    return True
+
+
+def _record_landed_fill(cid, frame_id, turn_idx, published, needs):
+    """Count one fill that landed against the hour's line (`room_frontier.
+    record_fill`) -- except a pass that only described what stands
+    (`_only_looks`, 2026-10-09). It planted nothing, so counted it would
+    spend the hour the world's growth runs on, and on a slow clock that is
+    every planting the story gets. A number the player STATED is the total
+    of every fill (owner, 2026-10-08), so under one it counts too."""
+    from story.mandates import fill_limit_stated
+    from story.room_frontier import record_fill
+    if _only_looks(cid, frame_id, published) \
+            and not fill_limit_stated(cid, frame_id, turn_idx):
+        return False
+    record_fill(cid, frame_id, turn_idx=turn_idx, package_uid=published[0],
+                needs=needs)
+    return True
+
+
 def _restate_status(cid, frame_id, turn_idx):
     """Rewrite the status row as it stands, so what is in motion counts a
     package the room just filed outside a reply. The line and the questions
@@ -2772,19 +2866,18 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
     the back-off, no fill record, no line."""
     from core.jobs import is_cancelled, story_rewound_past
     from story import room_conversation as room
-    from story.room_frontier import (fill_signature, frame_turn_idx,
-                                     frontier_report, record_fill,
+    from story.room_frontier import (frame_turn_idx, frontier_report,
                                      record_fill_asked, record_spend)
     now = room.current_turn_idx(cid)
     if story_rewound_past(base_turn, now):
         return {"skipped": "rewound", "base_turn": base_turn, "turn": now}
     report = frontier_report(cid, frame_id)
-    if not _fill_wanted(report):
+    if not _fill_wanted(report, _looks_asked(cid, frame_id, report, now)):
         return {"skipped": "nothing short"}
     mandate_uids = _mandate_uids(cid, frame_id, now)
     # THE QUESTION THIS FILL WAS ASKED, read where the task was built, so the
     # memo files the answer against exactly what the Room was shown.
-    signature = fill_signature(report, mandate_uids)
+    signature = _signature(cid, frame_id, report, mandate_uids, now)
     # A NEED FILED WHILE THE FILL RUNS JOINS ITS NEXT PASS. The fill holds
     # the chat's one fill slot (`FILL_JOB_KEY`, deduped per chat), so a
     # commit that files a need while a planting fill runs JOINS that fill
@@ -2818,7 +2911,7 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
     def _each_pass(carried):
         fresh = frontier_report(cid, frame_id)
         carried.update(_fill_task(cid, frame_id, fresh))
-        _ask(fill_signature(fresh, mandate_uids))
+        _ask(_signature(cid, frame_id, fresh, mandate_uids, now))
         for need in carried["needs"]:
             if need["uid"] not in carried_needs:
                 carried_needs.append(need["uid"])
@@ -2835,7 +2928,7 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
         try:
             left = frontier_report(cid, frame_id)
             if set(left.get("open_need_uids") or ()) <= set(carried_needs):
-                _ask(fill_signature(left, mandate_uids))
+                _ask(_signature(cid, frame_id, left, mandate_uids, now))
         except Exception as exc:
             logger.info("room fill: the frontier it left was not measured: %s", exc)
         for question in asked or [signature]:
@@ -2869,9 +2962,10 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
             _asked(bool(published))
             if published:
                 # A sketch answers no need -- it runs only when none is open
-                # -- so its fill counts on the planting line alone.
-                record_fill(cid, frame_id, turn_idx=now,
-                            package_uid=published[0], needs=())
+                # -- so its fill counts on the planting line alone, and a
+                # pass that only gave standing places their far looks not at
+                # all unless the player stated a number (`_record_landed_fill`).
+                _record_landed_fill(cid, frame_id, now, published, ())
                 _restate_status(cid, frame_id, now)
             try:
                 room.add_message(cid, frame_id, "planner", sketch["reply"],
@@ -2905,8 +2999,10 @@ def run_fill(cid, frame_id, *, base_turn, job=None):
     if out["stopped"] != "rewound":
         _asked(bool(out["published"]))
     if out["published"]:
-        record_fill(cid, frame_id, turn_idx=now, package_uid=out["published"][0],
-                    needs=_needs_answered(cid, frame_id, out["published"]))
+        # The same rule as the sketch's: a pass whose every package only gave
+        # far looks is not counted against planting's hour (`_record_landed_fill`).
+        _record_landed_fill(cid, frame_id, now, out["published"],
+                            _needs_answered(cid, frame_id, out["published"]))
     try:
         room.add_message(cid, frame_id, "planner", out["reply"], turn_idx=now)
     except ValueError:
@@ -2995,7 +3091,7 @@ def schedule_room_work(ctx):
     from story.mandates import (beats_per_proposal, fill_limit,
                                 fill_limit_stated, spend_limits)
     from story.room_bible import schedule_fold
-    from story.room_frontier import (fill_due, fill_signature, fills_this_hour,
+    from story.room_frontier import (fill_due, fills_this_hour,
                                      frontier_report, record_measure,
                                      spend_this_hour)
     from story.room_proposals import briefs_due, pass_due
@@ -3022,7 +3118,12 @@ def schedule_room_work(ctx):
     hour_open = (spend["calls_per_hour"] is None
                  or spend_this_hour(cid, frame_id, turn_idx) < spend["calls_per_hour"])
 
-    wanted = not bubble and _fill_wanted(report)
+    # FAR LOOKS ARE ASKED FOR ONLY UNDER THEIR GRANT, and never asked about:
+    # the status row's ask for a fill grant stays planting's and the needs'
+    # (`planting`), and looks only add to what a granted fill answers.
+    planting = not bubble and _fill_wanted(report)
+    looks = not bubble and _looks_asked(cid, frame_id, report, turn_idx)
+    wanted = planting or looks
     limit = fill_limit(cid, frame_id, turn_idx) if wanted else None
     if not bubble:
         # THE ENGINE'S OWN ASK FOR A FILL GRANT, read again at every commit
@@ -3032,7 +3133,7 @@ def schedule_room_work(ctx):
         # arrives or nothing is wanted (`_say_what_waits_on_a_grant`).
         _say_what_waits_on_a_grant(
             cid, frame_id, turn_idx,
-            None if not wanted or limit is not None
+            None if not planting or limit is not None
             else WAITING_LINE if report.get("open_need_uids")
             else WAITING_TO_PLANT_LINE)
     if wanted and limit is not None:
@@ -3054,8 +3155,9 @@ def schedule_room_work(ctx):
             # need, a moved shortfall, a new grant, or a new room while a
             # need is open -- is asked at once; an unchanged one waits out
             # `fill_wait_beats`.
-            due, why = fill_due(cid, frame_id, fill_signature(
-                report, _mandate_uids(cid, frame_id, turn_idx)), turn_idx)
+            due, why = fill_due(cid, frame_id, _signature(
+                cid, frame_id, report, _mandate_uids(cid, frame_id, turn_idx),
+                turn_idx), turn_idx)
             if not due:
                 logger.info("room fill not queued for chat %s: the question "
                             "is unchanged (%s)", cid, why)

@@ -1618,8 +1618,10 @@ def room_patch(cid: int, room_id: str, body: dict = Body(...),
         if "far_look" in body:
             # Text, kept as every writer keeps it (`landscape.
             # normalize_far_look`); empty removes it, and the place reads by
-            # its ground again.
-            from world.landscape import normalize_far_look
+            # its ground again. Either way it is the HOST's word, recorded as
+            # one (`landscape.WRITTEN_LOOKS_KEY` ""), so the Room's look
+            # operation never writes over it -- a clear included.
+            from world.landscape import WRITTEN_LOOKS_KEY, normalize_far_look
             raw = body.get("far_look")
             if raw is not None and not isinstance(raw, str):
                 raise HTTPException(400, "far_look must be text")
@@ -1628,6 +1630,9 @@ def room_patch(cid: int, room_id: str, body: dict = Body(...),
                 room["far_look"] = look
             else:
                 room.pop("far_look", None)
+            ledger = scene.get(WRITTEN_LOOKS_KEY)
+            scene[WRITTEN_LOOKS_KEY] = {**(ledger if isinstance(ledger, dict) else {}),
+                                        str(room_id): ""}
         if "region" in body:
             from world.regions import normalize_region_id
             region = normalize_region_id(str(body.get("region") or ""))

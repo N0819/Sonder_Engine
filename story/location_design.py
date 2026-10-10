@@ -235,7 +235,46 @@ def set_skeleton(cid, *, name=None, structure=None, rooms=None):
                   if not (isinstance(room, dict) and room.get("anchors")))
     if bare:
         out["rooms_with_no_fixtures"] = bare
+    # AND WHICH ROOMS SEEN FROM OUTSIDE SAY NOTHING OF HOW THEY READ FROM FAR
+    # OFF (2026-10-09), in the same answer for the same reason: the plan
+    # specification asks for `far_look`, and the fixtures were asked for in
+    # the contract twice before a design came back furnished -- this answer
+    # is the channel the Room reads.
+    unlooked = rooms_with_no_far_look(plan["rooms"])
+    if unlooked:
+        out["rooms_with_no_far_look"] = unlooked
     return out
+
+
+def rooms_with_no_far_look(rooms):
+    """The drafted rooms a far eye sees and that say no far look: declared
+    open or sheltered ground, and a building room joined to such ground --
+    the side of a building that stands to view (`landscape.
+    standing_looks_wanted` reads a built world the same way). A room that
+    declares no exposure is not listed: the review refuses it first."""
+    from world.landscape import OPEN_GROUND, normalize_far_look
+    from world.weather import EXPOSURES, _pick
+    rooms = rooms if isinstance(rooms, dict) else {}
+    ground = {str(rid): _pick(room.get("exposure"), EXPOSURES, "")
+              for rid, room in rooms.items() if isinstance(room, dict)}
+    joined = {}
+    for rid, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or ():
+            if isinstance(edge, dict) and edge.get("to"):
+                joined.setdefault(str(rid), set()).add(str(edge["to"]))
+                joined.setdefault(str(edge["to"]), set()).add(str(rid))
+    out = []
+    for rid, room in rooms.items():
+        rid = str(rid)
+        if not isinstance(room, dict) or not ground.get(rid) \
+                or normalize_far_look(room.get("far_look")):
+            continue
+        if ground[rid] in OPEN_GROUND or any(
+                ground.get(other) in OPEN_GROUND for other in joined.get(rid, ())):
+            out.append(rid)
+    return sorted(out)
 
 
 def set_charter(cid, charter):
@@ -405,6 +444,16 @@ def check(cid):
             "stood at or taken cover behind: %s. Give each the features it is "
             "made of (`anchors`), or leave bare the ones that honestly hold "
             "nothing." % (len(bare), ", ".join(bare[:12])))
+    # A ROOM SEEN FROM OUTSIDE THAT SAYS NOT HOW IT READS FROM FAR OFF,
+    # reported and never refused (2026-10-09): a far eye reads it as its
+    # ground alone, which is a worse place, not a broken one.
+    unlooked = rooms_with_no_far_look(plan.get("rooms") or {})
+    if unlooked:
+        notes.append(
+            "%d room(s) seen from outside -- open ground, or a building on it -- "
+            "say no far_look, so a far eye reads each as its ground alone: %s. "
+            "Give each how it reads from far off." % (
+                len(unlooked), ", ".join(unlooked[:12])))
     # THE ROOMS THE CLOSURE WILL INVENT, said to the planner whose plan made
     # it invent them. A split was recorded in the closure and reached the
     # host's launch warnings, never this review: chat 164's plan berthed a

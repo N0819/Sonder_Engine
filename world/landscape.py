@@ -83,6 +83,10 @@ NOMINAL_SPAN_M = 8.0     # a room with no authored extent, along a line of
                          # sight -- placing what stands between, never said
 SLIVER_M = 0.5           # less of a place than this over what is in front of
                          # it is not a view of it
+CELLAR_BELOW_M = 0.5     # an enclosed room whose floor is more than this below
+                         # the open ground it adjoins is a cellar under that
+                         # ground, no building standing on it (`far_places`,
+                         # `_building_fronts`)
 
 #: THE LONGEST FAR LOOK KEPT, in characters (named to the owner,
 #: ask-before-limiting). A look is ONE phrase spliced into a line that
@@ -346,6 +350,18 @@ def building_of(scene, front, graph=None):
             height[other] = h
             queue.append(other)
     return set(height), height
+
+
+def building_height(rise):
+    """How high a mass stands to a far eye -- "one", "two" or "tall" -- from
+    `building_of`'s ``{room: metres over the front's floor}``: its highest
+    room's floor plus a storey, over `TALL_M` tall, over a storey two. What
+    the far layer says a building by when it has no look of its own
+    (`landscape_building_<height>`), and what the planting sketch is shown
+    of a standing building, whose look is said in its place."""
+    from world.site_plan import STOREY_M
+    height_m = max((rise or {}).values() or [0.0]) + STOREY_M
+    return "tall" if height_m > TALL_M else "two" if height_m > STOREY_M + 0.1 else "one"
 
 
 def _whole_building(scene, room, graph):
@@ -908,7 +924,7 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
                 vertical = normalize_vertical(edge.get("vertical"))
                 if (ground in OPEN_GROUND and other_ground == "building"
                         and (vertical == "down" or room_elevation_m(scene, other)
-                             < room_elevation_m(scene, src) - 0.5)):
+                             < room_elevation_m(scene, src) - CELLAR_BELOW_M)):
                     continue                 # a cellar under the ground is no building on it
                 nxt = {"room": other, "hops": hops + 1, "path": rec["path"] + [other],
                        "dirs": rec["dirs"] + [CLIMB if vertical else
@@ -1050,11 +1066,9 @@ def far_places(scene, observer, *, known=None, senses=None, via_names=None,
             if not seen_mass and not lit_rooms:
                 hide({"kind": "dark", "room": "", "name": ""}, bearing)
                 continue
-            height_m = max(rise.values() or [0.0]) + STOREY_M
             place = {"ground": "building", "lights": len(lit_rooms),
                      "high": any(rise.get(m, 0.0) > 0.0 for m in lit_rooms),
-                     "height": ("tall" if height_m > TALL_M else
-                                "two" if height_m > STOREY_M + 0.1 else "one"),
+                     "height": building_height(rise),
                      "dark": not seen_mass}
             # Named from the front the eye sees first, then the nearest room
             # in from it (`building_of` keeps that order) -- never the first
@@ -1449,3 +1463,297 @@ def _breadth(scene, rid):
     room = _rooms(scene).get(rid) or {}
     tier = size_from_extent(room.get("extent")) or str(room.get("size") or "").strip().casefold()
     return "wide" if tier in ("large", "huge", "vast") else ""
+
+
+# ---------------------------------------------------------------------------
+# Places that already stand, read by their ground (2026-10-09)
+# ---------------------------------------------------------------------------
+#
+# THE OWNER'S GO-AHEAD (2026-10-09, "far looks everywhere"): only places a
+# plan wrote since 2026-10-08 had a far look, so a room the Director minted
+# in a beat and every place of an older story read by their ground. The Room
+# now writes a look onto a place that already stands
+# (`plot_packages.set_far_looks`), and the planting sketch is handed the
+# places that want one (`standing_looks_wanted`, through the fill's frontier
+# report). What may be written is decided HERE, once, for the operation, the
+# sketch and the fill alike: a look fills a place that reads by its ground,
+# or replaces the Room's own word that nobody has changed since -- and a
+# look the plan seeded, a beat wrote, the opening wrote or a host edited or
+# cleared stands, as the plan's own rule keeps it (`structure.
+# PLAN_SEEDED_FIELDS`, `regions.lay_planned_region_far_look`).
+
+#: THE ROOM'S WORD ON A STANDING PLACE, per frame: ``{room id: the far look
+#: the Room's look operation last wrote there}``, and "" where a HOST has
+#: written or cleared that room's look by hand (the World Browser's room
+#: card) -- a host's word the operation never writes over. Read and written
+#: by `plot_packages.set_far_looks` and the World Browser alone; a scene
+#: whose places nobody looked at carries none. Room-keyed, like
+#: `structure.LAID_LOOKS_KEY` beside it, so the entity-rename walk leaves it
+#: alone (`commit_scene_state._ENTITY_RENAME_SKIP`).
+WRITTEN_LOOKS_KEY = "far_looks_written"
+
+#: Why a look may or may not be written, as `room_look_writable` and
+#: `region_look_writable` answer it: the first two may be written, the rest
+#: stand. Engine words for a reader to explain, never said to a mind.
+LOOK_WRITE_REASONS = ("none", "own", "host", "changed", "standing", "cleared",
+                      "undeclared", "inside", "absent")
+
+
+def _written_ledger(scene):
+    ledger = (scene or {}).get(WRITTEN_LOOKS_KEY)
+    return ledger if isinstance(ledger, dict) else {}
+
+
+def _look_verdict(current, written, has_written, laid):
+    """The one rule for a room and a region alike: ``(may, why)``.
+
+    * the Room's operation wrote here before: it may replace its own word
+      while the place still reads by it ("own"); a host's mark ("host") and
+      any other word since ("changed") stand;
+    * the place reads by a look nobody recorded -- the plan's, a beat's, the
+      opening's or a host's -- and it stands ("standing");
+    * the plan laid a look and the place reads by none now: somebody cleared
+      it, and the clear stands ("cleared");
+    * otherwise the place reads by its ground and a look may be written
+      ("none")."""
+    if has_written:
+        written = normalize_far_look(written)
+        if not written:
+            return False, "host"
+        return (True, "own") if current == written else (False, "changed")
+    if current:
+        return False, "standing"
+    if laid:
+        return False, "cleared"
+    return True, "none"
+
+
+def room_look_writable(scene, rid):
+    """``(may, why)``: whether the Room's look operation may write room
+    `rid`'s far look in this scene now (`_look_verdict`). A room the scene
+    does not hold ("absent"), the inside of a body ("inside") and a room
+    declaring no exposure ("undeclared": the far layer reads declared
+    ground only, so no far eye sees it) take none."""
+    rid = str(rid)
+    room = _rooms(scene).get(rid)
+    if not isinstance(room, dict):
+        return False, "absent"
+    if str(room.get("parent_entity") or "").strip():
+        return False, "inside"
+    if declared_ground(scene, rid) is None:
+        return False, "undeclared"
+    ledger = _written_ledger(scene)
+    from world.structure import LAID_LOOKS_KEY
+    laid = (scene or {}).get(LAID_LOOKS_KEY)
+    laid = laid.get(rid) if isinstance(laid, dict) else None
+    return _look_verdict(normalize_far_look(room.get("far_look")),
+                         ledger.get(rid), rid in ledger, laid)
+
+
+def region_look_writable(entry):
+    """``(may, why)`` for a region's registry entry (`regions.
+    region_registry`): the same rule, read off the entry's own records --
+    `far_look_written` (the Room's word, "" a host's) and `far_look_laid`
+    (the plan's)."""
+    entry = entry if isinstance(entry, dict) else {}
+    return _look_verdict(normalize_far_look(entry.get("far_look")),
+                         entry.get("far_look_written"),
+                         isinstance(entry.get("far_look_written"), str),
+                         normalize_far_look(entry.get("far_look_laid")))
+
+
+def _building_fronts(scene, graph):
+    """Every enclosed room a far walk enters a building by, as `far_places`
+    does: joined to open ground by an edge that does not go DOWN into it
+    from the ground, and not standing under that ground -- "a cellar under
+    the ground is no building on it". Each is a front the far layer builds a
+    mass from (`building_of`), which takes in no room below that front's
+    floor: a building on a slope, or fronting a street and a terrace above
+    it, is a different mass from each side.
+
+    GROUND THAT OPENS ONTO THIS ROOM ALONE is no way in for a far eye: a
+    far walk reaches ground from a room beside it, and a body beside this
+    room has it in its near field, which the far layer never answers. So a
+    room fronts only ground that touches some other room too -- a street,
+    a terrace with a hill beyond it, a courtyard another wing looks across
+    -- and never a balcony or a landing off it alone. Measured on the live
+    play db (2026-10-09): a watchtower's top cabin fronting its own balcony
+    was offered in three scenes, and no stored view, 56 walks in all, ever
+    read a look there."""
+    from world.site_plan import room_elevation_m
+    from world.spatial import normalize_vertical
+    fronts = set()
+    for ground in _rooms(scene):
+        if declared_ground(scene, ground) not in OPEN_GROUND:
+            continue
+        floor = room_elevation_m(scene, ground)
+        for edge in graph.get(ground) or ():
+            other = str(edge.get("to"))
+            if declared_ground(scene, other) != "building" \
+                    or normalize_vertical(edge.get("vertical")) == "down" \
+                    or room_elevation_m(scene, other) < floor - CELLAR_BELOW_M \
+                    or not any(str(e.get("to")) != other for e in graph.get(ground) or ()):
+                continue
+            fronts.add(other)
+    return fronts
+
+
+def _first_look_at(scene, order):
+    """Where in a mass's reading order (`far_places`: its front, then each
+    room in from it) the first room carrying a far look stands; None when
+    none does and the mass reads by its ground."""
+    return next((i for i, rid in enumerate(order) if far_look_of(scene, rid)), None)
+
+
+def _made_for_another_side(scene, front, rid, fronts, mass):
+    """Whether the far look on `rid`, which the view from `front` reads, was
+    made for ANOTHER side of the building: the Room's own unchanged word
+    (`room_look_writable` "own") on another front whose own view does not
+    take `front` in -- a terrace front's look, read from the street below
+    for want of the street front's own, said of a mass it was never written
+    for. A look somebody else wrote stands as what the view reads, and one
+    the Room wrote on a front that builds this same mass -- another door
+    onto the street -- was made for this very view (review 2026-10-09,
+    N1)."""
+    return (rid != front and rid in fronts and front not in mass(rid)[0]
+            and room_look_writable(scene, rid) == (True, "own"))
+
+
+def _look_lands_clear(scene, front, graph, fronts, mass):
+    """Whether a look written on `front` changes no OTHER view of its
+    building but one that reads by its ground with nobody's word on it. A
+    front's look is read from every front whose mass takes it in, wherever
+    it stands in that mass's reading order: it must not come before a look
+    already written on another of its rooms, the Room's own included (that
+    view would read the new word in place of the one it reads), and it may
+    fill a view that reads by its ground only where no room of that mass
+    carries a cleared or host's mark (`room_look_writable`). A look made for
+    ANOTHER side (`_made_for_another_side`) is not one this protects: a door
+    that reads the terrace's one-storey word for a two-storey mass is a view
+    owed its own, and a look written for it lands (review B1, 2026-10-09: two
+    street doors that each reached the other before the stair read the
+    terrace look for good)."""
+    for other in fronts & _whole_building(scene, front, graph):
+        if other == front:
+            continue
+        members, order = mass(other)
+        if front not in members:
+            continue
+        first = _first_look_at(scene, order)
+        if first is not None:
+            if first > order.index(front) and not _made_for_another_side(
+                    scene, other, order[first], fronts, mass):
+                return False
+        elif not all(room_look_writable(scene, m) == (True, "none") for m in members):
+            return False
+    return True
+
+
+def standing_looks_wanted(scene, starts, *, regions=None):
+    """The standing places, and parts of the map, a far eye near `starts`
+    could be told about that read by their ground alone: ``{"places":
+    [...], "regions": [...]}``, nearest first. [] lists when none.
+
+    WITHIN REACH is the far layer's own: every room the scene holds within
+    `REACH_HOPS` of a start over any declared edge, in a start's locale --
+    the places a far line from where the story stands, or a step from it,
+    could carry. Not only what an eye sees this beat: a body indoors looks
+    out on nothing, and the street it steps into should not read as "open
+    ground" for want of the beat it stood inside.
+
+    A PLACE is declared open or sheltered ground, or a BUILDING seen from
+    outside, read as the far layer reads it: FROM EACH FRONT (`_building_
+    fronts`), the mass `building_of` builds from that front, offered by the
+    front while that view reads by its ground -- the far layer says a
+    building by the first room of the mass, in its reading order, that
+    carries a look -- or by a look made for another side of it
+    (`_made_for_another_side`; the place then says whose, `reads_look_of`).
+    A building fronting a street and a terrace above it is two views, and a
+    look on its street front never reaches the terrace side, whose mass
+    holds no room below its own floor (review 2026-10-09, F3: claimed by the
+    first front reached, the terrace side read as "a building" for good).
+    The terrace side's look does reach the street side, and is read there
+    until the street front has its own -- a one-storey side's word said of
+    a two-storey mass -- so each side is offered whichever the story stands
+    nearer, and a side reading another side's look stays wanted (N1: the
+    street front, skipped as reached by the terrace front's look, was never
+    offered from the hill). A front that builds the same mass as a front
+    already offered -- another door onto the same street -- is not offered
+    again: that front's look was made for this view too. Nor is one whose
+    look would be read from another side in place of a look already
+    written there (`_look_lands_clear`). Each is offered only where
+    `room_look_writable` lets the Room write every room of its mass
+    ("none", or its own word): a place that reads by a look somebody else
+    wrote, or whose look somebody cleared, is not wanted.
+
+    A PART OF THE MAP (`regions`, the frame's registry) is wanted where some
+    ground of it in reach reads by its ground and the region has no far look
+    the operation may write over (`region_look_writable` "none"): its look
+    is what that ground reads by at the outline. A registry the stage could
+    not read offers no region (`REGIONS_UNREAD`)."""
+    from world.spatial import room_locale
+    rooms = _rooms(scene)
+    graph = _graph(scene)
+    starts = [str(s) for s in starts or () if str(s) in rooms]
+    locales = {room_locale(rooms.get(s)) for s in starts}
+    hops = {s: 0 for s in starts}
+    queue = deque(starts)
+    while queue:
+        cur = queue.popleft()
+        if hops[cur] >= REACH_HOPS:
+            continue
+        for edge in graph.get(cur) or ():
+            other = str(edge.get("to"))
+            if other in hops or other not in rooms:
+                continue
+            hops[other] = hops[cur] + 1
+            queue.append(other)
+    fronts = _building_fronts(scene, graph)
+    masses = {}
+
+    def mass(front):
+        """A front's mass and its reading order, as `far_places` reads it."""
+        if front not in masses:
+            members, rise = building_of(scene, front, graph)
+            masses[front] = (members, [front, *rise])
+        return masses[front]
+
+    places, offered, region_ground = [], [], {}
+    for rid in sorted(hops, key=lambda r: (hops[r], r)):
+        if room_locale(rooms.get(rid)) not in locales:
+            continue
+        ground = declared_ground(scene, rid)
+        if ground in OPEN_GROUND:
+            if far_look_of(scene, rid):
+                continue
+            region = str((rooms.get(rid) or {}).get("region") or "")
+            if region:
+                region_ground.setdefault(region, []).append(rid)
+            if room_look_writable(scene, rid) == (True, "none"):
+                places.append({"room": rid, "ground": ground, "hops": hops[rid]})
+        elif ground == "building" and rid in fronts:
+            members, order = mass(rid)
+            first = _first_look_at(scene, order)
+            reads = order[first] if first is not None else None
+            if (reads is not None
+                    and not _made_for_another_side(scene, rid, reads, fronts, mass)) \
+                    or any(mass(front)[0] == members for front in offered) \
+                    or not all(room_look_writable(scene, m)[0] for m in members) \
+                    or not _look_lands_clear(scene, rid, graph, fronts, mass):
+                continue
+            offered.append(rid)
+            place = {"room": rid, "ground": "building", "hops": hops[rid],
+                     "members": sorted(members)}
+            if reads is not None:
+                place["reads_look_of"] = reads
+            places.append(place)
+    wanted_regions = []
+    if not isinstance(regions, _UnreadRegions):
+        for region, ground_rooms in sorted(
+                region_ground.items(), key=lambda kv: (min(hops[r] for r in kv[1]), kv[0])):
+            entry = (regions or {}).get(region)
+            if isinstance(entry, dict) and region_look_writable(entry) == (True, "none"):
+                wanted_regions.append({"region": region,
+                                       "hops": min(hops[r] for r in ground_rooms),
+                                       "rooms": list(ground_rooms)})
+    return {"places": places, "regions": wanted_regions}

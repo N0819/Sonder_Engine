@@ -58,7 +58,7 @@ _PLAN_SYSTEM = """You design one inhabited location from supplied lore.
 Return one JSON object and no prose outside it. Do not invent an institution
 unless the lore or author brief implies one. Output: {name, structure:{key,
 max_planned, grammar:[{kind,names,purposes}]}, rooms:{id:{name,purpose,
-exposure:"open"|"sheltered"|"enclosed",adjacent:[{to,barrier:"open_door"}],frontier:[],
+exposure:"open"|"sheltered"|"enclosed",far_look,adjacent:[{to,barrier:"open_door"}],frontier:[],
 anchors:{anchor_id:{desc}}}}, charters:[{key,name,naming,
 priority,commons,upkeeps:{id:{place,floor,level,fails_untended,one_body_restores_in,
 requires,depends_on}},posts:{id:{place,serves,requires,reports_to,authority}},
@@ -74,6 +74,15 @@ with open sides, or enclosed by walls and a roof -- a loft or a tower top
 over another room declares its own. Sight from anywhere else reads only what
 a room declares, so an undeclared room is never seen from outside and adds
 no height to the building it stands on.
+A room seen from outside -- open ground, or a building whose outside stands
+to view -- also gives its far_look: how it reads from far off, as one short
+phrase a stranger's eye would compose of what stands there, seen whole.
+Every eye that far off is told it, knowing the place or not, so it names
+nothing: not this place, not another, not the part of the map it is in, not
+anyone. It holds what the place is, never what passes over it -- no light or
+hour, nobody there and nothing happening. It is the phrase for the far eye
+and never the room's description, so a planned room still carries no prose;
+without it, a far eye reads the place as its ground alone.
 A room's `anchors` are its FIXTURES: the fixed features of the place a body
 can stand at, work at, set something down on, take cover behind or lay a hand
 against. Give a room the ones it is MADE of rather than every object in it --
@@ -853,7 +862,7 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING, *,
     from world.frontage import ANNEX_OF, SPLIT_OF
     from world import place_names
     from world.place_names import deal_place_name, instance_of, standing_fillers
-    from world.structure import planned_geometry
+    from world.structure import planned_geometry, planned_seed
 
     occupancy = {}
     workplaces = set()
@@ -914,10 +923,14 @@ def _spread_berths(rooms, charter_bodies, ceiling=BERTH_CEILING, *,
                 # not over the same room: `over` names one room beneath the
                 # parent, which five siblings cannot all be standing on. An
                 # annex is not the same kind: what it is waits for the
-                # Director.
+                # Director. And it reads from far off as the parent does
+                # (`planned_seed`, 2026-10-09): a row of one kind of dwelling
+                # is said once with its count, never as one house and four
+                # buildings.
                 **({} if annexes else {
                     key: value for key, value in planned_geometry(base).items()
                     if key != "over"}),
+                **({} if annexes else planned_seed(base)),
             }
             for edge in edges:
                 neighbour = rooms.get(str(edge["to"]))
@@ -1146,7 +1159,7 @@ def close_plan(plan, *, history=None, featured_residents=None,
     # planted beside them kept all three. The same fail-open normalizer the
     # package path reads a planned room through (`plot_packages._plan_geometry`,
     # F47), so the two paths into the registry hold the same kind of value.
-    from story.plot_packages import _plan_geometry
+    from story.plot_packages import _plan_far_look, _plan_geometry
     rooms = {}
     for uid, raw in _mapping(plan.get("rooms")).items():
         if not isinstance(raw, dict):
@@ -1158,6 +1171,13 @@ def close_plan(plan, *, history=None, featured_residents=None,
                          if isinstance(e, dict) and e.get("to")],
             "frontier": [str(x) for x in raw.get("frontier") or () if str(x)],
             **_plan_geometry(raw),
+            # AND HOW IT READS FROM FAR OFF (2026-10-09). This rebuild is the
+            # allowlist above, and the far look the plan specification now
+            # asks a room for was not on it: a drafted town would have reached
+            # `plant_structure`, which seeds the look onto the stub, with none
+            # (`structure.PLAN_SEEDED_FIELDS`). The package path's own reader,
+            # so the two paths into the registry keep one spelling.
+            **{k: v for k, v in _plan_far_look(raw).items() if k == "far_look"},
             # A PLAN THAT NAMED ITS FIXTURES KEEPS THEM. This rebuild is an
             # allowlist and it dropped `anchors` the same way `plant_structure`
             # did, so even a furnished plan arrived bare.
