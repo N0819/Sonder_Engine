@@ -12,7 +12,7 @@
 | `agents/character_bare.py` | 1168 |  | `agents.common`, `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/character_tools.py` | 732 |  | `core.db` |
-| `agents/common.py` | 12538 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 12558 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 6074 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 7552 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
@@ -162,7 +162,7 @@
 | `world/charter_chatter.py` | 487 |  | `world.crowds` |
 | `world/charter_commitment.py` | 292 |  | `world.charter_model` |
 | `world/charter_creature.py` | 464 |  | `world.charter_harm`, `world.charter_model` |
-| `world/charter_crowd.py` | 364 |  | `world.crowds` |
+| `world/charter_crowd.py` | 368 |  | `world.crowds` |
 | `world/charter_decide.py` | 279 |  | `world.charter_model`, `world.charter_news` |
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
 | `world/charter_economy.py` | 444 |  | `world.charter_model` |
@@ -319,14 +319,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 4662 | 300 lines |
-| `presence_figures_for_room()` | 2250 | 284 lines |
-| `_unknown_actor_label()` | 5760 | 269 lines |
-| `_check_narrator_fidelity()` | 11707 | 258 lines |
-| `_scrub_unknown_identities()` | 6255 | 207 lines |
-| `_scrub_invented_dialogue()` | 10115 | 151 lines |
+| `norm_sequence()` | 4682 | 300 lines |
+| `presence_figures_for_room()` | 2270 | 284 lines |
+| `_unknown_actor_label()` | 5780 | 269 lines |
+| `_check_narrator_fidelity()` | 11727 | 258 lines |
+| `_scrub_unknown_identities()` | 6275 | 207 lines |
+| `_scrub_invented_dialogue()` | 10135 | 151 lines |
 | `observer_body_regions()` | 1744 | 140 lines |
-| `_check_quote_attribution()` | 11279 | 131 lines |
+| `_check_quote_attribution()` | 11299 | 131 lines |
 
 ### `agents/composer.py`
 
@@ -2017,13 +2017,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `members_of()` | 121 | 49 lines |
-| `crowd_for()` | 325 | 40 lines |
-| `member_noun()` | 215 | 37 lines |
-| `crowd_face()` | 294 | 29 lines |
+| `member_noun()` | 215 | 41 lines |
+| `crowd_for()` | 329 | 40 lines |
+| `crowd_face()` | 298 | 29 lines |
 | `_plural()` | 183 | 22 lines |
 | `engaged_turn()` | 81 | 20 lines |
-| `composition_of()` | 254 | 18 lines |
-| `mood_of()` | 274 | 18 lines |
+| `composition_of()` | 258 | 18 lines |
+| `mood_of()` | 278 | 18 lines |
 
 ### `world/charter_decide.py`
 

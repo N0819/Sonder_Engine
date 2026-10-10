@@ -2147,9 +2147,18 @@ def charter_ground_for_room(cid, sc, room_id, inputs=None, *, turn_idx=None):
     if room in memo:
         return memo[room]
     rows, carried, names = [], set(), set()
+    # A BODY THE SCENE PRESENTS IS NOT GROUND. `members_of` subtracts what
+    # the background-presence ledger says is presented, and the COMMIT
+    # writes that ledger -- so a body the Director bound to an entity THIS
+    # beat (`charter_ref`, the identity floor's binding) was presented by the
+    # scene and carried by its crowd at once. Chat 167 turn 4616: the
+    # opening bound the landlord, and the view held "the middle-aged square
+    # landlord ... is close by" beside "a handful of landlords and potmen".
+    bound = _scene_bound_charter_bodies(sc)
     for charter in inputs.get("charters") or []:
         key = str(charter.get("key") or "")
-        members = charter_crowd.members_of(charter, room)
+        members = [member for member in charter_crowd.members_of(charter, room)
+                   if (key, str(member)) not in bound]
         # A CROWD STILL HAS A FACE. One member per co-located institution is
         # fronted out of the band and falls through to
         # `presence_figures_for_room` as an individual figure, which is what
@@ -2173,6 +2182,17 @@ def charter_ground_for_room(cid, sc, room_id, inputs=None, *, turn_idx=None):
               "carried": carried, "names": names}
     memo[room] = ground
     return ground
+
+
+def _scene_bound_charter_bodies(sc):
+    """``{(charter key, body key)}`` every scene entity is bound to by its
+    ``charter_ref`` -- the bodies the scene itself presents as individuals."""
+    bound = set()
+    for entity in ((sc or {}).get("entities") or {}).values():
+        ref = entity.get("charter_ref") if isinstance(entity, dict) else None
+        if isinstance(ref, dict) and ref.get("charter") and ref.get("body"):
+            bound.add((str(ref["charter"]), str(ref["body"])))
+    return bound
 
 
 def _charter_body_display_names(charter, members):
