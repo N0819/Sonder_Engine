@@ -4271,6 +4271,44 @@ def fire_due_clocks(cid, turn_idx, *, elapsed=None, frame_id=None, turn_id=None)
                          for pkg, clock, filled in advanced]}
 
 
+def truths_known_by(cid, viewer_name, turn_idx, *, frame_id=None):
+    """The landed truths a mind is named as already holding, as ``[(package
+    title, truth)]`` in publish order.
+
+    A truth's `known_by` names the minds a fact is ALREADY inside (the
+    validation above), and until 2026-10-10 nothing read it: the Writers'
+    Room filed "the timbering report was signed by the deputy, Emrys
+    Vaughan" as known by Ffion Rees, and she answered from her card, which
+    said Prothero, and invented the dead it never named (O12/O13/O22 of the
+    Cwm Du run, chat 167 turns 4619-4626). The owner's ruling: a truth
+    reaches every mind its `known_by` names, from the turn after it lands,
+    as something that mind already knew.
+
+    Every truth of a package that landed BEFORE ``turn_idx`` -- never in it,
+    the publish's own next-turn rule -- that nothing has superseded. A
+    resolved package's truths stay known; a retired package's are
+    withdrawn. ``player`` names the player's character, never a cast mind."""
+    def _fold(text):
+        return " ".join(str(text or "").split()).casefold()
+
+    want = _fold(viewer_name)
+    if not want or want == TRUTH_AUDIENCE_PLAYER:
+        return []
+    landed = sorted(
+        (p for p in packages(cid, frame_id).values()
+         if p["status"] in LANDED and p.get("published_turn") is not None
+         and int(p["published_turn"]) < int(turn_idx)),
+        key=lambda p: (int(p["published_turn"]), p["uid"]))
+    out = []
+    for pkg in landed:
+        for truth in pkg.get("truths") or ():
+            if truth.get("superseded_by") or not truth.get("text"):
+                continue
+            if any(_fold(who) == want for who in truth.get("known_by") or ()):
+                out.append((pkg.get("title") or "", truth))
+    return out
+
+
 def visible_packages(cid, turn_idx, *, frame_id=None):
     """The landed packages a turn may see: published before it, never in
     it. What the pipeline (and later the Planner's frontier) reads."""

@@ -128,6 +128,22 @@ run itself made.
      him beside its own planned deputy.
    - Emrys Vaughan spoke on screen, yet his plan still reads unrendered, so the
      planned-person promotion bar can never count him.
+
+   Cause (fix-wave investigation): every fact sat in a plan-tier store --
+   package truths, plan roles, the place's history, the Room's own
+   conversation -- that reached no mind. A truth's `known_by` was validated
+   and never read; the launch could not file lore; and the deputy, placed by
+   a crowd's dispersal under his name alone, had no record for the binder to
+   bind, so a need was filed for him and the Room planned him again. FIXED
+   (the owner's ruling, "truths reach the minds named"): every landed,
+   unsuperseded truth reaches the minds its `known_by` names from the next
+   turn, as something they already knew, over an older card
+   (`plot_packages.truths_known_by`, `private_knowledge_for`); the Room's
+   card names the three ways a fact is held (common lore, `known_by`,
+   evidence), and the launch may `file_lore`; a planned body placed by name
+   alone stands up as its plan's record
+   (`director_floors._stand_up_plans_placed_by_name`), and no need is filed
+   for a name the Room planned.
 4. **The narrator originates or drops lines.**
    - 4617: it rendered a line nobody said.
    - 4618: a delivered background line never reached the page.

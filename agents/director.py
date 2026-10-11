@@ -223,6 +223,7 @@ from .director_floors import (
     unplaced_mints_needing_a_room,
     place_unplaced_mints,
     _bind_minted_entities_to_present_figures,
+    _stand_up_plans_placed_by_name,
     _stand_touching_figures,
     _mint_fallback_room,
     _untracked_restraint_subjects,
@@ -6993,6 +6994,22 @@ def director_resolve(ctx, nonce, _corrections=None):
                 _b["room"] or "this room",
                 " (more than one holds that post here; bound to the first "
                 "by name)" if _b["ambiguous"] else ""))
+    # A PLANNED BODY PLACED BY NAME ALONE stands up as its plan's record
+    # (`_stand_up_plans_placed_by_name`): the binder above reads records,
+    # and a crowd's dispersal or an arrival can write positions and no
+    # record at all.
+    try:
+        from persist.commit import _registered_name_roster
+        _roster = _registered_name_roster(chat, ctx.cast)
+    except Exception:
+        _roster = [p_name]
+    _stood_up = _stand_up_plans_placed_by_name(
+        sc, sd, list(_present_figures) + list(_reserved_figures), _roster)
+    for _b in _stood_up:
+        ctx.add_warning(
+            "Placed %r by name alone; it is the planned %s, stood up as its "
+            "plan's record (plan %s)." % (_b["minted_name"], _b["bound_to"], _b["plan"]))
+    _bound = list(_bound) + _stood_up
     if _bound:
         out["identity_bindings"] = _bound
     # A present charter body that touches or is touched stands in the scene,

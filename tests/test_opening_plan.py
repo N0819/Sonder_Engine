@@ -88,9 +88,11 @@ def test_the_capability_and_the_operation_exist():
     assert "place_at_opening" in md.MANDATE_CAPABILITIES
     assert "place_at_opening" in OPERATIONS and not OPERATIONS["place_at_opening"]["long"]
     # `set_vistas` (2026-10-04): what the opening's place looks out on is
-    # set before the first beat, like its rooms.
+    # set before the first beat, like its rooms. `file_lore` (the owner,
+    # 2026-10-10): what everyone here knows is filed before it too.
     assert set(op.OPENING_CAPABILITIES) == {"plan_rooms", "place_at_opening",
-                                            "director_note", "set_vistas"}
+                                            "director_note", "set_vistas",
+                                            "file_lore"}
     # A charter is an option the player takes, never one the planner assumes.
     assert "request_location" not in op.OPENING_CAPABILITIES
     assert "plan_entity" not in op.OPENING_CAPABILITIES

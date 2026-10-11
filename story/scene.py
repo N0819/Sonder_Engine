@@ -3046,7 +3046,15 @@ def own_private_history(chat, viewer_name, frame_id=None):
     return out
 
 
-def private_knowledge_for(chat, viewer_name, frame_id=None):
+def private_knowledge_for(chat, viewer_name, frame_id=None, turn_idx=None):
+    """What one mind privately knows: its own card's private history, what
+    another card shares with it (`known_by`), what it knows of the player,
+    and every landed Writers' Room truth whose `known_by` names it
+    (`plot_packages.truths_known_by`) -- from the turn after the truth
+    landed (``turn_idx``, else the latest turn row), labelled as something
+    it already knew that outranks an older memory: the owner's ruling of
+    2026-10-10, the Room's truth beats a card written before it (chat 167:
+    a card said Prothero signed the report the Room had the deputy sign)."""
     vn = (viewer_name or "").lower().strip()
     out = []
     for owner, entries in _cast_private_histories(chat, frame_id):
@@ -3071,4 +3079,17 @@ def private_knowledge_for(chat, viewer_name, frame_id=None):
                 out.append({"about": persona_name(pers),
                             "content": e["content"],
                             "source": "something you privately know about them"})
+    try:
+        from story.plot_packages import _latest_turn_idx, truths_known_by
+        if turn_idx is None:
+            turn_idx = _latest_turn_idx(chat["id"], frame_id)
+        truths = truths_known_by(chat["id"], viewer_name, turn_idx, frame_id=frame_id)
+    except Exception:
+        truths = []
+    if truths:
+        from language_runtime import linguistic
+        source = str(linguistic("story.scene", "_ALREADY_KNOWN_SOURCE"))
+        for title, truth in truths:
+            out.append({"about": title or "", "content": truth["text"],
+                        "source": source})
     return out

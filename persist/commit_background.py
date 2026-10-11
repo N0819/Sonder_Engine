@@ -2883,11 +2883,33 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         from world.charter_enrol import enrol_person
         from world.planning_needs import (file_planning_need,
                                           fill_planning_need)
+        # A NAME THE ROOM HAS PLANNED IS NOT UNPLANNED. Nothing here binds
+        # by name (`presence_person_plan`: a passer-by who shares a planned
+        # name is not taken for them) -- the identity floor binds a body
+        # the beat stands up -- but a need filed for a planned name asks
+        # the Room to plan it again, and it did: chat 167's deputy, planned
+        # at the opening, filed `rendered_unplanned` at turn 4618 and was
+        # re-planned under his own uid (O33). No need is filed for a name
+        # exactly one unrendered plan answers to.
+        def _bare_person_name(text):
+            return " ".join(strip_name_titles(str(text or "")).split()).casefold()
+        try:
+            from world.planned_entities import reserved_plans
+            _planned_names = {}
+            for _plan in reserved_plans(cid, frame_id=ctx.turn.frame_id):
+                for _label in [_plan.get("name")] + list(_plan.get("aliases") or ()):
+                    _bare = _bare_person_name(_label)
+                    if _bare:
+                        _planned_names.setdefault(_bare, set()).add(str(_plan.get("plan")))
+        except Exception:
+            _planned_names = {}
         for key, record in presences.items():
             if record.get("charter_refs") or record.get("plan_ref"):
                 continue
             _name = presence_display_name(key, record)
             if not _name:
+                continue
+            if len(_planned_names.get(_bare_person_name(_name), ())) == 1:
                 continue
             # ENROLMENT IS MEMBERSHIP, AND MEMBERSHIP IS FOR PEOPLE. Not the
             # speech gate: an animate NOUN is enough to hold a turn and is not

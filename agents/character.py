@@ -4558,7 +4558,8 @@ def character_step(ctx, cid, nonce):
             ctx.cast, persona_of(chat),
             set(relationships) | set(mind_models),
             exclude=[character_name(sh)]),
-        "private_knowledge": private_knowledge_for(chat, character_name(sh), ctx.turn.frame_id),
+        "private_knowledge": private_knowledge_for(chat, character_name(sh), ctx.turn.frame_id,
+                                                   ctx.turn.idx),
         "world_knowledge": knowledge,
         "decision": {
             "deep_tom_requested": cid in _tom,

@@ -1781,6 +1781,67 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=(),
     return stood
 
 
+def _stand_up_plans_placed_by_name(sc, sd, figures, roster=()):
+    """A PLANNED BODY THE BEAT PLACES BY NAME IS THAT PLAN, RENDERED.
+
+    The binder below reads entity records, and a beat can place a body by
+    `positions` alone: chat 167's crowd dispersal stood "Emrys Vaughan" --
+    the Writers' Room's deputy, planned since the opening -- at the saw
+    sheds with no record (turn 4618), and his arrival at 4628 wrote
+    positions, stations and poses only. Nothing bound him, his plan never
+    read rendered, and the commit filed a planning need for a name the Room
+    had planned, which it then planned again (O22/O33 of the Cwm Du run).
+
+    A positions key no record holds -- in the scene or the diff, by key,
+    name or alias -- whose bare name is exactly one planned figure's (in
+    view or reserved, `plan` set, no charter body) gets that plan's record:
+    the plan's name, its look, `plan_ref`. Never a name a registered mind
+    (``roster``) or a charter body answers to; never a name two plans
+    share. Returns one record per body stood up, in the binder's shape."""
+    positions = sd.get("positions") if isinstance(sd.get("positions"), dict) else {}
+    if not positions:
+        return []
+    held = set()
+    for table in ((sc or {}).get("entities") or {}, sd.get("entities") or {}):
+        for eid, ent in table.items():
+            held.add(_bare_person_name(eid))
+            if isinstance(ent, dict):
+                held.add(_bare_person_name(ent.get("name")))
+                held |= {_bare_person_name(a) for a in ent.get("aliases") or ()}
+    taken = {_bare_person_name(name) for name in roster or ()}
+    taken |= {_bare_person_name(f.get("name")) for f in figures or ()
+              if isinstance(f, dict) and f.get("charter") and f.get("body")}
+    held |= taken
+    held.discard("")
+    planned = [f for f in figures or () if isinstance(f, dict) and f.get("plan")
+               and not (f.get("charter") and f.get("body"))]
+    out = []
+    for key, room in list(positions.items()):
+        bare = _bare_person_name(key)
+        if not bare or bare in held:
+            continue
+        hits = [f for f in planned
+                if _bare_person_name(f.get("name")) == bare
+                or any(_bare_person_name(a) == bare for a in f.get("aliases") or ())]
+        if len({str(f["plan"]) for f in hits}) != 1:
+            continue
+        fig = hits[0]
+        kind = str(fig.get("kind") or "person")
+        record = {"name": str(fig.get("name") or key),
+                  "kind": "object" if kind == "thing" else kind,
+                  "plan_ref": {"uid": str(fig["plan"])}}
+        look = str(fig.get("look") or "").strip()
+        if look:
+            record["description"] = look
+        sd.setdefault("entities", {})[str(key)] = record
+        held.add(bare)
+        out.append({"entity_id": str(key), "minted_name": str(key),
+                    "bound_to": record["name"], "room": str(room or ""),
+                    "by": "name", "ambiguous": False,
+                    "plan": str(fig["plan"]), "stood_up": True})
+    return out
+
+
 def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                                              fallback_room=None,
                                              dialogue_log=None,

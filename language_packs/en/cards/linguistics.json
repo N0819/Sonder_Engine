@@ -3419,6 +3419,7 @@
     "_CLAUSE_JOIN_PERIOD": ". ",
     "_CLAUSE_JOIN_SEMICOLON": "; ",
     "_SENTENCE_END": ".",
-    "_SENTENCE_ENDS": ".!?"
+    "_SENTENCE_ENDS": ".!?",
+    "_ALREADY_KNOWN_SOURCE": "something you already knew, long before now -- where an older memory of yours says otherwise, this is how it truly was"
   }
 }

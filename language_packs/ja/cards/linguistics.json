@@ -4468,6 +4468,7 @@
     "_CLAUSE_JOIN_PERIOD": "。",
     "_CLAUSE_JOIN_SEMICOLON": "；",
     "_SENTENCE_END": "。",
-    "_SENTENCE_ENDS": ".!?。！？"
+    "_SENTENCE_ENDS": ".!?。！？",
+    "_ALREADY_KNOWN_SOURCE": "ずっと以前から知っていたこと――あなたの古い記憶がこれと食い違うなら、本当はこうだった"
   }
 }

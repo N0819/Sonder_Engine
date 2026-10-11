@@ -30,8 +30,15 @@ OPENING_PLACEMENTS_KEY = "opening_placements"
 #: `request_location`: a charter is an option the player takes, never one the
 #: planner assumes. No `plan_entity`: the cast exists and background people
 #: are the establish stage's. No `create_people`, no `presimulate`.
+#:
+#: AND WHAT EVERYONE HERE KNOWS (owner, 2026-10-10): `file_lore`, so a fact
+#: the premise makes common to a place -- the names of the dead, who signed
+#: the report -- is filed as lore its people know from the first beat. The
+#: launch could not file it at all, so the Room filed the owner's facts as
+#: truths no mind read, and the companion invented the dead (O12/O22 of the
+#: Cwm Du run, chat 167 turns 4619-4626).
 OPENING_CAPABILITIES = ("plan_rooms", "place_at_opening", "director_note",
-                        "set_vistas")
+                        "set_vistas", "file_lore")
 
 #: The sentence the mandate keeps. Engine-minted, so it is worded as the
 #: standing rule it is rather than as something the player typed.
