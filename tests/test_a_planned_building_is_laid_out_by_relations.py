@@ -327,10 +327,12 @@ def _registry(cid):
     return {uid: entry["planned"] for uid, entry in registry_rows(cid).items()}
 
 
-def test_the_layout_tier_is_on_unless_the_host_turns_it_off(temp_db):
-    """On by default since the bridge laid a real Room plan cleanly -- the
-    owner's shrine, replicated (the owner, 2026-10-10: "Bridge lane now, then
-    on") -- and turned off it reads nothing and calls nothing."""
+def test_the_layout_tier_is_off_unless_the_host_turns_it_on(temp_db):
+    """Off by default until the bridge lays a real Room plan cleanly (the
+    owner, 2026-10-10: "Bridge lane now, then on"; the bridge lane's shrine
+    stood with no refusal and was judged not yet clean beside the lab's) --
+    and off it reads nothing and calls nothing; turned off explicitly, the
+    same."""
     from agents.director_layout import (LAYOUT_TIER_SETTING, lay_out_buildings,
                                         layout_tier_enabled)
     from core.db import set_setting
@@ -339,11 +341,12 @@ def test_the_layout_tier_is_on_unless_the_host_turns_it_off(temp_db):
     calls = []
     scene = _scene()
     before = copy.deepcopy(scene)
-    assert layout_tier_enabled(), "on where the host has said nothing"
-    for word in ("off", "0", "false", "no"):
+    assert not layout_tier_enabled(), "off where the host has said nothing"
+    for word in ("on", "1", "true", "yes"):
         set_setting(LAYOUT_TIER_SETTING, word)
-        assert not layout_tier_enabled(), word
+        assert layout_tier_enabled(), word
     set_setting(LAYOUT_TIER_SETTING, "off")
+    assert not layout_tier_enabled()
     got, laid_out = lay_out_buildings(None, cid, scene, ["hall"], "en", call=_answers(calls))
     assert got is scene and laid_out == set()
     assert calls == [] and scene == before

@@ -1,9 +1,10 @@
 # Buildings from relations: the layout solver as a tier of the plan
 
-Status: first slice built 2026-10-08; ON by default since 2026-10-10, once
-the bridge lane laid the owner's own shrine plan cleanly (below) -- the
-host's `layout_solver_tier` setting, or the same switch on one story, turns
-it off. What is left is `UNBUILT_WORLD.md` §2.43.
+Status: first slice built 2026-10-08, OFF by default -- the host's
+`layout_solver_tier` setting, or the same switch on one story. The bridge
+lane (2026-10-10, below) lays the owner's own shrine plan with no refusal;
+the owner judged the result not yet clean beside the lab's, so the tier
+stays off. What is left is `UNBUILT_WORLD.md` §2.43.
 
 ## Why
 
@@ -59,14 +60,13 @@ re-reading the owner had just cut. Given up: a building nobody nears is never
 laid out, so the height-aware far readers meet it only then. At most one
 building is laid out a run (`LAYOUT_TIER_PER_RUN`).
 
-**The switch.** On unless turned off: for one story, by that story's own
+**The switch.** Off unless turned on: for one story, by that story's own
 `layout_solver_tier` world key (`LAYOUT_TIER_STORY_KEY`, read first, and kept
 across a reroll or a restore as a dial the author set,
 `persist.checkpoints.SETTING_PROVENANCE`), or for every story by the host's
 setting of the same name (`LAYOUT_TIER_SETTING`). A story's `off` holds even
-where the host's is on, and its `on` where the host's is off. Off by default
-until 2026-10-10, by the owner's ruling "Bridge lane now, then on": on once
-the bridge laid a real Room plan cleanly, which it did that day.
+where the host's is on. The owner's ruling of 2026-10-10, "Bridge lane now,
+then on": on by default once the bridge lays a real Room plan cleanly.
 
 **What a building is.** The plan says which rooms exist and how they join, not
 which share a roof. A stair does: two rooms joined `up`/`down` are two storeys
@@ -302,7 +302,39 @@ s, two seeds); two with the stone stairs' hall opening off the Main Hall's
 neighbour rather than the Main Hall (35 s and 32 s, four seeds each), the
 stair's landing there left to the room designer. Two of the lab's three fresh
 runs re-solve differently under rounds 4 and 6; the liked shrine and the third
-do not. The owner's comparison page holds all of it. On by default from then.
+do not. The owner's comparison page holds all of it. The default went on,
+and came back off the same day: the owner, reading the page, "The results
+still don't look particularly clean in comparison to the lab".
+
+**Why not clean yet** (measured the same day, the three recorded answer sets
+replayed, every change also run on the lab's liked shrine and its three
+fresh runs). The relate answers put every upward stair against opposite
+walls of its two rooms -- `n` in the room below, `s` in the room above: a
+stair climbing from the room below into the room beyond, which stands in the
+middle of the building. The lab's brief put its stairs at the outer wall,
+turning back over the room below ("arrives at the north end of the
+hallway"). The solver carves each stair hall out of a storey before
+dividing it, offering a stair the two ends and the middle of each wall of
+the region its storeys share; a stair in the middle of a storey leaves
+pieces no room can take whole, and on the ground and below its hall
+swallows them (`_absorb` caps a landing only above the ground) at no cost
+to the score, a hall being exempt from size and proportion -- engine A's
+basement stair stood end-on mid-way along the north wall, its hall 10 by
+5. Sixteen variants were measured: charging the swallowed floor moved it
+into stores; holding a stair to a wall of every storey made two of the
+three worse; every pace of a wall as a stair's place, with the swallowed
+floor charged at 2 a pace, cleaned one of the three and half of another,
+tripled the solve (8 s to 24 s) and re-solved the liked shrine worse (its
+genkan a strip down the west side); freeing the plan's sides helped one;
+making each stair's two walls agree was refused on every seed for two. A
+side-by-side placement of A's two ground-floor stairs, forced, scored 290.8
+against the solver's own 206.9: the score itself prefers the swallowed
+hall. Laid out with no stair holes, the same specs tile every storey
+cleanly, and each stair fits inside both rooms it joins (checked alone;
+placed together in tilings chosen blind to the stairs, A fits all three, B
+two, C one) -- the mockups on the owner's comparison page. The next design
+is the owner's call (`UNBUILT_WORLD.md` §2.43, stairs that stand in their
+rooms).
 
 ## The live runs
 

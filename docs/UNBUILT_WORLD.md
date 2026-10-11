@@ -2667,7 +2667,7 @@ leaves, in the order the owner agreed:
     lane). Replayed on every perception step of chats 165 and 166, 14 of 119
     far views change once the plans stand, each by a building in the line.
   A planned building can also be laid out onto a plan by code before anyone
-  has described it (§2.43, on by default since 2026-10-10).
+  has described it (§2.43, off by default).
 * **A window between storeys is an anchor, not an edge**: an edge is one per
   pair of rooms, and the ground-floor door already holds it.
 
@@ -2960,26 +2960,43 @@ said in the Room's review. What it leaves:
 
 
 <a id="unbuilt-2-43"></a>
-### 2.43 Buildings from relations: the layout solver as a tier of the plan -- first slice BUILT 2026-10-08, on by default 2026-10-10, what is left
+### 2.43 Buildings from relations: the layout solver as a tier of the plan -- first slice BUILT 2026-10-08, what is left
 
 The owner's choice of 2026-10-08, the fourth procedural-generation item
 ([`design/DESIGN_LAYOUT_TIER.md`](design/DESIGN_LAYOUT_TIER.md); Design.md, "A
 planned building is laid out from relations before its rooms are designed").
 Built: the solver never chooses an L stair; a pinned fixture keeps its whole
-rectangle; a plan carries `site`; the tier itself, on by default since
-2026-10-10 (`layout_solver_tier` turns it off, for one story or for every
-story) and reading the story's own lore of the building, inside the job
+rectangle; a plan carries `site`; the tier itself, off by default
+(`layout_solver_tier`, for one story or for every story) and reading the
+story's own lore of the building, inside the job
 that builds the rooms in view or ahead of any actor; every reader of a beat
 and its commit read the scene through a solved plan; the commit's writes to a
 planned row prepared before the lock lay only their own fields onto it; a
 re-plan takes back only what a solve laid; a comparison page for the owner.
 Left, each with what it needs:
 
-- **The lab inn's L stair.** The lab inn's liked first floor stood on an L
-  stair the fallback chose and now re-solves with U stairs (15 room
-  rectangles move): keep it, or put the L back into the fallback -- the
-  owner's call. (The owner's comparison before any story, the other half of
-  this entry, was the bridge lane of 2026-10-10, and the tier is on.)
+- **The owner's comparison before any story.** The tier stays off until the
+  owner judges its buildings clean beside the lab's. The bridge lane of
+  2026-10-10 laid the owner's shrine plan with no refusal, and the owner:
+  "The results still don't look particularly clean in comparison to the
+  lab". The lab inn's liked first floor stood on an L stair the fallback
+  chose and now re-solves with U stairs (15 room rectangles move): keep it,
+  or put the L back into the fallback -- the owner's call.
+- **Stairs that stand in their rooms.** What keeps the engine's buildings
+  from the lab's cleanliness (`design/DESIGN_LAYOUT_TIER.md`, "Why not clean
+  yet"): a stair the answers put mid-building is carved as a hole before the
+  storey is divided, and the floor beside it no room can take whole goes to
+  its hall; sixteen variants of the search and score either failed the
+  shrine's three answer sets or re-solved the lab's liked shrine worse. Laid
+  out with no stair holes, every storey of the shrine tiles cleanly and each
+  stair fits inside both rooms it joins -- which is how the engine already
+  records a stair: the plan's vertical edge, pinned inside its room. Needs a
+  solver that tiles each storey first and stands each stair inside its rooms,
+  searching tilings and stair places together (placed in tilings chosen
+  blind to the stairs, the three answer sets fit 3, 2 and 1 of their three
+  stairs), fixtures kept off the stair, and the bridge pinning a stair where
+  it stands in its room. The lab's liked shrine would be drawn that way too:
+  the owner's call.
 - **An L asked for by name.** The lab's answers may still name an L and get
   one; the tier never offers it to the model. Whether an answer may ask for
   an L at all is the owner's, and either answer is a solver change: a round
