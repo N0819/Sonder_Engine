@@ -19,13 +19,13 @@
 | `agents/director_evidence.py` | 4022 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2548 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/director_layout.py` | 506 |  | — |
+| `agents/director_layout.py` | 496 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 3399 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1632 |  | `core.db`, `llm`, `llm.prompts` |
-| `agents/director_rooms.py` | 2801 |  | — |
+| `agents/director_rooms.py` | 2812 |  | — |
 | `agents/director_scopes.py` | 599 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 754 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 469 |  | `core.db`, `core.logging_utils`, `story.room_proposals` |
@@ -37,7 +37,7 @@
 | `agents/perception.py` | 8398 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1881 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 3414 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 3423 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3109 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -108,7 +108,7 @@
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 620 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
 | `persist/commit_scene_state.py` | 2893 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.landscape`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.structure`, `world.weather` |
-| `persist/llm_capture.py` | 564 |  | `core.db` |
+| `persist/llm_capture.py` | 604 |  | `core.db` |
 | `persist/pipeline_trace.py` | 635 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `persist/steps.py` | 150 |  | `core.db` |
 | `story/__init__.py` | 6 |  | — |
@@ -410,14 +410,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `lay_out_buildings()` | 410 | 97 lines |
-| `building_description()` | 316 | 57 lines |
-| `lay_out_opening_ground()` | 375 | 33 lines |
-| `lay_out()` | 235 | 32 lines |
-| `_recording()` | 170 | 26 lines |
-| `_briefed()` | 269 | 25 lines |
+| `lay_out_buildings()` | 400 | 97 lines |
+| `building_description()` | 306 | 57 lines |
+| `lay_out_opening_ground()` | 365 | 33 lines |
+| `lay_out()` | 225 | 32 lines |
+| `_briefed()` | 259 | 25 lines |
 | `layout_tier_enabled()` | 133 | 20 lines |
 | `layout_grounds_enabled()` | 112 | 19 lines |
+| `_recording()` | 170 | 16 lines |
 
 ### `agents/director_lingua.py`
 
@@ -482,7 +482,7 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `design_rooms()` | 1675 | 264 lines |
-| `_predevelop_run()` | 2614 | 188 lines |
+| `_predevelop_run()` | 2621 | 192 lines |
 | `_doorways_that_fit()` | 1123 | 176 lines |
 | `_derive_far_bearings()` | 863 | 103 lines |
 | `_place_doorways()` | 751 | 92 lines |
@@ -634,14 +634,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 1188 | 409 lines |
-| `run_fill()` | 3047 | 167 lines |
-| `deliberate()` | 2205 | 162 lines |
-| `schedule_room_work()` | 3270 | 145 lines |
-| `run_location_plan()` | 1960 | 136 lines |
-| `run_dramaturge_pass()` | 2389 | 112 lines |
-| `_dramaturge_pass()` | 2514 | 108 lines |
-| `_payload()` | 670 | 103 lines |
+| `run_planner()` | 1197 | 409 lines |
+| `run_fill()` | 3056 | 167 lines |
+| `deliberate()` | 2214 | 162 lines |
+| `schedule_room_work()` | 3279 | 145 lines |
+| `run_location_plan()` | 1969 | 136 lines |
+| `run_dramaturge_pass()` | 2398 | 112 lines |
+| `_dramaturge_pass()` | 2523 | 108 lines |
+| `_payload()` | 679 | 103 lines |
 
 ### `core/db.py`
 
@@ -1405,14 +1405,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `record_room_exchange()` | 484 | 56 lines |
+| `record_room_exchange()` | 524 | 56 lines |
 | `record_exchange()` | 182 | 49 lines |
-| `referenced_blob_hashes()` | 335 | 41 lines |
+| `referenced_blob_hashes()` | 375 | 41 lines |
 | `_values()` | 149 | 26 lines |
-| `latest_turn_id()` | 438 | 26 lines |
+| `latest_turn_id()` | 478 | 26 lines |
 | `put_blob()` | 85 | 25 lines |
+| `recording_outside_a_step()` | 299 | 25 lines |
 | `_file_pending()` | 242 | 23 lines |
-| `vacuum_blobs()` | 378 | 23 lines |
 
 ### `persist/pipeline_trace.py`
 

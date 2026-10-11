@@ -264,23 +264,63 @@ def _file_pending(turn_id: int) -> None:
            (int(chat["chat_id"]), max(int(h["id"]) for h in held)))
 
 
-def record_chat_exchange(chat_id, *, step_key: str, **fields) -> None:
+def record_chat_exchange(chat_id, *, step_key: str, turn_idx=None, **fields) -> None:
     """Record one provider call made for a story outside any step and any
-    Room scope -- the layout tier's, in the job that builds the rooms in view
-    and at the launch (`agents/director_layout.py`) -- under the turn in
-    play, as a Room call is (`latest_turn_id`), or held until the story has
-    one. A diagnostic never fails the call it describes."""
+    Room scope -- the layout tier's and the room designer's, in the job that
+    builds the rooms in view, and the tier's at the launch -- under the turn
+    `turn_idx` names (the turn a job works for), else the turn in play, as a
+    Room call is (`latest_turn_id`), or held until the story has one. A
+    diagnostic never fails the call it describes."""
     if chat_id is None or not capture_enabled():
         return
     try:
         cid = int(chat_id)
-        turn_id = latest_turn_id(cid)
+        turn_id = (_turn_at(cid, turn_idx) if turn_idx is not None else None) \
+            or latest_turn_id(cid)
         if turn_id:
             record_exchange(turn_id=turn_id, step_key=step_key, **fields)
         else:
             _hold_pending(cid, step_key=step_key, **fields)
     except Exception:
         return
+
+
+def _turn_at(chat_id: int, turn_idx) -> int | None:
+    """The id of the chat's turn at index `turn_idx`, or None."""
+    try:
+        row = q("SELECT id FROM turns WHERE chat_id=? AND idx=? ORDER BY id DESC "
+                "LIMIT 1", (int(chat_id), int(turn_idx)), one=True)
+    except Exception:
+        return None
+    return int(row["id"]) if row else None
+
+
+@contextlib.contextmanager
+def recording_outside_a_step(chat_id, step_key: str, *, turn_idx=None):
+    """Record every provider call made inside, for chat `chat_id` under
+    `step_key` (`record_chat_exchange`).
+
+    WORK OUTSIDE A STEP RECORDED NOTHING. A step arms the exchange sink every
+    provider call notes itself on (`pipeline_context.note_step_exchange`);
+    a background job runs with it cleared (`core/jobs.py`), and the launch
+    runs before any step -- so the layout tier and the room designer, which
+    build the rooms ahead of every beat, were in no capture at all: the
+    owner's database, capture on with full bodies, held ten step keys and
+    none of theirs. A call a step is already recording is left to that step;
+    off, nothing is recorded and nothing is copied."""
+    from core.pipeline_context import current_exchange_sink
+    if current_exchange_sink.get() is not None:
+        yield
+        return
+
+    def sink(entry):
+        record_chat_exchange(chat_id, step_key=step_key, turn_idx=turn_idx, **{
+            k: v for k, v in entry.items() if k != "step_key"})
+    token = current_exchange_sink.set(sink)
+    try:
+        yield
+    finally:
+        current_exchange_sink.reset(token)
 
 
 def pending_exchanges(chat_id: int, *, include_bodies: bool = False) -> list:

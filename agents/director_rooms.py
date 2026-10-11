@@ -2611,6 +2611,13 @@ def schedule_room_predevelopment(ctx):
                               base_turn=ctx.turn.idx)
 
 
+#: The step key the room designer's calls in the rooms-in-view job are
+#: recorded under (`llm_capture.recording_outside_a_step`), beside the layout
+#: tier's own (`director_layout.SORT_STEP` and its siblings). In a beat the
+#: same role's calls are the Director's sub-calls, recorded under its step.
+PREPARE_STEP = "director_rooms_prepare"
+
+
 def _predevelop_run(job, cid, frame_id, language_id):
     """One run of a frame's design job, on the world as it stands NOW: the
     frame's scene, its actors, the plan and the cache, all read afresh, and
@@ -2744,14 +2751,18 @@ def _predevelop_run(job, cid, frame_id, language_id):
         # already holding the room is.
         payload = {"prose": "", "note": note, "develop": {rid: briefs[rid]}}
         try:
-            draft = design_rooms(
-                None, current, payload, sheet, [rid],
-                lambda system, payload: _agent_json(
-                    "director_rooms", "director_rooms", system, payload,
-                    temperature=0.4, max_tokens=None),
-                record,
-                seed={rid: copy.deepcopy(earlier["room"])} if earlier else None,
-                seed_check=refused.get(rid) if earlier else None)
+            # recorded, as the beat's own calls are: outside a step nothing
+            # else records them (`llm_capture.recording_outside_a_step`)
+            from persist.llm_capture import recording_outside_a_step
+            with recording_outside_a_step(cid, PREPARE_STEP, turn_idx=turn_idx):
+                draft = design_rooms(
+                    None, current, payload, sheet, [rid],
+                    lambda system, payload: _agent_json(
+                        "director_rooms", "director_rooms", system, payload,
+                        temperature=0.4, max_tokens=None),
+                    record,
+                    seed={rid: copy.deepcopy(earlier["room"])} if earlier else None,
+                    seed_check=refused.get(rid) if earlier else None)
         except Exception as exc:
             # A FAILED RUN IS FILED, and the room waits
             # (`predevelop_retry_beats`): unfiled, it was designed again from

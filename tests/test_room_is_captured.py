@@ -389,3 +389,48 @@ def test_a_layout_call_a_step_already_records_is_left_to_the_step(temp_db):
     finally:
         current_exchange_sink.reset(token)
     assert len(kept) == 1 and llm_capture.exchanges_for_turn(turn_id) == []
+
+
+def test_a_call_outside_a_step_is_filed_under_the_turn_its_job_works_for(temp_db):
+    """A background job works for the turn that asked for it; a later turn
+    begun meanwhile is not the one its calls belong to."""
+    from core import db
+    db.set_setting("llm_capture_enabled", "1")
+    chat_id, first = _chat_with_a_turn(db)
+    later = db.qi("INSERT INTO turns(chat_id,idx,player_input,created) "
+                  "VALUES(?,1,'on',0)", (chat_id,))
+    with llm_capture.recording_outside_a_step(chat_id, "director_rooms_prepare", turn_idx=0):
+        _layout_call([])("director_rooms_prepare", "S", {})
+    assert [r["step_key"] for r in llm_capture.exchanges_for_turn(first)] == ["director_rooms_prepare"]
+    assert llm_capture.exchanges_for_turn(later) == []
+
+
+def test_the_room_designers_calls_between_turns_are_recorded(temp_db, monkeypatch):
+    """The owner, 2026-10-11: "We should capture those". The job that builds
+    the rooms in view runs between turns, where no step records anything;
+    its designer's calls are filed under the turn the job works for, beside
+    the layout tier's."""
+    import agents.common as common
+    from agents import director_rooms
+    from agents.director_layout import LAYOUT_TIER_SETTING
+    from core import db
+    from core.pipeline_context import note_step_exchange
+    from tests.test_a_planned_building_is_laid_out_by_relations import (
+        _job_answers, _story_on_the_street, _wait)
+    db.set_setting("llm_capture_enabled", "1")
+    db.set_setting(LAYOUT_TIER_SETTING, "on")
+    ctx = _story_on_the_street(temp_db)
+    answer = _job_answers([])
+
+    def agent(role, step_key, system, payload, **kw):
+        out = answer(role, step_key, system, payload, **kw)
+        note_step_exchange({"role": role, "requested": "a-model", "system": system,
+                            "payload": payload, "response": "{}", "started": 1.0,
+                            "duration": 0.1, "ok": True})
+        return out
+    monkeypatch.setattr(common, "_agent_json", agent)
+    _wait(director_rooms.schedule_room_predevelopment(ctx))
+    keys = [r["step_key"] for r in llm_capture.exchanges_for_turn(ctx.turn.id)]
+    assert keys[:3] == ["director_rooms_layout_brief", "director_rooms_layout_sort",
+                        "director_rooms_layout_relate"], keys
+    assert director_rooms.PREPARE_STEP in keys, keys

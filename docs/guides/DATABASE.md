@@ -65,7 +65,9 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   tier at the launch. Filed into `llm_capture` under the first turn anything
   is recorded against (`llm_capture._file_pending`), readable before that
   (`pending_exchanges`); its blobs count as live for `vacuum_blobs`. The same
-  diagnostic standing, deleted with the story.
+  diagnostic standing, deleted with the story. Calls made outside any step --
+  the layout tier's and the room designer's, between turns -- are filed under
+  the turn their job works for (`llm_capture.recording_outside_a_step`).
 - `room_messages`: the Writers' Room thread (`story/room_conversation.py`),
   one line per row, per story and era (`frame_id` NULL is the present),
   stamped with the beat it was said at. AUTHOR-SIDE state: a branch carries
