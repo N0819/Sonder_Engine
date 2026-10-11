@@ -4018,6 +4018,81 @@ def _agent_json(
                     "rung_system", "prefix") and v is not None},
     )
 
+#: How many single-bracket edits `_mend_closers` may make to one answer.
+#: Each observed answer needed one; a long plan might miscount twice.
+MEND_CLOSER_EDITS = 3
+
+
+def _closer_runs(text, upto):
+    """`(start, end)` of each run of closing brackets outside strings up to
+    `upto`, whitespace inside a run included."""
+    runs, inside, esc, start = [], False, False, None
+    for i, ch in enumerate(text[:upto + 1]):
+        if inside:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                inside = False
+            continue
+        if ch == '"':
+            inside = True
+        if ch in "]}":
+            start = i if start is None else start
+        elif start is not None and not ch.isspace():
+            runs.append((start, i))
+            start = None
+    if start is not None:
+        runs.append((start, min(len(text), upto + 1)))
+    return runs
+
+
+def _mend_closers(text, edits=MEND_CLOSER_EDITS):
+    """`text` parsed after mending up to `edits` miscounted closing brackets,
+    or None.
+
+    A MODEL MISCOUNTS ITS CLOSERS IN A DEEP ANSWER. Measured 2026-10-11 on
+    deepseek v4.1 flash, the Writers' Room's model, answering without JSON
+    mode -- which the provider layer turns off for the rest of a process once
+    OpenRouter has twice held a JSON-mode answer past the first-token clock:
+    two of three plans for five rooms closed a room one brace too many
+    (`}}}}}], "reply"`) or never closed the calls list
+    (`}}}}, "reply"`), and the Room read each as a step that said nothing,
+    losing the plan with it. Its replay of the owner's chat 165 lost two such
+    steps in its first reply, 13,051 and 9,843 characters of planned rooms.
+
+    Where the parser stops, one bracket is deleted from, or one inserted
+    into, the run of closers before it; the edit that parses is taken, and
+    else the one that parses furthest, up to `edits` times. A run holds one
+    place where a closer count can be wrong, so the mend reads the answer
+    the model wrote rather than guessing at one."""
+    for _ in range(edits + 1):
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            pos = exc.pos
+        runs = _closer_runs(text, pos)
+        if not runs:
+            return None
+        start, end = runs[-1]
+        furthest = None
+        for k in range(start, end + 1):
+            candidates = [text[:k] + c + text[k:] for c in "]}"]
+            if k < end and text[k] in "]}":
+                candidates.append(text[:k] + text[k + 1:])
+            for candidate in candidates:
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError as exc:
+                    if exc.pos > pos + 1 and (furthest is None or exc.pos > furthest[0]):
+                        furthest = (exc.pos, candidate)
+        if furthest is None:
+            return None
+        text = furthest[1]
+    return None
+
+
 def jparse(text, fallback_key="text", required=False):
     t = re.sub(r"^```[a-zA-Z]*\n?|```$", "", (text or "").strip(), flags=re.M).strip()
     try:
@@ -4062,6 +4137,15 @@ def jparse(text, fallback_key="text", required=False):
             return json.loads(repaired)
         except Exception:
             pass
+    # A MISCOUNTED CLOSING BRACKET (`_mend_closers`): the last rung before an
+    # answer the model gave is given up as prose
+    for candidate in (t, m.group(0) if m else None):
+        try:
+            mended = _mend_closers(candidate) if candidate else None
+        except Exception:
+            mended = None
+        if isinstance(mended, dict):
+            return mended
     if required:
         raise RuntimeError(
             f"LLM returned unparseable JSON (first 200 chars): {(text or '')[:200]}")
