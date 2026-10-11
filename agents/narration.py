@@ -115,6 +115,7 @@ from .common import (
     self_reference_forms,
     _strip_identity_tokens,
     _strip_player_echo,
+    _scrub_unknown_identities,
     _unknown_actor_label,
     cast_room,
     character_scene_keys,
@@ -126,6 +127,7 @@ from .common import (
     player_room_in,
     player_speech_lines,
     resolve_action_referents,
+    scrub_names_deep,
     sequence_event_allowed,
 )
 
@@ -516,6 +518,82 @@ def _roster_label(view_label, earned, recognized, seen=None, ever=None):
             return shown if shown == str(name) else None
         return None
     return label
+
+
+def _page_identity_scrub(ctx, observer_name, scene, known_map, label_for,
+                         present=None, earned=None):
+    """`text -> text` with every body this page may not name written the
+    way the page calls it, for the fields that carry the DIRECTOR'S OWN WORDS
+    about a player's conduct: `player_declared`, the player's acts in
+    `current_events` (`_ordered_beat_events`) and `spatial_frame.turned`.
+
+    The interpret binds what a player says to the body it means -- "the
+    red-faced man at the windlass" is a charter figure with a name -- and the
+    binding is right: the engine has to know whom she addressed. But the
+    surfaces it writes say so in the engine's vocabulary, and those three
+    fields handed them to the page as written. `_ordered_beat_events`
+    resolved annotated referents through a map of the registered cast alone,
+    so a body the scene stands and no card describes was never in it; the
+    other two had no floor at all. Measured (Saltmarsh Crossing, scratch chat
+    170, 2026-10-11): two beats running the page said "Goddricey took up the
+    mooring line" and "Cortonold Gorleridge stood where he had stood". The
+    payload's `onset`, `look` and act text named both ferry hands while the
+    player's own view called them "the old square-shouldered ferry hand" and
+    "the middle-aged raw-boned ferry hand", and nobody had said either name
+    to her.
+
+    ONE ROSTER, ONE LABEL. Who is in play is perception's answer
+    (`_identity_roster`: the cast, every body the scene stands, and every
+    body this seat's view was composed about), and who is a stranger is the
+    one its own act surfaces are scrubbed against at admission
+    (`_composer_unknown_sources`). What to call each is `label_for`, the rule
+    every other narrator field that names a body is keyed by. A body this
+    seat knows by name but `present` will not name -- a disguise that hides
+    who it is -- is a stranger here too. A body with no label at all is the
+    unfamiliar person, never an appearance composed for a body it never saw.
+
+    Whole names and their parts, outside quoted spans only
+    (`_scrub_unknown_identities`), so no line anybody spoke is touched; the
+    player's own words are already on the page, in `current_narration`.
+    """
+    from .perception import (_charter_titles_of, _composer_unknown_sources,
+                             _identity_roster)
+    try:
+        roster = _identity_roster(
+            observer_name, "", ctx.cast, scene=scene,
+            bodies=[{"name": name} for name in (earned or {})],
+            titles_of=_charter_titles_of(ctx, scene))
+    except Exception as exc:
+        ctx.add_warning(f"narrator: the page's identity roster failed ({exc}); "
+                        "the Director's words about the player went as written")
+        return lambda text: text
+    recognized, unknown = _composer_unknown_sources(
+        observer_name, known_map or {}, roster)
+    if present is not None:
+        strangers = {source["name"] for source in unknown}
+        hidden = [source for source in roster
+                  if source["name"] != observer_name
+                  and source["name"] not in strangers
+                  and str(present(source["name"]) or "").strip() != source["name"]]
+        if hidden:
+            recognized = {form for form in recognized
+                          if not any(_recognizes(source["name"], {form})
+                                     for source in hidden)}
+            unknown = [*unknown, *hidden]
+    labels = {}
+    for source in unknown:
+        shown = str(label_for(source["name"]) or "").strip()
+        labels[source["name"]] = (shown if shown and shown != source["name"]
+                                  else composer._unfamiliar_person())
+    allowed = [observer_name, *recognized]
+
+    def scrub(text):
+        if not isinstance(text, str) or not text or not unknown:
+            return text
+        out, _leaked = _scrub_unknown_identities(
+            text, allowed_forms=allowed, unknown_sources=unknown, labels=labels)
+        return out
+    return scrub
 
 
 def _speaker_display(name, recognized, appearance=None, aliases=None,
@@ -973,7 +1051,7 @@ def _presence_room_of(ctx, scene, name, reaction=None):
 
 
 def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
-                         scene=None, p_room=None, player_forms=()):
+                         scene=None, p_room=None, player_forms=(), scrub=None):
     """F1/F4: the pipeline's own numbered causal record of this beat, built
     from step order + the loop call sequences (stimulus -> response pairs):
     player declaration first, then reaction rounds, then interaction rounds in
@@ -981,7 +1059,8 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
     reactions. Info-barrier: an NPC line enters ONLY if its quote actually
     reached the player's view, and an NPC ACT only if it is overt and the
     player can perceive its actor; speakers render under the same display
-    (name or anonymous label) the view used."""
+    (name or anonymous label) the view used. `scrub` is the page's identity
+    floor (`_page_identity_scrub`) for a body named in an act's own words."""
     raw = []
     player_deferred = []
     # Action referents are canonical identities at interpret time.  Event
@@ -997,6 +1076,9 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
         referent_labels[str(canonical)] = display
         for alias in info.get("aliases") or []:
             referent_labels[str(alias)] = display
+    # A body no card describes is named in the surface itself, not only in
+    # an annotated referent, so the map above cannot reach it.
+    page_names = scrub or (lambda text: text)
     di = ctx.get("director_interpret") or {}
     for e in (di.get("sequence") or []):
         if not isinstance(e, dict):
@@ -1016,9 +1098,8 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
             surface = adjudicated_player_action_text(
                 e, ctx.get("director_resolve") or {})
             if surface:
-                destination.append((p_name, "action",
-                                    resolve_action_referents(
-                                        surface, e, referent_labels)))
+                destination.append((p_name, "action", page_names(
+                    resolve_action_referents(surface, e, referent_labels))))
 
     seen_cache = {}
     player_card = _player_sense_card(ctx)
@@ -1091,9 +1172,8 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                 if perceives is None:
                     perceives = _player_perceives(name)
                 if perceives:
-                    raw.append((name, "action",
-                                resolve_action_referents(
-                                    surface, e, referent_labels)))
+                    raw.append((name, "action", page_names(
+                        resolve_action_referents(surface, e, referent_labels))))
 
     covered = set()
     for r in (ctx.reaction_loop or {}).get("rounds") or []:
@@ -2245,6 +2325,13 @@ def narrator(ctx, nonce):
     player_awareness = awareness_of(
         apply_awareness_diff(awareness_map(chat["id"]), _res_diff), player_name)
     _scene_for_frame = ctx.get("outcome_scene") or get_scene(chat["id"], chat)
+    # THE DIRECTOR'S OWN WORDS ABOUT THE PLAYER, as this page calls each body
+    # (`_page_identity_scrub`): `player_declared`, the player's acts in
+    # `current_events` and `spatial_frame.turned` all carry them.
+    _page_scrub = _page_identity_scrub(
+        ctx, player_name, _scene_for_frame, known_map, _view_label,
+        present=_present, earned=_earned)
+    player_declared = scrub_names_deep(player_declared, _page_scrub)
     # Through the same identity floor as every other name in this payload:
     # `spatial_digest` renders `ahead_entity` from `scene.positions`, which is
     # keyed by canonical name, and `_view_label` was built twenty lines up
@@ -2281,8 +2368,8 @@ def narrator(ctx, nonce):
             _facing = None
             ctx.add_warning(f"spatial_frame.turned: facing not computed ({_exc})")
         _frame["turned"] = {
-            "looks": _player_looks,
-            "look": _player_looks[-1],
+            "looks": [_page_scrub(look) for look in _player_looks],
+            "look": _page_scrub(_player_looks[-1]),
             "facing": _facing,
             "ahead": list(_frame.get("ahead") or [])
                      + ([_frame["ahead_entity"]] if _frame.get("ahead_entity") else []),
@@ -2327,7 +2414,7 @@ def narrator(ctx, nonce):
         event_order = _ordered_beat_events(
             ctx, player_name, view, recognized, cast_info,
             scene=_scene_for_frame, p_room=p_room,
-            player_forms=player_forms)
+            player_forms=player_forms, scrub=_page_scrub)
         pos_payload, pos_facts, room_names = _position_delta_payload(
             ctx, chat, player_name, p_room, recognized, cast_info)
         # S3-A5: pass visible rooms so portal states for unseen rooms are
@@ -2805,7 +2892,16 @@ def narrator_extra(ctx, nonce):
         past_narration, prev = _past_narration_extra_block(
             chat["id"], ctx.turn["idx"], ctx.turn["frame_id"], pid, _depth)
 
-        player_declared = _narrator_player_declared(entry)
+        # This seat's own floor over the Director's words about its conduct
+        # (`_page_identity_scrub`), as `narrator` applies the primary's.
+        player_declared = scrub_names_deep(
+            _narrator_player_declared(entry), _page_identity_scrub(
+                ctx, extra.get("name") or "",
+                ctx.get("outcome_scene") or get_scene(chat["id"], chat),
+                wget(chat["id"], "known", {}) or {},
+                _extra_view_label(chat["id"], extra, ctx.cast, earned=earned,
+                                  present=_extra_present),
+                present=_extra_present, earned=earned))
 
         # Deferred to commit exactly like narrator() above -- each pending
         # write rides this persona's own returned entry.

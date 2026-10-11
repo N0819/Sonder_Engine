@@ -32,7 +32,7 @@
 | `agents/impossible_knowledge.py` | 232 |  | `agents.common`, `core.db`, `story.character_schema` |
 | `agents/loops.py` | 1953 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents`, `agents.character`, `agents.common`, `core.db`, `core.pipeline_context`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
-| `agents/narration.py` | 2959 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
+| `agents/narration.py` | 3055 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
 | `agents/perception.py` | 8398 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1881 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
@@ -570,14 +570,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `narrator()` | 2131 | 540 lines |
-| `_sensory_channels_manifest()` | 705 | 241 lines |
-| `_ordered_beat_events()` | 975 | 234 lines |
-| `narrator_extra()` | 2744 | 216 lines |
-| `_visible_portal_states()` | 1344 | 124 lines |
-| `_generate_narration()` | 1964 | 89 lines |
-| `_position_delta_payload()` | 1255 | 87 lines |
-| `_resolve_narration_person()` | 173 | 71 lines |
+| `narrator()` | 2211 | 547 lines |
+| `_sensory_channels_manifest()` | 783 | 241 lines |
+| `_ordered_beat_events()` | 1053 | 236 lines |
+| `narrator_extra()` | 2831 | 225 lines |
+| `_visible_portal_states()` | 1424 | 124 lines |
+| `_generate_narration()` | 2044 | 89 lines |
+| `_position_delta_payload()` | 1335 | 87 lines |
+| `_page_identity_scrub()` | 523 | 74 lines |
 
 ### `agents/offscreen_beat.py`
 
