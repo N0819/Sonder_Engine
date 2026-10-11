@@ -18,7 +18,7 @@
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 4022 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
-| `agents/director_floors.py` | 2538 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/director_floors.py` | 2548 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_layout.py` | 419 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
@@ -96,7 +96,7 @@
 | `persist/checkpoints.py` | 1713 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 857 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1797 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire`, `world.spatial` |
-| `persist/commit_background.py` | 5642 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
+| `persist/commit_background.py` | 5636 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 576 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -215,8 +215,8 @@
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_names.py` | 267 |  | `world.charter_identity` |
 | `world/place_purpose.py` | 554 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
-| `world/planned_entities.py` | 686 |  | `core.db` |
-| `world/planning_needs.py` | 407 |  | — |
+| `world/planned_entities.py` | 714 |  | `core.db` |
+| `world/planning_needs.py` | 426 |  | — |
 | `world/region_events.py` | 461 |  | — |
 | `world/regions.py` | 755 |  | `world.spatial` |
 | `world/routines.py` | 256 |  | `world.day_cycle` |
@@ -397,11 +397,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_bind_minted_entities_to_present_figures()` | 1845 | 277 lines |
+| `_bind_minted_entities_to_present_figures()` | 1855 | 277 lines |
 | `_stand_touching_figures()` | 1629 | 153 lines |
-| `resolve_concealment_refs()` | 2208 | 121 lines |
+| `resolve_concealment_refs()` | 2218 | 121 lines |
 | `_conditions_view()` | 597 | 103 lines |
-| `strip_addressee_concealment()` | 2357 | 102 lines |
+| `strip_addressee_concealment()` | 2367 | 102 lines |
 | `_awareness_exits()` | 733 | 98 lines |
 | `_release_attempts()` | 991 | 93 lines |
 | `_narrated_destruction_subjects()` | 1251 | 79 lines |
@@ -1264,14 +1264,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `track_background_presences()` | 2117 | 923 lines |
-| `pick_voice_demand()` | 4226 | 442 lines |
-| `promote_background_character()` | 4840 | 403 lines |
-| `descriptor_bindings()` | 3779 | 156 lines |
+| `track_background_presences()` | 2117 | 917 lines |
+| `pick_voice_demand()` | 4220 | 442 lines |
+| `promote_background_character()` | 4834 | 403 lines |
+| `descriptor_bindings()` | 3773 | 156 lines |
 | `_fold_duplicate_presences()` | 801 | 143 lines |
-| `schedule_auto_promotion()` | 5520 | 123 lines |
-| `addressed_rooms()` | 4103 | 121 lines |
-| `select_auto_promotion()` | 5282 | 109 lines |
+| `schedule_auto_promotion()` | 5514 | 123 lines |
+| `addressed_rooms()` | 4097 | 121 lines |
+| `select_auto_promotion()` | 5276 | 109 lines |
 
 ### `persist/commit_common.py`
 
@@ -2684,21 +2684,21 @@
 | `materialize_plans_in_sight()` | 290 | 168 lines |
 | `normalize_plan()` | 123 | 96 lines |
 | `project_planned_emissions()` | 227 | 61 lines |
-| `plan_figure()` | 542 | 43 lines |
+| `plan_figure()` | 570 | 43 lines |
 | `plan_state()` | 79 | 42 lines |
-| `settle_rendered_plans()` | 624 | 41 lines |
+| `settle_rendered_plans()` | 652 | 41 lines |
 | `_station_a_thing()` | 460 | 40 lines |
-| `_contradicted_axis()` | 667 | 20 lines |
+| `plan_answering()` | 506 | 26 lines |
 
 ### `world/planning_needs.py`
 
 | Function | Start | Size |
 |---|---:|---:|
 | `normalize_need()` | 143 | 57 lines |
+| `drain_planning_needs()` | 356 | 44 lines |
 | `_fold_need()` | 257 | 27 lines |
 | `record_planning_needs()` | 299 | 26 lines |
-| `drain_planning_needs()` | 356 | 25 lines |
-| `schedule_planning_needs()` | 383 | 25 lines |
+| `schedule_planning_needs()` | 402 | 25 lines |
 | `planning_need()` | 202 | 17 lines |
 | `fill_planning_need()` | 327 | 14 lines |
 | `normalize_planning_needs()` | 221 | 12 lines |

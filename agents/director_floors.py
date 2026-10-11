@@ -1792,13 +1792,23 @@ def _stand_up_plans_placed_by_name(sc, sd, figures, roster=()):
     read rendered, and the commit filed a planning need for a name the Room
     had planned, which it then planned again (O22/O33 of the Cwm Du run).
 
-    A positions key no record holds -- in the scene or the diff, by key,
-    name or alias -- whose bare name is exactly one planned figure's (in
-    view or reserved, `plan` set, no charter body) gets that plan's record:
-    the plan's name, its look, `plan_ref`. Never a name a registered mind
-    (``roster``) or a charter body answers to; never a name two plans
-    share. Returns one record per body stood up, in the binder's shape."""
-    positions = sd.get("positions") if isinstance(sd.get("positions"), dict) else {}
+    A positions key -- the scene's or this beat's -- that no record holds,
+    in the scene or the diff, by key, name or alias, whose bare name is
+    exactly one planned figure's (in view or reserved, `plan` set, no
+    charter body) gets that plan's record: the plan's name, its look,
+    `plan_ref`. Never a name a registered mind (``roster``) or a charter
+    body answers to; never a name two plans share. Returns one record per
+    body stood up, in the binder's shape.
+
+    THE SCENE'S POSITIONS TOO, not only the beat's. A body placed by name
+    alone before this rule existed is skipped by every other floor -- the
+    binder reads records, and the lease counts a placed body as held -- so
+    the deputy stood at the pit bottom with no record through a replay of
+    the beat in which he held the cage gate and spoke (chat 167 turn 4629,
+    replayed 2026-10-10). Read off the merged positions, a story carrying
+    such a body heals on its next beat."""
+    positions = dict((sc or {}).get("positions") or {})
+    positions.update(sd.get("positions") if isinstance(sd.get("positions"), dict) else {})
     if not positions:
         return []
     held = set()

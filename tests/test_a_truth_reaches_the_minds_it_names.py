@@ -149,6 +149,19 @@ class TestAPlannedBodyPlacedByNameIsItsPlan:
                           "plan_ref": {"uid": EMRYS["plan"]}, "description": EMRYS["look"]}
         assert [b["plan"] for b in stood] == [EMRYS["plan"]]
 
+    def test_a_body_the_scene_already_holds_by_name_alone_heals(self):
+        """Replay of 4629: he was placed at 4628, before the rule, and every
+        other floor skips a placed body -- the binder reads records, the
+        lease counts a placed body as held."""
+        from agents.director import _stand_up_plans_placed_by_name
+        sc = {"positions": {"Emrys Vaughan": "pit_bottom", "Nell Hartley": "pit_bottom"},
+              "entities": {}}
+        sd = {"positions": {"Nell Hartley": "pit_bottom"}}
+        stood = _stand_up_plans_placed_by_name(sc, sd, [EMRYS], ["Nell Hartley"])
+        assert [b["entity_id"] for b in stood] == ["Emrys Vaughan"]
+        assert sd["entities"]["Emrys Vaughan"]["plan_ref"] == {"uid": EMRYS["plan"]}
+        assert "Nell Hartley" not in sd["entities"]
+
     def test_a_title_or_case_is_the_same_name(self):
         sd, stood = self._stand([EMRYS], positions={"Mr emrys vaughan": "saw_sheds"})
         assert sd["entities"]["Mr emrys vaughan"]["name"] == "Emrys Vaughan"
@@ -215,3 +228,58 @@ def test_a_name_the_room_planned_files_no_need(temp_db):
                                  "brief": {"where": "pit_bottom"}}, turn_idx=0)
     track_background_presences(_presence_ctx(temp_db, planned), nonce=0)
     assert needs_for(planned) == []
+
+
+# ---- a name the Room planned is not unplanned, before or after it renders ----
+
+def _plans_chat(temp_db):
+    from world.planned_entities import add_planned_entity
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Cwm Du", "", time.time()))
+    emrys = add_planned_entity(cid, {"kind": "person", "name": "Emrys Vaughan",
+                                     "aliases": ["the deputy"],
+                                     "brief": {"where": "pit_bottom"}}, turn_idx=0)
+    add_planned_entity(cid, {"kind": "thing", "name": "Gallery Nine timbering",
+                             "brief": {"where": "gallery_nine"}}, turn_idx=0)
+    return cid, emrys["uid"]
+
+
+def test_one_reader_says_which_plan_answers_a_name(temp_db):
+    from world.planned_entities import (add_planned_entity, plan_answering,
+                                        settle_rendered_plans)
+    cid, uid = _plans_chat(temp_db)
+    assert plan_answering(cid, "Emrys Vaughan") == uid
+    assert plan_answering(cid, "Mr emrys  vaughan") == uid
+    assert plan_answering(cid, "the deputy") == uid
+    assert plan_answering(cid, "Gallery Nine timbering") is None     # no person
+    assert plan_answering(cid, "Ffion Rees") is None
+    settle_rendered_plans(cid, [{"plan": uid, "entity_id": "Emrys Vaughan",
+                                 "render": "a lean man in a waistcoat", "turn": 3}])
+    assert plan_answering(cid, "Emrys Vaughan") == uid               # still his
+    add_planned_entity(cid, {"kind": "person", "name": "Dai Price",
+                             "brief": {"where": "pit_bottom"}}, turn_idx=1)
+    add_planned_entity(cid, {"kind": "person", "name": "Dai Haulier",
+                             "aliases": ["Dai Price"], "brief": {"where": "lamp_room"}},
+                       turn_idx=1)
+    assert plan_answering(cid, "Dai Price") is None                  # two answer
+
+
+def test_the_drain_closes_a_stale_need_for_a_planned_name(temp_db, monkeypatch):
+    """The need filed at 4618, before the filer learned the rule, stayed open;
+    retried by the drain it would enrol the planned deputy as a second body
+    wherever a seat was open."""
+    import world.charter_enrol as charter_enrol
+    from world.planning_needs import (drain_planning_needs, file_planning_need,
+                                      open_planning_needs)
+    cid, uid = _plans_chat(temp_db)
+    need, _fresh = file_planning_need(cid, {
+        "kind": "person", "reason": "rendered_unplanned", "presence": "p_emrys",
+        "surface": {"name": "Emrys Vaughan", "room": "saw_sheds",
+                    "description": "a lean man", "did": "", "role": ""}}, turn_idx=1)
+
+    def never(*_a, **_k):
+        raise AssertionError("a planned person was sent to enrolment")
+    monkeypatch.setattr(charter_enrol, "enrol_person", never)
+    out = drain_planning_needs(cid)
+    assert out["closed"] == [{"uid": need["uid"], "plan": uid}]
+    assert out["filled"] == [] and open_planning_needs(cid) == []

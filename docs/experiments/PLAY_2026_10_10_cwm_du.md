@@ -196,5 +196,44 @@ run itself made.
    - At launch, two DeepSeek JSON-mode answers were held 30 s each before JSON
      mode was dropped for the process (the turn-speed lane's owner question 4).
 
+## Fix-wave replays (2026-10-10)
+
+Each beat was replayed on its own copy of the scratch database, branched at
+the beat before, with the recorded input submitted through the app as in
+play (OpenRouter, the run's routing). 4629 used the ORIGINAL input,
+reconstructed from that beat's first account and the run log, because the
+stored one is the edit that declared the ride.
+
+- **4620 (the truth beats the card): passed.** Ffion's mind was handed the
+  Room's truth that the deputy, Emrys Vaughan, signed the report, beside her
+  card's line saying Prothero did, and she answered "Emrys Vaughan's name is
+  on it. The deputy." The original beat named Prothero.
+- **4627 (her view binds her words): passed.** The account bound "the man on
+  the rails ... you'll be the overman" to Gwenafryn Abogwyn, the man her view
+  had shown as the overman; the original bound it to Prysenlas, who had walked
+  in unseen. No re-ask was needed. His reply still reached her as fragments:
+  the scene holds him at the pit bottom, a move no beat declared between 4626
+  and 4627 (the investigation's separate finding, still open).
+- **4629 (the ride): channel fixed, class still open.** Stepping into the cage
+  brought its channels (`brought: contact_ops__interior, entities__inside`),
+  and page and state now agree -- both women at the pit bottom as the cage
+  starts to rise, the confession no longer lost to a contradiction. But the
+  encoder wrote her boarding as a pose ("inside", relative to the landing)
+  and minted the cage a vehicle in transit with no interior, so the arrival
+  will not carry her. The open question is the owner's: a stronger encoder
+  rule, or a floor that reads a body posed inside a vehicle as aboard it.
+  The re-ask fired once here, on Emrys Vaughan named as scenery at the
+  landing -- the measured scenery case, costing one account.
+- **Found by the 4629 replay, fixed after it:** a planned body placed by name
+  alone BEFORE the rule existed (Emrys, placed at 4628) was skipped by every
+  floor -- the binder reads records, the lease counts a placed body as held,
+  and the new floor read only the beat's own placements. The floor now reads
+  the merged scene, so such a story heals on its next beat (checked on the
+  replayed state: he stands up as his plan's record, nobody else does). And
+  the needs drain, which retries open person-needs by enrolment, now CLOSES a
+  need whose name a plan answers (`plan_answering`): retried, the stale need
+  filed at 4618 would have enrolled the planned deputy as a second body
+  wherever a seat was open.
+
 The working log, with every turn's evidence, is the scratch `findings.md` that
 the session's report points to.

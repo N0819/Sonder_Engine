@@ -359,13 +359,30 @@ def drain_planning_needs(cid, frame_id=None, scene=None):
     A person-need still open (the commit could not enrol it -- no registry
     yet, a refused surface) is tried again by enrolment; a thing-need and a
     room-need stay open for the Writers' Room, which is the job's later
-    owner. Returns ``{"filled": [...], "open": n}``; pure bookkeeping, no
-    model call.
+    owner. A person-need whose name an authored plan answers is CLOSED, never
+    enrolled (`planned_entities.plan_answering`): the Room planned that
+    person, and enrolment would stand a second body beside the plan.
+    Returns ``{"filled": [...], "open": n}``, with ``closed`` beside them
+    when it closed any; pure bookkeeping, no model call.
     """
     from world.charter_enrol import enrol_person
+    from world.planned_entities import plan_answering, planned_entities
 
-    filled = []
+    filled, closed = [], []
+    try:
+        plans = planned_entities(cid, frame_id)
+    except Exception:
+        plans = {}
     for need in open_planning_needs(cid, frame_id, kind="person"):
+        surface = need.get("surface") if isinstance(need.get("surface"), dict) else {}
+        planned = plan_answering(cid, surface.get("name"), frame_id, plans=plans) \
+            if plans else None
+        if planned:
+            close_planning_need(cid, need["uid"],
+                                "the Writers' Room planned this person (%s)" % planned,
+                                frame_id=frame_id)
+            closed.append({"uid": need["uid"], "plan": planned})
+            continue
         try:
             record = enrol_person(cid, need, frame_id=frame_id, scene=scene)
         except Exception:
@@ -376,8 +393,10 @@ def drain_planning_needs(cid, frame_id=None, scene=None):
                                frame_id=frame_id)
             filled.append({"uid": need["uid"], "ref": record["ref"],
                            "how": record["how"]})
-    return {"filled": filled,
-            "open": len(open_planning_needs(cid, frame_id))}
+    out = {"filled": filled, "open": len(open_planning_needs(cid, frame_id))}
+    if closed:
+        out["closed"] = closed
+    return out
 
 
 def schedule_planning_needs(ctx):

@@ -503,6 +503,34 @@ def _fold(value):
     return " ".join(str(value or "").split()).casefold()
 
 
+def plan_answering(cid, name, frame_id=None, plans=None):
+    """The uid of the one authored plan for a person or a creature that
+    answers to ``name`` -- by its name or an alias, ranks and honorifics
+    aside -- rendered or not; None when no plan does, or more than one.
+
+    A NAME THE ROOM HAS PLANNED IS NOT UNPLANNED: the one reader the commit's
+    need filer and the needs drain share (chat 167: a `rendered_unplanned`
+    need was filed at turn 4618 for the deputy the Room had planned at the
+    opening, and the drain, retrying it, would have enrolled him into an
+    institution as a second body beside his plan wherever a seat was open).
+    Rendered plans answer too: once a render settles, the name is still the
+    plan's. ``plans`` takes the store already read."""
+    from persist.commit import strip_name_titles
+
+    def bare(text):
+        return _fold(strip_name_titles(str(text or "")))
+
+    want = bare(name)
+    if not want:
+        return None
+    if plans is None:
+        plans = planned_entities(cid, frame_id)
+    hits = {str(uid) for uid, plan in (plans or {}).items()
+            if isinstance(plan, dict) and str(plan.get("kind") or "person") != "thing"
+            and want in {bare(plan.get("name"))} | {bare(a) for a in plan.get("aliases") or ()}}
+    return next(iter(hits)) if len(hits) == 1 else None
+
+
 def _entity_key(name, entities):
     """A scene key for `name` that no entity already uses."""
     base = re.sub(r"[^a-z0-9]+", "_", _fold(name)).strip("_") or "thing"

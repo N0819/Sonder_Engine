@@ -2890,26 +2890,20 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         # the Room to plan it again, and it did: chat 167's deputy, planned
         # at the opening, filed `rendered_unplanned` at turn 4618 and was
         # re-planned under his own uid (O33). No need is filed for a name
-        # exactly one unrendered plan answers to.
-        def _bare_person_name(text):
-            return " ".join(strip_name_titles(str(text or "")).split()).casefold()
+        # exactly one authored plan answers to (`plan_answering`, the reader
+        # the needs drain shares).
         try:
-            from world.planned_entities import reserved_plans
-            _planned_names = {}
-            for _plan in reserved_plans(cid, frame_id=ctx.turn.frame_id):
-                for _label in [_plan.get("name")] + list(_plan.get("aliases") or ()):
-                    _bare = _bare_person_name(_label)
-                    if _bare:
-                        _planned_names.setdefault(_bare, set()).add(str(_plan.get("plan")))
+            from world.planned_entities import plan_answering, planned_entities
+            _plans = planned_entities(cid, ctx.turn.frame_id)
         except Exception:
-            _planned_names = {}
+            _plans = {}
         for key, record in presences.items():
             if record.get("charter_refs") or record.get("plan_ref"):
                 continue
             _name = presence_display_name(key, record)
             if not _name:
                 continue
-            if len(_planned_names.get(_bare_person_name(_name), ())) == 1:
+            if _plans and plan_answering(cid, _name, ctx.turn.frame_id, plans=_plans):
                 continue
             # ENROLMENT IS MEMBERSHIP, AND MEMBERSHIP IS FOR PEOPLE. Not the
             # speech gate: an animate NOUN is enough to hold a turn and is not
