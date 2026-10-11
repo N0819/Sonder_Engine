@@ -4364,7 +4364,7 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
     """
     groups = []
 
-    def add_group(entity_id, authority_mode, events):
+    def add_group(entity_id, authority_mode, events, goes_to=None):
         rows = [dict(event) for event in (events or [])
                 if isinstance(event, dict)]
         if rows:
@@ -4372,6 +4372,7 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
                 "entity_id": str(entity_id),
                 "authority_mode": str(authority_mode),
                 "events": rows,
+                **({"goes_to": str(goes_to)} if goes_to else {}),
             })
 
     primary_id = getattr(ctx.chat, "persona_id", None) \
@@ -4408,7 +4409,15 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
         entity_id = declaration.get("char_id")
         entity_id = f"character:{entity_id}" if entity_id is not None \
             else str(declaration.get("name") or "autonomous:unknown")
-        add_group(entity_id, "autonomous", declaration.get("sequence") or [])
+        # A DECLARED DESTINATION GOES THROUGH THE RESOLVE: a background
+        # figure's `goes_to` (typed, a room it was shown) is where that body
+        # says it is going -- its own walk for the account to carry.
+        # Dropped here, it reached only the commit, whose departure applier
+        # walked a hewer into the pit bottom after the resolve had kept him
+        # on the main level beside the player (chat 167 turn 4626; nine
+        # such moves across three stories in the play database).
+        add_group(entity_id, "autonomous", declaration.get("sequence") or [],
+                  goes_to=declaration.get("goes_to"))
 
     # Mechanical outcomes and due processes are events from engine-owned
     # entities, not special prose duties.
@@ -5184,6 +5193,11 @@ def _take_declaration(decls, char_speech, char_actions, declaration,
         "char_id": char_id, "name": name, "sequence": sequence,
         "is_reaction": declaration.get("is_reaction", False),
         "follow_op": declaration.get("follow_op"),
+        # WHERE IT SAID IT IS GOING, typed: a figure's declared departure is
+        # the resolve's to write as its own walk (`_causal_event_inputs`
+        # carries it), never the commit's to enact after the resolve kept
+        # the body where it was -- chat 167 turn 4626.
+        "goes_to": str(declaration.get("goes_to") or "").strip() or None,
         "material_effects": declaration.get("material_effects") or [],
         "speech": next((e.get("text") for e in sequence
                         if e.get("type") == "speech"), None),

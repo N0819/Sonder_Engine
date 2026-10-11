@@ -3331,7 +3331,7 @@ def apply_presence_handovers(scene, reactions, presences, warn=None):
     for reaction in reactions or ():
         if not isinstance(reaction, dict):
             continue
-        if reaction.get("is_figure"):
+        if _declared_before_the_resolve(reaction):
             # DECLARED BEFORE THE RESOLVE, so the Director resolved the act
             # and its encoder already wrote whatever moved: scratch story 165
             # turn 4581, a keeper's declared reach for the premium book came
@@ -3374,6 +3374,21 @@ def apply_presence_handovers(scene, reactions, presences, warn=None):
     return handed
 
 
+def _declared_before_the_resolve(reaction):
+    """Was this reaction DECLARED BEFORE THE RESOLVE -- a figure's, which the
+    resolve enacted or declined -- so no commit applier may enact it again?
+
+    A commit applier is for the voices that speak AFTER the resolve, which
+    nothing else writes. Enacting a pre-resolve declaration makes a second
+    writer of what the resolve already settled: a keeper's reach for the
+    premium book minted a second book (scratch story 165 turn 4581, the
+    handovers rule), and a hewer the resolve kept on the main level beside
+    the player was walked into the pit bottom after the scene and its lease
+    had committed, so his next line crossed rooms (chat 167 turn 4626). The
+    one predicate both appliers ask, so the next applier cannot miss it."""
+    return bool((reaction or {}).get("is_figure"))
+
+
 def apply_presence_departures(scene, reactions, presences, warn=None,
                               paces=None, turn_idx=None):
     """A presence that said where it goes is there when the beat ends.
@@ -3401,6 +3416,10 @@ def apply_presence_departures(scene, reactions, presences, warn=None,
     rooms = (scene or {}).get("rooms") or {}
     for reaction in reactions or ():
         if not isinstance(reaction, dict):
+            continue
+        if _declared_before_the_resolve(reaction):
+            # Its `goes_to` went to the resolve as that body's own walk
+            # (`director._causal_event_inputs`); the resolve wrote it.
             continue
         dest = str(reaction.get("goes_to") or "").strip()
         name = str(reaction.get("name") or "").strip()

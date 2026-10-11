@@ -213,7 +213,13 @@ stored one is the edit that declared the ride.
   had shown as the overman; the original bound it to Prysenlas, who had walked
   in unseen. No re-ask was needed. His reply still reached her as fragments:
   the scene holds him at the pit bottom, a move no beat declared between 4626
-  and 4627 (the investigation's separate finding, still open).
+  and 4627. FIXED after the replays (2026-10-11): the move happened inside
+  4626's own commit -- the background presence applier enacted the
+  `goes_to` his figure voice had declared before the resolve, which the
+  Director never saw, after the scene and its lease had committed (nine such
+  moves across three stories). A declared destination now goes to the resolve
+  as that body's own walk, and the commit's appliers never enact a
+  declaration made before the resolve (`_declared_before_the_resolve`).
 - **4629 (the ride): channel fixed, class still open.** Stepping into the cage
   brought its channels (`brought: contact_ops__interior, entities__inside`),
   and page and state now agree -- both women at the pit bottom as the cage
