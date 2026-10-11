@@ -67,9 +67,9 @@ def test_a_voice_that_speaks_after_the_resolve_still_goes():
 
 
 def test_both_appliers_ask_one_predicate():
-    from persist import commit_background
-    assert commit_background._declared_before_the_resolve(FIGURE)
-    assert not commit_background._declared_before_the_resolve({"name": "x"})
+    from persist.commit import _declared_before_the_resolve
+    assert _declared_before_the_resolve(FIGURE)
+    assert not _declared_before_the_resolve({"name": "x"})
     scene = _scene()
     handed = apply_presence_handovers(
         scene, [dict(FIGURE, hands_over={"what": "a lamp", "to": "Nell Hartley"})], {})

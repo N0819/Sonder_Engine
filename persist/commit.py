@@ -135,6 +135,7 @@ from persist.commit_background import (beat_reactions, BACKGROUND_PROMOTION_DIAL
     advance_conversation_threads,
     apply_presence_departures,
     apply_presence_handovers,
+    _declared_before_the_resolve,
     BACKGROUND_PROMOTION_MENTION_THRESHOLD, promotion_thresholds,
     _BACKGROUND_NAME_TITLE_WORDS, _NAME_TITLE_PREFIXES, strip_name_titles,
     name_in_roster, _PRESENCE_ARTICLES, _presence_identity,
