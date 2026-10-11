@@ -32,6 +32,7 @@ from world.spatial import (
     materialize_enclosure_interiors,
     merge_scene_with_diff,
     effective_light,
+    sighted_level,
     spatial_rel_between,
 )
 from world.survival import is_sealed_in
@@ -216,25 +217,34 @@ class TestTheFiveGates:
         assert materialize_enclosure_interiors(scene) == []
         assert _interiors_of(scene) == set()
 
-    def test_a_non_body_holder_is_never_minted_for(self):
-        """Gate 3, AND THE REASON IS THE FIREWALL, NOT TAXONOMY.
-        `sync_entity_interior_rooms` and `infer_body_enclosures` are both
-        body-scoped, so an interior minted for a lift car is never indexed and
-        never defaulted opaque -- `apply_transit_dock_edges` would derive an
-        `open_door`, and an occupant `containment_hides` was concealing becomes
-        one visible from the room outside. That is information EXPANSION."""
+    def test_a_non_body_holder_is_minted_for_with_its_way_in_shut(self):
+        """Gate 3's other half, AND THE FIREWALL REASON STILL HOLDS. A thing's
+        minted inside used to take an `open_door` from the dock rewrite, so an
+        occupant `containment_hides` was concealing became one visible from
+        the room outside -- information EXPANSION -- and gate 3 refused every
+        non-body holder. Since the owner's ruling of 2026-10-11 the inside is
+        minted SHUT, through the thing's own enclosure, and only the thing's
+        own hatch opens it (`_mint_thing_interior`): the occupant stands
+        inside, and the room outside still cannot see her."""
         merged = merge_scene_with_diff(
             _scene(kind="vehicle", body=False), {})
-        assert _interiors_of(merged) == set()
+        interiors = _interiors_of(merged)
+        assert len(interiors) == 1
+        room = merged["rooms"][next(iter(interiors))]
+        assert [edge["barrier"] for edge in room["adjacent"]] == ["closed_door"]
+        assert merged["positions"][OCCUPANT] in interiors
+        assert sighted_level(merged, OUTSIDER, OCCUPANT) == "none"
         assert merged["entities"][HOLDER_ID].get("enclosure") in (None, "")
 
-    def test_a_non_body_holder_with_a_card_spec_is_still_refused(self):
-        """The spec is not a licence: the gate is about what the engine can
-        guarantee about the way in, not about who authored what."""
+    def test_a_card_spec_is_no_licence_for_an_open_way_in(self):
+        """The spec is not a licence: what the engine guarantees about the way
+        in does not depend on who authored what. A thing's inside is the one
+        shut room, whatever its card says."""
         scene = _scene(kind="vehicle", body=False,
                        spec=[{"name": "Cargo Bay"}])
-        assert materialize_enclosure_interiors(scene) == []
-        assert _interiors_of(scene) == set()
+        assert materialize_enclosure_interiors(scene) == [HOLDER_ID]
+        room = scene["rooms"][next(iter(_interiors_of(scene)))]
+        assert [edge["barrier"] for edge in room["adjacent"]] == ["closed_door"]
 
     def test_an_unplaced_holder_is_not_minted_for(self):
         """Gate 4. An interior that is nowhere has no exterior to travel with.
@@ -488,9 +498,14 @@ class TestInsideABodyIsItsInterior:
         assert _interiors_of(merged) == {MINTED}
         assert merged["positions"][OCCUPANT] == MINTED
 
-    def test_inside_a_thing_that_is_not_a_body_stays_inside(self):
+    def test_inside_a_thing_that_is_not_a_body_stands_inside_it(self):
+        """A body `inside` a thing stands in the thing's one room, and the
+        shut way in hides her as the ledger did (`_mint_thing_interior`)."""
         merged = merge_scene_with_diff(
             _scene(record=False, body=False, kind="crate"),
             {"containment": {OCCUPANT: {"in": HOLDER_ID, "mode": "inside"}}})
-        assert merged["contained"][OCCUPANT]["mode"] == "inside"
-        assert _interiors_of(merged) == set()
+        interiors = _interiors_of(merged)
+        assert len(interiors) == 1
+        assert merged["positions"][OCCUPANT] in interiors
+        assert OCCUPANT not in (merged.get("contained") or {})
+        assert sighted_level(merged, OUTSIDER, OCCUPANT) == "none"

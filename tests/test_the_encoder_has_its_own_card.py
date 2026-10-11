@@ -221,8 +221,13 @@ def test_a_rule_that_decides_where_a_body_is_brings_its_channel(temp_db, monkeyp
     assert "contact_ops__interior" in record["parts"]
     assert "entities__emits" not in record["parts"]
     assert set(record["brought"]) == {"entities__inside", "contact_ops__interior"}
+    # the inside rule writes containment too (the 4629 replay: brought
+    # `entities` alone, it posed her inside against the landing)
+    assert "containment" in selected
     assert director_prose.BODY_PLACING_PARTS == {
-        "entities__inside", "entities__transit", "contact_ops__interior"}
+        "entities__inside": ("entities", "containment"),
+        "entities__transit": ("entities",),
+        "contact_ops__interior": ("contact_ops",)}
 
 
 def test_a_failed_decision_model_ships_every_part(temp_db, monkeypatch):

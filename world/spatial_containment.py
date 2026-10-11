@@ -2105,8 +2105,156 @@ def _mint_minimal_interior(scene: dict, eid: str, occupant: str,
     return True
 
 
+def _a_body_subject(scene: dict, subject: str) -> bool:
+    """Is this contained subject a BODY -- somebody who stands in a room --
+    rather than a thing carried in another? A person is positioned by name
+    and may have no record of their own; a record answers by
+    `_is_body_entity`, the engine's one test (the cast and the player carry
+    the `kind: person` record the engine writes for them)."""
+    eid, entity = _unique_entity_keyed(scene, subject)
+    if not eid:
+        return _ci_get((scene or {}).get("positions") or {}, subject) is not None
+    return _is_body_entity(scene, eid, entity)
+
+
+def _mint_thing_interior(scene: dict, subject: str, holder: str, eid: str,
+                         entity) -> bool:
+    """A BODY INSIDE A THING STANDS IN THE THING: mint the one room it stands
+    in, its way in SHUT unless the thing's own hatch opens it.
+
+    The other half of gate 3. A thing big enough to be inside is a room
+    (`encoder/entities__inside`), and the only producer of that room was the
+    encoder remembering to author it -- which it did not: chat 167 turn 4629
+    (replayed 2026-10-10) minted a shaft cage with `interior_rooms: []` and
+    no position at all, posed the player "inside" against the landing it
+    hung at, and the cage set off up the shaft with nobody in it. Existence
+    is a derivation here as it is for a body's inside: a body contained
+    `inside` (or `interior`) a thing with no inside of its own stands in one.
+
+    THE NON-BODY ENCLOSURE DEFAULT, which is what made gate 3 body-only: an
+    interior minted for a thing used to take an `open_door` from the dock
+    rewrite, making an occupant the ledger concealed visible from the room
+    outside. This one is minted SHUT, through the thing's own enclosure
+    (`_closed_enclosure_barrier`: a window for glass, bars for a cage), and
+    the dock rewrite opens it only on the thing's own `hatch` -- "a hatch
+    left unsaid stays shut", the rule a vessel under way already follows.
+
+    A THING A BODY GOT INTO IS WHERE THE BODY WAS: one with no position takes
+    its occupant's room, so a cage minted with no place hangs at the landing
+    she stepped in at. A carried thing -- a coin in a jar -- is carriage and
+    stays the ledger's business; only a BODY stands in an inside. Lit unless
+    the room says otherwise: the light field and its sources decide, as for
+    any room. Mutates; idempotent (gate 5 holds: an inside already standing
+    is never minted again)."""
+    from world.spatial_transit import _closed_enclosure_barrier
+
+    if not _a_body_subject(scene, subject):
+        return False
+    if _interior_rooms_of(scene, eid):
+        return False                                            # gate 5
+    rooms = scene["rooms"]
+    if room_of(scene, eid) is None:
+        where = str(_ci_get((scene or {}).get("positions") or {}, subject) or "")
+        if not where or where not in rooms:
+            return False                                        # gate 4
+        scene.setdefault("positions", {})[eid] = where
+    exterior = room_of(scene, eid)
+    if exterior is None or exterior not in rooms:
+        return False
+    rid = _station_room_id(rooms, eid, "interior")
+    if not rid:
+        return False
+    name = _declared_interior_region(scene, subject, holder)
+    name = " ".join(str(name).split())[:_MINTED_INTERIOR_NAME_MAX].strip()
+    if not name:
+        name = "Inside %s" % _display_name(scene, holder)
+    rooms[rid] = {
+        "name": name,
+        "desc": "",
+        "parent_entity": eid,
+        "adjacent": [{"to": exterior, "distance": "near",
+                      "barrier": _closed_enclosure_barrier(entity)}],
+        "dock_exit": True,
+    }
+    return True
+
+
+def contain_posed_inside(scene: dict, posed=None, minted=()) -> list:
+    """A body POSED inside a thing this beat is CONTAINED in it -- where the
+    pose names the thing.
+
+    The encoder reaches for a pose to say a body got into something,
+    `relation: "inside"`, and no reader places a body by its pose: chat 167
+    turn 4629, replayed twice (2026-10-10/11), posed the player inside the
+    shaft cage both times, once with the inside rule and its containment
+    channel in hand, while the cage set off without her. Canonicalised once
+    at ingest, against the holder (the `inside`/`interior` lesson): only
+    where the pose's `relative_to` or `support` NAMES an enterable thing
+    itself -- one non-body entity -- does it become containment `inside`
+    that thing, which `_mint_thing_interior` then stands her in. A pose
+    against an anchor, a room or another body is an arrangement and is left
+    alone ("inside the doorway"), and so is a body whose containment the
+    beat or the scene already states.
+
+    AND THE BEAT'S OWN SPELLING OF GETTING IN, read off what it wrote. Twice
+    replayed with the inside rule in hand, the encoder posed her `inside`
+    against the LANDING the cage hung at and, in the same event, minted the
+    cage with no place at all -- a thing somebody got into, standing nowhere.
+    So a body posed `inside` this beat, against anything that names no
+    thing, is inside the one enterable thing (a vehicle or a container) the
+    beat minted (``minted``, the diff's new keys) and placed nowhere; with
+    two such things it is in neither, as a guess would be. Measured before
+    it was built: it fires on both replays and on none of the 324 encoded
+    stages stored in the play and owner databases (2026-10-11).
+
+    ONLY THIS BEAT'S POSES (``posed``, the diff's): a standing pose outlives
+    the moment it described, and read every merge it would pull a body that
+    has since stepped out back into the thing. Returns the subjects it
+    contained."""
+    if not isinstance(posed, dict) or not posed:
+        return []
+    contained = scene.setdefault("contained", {})
+    if not isinstance(contained, dict):
+        return []
+    unplaced = set()
+    for key in minted or ():
+        eid, entity = _unique_entity_keyed(scene, str(key))
+        if not eid or not isinstance(entity, dict) or _is_body_entity(scene, eid, entity):
+            continue
+        kind = str(entity.get("kind") or "").strip().casefold()
+        if (kind in ("vehicle", "container") or entity.get("container") is True) \
+                and room_of(scene, eid) is None:
+            unplaced.add(eid)
+    out = []
+    for subject, pose in posed.items():
+        if not isinstance(pose, dict):
+            continue
+        if str(pose.get("relation") or "").strip().casefold() not in _INTERIOR_MODES:
+            continue
+        if _ci_get(contained, subject) is not None or not _a_body_subject(scene, subject):
+            continue
+        for ref in (pose.get("relative_to"), pose.get("support")):
+            ref = str(ref or "").strip()
+            if not ref:
+                continue
+            eid, entity = _unique_entity_keyed(scene, ref)
+            if not eid or same_subject(scene, eid, subject) \
+                    or _is_body_entity(scene, eid, entity):
+                continue
+            contained[str(subject)] = {"in": eid, "mode": "inside"}
+            out.append(str(subject))
+            break
+        else:
+            if len(unplaced) == 1:
+                contained[str(subject)] = {"in": next(iter(unplaced)), "mode": "inside"}
+                out.append(str(subject))
+    return out
+
+
 def materialize_enclosure_interiors(scene: dict) -> list:
-    """A standing `mode: interior` record over a BODY is a place. Mint it.
+    """A standing `mode: interior` record over a BODY is a place. Mint it --
+    and a body standing `inside` a THING stands in the thing
+    (`_mint_thing_interior`, gate 3's other half).
 
     THE MISSING ON-RAMP. `place_enclosed_bodies` converts the ledger form of
     one body inside another into the place form -- but only for a holder that
@@ -2149,6 +2297,11 @@ def materialize_enclosure_interiors(scene: dict) -> list:
     5. The holder has NO interior rooms yet. Scene topology beats the card and
        beats the floor, and this is also what makes the pass idempotent.
 
+    A HOLDER THAT IS NOT A BODY takes the other branch (`_mint_thing_interior`):
+    a body contained `inside` or `interior` a thing stands in the thing's one
+    minted room, its way in shut until the thing's own hatch opens it -- the
+    non-body enclosure default gate 3 was waiting on.
+
     Never writes `interior_rooms` and never writes `enclosure`: both are
     derived, by the two body-scoped passes that already own them.
 
@@ -2165,7 +2318,8 @@ def materialize_enclosure_interiors(scene: dict) -> list:
         record = contained.get(subject)
         if not isinstance(record, dict):
             continue
-        if str(record.get("mode") or "").strip().casefold() != "interior":
+        mode = str(record.get("mode") or "").strip().casefold()
+        if mode not in _INTERIOR_MODES:
             continue                                            # gate 1
         holder = str(record.get("in") or "").strip()
         if not holder:
@@ -2173,8 +2327,12 @@ def materialize_enclosure_interiors(scene: dict) -> list:
         eid, entity = _unique_entity_keyed(scene, holder)
         if not eid:
             continue                                            # gate 2
-        if not _encloses_as_a_mass(scene, eid, entity, record.get("mode")):
-            continue                                            # gate 3
+        if not _encloses_as_a_mass(scene, eid, entity, mode):
+            if _mint_thing_interior(scene, subject, holder, eid, entity):
+                minted.append(eid)                              # gate 3
+            continue
+        if mode != "interior":
+            continue        # a body's own inside is `interior`, exactly
         if room_of(scene, holder) is None:
             continue                                            # gate 4
         if _interior_rooms_of(scene, eid):
@@ -2406,8 +2564,16 @@ def place_enclosed_bodies(scene: dict) -> list:
     `derive_contained_positions` drag them back out to the holder's exterior
     room on the next merge.
 
+    A BODY `inside` A THING converts the same way (the room form a body's
+    inside has, for a thing's): a body standing in a thing's interior is
+    placed there, and the thing's DOORWAY, not the ledger, then says who
+    sees in. Left as a record, `inside` -- a shut-away mode -- concealed an
+    occupant through an open hatch: the onsetter at the landing could not
+    see the player standing in the open shaft cage (chat 167 turn 4629,
+    replayed 2026-10-10). A closed hatch still conceals her, by its door.
+
     Returns the subjects it placed, for the caller's report. Idempotent:
-    a second call finds no mode-interior record left to convert.
+    a second call finds no record left to convert.
     """
     contained = (scene or {}).get("contained")
     if not isinstance(contained, dict) or not contained:
@@ -2420,7 +2586,8 @@ def place_enclosed_bodies(scene: dict) -> list:
         record = contained.get(subject)
         if not isinstance(record, dict):
             continue
-        if str(record.get("mode") or "").strip().casefold() != "interior":
+        mode = str(record.get("mode") or "").strip().casefold()
+        if mode not in _INTERIOR_MODES:
             continue
         holder = str(record.get("in") or "").strip()
         if not holder:
@@ -2431,6 +2598,10 @@ def place_enclosed_bodies(scene: dict) -> list:
         eid, entity = _unique_entity_keyed(scene, holder)
         if not eid:
             continue
+        if mode != "interior" and (
+                _encloses_as_a_mass(scene, eid, entity, mode)
+                or not _a_body_subject(scene, subject)):
+            continue   # `inside` a BODY stays the ledger's: a mouth, a coil
         interior_ids = _interior_rooms_of(scene, eid)
         if not interior_ids:
             continue           # no inside to stand in: nothing changes

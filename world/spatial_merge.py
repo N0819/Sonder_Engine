@@ -33,6 +33,7 @@ from world.spatial_containment import (
     derive_inventory_placements,
     mint_transferred_objects,
     derive_minted_entity_placements,
+    contain_posed_inside,
     materialize_enclosure_interiors,
     materialize_named_stations,
     replace_engine_minted_interiors,
@@ -2273,6 +2274,13 @@ def merge_scene_with_diff(
     # its destination inside `derive_inventory_placements`, and this vouches
     # a containment record the contact hand wrote against the same body.
     normalize_scene_containment(merged, carriers=carriers)
+    # A body POSED inside a thing this beat is contained in it, where the pose
+    # names the thing -- the encoder's own spelling of getting in
+    # (`contain_posed_inside`); the floor below then stands her in its inside.
+    contain_posed_inside(
+        merged, posed=(diff or {}).get("poses"),
+        minted=[key for key in ((diff or {}).get("entities") or {})
+                if key not in ((scene or {}).get("entities") or {})])
     # ...and a body that has taken another one inside HAS an inside, whether or
     # not any model remembered to author it. The floor mints one room from the
     # record itself; the holder's card mints the stations it declares. Runs

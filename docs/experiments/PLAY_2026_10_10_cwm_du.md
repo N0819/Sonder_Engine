@@ -220,16 +220,23 @@ stored one is the edit that declared the ride.
   moves across three stories). A declared destination now goes to the resolve
   as that body's own walk, and the commit's appliers never enact a
   declaration made before the resolve (`_declared_before_the_resolve`).
-- **4629 (the ride): channel fixed, class still open.** Stepping into the cage
-  brought its channels (`brought: contact_ops__interior, entities__inside`),
-  and page and state now agree -- both women at the pit bottom as the cage
-  starts to rise, the confession no longer lost to a contradiction. But the
-  encoder wrote her boarding as a pose ("inside", relative to the landing)
-  and minted the cage a vehicle in transit with no interior, so the arrival
-  will not carry her. The open question is the owner's: a stronger encoder
-  rule, or a floor that reads a body posed inside a vehicle as aboard it.
-  The re-ask fired once here, on Emrys Vaughan named as scenery at the
-  landing -- the measured scenery case, costing one account.
+- **4629 (the ride): FIXED (2026-10-11), on the third replay.** The first
+  replay brought the inside rule's channel, and page and state agreed, but
+  the encoder wrote her boarding as a pose ("inside", against the landing
+  anchor) and minted the cage a vehicle with no interior, so the cage could
+  not carry her; a second, with the rule's containment channel and a sharper
+  card in hand, did the same, and its resolve then wrote her ride under the
+  world's "the cage settled" event, which the walk floor rightly refused --
+  the cage rose to the pithead with her companion and left her at the pit
+  bottom. The owner's ruling: build the interior in code. A body `inside` a
+  thing with no inside of its own now stands in one the engine mints, its
+  way in shut until the thing's own hatch opens it, and the encoder's own
+  spelling -- posed `inside` in the beat that mints one placeless enterable
+  thing -- reads as that containment. On the third replay the shaft cage got
+  its interior, both women stood in it, and it docked at the pithead with
+  its gate open on the yard: the page and the state agree, and she rode up.
+  Both re-asks fired on Emrys Vaughan named as scenery at the landing, the
+  measured scenery case.
 - **Found by the 4629 replay, fixed after it:** a planned body placed by name
   alone BEFORE the rule existed (Emrys, placed at 4628) was skipped by every
   floor -- the binder reads records, the lease counts a placed body as held,

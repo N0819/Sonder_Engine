@@ -3,7 +3,7 @@
 - 身体が運ばれる、包むものに入る、別の身体に乗る、その関係から離れる：その身体の containment を書きます（解放後にどこに立つかは positions か stations です）。
 - 携帯物の移転なしに包囲や遮蔽が変わる――動かない物を包む覆いを持ち上げれば、その遮蔽が終わる：その関係の containment を書き、実在の確立した包むものを名指します。記述が「hidden」（隠れている）と言うだけで持ち手を創作してはいけません。
 
-Shape: containment:{name:{in,mode}|null}。包囲や携行が始まるときは {subject:{in:<existing holder>,mode:<mode>}}、終わるときは {subject:null}。held|carried|riding|mounted|worn は見える状態での携行、pocket|container|inside は閉じ込め――周りの部屋から隠され、部屋を見ることもできませんが、触覚と許された聴覚は残ります。ほかの語は閉じ込めとして読まれます。見える状態でも、観察者の通常の限界は越えません。
+Shape: containment:{name:{in,mode}|null}。包囲や携行が始まるときは {subject:{in:<existing holder>,mode:<mode>}}、終わるときは {subject:null}。held|carried|riding|mounted|worn は見える状態での携行、pocket|container|inside は閉じ込め――周りの部屋から隠され、部屋を見ることもできませんが、触覚と許された聴覚は残ります。中に立てるほど大きな物の `inside` にいる身体は、代わりにその物の内部に立ち、出入口を何が通るかはその物自身の hatch が決めます。ほかの語は閉じ込めとして読まれます。見える状態でも、観察者の通常の限界は越えません。
 
 接触と containment は別の事実です：肩に置いた手は肩に乗せて運ぶことではなく、ポケットの中にあることはどの面が触れているかを何も言いません。
 運ばれている身体は自分の位置を持ちません：入れ子の連なりを通って、運ぶ者に従います。containment が続く間に、その部屋を書いて動かしてはいけません。実際に抜け出したなら、containment を解放してから身体を動かします。まだ閉じ込められている身体が、部屋に自由に立っているかのように振る舞うことは決してありません。

@@ -125,7 +125,7 @@ from world.spatial_containment import (
     derive_minted_entity_placements,
     enclosure_joins_rooms, hiding_holders_of, inside_as_holder,
     resolve_placement_target,
-    interior_occupants, materialize_enclosure_interiors,
+    interior_occupants, contain_posed_inside, materialize_enclosure_interiors,
     normalize_scene_containment, normalize_scene_scales,
     place_enclosed_bodies, replace_engine_minted_interiors,
     scale_changed_names,

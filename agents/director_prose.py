@@ -189,9 +189,17 @@ def candidate_channels(stage, facts=None):
 #: `entities` 0.23, so the encoder never saw that boarding is a walk into the
 #: thing's inside, wrote the ride as the operator moving her, and every floor
 #: rightly kept her 400 ft down. The other parts still ship only with their
-#: channel. A closed set of the engine's own card parts.
-BODY_PLACING_PARTS = frozenset({"entities__inside", "entities__transit",
-                                "contact_ops__interior"})
+#: channel. A closed table of the engine's own card parts, each with EVERY
+#: channel its rule writes: the inside rule puts whoever gets in `inside`
+#: the thing by containment (the engine then stands them in its interior,
+#: `spatial_containment._mint_thing_interior`), so it brings `containment`
+#: as well as its own -- replayed, the beat that brought `entities` alone
+#: posed her "inside" against the landing and the cage left without her.
+BODY_PLACING_PARTS = {
+    "entities__inside": ("entities", "containment"),
+    "entities__transit": ("entities",),
+    "contact_ops__interior": ("contact_ops",),
+}
 
 
 def part_channel(part):
@@ -495,18 +503,17 @@ def aim_by_their_view(inputs, prose, places, people, perceived, ask,
     perceived (``perceived_here`` empty) the unperceived person is the only
     one the words could mean, and asking again re-aims nothing.
 
-    Measured 2026-10-10 over the 105 stored prose-contract interpretations
+    Measured 2026-10-11 over the 105 stored prose-contract interpretations
     of the play database (the owner's 55 are among them), each against its
-    own pre-beat ledger and checkpoint: an account named somebody no player
-    had perceived in 7. Three had no perceived alternative and are not
-    asked again -- a stranger skidding into the lift as the player hailed
-    her (chat 160 turn 4540, and its branch) and the woman an opening's
-    empty ledger never recorded (chat 165 turn 4579). Of the four that are,
-    three were the wrong bindings the run found (chat 165 turn 4582, chat
-    167 turns 4617 and 4627 -- 4617 by its live index, its checkpoint having
-    lost the opening's commit) and one named a man as scenery on the way
+    own pre-beat ledger and its own checkpoint (checkpoint N is the world
+    before turn N): an account named somebody no player had perceived in 4.
+    Three were the wrong bindings the run found (chat 165 turn 4582, chat
+    167 turns 4617 and 4627 -- 4617 by its live index, whose landlord
+    figures its stored world never stood: the rerolled opening's rebuild had
+    left the inn's people out) and one named a man as scenery on the way
     past (chat 167 turn 4629), which costs one account and changes nothing
-    else. The owner's database alone: none."""
+    else. Someone perceived was there to mean instead in all four. The
+    owner's database alone: none."""
     if perceived_here is not None and not perceived_here:
         return prose, places, {}
     named = people_named_unperceived(prose, inputs, people, perceived)
@@ -670,13 +677,16 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
                 or probabilities.get(channel, 0.0) >= record["threshold"]]
     selected += [channel for channel in extension
                  if probabilities.get(channel, 0.0) >= record["threshold"]]
-    # A RULE THAT DECIDES WHERE A BODY IS BRINGS ITS CHANNEL
-    # (`BODY_PLACING_PARTS`): the part's yes says the channel is touched
+    # A RULE THAT DECIDES WHERE A BODY IS BRINGS ITS CHANNELS
+    # (`BODY_PLACING_PARTS`): the part's yes says they are touched
     for part in parts:
-        channel = part_channel(part)
-        if (part in BODY_PLACING_PARTS and part in questions and channel not in selected
-                and probabilities.get(part, 0.0) >= record["threshold"]):
-            selected.append(channel)
+        if (part not in BODY_PLACING_PARTS or part not in questions
+                or probabilities.get(part, 0.0) < record["threshold"]):
+            continue
+        missing = [channel for channel in BODY_PLACING_PARTS[part]
+                   if channel not in selected and channel in candidates]
+        if missing:
+            selected += missing
             record.setdefault("brought", []).append(part)
     chosen = [part for part in parts
               if part_channel(part) in selected
