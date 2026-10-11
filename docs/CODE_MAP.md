@@ -14,15 +14,15 @@
 | `agents/character_tools.py` | 732 |  | `core.db` |
 | `agents/common.py` | 12558 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 6074 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 7571 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 7786 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 3975 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
+| `agents/director_evidence.py` | 4022 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2477 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_layout.py` | 419 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 3268 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `agents/director_prose.py` | 3389 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1632 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 2801 |  | — |
@@ -345,14 +345,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4998 | 2540 lines |
-| `director_interpret()` | 1418 | 1040 lines |
-| `_reconcile_resolution()` | 2811 | 521 lines |
-| `_run_specialists()` | 3389 | 425 lines |
+| `director_resolve()` | 5213 | 2540 lines |
+| `director_interpret()` | 1611 | 1062 lines |
+| `_reconcile_resolution()` | 3026 | 521 lines |
+| `_run_specialists()` | 3604 | 425 lines |
 | `director_establish()` | 378 | 211 lines |
-| `_reconcile_interpretation()` | 2485 | 172 lines |
-| `_ground_public_evidence()` | 3953 | 116 lines |
-| `_require_complete_entity_interiors()` | 3816 | 95 lines |
+| `_reconcile_interpretation()` | 2700 | 172 lines |
+| `_ground_public_evidence()` | 4168 | 116 lines |
+| `_require_complete_entity_interiors()` | 4031 | 95 lines |
 
 ### `agents/director_contact.py`
 
@@ -372,13 +372,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_evidence_present()` | 2075 | 359 lines |
+| `causal_world_index()` | 3124 | 301 lines |
 | `normalize_causal_ledger()` | 2801 | 271 lines |
-| `causal_world_index()` | 3124 | 254 lines |
 | `restore_declared_quotes()` | 2629 | 151 lines |
 | `beat_event_ledger()` | 1288 | 123 lines |
 | `beat_timeline()` | 1175 | 111 lines |
-| `_fold_derived_manifest_events()` | 3887 | 89 lines |
-| `_span_items()` | 3514 | 86 lines |
+| `_fold_derived_manifest_events()` | 3934 | 89 lines |
+| `_span_items()` | 3561 | 86 lines |
 
 ### `agents/director_fanout.py`
 
@@ -442,14 +442,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 2881 | 254 lines |
-| `encode()` | 2429 | 143 lines |
-| `a_walk_is_its_owners()` | 1730 | 132 lines |
-| `select_channels()` | 484 | 104 lines |
-| `entity_keys_name_held_things()` | 1967 | 86 lines |
-| `rooms_named_by_part()` | 783 | 83 lines |
-| `implied_tools()` | 1179 | 80 lines |
-| `rooms_in_play()` | 893 | 75 lines |
+| `run()` | 2984 | 272 lines |
+| `encode()` | 2532 | 143 lines |
+| `a_walk_is_its_owners()` | 1833 | 132 lines |
+| `select_channels()` | 587 | 104 lines |
+| `entity_keys_name_held_things()` | 2070 | 86 lines |
+| `rooms_named_by_part()` | 886 | 83 lines |
+| `implied_tools()` | 1282 | 80 lines |
+| `rooms_in_play()` | 996 | 75 lines |
 
 ### `agents/director_reconcile.py`
 

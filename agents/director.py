@@ -796,6 +796,199 @@ def _figure_identities(figures):
             and str(fig.get("kind") or "person") != "thing"}
 
 
+def _last_lines(ctx, sc, identities, players):
+    """The lines the last committed beat put between a player and anyone, as
+    ``[{"speaker", "to", "line"}]`` in world names, in the beat's order: a
+    line a player spoke, and a line said to one. A target is resolved from
+    the speaker's own words for the body (`_bodies_addressed_as`) where it
+    is not a name the world holds: a speaker never told a player's name says
+    a line to "the compact lean woman". Empty where the beat before had no
+    resolve (the first beat after an opening)."""
+    frame_id = getattr(ctx.turn, "frame_id", None)
+    try:
+        prev = q("SELECT id FROM turns WHERE chat_id=? AND idx<? AND frame_id IS ? "
+                 "ORDER BY idx DESC LIMIT 1",
+                 (ctx.chat["id"], ctx.turn.idx, frame_id), one=True)
+        step = prev and q(
+            "SELECT v.content AS content FROM steps s JOIN variants v "
+            "ON v.step_id=s.id AND v.active=1 "
+            "WHERE s.turn_id=? AND s.key='director_resolve'",
+            (prev["id"],), one=True)
+        log = (json.loads(step["content"]) or {}).get("dialogue_log") if step else None
+    except (TypeError, ValueError, KeyError):
+        return []
+    if not isinstance(log, list):
+        return []
+    entities = (sc or {}).get("entities") or {}
+    held = {str(key).casefold() for key in ((sc or {}).get("positions") or {})}
+    held |= {str((record or {}).get("name") or "").casefold()
+             for record in entities.values() if isinstance(record, dict)}
+    held |= {str(name).casefold() for name in identities.values() if name}
+    held.discard("")
+    playing = {str(name).casefold() for name in players}
+    out = []
+    for entry in log:
+        if not isinstance(entry, dict):
+            continue
+        speaker = str(entry.get("speaker") or "").strip()
+        line = str(entry.get("exact_quote") or "").strip()
+        if not speaker or not line:
+            continue
+        raw = entry.get("intended_target")
+        to = []
+        for target in (raw if isinstance(raw, list) else [raw]):
+            target = str(target or "").strip()
+            target = str(identities.get(target) or target)
+            if not target:
+                continue
+            bodies = ([target] if target.casefold() in held
+                      else _bodies_addressed_as(ctx, sc, speaker, [target]) or [target])
+            to += [body for body in bodies if body not in to]
+        if speaker.casefold() in playing or any(t.casefold() in playing for t in to):
+            out.append({"speaker": speaker, "to": to, "line": line})
+    return out
+
+
+def index_people(causal_index, sc, identities):
+    """``(people, in_view)``: every person the interpretation could aim a
+    player's words at, as ``{person: [forms an account may write them in]}``
+    -- the world index's people and the identity index -- and the names of
+    those the world index lists, in its order.
+
+    A world-index row is a person when it is a figure, a body with no
+    record, or a record that is somebody: a charter body, an animate kind
+    (whole or word-wise, as `_presence_speech_verdict` reads one), or a row
+    the index gave a look or a role. A record is found by its id or by its
+    name, since `positions` keys a body either way."""
+    from llm.schemas import _ANIMATE_ENTITY_KINDS
+    from persist.commit import strip_name_titles
+
+    entities = (sc or {}).get("entities") or {}
+    by_name = {" ".join(str(record.get("name") or "").split()).casefold(): record
+               for record in entities.values() if isinstance(record, dict)}
+
+    def _record(row):
+        record = entities.get(str(row.get("id")))
+        if not isinstance(record, dict):
+            record = by_name.get(" ".join(str(row.get("name") or row.get("id") or "")
+                                          .split()).casefold())
+        return record if isinstance(record, dict) else {}
+
+    def _a_person(row):
+        kind = str(row.get("kind") or "")
+        if kind in ("body", "figure"):
+            return True
+        if kind != "entity":
+            return False
+        record = _record(row)
+        kind_words = str(record.get("kind") or "").casefold()
+        words = {kind_words} | set(re.split(r"[^a-z0-9]+", kind_words))
+        return bool(record.get("charter_ref") or row.get("look") or row.get("role")
+                    or words & _ANIMATE_ENTITY_KINDS)
+
+    people = {}
+    for room in ((causal_index or {}).get("rooms") or {}).values():
+        for row in room.get("holds") or ():
+            if isinstance(row, dict) and _a_person(row):
+                name = str(row.get("name") or row.get("id") or "").strip()
+                if name:
+                    people.setdefault(name, set()).update(
+                        str(a) for a in _record(row).get("aliases") or ()
+                        if str(a or "").strip())
+    in_view = list(people)
+    for name in (identities or {}).values():
+        if str(name or "").strip():
+            people.setdefault(str(name).strip(), set())
+    for name, forms in people.items():
+        forms.update({name, strip_name_titles(name)})
+    return {name: sorted(forms) for name, forms in people.items()}, in_view
+
+
+def _players_view(ctx, sc, causal_index, identities, players):
+    """WHOM EACH PLAYER HAS PERCEIVED, for reading what their words point at.
+
+    A player picks people out by what their own view showed them -- a
+    description, a guess at who someone is, a pronoun -- and the
+    interpretation turned those words into a name against the all-knowing
+    world index, which says nothing of what the player perceived or who had
+    just spoken to them: "the man behind the bar" became a potman the view
+    never described, "you'll be the overman" a man who had walked in
+    unseen, and a reply to the man who had just answered her went to her
+    companion (O8/O23/O25 of the Cwm Du run, chat 167 turns 4617, 4627 and
+    4628; the same class in chat 165 turn 4582). Code does not guess the
+    binding; it hands the interpretation the view.
+
+    ``players`` is ``[(observer key, name)]``. Returns a dict:
+
+    - ``knows_as``: ``{player: {person: the words their view gave them}}``
+      for every person in the world index the player has perceived -- the
+      name they know (`known`), else the label their view LEARNED at full
+      sight (`perception.described_by`), else what their view calls a body
+      it showed last beat or can see now (`perception.present_label_fn`,
+      `sighted_level`: an opening's ledger can hold nobody while the woman
+      the player is talking to stands in the fog, chat 165 turn 4579);
+    - ``last_lines``: `_last_lines`;
+    - ``people``: `index_people`;
+    - ``perceived``: the casefolded names of those people any player is,
+      knows, has perceived, or exchanged a line with last beat;
+    - ``perceived_here``: the people in the world index some player other
+      than themselves has perceived -- what a player's words could be
+      re-aimed at (`director_prose.aim_by_their_view`).
+    """
+    from world.spatial import sighted_level
+    from .common import _recognizes
+    from .composer import body_key
+    from .perception import _prior_ledger_entry, described_by, present_label_fn
+
+    people, in_view = index_people(causal_index, sc, identities)
+    in_view = set(in_view)
+    names = [name for _key, name in players]
+
+    def _in_sight(observer, person):
+        try:
+            return sighted_level(sc, observer, person) != "none"
+        except Exception:
+            return False
+    known_map = wget(ctx.chat["id"], "known", {}) or {}
+    knows_as, perceived, here = {}, {str(n).casefold() for n in names}, set()
+    for observer_key, observer_name in players:
+        described, learned = described_by(ctx, observer_key)
+        seen = {str(n).casefold()
+                for n in (_prior_ledger_entry(ctx, observer_key).get("seen") or ())}
+        recognized = set(known_map.get(observer_name) or [])
+        label_now, mine = None, {}
+        for person in people:
+            if person == observer_name:
+                continue
+            key = body_key(person)
+            if _recognizes(person, recognized):
+                label = person
+            elif key in learned:
+                label = learned[key]
+            elif (person.casefold() in seen or (described and key in described)
+                  or (person in in_view and _in_sight(observer_name, person))):
+                if label_now is None:
+                    label_now = present_label_fn(ctx, observer_key, observer_name, sc)
+                label = str(label_now(person) or "").strip()
+            else:
+                continue
+            perceived.add(person.casefold())
+            if person in in_view:
+                here.add(person)
+                if label:
+                    mine[person] = label
+        if mine:
+            knows_as[observer_name] = mine
+    last_lines = _last_lines(ctx, sc, identities, names)
+    for line in last_lines:
+        for person in [line["speaker"]] + list(line["to"]):
+            perceived.add(str(person).casefold())
+            if person in in_view and person not in names:
+                here.add(person)
+    return {"knows_as": knows_as, "last_lines": last_lines, "people": people,
+            "perceived": sorted(perceived), "perceived_here": sorted(here)}
+
+
 def _present_figure_rows(figures, answers=None, cap=24):
     """The payload rows for `present_figures`: name, role, room, the
     full-sight look, the plan uid, and for an authored plan its kind and
@@ -1757,6 +1950,22 @@ def director_interpret(ctx, nonce):
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "variant_seed": nonce,
     }
+    # WHOM EACH PLAYER HAS PERCEIVED (`_players_view`): the words their own
+    # view gave them for each person here, and the lines just said to or by
+    # them -- what the interpretation reads "the man behind the bar" against.
+    _view_players = [("player", pers.get("name") or persona_name(pers))] + [
+        (f"extra:{_extra.get('persona_id')}", str(_extra.get("name")))
+        for _extra in (ctx.extra_players or ()) if _extra.get("name")]
+    try:
+        _players_seen = _players_view(
+            ctx, sc, _causal_index, _interpret_identities, _view_players)
+    except Exception as _view_exc:  # the interpretation runs without it
+        ctx.add_warning(f"interpret: the players' view is unavailable: {_view_exc}")
+        _players_seen = {}
+    if _players_seen.get("knows_as"):
+        _interpret_model_payload["player_knows_as"] = _players_seen["knows_as"]
+    if _players_seen.get("last_lines"):
+        _interpret_model_payload["last_lines"] = _players_seen["last_lines"]
     _interpret_model_payload = _extension_director_payload(
         ctx, _interpret_model_payload, phase="interpret")
 
@@ -1810,6 +2019,12 @@ def director_interpret(ctx, nonce):
     _first_extras = _interpret_extras({})
     if _installed:
         _first_extras["installed_rooms"] = _installed
+    if _players_seen.get("people"):
+        # For the one re-ask (`director_prose.aim_by_their_view`); no model
+        # payload is built from it.
+        _first_extras["players_view"] = {
+            key: _players_seen.get(key)
+            for key in ("people", "perceived", "perceived_here")}
     out = director_prose.run(
         ctx, "interpret", sc, _interpret_model_payload,
         _interpret_beat_view(ctx, {}, p_name), _first_extras,

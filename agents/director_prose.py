@@ -430,6 +430,109 @@ def carry_every_quoted_line(raw_input, prose, places, ask,
     return best[0], best[1], record
 
 
+#: How many times the interpretation's account is asked again when it names
+#: a person no player has perceived and no player's input named. One, by the
+#: owner's ruling of 2026-10-10 on O8/O23/O25 of the Cwm Du run: the account
+#: is where the addressee first goes wrong, and every later reader -- the
+#: encoder's targets, the voices asked, the page -- inherits it. What it
+#: costs is measured on `aim_by_their_view`: four beats in 105.
+UNPERCEIVED_REASKS = 1
+
+
+def inputs_text(model_payload):
+    """Every player's raw input this beat, joined: the interpretation's own
+    copy (`event_inputs`' `raw_text`, which only it is handed)."""
+    return "\n".join(
+        str(event.get("raw_text") or "")
+        for entry in (model_payload or {}).get("event_inputs") or ()
+        if isinstance(entry, dict)
+        for event in entry.get("events") or () if isinstance(event, dict))
+
+
+def people_named_unperceived(prose, inputs, people, perceived):
+    """The people the account names whom no player has perceived and no
+    player's input named, in the order the account first names them.
+
+    ``people`` maps each person the interpretation could aim a player's
+    words at to the forms an account may write them in; ``perceived`` holds
+    the casefolded names of those any player is, knows or has perceived
+    (`director._players_view`). The account names a person by a whole form
+    (`name_boundary_pattern`, in any script); an input names one by any
+    identifying word of the name (`_significant_name_tokens`), so "Mrs
+    Rees" names Ffion Rees, and a line a player quoted -- which the account
+    repeats -- never counts against it."""
+    from story.character_schema import name_boundary_pattern
+    from .common import _significant_name_tokens
+    text = str(prose or "")
+    seen = {str(name).casefold() for name in perceived or ()}
+    hits = []
+    for person, forms in (people or {}).items():
+        if str(person).casefold() in seen:
+            continue
+        at = [m.start() for form in (forms or [person]) if str(form or "").strip()
+              for m in [re.search(name_boundary_pattern(str(form)), text, re.I)] if m]
+        if not at:
+            continue
+        if any(re.search(name_boundary_pattern(token), str(inputs or ""), re.I)
+               for token in _significant_name_tokens(person)):
+            continue
+        hits.append((min(at), str(person)))
+    return [person for _at, person in sorted(hits)]
+
+
+def aim_by_their_view(inputs, prose, places, people, perceived, ask,
+                      reasks=UNPERCEIVED_REASKS, perceived_here=None):
+    """`(prose, places, record)`: AN ACCOUNT THAT AIMS A PLAYER'S WORDS AT
+    SOMEBODY NO PLAYER PERCEIVED IS ASKED AGAIN, once, before anything is
+    encoded (`UNPERCEIVED_REASKS`). ``ask(note)`` -> ``(prose, places)``
+    asks with ``note`` -- `{"named_unperceived": [...]}`, the payload's
+    `asked_again` -- in front of the author. The second account goes on
+    only if it names fewer such people and leaves out no more of the lines
+    the players quoted; a call to someone unseen that the author keeps is
+    the first account's, unchanged. ``record`` is empty when nothing fired.
+
+    ONLY WHERE THE WORDS COULD BE RE-AIMED: with nobody here a player has
+    perceived (``perceived_here`` empty) the unperceived person is the only
+    one the words could mean, and asking again re-aims nothing.
+
+    Measured 2026-10-10 over the 105 stored prose-contract interpretations
+    of the play database (the owner's 55 are among them), each against its
+    own pre-beat ledger and checkpoint: an account named somebody no player
+    had perceived in 7. Three had no perceived alternative and are not
+    asked again -- a stranger skidding into the lift as the player hailed
+    her (chat 160 turn 4540, and its branch) and the woman an opening's
+    empty ledger never recorded (chat 165 turn 4579). Of the four that are,
+    three were the wrong bindings the run found (chat 165 turn 4582, chat
+    167 turns 4617 and 4627 -- 4617 by its live index, its checkpoint having
+    lost the opening's commit) and one named a man as scenery on the way
+    past (chat 167 turn 4629), which costs one account and changes nothing
+    else. The owner's database alone: none."""
+    if perceived_here is not None and not perceived_here:
+        return prose, places, {}
+    named = people_named_unperceived(prose, inputs, people, perceived)
+    if not named:
+        return prose, places, {}
+    record = {"named_unperceived": list(named)}
+    best = (prose, places, named)
+    dropped = len(quoted_lines_left_out(inputs, prose))
+    for _attempt in range(max(0, int(reasks))):
+        try:
+            again, again_places = ask({"named_unperceived": list(best[2])})
+        except Exception as exc:  # the first account still stands
+            record["error"] = str(exc)[:200]
+            break
+        still = people_named_unperceived(again, inputs, people, perceived)
+        if (len(still) < len(best[2])
+                and len(quoted_lines_left_out(inputs, again)) <= dropped):
+            best = (again, again_places, still)
+        if not still:
+            break
+    record["reasked"] = True
+    record["kept"] = "again" if best[0] is not prose else "first"
+    record["still_named"] = list(best[2])
+    return best[0], best[1], record
+
+
 # ---- 2. the decision model picks the tools -------------------------------
 
 def _jev_state(prose, model_payload, owed=None):
@@ -2905,6 +3008,23 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
                    len(carried_short.get("still_left_out") or ()),
                    "; ".join('"%s"' % line[:60]
                              for line in carried_short["left_out"])))
+    asked_again = {}
+    seen_by = (extras or {}).get("players_view") if isinstance(extras, dict) else None
+    if stage == "interpret" and isinstance(seen_by, dict) and seen_by.get("people"):
+        prose, places, asked_again = aim_by_their_view(
+            inputs_text(model_payload), prose, places, seen_by["people"],
+            seen_by.get("perceived") or (),
+            lambda note: author(ctx, stage, dict(model_payload, asked_again=note)),
+            perceived_here=seen_by.get("perceived_here") or ())
+        if asked_again:
+            ctx.add_warning(
+                "interpretation: the account named %s, whom no player has "
+                "perceived and no input named, and was asked again; the %s "
+                "account went on%s"
+                % (", ".join(asked_again["named_unperceived"]),
+                   "second" if asked_again.get("kept") == "again" else "first",
+                   (" (still naming %s)" % ", ".join(asked_again["still_named"])
+                    if asked_again.get("still_named") else "")))
     author_seconds = round(time.time() - t0, 3)
     reserved = reserve_places(places, sc)
     planned = extras.get("planned_rooms") if isinstance(extras, dict) else None
@@ -3100,6 +3220,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         "prose": prose,
         "author_seconds": author_seconds,
         **({"carried_short": carried_short} if carried_short else {}),
+        **({"asked_again": asked_again} if asked_again else {}),
         "jev": jev,
         "channels": channels,
         "encoder": encoding,

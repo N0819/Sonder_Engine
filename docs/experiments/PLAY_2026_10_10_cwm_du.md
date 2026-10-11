@@ -89,6 +89,21 @@ run itself made.
      cast members a line addresses) reads names too.
    - 4617, 4627: the addressee was resolved to a different body than the one in
      view who had just spoken.
+
+   Cause of 4617, 4627 and 4628 (fix-wave investigation): the player picks
+   people out by what her view showed her, and the interpretation bound her
+   words against the all-knowing world index, which said nothing of what
+   she perceived or who had just spoken to her. The same class appeared at
+   chat 165 turn 4582. FIXED (the owner's ruling, "give it her view, plus a
+   re-ask"): the interpretation is handed `player_knows_as` and `last_lines`;
+   one card clause in both packs says a person her input points at without
+   naming them is the one her view showed her that way; and an account
+   naming somebody no player perceived and no input named is asked again
+   once, only where someone perceived is there to mean instead. Measured
+   over the 105 stored play interpretations, it asks again on 4: three were
+   these wrong bindings, and one named a man as scenery. Two repairs to the
+   index went with it: a charter body the scene stands keeps its look and is
+   listed once, and a thing placed under its own name is not a body.
 2. **A conveyance worked by another does not carry those aboard** (4629). The
    shaft cage is no vessel. Both floors kept the player 400 ft down even after
    the encoder wrote the joint ascent:

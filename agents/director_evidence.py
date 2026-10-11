@@ -3228,12 +3228,19 @@ def causal_world_index(sc, here=None, *, room_ids=None,
         _drops = drops_from(sc, room_id)
         if _drops:
             index[str(room_id)]["drops"] = _drops
+    # A THING PLACED UNDER ITS OWN NAME IS STILL A THING: `positions` keys a
+    # record by its id or by its display name, and read by id alone a towel
+    # positioned as "folded warm towel" was listed a body (chat 155).
+    entity_names = {" ".join(str(record.get("name") or "").split()).casefold()
+                    for record in entities.values() if isinstance(record, dict)}
+    entity_names.discard("")
     for key, room_id in positions.items():
         room = index.get(str(room_id))
         if room is None:
             continue
         row = {"id": str(key), "name": display(key),
-               "kind": "entity" if key in entities else "body"}
+               "kind": "entity" if (key in entities or " ".join(
+                   str(key).split()).casefold() in entity_names) else "body"}
         # Off the ground, and how far (`world/site_plan`, flight).
         from world.site_plan import body_altitude_m
         aloft = body_altitude_m(sc, key) if row["kind"] == "body" else 0.0
@@ -3252,11 +3259,51 @@ def causal_world_index(sc, here=None, *, room_ids=None,
     # room, role, look, creature); the row's own room decides whether it
     # falls in the slice, and a name already held (a body bound to a
     # registered mind, or a scene entity of the same name) is not doubled.
+    #
+    # ONE ROW PER BODY, WHERE THE SCENE PUTS IT. A charter body the scene
+    # stands (a lease: on screen the scene keeps its row) is the scene's
+    # row, wherever the charter would place it, and that row takes the
+    # figure's look and role -- a scene record of a charter body carries
+    # neither. Before, the leased overman was a bare `entity` row between a
+    # bag and a clasp knife, and a hewer stood twice, in the scene's room and
+    # in his post's (O23/O25 of the Cwm Du run, chat 167 turns 4627-4628).
+    def _ident(text):
+        return " ".join(str(text or "").split()).casefold()
+    stood = {}
+    for key in positions:
+        record = entities.get(key) if isinstance(entities.get(key), dict) else {}
+        forms = {_ident(key), _ident(display(key))}
+        forms |= {_ident(alias) for alias in record.get("aliases") or ()}
+        ref = record.get("charter_ref")
+        if isinstance(ref, dict) and ref.get("charter") and ref.get("body"):
+            forms.add(("charter", str(ref["charter"]), str(ref["body"])))
+        plan_ref = record.get("plan_ref")
+        if isinstance(plan_ref, dict) and plan_ref.get("uid"):
+            forms.add(("plan", str(plan_ref["uid"])))
+        forms.discard("")
+        for form in forms:
+            stood.setdefault(form, str(key))
+    held_rows = {str(row["id"]): row for room_row in index.values()
+                 for row in room_row["holds"]}
     for figure in figures or ():
         if not isinstance(figure, dict) or figure.get("reserved"):
             continue
-        room = index.get(str(figure.get("room") or ""))
         name = str(figure.get("name") or "").strip()
+        forms = {_ident(name)} | {_ident(a) for a in figure.get("aliases") or ()}
+        if figure.get("charter") and figure.get("body"):
+            forms.add(("charter", str(figure["charter"]), str(figure["body"])))
+        if figure.get("plan"):
+            forms.add(("plan", str(figure["plan"])))
+        forms.discard("")
+        placed = next((stood[form] for form in forms if form in stood), None)
+        if placed is not None:
+            row = held_rows.get(placed)
+            if row is not None:
+                for field in ("role", "look"):
+                    if str(figure.get(field) or "").strip() and not row.get(field):
+                        row[field] = str(figure[field]).strip()
+            continue
+        room = index.get(str(figure.get("room") or ""))
         if room is None or not name:
             continue
         if any(str(row.get("id")) == name for row in room["holds"]):

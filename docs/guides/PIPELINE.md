@@ -364,7 +364,9 @@ it in a way nothing in this repository will catch.
 This is the first invocation of the Director (`agents/director_prose.py`;
 the causal Director that preceded it was deleted 2026-09-27). Its model input
 is an `event_inputs` array grouped by `{entity_id, authority_mode, events}`
-plus small identity, object-name, position, and contact indexes. It runs five
+plus small identity, object-name, position, and contact indexes, and each
+player's view of the people here: `player_knows_as` and `last_lines`
+(`director._players_view`). It runs five
 steps: the Director writes PROSE (`prompts.prose_director_prompt`) and nothing
 else; the decision model (`llm/decisions.py`) asks one yes/no question per
 channel this stage can carry, per encoder part and per planned room in reach,
@@ -374,7 +376,11 @@ typed transforms; the check-and-repair pass (`agents/director_repair.py`, on
 by default since 2026-09-28) has the decision model judge that draft against
 the prose, sentence by sentence, and sends what it confidently finds missing
 or wrong back to the encoder as targeted jobs; and code converts the events
-into ledger rows. No model call writes narration.
+into ledger rows. No model call writes narration. Before anything is
+encoded the account is asked again, once each: when it leaves out a line a
+player quoted (`carry_every_quoted_line`), and when it names somebody no
+player has perceived and no input named while someone perceived is there
+to mean instead (`aim_by_their_view`).
 
 Before any model call the stage builds in the rooms prepared ahead of its actors (`director_rooms.install_prepared_rooms`). Every clean design the commit tail's job made for a planned stub that an actor of this frame can see into or is heading for is merged into the scene this stage reads, so the Director, its encoder and any room author see the room. The actors are `actors_ahead`: the players first, then each cast member the scene places. Unless the host or the story turns the layout tier off (`layout_solver_tier`), that job first lays out at most one planned building of several storeys among those rooms -- rooms, stairs, doorways, windows and fixtures placed by the solver and written into the plan (`agents/director_layout.py`) -- and designs its rooms on the plan. The scene this stage opens on is read through the plan (`get_scene`, `structure.apply_solved_plans`), and so is the scene the commit merges the beat onto, so a room built in stands where the solver put it. To qualify (`director_rooms._install_test`, the same test the job runs before it designs), a design must:
 - have been made from the brief the plan holds now;
