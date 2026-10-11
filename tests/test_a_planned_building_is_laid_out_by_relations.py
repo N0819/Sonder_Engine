@@ -1635,3 +1635,29 @@ def test_a_stair_whose_hall_opens_on_no_room_it_joins_is_unlanded():
     layout.doors = [d for d in layout.doors
                     if not ({d["a"], d["b"]} & halls and st["from"] in (d["a"], d["b"]))]
     assert lb.unlanded(spec, layout) == [(st["id"], st["from"])]
+
+
+def test_a_shape_built_from_parts_that_names_none_is_laid_as_its_box():
+    """A part-less `l` or `composite` covers its whole extent
+    (`spatial_fov._shape_cells`): joined by a stair it is solved as the
+    rectangle it already is, its shape word kept. The Room planned the
+    owner's refined shrine (scratch chat 169, 2026-10-10) with its basement
+    `composite` and its roof room an `l`, neither with a part, and the whole
+    building was refused. One that names parts, or a round room joined any
+    other way than one doorway, still keeps its building out."""
+    boxed = copy.deepcopy(SPECS)
+    boxed["loft"][1]["shape"] = "composite"
+    b = _building(specs=boxed)
+    assert b["refusal"] is None and b["boxed"] == ["loft"]
+    spec = lb.spec_from_answers(b, lb.hold_inventory(b, copy.deepcopy(SORT)), copy.deepcopy(RELATE))
+    layout = lb.solve_spec(spec)
+    solved, _report = lb.planned_layout(b, spec, layout)
+    geometry = solved["loft"]["geometry"]
+    rect = layout.floors[1]["loft"][0]
+    assert "shape" not in geometry and geometry["extent"] == {"w": rect.w, "d": rect.d}
+    parted = copy.deepcopy(boxed)
+    parted["loft"][1]["parts"] = [{"w": 3, "d": 3, "at": "nw"}, {"w": 6, "d": 2, "at": "sw"}]
+    assert "loft is planned composite" in (_building(specs=parted)["refusal"] or "")
+    rounded = copy.deepcopy(SPECS)
+    rounded["loft"][1]["shape"] = "round"
+    assert "loft is planned round" in (_building(specs=rounded)["refusal"] or "")

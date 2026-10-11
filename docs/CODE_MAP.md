@@ -207,7 +207,7 @@
 | `world/frontage.py` | 1216 |  | `world.spatial` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1759 |  | — |
-| `world/layout_bridge.py` | 1437 |  | `world.layout_solver`, `world.structure` |
+| `world/layout_bridge.py` | 1449 |  | `world.layout_solver`, `world.structure` |
 | `world/layout_solver.py` | 2356 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1332 |  | `core`, `world.spatial`, `world.spatial_frames` |
@@ -2577,14 +2577,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `planned_layout()` | 1151 | 279 lines |
-| `spec_from_answers()` | 684 | 212 lines |
-| `_building()` | 336 | 162 lines |
-| `hold_inventory()` | 550 | 81 lines |
-| `plan_buildings()` | 236 | 57 lines |
-| `refusals()` | 968 | 56 lines |
-| `_edges_of()` | 182 | 28 lines |
-| `sort_payload()` | 502 | 28 lines |
+| `planned_layout()` | 1162 | 280 lines |
+| `spec_from_answers()` | 695 | 212 lines |
+| `_building()` | 337 | 172 lines |
+| `hold_inventory()` | 561 | 81 lines |
+| `plan_buildings()` | 237 | 57 lines |
+| `refusals()` | 979 | 56 lines |
+| `_edges_of()` | 183 | 28 lines |
+| `sort_payload()` | 513 | 28 lines |
 
 ### `world/layout_solver.py`
 

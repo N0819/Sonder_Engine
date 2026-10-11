@@ -82,9 +82,10 @@ aimed at a size only where the story's own lore states one, and the solve's
 size replaces the estimate, each filed against the other (`stated`,
 `described`; the owner's ruling of 2026-10-10). A room the plan states is
 not a rectangle stands in a block of its own when it opens into the
-building by one doorway on a side the plan states; built from `parts`, or
-joined any other way, it refuses the building before any call is made: the
-solver lays rectangles. So does a room already standing on the plan the
+building by one doorway on a side the plan states; an `l` or a `composite`
+that names no parts is its box, and is solved as the rectangle it is;
+built from `parts`, or round and joined any other way, it refuses the
+building before any call is made: the solver lays rectangles. So does a room already standing on the plan the
 solve would be written on: placed beside an earlier solve, it stands in that
 solve's frame. A side only the model chose that the solver put elsewhere is
 listed in the record (`sides`), not refused.
@@ -464,14 +465,24 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
             # the plan places inside its box cannot be re-boxed, and one
             # joined any other way -- by a stair, or to two rooms -- still
             # keeps its building out.
-            from world.spatial import normalize_parts
-            block = (None if normalize_parts(plan[uid].get("parts"))
-                     else _own_block(uid, joins, stairs, levels))
-            if block is None:
+            from world.spatial import _PART_SHAPES, normalize_parts
+            parts = normalize_parts(plan[uid].get("parts"))
+            block = None if parts else _own_block(uid, joins, stairs, levels)
+            if block is not None:
+                building.setdefault("own_blocks", {})[uid] = block
+            elif str(plan[uid]["shape"]).strip().casefold() in _PART_SHAPES and not parts:
+                # A SHAPE BUILT FROM PARTS THAT NAMES NONE IS ITS BOX: its
+                # cells are the whole of its extent (`spatial_fov._shape_cells`),
+                # so it is solved as the rectangle it already is, its shape
+                # word kept (`planned_layout`). The Writers' Room planned the
+                # shrine of the owner's refined lore (scratch chat 169,
+                # 2026-10-10) with its basement `composite` and its roof room
+                # an `l`, neither with a part, and the whole building was
+                # refused for rooms it could lay.
+                building.setdefault("boxed", []).append(uid)
+            else:
                 refusal = (f"{uid} is planned {plan[uid]['shape']}, and the solver lays "
                            f"{SOLVED_SHAPE}s")
-            else:
-                building.setdefault("own_blocks", {})[uid] = block
     if refusal is None:
         # A SOLVE IS WRITTEN ONLY ONTO A PLAN NOTHING ELSE STANDS ON. A room
         # outside the building standing on the plan this solve would write --
@@ -1169,9 +1180,10 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         geometry = {"extent": {"w": r.w, "d": r.d}, "shape": SOLVED_SHAPE, "level": levels[uid],
                     "site": {"plan": building["plan"], "x": r.x, "y": r.y,
                              "elev_m": round(levels[uid] * STOREY_M, 2)}}
-        if uid in (building.get("own_blocks") or {}):
-            # its own block: where it stands and how large are the solve's,
-            # its shape the plan's -- never squared
+        if uid in (building.get("own_blocks") or {}) or uid in (building.get("boxed") or ()):
+            # its own block, or a shape that names no parts: where it stands
+            # and how large are the solve's, its shape word the plan's --
+            # never squared
             geometry.pop("shape")
         out[uid] = {"geometry": geometry, "anchors": {}, "edges": {},
                     "record": {"moved": [], "unplaced": []}}
