@@ -756,6 +756,9 @@ def test_a_dump_trims_the_largest_read_result_before_evicting_the_neighbours(
                             lambda cid_, frame_id, _t=name, **kw: _big(3000, _t))
     monkeypatch.setitem(TOOL_INDEX["inspect_rooms"], "handler",
                         lambda cid_, frame_id, **kw: _big(11000, "rooms"))
+    # The ORDER of sacrifice, at the cap this was measured under: the
+    # transcript has to be over its cap for anything to be given up.
+    monkeypatch.setattr(sp, "PLANNER_TRANSCRIPT_CHARS", 24_000)
     seen = []
     answers = iter([
         {"calls": [{"tool": n, "args": {}} for n in small[:3]]},
@@ -1047,3 +1050,53 @@ def test_a_first_step_failure_with_nothing_done_still_raises(temp_db,
     scripted(die)
     with pytest.raises(ReasoningBudgetExhausted):
         sp.run_planner(cid, None, text="anything")
+
+
+def test_a_lorebook_layouts_working_set_stays_whole_in_view(temp_db, monkeypatch):
+    """Chat 165 ("Home 3", 2026-10-11): laying a shrine out from its lorebook
+    holds the entries being matched, the household's charter and the room
+    list in view at once -- ~35k at the sizes measured on the replay. Under a
+    24k transcript every read evicted the one it was compared against and
+    the Room re-read until the step ceiling (127 calls, one entry read 22
+    times); the transcript holds that working set whole."""
+    from story.room_tools import TOOL_INDEX
+    monkeypatch.setitem(TOOL_INDEX["read_lore"], "handler",
+                        lambda cid_, frame_id, entry_id=None, **kw:
+                        _big(3900, "entry %s" % entry_id))
+    monkeypatch.setitem(TOOL_INDEX["inspect_charters"], "handler",
+                        lambda cid_, frame_id, **kw: _big(8600, "charters"))
+    monkeypatch.setitem(TOOL_INDEX["inspect_rooms"], "handler",
+                        lambda cid_, frame_id, **kw: _big(11000, "rooms"))
+    seen = []
+    answers = iter([
+        {"calls": [{"tool": "read_lore", "args": {"entry_id": n}} for n in (229, 230, 232)]
+         + [{"tool": "inspect_charters", "args": {}}, {"tool": "inspect_rooms", "args": {}}]},
+        {"reply": "compared"},
+    ])
+
+    def script(role, system, user, **kw):
+        seen.append(json.loads(user))
+        return json.dumps(next(answers))
+    monkeypatch.setattr(providers, "chat_complete", script)
+    cid, _ = _story(temp_db)
+    sp.run_planner(cid, None, text="Lay the shrine out from the lorebook.")
+    shown = seen[1]["transcript"]
+    assert [e["tool"] for e in shown] == ["read_lore"] * 3 + ["inspect_charters",
+                                                              "inspect_rooms"]
+    assert not any("recall" in e["result"] for e in shown)
+
+
+def test_calls_past_a_steps_limit_are_reported_never_dropped(temp_db, scripted):
+    """The chat 165 replay (2026-10-11): a step asked for thirteen calls and
+    the last five were sliced off in silence."""
+    over = sp.PLANNER_TOOL_CALLS_PER_STEP + 2
+    script = scripted({"calls": [{"tool": "inspect_needs", "args": {}}] * over},
+                      {"reply": "done"})
+    cid, _ = _story(temp_db)
+    sp.run_planner(cid, None, text="Read everything.")
+    shown = script.payloads[1]["transcript"]
+    assert sum(1 for e in shown if e["tool"] == "inspect_needs") == \
+        sp.PLANNER_TOOL_CALLS_PER_STEP
+    report = [e for e in shown if e["tool"] is None]
+    assert len(report) == 1 and len(report[0]["args"]) == 2
+    assert "did not run" in report[0]["result"]["error"]

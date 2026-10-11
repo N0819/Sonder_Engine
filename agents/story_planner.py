@@ -171,7 +171,22 @@ PLANNER_REPLY_CHARS = 80_000
 #: chat 114 (2026-09-04): a 13k `inspect_rooms` echo at step 4 evicted seven
 #: smaller results at step 5 -- the packages and plans the Planner had just
 #: read -- under the old rule of whole entries newest-first.
-PLANNER_TRANSCRIPT_CHARS = 24_000
+#:
+#: RAISED FROM 24,000 (2026-10-11) BECAUSE A WORKING SET OUTGREW IT. A Room
+#: laying ground out from a lorebook has to hold the entries it is matching,
+#: the room list and the household's charter in view at once -- three of the
+#: shrine's entries at ~3.9k each, an 8.6k charter and up to an 11k room list,
+#: ~35k -- and under 24k every read evicted the one it was being compared
+#: against, so it read them again, step after step. The owner's chat 165
+#: ("Home 3") stopped at the step ceiling on four replies running (61, 114,
+#: 124 and 143 calls) and the last left an empty draft. Replayed on the
+#: scratch db with the same lorebook and lines: at 24k the reply that laid
+#: the shrine out published by step 13 and then re-read until step 41 (127
+#: calls; entry 229 read 22 times), and each "keep going" after it spent
+#: ~100 calls to land nothing; at 48k the same reply published and concluded
+#: in 19 steps and 34 calls. A larger cut costs characters per step and
+#: saves the steps that only re-read.
+PLANNER_TRANSCRIPT_CHARS = 48_000
 PLANNER_TRIM_HEAD_CHARS = 1_500
 #: A read tool result's RECEIPT: what was called and the shape of what came
 #: back. The tools are pure reads of a database that is still there, so a
@@ -1367,6 +1382,18 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                    if isinstance(result, dict) else None,
                    "error": (result or {}).get("error")
                    if isinstance(result, dict) else None})
+        # A CALL PAST THE STEP'S LIMIT IS REPORTED, NEVER DROPPED, by the
+        # rule a malformed call already follows above. Measured (the chat
+        # 165 replay, 2026-10-11): a step asked for thirteen calls, ten of
+        # them `read_lore`, and the last five were sliced off in silence, so
+        # the model could learn they had not run only by their absence.
+        if not stopped and len(calls) > PLANNER_TOOL_CALLS_PER_STEP:
+            unrun = calls[PLANNER_TOOL_CALLS_PER_STEP:]
+            transcript.append({"tool": None, "args": unrun, "result": {
+                "error": "a step runs at most %d calls; these %d did not run "
+                         "-- ask for them again"
+                         % (PLANNER_TOOL_CALLS_PER_STEP, len(unrun))},
+                "step": step})
         if stopped:
             break
     else:
