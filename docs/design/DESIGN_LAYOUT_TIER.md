@@ -1,10 +1,12 @@
 # Buildings from relations: the layout solver as a tier of the plan
 
-Status: first slice built 2026-10-08, OFF by default -- the host's
-`layout_solver_tier` setting, or the same switch on one story. The bridge
-lane (2026-10-10, below) lays the owner's own shrine plan with no refusal;
-the owner judged the result not yet clean beside the lab's, so the tier
-stays off. What is left is `UNBUILT_WORLD.md` §2.43.
+Status: first slice built 2026-10-08; ON by default since 2026-10-10 -- the
+host's `layout_solver_tier` setting, or the same switch on one story, turns
+it off. The bridge lane (below) laid the owner's shrine plan with no
+refusal but not yet cleanly; with the shrine's lore refined for placement
+and the Room's sides weighed as wishes, two of three answer sets laid it out
+room for room as the lab did, and the owner: "It's ok enough now". What is
+left is `UNBUILT_WORLD.md` §2.43.
 
 ## Why
 
@@ -60,13 +62,16 @@ re-reading the owner had just cut. Given up: a building nobody nears is never
 laid out, so the height-aware far readers meet it only then. At most one
 building is laid out a run (`LAYOUT_TIER_PER_RUN`).
 
-**The switch.** Off unless turned on: for one story, by that story's own
+**The switch.** On unless turned off: for one story, by that story's own
 `layout_solver_tier` world key (`LAYOUT_TIER_STORY_KEY`, read first, and kept
 across a reroll or a restore as a dial the author set,
 `persist.checkpoints.SETTING_PROVENANCE`), or for every story by the host's
 setting of the same name (`LAYOUT_TIER_SETTING`). A story's `off` holds even
-where the host's is on. The owner's ruling of 2026-10-10, "Bridge lane now,
-then on": on by default once the bridge lays a real Room plan cleanly.
+where the host's is on, and its `on` where the host's is off. The owner's
+ruling of 2026-10-10, "Bridge lane now, then on": on by default once the
+bridge lays a real Room plan cleanly -- off again the same day when it did
+not yet, and on once the owner judged the refined shrine ("It's ok enough
+now").
 
 **What a building is.** The plan says which rooms exist and how they join, not
 which share a roof. A stair does: two rooms joined `up`/`down` are two storeys

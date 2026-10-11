@@ -2667,7 +2667,7 @@ leaves, in the order the owner agreed:
     lane). Replayed on every perception step of chats 165 and 166, 14 of 119
     far views change once the plans stand, each by a building in the line.
   A planned building can also be laid out onto a plan by code before anyone
-  has described it (§2.43, off by default).
+  has described it (§2.43, on by default since 2026-10-10).
 * **A window between storeys is an anchor, not an edge**: an edge is one per
   pair of rooms, and the ground-floor door already holds it.
 
@@ -2960,28 +2960,27 @@ said in the Room's review. What it leaves:
 
 
 <a id="unbuilt-2-43"></a>
-### 2.43 Buildings from relations: the layout solver as a tier of the plan -- first slice BUILT 2026-10-08, what is left
+### 2.43 Buildings from relations: the layout solver as a tier of the plan -- first slice BUILT 2026-10-08, on by default 2026-10-10, what is left
 
 The owner's choice of 2026-10-08, the fourth procedural-generation item
 ([`design/DESIGN_LAYOUT_TIER.md`](design/DESIGN_LAYOUT_TIER.md); Design.md, "A
 planned building is laid out from relations before its rooms are designed").
 Built: the solver never chooses an L stair; a pinned fixture keeps its whole
-rectangle; a plan carries `site`; the tier itself, off by default
-(`layout_solver_tier`, for one story or for every story) and reading the
-story's own lore of the building, inside the job
+rectangle; a plan carries `site`; the tier itself, on by default since
+2026-10-10 (`layout_solver_tier` turns it off, for one story or for every
+story) and reading the story's own lore of the building, inside the job
 that builds the rooms in view or ahead of any actor; every reader of a beat
 and its commit read the scene through a solved plan; the commit's writes to a
 planned row prepared before the lock lay only their own fields onto it; a
 re-plan takes back only what a solve laid; a comparison page for the owner.
 Left, each with what it needs:
 
-- **The owner's comparison before any story.** The tier stays off until the
-  owner judges its buildings clean beside the lab's. The bridge lane of
-  2026-10-10 laid the owner's shrine plan with no refusal, and the owner:
-  "The results still don't look particularly clean in comparison to the
-  lab". The lab inn's liked first floor stood on an L stair the fallback
-  chose and now re-solves with U stairs (15 room rectangles move): keep it,
-  or put the L back into the fallback -- the owner's call.
+- **The lab inn's L stair.** The lab inn's liked first floor stood on an L
+  stair the fallback chose and now re-solves with U stairs (15 room
+  rectangles move): keep it, or put the L back into the fallback -- the
+  owner's call. (The owner's comparison before any story, the other half of
+  this entry, was made on 2026-10-10: "It's ok enough now", and the tier is
+  on.)
 - **A building whose lore does not say where things stand.** The shrine's
   own lore said what each room held and seldom where it stood, and laid out
   messy: the answers put its stairs mid-building, and the floor beside a

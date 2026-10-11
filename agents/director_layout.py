@@ -1,13 +1,13 @@
 """The layout tier: a planned building of several storeys is laid out by code
-before any of its rooms is designed. OFF unless the host or the story turns
-it on (`LAYOUT_TIER_SETTING`, `LAYOUT_TIER_STORY_KEY`). The owner's ruling of
+before any of its rooms is designed. ON unless the host or the story turns
+it off (`LAYOUT_TIER_SETTING`, `LAYOUT_TIER_STORY_KEY`). The owner's ruling of
 2026-10-10, after their shrine (chat 164) was built with no solve at all:
 on by default once the bridge lays a real Room plan cleanly -- the shrine's
-own plan, replicated, against the layout lab's. After the bridge lane's seven
-rounds every answer set of the shrine's own plan and lore stood with no
-refusal through this module's own path, but the owner, reading them beside
-the lab's: "The results still don't look particularly clean in comparison
-to the lab" -- so the tier stays off (`docs/design/DESIGN_LAYOUT_TIER.md`).
+own plan, replicated, against the layout lab's. Judged not yet clean after
+the bridge lane's seven rounds; then, the shrine's lore refined for
+placement and the Room's sides weighed as wishes, two of three answer sets
+laid it out room for room as the lab did, and the owner: "It's ok enough
+now" (`docs/design/DESIGN_LAYOUT_TIER.md`).
 
 THE OWNER'S CHOICE (2026-10-08, survey rank 6, first slice): the layout lab's
 solver as an out-of-band tier for planned buildings -- "a model decides what
@@ -62,11 +62,11 @@ from __future__ import annotations
 import json
 import time
 
-#: The host's switch, in the settings table. OFF unless set to
-#: `1`/`on`/`true`/`yes` -- until the bridge lays a real Room plan cleanly
-#: (the owner, 2026-10-10: "Bridge lane now, then on"; not yet, by the
-#: owner's own reading of the shrine's replica that day); the owner's
-#: comparison protocol for the layout lab applies (`tools/layout_lab/baselines`).
+#: The host's switch, in the settings table. ON unless set to
+#: `0`/`off`/`false`/`no` -- the owner's ruling of 2026-10-10, "Bridge lane
+#: now, then on", met that day on the shrine's refined lore ("It's ok enough
+#: now"); the owner's comparison protocol for the layout lab applies to
+#: every change of the solver (`tools/layout_lab/baselines`).
 LAYOUT_TIER_SETTING = "layout_solver_tier"
 #: The STORY's switch: a world key of the chat, read before the host's, so
 #: the tier can be turned on for one story to compare it there and nowhere
@@ -102,8 +102,8 @@ _OFF = ("0", "off", "false", "no")
 def layout_tier_enabled(cid=None) -> bool:
     """Whether planned buildings are laid out by the solver in chat `cid`:
     the story's own switch when it states one (`LAYOUT_TIER_STORY_KEY`),
-    else the host's (`LAYOUT_TIER_SETTING`) -- OFF unless one of them says
-    on."""
+    else the host's (`LAYOUT_TIER_SETTING`) -- ON unless one of them says
+    off."""
     from core.db import get_setting, wget
     if cid is not None:
         try:
@@ -117,8 +117,8 @@ def layout_tier_enabled(cid=None) -> bool:
     try:
         raw = get_setting(LAYOUT_TIER_SETTING)
     except Exception:
-        return False
-    return str(raw or "").strip().casefold() in _ON
+        return True
+    return str(raw or "").strip().casefold() not in _OFF
 
 
 def _plan_specs(cid):
