@@ -106,3 +106,19 @@ def test_a_json_answer_is_read_as_json_whatever_it_says():
     said = json.dumps({"reply": f"the model once wrote <{BAR}DSML{BAR} invoke> by mistake"})
     from agents.common import jparse
     assert jparse(said)["reply"].startswith("the model once wrote")
+
+
+def test_a_call_closed_on_itself_with_its_arguments_in_an_attribute_is_read():
+    """A third form the replay wrote: each invoke closed on itself, its
+    arguments JSON in an `args` attribute -- quotes and all, unescaped -- and
+    mixed with the first form, in the order written."""
+    raw = (f'<{BAR}DSML{BAR} calls>\n'
+           f'<{BAR}DSML{BAR} invoke name="inspect_charters" args="{{}}" />\n'
+           + _invoke("read_lore", ("entry_id", "false", "12")) +
+           f'<{BAR}DSML{BAR} invoke name="new_package" args="{{"title": "The night it opens", '
+           f'"authority": {{"create_people": true}}}}" />')
+    assert sp._native_answer(raw)["calls"] == [
+        {"tool": "inspect_charters", "args": {}},
+        {"tool": "read_lore", "args": {"entry_id": 12}},
+        {"tool": "new_package", "args": {"title": "The night it opens",
+                                         "authority": {"create_people": True}}}]

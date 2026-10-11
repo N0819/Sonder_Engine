@@ -322,10 +322,13 @@ def _call(system, payload, *, max_tokens):
 
 #: A model's own tool-call markup -- DeepSeek's "DSML" -- written as text in
 #: place of the JSON the card asks for (`_native_answer`): an invoke of a
-#: tool with its parameters; an element of either tag named with one of the
+#: tool with its parameters, or closed on itself with its arguments as JSON
+#: in an `args` attribute; an element of either tag named with one of the
 #: answer's own keys; a list of calls written straight inside the calls block.
 _NATIVE_INVOKE = re.compile(
     r'<｜DSML｜\s*invoke\s+name="([^"]+)"\s*>(.*?)</｜DSML｜\s*invoke\s*>', re.S)
+_NATIVE_INVOKE_ARGS = re.compile(
+    r'<｜DSML｜\s*invoke\s+name="([^"]+)"\s+args="(.*?)"\s*/>', re.S)
 _NATIVE_PARAM = re.compile(
     r'<｜DSML｜\s*parameter\s+name="([^"]+)"(?:\s+string="(true|false)")?\s*>'
     r'(.*?)</｜DSML｜\s*parameter\s*>', re.S)
@@ -357,7 +360,8 @@ def _native_answer(raw):
     model, answering without JSON mode, sometimes writes DeepSeek's own
     tool-call markup instead of the JSON the card asks for:
     `<｜DSML｜ invoke name="read_lore">` with each argument a `parameter`,
-    `string="false"` marking a JSON value -- or the card's own answer in the
+    `string="false"` marking a JSON value, or closed on itself with its
+    arguments in an `args` attribute -- or the card's own answer in the
     markup, a `calls` element holding the JSON list of calls beside a `reply`
     one, or the list written straight inside the calls block. A replay of the
     owner's chat 165 lost 8 of its 98 steps so, each read as a step that said
@@ -369,15 +373,25 @@ def _native_answer(raw):
     text = str(raw or "")
     if "｜DSML｜" not in text:
         return {}
-    calls, rest = [], text
+    invoked, rest = [], text
     for match in _NATIVE_INVOKE.finditer(text):
         name = match.group(1).strip()
         if name in ANSWER_KEYS:
             continue
-        calls.append({"tool": name, "args": {
+        invoked.append((match.start(), {"tool": name, "args": {
             key: _native_value(string, value)
-            for key, string, value in _NATIVE_PARAM.findall(match.group(2))}})
+            for key, string, value in _NATIVE_PARAM.findall(match.group(2))}}))
         rest = rest.replace(match.group(0), "", 1)
+    for match in _NATIVE_INVOKE_ARGS.finditer(text):
+        name = match.group(1).strip()
+        if name in ANSWER_KEYS:
+            continue
+        args = _native_value("false", match.group(2))
+        invoked.append((match.start(), {"tool": name,
+                                        "args": args if isinstance(args, dict) else {}}))
+        rest = rest.replace(match.group(0), "", 1)
+    # in the order the model wrote them, whichever form each took
+    calls = [call for _at, call in sorted(invoked, key=lambda pair: pair[0])]
     answer = {}
     for key, string, value in _NATIVE_KEYED.findall(rest):
         if key in ANSWER_KEYS and key not in answer:

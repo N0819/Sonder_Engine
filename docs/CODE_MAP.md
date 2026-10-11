@@ -37,7 +37,7 @@
 | `agents/perception.py` | 8398 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1881 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 3400 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 3414 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3109 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -634,14 +634,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 1174 | 409 lines |
-| `run_fill()` | 3033 | 167 lines |
-| `deliberate()` | 2191 | 162 lines |
-| `schedule_room_work()` | 3256 | 145 lines |
-| `run_location_plan()` | 1946 | 136 lines |
-| `run_dramaturge_pass()` | 2375 | 112 lines |
-| `_dramaturge_pass()` | 2500 | 108 lines |
-| `_payload()` | 656 | 103 lines |
+| `run_planner()` | 1188 | 409 lines |
+| `run_fill()` | 3047 | 167 lines |
+| `deliberate()` | 2205 | 162 lines |
+| `schedule_room_work()` | 3270 | 145 lines |
+| `run_location_plan()` | 1960 | 136 lines |
+| `run_dramaturge_pass()` | 2389 | 112 lines |
+| `_dramaturge_pass()` | 2514 | 108 lines |
+| `_payload()` | 670 | 103 lines |
 
 ### `core/db.py`
 
