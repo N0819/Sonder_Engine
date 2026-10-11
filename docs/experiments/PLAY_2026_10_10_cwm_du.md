@@ -115,7 +115,11 @@ run itself made.
      tripwire caught it.
 6. **An aborted beat** (4630). GLM 5.3 ran away ("Degenerate model output:
    repeating 26-character phrase"). That is classed a provider error, and D5's
-   fresh attempt never follows one.
+   fresh attempt never follows one. FIXED in the fix wave: a runaway is kept
+   apart from an outage, leaves no draft to repair and earns the one fresh
+   ask, sent once (`llm_quality` `runaway`,
+   `RetryConfig.degenerate_retries`); the transport logs every attempt it
+   killed, and re-asks a runaway without a rate-limit backoff.
 7. **Rendering.**
    - Hair without its noun: "slow landlord, with red". 69 of 228 hair entries
      are one word, and most phrases also lack the noun.

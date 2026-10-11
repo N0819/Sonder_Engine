@@ -15,6 +15,8 @@ from llm.providers import (
     role_candidate_count,
     LLMError,
     Aborted,
+    DegenerateOutput,
+    RetryConfig,
     ToolsUnsupported,
 )
 from llm.schemas import (
@@ -764,6 +766,10 @@ REBUILD_KEEPS_SHEET = frozenset({"director_specialist", "director_repair"})
 #: asked again parsed, while each re-ask costs a whole first call (an
 #: encoder request there ran ~35k input tokens, ~10 s).
 MALFORMED_REASKS = 1
+#: The fresh ask goes out ONCE: a runaway on it is not re-asked again by the
+#: transport (`providers.RetryConfig.degenerate_retries`), which already
+#: re-asked the first request's runaway up to its own retries.
+_FRESH_ASK_RETRY = RetryConfig(degenerate_retries=0)
 
 
 def _content_size(step_key, obj):
@@ -882,6 +888,14 @@ def complete_validated_json(
 
     provider_errored = False
     last_provider_error = None
+    # AN ANSWER THAT RAN AWAY IS NO OUTAGE (O27, chat 167 turn 4630). The
+    # stream guard kills a runaway as `DegenerateOutput`, an LLMError, and
+    # filed as the provider's failure it barred the one fresh ask a
+    # malformed answer gets -- so a beat a single re-ask would have kept
+    # aborted ("character_bare: all providers failed (last provider error:
+    # Degenerate model output: repeating 26-character phrase)"). Kept apart
+    # here: a runaway leaves no draft to repair, and earns the fresh ask.
+    runaway = None
     # Raised once, by the length-escalation below, and then inherited by every
     # later attempt in this call -- a repair or a fallback candidate rebuilding
     # the same object needs the same room. None until then, which is the
@@ -1051,9 +1065,14 @@ def complete_validated_json(
         # The primary provider itself failed (auth/model-not-found/5xx past
         # retries). Don't die here -- fall through to the configured fallback
         # candidates below, which previously only ran on VALIDATION failures.
+        # A runaway is no draft either, but no outage (`runaway`).
         raw = ""
         provider_errored = True
-        last_provider_error = exc
+        if isinstance(exc, DegenerateOutput):
+            runaway = exc
+            note_step_warning(f"{step_key}: the answer ran away ({exc.reason})")
+        else:
+            last_provider_error = exc
         note_provider_exchange(
             role=role, system=_sent_system, payload=_sent, response="",
             ok=False, started=_capture_t0, error=str(exc))
@@ -1249,7 +1268,10 @@ def complete_validated_json(
             except LLMError as exc:
                 raw = ""
                 provider_errored = True
-                last_provider_error = exc
+                if isinstance(exc, DegenerateOutput):
+                    runaway = exc
+                else:
+                    last_provider_error = exc
                 note_provider_exchange(
                     role=role, system=_asked_system, payload=_asked_payload,
                     response="", ok=False, started=_wall0, error=str(exc))
@@ -1345,7 +1367,10 @@ def complete_validated_json(
         except Aborted:
             raise
         except LLMError as exc:
-            last_provider_error = exc
+            if isinstance(exc, DegenerateOutput):
+                runaway = exc
+            else:
+                last_provider_error = exc
             note_provider_exchange(
                 role=role, system=_asked_system, payload=_asked_payload,
                 response="", ok=False, started=_wall0, error=str(exc))
@@ -1463,7 +1488,10 @@ def complete_validated_json(
         except Aborted:
             raise
         except LLMError as exc:
-            last_provider_error = exc
+            if isinstance(exc, DegenerateOutput):
+                runaway = exc
+            else:
+                last_provider_error = exc
             note_provider_exchange(
                 role=role, system=_repair_system, payload=repair_payload,
                 response="", ok=False, started=_wall0, error=str(exc))
@@ -1558,7 +1586,10 @@ def complete_validated_json(
         except Aborted:
             raise
         except LLMError as exc:
-            last_provider_error = exc
+            if isinstance(exc, DegenerateOutput):
+                runaway = exc
+            else:
+                last_provider_error = exc
             note_provider_exchange(
                 role=role, system=_fallback_system, payload=fallback_payload,
                 response="", ok=False, started=_wall0, error=str(exc))
@@ -1643,9 +1674,11 @@ def complete_validated_json(
     # gate that also read the LAST rung's cut lost the beat when an
     # unmendable first answer's rebuild was cut, or a malformed rebuild's
     # last fallback (scripted on the D5 landing's second round).
-    if (malformed_seen and not _original_cut
-            and not provider_errored and last_provider_error is None):
-        if not any_parsed:
+    if (((malformed_seen and not provider_errored) or runaway is not None)
+            and not _original_cut and last_provider_error is None):
+        if runaway is not None and not malformed_seen:
+            _fresh_why = f"the answer ran away ({runaway.reason})"
+        elif not any_parsed:
             _fresh_why = "no answer parsed"
         elif parse_error is not None:
             _fresh_why = "the repair came back malformed"
@@ -1661,11 +1694,15 @@ def complete_validated_json(
             # one (`_same_request_record`).
             _asked_system, _asked_payload = _same_request_record()
             try:
-                fresh = _same_request(token_ceiling=token_ceiling)
+                fresh = _same_request(token_ceiling=token_ceiling,
+                                      retry_config=_FRESH_ASK_RETRY)
             except Aborted:
                 raise
             except LLMError as exc:
-                last_provider_error = exc
+                if isinstance(exc, DegenerateOutput):
+                    runaway = exc
+                else:
+                    last_provider_error = exc
                 note_provider_exchange(
                     role=role, system=_asked_system, payload=_asked_payload, response="",
                     ok=False, started=_wall0, error=str(exc))
@@ -1782,6 +1819,12 @@ def complete_validated_json(
         raise RuntimeError(
             f"{step_key}: all providers failed "
             f"(last provider error: {last_provider_error}); "
+            f"validation: {'; '.join(report.errors[:6])}{_sent}"
+        )
+    if runaway is not None:
+        raise RuntimeError(
+            f"{step_key}: the answer ran away ({runaway.reason}) and its fresh "
+            f"ask brought no answer that validated; "
             f"validation: {'; '.join(report.errors[:6])}{_sent}"
         )
     raise RuntimeError(

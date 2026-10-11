@@ -2362,6 +2362,11 @@ class RetryConfig:
     base_delay: float = 1.0
     max_delay: float = 30.0
     retryable_status: frozenset = frozenset({429, 500, 502, 503, 504})
+    #: How many times an answer that RAN AWAY (`DegenerateOutput`) is asked
+    #: again by this loop; None follows `max_retries` as any retryable
+    #: error does. The ladder's one fresh ask sets 0 (`llm_quality`): it has
+    #: already been through this loop once.
+    degenerate_retries: "int | None" = None
 
     def delay_for(self, attempt: int) -> float:
         """Exponential backoff, JITTERED.
@@ -2388,6 +2393,9 @@ def _should_retry(error: Exception, attempt: int, config: RetryConfig) -> bool:
     if attempt >= config.max_retries:
         return False
     if isinstance(error, Aborted):
+        return False
+    if isinstance(error, DegenerateOutput) and config.degenerate_retries is not None \
+            and attempt >= config.degenerate_retries:
         return False
     if isinstance(error, LLMError):
         if error.retryable:
@@ -4086,12 +4094,20 @@ def chat_complete(
                         reasoning_effort) or None
                     reasoning_only = 0
 
+            if isinstance(error, DegenerateOutput):
+                # SAID, EVERY TIME: a killed stream reaches no usage log, so a
+                # call that spent forty seconds on runaways read as one short
+                # answer (O27). A runaway is a sampling accident, not a rate
+                # limit: asked again at once, never after a backoff.
+                _logger.info("llm %s: the answer ran away (%s) on attempt %d of %d",
+                             role, error.reason, attempt + 1, retry_config.max_retries + 1)
             if not _should_retry(error, attempt, retry_config):
                 raise error
 
             # Sleep in short slices so an abort during backoff is observed
             # promptly instead of stalling for the full (up to ~30s) delay.
-            deadline = retry_config.delay_for(attempt)
+            deadline = 0.0 if isinstance(error, DegenerateOutput) \
+                else retry_config.delay_for(attempt)
             slept = 0.0
             while slept < deadline:
                 _check_cancel()

@@ -53,10 +53,10 @@
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 325 |  | `core.db` |
 | `llm/json_mend.py` | 302 |  | — |
-| `llm/llm_quality.py` | 1790 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 1833 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 700 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 5821 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 5837 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 6791 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -778,14 +778,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 852 | 939 lines |
-| `_targeted_field_patch()` | 330 | 98 lines |
-| `note_provider_exchange()` | 599 | 59 lines |
-| `output_ran_out_of_room()` | 149 | 47 lines |
-| `json_failure_diagnosis()` | 198 | 39 lines |
-| `_extract_balanced_object()` | 62 | 37 lines |
-| `_unshrunk()` | 815 | 35 lines |
-| `_without_trailing_commas()` | 26 | 34 lines |
+| `complete_validated_json()` | 858 | 976 lines |
+| `_targeted_field_patch()` | 332 | 98 lines |
+| `note_provider_exchange()` | 601 | 59 lines |
+| `output_ran_out_of_room()` | 151 | 47 lines |
+| `json_failure_diagnosis()` | 200 | 39 lines |
+| `_extract_balanced_object()` | 64 | 37 lines |
+| `_unshrunk()` | 821 | 35 lines |
+| `_without_trailing_commas()` | 28 | 34 lines |
 
 ### `llm/prompt_cache.py`
 
@@ -812,14 +812,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 4303 | 395 lines |
-| `chat_complete()` | 3937 | 172 lines |
-| `_claude_cli_complete()` | 3805 | 130 lines |
-| `async _chat_complete_async_once()` | 4911 | 130 lines |
-| `_sse_openai()` | 3463 | 118 lines |
-| `async chat_complete_async()` | 4818 | 92 lines |
-| `_json_mode_recovery_stages()` | 3046 | 83 lines |
-| `async _sse_openai_async()` | 5042 | 74 lines |
+| `_chat_complete_once()` | 4319 | 395 lines |
+| `chat_complete()` | 3945 | 180 lines |
+| `_claude_cli_complete()` | 3813 | 130 lines |
+| `async _chat_complete_async_once()` | 4927 | 130 lines |
+| `_sse_openai()` | 3471 | 118 lines |
+| `async chat_complete_async()` | 4834 | 92 lines |
+| `_json_mode_recovery_stages()` | 3054 | 83 lines |
+| `async _sse_openai_async()` | 5058 | 74 lines |
 
 ### `llm/research_providers.py`
 
