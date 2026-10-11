@@ -2928,6 +2928,12 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
                        if value not in public_targets
                        and len(target_names.get(value, ())) == 1 else value
                        for value in targets]
+        # ONE SPELLING OF A PERSON: an identity handle (`character:84`,
+        # `persona:22`) becomes the name it stands for, the form most rows
+        # already carry and every reader shows -- left as written it reached
+        # the narrator and the dialogue log as "character:84" (O28, chat 167
+        # turn 4630). Object ids and names are untouched.
+        targets = [str(identity_index.get(value) or value) for value in targets]
         normalized = {
             "chrono_id": chrono_id,
             "item_id": item_id,

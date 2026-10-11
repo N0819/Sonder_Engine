@@ -997,16 +997,25 @@ def _interpret_scene_entities(sc, contextual_rooms):
 def _addressed_characters(rows, cast):
     """Cast ids a spoken row targets, in row order, each once.
 
-    Targets are identity handles (`character:<id>`); the cast roster says
-    which of those are this story's characters. Presence is not decided
-    here: `runtime.build_plan` already drops a reactor who cannot perceive
-    the beat, and that gate applies to these as to any other."""
-    known = set()
+    A target is a member's name -- the one spelling `normalize_causal_ledger`
+    leaves -- or an identity handle (`character:<id>`) from a row that never
+    passed through it; the cast roster says which are this story's
+    characters. Presence is not decided here: `runtime.build_plan` already
+    drops a reactor who cannot perceive the beat, and that gate applies to
+    these as to any other."""
+    known, by_name = set(), {}
     for member in cast or []:
         try:
-            known.add(int(member["id"]))
+            cid = int(member["id"])
         except (KeyError, TypeError, ValueError, IndexError):
             continue
+        known.add(cid)
+        try:
+            name = character_name_from_text(member["sheet"])
+        except (KeyError, TypeError, IndexError):
+            name = ""
+        if name:
+            by_name.setdefault(str(name).casefold(), cid)
     out = []
     for row in rows or []:
         if not isinstance(row, dict):
@@ -1015,12 +1024,13 @@ def _addressed_characters(rows, cast):
             continue
         for target in row.get("targets") or []:
             target = str(target or "").strip()
-            if not target.startswith("character:"):
-                continue
-            try:
-                cid = int(target.split(":", 1)[1])
-            except ValueError:
-                continue
+            if target.startswith("character:"):
+                try:
+                    cid = int(target.split(":", 1)[1])
+                except ValueError:
+                    continue
+            else:
+                cid = by_name.get(target.casefold())
             if cid in known and cid not in out:
                 out.append(cid)
     return out

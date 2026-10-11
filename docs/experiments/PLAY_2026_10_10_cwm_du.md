@@ -83,6 +83,10 @@ run itself made.
      not repaired", and Ffion answered the silence.
    - 4622: the player was moved with no walk declared.
    - 4628: the player's lines were retargeted to another person.
+   - 4630: her line's target was written as the handle "character:84".
+     FIXED in the fix wave: `normalize_causal_ledger` writes every identity
+     handle as the name it stands for, and the one handle-only reader (which
+     cast members a line addresses) reads names too.
    - 4617, 4627: the addressee was resolved to a different body than the one in
      view who had just spoken.
 2. **A conveyance worked by another does not carry those aboard** (4629). The

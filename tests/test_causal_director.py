@@ -134,7 +134,10 @@ def test_real_world_and_identity_keys_win_over_private_handle_collisions():
     normalize_causal_ledger(
         out, identity_index={"2": "Mara", "character:4": "Nera"},
         known_targets={"1", "existing_room"})
-    assert out["ledgers"][0]["targets"] == ["1", "2", "character:4", "existing_room"]
+    # an identity key wins over the private item handle it collides with
+    # (never "key"), and is written as the name it stands for: one spelling
+    # of a person on the ledger (O28, chat 167 turn 4630)
+    assert out["ledgers"][0]["targets"] == ["1", "Mara", "Nera", "existing_room"]
 
 
 def test_legacy_numeric_character_target_is_not_reinterpreted_as_an_item():
