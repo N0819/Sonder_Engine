@@ -228,3 +228,24 @@ def test_a_patch_that_stood_is_recorded_ok_true(monkeypatch, captured):
     assert [r["ok"] for r in captured] == [True]
     assert captured[0]["error"] == ""
 
+
+
+def test_the_opening_rebuild_keeps_the_establish_sheet(monkeypatch, captured):
+    """Chat 167's rerolled opening: its answer left the bodies and things out,
+    and the rebuild, sent only the generic repair sheet, authored a one-entity
+    world that was committed as the story's start. The opening's rebuild now
+    carries the opening's own contract (`llm_quality.REBUILD_KEEPS_SHEET`)."""
+    sheet = "THE OPENING SHEET. Place every present body; mint what the passage names."
+    good = {"location": "Cwm Du", "time": "night", "scene_description": "A wet pithead.",
+            "rooms": {"yard": {"name": "Pithead Yard", "desc": "Wet slate.", "adjacent": []}},
+            "positions": {"Nell Hartley": "yard"}}
+    _candidates(monkeypatch, 1)
+    monkeypatch.setattr(llm_quality, "_targeted_field_patch", lambda *args, **kw: None)
+    monkeypatch.setattr(llm_quality, "output_ran_out_of_room", lambda raw: False)
+    llm = _script(monkeypatch, ["not JSON", json.dumps(good)])
+
+    out = _agent_json("director", "director_establish", sheet, {"passage": "x"})
+
+    assert out["positions"] == {"Nell Hartley": "yard"}
+    assert len(llm.calls) == 2
+    assert llm.calls[1]["system"].startswith(sheet)

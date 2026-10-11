@@ -749,7 +749,16 @@ REBUILD_FORMAT = "json_schema"
 #: (2026-09-28): the sheet-less rebuild was valid 58 of 58 times outside the
 #: transform contract, and 52 of 70 inside it, where 12 of the 47 that
 #: rebuilt a parseable answer came back with fewer writes.
-REBUILD_KEEPS_SHEET = frozenset({"director_specialist", "director_repair"})
+#:
+#: AND THE OPENING'S, whose contract is the whole world the story opens on.
+#: Chat 167's rerolled opening (2026-10-10, capture 7016) failed for leaving
+#: its bodies and things out; the sheet-less rebuild, reasoning off, then
+#: authored the opening afresh from the generic repair sheet -- one entity,
+#: two positions -- and that thin world was committed and checkpointed as
+#: the story's start. 8 of the play database's 144 establish answers went
+#: through the rebuild, and 6 came out with one entity or none.
+REBUILD_KEEPS_SHEET = frozenset({"director_specialist", "director_repair",
+                                 "director_establish"})
 
 #: How many times a request is asked AFRESH -- the original request, its own
 #: sheet and sampler, no broken draft attached -- when a malformed answer is
