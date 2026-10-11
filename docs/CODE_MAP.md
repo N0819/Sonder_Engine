@@ -123,7 +123,7 @@
 | `story/history_routing.py` | 215 |  | — |
 | `story/importers.py` | 3256 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 487 |  | — |
-| `story/location_design.py` | 567 |  | `core.db` |
+| `story/location_design.py` | 577 |  | `core.db` |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 740 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
@@ -1580,14 +1580,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check()` | 345 | 132 lines |
-| `set_skeleton()` | 192 | 55 lines |
-| `rooms_with_no_far_look()` | 249 | 29 lines |
+| `check()` | 355 | 132 lines |
+| `set_skeleton()` | 202 | 55 lines |
+| `rooms_with_no_far_look()` | 259 | 29 lines |
 | `resumable_draft()` | 122 | 28 lines |
-| `set_history()` | 316 | 27 lines |
-| `set_charter()` | 280 | 22 lines |
-| `_reservation()` | 479 | 22 lines |
-| `submitted_plan()` | 521 | 17 lines |
+| `set_history()` | 326 | 27 lines |
+| `set_charter()` | 290 | 22 lines |
+| `_reservation()` | 489 | 22 lines |
+| `_require_open()` | 182 | 18 lines |
 
 ### `story/lore_structure.py`
 

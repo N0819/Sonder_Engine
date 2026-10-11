@@ -1607,7 +1607,7 @@
   "No image model configured — pick one under ⚙ API › Scene backdrops.": "No image model configured — pick one under ⚙ API › Scene backdrops.",
   "No image model configured — set the `image_model` setting": "No image model configured — set the `image_model` setting",
   "No local library folder is set, or the path does not exist. Set it in ⚙ API → Room ambience.": "No local library folder is set, or the path does not exist. Set it in ⚙ API → Room ambience.",
-  "no location is being designed right now; these tools are for a location pass, which the engine opens when a story asks for a place with a life behind it": "no location is being designed right now; these tools are for a location pass, which the engine opens when a story asks for a place with a life behind it",
+  "no location is being designed right now, and these tools work only inside a launch's location pass. A place asked for anywhere else is laid out as a package: `plan_rooms` under a mandate that permits it (a grant the player's own line can carry), drafted with `new_package` and `draft_operation`, then validated and published": "no location is being designed right now, and these tools work only inside a launch's location pass. A place asked for anywhere else is laid out as a package: `plan_rooms` under a mandate that permits it (a grant the player's own line can carry), drafted with `new_package` and `draft_operation`, then validated and published",
   "No lorebooks attached.": "No lorebooks attached.",
   "No lorebooks yet.": "No lorebooks yet.",
   "No matching entries.": "No matching entries.",

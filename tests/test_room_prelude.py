@@ -380,6 +380,11 @@ def test_the_tools_refuse_outside_a_location_pass(chat):
         with pytest.raises(ValueError) as caught:
             call()
         assert "no location is being designed" in str(caught.value)
+        # ...and names the route a place takes outside a pass (chat 166,
+        # "Home 4": told only where these tools run, the Room sent the
+        # player to the launch screen instead of planting `plan_rooms`).
+        for route in ("plan_rooms", "new_package", "draft_operation"):
+            assert route in str(caught.value), route
 
 
 def test_the_four_tools_are_on_the_table():

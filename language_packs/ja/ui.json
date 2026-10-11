@@ -1580,7 +1580,7 @@
   "No image model configured — pick one under ⚙ API › Scene backdrops.": "画像モデルが設定されていません — ⚙ API › シーン背景 から選択してください。",
   "No image model configured — set the `image_model` setting": "画像モデルが設定されていません — `image_model` 設定を行ってください",
   "No local library folder is set, or the path does not exist. Set it in ⚙ API → Room ambience.": "ローカルライブラリのフォルダが未設定か、パスが存在しません。⚙ API → Room ambience で設定してください。",
-  "no location is being designed right now; these tools are for a location pass, which the engine opens when a story asks for a place with a life behind it": "no location is being designed right now; these tools are for a location pass, which the engine opens when a story asks for a place with a life behind it",
+  "no location is being designed right now, and these tools work only inside a launch's location pass. A place asked for anywhere else is laid out as a package: `plan_rooms` under a mandate that permits it (a grant the player's own line can carry), drafted with `new_package` and `draft_operation`, then validated and published": "no location is being designed right now, and these tools work only inside a launch's location pass. A place asked for anywhere else is laid out as a package: `plan_rooms` under a mandate that permits it (a grant the player's own line can carry), drafted with `new_package` and `draft_operation`, then validated and published",
   "No lorebooks attached.": "伝承がアタッチされていません。",
   "No lorebooks yet.": "まだ伝承がありません。",
   "No matching entries.": "一致するエントリがありません。",

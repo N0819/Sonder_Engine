@@ -180,12 +180,22 @@ def _size(value):
 
 
 def _require_open(cid):
+    """The draft, or the refusal -- which names the route a place takes
+    outside a pass, because a refusal that names only where these tools run
+    sends the model away from the one it has. Measured (the owner's chat 166,
+    "Home 4", 2026-10-11): asked to build the shrine before the story began,
+    the Room called `draft_location` three times, was told only that a
+    location pass opens at the launch, and told the player the build was
+    theirs to trigger on the launch screen; the same request in chat 165 had
+    been laid out as `plan_rooms` packages under the player's own grant."""
     row = draft(cid)
     if not row.get("open"):
         raise ValueError(
-            "no location is being designed right now; these tools are for a "
-            "location pass, which the engine opens when a story asks for a "
-            "place with a life behind it")
+            "no location is being designed right now, and these tools work "
+            "only inside a launch's location pass. A place asked for anywhere "
+            "else is laid out as a package: `plan_rooms` under a mandate that "
+            "permits it (a grant the player's own line can carry), drafted with "
+            "`new_package` and `draft_operation`, then validated and published")
     return row
 
 

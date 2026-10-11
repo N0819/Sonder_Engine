@@ -94,7 +94,7 @@
   "interventions is a list of operations": "engine refusal text for the Writers' Room's location-designer tools, raised in story/room_tools.py and returned to the Story Planner inside the tool result; nothing on that path reads the catalog, so a Japanese value would be inert -- docs/UNBUILT_PIPELINE.md § 1.165",
   "LCARS": "brand, unit, or protocol name, identical in every language",
   "MB": "brand, unit, or protocol name, identical in every language",
-  "no location is being designed right now; these tools are for a location pass, which the engine opens when a story asks for a place with a life behind it": "engine refusal text for the Writers' Room's location-designer tools, raised in story/room_tools.py and returned to the Story Planner inside the tool result; nothing on that path reads the catalog, so a Japanese value would be inert -- docs/UNBUILT_PIPELINE.md § 1.165",
+  "no location is being designed right now, and these tools work only inside a launch's location pass. A place asked for anywhere else is laid out as a package: `plan_rooms` under a mandate that permits it (a grant the player's own line can carry), drafted with `new_package` and `draft_operation`, then validated and published": "engine refusal text for the Writers' Room's location-designer tools, raised in story/room_tools.py and returned to the Story Planner inside the tool result; nothing on that path reads the catalog, so a Japanese value would be inert -- docs/UNBUILT_PIPELINE.md § 1.165",
   "NSFW:": "brand, unit, or protocol name, identical in every language",
   "OK": "brand, unit, or protocol name, identical in every language",
   "PATCH": "brand, unit, or protocol name, identical in every language",
