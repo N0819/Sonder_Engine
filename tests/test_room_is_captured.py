@@ -280,3 +280,112 @@ def test_a_job_queued_from_the_commit_tail_arms_its_own_scope(
     rows = llm_capture.exchanges_for_turn(turn_id)
     assert [r["step_key"] for r in rows] == ["room:planner"], (
         "the call a fill job makes is filed against the turn in play")
+
+
+# ---------------------------------------------------------------------------
+# Before the story's first turn (2026-10-11). A row is filed under a turn,
+# and a story with none recorded nothing: the owner's chat 165 ("Home 3"),
+# planned with the Room before the launch, left no row for a whole budget
+# report's worth of work. And the layout tier, which runs at the launch and
+# in a background job outside any step, was in no capture at all.
+# ---------------------------------------------------------------------------
+
+def test_a_room_call_before_the_first_turn_is_held_and_filed_ahead_of_it(
+        temp_db, monkeypatch):
+    from core import db
+    _seal(monkeypatch)
+    db.set_setting("llm_capture_enabled", "1")
+    db.set_setting("llm_capture_bodies", "full")
+    chat_id = db.qi("INSERT INTO chats(name,created) VALUES('t',0)")
+    with llm_capture.room_capture(chat_id, "planner"):
+        room_call("story_planner", "PRELUDE SHEET", {"line": "build the shrine"})
+        room_call("story_planner", "PRELUDE SHEET", {"line": "keep going"})
+    held = llm_capture.pending_exchanges(chat_id, include_bodies=True)
+    assert [h["step_key"] for h in held] == ["room:planner", "room:planner"]
+    assert held[0]["system"] == "PRELUDE SHEET"
+    assert held[1]["payload"]["line"] == "keep going"
+    # a held call's blobs are live: the collector keeps them
+    assert held[0]["system_hash"] in llm_capture.referenced_blob_hashes()
+    # the launch: the first turn anything is recorded against files them first
+    turn_id = db.qi("INSERT INTO turns(chat_id,idx,player_input,created) "
+                    "VALUES(?,0,'hi',0)", (chat_id,))
+    llm_capture.record_exchange(turn_id=turn_id, step_key="director_establish",
+                                role="director", system="S", payload={}, response="{}")
+    rows = llm_capture.exchanges_for_turn(turn_id)
+    assert [(r["seq"], r["step_key"]) for r in rows] == [
+        (1, "room:planner"), (2, "room:planner"), (3, "director_establish")]
+    assert llm_capture.pending_exchanges(chat_id) == []
+    export = pipeline_trace.export_turn_debug(turn_id)
+    assert export["room_calls_captured"] == 2
+
+
+def test_nothing_is_held_while_capture_is_off(temp_db, monkeypatch):
+    from core import db
+    _seal(monkeypatch)
+    chat_id = db.qi("INSERT INTO chats(name,created) VALUES('t',0)")
+    with llm_capture.room_capture(chat_id, "planner"):
+        room_call("story_planner", "SHEET", {"line": "hi"})
+    assert llm_capture.pending_exchanges(chat_id) == []
+
+
+def test_a_held_call_goes_with_its_story(temp_db, monkeypatch):
+    from core import db
+    _seal(monkeypatch)
+    db.set_setting("llm_capture_enabled", "1")
+    chat_id = db.qi("INSERT INTO chats(name,created) VALUES('t',0)")
+    with llm_capture.room_capture(chat_id, "planner"):
+        room_call("story_planner", "SHEET", {"line": "hi"})
+    assert llm_capture.pending_exchanges(chat_id)
+    db.qi("DELETE FROM chats WHERE id=?", (chat_id,))
+    assert db.q("SELECT COUNT(*) AS n FROM llm_capture_pending", one=True)["n"] == 0
+
+
+def _layout_call(seen):
+    """A stand-in for the tier's model call: the provider layer notes each
+    exchange on whatever sink is armed (`llm_quality` -> `note_step_exchange`)."""
+    from core.pipeline_context import note_step_exchange
+
+    def call(step, system, payload):
+        seen.append(step)
+        note_step_exchange({"role": "director_rooms", "requested": "a-model",
+                            "system": system, "payload": payload,
+                            "response": '{"rooms": []}', "started": 1.0,
+                            "duration": 0.5, "ok": True})
+        return {"rooms": []}
+    return call
+
+
+def test_the_layout_tiers_calls_are_recorded_under_the_turn_in_play(temp_db):
+    from agents.director_layout import SORT_STEP, _recording
+    from core import db
+    db.set_setting("llm_capture_enabled", "1")
+    chat_id, turn_id = _chat_with_a_turn(db)
+    seen = []
+    assert _recording(chat_id, _layout_call(seen))(SORT_STEP, "SORT SHEET", {"building": 1}) \
+        == {"rooms": []}
+    rows = llm_capture.exchanges_for_turn(turn_id)
+    assert [(r["step_key"], r["role"]) for r in rows] == [(SORT_STEP, "director_rooms")]
+
+
+def test_the_layout_tiers_calls_at_the_launch_are_held(temp_db):
+    from agents.director_layout import BRIEF_STEP, _recording
+    from core import db
+    db.set_setting("llm_capture_enabled", "1")
+    chat_id = db.qi("INSERT INTO chats(name,created) VALUES('t',0)")
+    _recording(chat_id, _layout_call([]))(BRIEF_STEP, "BRIEF SHEET", {})
+    assert [h["step_key"] for h in llm_capture.pending_exchanges(chat_id)] == [BRIEF_STEP]
+
+
+def test_a_layout_call_a_step_already_records_is_left_to_the_step(temp_db):
+    from agents.director_layout import RELATE_STEP, _recording
+    from core import db
+    from core.pipeline_context import current_exchange_sink
+    db.set_setting("llm_capture_enabled", "1")
+    chat_id, turn_id = _chat_with_a_turn(db)
+    kept = []
+    token = current_exchange_sink.set(kept.append)
+    try:
+        _recording(chat_id, _layout_call([]))(RELATE_STEP, "S", {})
+    finally:
+        current_exchange_sink.reset(token)
+    assert len(kept) == 1 and llm_capture.exchanges_for_turn(turn_id) == []

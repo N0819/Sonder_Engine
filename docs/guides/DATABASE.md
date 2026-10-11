@@ -60,6 +60,12 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   and a branch does not copy it -- a turn's capture is deleted with the turn
   (`ON DELETE CASCADE`) and pruned to `RETAIN_TURNS` per chat. Read through
   `GET /api/turns/{tid}/debug` (`persist/pipeline_trace.export_turn_debug`).
+- `llm_capture_pending`: the same columns keyed by `chat_id`, for a story's
+  calls made before it has a turn -- the Writers' Room's prelude, the layout
+  tier at the launch. Filed into `llm_capture` under the first turn anything
+  is recorded against (`llm_capture._file_pending`), readable before that
+  (`pending_exchanges`); its blobs count as live for `vacuum_blobs`. The same
+  diagnostic standing, deleted with the story.
 - `room_messages`: the Writers' Room thread (`story/room_conversation.py`),
   one line per row, per story and era (`frame_id` NULL is the present),
   stamped with the beat it was said at. AUTHOR-SIDE state: a branch carries

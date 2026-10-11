@@ -25,6 +25,13 @@ OFF BY DEFAULT. With `llm_capture_enabled` unset nothing here runs and the
 "never content" promise above holds exactly as written. Turning it on is a
 deliberate act, and `hash_only` -- the default once on -- keeps it true of the
 bodies while still giving a complete, ordered skeleton of the turn.
+
+BEFORE THE FIRST TURN. A row is filed under a turn, and a story with none --
+the player planning with the Writers' Room before the launch -- used to record
+nothing; so did the layout tier, which runs at the launch and in a background
+job, outside any step. Those calls are held by story (`llm_capture_pending`)
+and filed under the first turn anything is recorded against
+(`_file_pending`); until then `pending_exchanges` reads them.
 """
 
 from __future__ import annotations
@@ -132,6 +139,46 @@ def _payload_hashes(payload: Any) -> dict:
     return out
 
 
+#: The columns a captured call fills after its key (`turn_id` in
+#: `llm_capture`, `chat_id` in `llm_capture_pending`) and its `seq`.
+_COLUMNS = ("step_key", "role", "requested", "served", "started", "duration", "ok",
+            "error", "system_hash", "payload_hashes", "response_hash", "reasoning_hash",
+            "response_format", "reasoning_effort", "max_tokens", "finish_reason")
+
+
+def _values(*, step_key: str, role: str, requested: str = "", served: str = "",
+            system: str = "", payload: Any = None, response: Any = None,
+            reasoning: str = "", started: float = 0.0, duration: float = 0.0,
+            ok: bool = True, error: str = "", response_format: str = "",
+            reasoning_effort: str = "", max_tokens: int | None = None,
+            finish_reason: str = "") -> tuple:
+    """One call's column values, in `_COLUMNS` order, its texts stored as
+    blobs (`put_blob`, `_payload_hashes`)."""
+    if not isinstance(response, str):
+        try:
+            response = json.dumps(response, ensure_ascii=False)
+        except Exception:
+            response = str(response)
+    try:
+        max_tokens = int(max_tokens) if max_tokens is not None else None
+    except (TypeError, ValueError):
+        max_tokens = None
+    return (str(step_key or ""), str(role or ""),
+            str(requested or ""), str(served or ""),
+            float(started or time.time()), float(duration or 0.0),
+            1 if ok else 0, str(error or "")[:400],
+            put_blob(system),
+            json.dumps(_payload_hashes(payload), ensure_ascii=False),
+            put_blob(response), put_blob(reasoning) if reasoning else None,
+            str(response_format or ""), str(reasoning_effort or ""),
+            max_tokens, str(finish_reason or ""))
+
+
+def _insert(table: str, key: str, owner: int, seq: int, values: tuple) -> None:
+    qi(f"INSERT INTO {table}({key},seq,{','.join(_COLUMNS)}) "
+       f"VALUES({','.join('?' * (len(_COLUMNS) + 2))})", (owner, seq, *values))
+
+
 def record_exchange(*, turn_id: int | None, step_key: str, role: str,
                     requested: str = "", served: str = "",
                     system: str = "", payload: Any = None,
@@ -165,55 +212,106 @@ def record_exchange(*, turn_id: int | None, step_key: str, role: str,
     if not turn_id or not capture_enabled():
         return
     try:
+        _file_pending(int(turn_id))
+    except Exception:
+        pass
+    try:
         row = q("SELECT COALESCE(MAX(seq),0) AS s FROM llm_capture "
                 "WHERE turn_id=?", (int(turn_id),), one=True)
         seq = int(row["s"]) + 1 if row else 1
-        if not isinstance(response, str):
-            try:
-                response = json.dumps(response, ensure_ascii=False)
-            except Exception:
-                response = str(response)
-        try:
-            max_tokens = int(max_tokens) if max_tokens is not None else None
-        except (TypeError, ValueError):
-            max_tokens = None
-        qi("INSERT INTO llm_capture(turn_id,seq,step_key,role,requested,served,"
-           "started,duration,ok,error,system_hash,payload_hashes,response_hash,"
-           "reasoning_hash,response_format,reasoning_effort,max_tokens,"
-           "finish_reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-           (int(turn_id), seq, str(step_key or ""), str(role or ""),
-            str(requested or ""), str(served or ""),
-            float(started or time.time()), float(duration or 0.0),
-            1 if ok else 0, str(error or "")[:400],
-            put_blob(system),
-            json.dumps(_payload_hashes(payload), ensure_ascii=False),
-            put_blob(response), put_blob(reasoning) if reasoning else None,
-            str(response_format or ""), str(reasoning_effort or ""),
-            max_tokens, str(finish_reason or "")))
+        _insert("llm_capture", "turn_id", int(turn_id), seq, _values(
+            step_key=step_key, role=role, requested=requested, served=served,
+            system=system, payload=payload, response=response,
+            reasoning=reasoning, started=started, duration=duration, ok=ok,
+            error=error, response_format=response_format,
+            reasoning_effort=reasoning_effort, max_tokens=max_tokens,
+            finish_reason=finish_reason))
     except Exception:
         return
+
+
+def _hold_pending(chat_id: int, **fields) -> None:
+    """Hold one call made for a story that has no turn yet, in the order the
+    story's calls were recorded (`llm_capture_pending`)."""
+    row = q("SELECT COALESCE(MAX(seq),0) AS s FROM llm_capture_pending "
+            "WHERE chat_id=?", (int(chat_id),), one=True)
+    seq = int(row["s"]) + 1 if row else 1
+    _insert("llm_capture_pending", "chat_id", int(chat_id), seq, _values(**fields))
+
+
+def _file_pending(turn_id: int) -> None:
+    """File the calls a story held before it had a turn under the first turn
+    anything is recorded against, in the order they started -- every one of
+    them before anything recorded after. One read when nothing is held,
+    which is every story but one just launched."""
+    if not q("SELECT 1 FROM llm_capture_pending LIMIT 1", one=True):
+        return
+    chat = q("SELECT chat_id FROM turns WHERE id=?", (int(turn_id),), one=True)
+    if not chat:
+        return
+    with transaction():
+        held = q("SELECT * FROM llm_capture_pending WHERE chat_id=? ORDER BY seq",
+                 (int(chat["chat_id"]),))
+        if not held:
+            return
+        row = q("SELECT COALESCE(MAX(seq),0) AS s FROM llm_capture "
+                "WHERE turn_id=?", (int(turn_id),), one=True)
+        base = int(row["s"]) if row else 0
+        for n, h in enumerate(held, start=1):
+            _insert("llm_capture", "turn_id", int(turn_id), base + n,
+                    tuple(h[c] for c in _COLUMNS))
+        qi("DELETE FROM llm_capture_pending WHERE chat_id=? AND id<=?",
+           (int(chat["chat_id"]), max(int(h["id"]) for h in held)))
+
+
+def record_chat_exchange(chat_id, *, step_key: str, **fields) -> None:
+    """Record one provider call made for a story outside any step and any
+    Room scope -- the layout tier's, in the job that builds the rooms in view
+    and at the launch (`agents/director_layout.py`) -- under the turn in
+    play, as a Room call is (`latest_turn_id`), or held until the story has
+    one. A diagnostic never fails the call it describes."""
+    if chat_id is None or not capture_enabled():
+        return
+    try:
+        cid = int(chat_id)
+        turn_id = latest_turn_id(cid)
+        if turn_id:
+            record_exchange(turn_id=turn_id, step_key=step_key, **fields)
+        else:
+            _hold_pending(cid, step_key=step_key, **fields)
+    except Exception:
+        return
+
+
+def pending_exchanges(chat_id: int, *, include_bodies: bool = False) -> list:
+    """Every call a story holds because it has no turn yet, in order -- the
+    record of a story nobody has launched (`llm_capture_pending`)."""
+    rows = q("SELECT * FROM llm_capture_pending WHERE chat_id=? ORDER BY seq",
+             (int(chat_id),))
+    return [_read_row(row, include_bodies) for row in rows or ()]
 
 
 def exchanges_for_turn(turn_id: int, *, include_bodies: bool = False) -> list:
     """Every captured exchange for one turn, in the order the calls started."""
     rows = q("SELECT * FROM llm_capture WHERE turn_id=? ORDER BY seq",
              (int(turn_id),))
-    out = []
-    for row in rows or ():
-        entry = {k: row[k] for k in row.keys()}
-        try:
-            entry["payload_hashes"] = json.loads(entry.get("payload_hashes")
-                                                 or "{}")
-        except Exception:
-            entry["payload_hashes"] = {}
-        if include_bodies:
-            entry["system"] = get_blob(entry.get("system_hash"))
-            entry["response"] = get_blob(entry.get("response_hash"))
-            entry["reasoning"] = get_blob(entry.get("reasoning_hash"))
-            entry["payload"] = {k: get_blob(v) for k, v
-                                in entry["payload_hashes"].items()}
-        out.append(entry)
-    return out
+    return [_read_row(row, include_bodies) for row in rows or ()]
+
+
+def _read_row(row, include_bodies: bool) -> dict:
+    entry = {k: row[k] for k in row.keys()}
+    try:
+        entry["payload_hashes"] = json.loads(entry.get("payload_hashes")
+                                             or "{}")
+    except Exception:
+        entry["payload_hashes"] = {}
+    if include_bodies:
+        entry["system"] = get_blob(entry.get("system_hash"))
+        entry["response"] = get_blob(entry.get("response_hash"))
+        entry["reasoning"] = get_blob(entry.get("reasoning_hash"))
+        entry["payload"] = {k: get_blob(v) for k, v
+                            in entry["payload_hashes"].items()}
+    return entry
 
 
 def prune(chat_id: int) -> int:
@@ -255,8 +353,13 @@ def referenced_blob_hashes() -> set:
     without deleting anything.
     """
     live = set()
-    for row in q("SELECT system_hash, response_hash, reasoning_hash, "
-                 "payload_hashes FROM llm_capture") or ():
+    # a call a story holds before its first turn references blobs too
+    # (`llm_capture_pending`), and its hold can outlast a vacuum
+    rows = list(q("SELECT system_hash, response_hash, reasoning_hash, "
+                  "payload_hashes FROM llm_capture") or ())
+    rows += list(q("SELECT system_hash, response_hash, reasoning_hash, "
+                   "payload_hashes FROM llm_capture_pending") or ())
+    for row in rows:
         for column in ("system_hash", "response_hash", "reasoning_hash"):
             digest = row[column]
             if digest:
@@ -345,10 +448,12 @@ def latest_turn_id(chat_id):
     that turn's stages by wall clock, which is the order the two actually
     happened in.
 
-    A chat with no turn at all records nothing: there is no beat to file the
-    call under and no export it could appear in. In practice a chat has a
-    turn from its greeting on (`story/greetings.py`), so that is the empty
-    case rather than the planning case.
+    A chat with no turn yet HOLDS its calls until it has one
+    (`_hold_pending`). This note used to call that the empty case rather than
+    the planning case -- a chat has a turn from its greeting on -- and the
+    prelude proved it the planning case: the player plans with the Room
+    before the launch, and the owner's chat 165, a budget report's worth of
+    Room work, had no turn and left no row.
     """
     try:
         row = q("SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC "
@@ -413,19 +518,23 @@ def record_room_exchange(*, role: str, system: str = "", payload: Any = None,
     try:
         cid = int(chat_id if chat_id is not None else scope["chat_id"])
         turn_id = (scope.get("turn_id") if scope else None) or latest_turn_id(cid)
+        step = str(phase or (scope or {}).get("phase") or ROOM_PHASE_DEFAULT)
+        fields = dict(step_key=ROOM_STEP_PREFIX + step,
+                      role=role, requested=requested, served=served,
+                      system=system, payload=payload, response=response,
+                      reasoning=reasoning, started=started,
+                      duration=duration, ok=ok, error=error,
+                      response_format=response_format,
+                      reasoning_effort=reasoning_effort,
+                      max_tokens=max_tokens, finish_reason=finish_reason)
         if not turn_id:
+            # the Room planning with the player before the launch: held
+            # until the story has a turn (`_hold_pending`)
+            _hold_pending(cid, **fields)
             return
         if scope is not None:
             scope["turn_id"] = turn_id
-        step = str(phase or (scope or {}).get("phase") or ROOM_PHASE_DEFAULT)
-        record_exchange(turn_id=turn_id, step_key=ROOM_STEP_PREFIX + step,
-                        role=role, requested=requested, served=served,
-                        system=system, payload=payload, response=response,
-                        reasoning=reasoning, started=started,
-                        duration=duration, ok=ok, error=error,
-                        response_format=response_format,
-                        reasoning_effort=reasoning_effort,
-                        max_tokens=max_tokens, finish_reason=finish_reason)
+        record_exchange(turn_id=turn_id, **fields)
     except Exception:
         return
 

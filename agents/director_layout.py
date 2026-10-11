@@ -167,6 +167,34 @@ def _default_call(step, system, payload):
                        temperature=None, max_tokens=None)
 
 
+def _recording(cid, call):
+    """`call`, with each of its provider calls recorded for chat `cid`.
+
+    THE TIER'S CALLS ARE RECORDED (2026-10-11). It runs in the job that builds
+    the rooms in view, where `core.jobs` clears the step's exchange sink, and
+    at the launch, before any turn -- so no capture held one of its calls: the
+    owner's database, capture on with full bodies, held ten step keys and
+    none of them the tier's. Each call is filed as the Room's are, under the
+    turn in play or held until the story has one
+    (`llm_capture.record_chat_exchange`), under its own step key. A call a
+    step is already recording is left to that step."""
+    def recorded(step, system, payload):
+        from core.pipeline_context import current_exchange_sink
+        if current_exchange_sink.get() is not None:
+            return call(step, system, payload)
+
+        def sink(entry):
+            from persist.llm_capture import record_chat_exchange
+            record_chat_exchange(cid, step_key=step, **{
+                k: v for k, v in entry.items() if k != "step_key"})
+        token = current_exchange_sink.set(sink)
+        try:
+            return call(step, system, payload)
+        finally:
+            current_exchange_sink.reset(token)
+    return recorded
+
+
 def _read_runs(cid):
     from core.db import wget
     stored = wget(cid, LAYOUT_RUNS_KEY) or {}
@@ -394,7 +422,7 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
     from world import layout_bridge, structure
 
     turn_idx = getattr(job, "base_turn", None)
-    call = call or _default_call
+    call = _recording(cid, call or _default_call)
     try:
         specs = _plan_specs(cid)
         held_open = structure.provisional_room_ids(cid)

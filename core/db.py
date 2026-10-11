@@ -735,6 +735,39 @@ CREATE TABLE IF NOT EXISTS llm_capture(
 );
 CREATE INDEX IF NOT EXISTS idx_llm_capture_turn ON llm_capture(turn_id, seq);
 
+-- A story's provider calls made BEFORE it has a turn: the Writers' Room
+-- planning with the player ahead of the launch (its prelude), the layout
+-- tier at the launch. `llm_capture` files a call under a turn, and a story
+-- with none recorded nothing at all -- the owner's chat 165 ("Home 3"), a
+-- whole budget report's worth of Room work, left no row. Held here by story,
+-- in the order the calls started, until the first turn anything is recorded
+-- against, then filed under it in `llm_capture` (`persist/llm_capture.
+-- _file_pending`); readable before that (`pending_exchanges`). The same
+-- columns, keyed by `chat_id`, and the same DIAGNOSTIC standing: deleted
+-- with the story, never checkpointed, archived or branched.
+CREATE TABLE IF NOT EXISTS llm_capture_pending(
+    id            INTEGER PRIMARY KEY,
+    chat_id       INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    seq           INTEGER NOT NULL,
+    step_key      TEXT NOT NULL DEFAULT '',
+    role          TEXT NOT NULL DEFAULT '',
+    requested     TEXT NOT NULL DEFAULT '',
+    served        TEXT NOT NULL DEFAULT '',
+    started       REAL NOT NULL DEFAULT 0,
+    duration      REAL NOT NULL DEFAULT 0,
+    ok            INTEGER NOT NULL DEFAULT 1,
+    error         TEXT NOT NULL DEFAULT '',
+    system_hash   TEXT,
+    payload_hashes TEXT NOT NULL DEFAULT '{}',
+    response_hash TEXT,
+    reasoning_hash TEXT,
+    response_format TEXT NOT NULL DEFAULT '',
+    reasoning_effort TEXT NOT NULL DEFAULT '',
+    max_tokens    INTEGER,
+    finish_reason TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_llm_capture_pending_chat ON llm_capture_pending(chat_id, seq);
+
 CREATE TABLE IF NOT EXISTS memories(
     id INTEGER PRIMARY KEY,
     chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
