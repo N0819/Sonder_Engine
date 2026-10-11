@@ -59,6 +59,7 @@ it did before this existed. A failed attempt waits as a failed design does
 """
 from __future__ import annotations
 
+import copy
 import json
 import time
 
@@ -76,6 +77,14 @@ LAYOUT_TIER_SETTING = "layout_solver_tier"
 #: (`persist.checkpoints.SETTING_PROVENANCE`). Review of 2026-10-08, F8: the
 #: one global switch could not turn the tier on "for a story".
 LAYOUT_TIER_STORY_KEY = "layout_solver_tier"
+#: THE GROUNDS' SWITCH (2026-10-11, the owner: "Tier lays out the grounds"):
+#: whether the tier lays out the outdoor places a planned building stands in
+#: with it (`layout_bridge._grounds_of`). OFF until the owner has judged the
+#: comparison against the layout lab's liked shrine -- the lab's rule, that
+#: a layout change is shown before it turns on. The host's setting, and the
+#: story's own key read first, as the tier's own switch is.
+LAYOUT_GROUNDS_SETTING = "layout_grounds"
+LAYOUT_GROUNDS_STORY_KEY = "layout_grounds"
 #: Buildings laid out per run of the rooms-in-view job, at most. Each is two
 #: calls on the room role and about 11 s of solve (the owner's preferred
 #: shrine: 11.1 s for eleven rooms on four storeys), and the run then designs
@@ -98,6 +107,27 @@ BRIEF_STEP = "director_rooms_layout_brief"
 
 _ON = ("1", "on", "true", "yes")
 _OFF = ("0", "off", "false", "no")
+
+
+def layout_grounds_enabled(cid=None) -> bool:
+    """Whether the tier lays out a building's grounds with it in chat `cid`:
+    the story's own switch when it states one, else the host's -- OFF unless
+    one of them says on (`LAYOUT_GROUNDS_SETTING`)."""
+    from core.db import get_setting, wget
+    if cid is not None:
+        try:
+            story = str(wget(cid, LAYOUT_GROUNDS_STORY_KEY) or "").strip().casefold()
+        except Exception:
+            story = ""
+        if story in _ON:
+            return True
+        if story in _OFF:
+            return False
+    try:
+        raw = get_setting(LAYOUT_GROUNDS_SETTING)
+    except Exception:
+        return False
+    return str(raw or "").strip().casefold() in _ON
 
 
 def layout_tier_enabled(cid=None) -> bool:
@@ -177,7 +207,13 @@ def _waiting(entry, signature, turn_idx):
 def lay_out(building, call, language_id):
     """One building, solved: `(spec, layout, inventory, refusals)`. Raises
     when an answer cannot be read; refusals are the bridge's. The spec
-    carries the brief the two calls followed (`brief`), for the record."""
+    carries the brief the two calls followed (`brief`), for the record.
+
+    THE GROUNDS NEVER COST THE HOUSE ITS LAYOUT. Where the ground laid round
+    a building leaves every seed refused, the building is solved again from
+    the same two answers as the tier laid it before the grounds
+    (`layout_bridge.without_grounds`) -- no further call -- and the spec says
+    why the ground was left where the plan had it (`grounds_dropped`)."""
     from llm.prompts import layout_prompt
     from world import layout_bridge
     building = _briefed(building, call, language_id)
@@ -186,10 +222,19 @@ def lay_out(building, call, language_id):
     inventory = layout_bridge.hold_inventory(building, sort_answer)
     relate_answer = call(RELATE_STEP, layout_prompt("relate", language_id),
                          layout_bridge.relate_payload(building, inventory))
-    spec = layout_bridge.spec_from_answers(building, inventory, relate_answer)
+    spec = layout_bridge.spec_from_answers(building, inventory, copy.deepcopy(relate_answer))
     if building.get("brief"):
         spec["brief"] = building["brief"]
     layout, refused = layout_bridge.solve_for(building, spec)
+    if refused and building.get("grounds"):
+        house = layout_bridge.without_grounds(building)
+        bare = layout_bridge.spec_from_answers(house, inventory, copy.deepcopy(relate_answer))
+        bare_layout, bare_refused = layout_bridge.solve_for(house, bare)
+        if not bare_refused:
+            bare["grounds_dropped"] = list(refused[:12])
+            if building.get("brief"):
+                bare["brief"] = building["brief"]
+            return bare, bare_layout, inventory, bare_refused
     return spec, layout, inventory, refused
 
 
@@ -354,7 +399,9 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
         specs = _plan_specs(cid)
         held_open = structure.provisional_room_ids(cid)
         wanted = set(room_ids)
-        buildings = [b for b in layout_bridge.plan_buildings(specs, scene, held_open=held_open)
+        buildings = [b for b in layout_bridge.plan_buildings(
+                         specs, scene, held_open=held_open,
+                         grounds=layout_grounds_enabled(cid))
                      if b["refusal"] is None and wanted & set(b["rooms"])]
     except Exception as exc:
         logger.info("layout tier: chat=%s could not read the plan: %s", cid, str(exc)[:300])
@@ -393,10 +440,15 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
             logger.info("layout tier: chat=%s building=%s refused (%d in a row): %s",
                         cid, key, failed, "; ".join(refused[:6]))
             continue
+        if spec.get("grounds_dropped"):
+            building = layout_bridge.without_grounds(building)
+            logger.info("layout tier: chat=%s building=%s laid out without its grounds: %s",
+                        cid, key, "; ".join(spec["grounds_dropped"][:6]))
         solved, report = layout_bridge.planned_layout(building, spec, layout, turn=turn_idx,
                                                       inventory=inventory)
         written = structure.write_planned_layout(
-            cid, solved, expected=building["specs"], job=job)
+            cid, solved, expected={**building["specs"], **(building.get("ground_specs") or {})},
+            job=job)
         if not written:
             logger.info("layout tier: chat=%s building=%s not written: the plan "
                         "changed, or the job was stopped", cid, key)
@@ -405,6 +457,11 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
                  "moved": len(report["moved"]), "unplaced": len(report["unplaced"]),
                  "restored": len(report["restored"]), "marks": len(report["marks"]),
                  "seconds": round(time.time() - started, 2)}
+        if "grounds" in report:
+            entry["grounds"] = len(report["grounds"])
+            entry["grounds_unplaced"] = list(report["grounds_unplaced"])
+        if spec.get("grounds_dropped"):
+            entry["grounds_dropped"] = list(spec["grounds_dropped"])
         if spec.get("brief"):
             entry["brief"] = spec["brief"]
         _file_run(cid, job, key, entry)
@@ -414,6 +471,8 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
                     "to the designer; %d the plan listed restored, %d ways marked",
                     cid, key, building["plan"], entry["seconds"], entry["moved"],
                     entry["unplaced"], entry["restored"], entry["marks"])
-        structure.apply_planned_layout(scene, _plan_specs(cid), set(building["rooms"]))
-        laid_out.update(building["rooms"])
+        # the building's rooms and the ground the solve laid round it
+        rooms_laid = set(building["rooms"]) | set(solved)
+        structure.apply_planned_layout(scene, _plan_specs(cid), rooms_laid)
+        laid_out.update(rooms_laid)
     return scene, laid_out

@@ -877,6 +877,10 @@ SETTING_PROVENANCE = {
     # A dial, like `living_world`: the plans it SOLVED are the story's and
     # roll back with the registry.
     "layout_solver_tier": SET_BY_HAND,
+    # Whether the tier lays out a building's grounds with it
+    # (`agents.director_layout.LAYOUT_GROUNDS_STORY_KEY`): the same kind of
+    # dial, set by hand to compare the grounds in one story.
+    "layout_grounds": SET_BY_HAND,
     # NOT a preference -- the one entry here preserved on a correctness
     # argument instead. The secret nonce that keys every viewer-scoped
     # anonymous `body:` id (web/story_view.py), minted lazily on first

@@ -19,7 +19,7 @@
 | `agents/director_evidence.py` | 4022 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2548 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/director_layout.py` | 419 |  | — |
+| `agents/director_layout.py` | 478 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 3399 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
@@ -93,7 +93,7 @@
 | `persist/about_backfill.py` | 310 |  | `core.db` |
 | `persist/chat_archive.py` | 1281 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema`, `story.room_conversation` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
-| `persist/checkpoints.py` | 1713 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
+| `persist/checkpoints.py` | 1717 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 858 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1797 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire`, `world.spatial` |
 | `persist/commit_background.py` | 5655 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
@@ -207,8 +207,8 @@
 | `world/frontage.py` | 1216 |  | `world.spatial` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1759 |  | — |
-| `world/layout_bridge.py` | 1468 |  | `world.layout_solver`, `world.structure` |
-| `world/layout_solver.py` | 2340 |  | — |
+| `world/layout_bridge.py` | 2124 |  | `world.layout_solver`, `world.structure` |
+| `world/layout_solver.py` | 2349 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1332 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
@@ -248,7 +248,7 @@
 | `world/spatial_transit.py` | 1233 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 494 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 2548 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 2572 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
 | `world/vistas.py` | 391 |  | — |
@@ -410,14 +410,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `lay_out_buildings()` | 337 | 83 lines |
-| `building_description()` | 243 | 57 lines |
-| `lay_out_opening_ground()` | 302 | 33 lines |
-| `_briefed()` | 196 | 25 lines |
-| `layout_tier_enabled()` | 103 | 20 lines |
-| `lay_out()` | 177 | 17 lines |
-| `_file_run()` | 146 | 14 lines |
-| `_waiting()` | 162 | 13 lines |
+| `lay_out_buildings()` | 382 | 97 lines |
+| `building_description()` | 288 | 57 lines |
+| `lay_out_opening_ground()` | 347 | 33 lines |
+| `lay_out()` | 207 | 32 lines |
+| `_briefed()` | 241 | 25 lines |
+| `layout_tier_enabled()` | 133 | 20 lines |
+| `layout_grounds_enabled()` | 112 | 19 lines |
+| `_file_run()` | 176 | 14 lines |
 
 ### `agents/director_lingua.py`
 
@@ -1225,14 +1225,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_restore_checkpoint_body()` | 1036 | 176 lines |
+| `_restore_checkpoint_body()` | 1040 | 176 lines |
 | `_restore_books()` | 368 | 148 lines |
-| `compact_checkpoints()` | 1355 | 123 lines |
+| `compact_checkpoints()` | 1359 | 123 lines |
 | `_snapshot_without_world()` | 192 | 117 lines |
 | `insert_world_tables()` | 656 | 105 lines |
 | `_snapshot_lore()` | 107 | 83 lines |
 | `restore_checkpoint()` | 517 | 83 lines |
-| `refresh_checkpoint()` | 1653 | 61 lines |
+| `refresh_checkpoint()` | 1657 | 61 lines |
 
 ### `persist/commit.py`
 
@@ -2577,20 +2577,20 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `planned_layout()` | 1169 | 292 lines |
-| `spec_from_answers()` | 718 | 206 lines |
-| `_building()` | 340 | 172 lines |
-| `hold_inventory()` | 591 | 81 lines |
-| `plan_buildings()` | 240 | 57 lines |
-| `refusals()` | 996 | 46 lines |
-| `sort_payload()` | 516 | 32 lines |
-| `_edges_of()` | 186 | 28 lines |
+| `planned_layout()` | 1518 | 342 lines |
+| `spec_from_answers()` | 896 | 223 lines |
+| `_building()` | 462 | 189 lines |
+| `_ground_plan()` | 1121 | 149 lines |
+| `hold_inventory()` | 739 | 84 lines |
+| `_ground_geometry()` | 1938 | 82 lines |
+| `_grounds_of()` | 338 | 73 lines |
+| `plan_buildings()` | 259 | 59 lines |
 
 ### `world/layout_solver.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_grounds()` | 1999 | 308 lines |
+| `_grounds()` | 1999 | 317 lines |
 | `solve()` | 1282 | 250 lines |
 | `_place_fixtures()` | 1806 | 189 lines |
 | `_place_blocks()` | 589 | 127 lines |
@@ -3080,14 +3080,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `claim_frontier_spaces()` | 2187 | 207 lines |
-| `mint_frontier()` | 880 | 197 lines |
-| `plant_structure()` | 1079 | 191 lines |
-| `prepare_frontier_expansion()` | 1957 | 174 lines |
-| `materialize_planned_fringe()` | 1272 | 152 lines |
-| `planned_context()` | 1830 | 75 lines |
-| `apply_planned_layout()` | 214 | 74 lines |
-| `write_planned_layout()` | 429 | 74 lines |
+| `claim_frontier_spaces()` | 2211 | 207 lines |
+| `mint_frontier()` | 904 | 197 lines |
+| `plant_structure()` | 1103 | 191 lines |
+| `prepare_frontier_expansion()` | 1981 | 174 lines |
+| `materialize_planned_fringe()` | 1296 | 152 lines |
+| `write_planned_layout()` | 446 | 81 lines |
+| `planned_context()` | 1854 | 75 lines |
+| `apply_planned_layout()` | 222 | 74 lines |
 
 ### `world/subjects.py`
 

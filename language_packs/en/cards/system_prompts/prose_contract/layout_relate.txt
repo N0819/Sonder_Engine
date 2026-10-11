@@ -6,7 +6,8 @@ Answer with one JSON object:
 {"front": "n|e|s|w -- the side the entrance faces, only when fixed gives none",
  "storeys": [{"level": 1, "smaller": true}],
  "rooms": [ROOM],
- "stairs": [{"from": "<room id>", "to": "<room id>", "name": "...", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "<one of vocabulary.stair_kinds>"}]}
+ "stairs": [{"from": "<room id>", "to": "<room id>", "name": "...", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "<one of vocabulary.stair_kinds>"}],
+ "grounds": [GROUND]}
 List under `storeys` only a storey under the roof, narrower than the one below it. Give a stair's `kind` only when the plan's words say which, or the stair plainly must be.
 
 ROOM = {"id": "<room id>",
@@ -17,6 +18,8 @@ ROOM = {"id": "<room id>",
         "windows": [{"id": "<window id>", "side": "n|e|s|w", "count": 1}],
         "fixtures": [{"id": "<fixture id>", "kind": "<one of vocabulary.fixture_kinds, or a word of your own>", "size": "<one of vocabulary.sizes>", "at": "<one of vocabulary.places, or walls>", "in": "<zone id>", "near": "<fixture or window id>", "beside": "<fixture or window id>", "facing": "<fixture or window id>"}]}
 
+GROUND = {"id": "<place id>", "where": "around|n|e|s|w", "from": "entrance|<way id>", "to": "<feature id>", "kind": "<one of vocabulary.fixture_kinds>", "size": "<one of vocabulary.sizes>", "across": "<way id>", "flank": "<way id>", "along": "<way id>", "end": "far|near", "by": "<place or room id, or entrance>", "side": "n|e|s|w"}
+
 How to read the fields:
 - One compass for the whole building, on every storey. A person entering by the front faces the opposite way: with the front on the south their left is west, their right east, and the back north.
 - `side` on a join is where the OTHER room lies from THIS one: a join with `side` e puts that room through this room's east wall. Write each join once. `order` counts the joins that share one wall from its north or west end, only where several do.
@@ -25,4 +28,5 @@ How to read the fields:
 - A fixture's `kind` is the one of `vocabulary.fixture_kinds` it is; for a thing none of them is, a word of your own with a `size`, which can also scale a listed kind. Its `at` is the wall it stands against, `middle` for a thing that stands free, a corner, or `walls` to spread several alike round the room; `in` is the zone it stands in, and `near`, `beside` and `facing` name what it stands by.
 - Where the description or the brief states a room's size, in whatever unit, write that size as the room's `area_m2`, turned into square metres; the engine sizes every other room from what it holds.
 - A stair stands inside the room at each end: `from_at` is the wall of the FROM room it stands against, `to_at` the wall of the TO room it arrives at. The two rooms are one building on two storeys, so the two walls must agree.
+- Where `inventory.grounds` says what each outdoor place IS, give each one the fields its kind takes, in the same compass: open ground `where` it lies -- `around` the building, or the side of it; a way `from` where it starts -- `entrance` for the approach out of the front door, or the id of the way it leaves -- and `to` the feature it leads to, where it leads to one; a feature its `kind` and `size`, and ONE of: `across` a way it spans, at the `end` of it; `flank` a way when the place is a pair standing either side of it, at the `end` of it; `along` a way when the place is a row of them down its sides; `by` the place or room it stands beside, or the `entrance`, with the `side` of it the thing stands on where the description says; or the `side` of the building it stands on; an outbuilding the `side` of the building it stands apart on.
 - Say only what the plan and the inventory give, or what a real place of this kind plainly has.

@@ -3082,13 +3082,28 @@ Left, each with what it needs:
   Needs a solve laid onto the plan its ground already stands on, moved to
   where its doorway meets that ground, and then the town-fabric tier (survey
   rank 7): streets, plots and footprints on one plan.
-- **Zones, stair halls, stores and grounds are not carried.** An anchor is the
+- **Zones, stair halls and stores are not carried.** An anchor is the
   engine's only floor place, so a zone holding cushions would read to the
   designer's check as fixtures on one cell. The solver's stair hall is not a
   room of the plan, so a stair is the plan's vertical edge pinned where each
   room meets it, the hall's cells belong to no room, and an enclosed stair's
   walls and door are not kept. Needs a floor-area record the check reads as
   floor, and a ruling on whether a stairwell is a room.
+- **The grounds: built 2026-10-11, OFF until the owner has judged them**
+  (`layout_grounds`; `design/DESIGN_LAYOUT_TIER.md`, "The grounds"). The
+  comparison is beside the lab's liked shrine on three replicas of Home 5's
+  plan. Left:
+  - a ground place the Room re-plans alone is never laid again, and a place
+    planned after its building was laid out is never laid, because the
+    house still stands on its solve and the building is refused as laid --
+    both need a pass that lays ground onto a plan its house already stands on;
+  - switched off after it was on, the old ground keeps a re-planned house off
+    its plan, which fails open;
+  - a pair or a row planned as one place (`flank`, `along`) is one room of
+    separate parts;
+  - the way to an outbuilding is no place, so its cells are the open ground's;
+  - a one-pace sliver between two places is no place's, because the world
+    reads no part narrower than two paces.
 - **A moved fixture goes back to the model unpinned, not as a question.** It
   is written on the wall the model named and laid along it, and the
   designer's check shows what it crowds (live: the taproom's hearth laid

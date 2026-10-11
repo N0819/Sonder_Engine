@@ -42,9 +42,9 @@ outdoors "a jumbled together mess". So, written once from this design:
      a plot; the approach runs from the entrance door out the front; an
      outdoor feature is an object placed by a plain relation -- across a
      way (a gate), flanking it (guardians), along it (lanterns), by
-     something (a well by the entryway), on a side of the building (a tree
-     behind it) -- never a fenced room. An outbuilding is a block of its
-     own, standing apart.
+     something (a well by the entryway) and on a side of it where one is
+     given, on a side of the building (a tree behind it) -- never a fenced
+     room. An outbuilding is a block of its own, standing apart.
 
 THE SPEC (what the model writes; `tools/layout_lab/run.py` holds the prompt):
 
@@ -2187,6 +2187,15 @@ def _grounds(layout, rooms, grounds):
                     cx, cy = x + ww / 2, y + dd / 2
                     if anchor is not None:
                         sc = min(abs(cx - a - 0.5) + abs(cy - b - 0.5) for a, b in anchor)
+                        if side in _SIDES:
+                            # BY SOMETHING, ON A SIDE OF IT -- a well by the
+                            # entryway east of the path: ground on the other
+                            # side is taken only where that side has none
+                            ax = sum(a for a, _ in anchor) / len(anchor) + 0.5
+                            ay = sum(b for _, b in anchor) / len(anchor) + 0.5
+                            ahead = {"e": cx - ax, "w": ax - cx, "s": cy - ay, "n": ay - cy}[side]
+                            if ahead <= 0:
+                                sc += site.w + site.d
                     elif side in _SIDES:
                         # on that side of the building, centred on it
                         if side == "n" and y + dd > hb.y:

@@ -11,6 +11,8 @@ For each room list:
 
 For each stair say whether it is `enclosed` -- behind a door, in a stairwell of its own -- or open, rising in the room, and give the `door` when it is enclosed. A stair the plan calls a `ladder` or a `hatch` is open.
 
+Where the building carries `grounds`, those are the places outside it that the plan gives it: the ground it stands in, the ways across that ground, the things standing on it, a small building apart. Keep each under its own `id` and say what each IS (`is`): `open` for ground a body walks about on, `way` for ground that runs from one place to another, `feature` for one thing standing on the ground that a body stands at, `outbuilding` for a place with walls of its own standing apart from the building. Quote the words it rests on (`why`).
+
 Give every new entry an `id` in snake_case and a `name` in the language the plan is written in. Several alike -- fixtures or windows -- are one entry with `count`, and its `name` names one of them: the engine lays each as a thing of its own and names it so. Name every entry for what it is, never whose it is: a person's name inside an entry's name reaches every mind that sees the thing, including one that never learned that person's name. Every entry quotes the words it rests on (`why`); a thing nothing in the plan supports is not listed, except an `implied` one. Inside any JSON string use single quotes, never double quotes.
 
 Answer with one JSON object:
@@ -18,4 +20,5 @@ Answer with one JSON object:
             "fixtures": [{"id": "<snake_case>", "name": "...", "mount": "floor|hung|ceiling|in <fixture id>|on <fixture id>", "count": 1, "implied": false, "marks": "<room id, only for a fixture that marks where a way meets this room>", "why": "..."}],
             "zones": [{"id": "<snake_case>", "name": "...", "why": "..."}],
             "windows": [{"id": "<snake_case>", "name": "...", "faces": "...", "count": 1, "why": "..."}]}],
- "stairs": [{"from": "<room id>", "to": "<room id>", "enclosed": false, "door": "<the door, when enclosed>", "why": "..."}]}
+ "stairs": [{"from": "<room id>", "to": "<room id>", "enclosed": false, "door": "<the door, when enclosed>", "why": "..."}],
+ "grounds": [{"id": "<place id>", "is": "open|way|feature|outbuilding", "why": "..."}]}

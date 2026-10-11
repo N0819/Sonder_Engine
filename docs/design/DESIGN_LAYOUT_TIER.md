@@ -381,6 +381,121 @@ staircase arriving at one end of a central hallway, the rooms off it, the
 roof stair at its other end. The owner's lorebook carries the refined
 entries (2026-10-10, their prior text kept outside the repository).
 
+## The grounds (2026-10-11)
+
+The owner tried the shrine again (chat 167, "Home 5"): "it generated
+something but it looks nothing like the layout lab". Two causes. The lore
+stated no room's size in a form the calls passed on (fixed first, 1f6cbbe4,
+with the sizes added to the owner's lorebook). And the lab's shrine stood in
+its garden, its approach running from the front door to the torii, while the
+engine laid the house out alone and left every outdoor place where the
+Writers' Room's own estimates put it: a 60 by 60 garden, a 20 by 20 camphor
+tree and a lantern path 40 long, each a box beside a house a fraction their
+size. The owner's choice: "Tier lays out the grounds". Built behind its own
+switch, OFF until the owner has judged it beside the lab (`layout_grounds`,
+the host's setting or the story's world key, read as the tier's own is;
+`director_layout.layout_grounds_enabled`).
+
+**What is ground** (`layout_bridge._grounds_of`). The outdoor places of the
+building's own structure its doors reach through other such places, nearest
+first: at most `GROUNDS_MAX_PLACES` (12) within `GROUNDS_MAX_HOPS` (3) joins,
+both named for the owner. A place is ground only where nothing else decides
+it: not one of the building's rooms, not a frontier space the Room has yet to
+claim, not a room the story has described, not standing on a plan already
+decided, not the inside of something, and on the ground storey. The places
+stay the plan's rooms -- the tier never invents or removes a room, and a body
+can stand at a tree. Past three joins the places are the town's. Home 5's
+plan held six outdoor places, every one within three joins of a door.
+
+**What each IS, and where.** The sort call says what each place is in the
+solver's own four words (its rule 5, "the grounds are open ground with things
+in it"): `open` ground a body walks about on, a `way` from one place to
+another, a `feature` -- one thing standing on the ground that a body stands
+at -- and an `outbuilding`, a place with walls of its own standing apart. The
+relate call gives each the solver's own relations: open ground lies `around`
+the building or on a side of it; a way runs `from` the entrance or another
+way, `to` the feature it leads to; a feature stands `across` a way it spans,
+`flank`s it as a pair, runs `along` it as a row, stands `by` a place, a room
+or the entrance -- on the side of it the description gives -- or on a `side`
+of the building; an outbuilding stands apart on a side. Every word is held
+to those sets (`hold_grounds`, `_ground_plan`). A place the first call left
+unsaid is laid as the tier always laid it: open ground on its doorway's side
+where the house opens straight onto it, and not at all further out.
+
+**The doorways.** An outbuilding is a block of its own standing apart,
+reached by a way between its door and the house's -- solver geometry, never
+written. A door of the house onto a feature opens onto the ground the
+feature stands in (`door_to`), and is written back as the doorway to the
+place the plan names, on the wall the solve found. Every doorway onto the
+ground meets its other side across the wall, the lab converter's own measure
+(`_ground_doorways`): on the place a door opens straight onto, the cell
+across its threshold; on a thing standing by the door, its nearest cell,
+facing it; where two places of the ground the plan joins touch, the middle
+of the side the plan states, else of the side they share most.
+
+**As the world reads it** (`_ground_geometry`). The solver lays its ways and
+features ON its open ground; as rooms of their own each cell is one place's
+-- outbuilding, then feature, then way, then open ground. And the world reads
+no side or part narrower than two paces (`EXTENT_MIN_PACES`, through
+`spatial_fov.normalize_parts`): a one-pace band of garden written as a part
+is read two deep, over the house beside it, and the garden's grid then sees
+across the house's floor. So a thing the solver lays a pace across -- a gate,
+a lantern -- is widened into ground no other place holds; open ground is
+written as overlapping parts of two paces or more (`_cover`), and a sliver no
+two-by-two block holds is no place's. A planned round thing keeps its shape
+in its solved box. The Room's estimate is filed against each place's solve,
+as a room's is.
+
+**Re-plans and failures.** A house the Room re-plans gives its rooms' solve
+back, but its ground's rows keep theirs; ground an earlier solve of the same
+building laid (`_own_grounds`, read off the solve's own record) is laid again
+with the house, never keeping it off its own plan. With the switch off it
+does keep it off -- a new solve beside the old ground would read two frames
+as one -- and the house is left as planned. Where the ground leaves every
+seed refused, the house is solved again from the same two answers, with no
+further call, as the tier laid it before the grounds (`lay_out`,
+`grounds_dropped` on the run's record): the grounds never cost a house its
+layout.
+
+**One solver change, by the lab's rule.** The lore puts the shrine's well
+"east of the path near the entryway", and every answer said so -- by the
+entrance, side e -- but the solver read `by` and dropped `side`, and its
+search, ties broken west, laid the well west of the path in three runs of
+three. A feature by something with a side given now takes ground on that
+side of it wherever that side has any (`layout_solver`, the features' `by`).
+The lab's liked shrine (`baselines/shrine_rewritten.json`) and its three
+fresh runs, none of which asks for both, re-solve cell for cell.
+
+**Measured** on fresh replicas of Home 5's plan (scratch chats 180-182), the
+story's switches on, the room role on deepseek v4.1 flash as the owner's
+engine.db routes it: three live runs, each laying the house and six ground
+places in 35-46 s with no refusal, no place unplaced, no fallback, no two
+rooms on one cell and no site-plan overlap or refusal; the first call sorted
+the six as the lore describes them all three times. Replayed on the final
+code from the saved answers (chats 183-185): the same, with the well east of
+the path all three times.
+
+| Place | Is | The Room's estimate | Solved, three runs |
+|---|---|---|---|
+| The Garden of Stone and Moss | open | 60 by 60 | 32-35 by 34-36, round the house, 12-13 parts |
+| The Lantern Path | way | 8 by 40 | 3 by 10-11, from the genkan's door south |
+| The Torii Gate | feature | 10 by 6 | 4-5 by 2, at the path's far end |
+| The Sacred Well | feature | 5 by 5 | 2 by 2, round, by the entrance |
+| The Sacred Camphor Tree | feature | 20 by 20 | 6 by 6, round, north of the house |
+| The Latrine | outbuilding | 4 by 4 | 3 by 4, three paces apart to the west, its way to the washroom's door |
+
+The arrangement is the lab's, the latrine west where the lore puts it
+("behind the shrine's west end") rather than behind. The comparison page,
+beside the lab's liked shrine and Home 5 as the engine holds it, is
+`output/layout_home5_grounds_2026-10-11/compare.html` (not in the repository).
+
+**Not yet.** A ground place the Room re-plans alone is not laid again, and a
+place planned after the building was laid out is never laid: the house still
+stands on its solve, so the building is refused as laid, and either needs a
+pass that lays ground onto a plan its house already stands on. A pair or a
+row planned as one place is one room of separate parts. The way to an
+outbuilding is no place; its cells are the open ground's.
+
 ## The live runs
 
 Scratch chat 165's inn: the Taproom of the Eel and Lamp and the Rooms to Let
@@ -423,4 +538,6 @@ re-plan and the derived neighbour, the story switch across a restore),
 `tests/test_names_carry_no_owner.py` (the sort card), `tests/test_layout_solver.py`
 (the L), `tests/test_body_cells.py` (the whole rectangle),
 `tests/test_site_plan.py` (the converter), `tests/test_room_lint.py` (a pinned
-anchor's wall share).
+anchor's wall share), `tests/test_a_building_stands_in_its_grounds.py` (the grounds: which
+places, what each is, one place a cell as the world reads it, every doorway's
+other side, a side by something, the re-plan, the fallback, the switch).

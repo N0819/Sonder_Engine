@@ -6,7 +6,8 @@ JSON オブジェクトを一つだけ答えてください。
 {"front": "n|e|s|w -- the side the entrance faces, only when fixed gives none",
  "storeys": [{"level": 1, "smaller": true}],
  "rooms": [ROOM],
- "stairs": [{"from": "<room id>", "to": "<room id>", "name": "...", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "<one of vocabulary.stair_kinds>"}]}
+ "stairs": [{"from": "<room id>", "to": "<room id>", "name": "...", "from_at": "n|e|s|w", "to_at": "n|e|s|w", "kind": "<one of vocabulary.stair_kinds>"}],
+ "grounds": [GROUND]}
 `storeys` に挙げるのは、屋根の下にあって下の階より狭い階だけです。階段の `kind` は、計画の言葉がどれかを言っているか、その階段がどう見てもそうでなければならない場合だけ与えてください。
 
 ROOM = {"id": "<room id>",
@@ -17,6 +18,8 @@ ROOM = {"id": "<room id>",
         "windows": [{"id": "<window id>", "side": "n|e|s|w", "count": 1}],
         "fixtures": [{"id": "<fixture id>", "kind": "<one of vocabulary.fixture_kinds, or a word of your own>", "size": "<one of vocabulary.sizes>", "at": "<one of vocabulary.places, or walls>", "in": "<zone id>", "near": "<fixture or window id>", "beside": "<fixture or window id>", "facing": "<fixture or window id>"}]}
 
+GROUND = {"id": "<place id>", "where": "around|n|e|s|w", "from": "entrance|<way id>", "to": "<feature id>", "kind": "<one of vocabulary.fixture_kinds>", "size": "<one of vocabulary.sizes>", "across": "<way id>", "flank": "<way id>", "along": "<way id>", "end": "far|near", "by": "<place or room id, or entrance>", "side": "n|e|s|w"}
+
 各項目の読み方:
 - 建物全体で、どの階でも、方位は一つです。正面から入る人は正面と逆の向きを向きます。正面が南なら、その人の左は西、右は東、奥は北です。
 - join の `side` は、この room から見て「相手の」room がある側です。`side` が e の join は、その room をこの room の東の壁の向こうに置きます。各 join は一度だけ書いてください。`order` は、一つの壁を複数の join が共有するときだけ、その壁の北端または西端から数えます。
@@ -25,4 +28,5 @@ ROOM = {"id": "<room id>",
 - fixture の `kind` は、それに当たる `vocabulary.fixture_kinds` の一つです。どれにも当たらないものには、あなた自身の語と `size` を与えます。`size` は挙げられた kind の大きさを変えるのにも使えます。その `at` は、沿って立つ壁、自立するものなら `middle`、隅、または同じものを複数 room の壁に沿って並べるなら `walls` です。`in` はそれが立つ zone、`near`・`beside`・`facing` はそれがそばに立つものを名指します。
 - description か brief が room の大きさを述べているところでは、どの単位であっても、その大きさを平方メートルに直してその room の `area_m2` に書いてください。それ以外の room の大きさは、エンジンがその room が収めるものから決めます。
 - 階段は両端の room の中に立ちます。`from_at` は FROM の room でそれが沿って立つ壁、`to_at` は TO の room でそれが着く壁です。二つの room は二つの階にある一つの建物なので、二つの壁は一致しなければなりません。
+- `inventory.grounds` が外の場所それぞれが何であるかを述べているときは、同じ方位で、それぞれにその種類がとる項目を与えてください。開けた地面（open）には、それがある `where`――建物の `around`、またはそのどちら側か。道（way）には、それが始まる `from`――表の扉から出る参道なら `entrance`、ほかの道から分かれるならその道の id――と、それが一つのものに通じるなら、そのもの（feature）の `to`。もの（feature）には `kind` と `size`、そして次のうち一つ：道をまたいで立つなら `across`（道のどちらの `end` か）、その場所が道の両側に立つ一対なら `flank`（道のどちらの `end` か）、道の両脇に並ぶ列なら `along`、そばに立つ場所か room、または `entrance` を `by`（description がそのどちら側に立つかを述べていれば、その側を `side` に）、あるいは建物のどちら側に立つかを `side`。離れ家（outbuilding）には、建物から離れて立つ側を `side`。
 - 計画と inventory が与えること、またはこの種の実在の場所が明らかに持っていることだけを述べてください。

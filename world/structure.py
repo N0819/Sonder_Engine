@@ -84,7 +84,7 @@ def normalize_structures(stored):
 #: (`write_planned_layout`). Carried onto the stub so a sited room is
 #: "described, never re-measured" from the beat it is first seen
 #: (`spatial_merge`).
-GEOMETRY_FIELDS = ("extent", "shape", "exposure", "sound",
+GEOMETRY_FIELDS = ("extent", "shape", "parts", "exposure", "sound",
                    "level", "over", "floor", "surface", "quiet", "site")
 
 #: The fields of an anchor and of an edge that say WHERE it is, which a
@@ -184,15 +184,23 @@ def planned_anchors(planned):
 def planned_geometry(planned):
     """The geometry a planned room carries, omitting what it does not. A
     `site` is read through `site_plan.normalize_site`, so one that is not a
-    place on a plan is no site at all rather than a guess at one."""
+    place on a plan is no site at all rather than a guess at one; `parts`
+    are only ever the layout tier's (`layout_bridge._ground_geometry`) --
+    a Room's plan carries none (`plot_packages._plan_geometry`)."""
     from world.site_plan import normalize_site
+    from world.spatial import normalize_parts
 
     planned = planned if isinstance(planned, dict) else {}
     out = {key: copy.deepcopy(planned[key]) for key in GEOMETRY_FIELDS
-           if planned.get(key) and key != "site"}
+           if planned.get(key) and key not in ("site", "parts")}
     site = normalize_site(planned.get("site"))
     if site:
         out["site"] = site
+    # parts as the world reads them (`spatial_fov.normalize_parts`): one it
+    # cannot place is no part, never a guess at one
+    parts = normalize_parts(planned.get("parts"))
+    if parts:
+        out["parts"] = parts
     return out
 
 
@@ -290,7 +298,12 @@ def apply_planned_layout(scene, specs, room_ids=None):
 def _lay_stub_on_its_plan(room, spec):
     """One prose-free stub laid on its solved plan (`apply_planned_layout`),
     and the record of what the solve laid on it (`LAID_OUT_KEY`)."""
-    room.update(planned_geometry(spec))
+    geometry = planned_geometry(spec)
+    room.update(geometry)
+    if "parts" not in geometry:
+        # the plan owns a stub's measurements, and parts are one: a stub its
+        # solve laid as a rectangle keeps none an earlier solve gave it
+        room.pop("parts", None)
     held = room.get("anchors") if isinstance(room.get("anchors"), dict) else {}
     split = _split_records(spec)
     for aid, anchor in (planned_anchors(spec).get("anchors") or {}).items():
@@ -344,7 +357,10 @@ def _take_the_solve_off(room, spec, record):
     room.pop(LAID_OUT_KEY, None)
     room.pop("site", None)
     stated = planned_geometry(spec)
-    for key in ("extent", "shape", "level"):
+    # `parts` with the box they lie in: ground the layout tier laid round a
+    # building is a composite whose parts are the solve's
+    # (`layout_bridge.planned_layout`), and goes with it
+    for key in ("extent", "shape", "parts", "level"):
         if key in stated:
             room[key] = stated[key]
         else:
@@ -421,7 +437,8 @@ def _layout_print(room) -> str:
     edges = [{key: edge.get(key) for key in ("to",) + LAYOUT_EDGE_FIELDS}
              for edge in room.get("adjacent") or () if isinstance(edge, dict)]
     return json.dumps({"site": room.get("site"), "extent": room.get("extent"),
-                       "shape": room.get("shape"), "level": room.get("level"),
+                       "shape": room.get("shape"), "parts": room.get("parts"),
+                       "level": room.get("level"),
                        "laid_out": room.get(LAID_OUT_KEY), "edges": edges},
                       sort_keys=True, default=str)
 
@@ -431,10 +448,11 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
     whether it was written. The layout tier's ONE write
     (`agents/director_layout.py`), and code's alone: no model reaches it.
 
-    `rooms` is `{uid: {"geometry": {extent, shape, level, site}, "anchors":
-    {anchor id: fields}, "edges": {neighbour uid: fields}, "layout": the
-    solve's record}}` (`world.layout_bridge.planned_layout`). Each row's
-    `planned` payload takes the geometry, each anchor's fields merged onto
+    `rooms` is `{uid: {"geometry": {extent, shape, parts, level, site},
+    "anchors": {anchor id: fields}, "edges": {neighbour uid: fields},
+    "layout": the solve's record}}` (`world.layout_bridge.planned_layout`).
+    Each row's `planned` payload takes the geometry -- a field given as None
+    taken off it -- each anchor's fields merged onto
     the plan's record of it (its `desc` kept), each edge's position fields
     onto the plan's edge to that neighbour, and the record under `layout`.
 
@@ -473,7 +491,13 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
         for uid, solved in rooms.items():
             payload = current[uid]
             planned = payload["planned"]
-            planned.update(copy.deepcopy(solved.get("geometry") or {}))
+            for key, value in (solved.get("geometry") or {}).items():
+                # None is the solve saying there is none -- a place laid as
+                # one rectangle has no parts an earlier solve gave it
+                if value is None:
+                    planned.pop(key, None)
+                else:
+                    planned[key] = copy.deepcopy(value)
             anchors = planned.get("anchors") if isinstance(planned.get("anchors"), dict) else {}
             split = set(_split_records(solved))
             for aid, fields in (solved.get("anchors") or {}).items():
