@@ -53,8 +53,7 @@ THE SPEC (what the model writes; `tools/layout_lab/run.py` holds the prompt):
      "storeys"?: [{"level", "smaller"?: bool}],
      "blocks"?: [{"id", "beside"?: {"block", "side"}, "apart"?: bool}],
      "rooms": [{"id", "name", "level", "block"?, "purpose", "size"?,
-                "joins": [{"to": room_id | area_id | way_id, "side"?, "order"?, "kind"?,
-                           "held"?: bool}],
+                "joins": [{"to": room_id | area_id | way_id, "side"?, "order"?, "kind"?}],
                 "zones": [{"id", "name", "at"?, "by"?: "entrance", "size"?}],
                 "fixtures": [{"id", "name", "kind", "size"?, "at"?, "in"?: zone_id,
                               "near"?, "beside"?, "facing"?}]}],
@@ -538,17 +537,6 @@ def _hall_rooms(shafts, rooms):
                                       "purpose": "stair", "joins": joins, "fixtures": [], "zones": [],
                                       "details": [], "contents": {}, "shaft": sh.id, "synthetic": True}
     return halls
-
-
-def _held(rid, other, rooms):
-    """Whether the join between two rooms carries a side a PLAN holds
-    (`held`, written by `layout_bridge.spec_from_answers`): a side the solve
-    must keep for the plan to stand, not one a model asked for."""
-    for a, b in ((rid, other), (other, rid)):
-        for j in (rooms.get(a) or {}).get("joins") or ():
-            if isinstance(j, dict) and j.get("to") == b and j.get("held"):
-                return True
-    return False
 
 
 def _joins(rid, rooms):
@@ -1204,13 +1192,9 @@ def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, 
             if not cells:
                 s += 60
             elif side and side != got:
-                # a stair on the wrong wall is the fault a reader sees first;
-                # a side a plan HOLDS costs what a missing doorway costs, since
-                # either refuses the plan's building (`layout_bridge.refusals`)
-                # -- at 20 the owner's shrine (chat 164, 2026-10-10) traded two
-                # of them for a better-scoring stair and was refused for it
+                # a stair on the wrong wall is the fault a reader sees first
                 stair = "stair" in (key, purpose_key(rooms[other]) if other in rooms else "")
-                s += 60 if _held(rid, other, rooms) else (45 if stair else 20)
+                s += 45 if stair else 20
         want = outward.get(rid)
         if want is not None:
             sides = [want] if want in _SIDES else list(_SIDES)

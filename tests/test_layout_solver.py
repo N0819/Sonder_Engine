@@ -508,27 +508,3 @@ def test_a_block_of_none_but_storeys_under_the_roof_still_has_an_outline():
     lay = solve(spec)
     oriel = lay.outlines["oriel"][1]
     assert oriel.w * oriel.d > 0 and "oriel_room" in lay.floors[1]
-
-
-def test_a_side_a_plan_holds_costs_what_a_missing_doorway_costs():
-    """`held` marks a side the PLAN states (`layout_bridge.spec_from_answers`):
-    turned, it refuses the plan's building as a missing doorway does, and the
-    scoring weighs it so. At the 20 a model's asked side costs, the owner's
-    shrine (chat 164, 2026-10-10) traded two held sides for a better-scoring
-    stair and was refused for it. Read from whichever room wrote the join."""
-    from world.layout_solver import _score
-    rooms = {"a": {"id": "a", "purpose": "living", "level": 0, "joins": [{"to": "b", "side": "e"}]},
-             "b": {"id": "b", "purpose": "living", "level": 0, "joins": []}}
-    parts = {"a": Rect(4, 0, 4, 4), "b": Rect(0, 0, 4, 4)}       # b stands west of a, asked east
-
-    def score():
-        return _score(parts, ["a", "b"], rooms, {"a": 16, "b": 16}, Rect(0, 0, 8, 4),
-                      {}, {"_front": "s"}, {}, 0)
-
-    asked = score()
-    rooms["a"]["joins"][0]["held"] = True
-    held_here = score()
-    del rooms["a"]["joins"][0]["held"]
-    rooms["b"]["joins"].append({"to": "a", "held": True})
-    held_there = score()
-    assert held_here - asked == 40 == held_there - asked

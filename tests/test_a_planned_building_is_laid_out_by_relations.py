@@ -452,13 +452,14 @@ def test_a_planned_room_carries_its_site_onto_its_stub_and_an_unreadable_one_is_
     assert "site" not in planned_geometry({"site": "behind the church"})
 
 
-def test_a_side_the_plan_states_is_never_lost_to_the_solve():
-    """A bearing the plan states is a fact the plan made, like a stated
-    size. The solver may put a doorway on another wall when its arrangement
-    cannot honour the side asked -- it warns and goes on -- and written back
-    that would re-bear the plan's own edge without a word, so the building is
-    refused. A side the MODEL chose is the solver's to settle, and the move is
-    listed in the solve's record."""
+def test_a_side_the_room_planned_is_a_wish_the_solve_may_turn():
+    """The owner's ruling of 2026-10-10, "sides are wishes, like the lab":
+    before any room is described a side the Room planned is weighed as the
+    lab weighed every side, and the solve may turn it -- never refused, the
+    turn filed beside the solve and marked `planned`, the plan's own doorway
+    written on the wall the solve chose. Held as a fact it refused all three
+    of the owner's refined shrine's answer sets. A side the MODEL chose is
+    filed the same way, unmarked."""
     from world.layout_solver import Layout, Rect
     specs = copy.deepcopy(SPECS)
     specs["hall"][1]["adjacent"][1]["dir"] = "e"          # the plan: the kitchen lies east
@@ -473,9 +474,12 @@ def test_a_side_the_plan_states_is_never_lost_to_the_solve():
                     {"a": "kitchen", "b": "yard", "level": 0, "side": "n", "cell": [3, 0],
                      "outside": True}]
     reasons = lb.refusals(b, spec, layout)
-    assert any("kitchen was planned through the e wall of hall" in r for r in reasons), reasons
-    assert any("hall was planned to open onto street through its s wall" in r for r in reasons)
-    # a side only the model chose is listed, never refused
+    assert not any("was planned through" in r or "was planned to open onto" in r for r in reasons), reasons
+    solved, report = lb.planned_layout(b, spec, layout)
+    assert {"room": "hall", "to": "kitchen", "asked": "e", "solved": "n", "planned": True} in report["sides"]
+    assert solved["hall"]["edges"]["kitchen"]["dir"] == "n", "the plan's doorway moves with the solve"
+    assert solved["kitchen"]["edges"]["hall"]["dir"] == "s"
+    # a side only the model chose is listed, never refused, and unmarked
     model_side = copy.deepcopy(RELATE)
     model_side["rooms"][1]["joins"] = [{"to": "yard", "side": "e"}]
     b2 = _building()
@@ -1343,12 +1347,11 @@ def test_a_re_planned_building_is_laid_out_again_and_its_ground_with_it(temp_db)
 
 
 
-def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db):
+def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db, monkeypatch):
     """A re-planned building the derivation no longer keeps out (above) is
-    attempted even where the answers cannot solve it: the hall re-planned
-    with its kitchen through the same south wall its front door opens onto
-    the street by -- a rectangle whose south wall the kitchen takes has no
-    stretch of it left outside, so no division holds both -- and the
+    attempted even where the answers cannot solve it -- here the bridge's
+    refusal is forced, every seed refused, since what is under test is what
+    the tier does with a refusal and not which plans earn one -- and the
     bridge refuses the solve after its two calls -- where, until
     2026-10-09, the street's stale site refused it before any call. The
     refusal is filed, the building waits as every refused solve waits
@@ -1365,8 +1368,8 @@ def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db
     rooms = {uid: dict(spec, name=name) for uid, (name, spec) in copy.deepcopy(SPECS).items()}
     for room in rooms.values():
         room.pop("structure", None)
-    next(a for a in rooms["hall"]["adjacent"] if a["to"] == "kitchen")["dir"] = "s"
     plant_structure(cid, {"key": "town", "name": "Town"}, rooms)
+    monkeypatch.setattr(lb, "refusals", lambda building, spec, layout: ["a refusal the test forces"])
     job_copy = copy.deepcopy(sc)
     apply_solved_plans(cid, job_copy)
     (b,) = lb.plan_buildings(_planned_specs(cid), job_copy,
@@ -1554,7 +1557,7 @@ def test_a_room_of_another_shape_off_one_doorway_stands_in_a_block_of_its_own():
     store_room = next(r for r in spec["rooms"] if r["id"] == "store")
     assert store_room["block"] == "store"
     # its doorway is written from its own side, as the lab wrote the cavern's
-    assert {"to": "kitchen", "kind": "door", "side": "s", "held": True} in store_room["joins"]
+    assert {"to": "kitchen", "kind": "door", "side": "s"} in store_room["joins"]
     assert not any(j["to"] == "store" for r in spec["rooms"] if r["id"] == "kitchen"
                    for j in r["joins"])
     layout = lb.solve_spec(spec)
@@ -1573,21 +1576,19 @@ def test_a_room_of_another_shape_off_one_doorway_stands_in_a_block_of_its_own():
     assert refusal and "store is planned composite" in refusal
 
 
-def test_the_plans_own_sides_are_held_and_a_models_are_not():
-    """`held` marks exactly the sides the plan states: losing one refuses the
-    building (`refusals`), so the solver weighs losing it as that
-    (`layout_solver._held`); a side only the model gave is listed if lost,
-    never refused, and stays light."""
+def test_the_plans_own_sides_reach_the_solver_as_asked_sides():
+    """A side the plan states reaches the solver as a side asked, weighed
+    as the lab weighed every side -- no heavier than one the model chose
+    (the owner's ruling of 2026-10-10, sides are wishes)."""
     def hall_kitchen(specs):
         b = _building(specs=specs)
         spec = lb.spec_from_answers(b, lb.hold_inventory(b, copy.deepcopy(SORT)), copy.deepcopy(RELATE))
         return next(j for r in spec["rooms"] for j in r["joins"]
                     if {r["id"], j["to"]} == {"hall", "kitchen"})
-    assert "held" not in hall_kitchen(copy.deepcopy(SPECS))
     planned = copy.deepcopy(SPECS)
     next(a for a in planned["hall"][1]["adjacent"] if a["to"] == "kitchen")["dir"] = "w"
     entry = hall_kitchen(planned)
-    assert entry["held"] is True and entry["side"] == "w"
+    assert entry["side"] == "w" and "held" not in entry
 
 
 def test_a_building_the_search_missed_on_one_seed_is_tried_on_the_next(monkeypatch):

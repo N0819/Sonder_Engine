@@ -207,8 +207,8 @@
 | `world/frontage.py` | 1216 |  | `world.spatial` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1759 |  | — |
-| `world/layout_bridge.py` | 1449 |  | `world.layout_solver`, `world.structure` |
-| `world/layout_solver.py` | 2356 |  | — |
+| `world/layout_bridge.py` | 1448 |  | `world.layout_solver`, `world.structure` |
+| `world/layout_solver.py` | 2340 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1332 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
@@ -2577,27 +2577,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `planned_layout()` | 1162 | 280 lines |
-| `spec_from_answers()` | 695 | 212 lines |
-| `_building()` | 337 | 172 lines |
-| `hold_inventory()` | 561 | 81 lines |
-| `plan_buildings()` | 237 | 57 lines |
-| `refusals()` | 979 | 56 lines |
-| `_edges_of()` | 183 | 28 lines |
-| `sort_payload()` | 513 | 28 lines |
+| `planned_layout()` | 1149 | 292 lines |
+| `spec_from_answers()` | 698 | 206 lines |
+| `_building()` | 340 | 172 lines |
+| `hold_inventory()` | 564 | 81 lines |
+| `plan_buildings()` | 240 | 57 lines |
+| `refusals()` | 976 | 46 lines |
+| `_edges_of()` | 186 | 28 lines |
+| `sort_payload()` | 516 | 28 lines |
 
 ### `world/layout_solver.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_grounds()` | 2015 | 308 lines |
-| `solve()` | 1298 | 250 lines |
-| `_place_fixtures()` | 1822 | 189 lines |
-| `_place_blocks()` | 601 | 127 lines |
-| `_spine_h()` | 930 | 91 lines |
-| `_place_doors()` | 1565 | 78 lines |
-| `_score()` | 1150 | 70 lines |
-| `_place_zones()` | 1696 | 60 lines |
+| `_grounds()` | 1999 | 308 lines |
+| `solve()` | 1282 | 250 lines |
+| `_place_fixtures()` | 1806 | 189 lines |
+| `_place_blocks()` | 589 | 127 lines |
+| `_spine_h()` | 918 | 91 lines |
+| `_place_doors()` | 1549 | 78 lines |
+| `_score()` | 1138 | 66 lines |
+| `_place_zones()` | 1680 | 60 lines |
 
 ### `world/living_world.py`
 

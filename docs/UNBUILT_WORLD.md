@@ -2982,21 +2982,26 @@ Left, each with what it needs:
   lab". The lab inn's liked first floor stood on an L stair the fallback
   chose and now re-solves with U stairs (15 room rectangles move): keep it,
   or put the L back into the fallback -- the owner's call.
-- **Stairs that stand in their rooms.** What keeps the engine's buildings
-  from the lab's cleanliness (`design/DESIGN_LAYOUT_TIER.md`, "Why not clean
-  yet"): a stair the answers put mid-building is carved as a hole before the
-  storey is divided, and the floor beside it no room can take whole goes to
-  its hall; sixteen variants of the search and score either failed the
-  shrine's three answer sets or re-solved the lab's liked shrine worse. Laid
-  out with no stair holes, every storey of the shrine tiles cleanly and each
-  stair fits inside both rooms it joins -- which is how the engine already
-  records a stair: the plan's vertical edge, pinned inside its room. Needs a
-  solver that tiles each storey first and stands each stair inside its rooms,
-  searching tilings and stair places together (placed in tilings chosen
-  blind to the stairs, the three answer sets fit 3, 2 and 1 of their three
-  stairs), fixtures kept off the stair, and the bridge pinning a stair where
-  it stands in its room. The lab's liked shrine would be drawn that way too:
-  the owner's call.
+- **A building whose lore does not say where things stand.** The shrine's
+  own lore said what each room held and seldom where it stood, and laid out
+  messy: the answers put its stairs mid-building, and the floor beside a
+  stair no room could take whole went to the stair's hall
+  (`design/DESIGN_LAYOUT_TIER.md`, "Why not clean yet"). With placement
+  added to the lore, every word kept, it laid out as the lab's did ("The
+  lore, refined"). Most stories' lore is like the first. Needs either lore
+  that places things -- the author's, as the owner's now does -- or a brief
+  the engine writes before its two calls: measured once on the raw lore,
+  the room designer's own model writing it, two of three briefed answer sets
+  stood, less clean than the refined lore, and the relations still sent the
+  stairs through to the room beyond.
+- **Stairs that stand in their rooms -- tried, and shelved.** A prototype
+  that tiles each storey first and stands each stair inside the rooms it
+  joins (flush with a wall on each storey, a landing clear at each end, the
+  room left one floor) placed every stair of the shrine and broke no
+  invariant, but crowded the main hall and the corridors with stairs, and
+  the owner judged the lab's shrine still the best. Kept as a direction for
+  a building whose stairs no lore places, should the entry above leave one
+  messy.
 - **An L asked for by name.** The lab's answers may still name an L and get
   one; the tier never offers it to the model. Whether an answer may ask for
   an L at all is the owner's, and either answer is a solver change: a round
@@ -3038,7 +3043,7 @@ Left, each with what it needs:
   2026-10-09 a derived site keeps a building out only where it lies in
   another building's solve: a building whose own solve a re-plan took back
   is laid out again, its ground re-derived from the rooms -- and one the
-  answers cannot solve (a side the plan states that no division keeps) costs the tier's two
+  answers cannot solve on any seed costs the tier's two
   calls each time its wait runs out (2 beats, then 4, 8 and every 16 while
   it keeps failing on the same plan) and its seeds, where the stale ground refused it
   before any call. Where two are laid out before the engine places their

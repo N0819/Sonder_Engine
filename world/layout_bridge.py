@@ -74,9 +74,11 @@ went to one was lost (review of 2026-10-08, F3 and R2-2).
 
 FAILS OPEN. `refusals` names everything that stops a solve standing for the
 plan -- a planned room with no floor, a stair with no hall, a join with no
-doorway, a side the plan states put on another wall -- and a refused
-building is written nowhere: today's designer builds its rooms exactly as it
-would have. A room's SIZE is none of these. The plan's `extent` is the
+doorway -- and a refused building is written nowhere: today's designer
+builds its rooms exactly as it would have. A room's SIZE is none of these,
+and nor is a SIDE: a side the Room planned is a wish, as in the lab, which
+the solve may turn, the plan's doorway moving with it (the owner's ruling
+of 2026-10-10). The plan's `extent` is the
 Writers' Room's estimate: the solver sizes every room from what it holds,
 aimed at a size only where the story's own lore states one, and the solve's
 size replaces the estimate, each filed against the other (`stated`,
@@ -87,8 +89,9 @@ that names no parts is its box, and is solved as the rectangle it is;
 built from `parts`, or round and joined any other way, it refuses the
 building before any call is made: the solver lays rectangles. So does a room already standing on the plan the
 solve would be written on: placed beside an earlier solve, it stands in that
-solve's frame. A side only the model chose that the solver put elsewhere is
-listed in the record (`sides`), not refused.
+solve's frame. A side the solver put elsewhere -- the Room's, marked
+`planned`, or one only the model chose -- is listed in the record (`sides`),
+never refused.
 """
 from __future__ import annotations
 
@@ -753,8 +756,6 @@ def spec_from_answers(building, inventory, answer):
                 entry = {"to": other, "kind": _door_kind(j["barrier"])}
                 if side:
                     entry["side"] = side
-                if j["side"]:
-                    entry["held"] = True
                 joins.append(entry)
                 continue
             side = j["side"] or _side((asked.get(other) or {}).get("side"))
@@ -765,10 +766,6 @@ def spec_from_answers(building, inventory, answer):
             entry = {"to": other, "kind": _door_kind(j["barrier"])}
             if side:
                 entry["side"] = side
-            if j["side"]:
-                # the PLAN's side: the solver weighs losing it as the
-                # refusal it is (`layout_solver._held`)
-                entry["held"] = True
             order = _int((asked.get(other) or {}).get("order"))
             if order > 0:
                 entry["order"] = order
@@ -1013,24 +1010,14 @@ def refusals(building, spec, layout):
     # (`planned_layout`; the owner's ruling of 2026-10-10). Until then a
     # solve a quarter off a planned size or side was refused (F47, review of
     # 2026-10-08 F2), and on the owner's shrine that was nearly every room.
-    # A SIDE THE PLAN STATES IS A FACT THE PLAN MADE: the
-    # solver may put a doorway on another wall when its arrangement cannot
-    # honour the one asked (it records a warning and goes on), and written
-    # back that would re-bear the plan's own edge without a word
-    for j in building["joins"]:
-        if not j["side"] or building["levels"].get(j["a"]) != building["levels"].get(j["b"]):
-            continue
-        got = _door_side(layout, j["a"], j["b"])
-        if got and got != j["side"]:
-            out.append(f"{j['b']} was planned through the {j['side']} wall of {j['a']} "
-                       f"and the solve put it through the {got}")
-    for o in building["outside"]:
-        if not o["side"]:
-            continue
-        got = _outside_side(layout, building, o)
-        if got and got != o["side"]:
-            out.append(f"{o['room']} was planned to open onto {o['to']} through its "
-                       f"{o['side']} wall and the solve opened it through the {got}")
+    # NOR IS A SIDE: the owner's ruling of 2026-10-10, "sides are wishes,
+    # like the lab". Before any room is described a side the Room planned is
+    # weighed as the lab weighed every side, the solve may turn it, the turn
+    # is filed beside the solve (`planned_layout`, `sides`, marked
+    # `planned`), and the plan's own doorway moves to the wall the solve
+    # chose (`structure.write_planned_layout`). Held as a fact, it refused all
+    # three of the owner's refined shrine's answer sets, two for a washroom
+    # the lab's own liked shrine had turned too.
     return out
 
 
@@ -1411,10 +1398,20 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             out[uid]["anchors"][mark["id"]] = anchor
             report["marks"].append({"room": uid, "anchor": mark["id"], "way": mark["to"],
                                     "cell": list(cell)})
-    # DOORWAYS ON ANOTHER WALL THAN ASKED: a side the plan stated refuses the
-    # solve (`refusals`); one the model chose is the solver's arrangement to
-    # settle, and is said rather than made silently
+    # DOORWAYS ON ANOTHER WALL THAN ASKED: the solver's arrangement to
+    # settle, a side the Room planned as much as one the model chose (the
+    # owner's ruling of 2026-10-10), and said rather than made silently --
+    # the Room's own marked `planned`, its doorway written on the wall the
+    # solve chose
     report["sides"] = []
+    planned_sides = {}
+    for j in building["joins"]:
+        if j["side"]:
+            planned_sides[(j["a"], j["b"])] = j["side"]
+            planned_sides[(j["b"], j["a"])] = _OPP[j["side"]]
+    for o in building["outside"]:
+        if o["side"]:
+            planned_sides[(o["room"], o["to"])] = o["side"]
     asked_sides = [(sroom["id"], j["to"], j.get("side")) for sroom in spec.get("rooms") or ()
                    for j in sroom.get("joins") or () if j.get("side")]
     if entrance:
@@ -1426,6 +1423,8 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             got = _outside_side(layout, building, {"room": room_id, "to": to})
         if got and asked_side and got != asked_side:
             entry = {"room": room_id, "to": to, "asked": asked_side, "solved": got}
+            if planned_sides.get((room_id, to)) == asked_side:
+                entry["planned"] = True
             report["sides"].append(entry)
             if room_id in out:
                 out[room_id]["record"].setdefault("sides", []).append(entry)

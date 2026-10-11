@@ -239,10 +239,13 @@ designer, its stubs placed by derivation beside that street.
 solve the bridge refuses on every seed it is tried with
 (`layout_bridge.solve_for`, `LAYOUT_SOLVE_SEEDS`; `refusals`: a planned room
 with no floor, a stair with no hall, a join with no doorway, a doorway
-outside missing, a side the plan states put on another wall -- never a
-room's size, below); a plan changed underneath; a cancelled job. A side only the model chose that the solver put
-on another wall is listed in the record (`planned.layout.sides`), as the
-survey counted four on the shrine, and never refused. Each writes nothing and
+outside missing -- never a room's size, nor a side, below); a plan changed
+underneath; a cancelled job. A side the solver put on another wall -- one
+the Room planned, marked `planned`, or one only the model chose -- is listed
+in the record (`planned.layout.sides`), as the survey counted four on the
+shrine, and never refused; the plan's doorway moves to the wall the solve
+chose (the owner's ruling of 2026-10-10, "sides are wishes, like the
+lab"). Each writes nothing and
 today's designer builds the rooms as it did. A failed attempt waits as a
 failed design does (`director_rooms.predevelop_retry_beats`).
 
@@ -289,6 +292,9 @@ every solver change re-solved the lab's liked shrine cell for cell
    for its inset -- and the ground floor's spare went to a stair hall 20 by 5.
 5. **A side the plan holds costs what a missing doorway costs** (`held`,
    60): at 20 the solve traded two of them for a better-scoring stair.
+   Withdrawn the same day with the owner's ruling that the Room's sides are
+   wishes (below): none is refused, and the solver weighs them as the lab
+   did.
 6. **A room joined to another block stands on the wall facing it at 60, not
    15**: on one answer set the basement stood off the cavern's wall in all
    20 seeds; after, 15 of 20 stood with no refusal.
@@ -332,9 +338,27 @@ against the solver's own 206.9: the score itself prefers the swallowed
 hall. Laid out with no stair holes, the same specs tile every storey
 cleanly, and each stair fits inside both rooms it joins (checked alone;
 placed together in tilings chosen blind to the stairs, A fits all three, B
-two, C one) -- the mockups on the owner's comparison page. The next design
-is the owner's call (`UNBUILT_WORLD.md` §2.43, stairs that stand in their
-rooms).
+two, C one) -- the mockups on the owner's comparison page.
+
+**The lore, refined** (the same day). A stairs-in-rooms prototype tiled
+every storey cleanly but crowded its rooms and corridors with stairs, and
+the owner judged the lab's shrine still the best -- then: "Perhaps the
+lorebook needs some refinement". The lab's shrine was laid out from the
+lore rewritten for placement, so placement was added to the shrine's seven
+building entries -- a compass, which room lies beside which, where each
+stair runs and arrives -- every original word kept, in order. The Writers'
+Room planned the shrine fresh from it (scratch chat 169) in the lab's
+arrangement: the genkan at the front, the main hall with both stairs in its
+north wall, the kitchen east and the washroom west. Its three answer sets
+were refused for a room planned `composite` with no parts (now its box) and
+then for sides the solve turned -- two for the washroom east of the main
+hall, as the lab's liked shrine had it too -- and the owner ruled that the
+Room's sides, like its sizes, are wishes. All three then stand, two of them
+room for room as the lab laid it out: both stairs in a band along the back,
+the main hall, the washroom and the kitchen in a grid, and upstairs the
+staircase arriving at one end of a central hallway, the rooms off it, the
+roof stair at its other end. The owner's lorebook carries the refined
+entries (2026-10-10, their prior text kept outside the repository).
 
 ## The live runs
 
