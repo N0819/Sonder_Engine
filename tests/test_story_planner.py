@@ -877,6 +877,83 @@ def test_a_repeat_of_a_call_that_fell_out_of_view_is_shown_again(temp_db, monkey
     assert last["tool"] == "inspect_rooms" and "see_step" not in last["result"]
 
 
+def test_a_room_already_read_is_a_pointer_in_an_overlapping_batch(temp_db, monkeypatch):
+    """The owner's chat 165, replayed at the 48k transcript: told "keep
+    going", the Room checked its map in 35 `inspect_rooms` calls, 30
+    different overlapping batches no whole-call echo matched, and read 17
+    rooms 126 times. A room the reply has already shown whole, unchanged and
+    still in view, is answered with the step to look at; one that changed
+    comes back whole; and a repeat of a batch answered partly with pointers
+    is answered room by room again -- never a pointer to a pointer."""
+    from story.room_tools import TOOL_INDEX, tool_manifest
+    state = {"b": "a gate"}
+
+    def rooms(cid_, frame_id, *, room_ids=None):
+        return {"location": "Port", "rooms": [
+            {"id": r, "name": r.upper(), "desc": state["b"] if r == "b" else f"room {r}"}
+            for r in room_ids]}
+    monkeypatch.setitem(TOOL_INDEX["inspect_rooms"], "handler", rooms)
+    seen = []
+    answers = iter([
+        {"calls": [{"tool": "inspect_rooms", "args": {"room_ids": ["a", "b"]}}]},
+        {"calls": [{"tool": "inspect_rooms", "args": {"room_ids": ["b", "c"]}}]},
+        lambda p: state.update(b="a broken gate") or {
+            "calls": [{"tool": "inspect_rooms", "args": {"room_ids": ["a", "b"]}}]},
+        {"calls": [{"tool": "inspect_rooms", "args": {"room_ids": ["b", "c"]}}]},
+        {"reply": "done"},
+    ])
+
+    def script(role, system, user, **kw):
+        payload = json.loads(user)
+        seen.append(payload)
+        step = next(answers)
+        return json.dumps(step(payload) if callable(step) else step)
+    monkeypatch.setattr(providers, "chat_complete", script)
+    cid, _ = _story(temp_db)
+    sp.run_planner(cid, None, text="hi")
+    t = seen[4]["transcript"]
+    rows = [e["result"]["rooms"] for e in t]
+    assert rows[0] == [{"id": "a", "name": "A", "desc": "room a"},
+                       {"id": "b", "name": "B", "desc": "a gate"}]
+    assert rows[1] == [{"id": "b", "see_step": 1}, {"id": "c", "name": "C", "desc": "room c"}]
+    assert rows[2] == [{"id": "a", "see_step": 1}, {"id": "b", "name": "B", "desc": "a broken gate"}]
+    assert rows[3] == [{"id": "b", "see_step": 3}, {"id": "c", "see_step": 2}]
+    assert all(e["result"]["location"] == "Port" for e in t)
+    # the model is told what a pointer row means
+    described = {x["name"]: x["description"] for x in tool_manifest()}
+    assert "see_step" in described["inspect_rooms"]
+
+
+def test_a_room_whose_copy_fell_out_of_view_is_shown_whole_again(temp_db, monkeypatch):
+    """The pointer is offered only while the copy it points at is still
+    shown whole: a room whose earlier batch was trimmed comes back in full."""
+    from story.room_tools import TOOL_INDEX
+    monkeypatch.setitem(TOOL_INDEX["inspect_rooms"], "handler",
+                        lambda cid_, frame_id, *, room_ids=None: {
+                            "rooms": [{"id": r, "desc": "x" * 5000} for r in room_ids]})
+    monkeypatch.setitem(TOOL_INDEX["inspect_charters"], "handler",
+                        lambda cid_, frame_id, **kw: _big(11000, "charters"))
+    monkeypatch.setattr(sp, "PLANNER_TRANSCRIPT_CHARS", 15_000)
+    seen = []
+    answers = iter([
+        {"calls": [{"tool": "inspect_rooms", "args": {"room_ids": ["a", "b"]}}]},
+        {"calls": [{"tool": "inspect_charters", "args": {}}]},     # the rooms are trimmed now
+        {"calls": [{"tool": "inspect_rooms", "args": {"room_ids": ["b", "c"]}}]},
+        {"reply": "done"},
+    ])
+
+    def script(role, system, user, **kw):
+        seen.append(json.loads(user))
+        return json.dumps(next(answers))
+    monkeypatch.setattr(providers, "chat_complete", script)
+    cid, _ = _story(temp_db)
+    sp.run_planner(cid, None, text="hi")
+    assert "recall" in seen[2]["transcript"][0]["result"]
+    last = seen[3]["transcript"][-1]["result"]["rooms"]
+    assert [r.get("see_step") for r in last] == [None, None]
+    assert last[0] == {"id": "b", "desc": "x" * 5000}
+
+
 def test_the_payload_keyed_tools_answer_with_a_pointer_not_a_copy(temp_db, scripted):
     """`inspect_clock` and `inspect_packages` return what every payload
     already carries under `clock` and `packages`, rebuilt each step; the

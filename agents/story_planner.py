@@ -313,7 +313,85 @@ def _call(system, payload, *, max_tokens):
     raw = room_call(PLANNER_ROLE, system, payload,
                     max_tokens=max_tokens, phase="planner")
     out = jparse(raw)
+    if not (isinstance(out, dict) and any(key in out for key in ANSWER_KEYS)):
+        native = _native_answer(raw)
+        if native:
+            return native
     return out if isinstance(out, dict) else {}
+
+
+#: A model's own tool-call markup -- DeepSeek's "DSML" -- written as text in
+#: place of the JSON the card asks for (`_native_answer`): an invoke of a
+#: tool with its parameters; an element of either tag named with one of the
+#: answer's own keys; a list of calls written straight inside the calls block.
+_NATIVE_INVOKE = re.compile(
+    r'<｜DSML｜\s*invoke\s+name="([^"]+)"\s*>(.*?)</｜DSML｜\s*invoke\s*>', re.S)
+_NATIVE_PARAM = re.compile(
+    r'<｜DSML｜\s*parameter\s+name="([^"]+)"(?:\s+string="(true|false)")?\s*>'
+    r'(.*?)</｜DSML｜\s*parameter\s*>', re.S)
+_NATIVE_KEYED = re.compile(
+    r'<｜DSML｜\s*(?:invoke|parameter)\s+name="([^"]+)"(?:\s+string="(true|false)")?\s*>'
+    r'(.*?)</｜DSML｜\s*(?:parameter|invoke)\s*>', re.S)
+_NATIVE_CALL_LIST = re.compile(r'<｜DSML｜\s*calls\s*>\s*(\[.*?\])\s*</｜DSML｜', re.S)
+
+
+def _native_value(string, value):
+    """A parameter's value: as written, or the JSON it is where
+    `string="false"` says so (kept as written when it does not parse)."""
+    if string == "false":
+        try:
+            return json.loads(value)
+        except ValueError:
+            from agents.common import jparse
+            mended = jparse('{"v": %s}' % value)
+            return mended["v"] if isinstance(mended, dict) and "v" in mended else value
+    return value
+
+
+def _native_answer(raw):
+    """The answer an output gives in its model's own tool-call markup, as the
+    Planner's answer (`calls` as `[{"tool", "args"}]`, and any of the
+    answer's own keys it writes); {} when it gives none.
+
+    ANSWERED IN ANOTHER SYNTAX (2026-10-11). deepseek v4.1 flash, the Room's
+    model, answering without JSON mode, sometimes writes DeepSeek's own
+    tool-call markup instead of the JSON the card asks for:
+    `<｜DSML｜ invoke name="read_lore">` with each argument a `parameter`,
+    `string="false"` marking a JSON value -- or the card's own answer in the
+    markup, a `calls` element holding the JSON list of calls beside a `reply`
+    one, or the list written straight inside the calls block. A replay of the
+    owner's chat 165 lost 8 of its 98 steps so, each read as a step that said
+    nothing: one asking to preview the package and read the structures, one
+    to read eight lore entries. The markup is the model's way of answering,
+    never the story's words: read, it asks what the same answer in JSON asks.
+    The answer's keys are read only outside a tool's own invoke, so no tool's
+    argument is ever taken for the answer."""
+    text = str(raw or "")
+    if "｜DSML｜" not in text:
+        return {}
+    calls, rest = [], text
+    for match in _NATIVE_INVOKE.finditer(text):
+        name = match.group(1).strip()
+        if name in ANSWER_KEYS:
+            continue
+        calls.append({"tool": name, "args": {
+            key: _native_value(string, value)
+            for key, string, value in _NATIVE_PARAM.findall(match.group(2))}})
+        rest = rest.replace(match.group(0), "", 1)
+    answer = {}
+    for key, string, value in _NATIVE_KEYED.findall(rest):
+        if key in ANSWER_KEYS and key not in answer:
+            answer[key] = _native_value(string, value)
+    listed = answer.pop("calls", None)
+    if not isinstance(listed, list):
+        found = _NATIVE_CALL_LIST.search(rest)
+        listed = _native_value("false", found.group(1)) if found else None
+    if isinstance(listed, list):
+        calls += [c for c in listed if isinstance(c, dict) and c.get("tool")]
+    if calls:
+        answer["calls"] = calls
+    return answer if answer.get("calls") or any(
+        answer.get(key) for key in ANSWER_KEYS) else {}
 
 
 # ---------------------------------------------------------------------------
@@ -537,6 +615,42 @@ def _shown_transcript(transcript, cap=None):
     shown = [entries[i] for i in kept]
     whole = {n for n, i in enumerate(kept) if i not in trimmed}
     return shown, whole
+
+
+def _echo_items(result, field, tool, seen, in_view, transcript):
+    """`result` with each row of its `field` list that this reply has
+    already shown whole -- unchanged, and still in the model's view --
+    answered as its id and the step to look at, the way a repeated call is
+    (`run_planner`'s echo policy); `result` itself when no row was. `seen`
+    maps (tool, row id) to the index of the entry that last showed the row
+    whole, and the row as it showed it.
+
+    THE ECHO POLICY, ONE ROOM AT A TIME (2026-10-11). The owner's chat 165,
+    replayed at the 48k transcript: told "keep going" once the shrine was
+    planned, the Room checked its map in 35 `inspect_rooms` calls, 30
+    different overlapping batches the whole-call echo matched none of, and
+    read 17 rooms 126 times -- 191,860 characters -- while 6 of its 12
+    `read_lore` calls re-read entries those copies had pushed out of view.
+    A room the reply has read and that has not changed is now a pointer; a
+    room that changed, or whose copy fell out of view, comes back whole, so
+    nothing a re-read could tell the Room is withheld."""
+    rows = result.get(field) if field else None
+    if not isinstance(rows, list):
+        return result
+    index = len(transcript)
+    out, echoed = [], False
+    for row in rows:
+        rid = row.get("id") if isinstance(row, dict) else None
+        key = (tool, str(rid))
+        earlier = seen.get(key) if rid is not None else None
+        if earlier is not None and earlier[0] in in_view and earlier[1] == row:
+            out.append({"id": rid, "see_step": transcript[earlier[0]]["step"]})
+            echoed = True
+            continue
+        out.append(row)
+        if rid is not None:
+            seen[key] = (index, row)
+    return dict(result, **{field: out}) if echoed else result
 
 
 def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
@@ -1147,7 +1261,9 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     # whose answer is unchanged and still in the model's view is echoed as
     # the step to look at, never a second copy. `in_view` is what the model
     # saw whole in the payload it just read, plus what this step appended.
-    answered, in_view = {}, set()
+    # `seen_items` holds the same for each room of a batch read
+    # (`_echo_items`): overlapping batches repeat rooms, never whole calls.
+    answered, in_view, seen_items = {}, set(), {}
     # THE STATIC HALF OF THE PAYLOAD, ONCE PER WRITE (review 2026-09-07,
     # C21). Every step rebuilt the frontier, the cast's minds, the clock,
     # the packages, the mandates and the status row. Measured on the bench
@@ -1371,7 +1487,12 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                         and transcript[earlier]["result"] == result:
                     echo = {"see_step": transcript[earlier]["step"]}
                 else:
-                    answered[key] = len(transcript)
+                    echo = _echo_items(result, (TOOL_INDEX.get(name) or {}).get("echo_items"),
+                                       name, seen_items, in_view, transcript)
+                    # an answer partly made of pointers is no whole answer
+                    # for a later repeat to point at
+                    if echo is result:
+                        answered[key] = len(transcript)
                     in_view.add(len(transcript))
             transcript.append({"tool": name, "args": args, "result": echo, "step": step})
             # What the room DID, not what it meant to do: a refusal and an

@@ -1481,9 +1481,11 @@ TOOLS = [
      "args": _schema({}), "reads": True,
      "handler": _t_inspect_structures},
     {"name": "inspect_rooms",
-     "description": "The map and the neighbourhood. With no arguments: `index` is every room the story knows -- live, planned (a stub nobody has entered) or retired (an id that is spent) -- with its holder when it is the inside of a body, its `region` (the part of the map it belongs to; the index is grouped by it, the cast's region first) and its distance in hops from the cast; `rooms` is the full slice of every room within two hops (description, exits with barriers, who stands there and in what, what stands there, the plan's brief for a stub, and what the author layer already claims for it: planned entities, open needs, package operations). Everything farther is index-only: pass room_ids to open any rooms by id, whatever their status. The room a body stands in is a room whatever holds it.",
+     "description": "The map and the neighbourhood. With no arguments: `index` is every room the story knows -- live, planned (a stub nobody has entered) or retired (an id that is spent) -- with its holder when it is the inside of a body, its `region` (the part of the map it belongs to; the index is grouped by it, the cast's region first) and its distance in hops from the cast; `rooms` is the full slice of every room within two hops (description, exits with barriers, who stands there and in what, what stands there, the plan's brief for a stub, and what the author layer already claims for it: planned entities, open needs, package operations). Everything farther is index-only: pass room_ids to open any rooms by id, whatever their status. The room a body stands in is a room whatever holds it. Within one reply, a room already shown in full that has not changed since comes back as its `id` and the step that shows it (`see_step`).",
      "args": _schema({"room_ids": _SL}),
      "reads": True,
+     # the result's per-room rows, echoed one by one (`story_planner._echo_items`)
+     "echo_items": "rooms",
      "handler": _t_inspect_rooms},
     {"name": "inspect_route",
      "description": "Whether one room can be walked to from another over the edges a body could cross -- a closed door is a hop, not a wall -- and the plan's topology, and the shortest path if so. When unreachable, lists what IS reachable from the start.",
