@@ -191,14 +191,38 @@ def _scores(scores):
 
 def test_the_decision_model_picks_parts_only_with_their_channel(
         temp_db, monkeypatch):
+    """A part ships only with its channel -- save a rule that decides where a
+    body is, below."""
     monkeypatch.setattr(decisions, "OVERRIDE", _scores({
-        "entities": 0.9, "entities__transit": 0.9, "entities__emits": 0.1,
-        "contact_ops": 0.1, "contact_ops__interior": 0.9}))
+        "entities": 0.1, "entities__emits": 0.9, "entities__examined": 0.9,
+        "contact_ops": 0.9}))
     ctx = _make_ctx(temp_db, interp=_action_interp())
     selected, record = director_prose.select_channels(
         ctx, "resolve", "The lift doors shut and it drops.", {})
-    assert "entities" in selected and "contact_ops" not in selected
-    assert record["parts"] == ["entities__transit"]
+    assert "entities" not in selected and "contact_ops" in selected
+    assert record["parts"] == []
+
+
+def test_a_rule_that_decides_where_a_body_is_brings_its_channel(temp_db, monkeypatch):
+    """The owner's ruling of 2026-10-10 on O26 (chat 167, turn 4629): the
+    decision model answered yes to stepping into a thing with an inside (0.94)
+    and no to the things channel (0.23), so the encoder never saw that
+    boarding a cage is walking into its inside, and the rider was left 400 ft
+    down. A body-placing part now brings its channel; its siblings then ship
+    on their own answers."""
+    monkeypatch.setattr(decisions, "OVERRIDE", _scores({
+        "entities": 0.23, "entities__inside": 0.94, "entities__new": 0.75,
+        "entities__emits": 0.1, "contact_ops": 0.1, "contact_ops__interior": 0.9}))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    selected, record = director_prose.select_channels(
+        ctx, "interpret", "She steps into the cage. 'Take me up.'", {})
+    assert "entities" in selected and "contact_ops" in selected
+    assert "entities__inside" in record["parts"] and "entities__new" in record["parts"]
+    assert "contact_ops__interior" in record["parts"]
+    assert "entities__emits" not in record["parts"]
+    assert set(record["brought"]) == {"entities__inside", "contact_ops__interior"}
+    assert director_prose.BODY_PLACING_PARTS == {
+        "entities__inside", "entities__transit", "contact_ops__interior"}
 
 
 def test_a_failed_decision_model_ships_every_part(temp_db, monkeypatch):

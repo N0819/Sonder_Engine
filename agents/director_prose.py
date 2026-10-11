@@ -180,6 +180,20 @@ def candidate_channels(stage, facts=None):
     return out
 
 
+#: The encoder parts whose rules decide WHERE A BODY IS -- inside a thing
+#: with an inside, aboard a room that moves, inside another body. One that
+#: the decision model answers yes ships with its channel whatever the
+#: channel's own answer (`select_channels`): the owner's ruling of
+#: 2026-10-10 on O26 of the Cwm Du run (chat 167, turn 4629), where
+#: `entities__inside` scored 0.94 on a player stepping into a shaft cage and
+#: `entities` 0.23, so the encoder never saw that boarding is a walk into the
+#: thing's inside, wrote the ride as the operator moving her, and every floor
+#: rightly kept her 400 ft down. The other parts still ship only with their
+#: channel. A closed set of the engine's own card parts.
+BODY_PLACING_PARTS = frozenset({"entities__inside", "entities__transit",
+                                "contact_ops__interior"})
+
+
 def part_channel(part):
     """The channel an encoder part (`<channel>__<part>`) belongs to."""
     return str(part).split(ENCODER_PART_SEP, 1)[0]
@@ -553,6 +567,14 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
                 or probabilities.get(channel, 0.0) >= record["threshold"]]
     selected += [channel for channel in extension
                  if probabilities.get(channel, 0.0) >= record["threshold"]]
+    # A RULE THAT DECIDES WHERE A BODY IS BRINGS ITS CHANNEL
+    # (`BODY_PLACING_PARTS`): the part's yes says the channel is touched
+    for part in parts:
+        channel = part_channel(part)
+        if (part in BODY_PLACING_PARTS and part in questions and channel not in selected
+                and probabilities.get(part, 0.0) >= record["threshold"]):
+            selected.append(channel)
+            record.setdefault("brought", []).append(part)
     chosen = [part for part in parts
               if part_channel(part) in selected
               and (part not in questions

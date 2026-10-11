@@ -93,7 +93,14 @@ run itself made.
 
    The page took her up, and Ffion's whispered confession reached no view. It
    reproduced on reroll and was only cured by editing the input to declare
-   the ride.
+   the ride. Cause (fix-wave investigation): the decision model answered
+   yes to "enter or leave a thing that has an inside" (0.94) and no to the
+   things channel (0.23), and a part shipped only with its channel, so the
+   encoder never saw that boarding is a walk into the thing's inside; every
+   floor then rightly refused the ride written as the operator moving her.
+   FIXED (the owner's ruling): a part that decides where a body is
+   (`director_prose.BODY_PLACING_PARTS`: inside, transit, interior) brings
+   its channel.
 3. **World facts the Room holds do not reach the locals who would know them.**
    - 4619: Ffion named the dead wrongly, and one of them is a living banksman
      who later stood in the street.
