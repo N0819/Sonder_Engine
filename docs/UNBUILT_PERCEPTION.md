@@ -1736,6 +1736,38 @@ These remain:
   description keeps its stop ("Tall. Square-shouldered, ..." is "the tall.
   square-shouldered"). Neither occurs in the 81 stored appearances.
 
+<a id="unbuilt-1-200"></a>
+
+### 1.200 What a body reads does not reach it
+
+**Found 2026-10-11** by the Saltmarsh Crossing run
+(`docs/experiments/PLAY_2026_10_11_saltmarsh.md`, scratch chat 170). Four
+reads -- a tally in a harbour book, the signature under it, a loading slip --
+and none reached the page. The encoder's `entities__examined` card works: it
+authored the answer every time it was given one. Three gaps sit around it:
+
+- **The resolve leaves a read unanswered under a secret.** 3 of 3 (turns 4644,
+  4646 and a copy reroll), beside a Room note phrased as a prohibition ("Do not
+  let a character arrive at it ..."). The card already says a read is
+  answered. A clause -- "What the story keeps from someone stays kept by what
+  is there, which may be false or missing, never by leaving what was asked
+  unanswered" -- answered on 1 of 2 copy rerolls. Not landed, because of the
+  next two gaps.
+- **The thing read is somewhere else** (§1.199). The examined text was filed
+  on her survey ledger, which stood on the far bank, so `_things_read_by` saw
+  it at visual level `none`.
+- **A read made by handling is admitted by nothing** (turn 4656). The slip's
+  own state held "220 qtrs barley, 40 qtrs wheat ... Consignor: Venn". She
+  held it only within the beat (two `inventory_ops` transfers), which is no
+  standing contact, and the interpretation wrote no `look` for "reads it line
+  by line". None of the three admissions -- a standing contact, a shared
+  station, her own `look` -- fired.
+
+Candidates, the owner's call: the interpretation writes `look` for a read (a
+clause), and/or a thing the observer's own act took into the hand this beat
+reads like one in a standing contact (a floor on the inventory record, never
+a verb list).
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-11"></a>

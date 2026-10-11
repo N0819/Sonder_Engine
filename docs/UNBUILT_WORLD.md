@@ -2081,6 +2081,34 @@ room stays in it"; `spatial_transit.settle_departures`). What it leaves:
   still reads `none`: the channel is `dark` and the lantern lights the deck.
   Lit `dim`, the same scene grades the coat at `conduct`.
 
+<a id="unbuilt-1-199"></a>
+
+### 1.199 A thing a body carries is left where it was minted
+
+**Found 2026-10-11** by the Saltmarsh Crossing run
+(`docs/experiments/PLAY_2026_10_11_saltmarsh.md`, scratch chat 170). The
+opening minted the player's ledger, lantern, bag and letter of commission as
+free-standing portable things in the room she stood in, though her card shows
+her "with a ledger under one arm and a dark-lantern handle in the other".
+Nothing put them on her, so when she crossed the river they stayed on the far
+bank while every page had her writing in the ledger. Three ways in, one story:
+
+- **At the opening:** positions, never `contained` with her as holder.
+- **A transfer whose destination does not resolve writes nothing** (turn
+  4640): the letter went "to desk", and `derive_inventory_placements` rule 1
+  refused the unknown id silently. The letter's state says it lies on the
+  desk; its position is still the far bank.
+- **A pickup written as a position** (turn 4637): "takes up her canvas bag"
+  moved the bag to the room she stepped into and left it there.
+
+An explicit pickup (turn 4650, "tucks it under her arm and takes up her
+lantern") wrote `contained {in: the player, mode: held}`, and both have
+followed her since, so the carrier rail itself works. What needs deciding is
+where the first holder comes from: a clause (the encoder's opening card: a
+thing a body is described carrying is minted held by it) or a floor (a
+transfer whose destination does not resolve leaves the object with its holder
+and says so). Owner's call; §1.200 is the visible cost.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

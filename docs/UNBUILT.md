@@ -258,6 +258,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.180 — A wait inside the beat: who answers what comes after it sees the world from before it (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-180)
 - [§1.181 — What the Kirinoura wording fixes left on purpose (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-181)
 - [§1.182 — What the review of the present-tense rule found that predates it (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-182)
+- [§1.200 — What a body reads does not reach it (2026-10-11)](UNBUILT_PERCEPTION.md#unbuilt-1-200)
 
 **2. Roadmap**
 
@@ -324,6 +325,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.169 — A player one open stair away is neither seen nor seen to leave — a lead, unclassified](UNBUILT_WORLD.md#unbuilt-1-169)
 - [§1.193 — A declared follow carries the player — BUILT 2026-10-09, residuals open](UNBUILT_WORLD.md#unbuilt-1-193)
 - [§1.194 — A vessel moving within one room stays in it — BUILT 2026-10-09, residuals open](UNBUILT_WORLD.md#unbuilt-1-194)
+- [§1.199 — A thing a body carries is left where it was minted (2026-10-11)](UNBUILT_WORLD.md#unbuilt-1-199)
 
 **2. Roadmap**
 
