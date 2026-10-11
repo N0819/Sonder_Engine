@@ -315,9 +315,15 @@ def _plant(cid):
     plant_structure(cid, {"key": "town", "name": "Town"}, rooms)
 
 
+BRIEF = {"brief": "The hall faces the street; the kitchen lies behind it; the stair runs along "
+                  "the hall's back wall up to the loft over the hall."}
+
+
 def _answers(calls):
     def call(step, system, payload):
         calls.append(step)
+        if step.endswith("_brief"):
+            return copy.deepcopy(BRIEF)
         return copy.deepcopy(SORT if step.endswith("_sort") else RELATE)
     return call
 
@@ -370,7 +376,7 @@ def test_the_tier_writes_the_plan_never_the_scene_and_the_commit_carries_it(temp
     _scene_back, laid_out = lay_out_buildings(None, cid, scene, ["hall"], "en",
                                               call=_answers(calls))
     assert laid_out == {"hall", "kitchen", "loft"}
-    assert calls == ["director_rooms_layout_sort", "director_rooms_layout_relate"]
+    assert calls == ["director_rooms_layout_brief", "director_rooms_layout_sort", "director_rooms_layout_relate"]
     plan = _registry(cid)
     for uid in ("hall", "kitchen", "loft"):
         assert plan[uid]["site"]["plan"] == "layout:hall", uid
@@ -411,15 +417,17 @@ def test_a_refused_building_is_written_nowhere_and_waits_before_trying_again(tem
 
     job = Job(cid, "room_predevelopment", 2)
     lay_out_buildings(job, cid, _scene(), ["hall"], "en", call=broken)
-    assert calls == ["director_rooms_layout_sort"]
+    # the brief fails open; the first call that cannot be read fails the building
+    assert calls == ["director_rooms_layout_brief", "director_rooms_layout_sort"]
     assert not any((p or {}).get("site") for p in _registry(cid).values())
     (entry,) = wget(cid, LAYOUT_RUNS_KEY).values()
     assert entry["failed"] == 1 and entry["reasons"]
     lay_out_buildings(job, cid, _scene(), ["hall"], "en", call=broken)
-    assert calls == ["director_rooms_layout_sort"], "a failed building waits"
+    assert calls == ["director_rooms_layout_brief", "director_rooms_layout_sort"], "a failed building waits"
     later = Job(cid, "room_predevelopment", 2 + 2)
     lay_out_buildings(later, cid, _scene(), ["hall"], "en", call=broken)
-    assert calls == ["director_rooms_layout_sort"] * 2, "and is tried again once its wait is over"
+    assert calls == ["director_rooms_layout_brief", "director_rooms_layout_sort"] * 2, \
+        "and is tried again once its wait is over"
 
 
 def test_the_plan_is_written_only_onto_the_plan_that_was_solved(temp_db):
@@ -531,10 +539,12 @@ HALL_DESIGN = {"name": "the Hall", "desc": "A low hall, a stone hearth on its we
 
 
 def _job_answers(calls):
-    """The room role between turns: the layout tier's two answers, and a
+    """The room role between turns: the layout tier's three answers, and a
     designer that drafts the hall it owes and submits."""
     def answer(role, step_key, system, payload, **kw):
         calls.append(step_key)
+        if step_key.endswith("_layout_brief"):
+            return copy.deepcopy(BRIEF)
         if step_key.endswith("_layout_sort"):
             return copy.deepcopy(SORT)
         if step_key.endswith("_layout_relate"):
@@ -582,7 +592,8 @@ def test_the_room_in_view_of_the_next_beat_stands_on_its_solved_site(temp_db, mo
     calls = []
     monkeypatch.setattr(common, "_agent_json", _job_answers(calls))
     _wait(director_rooms.schedule_room_predevelopment(ctx))
-    assert calls[:2] == ["director_rooms_layout_sort", "director_rooms_layout_relate"], calls
+    assert calls[:3] == ["director_rooms_layout_brief", "director_rooms_layout_sort",
+                         "director_rooms_layout_relate"], calls
     plan = _registry(cid)
     assert plan["hall"]["site"]["plan"] == "layout:hall"
     filed = temp_db.wget(cid, director_rooms.PREPARED_KEY)["hall"]
@@ -1349,7 +1360,7 @@ def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db
     attempted even where the answers cannot solve it -- here the bridge's
     refusal is forced, every seed refused, since what is under test is what
     the tier does with a refusal and not which plans earn one -- and the
-    bridge refuses the solve after its two calls -- where, until
+    bridge refuses the solve after its three calls -- where, until
     2026-10-09, the street's stale site refused it before any call. The
     refusal is filed, the building waits as every refused solve waits
     (`director_rooms.predevelop_retry_beats`: 2 beats, then 4, 8 and every
@@ -1375,20 +1386,20 @@ def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db
     calls = []
     job = types.SimpleNamespace(base_turn=1)
     _scene, laid = lay_out_buildings(job, cid, job_copy, ["hall"], "en", call=_answers(calls))
-    assert len(calls) == 2 and laid == set(), (calls, laid)
+    assert len(calls) == 3 and laid == set(), (calls, laid)
     run = wget(cid, LAYOUT_RUNS_KEY)[b["key"]]
     assert run["failed"] == 1 and run["reasons"], run
     # within the wait, no call at all
     for turn in range(1, 1 + predevelop_retry_beats(1)):
         lay_out_buildings(types.SimpleNamespace(base_turn=turn), cid, copy.deepcopy(job_copy),
                           ["hall"], "en", call=_answers(calls))
-    assert len(calls) == 2, calls
-    # once the wait is over it is tried again -- two calls -- and fails again,
+    assert len(calls) == 3, calls
+    # once the wait is over it is tried again -- three calls -- and fails again,
     # and the next wait is twice as long: the cost of a building nobody can
     # solve, the same for every building the tier attempts
     lay_out_buildings(types.SimpleNamespace(base_turn=1 + predevelop_retry_beats(1)), cid,
                       copy.deepcopy(job_copy), ["hall"], "en", call=_answers(calls))
-    assert len(calls) == 4, calls
+    assert len(calls) == 6, calls
     assert wget(cid, LAYOUT_RUNS_KEY)[b["key"]]["failed"] == 2
     # and the commit that follows stores no stub with the old solve on it
     sc = _commit_like(cid, sc)
@@ -1461,7 +1472,7 @@ def test_the_building_the_opening_stands_in_is_laid_out_before_anything_is_descr
     calls = []
     laid = lay_out_opening_ground(cid, None, call=_answers(calls))
     assert laid == {"hall", "kitchen", "loft"}
-    assert calls, "the two calls were made"
+    assert calls, "the three calls were made"
     assert all((p or {}).get("site") for uid, p in _registry(cid).items()
                if uid in laid), "the plan holds the solve the opening reads"
 
@@ -1659,3 +1670,60 @@ def test_a_shape_built_from_parts_that_names_none_is_laid_as_its_box():
     rounded = copy.deepcopy(SPECS)
     rounded["loft"][1]["shape"] = "round"
     assert "loft is planned round" in (_building(specs=rounded)["refusal"] or "")
+
+
+def test_the_architects_brief_is_written_first_and_both_calls_follow_it():
+    """The owner's choice of 2026-10-10 ("the brief is a good idea too"):
+    one call writes how the building stands as a whole -- from the plan, the
+    sides it fixes and the story's lore, never from a brief already written --
+    and both layout calls read it as `brief`, beside the lore. The spec keeps
+    it for the record."""
+    from agents.director_layout import BRIEF_STEP, RELATE_STEP, SORT_STEP, lay_out
+    b = dict(_building(), description="The hall is the front room of the house.")
+    seen = []
+
+    def call(step, system, payload):
+        seen.append((step, copy.deepcopy(payload)))
+        if step == BRIEF_STEP:
+            return copy.deepcopy(BRIEF)
+        return copy.deepcopy(SORT if step == SORT_STEP else RELATE)
+
+    spec, _layout, _inv, _refused = lay_out(b, call, "en")
+    assert [step for step, _p in seen] == [BRIEF_STEP, SORT_STEP, RELATE_STEP]
+    brief_payload = seen[0][1]
+    assert "fixed" in brief_payload and "brief" not in brief_payload["building"]
+    assert brief_payload["building"]["description"] == "The hall is the front room of the house."
+    for _step, payload in seen[1:]:
+        assert payload["building"]["brief"] == BRIEF["brief"]
+        assert payload["building"]["description"] == "The hall is the front room of the house."
+    assert spec["brief"] == BRIEF["brief"]
+
+
+@pytest.mark.parametrize("answer", ["raises", {}, {"brief": "  "}, "not a dict"])
+def test_a_brief_that_fails_or_says_nothing_leaves_the_two_calls_the_lore_alone(answer):
+    """Fails open: the brief call raising, or writing nothing, costs nothing
+    but its own call -- the two layout calls read the lore alone."""
+    from agents.director_layout import BRIEF_STEP, SORT_STEP, lay_out
+    seen = []
+
+    def call(step, system, payload):
+        seen.append((step, copy.deepcopy(payload)))
+        if step == BRIEF_STEP:
+            if answer == "raises":
+                raise ValueError("no JSON")
+            return answer
+        return copy.deepcopy(SORT if step == SORT_STEP else RELATE)
+
+    spec, layout, _inv, _refused = lay_out(_building(), call, "en")
+    assert all("brief" not in payload["building"] for _step, payload in seen[1:])
+    assert "brief" not in spec and layout is not None
+
+
+@pytest.mark.parametrize("lang", ["en", "ja"])
+def test_every_layout_card_says_what_the_brief_is(lang):
+    from llm.prompts import layout_prompt
+    brief = layout_prompt("brief", lang)
+    assert "`fixed`" in brief and "`description`" in brief and '{"brief":' in brief
+    assert "`brief`" in layout_prompt("sort", lang)
+    assert "`brief`" in layout_prompt("relate", lang)
+

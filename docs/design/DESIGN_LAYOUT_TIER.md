@@ -123,6 +123,22 @@ rooms, the other building standing on its own (review V3-1). Laying a
 solve onto a plan its ground already stands on -- translated to where the
 doorway meets it -- is the town fabric's first step (survey rank 7).
 
+**The architect's brief, written first** (2026-10-10, the owner: "the
+brief is a good idea too"). One call on the room role writes how the
+building stands as a whole -- where each room lies, the wall each stair runs
+along, the room it rises from and the room it arrives in -- from the plan,
+the sides it fixes and the story's lore (`prose_contract.layout_brief`,
+`director_layout._briefed`); both calls below read it as `brief`, beside the
+lore, and the run record keeps it. It is the lab's own step: the liked
+shrine was laid out from lore rewritten for placement, and most stories'
+lore says what a room holds and seldom where it stands. Measured on the
+shrine's twelve recorded answer sets, replayed through the same code: the
+brief raised the stairs whose two walls agree -- what lets the solver lay
+them in a band at a wall -- from 1 of 9 to 3 of 9 on the raw lore and from 5
+of 9 to 7 of 9 on the refined; the floor the stair halls swallow did not
+move much either way. It fails open: no brief, the two calls read the lore
+alone.
+
 **Two calls, the lab's split, narrowed to what a plan leaves open.**
 `prose_contract.layout_sort` says what each planned room holds (fixtures and
 how each stands, zones, windows) and whether each stair is enclosed;

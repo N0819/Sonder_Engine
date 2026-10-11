@@ -255,6 +255,9 @@
     "room_prepare_note": {
       "$text": "prose_contract/room_prepare_note.txt"
     },
+    "layout_brief": {
+      "$text": "prose_contract/layout_brief.txt"
+    },
     "layout_sort": {
       "$text": "prose_contract/layout_sort.txt"
     },

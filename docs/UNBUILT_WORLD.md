@@ -2987,12 +2987,14 @@ Left, each with what it needs:
   stair no room could take whole went to the stair's hall
   (`design/DESIGN_LAYOUT_TIER.md`, "Why not clean yet"). With placement
   added to the lore, every word kept, it laid out as the lab's did ("The
-  lore, refined"). Most stories' lore is like the first. Needs either lore
-  that places things -- the author's, as the owner's now does -- or a brief
-  the engine writes before its two calls: measured once on the raw lore,
-  the room designer's own model writing it, two of three briefed answer sets
-  stood, less clean than the refined lore, and the relations still sent the
-  stairs through to the room beyond.
+  lore, refined"). Most stories' lore is like the first. The engine now
+  writes an architect's brief before its two calls (built 2026-10-10): on
+  the raw lore it raised the stairs whose walls agree from 1 of 9 to 3 of 9
+  and left the ground floor messy in two of three runs; lore that places
+  things -- the author's, as the owner's now does -- still lays out best.
+  Needs a measure of what the brief does across more buildings than the
+  shrine, and, if it stays short of refined lore, a sharper reading of a
+  stair's two walls in the relate card.
 - **Stairs that stand in their rooms -- tried, and shelved.** A prototype
   that tiles each storey first and stands each stair inside the rooms it
   joins (flush with a wall on each storey, a landing clear at each end, the

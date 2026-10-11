@@ -550,11 +550,12 @@ def room_author_prompt(language=None):
 
 
 def layout_prompt(kind, language=None):
-    """The layout tier's two sheets (`agents/director_layout.py`), on the
-    room designer's role: `sort` -- what each planned room of a building
-    holds -- and `relate` -- how what it holds relates, for the solver
+    """The layout tier's three sheets (`agents/director_layout.py`), on the
+    room designer's role: `brief` -- how a planned building stands as a
+    whole, written first -- `sort` -- what each planned room of it holds --
+    and `relate` -- how what it holds relates, for the solver
     (`world/layout_bridge.py`). Carries the adult overlay the room author's
-    sheet carries, since both describe the same rooms."""
+    sheet carries, since all three describe the same rooms."""
     card = _prompt_card(language)
     sheet = str(card["prose_contract"][f"layout_{kind}"]).rstrip("\n") + "\n"
     sheet += nsfw_overlay("director_spatial", card)

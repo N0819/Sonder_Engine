@@ -540,7 +540,34 @@ def sort_payload(building):
     # one-line purpose leaves out, and the solver sizes a room by what it holds.
     if str(building.get("description") or "").strip():
         out["building"]["description"] = str(building["description"]).strip()
+    # THE ARCHITECT'S BRIEF (`director_layout._briefed`), where one was
+    # written: how the building stands as a whole, which both calls follow
+    if str(building.get("brief") or "").strip():
+        out["building"]["brief"] = str(building["brief"]).strip()
     return out
+
+
+def brief_payload(building):
+    """What the architect's brief is written from: the building as the plan
+    holds it, what the plan fixes, and the story's lore of it -- never a
+    brief already written."""
+    out = sort_payload(dict(building, brief=None))
+    out["fixed"] = _fixed(building)
+    return out
+
+
+def _fixed(building):
+    """What the plan already fixes: the sides it states for its joins and the
+    doorways out, the front, and the entrance."""
+    fixed = {"joins": [{"from": j["a"], "to": j["b"], "side": j["side"]}
+                       for j in building["joins"] if j["side"]]
+             + [{"from": o["room"], "to": o["to"], "side": o["side"], "outside": True}
+                for o in building["outside"] if o["side"]]}
+    entrance = building["entrance"] or {}
+    if entrance.get("side"):
+        fixed["front"] = entrance["side"]
+    fixed["entrance"] = {"room": entrance.get("room"), "opens_onto": entrance.get("to")}
+    return fixed
 
 
 def _plan_anchors(building, uid):
@@ -649,14 +676,7 @@ def relate_payload(building, inventory):
     room to hold, what the plan already fixes, and the vocabularies. A mark
     is the engine's to place where its way meets the room, so the second
     call is not handed one to relate."""
-    fixed = {"joins": [{"from": j["a"], "to": j["b"], "side": j["side"]}
-                       for j in building["joins"] if j["side"]]
-             + [{"from": o["room"], "to": o["to"], "side": o["side"], "outside": True}
-                for o in building["outside"] if o["side"]]}
-    entrance = building["entrance"] or {}
-    if entrance.get("side"):
-        fixed["front"] = entrance["side"]
-    fixed["entrance"] = {"room": entrance.get("room"), "opens_onto": entrance.get("to")}
+    fixed = _fixed(building)
     shown = {"rooms": [{"id": r["id"],
                         "fixtures": list(r.get("fixtures") or ()),
                         "zones": list(r.get("zones") or ()),

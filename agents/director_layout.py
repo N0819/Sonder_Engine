@@ -93,6 +93,7 @@ LAYOUT_RUNS_KEY = "layout_tier_runs"
 #: (`persist/llm_capture.py`).
 SORT_STEP = "director_rooms_layout_sort"
 RELATE_STEP = "director_rooms_layout_relate"
+BRIEF_STEP = "director_rooms_layout_brief"
 
 
 _ON = ("1", "on", "true", "yes")
@@ -175,17 +176,48 @@ def _waiting(entry, signature, turn_idx):
 
 def lay_out(building, call, language_id):
     """One building, solved: `(spec, layout, inventory, refusals)`. Raises
-    when an answer cannot be read; refusals are the bridge's."""
+    when an answer cannot be read; refusals are the bridge's. The spec
+    carries the brief the two calls followed (`brief`), for the record."""
     from llm.prompts import layout_prompt
     from world import layout_bridge
+    building = _briefed(building, call, language_id)
     sort_answer = call(SORT_STEP, layout_prompt("sort", language_id),
                        layout_bridge.sort_payload(building))
     inventory = layout_bridge.hold_inventory(building, sort_answer)
     relate_answer = call(RELATE_STEP, layout_prompt("relate", language_id),
                          layout_bridge.relate_payload(building, inventory))
     spec = layout_bridge.spec_from_answers(building, inventory, relate_answer)
+    if building.get("brief"):
+        spec["brief"] = building["brief"]
     layout, refused = layout_bridge.solve_for(building, spec)
     return spec, layout, inventory, refused
+
+
+def _briefed(building, call, language_id):
+    """THE ARCHITECT'S BRIEF: `building` carrying a short account of how it
+    stands as a whole -- where each room lies, the wall each stair runs
+    along, the room it rises from and the room it arrives in -- written by
+    one call on the room role before the two that lay it out, and followed by
+    both (`brief`). The owner's choice of 2026-10-10 ("the brief is a good
+    idea too"): the layout lab's liked shrine was laid out from lore
+    rewritten for placement, while most stories' lore says what a room holds
+    and seldom where it stands; the shrine's own lore, unrefined, put its
+    stairs mid-building and laid out messy, and a brief written this way
+    stood on two of three answer sets where the plain lore stood on none
+    (`docs/design/DESIGN_LAYOUT_TIER.md`). Fails open: no brief -- the call
+    failed, or wrote nothing -- and the two calls read the lore alone."""
+    from core.logging_utils import logger
+    from llm.prompts import layout_prompt
+    from world import layout_bridge
+    try:
+        answer = call(BRIEF_STEP, layout_prompt("brief", language_id),
+                      layout_bridge.brief_payload(building))
+    except Exception as exc:
+        logger.info("layout tier: building=%s wrote no brief: %s", building.get("key"),
+                    " ".join(str(exc).split())[:200])
+        return building
+    brief = str(answer.get("brief") or "").strip() if isinstance(answer, dict) else ""
+    return dict(building, brief=brief) if brief else building
 
 
 #: The most of the story's own lore about one building the tier's two calls
@@ -354,6 +386,8 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
             entry = {"signature": signature, "turn": turn_idx, "failed": failed,
                      "failed_turn": turn_idx, "reasons": refused[:12],
                      "seconds": round(time.time() - started, 2)}
+            if (spec or {}).get("brief"):
+                entry["brief"] = spec["brief"]
             _file_run(cid, job, key, entry)
             runs[key] = entry
             logger.info("layout tier: chat=%s building=%s refused (%d in a row): %s",
@@ -371,6 +405,8 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
                  "moved": len(report["moved"]), "unplaced": len(report["unplaced"]),
                  "restored": len(report["restored"]), "marks": len(report["marks"]),
                  "seconds": round(time.time() - started, 2)}
+        if spec.get("brief"):
+            entry["brief"] = spec["brief"]
         _file_run(cid, job, key, entry)
         runs[key] = entry
         logger.info("layout tier: chat=%s building=%s laid out on %s in %.1fs; "

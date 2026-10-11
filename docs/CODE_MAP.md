@@ -19,7 +19,7 @@
 | `agents/director_evidence.py` | 3963 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2450 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/director_layout.py` | 383 |  | — |
+| `agents/director_layout.py` | 419 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 3242 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
@@ -55,7 +55,7 @@
 | `llm/json_mend.py` | 302 |  | — |
 | `llm/llm_quality.py` | 1790 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 699 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/prompts.py` | 700 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 5821 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 6791 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -207,7 +207,7 @@
 | `world/frontage.py` | 1216 |  | `world.spatial` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1759 |  | — |
-| `world/layout_bridge.py` | 1448 |  | `world.layout_solver`, `world.structure` |
+| `world/layout_bridge.py` | 1468 |  | `world.layout_solver`, `world.structure` |
 | `world/layout_solver.py` | 2340 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1332 |  | `core`, `world.spatial`, `world.spatial_frames` |
@@ -410,14 +410,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `lay_out_buildings()` | 305 | 79 lines |
-| `building_description()` | 211 | 57 lines |
-| `lay_out_opening_ground()` | 270 | 33 lines |
-| `layout_tier_enabled()` | 102 | 20 lines |
-| `_file_run()` | 145 | 14 lines |
-| `_waiting()` | 161 | 13 lines |
-| `lay_out()` | 176 | 13 lines |
-| `_label()` | 200 | 9 lines |
+| `lay_out_buildings()` | 337 | 83 lines |
+| `building_description()` | 243 | 57 lines |
+| `lay_out_opening_ground()` | 302 | 33 lines |
+| `_briefed()` | 196 | 25 lines |
+| `layout_tier_enabled()` | 103 | 20 lines |
+| `lay_out()` | 177 | 17 lines |
+| `_file_run()` | 146 | 14 lines |
+| `_waiting()` | 162 | 13 lines |
 
 ### `agents/director_lingua.py`
 
@@ -802,10 +802,10 @@
 | `preset_import_document()` | 269 | 51 lines |
 | `_encoder_pieces()` | 475 | 38 lines |
 | `unified_specialist_prompt()` | 445 | 28 lines |
-| `_relocate_character_identity()` | 605 | 28 lines |
+| `_relocate_character_identity()` | 606 | 28 lines |
 | `normalize_preset()` | 116 | 26 lines |
 | `_preset_override()` | 213 | 22 lines |
-| `narrator_sections()` | 659 | 18 lines |
+| `narrator_sections()` | 660 | 18 lines |
 | `_director_sheets()` | 77 | 17 lines |
 
 ### `llm/providers.py`
@@ -2577,14 +2577,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `planned_layout()` | 1149 | 292 lines |
-| `spec_from_answers()` | 698 | 206 lines |
+| `planned_layout()` | 1169 | 292 lines |
+| `spec_from_answers()` | 718 | 206 lines |
 | `_building()` | 340 | 172 lines |
-| `hold_inventory()` | 564 | 81 lines |
+| `hold_inventory()` | 591 | 81 lines |
 | `plan_buildings()` | 240 | 57 lines |
-| `refusals()` | 976 | 46 lines |
+| `refusals()` | 996 | 46 lines |
+| `sort_payload()` | 516 | 32 lines |
 | `_edges_of()` | 186 | 28 lines |
-| `sort_payload()` | 516 | 28 lines |
 
 ### `world/layout_solver.py`
 
