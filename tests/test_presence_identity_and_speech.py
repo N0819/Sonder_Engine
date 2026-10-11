@@ -362,6 +362,9 @@ def test_speech_verdict_grades():
             "pa": {"name": "PA System", "kind": "intercom", "portable": False},
             "chair": {"name": "Interview Chair", "kind": "furniture",
                       "portable": False},
+            "timber": {"name": "Gallery Nine timbering",
+                       "description": "Old props, dark with damp.",
+                       "state": {"condition": "sagging"}},
         },
     }
     assert _presence_speech_verdict(scene, "Guard 1") == "person"
@@ -370,6 +373,9 @@ def test_speech_verdict_grades():
     assert _presence_speech_verdict(scene, "Scranton Reality Anchors") == "undecided"
     assert _presence_speech_verdict(scene, "PA System") == "thing"
     assert _presence_speech_verdict(scene, "Interview Chair") == "thing"
+    # A record that states no kind is not assumed somebody (chat 167's
+    # planned timbering, minted kindless): the Director's routing decides.
+    assert _presence_speech_verdict(scene, "Gallery Nine timbering") == "undecided"
     # No entity record: benefit of the doubt.
     assert _presence_speech_verdict(scene, "Sleepy Hotel Clerk") == "person"
 

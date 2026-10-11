@@ -2588,7 +2588,7 @@ def prepare_scene_commit(ctx):
         from world.planned_entities import materialize_plans_in_sight
         sc, _stood_up = materialize_plans_in_sight(
             cid, sc, ctx.turn.frame_id,
-            occupied=_body_rooms)
+            occupied=_body_rooms, turn_idx=getattr(ctx.turn, "idx", None))
         for _rec in _stood_up:
             ctx.warnings.append(
                 ("planned thing placed: %s was standing in %s at nothing, so "

@@ -781,6 +781,21 @@ def _figures_in_view(ctx, rooms, reserved=False):
     return out
 
 
+def _figure_identities(figures):
+    """The identity handles figures standing in view add: a charter body's
+    or a planned person's or creature's handle is its own name.
+
+    A PLANNED THING IS NO IDENTITY. It is listed to be rendered -- in the
+    world index as a thing carrying its plan, in `present_figures` with its
+    brief -- never as somebody a row can come from or be said to. Indexed as
+    one, the Writers' Room's "Gallery Nine timbering" was aimed at as a body,
+    minted with no kind and filed a person who spoke and stood in a mind's
+    view (O16/O21/O30, chat 167 turns 4623-4631)."""
+    return {str(fig["name"]): str(fig["name"]) for fig in figures or ()
+            if isinstance(fig, dict) and fig.get("name")
+            and str(fig.get("kind") or "person") != "thing"}
+
+
 def _present_figure_rows(figures, answers=None, cap=24):
     """The payload rows for `present_figures`: name, role, room, the
     full-sight look, the plan uid, and for an authored plan its kind and
@@ -1702,10 +1717,7 @@ def director_interpret(ctx, nonce):
     # him" on a quay where he was not standing was read as a step toward a
     # man two rooms away in the chapel (scratch play 2026-09-14, chat 7
     # turn 8).
-    _interpret_identities.update({
-        str(_fig.get("name")): str(_fig.get("name"))
-        for _fig in _interpret_figures if _fig.get("name")
-    })
+    _interpret_identities.update(_figure_identities(_interpret_figures))
     _causal_index = causal_world_index(
         sc, here=p_room, room_ids=_causal_rooms,
         include_entity_interiors=True,
@@ -5741,10 +5753,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     })
     # A charter figure's handle IS its name -- the id the world index lists
     # it under (`causal_world_index(figures=)`).
-    _identity_index.update({
-        str(_fd.get("name")): str(_fd.get("name"))
-        for _fd in _figure_declarations if _fd.get("name")
-    })
+    _identity_index.update(_figure_identities(_figure_declarations))
     _resolve_event_inputs = _causal_event_inputs(
         ctx, interp, decls, dice, payload.get("world_pressure") or [])
     _name_declared_targets(ctx, resolve_sc, _resolve_event_inputs,

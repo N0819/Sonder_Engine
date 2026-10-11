@@ -124,6 +124,22 @@ run itself made.
    - 4625: the phrase became a presence the background stage picked.
    - 4631: it became an unearned identity in a mind's view. The composer
      tripwire caught it.
+
+   Cause (fix-wave investigation): the phrase was the Writers' Room's
+   planned THING, and four readers took it for somebody. The interpret's
+   identity index and the world index's figures listed it, so the beat aimed
+   at it as a body. The encoder minted it at 4624 under the plan's exact name
+   and look but no kind, so the binding floor searched the people and bound
+   it to nothing. The presence harvest filed the placed kindless record a
+   person, and the speech verdict read "no kind" as "person". The same
+   harvest judged the beat's patch before the merged record, so the gate
+   post lamp (a patch of name and state over `kind: lamp, portable`) was
+   filed a presence at 4626. FIXED: a planned thing is listed to be
+   rendered, never as an identity or a figure; a mint that names one and
+   does not say it is somebody binds to it; the scene commit settles a bound
+   thing's plan (before, only a person's render ever settled one); the
+   harvest judges the merged record and files only somebody; and a record
+   of no kind is undecided, voiced only by the Director's routing.
 6. **An aborted beat** (4630). GLM 5.3 ran away ("Degenerate model output:
    repeating 26-character phrase"). That is classed a provider error, and D5's
    fresh attempt never follows one. FIXED in the fix wave: a runaway is kept

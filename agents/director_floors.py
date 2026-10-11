@@ -1826,6 +1826,7 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
     audit: ``{entity_id, minted_name, bound_to, room, by, ambiguous, plan}``.
     """
     from persist.commit import _INERT_ENTITY_KINDS
+    from llm.schemas import _ANIMATE_ENTITY_KINDS
 
     entities = (sd or {}).get("entities")
     if not isinstance(entities, dict) or not entities or not figures:
@@ -1882,6 +1883,32 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                 thing = False
                 ent["kind"] = "person"
                 pool = [f for f in pool if str(f.get("kind") or "person") != "thing"]
+        # A NAME A PLANNED THING ANSWERS TO IS THAT THING, unless the mint
+        # says it is somebody -- the counterpart of the rule above. The
+        # encoder minted the Writers' Room's "Gallery Nine timbering" under
+        # the plan's exact name and look but no kind (chat 167 turn 4624), so
+        # it searched the people, bound to nothing, and the plan's thing was
+        # filed a person. When the minted name is exactly one unrendered
+        # thing plan's, and no person's, and the mint states no kind or one
+        # no word of which is animate (the speech verdict's reading), it is
+        # that thing. A mint that SAYS person still never binds to a thing.
+        _kind_words = {kind} | set(re.split(r"[^a-z0-9]+", kind))
+        if not thing and not (_kind_words & _ANIMATE_ENTITY_KINDS):
+            _bare = {_bare_person_name(label) for label in labels} - {""}
+
+            def _answers(f):
+                return (_bare_person_name(f.get("name")) in _bare
+                        or any(_bare_person_name(a) in _bare
+                               for a in (f.get("aliases") or ())))
+            _things = [f for f in people + reserved
+                       if str(f.get("kind") or "") == "thing" and _answers(f)]
+            _persons = [f for f in people + reserved
+                        if str(f.get("kind") or "person") != "thing" and _answers(f)]
+            if len({str(f.get("plan") or f.get("name")) for f in _things}) == 1 \
+                    and not _persons:
+                thing = True
+                if not str(ent.get("kind") or "").strip():
+                    ent["kind"] = "object"
         if thing:
             # A minted thing may be the render of a PLANNED thing, by name
             # alone; it is never a person standing here.

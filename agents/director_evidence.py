@@ -3262,6 +3262,12 @@ def causal_world_index(sc, here=None, *, room_ids=None,
         if any(str(row.get("id")) == name for row in room["holds"]):
             continue
         row = {"id": name, "name": name, "kind": "figure"}
+        if str(figure.get("kind") or "person") == "thing":
+            # A PLANNED THING IS A THING TO RENDER, NEVER A FIGURE: listed as
+            # one it was aimed at as a body and minted as a person (O16,
+            # chat 167 turn 4623). It keeps its plan, which a render binds to.
+            row = {"id": name, "name": name, "kind": "thing",
+                   "plan": str(figure.get("plan") or "")}
         for field in ("role", "look"):
             if str(figure.get(field) or "").strip():
                 row[field] = str(figure[field]).strip()

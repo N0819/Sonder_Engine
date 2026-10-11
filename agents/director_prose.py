@@ -608,6 +608,10 @@ def identities_with_figures(model_payload, extras=None):
     for row in rows:
         if not isinstance(row, dict) or row.get("reserved"):
             continue
+        # a planned THING is listed to be rendered, never as an identity
+        # (`director_interpret`, the same rule)
+        if str(row.get("kind") or "person") == "thing":
+            continue
         name = str((row or {}).get("name") or "").strip()
         if name and name.casefold() not in named:
             index[name] = name

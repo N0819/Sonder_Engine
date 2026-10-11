@@ -14,15 +14,15 @@
 | `agents/character_tools.py` | 732 |  | `core.db` |
 | `agents/common.py` | 12558 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 6074 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 7562 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 7571 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 3969 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
+| `agents/director_evidence.py` | 3975 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
-| `agents/director_floors.py` | 2450 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/director_floors.py` | 2477 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_layout.py` | 419 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 3264 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `agents/director_prose.py` | 3268 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1632 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 2801 |  | — |
@@ -96,7 +96,7 @@
 | `persist/checkpoints.py` | 1713 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 857 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1797 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire`, `world.spatial` |
-| `persist/commit_background.py` | 5601 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
+| `persist/commit_background.py` | 5620 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 576 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -215,7 +215,7 @@
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_names.py` | 267 |  | `world.charter_identity` |
 | `world/place_purpose.py` | 554 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
-| `world/planned_entities.py` | 659 |  | `core.db` |
+| `world/planned_entities.py` | 686 |  | `core.db` |
 | `world/planning_needs.py` | 407 |  | — |
 | `world/region_events.py` | 461 |  | — |
 | `world/regions.py` | 755 |  | `world.spatial` |
@@ -345,14 +345,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4986 | 2543 lines |
-| `director_interpret()` | 1403 | 1043 lines |
-| `_reconcile_resolution()` | 2799 | 521 lines |
-| `_run_specialists()` | 3377 | 425 lines |
+| `director_resolve()` | 4998 | 2540 lines |
+| `director_interpret()` | 1418 | 1040 lines |
+| `_reconcile_resolution()` | 2811 | 521 lines |
+| `_run_specialists()` | 3389 | 425 lines |
 | `director_establish()` | 378 | 211 lines |
-| `_reconcile_interpretation()` | 2473 | 172 lines |
-| `_ground_public_evidence()` | 3941 | 116 lines |
-| `_require_complete_entity_interiors()` | 3804 | 95 lines |
+| `_reconcile_interpretation()` | 2485 | 172 lines |
+| `_ground_public_evidence()` | 3953 | 116 lines |
+| `_require_complete_entity_interiors()` | 3816 | 95 lines |
 
 ### `agents/director_contact.py`
 
@@ -373,12 +373,12 @@
 |---|---:|---:|
 | `_evidence_present()` | 2075 | 359 lines |
 | `normalize_causal_ledger()` | 2801 | 271 lines |
-| `causal_world_index()` | 3124 | 248 lines |
+| `causal_world_index()` | 3124 | 254 lines |
 | `restore_declared_quotes()` | 2629 | 151 lines |
 | `beat_event_ledger()` | 1288 | 123 lines |
 | `beat_timeline()` | 1175 | 111 lines |
-| `_fold_derived_manifest_events()` | 3881 | 89 lines |
-| `_span_items()` | 3508 | 86 lines |
+| `_fold_derived_manifest_events()` | 3887 | 89 lines |
+| `_span_items()` | 3514 | 86 lines |
 
 ### `agents/director_fanout.py`
 
@@ -397,11 +397,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_bind_minted_entities_to_present_figures()` | 1784 | 250 lines |
+| `_bind_minted_entities_to_present_figures()` | 1784 | 277 lines |
 | `_stand_touching_figures()` | 1629 | 153 lines |
-| `resolve_concealment_refs()` | 2120 | 121 lines |
+| `resolve_concealment_refs()` | 2147 | 121 lines |
 | `_conditions_view()` | 597 | 103 lines |
-| `strip_addressee_concealment()` | 2269 | 102 lines |
+| `strip_addressee_concealment()` | 2296 | 102 lines |
 | `_awareness_exits()` | 733 | 98 lines |
 | `_release_attempts()` | 991 | 93 lines |
 | `_narrated_destruction_subjects()` | 1251 | 79 lines |
@@ -442,14 +442,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 2877 | 254 lines |
-| `encode()` | 2425 | 143 lines |
-| `a_walk_is_its_owners()` | 1726 | 132 lines |
+| `run()` | 2881 | 254 lines |
+| `encode()` | 2429 | 143 lines |
+| `a_walk_is_its_owners()` | 1730 | 132 lines |
 | `select_channels()` | 484 | 104 lines |
-| `entity_keys_name_held_things()` | 1963 | 86 lines |
-| `rooms_named_by_part()` | 779 | 83 lines |
-| `implied_tools()` | 1175 | 80 lines |
-| `rooms_in_play()` | 889 | 75 lines |
+| `entity_keys_name_held_things()` | 1967 | 86 lines |
+| `rooms_named_by_part()` | 783 | 83 lines |
+| `implied_tools()` | 1179 | 80 lines |
+| `rooms_in_play()` | 893 | 75 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -1264,14 +1264,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `track_background_presences()` | 2113 | 886 lines |
-| `pick_voice_demand()` | 4185 | 442 lines |
-| `promote_background_character()` | 4799 | 403 lines |
-| `descriptor_bindings()` | 3738 | 156 lines |
-| `_fold_duplicate_presences()` | 797 | 143 lines |
-| `schedule_auto_promotion()` | 5479 | 123 lines |
-| `addressed_rooms()` | 4062 | 121 lines |
-| `select_auto_promotion()` | 5241 | 109 lines |
+| `track_background_presences()` | 2117 | 901 lines |
+| `pick_voice_demand()` | 4204 | 442 lines |
+| `promote_background_character()` | 4818 | 403 lines |
+| `descriptor_bindings()` | 3757 | 156 lines |
+| `_fold_duplicate_presences()` | 801 | 143 lines |
+| `schedule_auto_promotion()` | 5498 | 123 lines |
+| `addressed_rooms()` | 4081 | 121 lines |
+| `select_auto_promotion()` | 5260 | 109 lines |
 
 ### `persist/commit_common.py`
 
@@ -2681,14 +2681,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_plans_in_sight()` | 290 | 141 lines |
+| `materialize_plans_in_sight()` | 290 | 168 lines |
 | `normalize_plan()` | 123 | 96 lines |
 | `project_planned_emissions()` | 227 | 61 lines |
-| `plan_figure()` | 515 | 43 lines |
+| `plan_figure()` | 542 | 43 lines |
 | `plan_state()` | 79 | 42 lines |
-| `settle_rendered_plans()` | 597 | 41 lines |
-| `_station_a_thing()` | 433 | 40 lines |
-| `_contradicted_axis()` | 640 | 20 lines |
+| `settle_rendered_plans()` | 624 | 41 lines |
+| `_station_a_thing()` | 460 | 40 lines |
+| `_contradicted_axis()` | 667 | 20 lines |
 
 ### `world/planning_needs.py`
 

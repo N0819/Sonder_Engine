@@ -548,14 +548,18 @@ def _presence_speech_verdict(scene, name, record=None):
     three grades:
 
     - "person": no entity record at all (provenance is already person-shaped
-      -- a dialogue speaker or a placed body, like chat 72's night clerk), an
-      animate kind (schemas._ANIMATE_ENTITY_KINDS, whole or word-wise so
-      "security guard" counts), or no kind to judge.
+      -- a dialogue speaker or a placed body, like chat 72's night clerk), or
+      an animate kind (schemas._ANIMATE_ENTITY_KINDS, whole or word-wise so
+      "security guard" counts).
     - "thing": a bodiless voice (scene.is_ubiquitous_entity -- the Director's
       own mouth) or a thing (_is_inert_presence_candidate -- chat 75's shed
       utility sash got three turns of housekeeper dialogue through exactly
       this hole). Never speaks through this stage.
-    - "undecided": a kind neither animate nor inert. Deliberately possible:
+    - "undecided": a kind neither animate nor inert, or a record that states
+      no kind at all -- a record is evidence, and one that never says what it
+      is does not say it is somebody (chat 167: the Writers' Room's planned
+      "Gallery Nine timbering", minted kindless, spoke as a person and stood
+      in a mind's view). Deliberately possible:
       the kind string cannot lexically separate a suppression device from a
       "dalek war machine" (live kinds include both), so where the record
       cannot decide, personhood is the Director's call -- only its explicit
@@ -595,7 +599,7 @@ def _presence_speech_verdict(scene, name, record=None):
         return "thing"
     kind = str(ent.get("kind") or "").strip().casefold()
     if not kind:
-        return "person"
+        return "undecided"
     from llm.schemas import _ANIMATE_ENTITY_KINDS
     if kind in _ANIMATE_ENTITY_KINDS:
         return "person"
@@ -2345,16 +2349,29 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # once it is voiced, and a presence this path admits can be voiced.
     # Verdict, not kind: the test is no longer a single word lookup, so resolve
     # it once per entity here and index the ANSWER by both keys.
+    # THE RECORD AS IT STANDS, NOT THE BEAT'S PATCH OF IT: the scene's merged
+    # entity is judged first, the diff only where the scene holds none. Read
+    # the other way, a patch carrying a lamp's name and state hid the merged
+    # `kind: lamp, portable` record and filed the lamp a presence (chat 167
+    # turn 4626). And a name with a record must be SOMEBODY by the entity
+    # harvest's own rule (`_is_person_entity`): a record of no kind is no
+    # person -- the planned "Gallery Nine timbering", minted kindless, was
+    # filed one, voiced and composed into a mind's view (O21/O30, chat 167).
+    # A bare name with no record at all stays agent-shaped, as below.
     _inert_by_key = {}
-    for _eid, _edef in (list((diff.get("entities") or {}).items())
-                        + list((_scene_now.get("entities") or {}).items())):
+    _somebody_by_key = {}
+    for _eid, _edef in (list((_scene_now.get("entities") or {}).items())
+                        + list((diff.get("entities") or {}).items())):
         if not isinstance(_edef, dict):
             continue
         _verdict = _is_inert_presence_candidate(_scene_now, _eid, _edef)
+        _somebody = _is_person_entity(_scene_now, _eid, _edef, roster, _ubiquitous,
+                                      is_ubiquitous_entity)
         for _key in (_eid, _edef.get("name")):
             _key = str(_key or "").strip().casefold()
             if _key:
                 _inert_by_key.setdefault(_key, _verdict)
+                _somebody_by_key.setdefault(_key, _somebody)
     for _placed in _diff_positions:
         # The same id-to-display-name fold the dialogue-speaker harvest has
         # always applied. `positions` legitimately keys bodies by entity id,
@@ -2375,6 +2392,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         # it on, and a name the beat PLACED IN A ROOM is in the scene by
         # construction (that is how the chat 72 night clerk was recovered).
         if _inert_by_key.get(_name.casefold()):
+            continue
+        if _somebody_by_key.get(_name.casefold()) is False:
             continue
         candidates.add(_name)
         if str(_placed or "").strip() in entity_id_to_name:

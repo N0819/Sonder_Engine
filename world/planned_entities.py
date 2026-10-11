@@ -287,7 +287,8 @@ def project_planned_emissions(cid, scene, frame_id=None):
     return scene, projected
 
 
-def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=()):
+def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=(),
+                               turn_idx=None):
     """A planned THING standing where a body stands becomes a real entity.
 
     THE COMPLEMENT OF `project_planned_emissions`, and licensed by its own
@@ -337,6 +338,11 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=()):
     so a reroll, a rerun-from-stage or a second visit cannot double-mint, and
     `plans_in_view` stops offering it.
 
+    It also SETTLES a thing plan the Director already rendered: a scene record
+    the identity floor bound to the plan (`plan_ref`) marks it rendered with
+    that record's description, wherever it stands. A person's render settles
+    through the presence ledger instead (`settle_rendered_plans`).
+
     Returns ``(scene, [{plan, entity_id, name, room}, ...])`` -- the scene
     mutated in place, and one record per thing stood up, for the caller to
     report.
@@ -363,6 +369,27 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=()):
     held.update(_fold(key) for key in positions)
     held.discard("")
     minted, changed = [], False
+    # A THING THE DIRECTOR RENDERED SETTLES ITS PLAN. The identity floor binds
+    # a mint to the plan it renders (`plan_ref`), and the presence ledger
+    # settles a PERSON's render onto its plan (`settle_rendered_plans`); a
+    # bound THING had no settle at all, so its plan stayed unrendered and was
+    # offered for rendering again every beat beside the record the scene held
+    # for it -- where a second mint of it would bind as a second copy (O16 of
+    # the Cwm Du run, chat 167 turn 4624: the Writers' Room's timbering). The
+    # bound record settles it, once, with the Director's own description; a
+    # name the scene merely shares with a plan is still a resolution question
+    # and settles nothing.
+    for key, record in entities.items():
+        ref = record.get("plan_ref") if isinstance(record, dict) else None
+        plan = plans.get(str(ref.get("uid") or "")) if isinstance(ref, dict) else None
+        if (not isinstance(plan, dict) or plan.get("rendered")
+                or str(plan.get("kind") or "") != "thing"):
+            continue
+        plan["rendered"] = {
+            "entity_id": _text(key, 120), "turn": turn_idx,
+            "render": _text(record.get("description") or record.get("name")
+                            or key, SURFACE_CHARS)}
+        changed = True
     for uid, plan in sorted(plans.items()):
         if plan.get("rendered") or str(plan.get("kind") or "") != "thing":
             continue
