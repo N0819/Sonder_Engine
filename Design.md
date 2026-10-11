@@ -911,6 +911,17 @@ Subsystems the original architecture never imagined, now load-bearing:
   exactly as at one hop. Scoped to ARRIVING declarations: an `arrives=false`
   walk already has a seam that answers how far it got (`scene.approach`), and
   two answers would be worse than one
+- **Furniture is never a wall** (`world/spatial_walk.cell_path`, 2026-10-11).
+  The walk inside a room goes round what the furnishing laid down, and where
+  nothing round it joins the two cells it now goes past it, over the fewest
+  fixture cells (`_path_past_fixtures`); a way round, however long, is still
+  the one taken. What keeps a body in a room is a doorway's barrier or a body
+  in it, never a footprint. Measured (Saltmarsh Crossing, scratch chat 170):
+  a small harbour office laid its chair over the only doorway and closed a
+  three-cell pocket round the player, who declared the walk out twice and
+  stayed both times ("nothing walkable leads on") while the page walked her
+  down the quay; re-run from the resolve, the same beat ended her in the
+  counting-room she was going to
 - **A position must be reachable** (`agents/director.py`). The movement
   backstop rules on DECLARED movement — route, contested doors, companions
   held back — and a position written for a body nobody said was going anywhere

@@ -169,9 +169,21 @@ def inside_the_door(scene: dict, room_id, from_room, entered_at=None) -> tuple:
 
 def cell_path(scene: dict, room_id, start, goal) -> list:
     """The shortest four-neighbour path of cells from `start` to `goal`
-    inside one room, both ends included, round what blocks; [] when the
-    goal cannot be reached. Start and goal are always walkable -- a body
-    stands where it stands. Ties break on the smaller coordinates."""
+    inside one room, both ends included, round what blocks. Start and goal
+    are always walkable -- a body stands where it stands. Ties break on the
+    smaller coordinates.
+
+    FURNITURE IS NEVER A WALL. Where nothing round the fixtures joins the
+    two cells, the path goes past them, over the fewest fixture cells
+    (`_path_past_fixtures`). What keeps a body in a room is a doorway's
+    barrier or a body standing in it -- a door's edge alone decides what
+    passes -- never where the furnishing happened to lay a footprint.
+    Measured (Saltmarsh Crossing, scratch chat 170, 2026-10-11): a small
+    harbour office laid its chair over the only doorway and its desk, chart
+    table, tide slate and window seat round a three-cell pocket, and the
+    player declared the walk out twice and stayed in the office both times
+    ("nothing walkable leads on") while the page walked her down the quay.
+    A way round, where there is one, is still always the one taken."""
     grid = room_grid(scene, room_id)
     start = grid.nearest(tuple(start))
     goal = grid.nearest(tuple(goal))
@@ -190,6 +202,31 @@ def cell_path(scene: dict, room_id, start, goal) -> list:
                 return list(path) + [nxt]
             seen.add(nxt)
             heapq.heappush(frontier, (cost + 1, nxt, path + (nxt,)))
+    return _path_past_fixtures(grid, start, goal, blocked)
+
+
+def _path_past_fixtures(grid, start, goal, blocked) -> list:
+    """The path from `start` to `goal` that crosses the fewest fixture
+    cells, and is the shortest among those: the way out of a floor the
+    furniture closed (`cell_path`). Each fixture cell costs more than any
+    route the room's floor can hold, so one fewer of them always wins."""
+    toll = len(grid.cells) + 1
+    frontier = [(0, start, (start,))]
+    best = {start: 0}
+    while frontier:
+        cost, cell, path = heapq.heappop(frontier)
+        if cell == goal:
+            return list(path)
+        if cost > best.get(cell, cost):
+            continue
+        for dx, dy in _STEPS:
+            nxt = (cell[0] + dx, cell[1] + dy)
+            if not grid.contains(nxt):
+                continue
+            step = cost + 1 + (toll if nxt in blocked else 0)
+            if step < best.get(nxt, step + 1):
+                best[nxt] = step
+                heapq.heappush(frontier, (step, nxt, path + (nxt,)))
     return []
 
 

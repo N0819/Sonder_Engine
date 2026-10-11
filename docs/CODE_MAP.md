@@ -246,7 +246,7 @@
 | `world/spatial_sound_field.py` | 3294 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 1233 |  | `world.spatial_barriers`, `world.spatial_identity` |
-| `world/spatial_walk.py` | 457 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
+| `world/spatial_walk.py` | 494 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 2548 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
@@ -3058,14 +3058,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `walk()` | 269 | 180 lines |
-| `cell_path()` | 170 | 24 lines |
+| `walk()` | 306 | 180 lines |
+| `cell_path()` | 170 | 36 lines |
+| `_path_past_fixtures()` | 208 | 23 lines |
 | `held_cells()` | 95 | 21 lines |
 | `door_cell()` | 118 | 19 lines |
 | `inside_the_door()` | 153 | 15 lines |
-| `beside_named()` | 226 | 15 lines |
-| `free_cell_near()` | 210 | 14 lines |
-| `anchor_stand_cell()` | 243 | 14 lines |
+| `beside_named()` | 263 | 15 lines |
+| `free_cell_near()` | 247 | 14 lines |
 
 ### `world/stimulation.py`
 

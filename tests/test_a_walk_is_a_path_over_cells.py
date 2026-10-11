@@ -250,3 +250,57 @@ def test_who_is_passing_is_who_the_beat_moved_between_rooms():
     sc = _tower()
     route = {**sc, "positions": {"Ren": "watch_cabin", "Doctor": "kitchen", "New": "kitchen"}}
     assert in_transit(sc, route) == {"Ren"}
+
+
+def _harbour_office():
+    """Saltmarsh Crossing's harbour office as it was laid out (scratch chat
+    170, 2026-10-11): a small room whose chair the furnishing laid over the
+    only doorway, and whose desk, chart table, tide slate and window seat
+    closed a three-cell pocket round where the player stood."""
+    return {
+        "rooms": {
+            "harbour_office": {"name": "Harbour Office", "extent": {"w": 4.0, "d": 6.0},
+                               "shape": "rectangle", "size": "small", "anchors": {
+                "chart_table": {"dir": "w", "height": "waist", "footprint": "large"},
+                "tide_slate": {"dir": "w", "height": "head", "footprint": "point"},
+                "desk": {"dir": "e", "height": "waist", "footprint": "large"},
+                "hearth": {"dir": "w", "height": "floor", "footprint": "small"},
+                "window_seat": {"dir": "s", "height": "waist", "footprint": "run"},
+                "chair": {"dir": "e", "height": "waist", "footprint": "small"},
+            }, "adjacent": [{"to": "north_quay", "barrier": "open_door", "dir": "e"}]},
+            "north_quay": {"name": "North Quay", "extent": {"w": 16.0, "d": 6.0},
+                           "shape": "rectangle", "anchors": {},
+                           "adjacent": [{"to": "harbour_office", "barrier": "open_door", "dir": "w"},
+                                        {"to": "grain_office", "barrier": "open_door", "dir": "n"}]},
+            "grain_office": {"name": "Grain Office", "extent": {"w": 4.0, "d": 5.0},
+                             "shape": "rectangle", "anchors": {},
+                             "adjacent": [{"to": "north_quay", "barrier": "open_door", "dir": "s"}]},
+        },
+        "positions": {"Agnes": "harbour_office"},
+        "stations": {"Agnes": {"at": None, "near": [], "cell": [2, 4]}},
+        "entities": {},
+    }
+
+
+def test_furniture_that_closes_the_floor_is_walked_past_never_a_wall():
+    sc = _harbour_office()
+    door = door_cell(sc, "harbour_office", "north_quay")
+    blocked = blocked_cells(sc, "harbour_office")
+    assert door in blocked            # the chair lies over the doorway
+    path = cell_path(sc, "harbour_office", (2, 4), door)
+    assert path[0] == (2, 4) and path[-1] == door
+    # Past the fewest fixture cells there are: one, the desk's corner.
+    assert sum(1 for c in path[1:-1] if c in blocked) == 1
+    out = walk(sc, "Agnes", "grain_office", paces=60)
+    assert out["room"] == "grain_office" and out["arrived"]
+    assert out["crossed"] == ["north_quay", "grain_office"]
+
+
+def test_a_way_round_the_furniture_is_still_the_way_taken():
+    sc = _scene()
+    blocked = blocked_cells(sc, "hall")
+    path = cell_path(sc, "hall", (0, 0), (7, 0))
+    assert not any(c in blocked for c in path[1:-1])
+    # One pace down, seven along, one up: longer than the seven straight
+    # across the table, and still the way taken.
+    assert len(path) - 1 == 9
