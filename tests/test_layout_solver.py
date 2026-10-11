@@ -475,3 +475,60 @@ def test_a_quarter_turn_stair_stands_only_where_a_spec_names_one():
     assert unasked == {"up": "straight"}
     asked = dict(TAPROOM, stairs=[dict(TAPROOM["stairs"][0], kind="l")])
     assert {s["id"]: s["kind"] for s in solve(asked).stairwells} == {"up": "l"}
+
+
+def test_a_storey_under_the_roof_never_sizes_its_block():
+    """The owner's shrine (chat 164, 2026-10-10): its roof room's nest was
+    asked huge, and the roof storey -- smaller by the roofline -- sized the
+    whole building, 20 by 14, its ground floor's spare handed to a stair hall
+    20 by 5. A storey under the roof fits itself to the floor below, so what
+    it holds never moves the building's outline."""
+    import copy
+    small, huge = copy.deepcopy(HOUSE), copy.deepcopy(HOUSE)
+    loft = next(r for r in huge["rooms"] if r["id"] == "loft")
+    loft["fixtures"] = [{"id": "nest", "name": "Nest", "kind": "nest", "size": "huge", "at": "middle"},
+                        {"id": "desk", "name": "Desk", "kind": "writing_desk"},
+                        {"id": "chest", "name": "Chest", "kind": "chest"},
+                        {"id": "screen", "name": "Screen", "kind": "screen", "size": "large"}]
+    a, b = solve(small).outlines["main"], solve(huge).outlines["main"]
+    assert (a[0], a[1]) == (b[0], b[1])
+    assert check(solve(huge)) == []
+
+
+def test_a_block_of_none_but_storeys_under_the_roof_still_has_an_outline():
+    """The one block the rule above leaves nothing to size from -- every
+    storey of it under the roof -- is sized from those storeys, as before."""
+    import copy
+    spec = copy.deepcopy(HOUSE)
+    spec["storeys"] = [{"level": 1, "smaller": True}, {"level": 2, "smaller": True}]
+    spec["blocks"] = [{"id": "oriel", "beside": {"block": "main", "side": "e"}}]
+    spec["rooms"].append({"id": "oriel_room", "name": "Oriel", "level": 1, "block": "oriel",
+                          "purpose": "study", "joins": [{"to": "bed_b", "side": "w"}],
+                          "fixtures": [{"id": "seat", "name": "Window seat", "kind": "window_seat"}]})
+    lay = solve(spec)
+    oriel = lay.outlines["oriel"][1]
+    assert oriel.w * oriel.d > 0 and "oriel_room" in lay.floors[1]
+
+
+def test_a_side_a_plan_holds_costs_what_a_missing_doorway_costs():
+    """`held` marks a side the PLAN states (`layout_bridge.spec_from_answers`):
+    turned, it refuses the plan's building as a missing doorway does, and the
+    scoring weighs it so. At the 20 a model's asked side costs, the owner's
+    shrine (chat 164, 2026-10-10) traded two held sides for a better-scoring
+    stair and was refused for it. Read from whichever room wrote the join."""
+    from world.layout_solver import _score
+    rooms = {"a": {"id": "a", "purpose": "living", "level": 0, "joins": [{"to": "b", "side": "e"}]},
+             "b": {"id": "b", "purpose": "living", "level": 0, "joins": []}}
+    parts = {"a": Rect(4, 0, 4, 4), "b": Rect(0, 0, 4, 4)}       # b stands west of a, asked east
+
+    def score():
+        return _score(parts, ["a", "b"], rooms, {"a": 16, "b": 16}, Rect(0, 0, 8, 4),
+                      {}, {"_front": "s"}, {}, 0)
+
+    asked = score()
+    rooms["a"]["joins"][0]["held"] = True
+    held_here = score()
+    del rooms["a"]["joins"][0]["held"]
+    rooms["b"]["joins"].append({"to": "a", "held": True})
+    held_there = score()
+    assert held_here - asked == 40 == held_there - asked

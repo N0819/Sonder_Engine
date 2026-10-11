@@ -9,6 +9,7 @@ rule. Every test names the rule it pins.
 """
 from __future__ import annotations
 
+import pytest
 import copy
 import json
 
@@ -232,18 +233,64 @@ def test_a_fixture_the_solver_moved_or_could_not_place_is_never_pinned():
     assert solved["hall"]["layout"]["moved"] and solved["kitchen"]["layout"]["unplaced"]
 
 
-def test_a_solve_that_loses_a_planned_measurement_is_refused():
-    """A stated size is a measurement the plan made (F47) and the solver
-    treats it as a target: a room the solve made much larger or smaller
-    than the plan stated refuses the whole building, which then fails open
-    to the designer."""
+def test_the_rooms_estimated_size_is_no_target_and_never_a_refusal():
+    """The owner's ruling of 2026-10-10, "size from contents, like the lab":
+    the plan's `extent` is the Writers' Room's ESTIMATE. Chat 164's Room
+    planned Hinami's room at 36 m2 against the lore's six mats, and a solve
+    held to a quarter of its estimates was refused room after room. The
+    estimate never reaches the solver, a solve far from it is never refused,
+    and the record files the two side by side -- the plan's numbers are
+    written over by the solve's, and that is where they are still read."""
     specs = copy.deepcopy(SPECS)
     specs["kitchen"][1]["extent"] = {"w": 20, "d": 20}
     b = _building(specs=specs)
-    spec = lb.spec_from_answers(b, lb.hold_inventory(b, SORT), RELATE)
+    inv = lb.hold_inventory(b, SORT)
+    spec = lb.spec_from_answers(b, inv, RELATE)
+    assert not any("area_m2" in r for r in spec["rooms"]), "an estimate is no target"
     layout = lb.solve_spec(spec)
-    reasons = lb.refusals(b, spec, layout)
-    assert any("kitchen was planned 20 by 20" in r for r in reasons), reasons
+    assert not any("was planned" in r for r in lb.refusals(b, spec, layout))
+    r = layout.floors[0]["kitchen"][0]
+    solved, report = lb.planned_layout(b, spec, layout, inventory=inv)
+    assert solved["kitchen"]["geometry"]["extent"] == {"w": r.w, "d": r.d}
+    assert solved["kitchen"]["layout"]["stated"] == {"w": 20, "d": 20}
+    assert {"room": "kitchen", "stated": {"w": 20, "d": 20},
+            "solved": {"w": r.w, "d": r.d}} in report["stated"]
+
+
+def test_a_size_the_lore_states_is_the_one_size_the_solver_aims_at():
+    """The second call reads the story's lore (`description`) and gives a
+    room's `area_m2` only where the lore states that room's size, as the
+    layout lab's prompt asked; the solver aims at it, never below what the
+    room holds (`layout_solver.room_target`), and the record files it
+    against the solve. With no description there is no lore to state a
+    size, so an area an answer gives is the model's own estimate, dropped."""
+    from world.layout_solver import PACE_M, room_target
+    b = _building()
+    inv = lb.hold_inventory(b, SORT)
+    relate = copy.deepcopy(RELATE)
+    kitchen = next(r for r in relate["rooms"] if r["id"] == "kitchen")
+    told = dict(b, description="The kitchen is thirty square metres of flagstones.")
+
+    def aimed(building):
+        spec = lb.spec_from_answers(building, inv, relate)
+        return next(r for r in spec["rooms"] if r["id"] == "kitchen").get("area_m2")
+
+    kitchen["area_m2"] = 30
+    assert aimed(told) == 30
+    assert aimed(b) is None, "no lore, no stated size"
+    for junk in (0, -4, "large", True, float("nan"), None):
+        kitchen["area_m2"] = junk
+        assert aimed(told) is None, junk
+    kitchen["area_m2"] = 30
+    spec = lb.spec_from_answers(told, inv, relate)
+    room = next(r for r in spec["rooms"] if r["id"] == "kitchen")
+    assert room_target(room) >= 30 / (PACE_M * PACE_M)
+    layout = lb.solve_spec(spec)
+    r = layout.floors[0]["kitchen"][0]
+    solved, report = lb.planned_layout(told, spec, layout, inventory=inv)
+    assert solved["kitchen"]["layout"]["described_m2"] == 30
+    assert {"room": "kitchen", "area_m2": 30, "solved": {"w": r.w, "d": r.d}} in report["described"]
+    assert "described_m2" not in solved["hall"]["layout"]
 
 
 # ---------------------------------------------------------------------------
@@ -280,10 +327,10 @@ def _registry(cid):
     return {uid: entry["planned"] for uid, entry in registry_rows(cid).items()}
 
 
-def test_the_layout_tier_is_off_unless_the_host_turns_it_on(temp_db):
-    """Off by default until the bridge lays a real Room plan cleanly (the
-    owner, 2026-10-10: "Bridge lane now, then on") -- and off it reads
-    nothing and calls nothing; turned off explicitly, the same."""
+def test_the_layout_tier_is_on_unless_the_host_turns_it_off(temp_db):
+    """On by default since the bridge laid a real Room plan cleanly -- the
+    owner's shrine, replicated (the owner, 2026-10-10: "Bridge lane now, then
+    on") -- and turned off it reads nothing and calls nothing."""
     from agents.director_layout import (LAYOUT_TIER_SETTING, lay_out_buildings,
                                         layout_tier_enabled)
     from core.db import set_setting
@@ -292,9 +339,11 @@ def test_the_layout_tier_is_off_unless_the_host_turns_it_on(temp_db):
     calls = []
     scene = _scene()
     before = copy.deepcopy(scene)
-    assert not layout_tier_enabled(), "off where the host has said nothing"
+    assert layout_tier_enabled(), "on where the host has said nothing"
+    for word in ("off", "0", "false", "no"):
+        set_setting(LAYOUT_TIER_SETTING, word)
+        assert not layout_tier_enabled(), word
     set_setting(LAYOUT_TIER_SETTING, "off")
-    assert not layout_tier_enabled()
     got, laid_out = lay_out_buildings(None, cid, scene, ["hall"], "en", call=_answers(calls))
     assert got is scene and laid_out == set()
     assert calls == [] and scene == before
@@ -677,49 +726,24 @@ def _solve(specs=None, sort=None, relate=None):
     return b, inv, spec, layout
 
 
-def test_a_stated_proportion_is_a_measurement_and_a_solve_that_loses_it_is_refused():
-    """A stated extent is a proportion as well as an area: a hall planned
-    twelve by three, solved near square at the same floor, is another room,
-    and once sited no beat may re-measure it. Each side may move a quarter
-    -- or a pace, the grid's own step -- and the room may turn a quarter.
-    Whatever the solver makes of a stated size, the refusal says so exactly
-    when the proportion or the floor is lost, and the record files the
-    stated size against the solved one either way."""
-    from world.layout_bridge import STATED_AREA_TOLERANCE, sides_kept
-    assert sides_kept((5, 6), (5, 7)) and sides_kept((3, 12), (12, 3))
-    assert sides_kept((3, 3), (4, 3)), "one pace is the grid's own step"
-    assert not sides_kept((12, 3), (6, 6)) and not sides_kept((12, 3), (8, 4))
+def test_every_estimate_is_filed_against_the_solve_and_none_is_refused():
+    """A long hall, a near-square one, a small one. Until the owner's ruling
+    of 2026-10-10 a stated extent was a measurement and its proportion too:
+    the review of 2026-10-08 (F2) measured a hall planned twelve by three
+    solved six by five and refused it. Whatever the solver now makes of each
+    estimate from what the hall holds, the building is never refused for
+    it, and the record files the estimate against the solved size either
+    way."""
     for stated in ((12, 3), (6, 5), (4, 4)):
         specs = copy.deepcopy(SPECS)
         specs["hall"][1]["extent"] = {"w": stated[0], "d": stated[1]}
         b, inv, spec, layout = _solve(specs=specs)
         r = layout.floors[0]["hall"][0]
-        lost = (not sides_kept(stated, (r.w, r.d))
-                or abs(r.w * r.d - stated[0] * stated[1])
-                > STATED_AREA_TOLERANCE * stated[0] * stated[1])
-        said = any(f"hall was planned {stated[0]} by {stated[1]}" in x
-                   for x in lb.refusals(b, spec, layout))
-        assert said == lost, (stated, (r.w, r.d))
+        assert not any("hall was planned" in x for x in lb.refusals(b, spec, layout)), stated
         solved, report = lb.planned_layout(b, spec, layout, inventory=inv)
         assert solved["hall"]["layout"]["stated"] == {"w": stated[0], "d": stated[1]}
         assert {"room": "hall", "stated": {"w": stated[0], "d": stated[1]},
                 "solved": {"w": r.w, "d": r.d}} in report["stated"]
-
-
-def test_a_long_hall_the_solver_squares_is_refused():
-    """The case the review measured: twelve by three, solved six by five,
-    passed the area check and was written over the plan."""
-    from world.layout_solver import Layout, Rect
-    long = copy.deepcopy(SPECS)
-    long["hall"][1]["extent"] = {"w": 12, "d": 3}
-    b = _building(specs=long)
-    spec = lb.spec_from_answers(b, lb.hold_inventory(b, SORT), RELATE)
-    layout = Layout(name="hall")
-    layout.floors = {0: {"hall": [Rect(0, 0, 6, 6)], "kitchen": [Rect(6, 0, 3, 6)]},
-                     1: {"loft": [Rect(0, 0, 6, 6)]}}
-    assert 6 * 6 == 36
-    assert any("hall was planned 12 by 3 and solved 6 by 6" in r
-               for r in lb.refusals(b, spec, layout))
 
 
 def test_a_room_the_plan_states_is_not_a_rectangle_keeps_its_building_out():
@@ -1318,9 +1342,11 @@ def test_a_re_planned_building_is_laid_out_again_and_its_ground_with_it(temp_db)
 
 def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db):
     """A re-planned building the derivation no longer keeps out (above) is
-    attempted even where the answers cannot solve it: the hall re-planned 12
-    by 3, the relations the model gives cannot hold that measurement, and
-    the bridge refuses the solve after its two calls -- where, until
+    attempted even where the answers cannot solve it: the hall re-planned
+    with its kitchen through the same south wall its front door opens onto
+    the street by -- a rectangle whose south wall the kitchen takes has no
+    stretch of it left outside, so no division holds both -- and the
+    bridge refuses the solve after its two calls -- where, until
     2026-10-09, the street's stale site refused it before any call. The
     refusal is filed, the building waits as every refused solve waits
     (`director_rooms.predevelop_retry_beats`: 2 beats, then 4, 8 and every
@@ -1336,7 +1362,7 @@ def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db
     rooms = {uid: dict(spec, name=name) for uid, (name, spec) in copy.deepcopy(SPECS).items()}
     for room in rooms.values():
         room.pop("structure", None)
-    rooms["hall"]["extent"] = {"w": 12, "d": 3}
+    next(a for a in rooms["hall"]["adjacent"] if a["to"] == "kitchen")["dir"] = "s"
     plant_structure(cid, {"key": "town", "name": "Town"}, rooms)
     job_copy = copy.deepcopy(sc)
     apply_solved_plans(cid, job_copy)
@@ -1367,7 +1393,12 @@ def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db
         room = sc["rooms"][uid]
         assert "laid_out" not in room, uid
         assert not any("extent" in a for a in (room.get("anchors") or {}).values()), uid
-    assert sc["rooms"]["hall"]["extent"] == {"w": 12, "d": 3}
+    # the stub is the re-plan's: the old solve's measurement went with it,
+    # and the only site it has is the one the engine derives every merge
+    hall = sc["rooms"]["hall"]
+    assert "extent" not in hall, hall["extent"]
+    assert (hall.get("site") or {}).get("plan") != "layout:hall", hall["site"]
+
 
 def test_the_tier_can_be_turned_on_for_one_story_and_a_rewind_keeps_the_dial(temp_db):
     """The owner compares the tier in a story before it publishes to any: the
@@ -1446,3 +1477,158 @@ def test_the_opening_plan_lays_out_its_ground_after_the_room_has_placed_it():
     assert "lay_out_opening_ground(" in source
     assert source.index("run_planner(") < source.index("lay_out_opening_ground(")
     assert source.index("lay_out_opening_ground(") < source.index("record_opening_plan(cid")
+
+
+def _book(temp_db, cid, entries):
+    book = temp_db.qi("INSERT INTO lorebooks(name) VALUES(?)", ("Town lore",))
+    temp_db.qi("UPDATE chats SET lorebook_id=? WHERE id=?", (book, cid))
+    for keys, content in entries:
+        temp_db.qi("INSERT INTO lore_entries(lorebook_id,keys,content) VALUES(?,?,?)",
+                   (book, keys, content))
+    return book
+
+
+def test_the_tier_reads_what_the_storys_lore_says_of_the_building(temp_db):
+    """The plan holds a room's one-line purpose; the lore holds what the room
+    IS, and a solver sizes a room by what it holds. The owner's shrine (chat
+    164) was replicated with nothing described and laid out from the plan
+    alone: every room came back a third of its planned size. The tier's
+    calls now read every entry whose OWN keys name the building or one of its
+    rooms -- the building's own first -- and nothing the keys do not name."""
+    from agents.director_layout import building_description
+    cid = _chat(temp_db)
+    _book(temp_db, cid, [
+        ("the realm beyond,the dimensional seal", "Past the seal lies another world."),
+        ("kitchen,hearth", "The kitchen keeps a deep stone hearth on its north wall."),
+        ("town,market town", "The town is an old market town on a ford."),
+        ("loft", "The loft holds two straw beds under the eaves."),
+    ])
+    (building,) = lb.plan_buildings(copy.deepcopy(SPECS), _scene())
+    building = dict(building, structure="town")
+    text = building_description(cid, building)
+    assert text.startswith("The town is an old market town"), "the building's own entry first"
+    assert "stone hearth" in text and "straw beds" in text
+    assert "another world" not in text
+    assert lb.sort_payload(dict(building, description=text))["building"]["description"] == text
+    assert "description" not in lb.sort_payload(building)["building"]
+
+
+@pytest.mark.parametrize("lang", ["en", "ja"])
+def test_the_relate_card_asks_for_a_size_only_where_the_lore_states_one(lang):
+    from llm.prompts import layout_prompt
+    card = layout_prompt("relate", lang)
+    assert '"area_m2"' in card and "`area_m2`" in card
+
+
+@pytest.mark.parametrize("lang", ["en", "ja"])
+def test_both_layout_cards_say_what_the_description_is(lang):
+    from llm.prompts import layout_prompt
+    assert "`description`" in layout_prompt("sort", lang)
+    assert "`description`" in layout_prompt("relate", lang)
+
+
+def test_a_room_of_another_shape_off_one_doorway_stands_in_a_block_of_its_own():
+    """The owner's shrine (chat 164) planned its Seal Cavern `composite`, off
+    the basement's north wall through one warded door, and the whole building
+    was refused for it. The layout lab's liked shrine stood the cavern in a
+    block of its own beside the main block -- a hand edit the engine now
+    makes: the building stands, the block sits on the side the plan states,
+    and the solve says where the room stands and how large; its shape stays
+    the plan's, never squared."""
+    specs = copy.deepcopy(SPECS)
+    specs["store"] = ("the Store", {"shape": "composite", "extent": {"w": 9, "d": 6},
+                                    "exposure": "enclosed",
+                                    "structure": specs["kitchen"][1].get("structure"),
+                                    "adjacent": [{"to": "kitchen", "dir": "s",
+                                                  "barrier": "closed_door"}]})
+    specs["kitchen"][1]["adjacent"].append({"to": "store", "dir": "n", "barrier": "closed_door"})
+    b = _building(specs=specs)
+    assert b["refusal"] is None
+    assert b["own_blocks"] == {"store": {"beside": "kitchen", "side": "n"}}
+    inv = lb.hold_inventory(b, copy.deepcopy(SORT))
+    spec = lb.spec_from_answers(b, inv, copy.deepcopy(RELATE))
+    assert {"id": "store", "apart": False, "beside": {"block": "main", "side": "n"}} in spec["blocks"]
+    store_room = next(r for r in spec["rooms"] if r["id"] == "store")
+    assert store_room["block"] == "store"
+    # its doorway is written from its own side, as the lab wrote the cavern's
+    assert {"to": "kitchen", "kind": "door", "side": "s", "held": True} in store_room["joins"]
+    assert not any(j["to"] == "store" for r in spec["rooms"] if r["id"] == "kitchen"
+                   for j in r["joins"])
+    layout = lb.solve_spec(spec)
+    solved, _report = lb.planned_layout(b, spec, layout)
+    store = solved["store"]["geometry"]
+    rect = next(rects[0] for floor in layout.floors.values()
+                for rid, rects in floor.items() if rid == "store")
+    assert "shape" not in store, "never squared: the plan's shape stands"
+    assert store["extent"] == {"w": rect.w, "d": rect.d}, "sized from what it holds"
+    assert store["site"]["plan"] == b["plan"]
+    assert not [r for r in lb.refusals(b, spec, layout) if r.startswith("store was planned")]
+    # built from parts the plan places inside its box, it cannot be re-boxed
+    parted = copy.deepcopy(specs)
+    parted["store"][1]["parts"] = [{"w": 4, "d": 6, "at": "nw"}, {"w": 9, "d": 2, "at": "sw"}]
+    refusal = _building(specs=parted)["refusal"]
+    assert refusal and "store is planned composite" in refusal
+
+
+def test_the_plans_own_sides_are_held_and_a_models_are_not():
+    """`held` marks exactly the sides the plan states: losing one refuses the
+    building (`refusals`), so the solver weighs losing it as that
+    (`layout_solver._held`); a side only the model gave is listed if lost,
+    never refused, and stays light."""
+    def hall_kitchen(specs):
+        b = _building(specs=specs)
+        spec = lb.spec_from_answers(b, lb.hold_inventory(b, copy.deepcopy(SORT)), copy.deepcopy(RELATE))
+        return next(j for r in spec["rooms"] for j in r["joins"]
+                    if {r["id"], j["to"]} == {"hall", "kitchen"})
+    assert "held" not in hall_kitchen(copy.deepcopy(SPECS))
+    planned = copy.deepcopy(SPECS)
+    next(a for a in planned["hall"][1]["adjacent"] if a["to"] == "kitchen")["dir"] = "w"
+    entry = hall_kitchen(planned)
+    assert entry["held"] is True and entry["side"] == "w"
+
+
+def test_a_building_the_search_missed_on_one_seed_is_tried_on_the_next(monkeypatch):
+    """`solve_for` takes the solver's own seed first and the next ones only
+    where it fell short: a solve with every stair landed at once, else the
+    first the bridge does not refuse, else the first seed's refusal. On the
+    owner's shrine (chat 164, 2026-10-10) one answer set stood on 13 of 20
+    seeds, the solver's own among the failures."""
+    from world.layout_solver import SEED
+    seen, plans = [], {}
+
+    def fake_solve(spec, seed=0):
+        seen.append(seed)
+        return f"layout{seed}"
+
+    monkeypatch.setattr(lb, "solve", fake_solve)
+    monkeypatch.setattr(lb, "refusals", lambda building, spec, layout: plans[layout][0])
+    monkeypatch.setattr(lb, "unlanded", lambda spec, layout: plans[layout][1])
+
+    def run(*table):
+        plans.clear()
+        seen.clear()
+        for k, outcome in enumerate(table):
+            plans[f"layout{SEED + k}"] = outcome
+        return lb.solve_for({}, {})
+
+    clean, standing, refused = ([], []), ([], [("stair", "hall")]), (["no doorway"], [])
+    assert lb.LAYOUT_SOLVE_SEEDS == 4
+    assert run(clean, refused, refused, refused) == (f"layout{SEED}", [])
+    assert seen == [SEED], "a seed after the first only where it fell short"
+    assert run(refused, standing, clean, refused) == (f"layout{SEED + 2}", [])
+    assert seen == [SEED, SEED + 1, SEED + 2]
+    assert run(refused, standing, refused, standing) == (f"layout{SEED + 1}", [])
+    assert len(seen) == 4
+    assert run(refused, (["other"], []), refused, refused) == (f"layout{SEED}", ["no doorway"])
+
+
+def test_a_stair_whose_hall_opens_on_no_room_it_joins_is_unlanded():
+    """Read off the layout's doors: a stair hall with no doorway onto a room
+    its stair joins leaves the plan's stair no landing in that room."""
+    b, inv, spec, layout = _solve()
+    assert lb.unlanded(spec, layout) == []
+    (st,) = spec["stairs"]
+    halls = {h for well in layout.stairwells for h in (well.get("halls") or {}).values()}
+    layout.doors = [d for d in layout.doors
+                    if not ({d["a"], d["b"]} & halls and st["from"] in (d["a"], d["b"]))]
+    assert lb.unlanded(spec, layout) == [(st["id"], st["from"])]

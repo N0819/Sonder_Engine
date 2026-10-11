@@ -21,9 +21,9 @@ outdoors "a jumbled together mess". So, written once from this design:
 
   1. OUTLINE FIRST. A building is one or more BLOCKS (a tower beside a
      cottage, an outbuilding apart from the house). A block's outline is
-     sized from its largest storey; every storey of the block divides that
-     same outline, a storey under the roof an inset of it. Ragged outlines
-     cannot occur.
+     sized from its largest storey that stands full; every storey of the
+     block divides that same outline, a storey under the roof an inset of
+     it that never sizes it. Ragged outlines cannot occur.
   2. DIVIDE THE OUTLINE. Guillotine cuts -- every cut splits a rectangle in
      two -- so every room is ONE rectangle by construction; where a storey
      has a corridor, a spine layout runs it down the block's long axis with
@@ -53,7 +53,8 @@ THE SPEC (what the model writes; `tools/layout_lab/run.py` holds the prompt):
      "storeys"?: [{"level", "smaller"?: bool}],
      "blocks"?: [{"id", "beside"?: {"block", "side"}, "apart"?: bool}],
      "rooms": [{"id", "name", "level", "block"?, "purpose", "size"?,
-                "joins": [{"to": room_id | area_id | way_id, "side"?, "order"?, "kind"?}],
+                "joins": [{"to": room_id | area_id | way_id, "side"?, "order"?, "kind"?,
+                           "held"?: bool}],
                 "zones": [{"id", "name", "at"?, "by"?: "entrance", "size"?}],
                 "fixtures": [{"id", "name", "kind", "size"?, "at"?, "in"?: zone_id,
                               "near"?, "beside"?, "facing"?}]}],
@@ -539,6 +540,17 @@ def _hall_rooms(shafts, rooms):
     return halls
 
 
+def _held(rid, other, rooms):
+    """Whether the join between two rooms carries a side a PLAN holds
+    (`held`, written by `layout_bridge.spec_from_answers`): a side the solve
+    must keep for the plan to stand, not one a model asked for."""
+    for a, b in ((rid, other), (other, rid)):
+        for j in (rooms.get(a) or {}).get("joins") or ():
+            if isinstance(j, dict) and j.get("to") == b and j.get("held"):
+                return True
+    return False
+
+
 def _joins(rid, rooms):
     """(other room, side of rid where it lies, order, kind) for every join
     between two rooms, whichever room wrote it."""
@@ -588,7 +600,7 @@ def _level_need(b, rooms, shafts):
 
 def _place_blocks(spec, rooms, shafts, front, layout):
     """{block: {level: outline Rect}}: each block sized from its largest
-    storey, placed beside (or apart from) the block it names."""
+    full storey, placed beside (or apart from) the block it names."""
     blocks = {}
     for r in rooms.values():
         blocks.setdefault(r["block"], set()).add(r["level"])
@@ -598,7 +610,16 @@ def _place_blocks(spec, rooms, shafts, front, layout):
     dims = {}
     for b, levels in blocks.items():
         need = _level_need(b, rooms, shafts)
-        full = [n * (1.25 if lv in smaller and lv > 0 else 1.0) for lv, n in need.items()]
+        # A STOREY UNDER THE ROOF NEVER SIZES ITS BLOCK: it fits itself to
+        # the floor below (`carried`, below), so the outline comes from the
+        # storeys that stand full. Until 2026-10-10 a smaller storey's need,
+        # taken at a quarter more for its inset, could: the roof room of the
+        # owner's shrine (chat 164), its nest asked huge, grew the whole
+        # building to 20 by 14 and left the ground floor's spare to its stair
+        # halls, one a 20 by 5 band. A block of none but smaller storeys is
+        # sized from them as before.
+        full = ([n for lv, n in need.items() if not (lv in smaller and lv > 0)]
+                or [n * 1.25 for n in need.values()])
         count = max(sum(1 for r in rooms.values() if r["block"] == b and r["level"] == lv) for lv in levels)
         dims[b] = _outline_dims(max(full) * 1.05, front, count)
     # the entrance's block stands first, at the origin
@@ -1183,9 +1204,13 @@ def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, 
             if not cells:
                 s += 60
             elif side and side != got:
-                # a stair on the wrong wall is the fault a reader sees first
+                # a stair on the wrong wall is the fault a reader sees first;
+                # a side a plan HOLDS costs what a missing doorway costs, since
+                # either refuses the plan's building (`layout_bridge.refusals`)
+                # -- at 20 the owner's shrine (chat 164, 2026-10-10) traded two
+                # of them for a better-scoring stair and was refused for it
                 stair = "stair" in (key, purpose_key(rooms[other]) if other in rooms else "")
-                s += 45 if stair else 20
+                s += 60 if _held(rid, other, rooms) else (45 if stair else 20)
         want = outward.get(rid)
         if want is not None:
             sides = [want] if want in _SIDES else list(_SIDES)
@@ -1320,6 +1345,13 @@ def solve(spec, seed=SEED) -> Layout:
                     "s" if a.y + a.d <= c.y else "n" if c.y + c.d <= a.y else None)
             if side:
                 facing.setdefault(r["level"], {})[rid] = side
+                # standing off that wall, the join has no doorway and the
+                # building is refused for it (`layout_bridge.refusals`), so it
+                # costs what a missing doorway costs, not an outward room's 15:
+                # at 15 the owner's shrine (chat 164, 2026-10-10) set its
+                # basement off the wall its Seal Cavern stands beyond, in every
+                # one of 20 seeds
+                outward_weight[rid] = max(outward_weight.get(rid, 0), 60)
 
     def weights_for(ids, free_area):
         """Each room's share: what it needs, grown toward its ceiling when the

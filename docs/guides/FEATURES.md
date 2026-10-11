@@ -375,12 +375,13 @@ legitimately perceive, learn, remember or infer.
   and told again when somebody goes that way. A body can be off the
   ground -- flying, levitating, perched on a roof -- and sees over what a room
   holds, is out of reach of the floor, and can look into an upper window.
-  A planned building of several storeys can be laid out by code before its
+  A planned building of several storeys is laid out by code before its
   rooms are designed -- its rooms, stairs, doorways, windows and fixtures
-  placed from relations the room designer's model writes -- when the host,
-  or the story, turns the layout tier on.
+  placed from relations the room designer's model writes, reading the
+  story's own lore of the building -- unless the host, or the story, turns
+  the layout tier off.
   *(partial: sloping ground is not built yet, a flier still travels by
-  doorways, and the layout tier is off by default, lays out only buildings
+  doorways, and the layout tier lays out only buildings
   nobody has described yet, and, once a building it laid out has its upper
   storey standing, leaves the next planned building along its street to the
   room designer.)*

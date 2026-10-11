@@ -19,7 +19,7 @@
 | `agents/director_evidence.py` | 3963 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2450 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/director_layout.py` | 293 |  | — |
+| `agents/director_layout.py` | 382 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 3242 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
@@ -207,8 +207,8 @@
 | `world/frontage.py` | 1216 |  | `world.spatial` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1759 |  | — |
-| `world/layout_bridge.py` | 1316 |  | `world.layout_solver`, `world.structure` |
-| `world/layout_solver.py` | 2324 |  | — |
+| `world/layout_bridge.py` | 1437 |  | `world.layout_solver`, `world.structure` |
+| `world/layout_solver.py` | 2356 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1332 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
@@ -410,14 +410,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `lay_out_buildings()` | 221 | 73 lines |
-| `lay_out_opening_ground()` | 186 | 33 lines |
-| `layout_tier_enabled()` | 97 | 20 lines |
-| `_file_run()` | 140 | 14 lines |
-| `_waiting()` | 156 | 13 lines |
-| `lay_out()` | 171 | 13 lines |
-| `_plan_specs()` | 119 | 7 lines |
-| `_default_call()` | 128 | 4 lines |
+| `lay_out_buildings()` | 304 | 79 lines |
+| `building_description()` | 210 | 57 lines |
+| `lay_out_opening_ground()` | 269 | 33 lines |
+| `layout_tier_enabled()` | 101 | 20 lines |
+| `_file_run()` | 144 | 14 lines |
+| `_waiting()` | 160 | 13 lines |
+| `lay_out()` | 175 | 13 lines |
+| `_label()` | 199 | 9 lines |
 
 ### `agents/director_lingua.py`
 
@@ -2577,27 +2577,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `planned_layout()` | 1042 | 267 lines |
-| `spec_from_answers()` | 639 | 176 lines |
-| `_building()` | 326 | 144 lines |
-| `hold_inventory()` | 516 | 81 lines |
-| `refusals()` | 843 | 61 lines |
-| `plan_buildings()` | 244 | 57 lines |
-| `_edges_of()` | 190 | 28 lines |
-| `_stands_at()` | 955 | 23 lines |
+| `planned_layout()` | 1151 | 279 lines |
+| `spec_from_answers()` | 684 | 212 lines |
+| `_building()` | 336 | 162 lines |
+| `hold_inventory()` | 550 | 81 lines |
+| `plan_buildings()` | 236 | 57 lines |
+| `refusals()` | 968 | 56 lines |
+| `_edges_of()` | 182 | 28 lines |
+| `sort_payload()` | 502 | 28 lines |
 
 ### `world/layout_solver.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_grounds()` | 1983 | 308 lines |
-| `solve()` | 1273 | 243 lines |
-| `_place_fixtures()` | 1790 | 189 lines |
-| `_place_blocks()` | 589 | 118 lines |
-| `_spine_h()` | 909 | 91 lines |
-| `_place_doors()` | 1533 | 78 lines |
-| `_score()` | 1129 | 66 lines |
-| `_place_zones()` | 1664 | 60 lines |
+| `_grounds()` | 2015 | 308 lines |
+| `solve()` | 1298 | 250 lines |
+| `_place_fixtures()` | 1822 | 189 lines |
+| `_place_blocks()` | 601 | 127 lines |
+| `_spine_h()` | 930 | 91 lines |
+| `_place_doors()` | 1565 | 78 lines |
+| `_score()` | 1150 | 70 lines |
+| `_place_zones()` | 1696 | 60 lines |
 
 ### `world/living_world.py`
 

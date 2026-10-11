@@ -1,8 +1,9 @@
 # Buildings from relations: the layout solver as a tier of the plan
 
-Status: first slice built 2026-10-08, OFF by default -- the host's
-`layout_solver_tier` setting, or the same switch on one story. What is left
-is `UNBUILT_WORLD.md` §2.43.
+Status: first slice built 2026-10-08; ON by default since 2026-10-10, once
+the bridge lane laid the owner's own shrine plan cleanly (below) -- the
+host's `layout_solver_tier` setting, or the same switch on one story, turns
+it off. What is left is `UNBUILT_WORLD.md` §2.43.
 
 ## Why
 
@@ -58,12 +59,14 @@ re-reading the owner had just cut. Given up: a building nobody nears is never
 laid out, so the height-aware far readers meet it only then. At most one
 building is laid out a run (`LAYOUT_TIER_PER_RUN`).
 
-**The switch.** Off unless turned on: for one story, by that story's own
+**The switch.** On unless turned off: for one story, by that story's own
 `layout_solver_tier` world key (`LAYOUT_TIER_STORY_KEY`, read first, and kept
 across a reroll or a restore as a dial the author set,
 `persist.checkpoints.SETTING_PROVENANCE`), or for every story by the host's
 setting of the same name (`LAYOUT_TIER_SETTING`). A story's `off` holds even
-where the host's is on.
+where the host's is on, and its `on` where the host's is off. Off by default
+until 2026-10-10, by the owner's ruling "Bridge lane now, then on": on once
+the bridge laid a real Room plan cleanly, which it did that day.
 
 **What a building is.** The plan says which rooms exist and how they join, not
 which share a roof. A stair does: two rooms joined `up`/`down` are two storeys
@@ -78,8 +81,12 @@ are `enclosed`; a room of unstated exposure is never guessed in along a level
 join -- it is ground the building opens onto. The tier lays out a building
 only when every room is a planned stub nobody has described, none is sited or
 held open as a frontier space, none is planned another shape than a
-rectangle (`SOLVED_SHAPE`: the solver lays rectangles, and written back it
-would square a round tower room for good), it spans two storeys, it opens
+rectangle -- save one that opens into the building by a single doorway on a
+side the plan states, which stands in a block of its own beside the room it
+opens from, keeping its shape (`SOLVED_SHAPE`: the solver lays rectangles,
+and written back one would square a round tower room for good; a room built
+from `parts` cannot be re-boxed and still keeps its building out) -- it
+spans two storeys, it opens
 onto something, it holds at most `LAYOUT_TIER_MAX_ROOMS` rooms, and no other
 room already stands on the plan it would be written on
 (`layout:<entrance room>`): a room placed there beside an earlier solve stands
@@ -118,7 +125,13 @@ how each stands, zones, windows) and whether each stair is enclosed;
 facing, stair walls and shape). Every word the solver reads -- purpose,
 fixture kind, size, place, stair shape -- is chosen from a closed set the
 solver's own tables enumerate, handed to the model in the payload
-(`layout_bridge.vocabulary`); a word outside it is no word. The first call
+(`layout_bridge.vocabulary`); a word outside it is no word. Both calls read
+the story's own lore of the building (`description`,
+`director_layout.building_description`): the lorebook entries whose labels,
+read whole, name the building or one of its rooms, whole entries up to
+`LAYOUT_DESCRIPTION_CHARS`, as the layout lab read its descriptions; the
+second call gives a room's `area_m2` only where that lore states the room's
+size. The first call
 names every entry for what it is, never whose it is -- the room author's own
 class, since a name it gives a thing the plan does not describe becomes that
 anchor's desc, which every mind that sees the room reads -- and an entry for
@@ -223,13 +236,11 @@ stands on the old solve's plan, so a re-planned building is left to the
 designer, its stubs placed by derivation beside that street.
 
 **Fails open, always.** Off; not a building; an answer that cannot be read; a
-solve the bridge refuses (`layout_bridge.refusals`: a planned room with no
-floor, a stair with no hall, a join with no doorway, a doorway outside
-missing, a stated size lost past `STATED_AREA_TOLERANCE` or a stated
-proportion lost -- a side off by more than `STATED_SIDE_TOLERANCE` of it or
-`STATED_SIDE_SLACK_PACES`, whichever is more, the room turned a quarter or
-not -- a side the plan states put on another wall); a plan changed
-underneath; a cancelled job. A side only the model chose that the solver put
+solve the bridge refuses on every seed it is tried with
+(`layout_bridge.solve_for`, `LAYOUT_SOLVE_SEEDS`; `refusals`: a planned room
+with no floor, a stair with no hall, a join with no doorway, a doorway
+outside missing, a side the plan states put on another wall -- never a
+room's size, below); a plan changed underneath; a cancelled job. A side only the model chose that the solver put
 on another wall is listed in the record (`planned.layout.sides`), as the
 survey counted four on the shrine, and never refused. Each writes nothing and
 today's designer builds the rooms as it did. A failed attempt waits as a
@@ -243,6 +254,55 @@ would hide a pinned bench three paces along a four-pace wall from the two
 chests laid beside it. Measured on every scene row of the play database (139
 rows over 133 chats, 1 to 166, frames included; 10 pinned anchors, none with
 a rectangle): 8 rows before, 8 after, none removed or added.
+
+## The bridge lane (2026-10-10)
+
+The owner tried their shrine in the engine (chat 164) and found it built with
+no solve at all, nothing like the layout lab's. Four causes: the tier was off;
+the opening had described the room Hinami woke in before the tier could run
+(fixed first: `director_layout.lay_out_opening_ground`); the plan's Seal
+Cavern is planned `composite`, which refused the whole building; and, forced
+through, the calls read one-line purposes and no lore, so the solve lost every
+planned size and turned three doorways. The owner's ruling, "Bridge lane now,
+then on": lay the shrine's own plan, replicated with nothing described
+(scratch chat 168, its sixteen planned rooms), against the lab's, one change a
+round, and turn the tier on once it lays out cleanly. From round 4 every round
+was measured on recorded answers replayed, so only the code differed, and
+every solver change re-solved the lab's liked shrine cell for cell
+(`tools/layout_lab/baselines`).
+
+1. **The lore.** Both calls read the story's own entries about the building,
+   matched by the labels the lorebook's author wrote, read whole: on the
+   owner's lorebook, exactly the seven entries the lab was laid out from,
+   less the grounds -- 10,101 characters.
+2. **A room of another shape off one doorway stands in a block of its own**,
+   as the lab's own hand edit stood the Seal Cavern beyond the basement's
+   north wall; its doorway is written from its side, its shape kept.
+3. **Size from contents** (the owner's ruling, that day): the plan's `extent`
+   is the Writers' Room's estimate -- Hinami's room 36 m2 against the lore's
+   six mats -- and a solve held to a quarter of it was refused room after
+   room. The solve's size replaces it, each filed against the other
+   (`stated`); a size the lore states is the one size aimed at (`area_m2`,
+   filed as `described`). No size refuses a building any more.
+4. **A storey under the roof never sizes its block.** The roost's nest, asked
+   huge, set the whole shrine at 20 by 14 -- its need taken a quarter larger
+   for its inset -- and the ground floor's spare went to a stair hall 20 by 5.
+5. **A side the plan holds costs what a missing doorway costs** (`held`,
+   60): at 20 the solve traded two of them for a better-scoring stair.
+6. **A room joined to another block stands on the wall facing it at 60, not
+   15**: on one answer set the basement stood off the cavern's wall in all
+   20 seeds; after, 15 of 20 stood with no refusal.
+7. **Up to `LAYOUT_SOLVE_SEEDS` seeds (4)**, each tried only where the one
+   before fell short: one with every stair landed wins at once, else the
+   first the bridge does not refuse. A solve of the shrine takes 7 to 9 s.
+
+Measured at the end, three answer sets through the tier's own path: all three
+stand with no refusal; one with every stair landed in each room it joins (14.4
+s, two seeds); two with the stone stairs' hall opening off the Main Hall's
+neighbour rather than the Main Hall (35 s and 32 s, four seeds each), the
+stair's landing there left to the room designer. Two of the lab's three fresh
+runs re-solve differently under rounds 4 and 6; the liked shrine and the third
+do not. The owner's comparison page holds all of it. On by default from then.
 
 ## The live runs
 

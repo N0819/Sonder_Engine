@@ -1,10 +1,12 @@
 """The layout tier: a planned building of several storeys is laid out by code
-before any of its rooms is designed. OFF unless the host or the story turns
-it on (`LAYOUT_TIER_SETTING`, `LAYOUT_TIER_STORY_KEY`). The owner's ruling of
+before any of its rooms is designed. ON unless the host or the story turns
+it off (`LAYOUT_TIER_SETTING`, `LAYOUT_TIER_STORY_KEY`). The owner's ruling of
 2026-10-10, after their shrine (chat 164) was built with no solve at all:
-ON BY DEFAULT once the bridge lays a real Room plan cleanly -- the shrine's
-own plan, replicated, against the layout lab's -- and not before, so no
-story pays for refused attempts meanwhile.
+on by default once the bridge lays a real Room plan cleanly -- the shrine's
+own plan, replicated, against the layout lab's. It did that day, after the
+bridge lane's seven rounds: three answer sets of the shrine's own plan and
+lore stood with no refusal through this module's own path, one with every
+stair landed in each room it joins (`docs/design/DESIGN_LAYOUT_TIER.md`).
 
 THE OWNER'S CHOICE (2026-10-08, survey rank 6, first slice): the layout lab's
 solver as an out-of-band tier for planned buildings -- "a model decides what
@@ -56,12 +58,14 @@ it did before this existed. A failed attempt waits as a failed design does
 """
 from __future__ import annotations
 
+import json
 import time
 
-#: The host's switch, in the settings table. OFF unless set to
-#: `1`/`on`/`true`/`yes` -- until the bridge lays a real Room plan cleanly
-#: (the owner, 2026-10-10: "Bridge lane now, then on"); the owner's comparison
-#: protocol for the layout lab applies (`tools/layout_lab/baselines`).
+#: The host's switch, in the settings table. ON unless set to
+#: `0`/`off`/`false`/`no` -- the owner's ruling of 2026-10-10, "Bridge lane
+#: now, then on", met that day on the shrine's replica; the owner's
+#: comparison protocol for the layout lab applies to every change of the
+#: solver (`tools/layout_lab/baselines`).
 LAYOUT_TIER_SETTING = "layout_solver_tier"
 #: The STORY's switch: a world key of the chat, read before the host's, so
 #: the tier can be turned on for one story to compare it there and nowhere
@@ -97,8 +101,8 @@ _OFF = ("0", "off", "false", "no")
 def layout_tier_enabled(cid=None) -> bool:
     """Whether planned buildings are laid out by the solver in chat `cid`:
     the story's own switch when it states one (`LAYOUT_TIER_STORY_KEY`),
-    else the host's (`LAYOUT_TIER_SETTING`) -- OFF unless one of them says
-    on."""
+    else the host's (`LAYOUT_TIER_SETTING`) -- ON unless one of them says
+    off."""
     from core.db import get_setting, wget
     if cid is not None:
         try:
@@ -112,8 +116,8 @@ def layout_tier_enabled(cid=None) -> bool:
     try:
         raw = get_setting(LAYOUT_TIER_SETTING)
     except Exception:
-        return False
-    return str(raw or "").strip().casefold() in _ON
+        return True
+    return str(raw or "").strip().casefold() not in _OFF
 
 
 def _plan_specs(cid):
@@ -179,8 +183,87 @@ def lay_out(building, call, language_id):
     relate_answer = call(RELATE_STEP, layout_prompt("relate", language_id),
                          layout_bridge.relate_payload(building, inventory))
     spec = layout_bridge.spec_from_answers(building, inventory, relate_answer)
-    layout = layout_bridge.solve_spec(spec)
-    return spec, layout, inventory, layout_bridge.refusals(building, spec, layout)
+    layout, refused = layout_bridge.solve_for(building, spec)
+    return spec, layout, inventory, refused
+
+
+#: The most of the story's own lore about one building the tier's two calls
+#: read (`building_description`), in characters, whole entries only. The
+#: layout lab's liked shrine was laid out from 14k characters of description
+#: (`tools/layout_lab/briefs`); the shrine's own entries in the owner's
+#: lorebook that name it or its rooms come to about 10k. Named per
+#: ask-before-limiting.
+LAYOUT_DESCRIPTION_CHARS = 16000
+
+
+def _label(text, articles):
+    """A name as the lore's labels are compared: slugged
+    (`spatial.normalize_room_id`), a leading article set aside -- the pack's
+    own article list (`compositor.articles`), so "The Shrine of the Golden
+    Fox" is the key "shrine of the golden fox" -- and nothing else changed."""
+    from world.spatial import normalize_room_id
+    slug = normalize_room_id(str(text or ""))
+    head, _sep, rest = slug.partition("_")
+    return rest if rest and head in articles else slug
+
+
+def building_description(cid, building, frame_id=None):
+    """WHAT THE STORY'S OWN LORE SAYS OF THIS BUILDING, for the tier's two
+    calls: every entry of the chat's lorebooks (`chat_lorebook_ids`, the
+    story's overlays merged by `lore_rows`) whose authored labels -- its
+    keys, title, aliases and uid -- name the building or one of its rooms by
+    name or id, the entries naming the building itself first, then in the
+    books' own order, whole, up to `LAYOUT_DESCRIPTION_CHARS`. "" when none.
+
+    The plan holds a room's one-line purpose; the lore holds what the room is
+    -- its fixtures, its windows, what its floor is laid with -- and a solver
+    sizes a room by what it holds. Without it the owner's shrine (chat 164)
+    came back with every room a third of its planned size; the layout lab's
+    liked shrine was laid out FROM such a description. Matched by the labels
+    the lorebook's author wrote, WHOLE -- a key that runs on past a room's
+    name ("seal cavern divine side") names somewhere else, and a word the
+    building's name merely contains ("shrine") names no building -- never by
+    reading the entries' prose. On the owner's lorebook this is exactly the
+    seven entries the layout lab was laid out from, less the grounds."""
+    from language_runtime import compositor_value
+    from mind.memory import chat_lorebook_ids, lore_rows
+    articles = {str(a).casefold() for a in compositor_value("articles") or ()}
+    own = {_label(building.get("structure"), articles),
+           _label(building.get("structure_name"), articles)}
+    building_labels = set(own)
+    for uid in building.get("rooms") or ():
+        building_labels.add(_label(uid, articles))
+        building_labels.add(_label((building.get("names") or {}).get(uid), articles))
+    building_labels.discard("")
+    own.discard("")
+    ids = chat_lorebook_ids(cid)
+    if not ids:
+        return ""
+    first, rest = [], []
+    for row in lore_rows(ids, chat_id=cid, frame_id=frame_id):
+        row = dict(row)
+        labels = {_label(row.get("title"), articles), _label(row.get("entry_uid"), articles)}
+        labels.update(_label(key, articles) for key in str(row.get("keys") or "").split(","))
+        aliases = row.get("aliases")
+        try:
+            aliases = json.loads(aliases) if isinstance(aliases, str) else aliases
+        except ValueError:
+            aliases = []
+        labels.update(_label(a, articles) for a in (aliases or ()) if a)
+        labels.discard("")
+        if not labels & building_labels:
+            continue
+        text = str(row.get("content") or "").strip()
+        if not text:
+            continue
+        (first if labels & own else rest).append(text)
+    out, total = [], 0
+    for text in first + rest:
+        if total + len(text) > LAYOUT_DESCRIPTION_CHARS:
+            continue
+        out.append(text)
+        total += len(text) + 2
+    return "\n\n".join(out)
 
 
 def lay_out_opening_ground(cid, frame_id=None, *, call=None):
@@ -253,6 +336,12 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
             continue
         done += 1
         started = time.time()
+        try:
+            described = building_description(cid, building)
+        except Exception:
+            described = ""
+        if described:
+            building = dict(building, description=described)
         try:
             spec, layout, inventory, refused = lay_out(building, call, language_id)
         except Exception as exc:

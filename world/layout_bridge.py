@@ -36,7 +36,8 @@ relate, from the closed vocabularies the solver's own tables enumerate
 
 WHAT A SOLVE BECOMES (`planned_layout`):
 * each room its rectangle -- `extent`, `shape` rectangle, `level`, and
-  `site` {plan, x, y, elev_m} on the building's plan;
+  `site` {plan, x, y, elev_m} on the building's plan; a room in a block of
+  its own keeps the shape the plan states, inside the solved box;
 * each fixture placed as asked an anchor pinned to its rectangle (`cell` and
   `extent`, read by `spatial_fov.anchor_extent`), its height the solver's,
   its `dir` the wall it stands against; several alike are one anchor each,
@@ -73,24 +74,30 @@ went to one was lost (review of 2026-10-08, F3 and R2-2).
 
 FAILS OPEN. `refusals` names everything that stops a solve standing for the
 plan -- a planned room with no floor, a stair with no hall, a join with no
-doorway, a stated size or proportion the solve lost, a side the plan states
-put on another wall -- and a refused building is written nowhere: today's
-designer builds its rooms exactly as it would have. A room the plan states
-is not a rectangle refuses the building before any call is made: the solver
-lays rectangles. So does a room already standing on the plan the solve would
-be written on: placed beside an earlier solve, it stands in that solve's
-frame. A side only the model chose that the solver put elsewhere is
-listed in the record (`sides`), not refused, and every stated measurement is
-filed against what was solved (`stated`).
+doorway, a side the plan states put on another wall -- and a refused
+building is written nowhere: today's designer builds its rooms exactly as it
+would have. A room's SIZE is none of these. The plan's `extent` is the
+Writers' Room's estimate: the solver sizes every room from what it holds,
+aimed at a size only where the story's own lore states one, and the solve's
+size replaces the estimate, each filed against the other (`stated`,
+`described`; the owner's ruling of 2026-10-10). A room the plan states is
+not a rectangle stands in a block of its own when it opens into the
+building by one doorway on a side the plan states; built from `parts`, or
+joined any other way, it refuses the building before any call is made: the
+solver lays rectangles. So does a room already standing on the plan the
+solve would be written on: placed beside an earlier solve, it stands in that
+solve's frame. A side only the model chose that the solver put elsewhere is
+listed in the record (`sides`), not refused.
 """
 from __future__ import annotations
 
 import copy
 import hashlib
 import json
+import math
 import re
 
-from world.layout_solver import (FIXTURE_SIZES, PACE_M, PURPOSE_AREA, SIZE_WORD_FOOTPRINT,
+from world.layout_solver import (FIXTURE_SIZES, PURPOSE_AREA, SIZE_WORD_FOOTPRINT,
                                  STAIR_FALLBACK, STAIRS, ZONE_SIZES, check, fixture_footprint,
                                  solve)
 from world.structure import LAYOUT_PLAN_PREFIX
@@ -104,29 +111,14 @@ from world.structure import LAYOUT_PLAN_PREFIX
 #: time; a building over it fails open to the designer, which builds it
 #: room by room as it always has. Named per ask-before-limiting.
 LAYOUT_TIER_MAX_ROOMS = 24
-#: How far a solved room's floor may stand from the floor area the plan
-#: STATED for it (`extent`) before the solve is refused, as a share of the
-#: stated area. A stated size is a measurement the plan made and is never
-#: quietly lost (F47); the solver treats it as a target, not a constraint
-#: (`layout_solver.room_target`), and a slice off by one pace on one side of
-#: a five-by-six room is a sixth of its floor. A quarter keeps that and
-#: refuses a room the solve made a third larger or smaller than asked.
-STATED_AREA_TOLERANCE = 0.25
-#: How far each SIDE of a solved room may stand from the side the plan
-#: STATED, as a share of that side, allowing the room a quarter turn -- and
-#: never less than `STATED_SIDE_SLACK_PACES`. A stated extent is a proportion
-#: as well as an area: a hall planned twelve by three and solved six by five
-#: keeps its floor within a quarter and is a different room (review of
-#: 2026-10-08, F2), and once sited no beat may re-measure it
-#: (`spatial_merge`). The solver aims every room at its area and keeps it
-#: near square (`layout_solver._score`), so a long room is refused rather
-#: than squared, and its building fails open to the designer. A quarter
-#: matches the area's tolerance.
-STATED_SIDE_TOLERANCE = 0.25
-#: The least a stated side may move, in paces, whatever its share: the grid
-#: is one pace, so a three-pace side solved four is the nearest the solver
-#: can come to three and a half.
-STATED_SIDE_SLACK_PACES = 1
+#: How many seeds of the solver's search one building is tried with before
+#: the bridge refuses it (`solve_for`): the solver's own seed first, then the
+#: next ones, each only where the one before fell short. A solve of the
+#: owner's shrine takes 7 to 9 s, so this bounds the worst case near 35 s of
+#: one background job, or of a launch whose opening stands in a planned
+#: building (`director_layout.lay_out_opening_ground`). Named per
+#: ask-before-limiting.
+LAYOUT_SOLVE_SEEDS = 4
 #: The one shape the solver lays. A room the plan states another shape of
 #: (`spatial_fov.SHAPES`: round, l, composite) refuses its building before
 #: any call is made: written back, its rectangle would square a round tower
@@ -300,6 +292,24 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
     return sorted(out, key=lambda b: b["key"])
 
 
+def _own_block(uid, joins, stairs, levels):
+    """`{"beside": room, "side": side}` -- the room `uid` opens from and the
+    side of it `uid` stands on -- when `uid` joins the building by exactly one
+    doorway on its own storey with a side the plan states, and no stair; else
+    None."""
+    if any(uid in (s["low"], s["high"]) for s in stairs):
+        return None
+    mine = [j for j in joins if uid in (j["a"], j["b"])]
+    if len(mine) != 1:
+        return None
+    (j,) = mine
+    other = j["b"] if j["a"] == uid else j["a"]
+    if levels.get(other) != levels.get(uid) or not j["side"]:
+        return None
+    side = j["side"] if j["a"] == other else _OPP.get(j["side"])
+    return {"beside": other, "side": side} if side else None
+
+
 def _on_a_plan(live, normalize_site, solved):
     """A live room's site when it stands on a plan a building may not be laid
     over: one decided -- solved, converted, placed by a host -- or one the
@@ -442,8 +452,26 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
         elif plan[uid].get("parent_entity") or (isinstance(live, dict) and live.get("parent_entity")):
             refusal = f"{uid} is the inside of something"
         elif str(plan[uid].get("shape") or SOLVED_SHAPE).strip().casefold() != SOLVED_SHAPE:
-            refusal = (f"{uid} is planned {plan[uid]['shape']}, and the solver lays "
-                       f"{SOLVED_SHAPE}s")
+            # A ROOM OF ANOTHER SHAPE THAT OPENS INTO THE BUILDING BY ONE
+            # DOORWAY STANDS IN A BLOCK OF ITS OWN beside the room it opens
+            # from, on the side the plan states -- the layout lab's own hand
+            # edit to the shrine the owner liked ("Seal Cavern added as a
+            # room of its own block beyond the basement's north wall"), made
+            # by the engine. The solve says where it stands and how large --
+            # from what it holds, like every room -- and its shape stays the
+            # plan's (`planned_layout`): a round room keeps its curve inside
+            # the solved box and is never squared. One built from `parts`
+            # the plan places inside its box cannot be re-boxed, and one
+            # joined any other way -- by a stair, or to two rooms -- still
+            # keeps its building out.
+            from world.spatial import normalize_parts
+            block = (None if normalize_parts(plan[uid].get("parts"))
+                     else _own_block(uid, joins, stairs, levels))
+            if block is None:
+                refusal = (f"{uid} is planned {plan[uid]['shape']}, and the solver lays "
+                           f"{SOLVED_SHAPE}s")
+            else:
+                building.setdefault("own_blocks", {})[uid] = block
     if refusal is None:
         # A SOLVE IS WRITTEN ONLY ONTO A PLAN NOTHING ELSE STANDS ON. A room
         # outside the building standing on the plan this solve would write --
@@ -491,8 +519,14 @@ def sort_payload(building):
             "fixtures": [{"id": aid, "desc": _text((a or {}).get("desc"), 300)}
                          for aid, a in anchors.items() if isinstance(a, dict)],
         })
-    return {"building": {"name": building["names"].get((building["entrance"] or {}).get("room"))
-                         or building["names"][building["rooms"][0]], "rooms": rooms}}
+    out = {"building": {"name": building["names"].get((building["entrance"] or {}).get("room"))
+                        or building["names"][building["rooms"][0]], "rooms": rooms}}
+    # WHAT THE STORY'S LORE SAYS OF IT (`director_layout.building_description`),
+    # where the tier found any: the fixtures, windows and floors a room's
+    # one-line purpose leaves out, and the solver sizes a room by what it holds.
+    if str(building.get("description") or "").strip():
+        out["building"]["description"] = str(building["description"]).strip()
+    return out
 
 
 def _plan_anchors(building, uid):
@@ -620,6 +654,17 @@ def relate_payload(building, inventory):
     return out
 
 
+def _area(value):
+    """A floor area in square metres: a positive finite number, else None."""
+    if isinstance(value, bool):
+        return None
+    try:
+        area = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round(area, 2) if math.isfinite(area) and area > 0 else None
+
+
 def _int(value, default=0):
     if isinstance(value, bool):
         return default
@@ -658,21 +703,49 @@ def spec_from_answers(building, inventory, answer):
         purpose = str(mine.get("purpose") or "").strip().casefold().replace(" ", "_")
         room = {"id": uid, "name": building["names"][uid], "level": building["levels"].get(uid, 0),
                 "purpose": purpose if purpose in purposes else "other"}
-        stated = spec.get("extent") if isinstance(spec.get("extent"), dict) else None
-        if stated and _int(stated.get("w")) > 0 and _int(stated.get("d")) > 0:
-            room["area_m2"] = round(_int(stated["w"]) * _int(stated["d"]) * PACE_M * PACE_M, 2)
+        if uid in (building.get("own_blocks") or {}):
+            room["block"] = uid
+        # A ROOM IS SIZED FROM WHAT IT HOLDS (`layout_solver.room_target`),
+        # aimed at a size only where the story's own lore states one. The
+        # plan's `extent` is the Writers' Room's estimate and never reaches
+        # the solver: the owner's ruling of 2026-10-10, "size from contents,
+        # like the lab" -- chat 164's Room planned the shrine at sizes no
+        # compact building holds (Hinami's room 36 m2 against the lore's six
+        # mats), and the quarter the solve was held to turned most real plans
+        # away. With no description there is no lore to state a size, so an
+        # area an answer gives then is the model's own estimate, dropped.
+        described = _area(mine.get("area_m2")) if building.get("description") else None
+        if described:
+            room["area_m2"] = described
         # joins: the plan's, sided by the plan where it says, else by the answer
         asked = {}
         for j in mine.get("joins") or ():
             if isinstance(j, dict):
                 asked[str(j.get("to") or "")] = j
         joins = []
+        own_blocks = building.get("own_blocks") or {}
         for j in building["joins"]:
             if uid not in (j["a"], j["b"]):
                 continue
             other = j["b"] if j["a"] == uid else j["a"]
+            # each join written once: from its first room -- except a room in
+            # a block of its own, which carries its own doorway (the lab's
+            # shrine wrote the cavern's door on the cavern), since the solver
+            # cuts a door between blocks from the block's side
+            writer = j["b"] if j["b"] in own_blocks else (
+                j["a"] if j["a"] in own_blocks else j["a"])
+            if writer != uid:
+                continue
             if j["a"] != uid:
-                continue             # each join written once, from its first room
+                side = _OPP.get(j["side"]) if j["side"] else None
+                side = side or _side((asked.get(other) or {}).get("side"))
+                entry = {"to": other, "kind": _door_kind(j["barrier"])}
+                if side:
+                    entry["side"] = side
+                if j["side"]:
+                    entry["held"] = True
+                joins.append(entry)
+                continue
             side = j["side"] or _side((asked.get(other) or {}).get("side"))
             if side is None and other in said:
                 back = next((x for x in said[other].get("joins") or ()
@@ -681,6 +754,10 @@ def spec_from_answers(building, inventory, answer):
             entry = {"to": other, "kind": _door_kind(j["barrier"])}
             if side:
                 entry["side"] = side
+            if j["side"]:
+                # the PLAN's side: the solver weighs losing it as the
+                # refusal it is (`layout_solver._held`)
+                entry["held"] = True
             order = _int((asked.get(other) or {}).get("order"))
             if order > 0:
                 entry["order"] = order
@@ -811,7 +888,11 @@ def spec_from_answers(building, inventory, answer):
             "front": front,
             "entrance": {"room": entrance.get("room"),
                          "kind": _door_kind(entrance.get("barrier"))} if entrance else {},
-            "storeys": smaller, "rooms": rooms, "stairs": stairs, "grounds": grounds}
+            "storeys": smaller, "rooms": rooms, "stairs": stairs, "grounds": grounds,
+            **({"blocks": [{"id": uid, "apart": False,
+                            "beside": {"block": "main", "side": block["side"]}}
+                           for uid, block in sorted((building.get("own_blocks") or {}).items())]}
+               if building.get("own_blocks") else {})}
 
 
 def _unique_outside(building):
@@ -838,6 +919,50 @@ def _mount(value, ids):
 def solve_spec(spec):
     """The solver's layout for a spec (`world.layout_solver.solve`)."""
     return solve(spec)
+
+
+def solve_for(building, spec):
+    """`(layout, refusals)`: the solve that stands for the plan, over
+    `LAYOUT_SOLVE_SEEDS` seeds of the solver's search taken in order from its
+    own (`layout_solver.SEED`). One whose every stair lands in each room it
+    joins (`unlanded`) is taken at once; failing that, the first the bridge
+    does not refuse; failing every seed, the first seed's solve and its
+    refusals, the building failing open as before. Each seed is
+    deterministic, so a building solves the same way every time, and a seed
+    after the first is tried only where the first fell short.
+
+    The owner's shrine (chat 164, 2026-10-10), replicated: of twenty seeds,
+    one answer set laid out with no refusal on fifteen, another on thirteen
+    and a third, after its cross-block door was weighed as the refusal it
+    is, on fifteen -- the solver's own seed among the failures more than
+    once. A building refused on one seed but not on most is a building the
+    search missed, not one the plan cannot hold."""
+    from world.layout_solver import SEED
+    first = standing = None
+    for k in range(LAYOUT_SOLVE_SEEDS):
+        layout = solve(spec, seed=SEED + k)
+        refused = refusals(building, spec, layout)
+        first = first or (layout, refused)
+        if refused:
+            continue
+        if not unlanded(spec, layout):
+            return layout, refused
+        standing = standing or (layout, refused)
+    return standing or first
+
+
+def unlanded(spec, layout):
+    """`[(stair id, room)]` for every end of a stair whose hall the solve
+    gave no doorway onto the room it joins: the plan's stair then has no
+    landing there (`planned_layout` pins none, and the room's designer
+    places it). Read off the layout's doors, never its warnings."""
+    halls_of = {}
+    for well in layout.stairwells:
+        for flight in well.get("flights") or ():
+            halls_of[flight] = set((well.get("halls") or {}).values())
+    pairs = {frozenset((d["a"], d["b"])) for d in layout.doors if not d.get("outside")}
+    return [(st["id"], room) for st in spec.get("stairs") or () for room in (st["from"], st["to"])
+            if not any(frozenset((hall, room)) in pairs for hall in halls_of.get(st["id"], ()))]
 
 
 def refusals(building, spec, layout):
@@ -872,17 +997,12 @@ def refusals(building, spec, layout):
             else o["to"]
         if (o["room"], target) not in outs:
             out.append(f"{o['room']} has no doorway onto {o['to']}")
-    for uid in building["rooms"]:
-        stated = _stated_sides(building["specs"][uid])
-        if uid not in placed or stated is None:
-            continue
-        rect = placed[uid][1]
-        want = stated[0] * stated[1]
-        if abs(rect.w * rect.d - want) > STATED_AREA_TOLERANCE * want \
-                or not sides_kept(stated, (rect.w, rect.d)):
-            out.append(f"{uid} was planned {stated[0]} by {stated[1]} "
-                       f"and solved {rect.w} by {rect.d}")
-    # A SIDE THE PLAN STATES IS A FACT THE PLAN MADE, like a stated size: the
+    # A ROOM'S SIZE IS NEVER A REFUSAL: the plan's `extent` is the Writers'
+    # Room's estimate, which the solve replaces, filed beside it
+    # (`planned_layout`; the owner's ruling of 2026-10-10). Until then a
+    # solve a quarter off a planned size or side was refused (F47, review of
+    # 2026-10-08 F2), and on the owner's shrine that was nearly every room.
+    # A SIDE THE PLAN STATES IS A FACT THE PLAN MADE: the
     # solver may put a doorway on another wall when its arrangement cannot
     # honour the one asked (it records a warning and goes on), and written
     # back that would re-bear the plan's own edge without a word
@@ -910,17 +1030,6 @@ def _stated_sides(planned):
         return None
     w, d = _int(stated.get("w")), _int(stated.get("d"))
     return (w, d) if w > 0 and d > 0 else None
-
-
-def sides_kept(stated, solved):
-    """Whether a solved rectangle keeps the proportion a plan stated: each
-    side within `STATED_SIDE_TOLERANCE` of its stated side -- or
-    `STATED_SIDE_SLACK_PACES`, whichever is more -- the room turned a
-    quarter or not."""
-    def near(want, got):
-        return abs(got - want) <= max(STATED_SIDE_SLACK_PACES, STATED_SIDE_TOLERANCE * want)
-    (w, d), (sw, sd) = stated, solved
-    return (near(w, sw) and near(d, sd)) or (near(w, sd) and near(d, sw))
 
 
 def _door_side(layout, a, b):
@@ -1052,25 +1161,37 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         for rid, rs in floor.items():
             rects[rid], levels[rid] = rs[0], lv
     out, report = {}, {"plan": building["plan"], "moved": [], "unplaced": [],
-                       "stated": [], "marks": [], "restored": [], "split": [],
-                       "warnings": list(layout.warnings)}
+                       "stated": [], "described": [], "marks": [], "restored": [],
+                       "split": [], "warnings": list(layout.warnings)}
     spec_rooms = {r["id"]: r for r in spec.get("rooms") or ()}
     for uid in building["rooms"]:
         r = rects[uid]
         geometry = {"extent": {"w": r.w, "d": r.d}, "shape": SOLVED_SHAPE, "level": levels[uid],
                     "site": {"plan": building["plan"], "x": r.x, "y": r.y,
                              "elev_m": round(levels[uid] * STOREY_M, 2)}}
+        if uid in (building.get("own_blocks") or {}):
+            # its own block: where it stands and how large are the solve's,
+            # its shape the plan's -- never squared
+            geometry.pop("shape")
         out[uid] = {"geometry": geometry, "anchors": {}, "edges": {},
                     "record": {"moved": [], "unplaced": []}}
         stated = _stated_sides(building["specs"][uid])
         if stated is not None:
-            # A STATED MEASUREMENT IS FILED AGAINST THE SOLVE, kept or not:
-            # the plan's own numbers are written over by the solve's, and
-            # this is where they are still read (review of 2026-10-08, F2).
+            # THE PLAN'S ESTIMATE IS FILED AGAINST THE SOLVE: the Room's own
+            # numbers are written over by the solve's (the owner's ruling of
+            # 2026-10-10), and this is where they are still read.
             entry = {"room": uid, "stated": {"w": stated[0], "d": stated[1]},
                      "solved": {"w": r.w, "d": r.d}}
             report["stated"].append(entry)
             out[uid]["record"]["stated"] = {"w": stated[0], "d": stated[1]}
+        described = (spec_rooms.get(uid) or {}).get("area_m2")
+        if described:
+            # a size the lore states: aimed at, and filed against the solve
+            # however near it came -- the solver never sizes a room below
+            # what it holds (`layout_solver.room_target`)
+            report["described"].append({"room": uid, "area_m2": described,
+                                        "solved": {"w": r.w, "d": r.d}})
+            out[uid]["record"]["described_m2"] = described
     # FIXTURES: pinned where they stand as asked; never pinned where the
     # solver moved them or could not place them
     asked = {}
@@ -1301,7 +1422,7 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         out[uid]["layout"] = {"plan": building["plan"], "turn": turn,
                               "moved": record["moved"], "unplaced": record["unplaced"],
                               "sides": record.get("sides", [])}
-        for key in ("stated", "restored", "split"):
+        for key in ("stated", "described_m2", "restored", "split"):
             if key in record:
                 out[uid]["layout"][key] = record[key]
         del out[uid]["record"]
