@@ -79,6 +79,7 @@ RULES:
 8. Keys must be a single comma-separated string. Each entry should be self-contained — do not reference other entries by number.
 9. Honor entry_target as a rough ceiling. Prefer fewer high-quality entries over many thin ones.
 10. All arrays may be empty if there is nothing to propose for that category.
+11. A building or other place with rooms that the request asks for gets a 'layout' entry for each floor or wing beside its 'location' entry, so the place can be laid out as the story's own lore describes it.
 
 STAGED GENERATION:
 If — and only if — the input contains "stage": "structure", you are running the FIRST of several calls, and the entry BODIES are written by later calls instead of this one. In that case do not write entry content: leave entry_ops empty and return an additional top-level key

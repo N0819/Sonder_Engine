@@ -277,3 +277,22 @@ def test_an_op_less_entry_still_reaches_the_book(temp_db, book):
         "SELECT COUNT(*) AS n FROM lore_entries WHERE lorebook_id=?",
         (book,), one=True,
     )["n"] == 2
+
+
+@pytest.mark.parametrize("lang", ["en", "ja"])
+def test_a_generated_layout_entry_is_a_floor_plan_the_tier_can_read(lang):
+    """The owner's shrine (2026-10-11): the layout lab's liked shrine was laid
+    out from lore stating which way the house fronts, which side of its
+    neighbour each room lies, each room's size and each stair's wall; the
+    owner's lorebook carried the placements but no sizes, and the engine's
+    layout turned a room off the side the lore gave it. The generator now
+    writes a 'layout' entry that a plan can be drawn from alone, and plans
+    one for every floor or wing of a building the request asks for."""
+    from llm.prompts import get_prompt, prompt_fragment
+    note = prompt_fragment("category_note", lang)
+    layout = note[note.index("'layout'"):note.index("'event'")]
+    for part in (("fronts", "compass", "size", "stair", "window") if lang == "en"
+                 else ("正面", "方角", "広さ", "階段", "窓")):
+        assert part in layout, (lang, part)
+    planner = get_prompt("generator_lorebook", lang)
+    assert "11." in planner and "'layout'" in planner.split("11.", 1)[1][:200]
