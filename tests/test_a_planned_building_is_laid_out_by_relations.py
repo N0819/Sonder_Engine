@@ -1535,6 +1535,22 @@ def test_the_relate_card_asks_for_a_size_only_where_the_lore_states_one(lang):
 
 
 @pytest.mark.parametrize("lang", ["en", "ja"])
+def test_a_size_the_lore_states_travels_through_the_brief(lang):
+    """The owner's shrine (chat 167, 2026-10-11): with "a six-mat room" in
+    the lore, the brief card's "No measurements" dropped every size and the
+    relate card's area rule ended on leaving it out, so 0 of 3 answers wrote
+    one and Hinami's room was turned off its side; with the brief carrying
+    the stated size and the relate card writing what the description OR the
+    brief states, 3 of 3 wrote all four and kept it east of the hallway."""
+    from llm.prompts import layout_prompt
+    rule = next(line for line in layout_prompt("relate", lang).splitlines()
+                if "`area_m2`" in line)
+    assert "brief" in rule
+    brief = layout_prompt("brief", lang)
+    assert ("description's own unit" in brief) if lang == "en" else ("description の単位" in brief)
+
+
+@pytest.mark.parametrize("lang", ["en", "ja"])
 def test_both_layout_cards_say_what_the_description_is(lang):
     from llm.prompts import layout_prompt
     assert "`description`" in layout_prompt("sort", lang)

@@ -6,6 +6,6 @@ Write the brief in plain prose, one short paragraph a storey, using the rooms' n
 - For each stair: the wall it runs along, the room it rises from and the room it arrives in. A stair stands in one place on every storey it joins: it runs along a wall and arrives over the room it rose from, unless the description puts the room above beyond it.
 - Lay each storey as a builder would: compact rooms side by side, a hallway that reaches every room opening off it, stairs along the walls of the rooms they serve rather than in the middle of a floor, and on a storey above, the rooms over the rooms below.
 - Where the description says where something stands, keep it; where it does not, choose the plainest arrangement that keeps the plan.
-- No measurements and no coordinates.
+- No coordinates, and no measurement of your own: where the description states a room's size, say it with that room, in the description's own unit.
 
 Answer with one JSON object: {"brief": "<the brief>"}

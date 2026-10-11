@@ -11,7 +11,7 @@ JSON オブジェクトを一つだけ答えてください。
 
 ROOM = {"id": "<room id>",
         "purpose": "<one of vocabulary.purposes: the one nearest what the room is for, else other>",
-        "area_m2": <square metres, only where the description states this room's size>,
+        "area_m2": <square metres: the size the description or the brief states for this room>,
         "joins": [{"to": "<room id>", "side": "n|e|s|w", "order": 1}],
         "zones": [{"id": "<zone id>", "at": "<one of vocabulary.places>", "by": "entrance", "size": "<one of vocabulary.zone_sizes>"}],
         "windows": [{"id": "<window id>", "side": "n|e|s|w", "count": 1}],
@@ -23,6 +23,6 @@ ROOM = {"id": "<room id>",
 - zone の `by` が `entrance` になるのは入口の扉のところの zone だけです。その `at` は、沿っている壁、`middle`、または隅です。
 - window の `side` はそれがある壁で、方位が決まれば何に面しているかから決まります。
 - fixture の `kind` は、それに当たる `vocabulary.fixture_kinds` の一つです。どれにも当たらないものには、あなた自身の語と `size` を与えます。`size` は挙げられた kind の大きさを変えるのにも使えます。その `at` は、沿って立つ壁、自立するものなら `middle`、隅、または同じものを複数 room の壁に沿って並べるなら `walls` です。`in` はそれが立つ zone、`near`・`beside`・`facing` はそれがそばに立つものを名指します。
-- room の `area_m2` は、description 自体がその room について述べている大きさを、述べられている単位から平方メートルに直したものです。description が大きさを述べていないところでは書かないでください。エンジンはどの room の大きさも、その room が収めるものから決めます。
+- description か brief が room の大きさを述べているところでは、どの単位であっても、その大きさを平方メートルに直してその room の `area_m2` に書いてください。それ以外の room の大きさは、エンジンがその room が収めるものから決めます。
 - 階段は両端の room の中に立ちます。`from_at` は FROM の room でそれが沿って立つ壁、`to_at` は TO の room でそれが着く壁です。二つの room は二つの階にある一つの建物なので、二つの壁は一致しなければなりません。
 - 計画と inventory が与えること、またはこの種の実在の場所が明らかに持っていることだけを述べてください。
