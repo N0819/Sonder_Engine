@@ -87,24 +87,6 @@ The owner's D6 and D7 rulings (2026-10-09) landed as `story/carriers.unbacked_cl
 - **The reply rule is a card's.** Both cards forbid a reply that says whether a character's words are true or only a claim, unless the player asked, and the full planner's reply names what it planted spoiler-safe where the package is sealed; no code reads a reply.
 - **A planned person's own truths do not reach their sheet.** `importers.PLAN_FIELDS_FOR_SHEET` withholds a plan's truths and purpose from the promotion draft because they carry no mark of whose head they are in; a per-truth `known_by` on plan truths, as package truths carry, would let the person's own through. The owner's to decide.
 
-<a id="unbuilt-1-202"></a>
-
-### 1.202 An absence the story's premise states never reaches the town
-
-**Found 2026-10-12** by the Hollowmere test story
-(`docs/experiments/PLAY_2026_10_12_hollowmere.md`, scratch chat 196). The
-brief and the Room's common lore both say Agathe Brenn, who keeps the upper
-telegraph instrument, has not answered since noon -- the premise of the
-story. The Room planted her as the instrument's keeper (`plan_entity`), the
-town simulator stood her body at her post as a resident's ordinary day, and
-when the player walked in she was there, and was voiced there, confused ("I
-know what Karl's bell sounds like"). Nothing carries "she is not where her
-post would put her" from a truth or the lore to the charter's placement of
-a body. Candidates, the owner's call: the Room plans the absence as an
-event or a placement (where she is instead, or that nobody knows), or the
-charter reads a planned person's truths before it places her.
-
-
 ## 2. Roadmap
 
 <a id="unbuilt-2-9"></a>

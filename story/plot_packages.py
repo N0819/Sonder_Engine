@@ -688,6 +688,7 @@ def _world_snapshot(cid, frame_id=None):
         # The registered cast and the player, by folded name: who a plan's
         # `known_by` may name.
         "cast": {str(n).casefold(): str(n) for n in cast_names},
+        "player": str(player or ""),
         "plans": plans,
         "needs": {n["uid"]: n for n in open_planning_needs(cid, frame_id)},
         "registry": registry,
@@ -1358,14 +1359,32 @@ def _preview_plan_entity(cid, frame_id, op, world):
                       % (op["kind"], ", ".join(PLAN_KINDS)))
     uid = plan_uid(op["kind"], op["name"])
     held = world["plans"].get(uid)
+    # WHO MAY KNOW A PLANNED PERSON FROM BEFORE THE STORY: a registered
+    # character, the player, or another person the room has planned -- before
+    # this package or in it. Plans were refused here (2026-10-12), so a tie
+    # the room stated between two of its own people could not be written:
+    # Hollowmere's lineman, whose plan said he courts the telegraphist,
+    # addressed her by a stranger's label in the line that spoke her name
+    # (scratch chat 196 turn 4685). `_seed_prior_ties` writes it both ways.
+    planned_people = dict(world.get("planned_people") or {})
+    for plan in (world.get("plans") or {}).values():
+        if isinstance(plan, dict) and str(plan.get("kind") or "person") == "person" \
+                and str(plan.get("name") or "").strip():
+            planned_people.setdefault(str(plan["name"]).strip().casefold(),
+                                      str(plan["name"]).strip())
     for name in op.get("known_by") or ():
         if name.casefold() == TRUTH_AUDIENCE_PLAYER:
             continue                     # the player, the truths' own word
-        if name.casefold() not in (world.get("cast") or {}):
+        if name.casefold() == op["name"].casefold():
+            errors.append("plan_entity says %r knows themself" % op["name"])
+            continue
+        if name.casefold() not in (world.get("cast") or {}) \
+                and name.casefold() not in planned_people:
             errors.append(
                 "plan_entity says %r knows %r from before the story, and %r "
-                "is not a registered character or the player"
-                % (name, op["name"], name))
+                "is not a registered character, a person the room has "
+                "planned, or the player" % (name, op["name"], name))
+    warnings.extend(_unwritten_ties(op, world, planned_people))
     for name in [op["name"]] + list(op["aliases"]):
         if name.casefold() in world["reserved_names"] and not held:
             errors.append(
@@ -1423,6 +1442,67 @@ def _preview_plan_entity(cid, frame_id, op, world):
         # roar and sees no `sound_source` knows it did not survive.
         change["sources"] = dict(op["sources"])
     return {"changes": [change], "errors": errors, "warnings": warnings}
+
+
+def _brief_text(brief) -> str:
+    if not isinstance(brief, dict):
+        return ""
+    return " ".join(str(brief.get(key) or "") for key in ("purpose", "truths"))
+
+
+def _names_whole(text, name) -> bool:
+    name = str(name or "").strip()
+    return bool(name) and re.search(
+        r"(?<!\w)%s(?!\w)" % re.escape(name), text or "", re.IGNORECASE) is not None
+
+
+def _unwritten_ties(op, world, planned_people):
+    """A TIE A PLAN STATES IS ONE IT CAN WRITE: a warning for each person the
+    story holds -- registered, the player, or planned, before this package or
+    in it -- whom this plan's brief names whole while neither side's
+    `known_by` lists the other, and for each planned person whose own brief
+    names this one. Only the room knows whether a mention is a tie from
+    before the story, so this asks and never seeds.
+
+    Measured 2026-10-12 replaying Hollowmere's turn-20 fill (scratch chat
+    196): a retired lineman's truths read "He knows Karl Wessel, the
+    company's present lineman", Wessel was the room's own plan, and his
+    `known_by` named only the companion -- the gap that had the lineman
+    addressing the telegraphist he courts by a stranger's label."""
+    me = str(op.get("name") or "").strip()
+    if not me or str(op.get("kind") or "person") != "person":
+        return []
+    player = str(world.get("player") or "").strip()
+    mine = {str(n).strip().casefold() for n in op.get("known_by") or ()}
+    if TRUTH_AUDIENCE_PLAYER in mine and player:
+        mine.add(player.casefold())
+    people = dict(planned_people)
+    people.update(world.get("cast") or {})
+    plans = {}
+    for plan in list((world.get("plans") or {}).values()) \
+            + list((world.get("package_plans") or {}).values()):
+        if isinstance(plan, dict) and str(plan.get("name") or "").strip():
+            plans[str(plan["name"]).strip().casefold()] = plan
+    text = _brief_text(op.get("brief"))
+    out = []
+    for folded, name in sorted(people.items()):
+        if folded == me.casefold() or folded in mine:
+            continue
+        other = plans.get(folded) or {}
+        theirs = {str(n).strip().casefold() for n in other.get("known_by") or ()}
+        if me.casefold() in theirs:
+            continue
+        if _names_whole(text, name):
+            out.append(
+                "plan_entity's brief for %r names %r, who is not in its "
+                "known_by: if they know each other from before the story, "
+                "name them there, or they meet as strangers" % (me, name))
+        elif other and _names_whole(_brief_text(other.get("brief")), me):
+            out.append(
+                "the plan for %r names %r in its brief, and neither lists the "
+                "other in known_by: if they know each other from before the "
+                "story, name them there, or they meet as strangers" % (name, me))
+    return out
 
 
 def _shape_plan_creature(op):
@@ -3252,7 +3332,8 @@ OPERATION_FIELDS = {
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",
         "role?": "what they are for, in a word or two", "aliases?": "[names]",
-        "known_by?": "[registered characters, or \"player\", who know this "
+        "known_by?": "[registered characters, people you have planned (before "
+                     "or in this package), or \"player\", who know this "
                      "person by name and sight from BEFORE the story -- "
                      "family, old friends, neighbours]. Leave someone out and "
                      "they meet as strangers, however the prose says they "
@@ -3843,6 +3924,14 @@ def preview_package(cid, uid, *, frame_id=None):
     for op in pkg["operations"]:
         if op["op"] == "plan_rooms":
             world["planned"].update(op.get("rooms") or {})
+        # ...AND ITS PEOPLE ARE PLANNED FOR ALL OF IT, so two planned in one
+        # package can know each other from before the story (`known_by`).
+        if op["op"] == "plan_entity" and str(op.get("kind") or "person") == "person" \
+                and str(op.get("name") or "").strip():
+            world.setdefault("planned_people", {})[
+                str(op["name"]).strip().casefold()] = str(op["name"]).strip()
+            world.setdefault("package_plans", {})[
+                str(op["name"]).strip().casefold()] = op
     for i, op in enumerate(pkg["operations"]):
         result = OPERATIONS[op["op"]]["preview"](cid, frame_id, op, world)
         if op["op"] == "plan_rooms" and not result["errors"]:

@@ -490,7 +490,6 @@ Not scheduled and not committed to a phase. See the
 
 - [§1.134 — What the campaign-3 plan/structure/tools wave left open (2026-09-05)](UNBUILT_PLANNING.md#unbuilt-1-134)
 - [§1.198 — A person someone claims, and a planned person's mind — residuals (2026-10-10)](UNBUILT_PLANNING.md#unbuilt-1-198)
-- [§1.202 — An absence the story's premise states never reaches the town (2026-10-12)](UNBUILT_PLANNING.md#unbuilt-1-202)
 
 **2. Roadmap**
 
