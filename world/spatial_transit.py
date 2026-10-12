@@ -129,6 +129,12 @@ def _interior_rooms_of(scene: dict, eid: str) -> list:
             and str(room.get("parent_entity") or "").strip() == target]
 
 
+#: The engine's words for a thing that carries bodies from one place to
+#: another (the establish card's `kind` vocabulary, less the two that stand
+#: still): a closed set the engine owns, not a list of ways to say "boat".
+MOVING_KINDS = frozenset({"vehicle", "ship", "boat"})
+
+
 def sync_entity_interior_rooms(scene: dict) -> bool:
     """A room that names a parent entity is that entity's interior. Index it.
 
@@ -179,6 +185,25 @@ def sync_entity_interior_rooms(scene: dict) -> bool:
     if not isinstance(rooms, dict) or not isinstance(entities, dict):
         return False
     changed = False
+    # ...AND THE OTHER WAY, FOR A THING THAT MOVES (2026-10-11). A vehicle
+    # that lists a room as its interior is that room's parent when the room
+    # names none: the room's claim is what the dock rewrite reads, and a deck
+    # written only on its ferry's list was a floor fixed in the river -- the
+    # Saltmarsh Crossing opening's rerun minted `chain_ferry_entity` (kind
+    # vehicle, interior_rooms ["chain_ferry"]) and left the deck unclaimed,
+    # so nothing aboard could ever be carried across. Scoped to the engine's
+    # own words for a thing that moves (`MOVING_KINDS`): a building lists its
+    # rooms too, and handing those to the dock rewrite is a change nobody
+    # has measured. A room another holder already claims is never taken.
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict) or \
+                str(ent.get("kind") or "").strip().casefold() not in MOVING_KINDS:
+            continue
+        for rid in ent.get("interior_rooms") or ():
+            room = rooms.get(str(rid))
+            if isinstance(room, dict) and not str(room.get("parent_entity") or "").strip():
+                room["parent_entity"] = str(eid)
+                changed = True
     for eid, ent in entities.items():
         if not isinstance(ent, dict):
             continue
