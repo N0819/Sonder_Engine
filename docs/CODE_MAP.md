@@ -7,7 +7,7 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 2653 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 2676 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 5104 | Private character decision agent. | `agents`, `agents.character_evidence`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_bare.py` | 1168 |  | `agents.common`, `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
@@ -37,7 +37,7 @@
 | `agents/perception.py` | 8471 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1881 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 3433 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 3485 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 3109 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
@@ -116,7 +116,7 @@
 | `story/attire.py` | 3624 |  | — |
 | `story/authored_events.py` | 299 |  | `core.db` |
 | `story/carriers.py` | 1369 |  | `core.db`, `core.logging_utils`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
-| `story/character_schema.py` | 2744 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
+| `story/character_schema.py` | 2706 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1170 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
 | `story/greetings.py` | 1340 |  | `agents.runtime`, `core`, `core.db`, `core.logging_utils`, `llm.llm_quality`, `llm.prompts`, `mind.affect_pass`, `mind.memory`, `mind.theory_of_mind`, `persist.steps`, `story.character_schema`, `story.importers`, `world.charter_runtime` |
@@ -128,7 +128,7 @@
 | `story/mandates.py` | 809 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
 | `story/opening_plan.py` | 128 |  | `core.db` |
-| `story/plot_packages.py` | 4457 |  | `world.spatial` |
+| `story/plot_packages.py` | 4546 |  | `world.spatial` |
 | `story/prelude.py` | 189 |  | `core.db` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 447 |  | `core.db` |
@@ -141,7 +141,7 @@
 | `story/room_sketch.py` | 1227 |  | `core.logging_utils` |
 | `story/room_slice.py` | 556 |  | `story.attire` |
 | `story/room_tools.py` | 1789 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
-| `story/scene.py` | 3095 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
+| `story/scene.py` | 3112 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 8046 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `persist.steps`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.prelude`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `web.world_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 279 | Typed host-authentication HTTP routes and cookie transport. | `web` |
@@ -227,7 +227,7 @@
 | `world/spatial_bubbles.py` | 592 |  | `world.spatial`, `world.spatial_frames` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1976 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_containment.py` | 3602 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_containment.py` | 3612 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 2035 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2581 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2245 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
@@ -260,9 +260,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 2430 | 213 lines |
+| `_react_one()` | 2453 | 213 lines |
 | `_background_react()` | 532 | 192 lines |
-| `declare_charter_figures()` | 2162 | 188 lines |
+| `declare_charter_figures()` | 2185 | 188 lines |
 | `scene_life()` | 1276 | 158 lines |
 | `_demanded_presences()` | 1063 | 144 lines |
 | `_present_others()` | 1670 | 135 lines |
@@ -634,14 +634,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 1207 | 409 lines |
-| `run_fill()` | 3066 | 167 lines |
-| `deliberate()` | 2224 | 162 lines |
-| `schedule_room_work()` | 3289 | 145 lines |
-| `run_location_plan()` | 1979 | 136 lines |
-| `run_dramaturge_pass()` | 2408 | 112 lines |
-| `_payload()` | 684 | 108 lines |
-| `_dramaturge_pass()` | 2533 | 108 lines |
+| `run_planner()` | 1241 | 411 lines |
+| `run_fill()` | 3118 | 167 lines |
+| `deliberate()` | 2276 | 162 lines |
+| `schedule_room_work()` | 3341 | 145 lines |
+| `run_location_plan()` | 2015 | 136 lines |
+| `run_dramaturge_pass()` | 2460 | 112 lines |
+| `_payload()` | 718 | 108 lines |
+| `_dramaturge_pass()` | 2585 | 108 lines |
 
 ### `core/db.py`
 
@@ -1491,7 +1491,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_card_warnings()` | 2540 | 174 lines |
+| `character_card_warnings()` | 2516 | 160 lines |
 | `default_character_data()` | 725 | 135 lines |
 | `normalize_character_data()` | 1571 | 132 lines |
 | `_normalize_psychology()` | 314 | 83 lines |
@@ -1641,14 +1641,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 3589 | 143 lines |
-| `_preview_plan_rooms()` | 1097 | 125 lines |
-| `fire_due_clocks()` | 4170 | 102 lines |
-| `_plan_geometry()` | 780 | 93 lines |
-| `_plan_edge()` | 911 | 84 lines |
-| `publish_package()` | 3951 | 84 lines |
-| `_reach_warning()` | 3740 | 81 lines |
-| `normalize_package()` | 259 | 77 lines |
+| `_package_checks()` | 3670 | 143 lines |
+| `_preview_plan_rooms()` | 1098 | 125 lines |
+| `fire_due_clocks()` | 4259 | 102 lines |
+| `_plan_geometry()` | 781 | 93 lines |
+| `_preview_plan_entity()` | 1354 | 91 lines |
+| `_plan_edge()` | 912 | 84 lines |
+| `publish_package()` | 4040 | 84 lines |
+| `_reach_warning()` | 3821 | 81 lines |
 
 ### `story/prelude.py`
 

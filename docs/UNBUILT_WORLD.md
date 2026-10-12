@@ -2158,6 +2158,29 @@ walk is recorded by where it is going"). What it leaves:
   it to that door, and the next beat takes her in.
 
 
+<a id="unbuilt-1-204"></a>
+
+### 1.204 A set-down whose transfer names its fixture in words stays in the hand
+
+**Found 2026-10-12**, measuring the Hollowmere test story's "set-down
+written as a station" -- which was not one: the narrator staged "She set the
+instrument on the shelf" while the world kept the line-tester in her hand,
+and the player's next beat unclipped it and stowed it. Over every pair of
+consecutive saved scenes in the scratch play db: 20 set-downs at a fixture,
+11 of which released the hold; the 9 that kept it are 5 things in 4 distinct
+beats (branch copies counted once), and 3 of those are a held thing carrying
+its holder's own station -- a book behind the bar, a coat on a pilot's
+shoulders, the clipped tester -- which is consistent, and which a floor
+reading "a new station while held is a set-down" would have dropped out of
+the hand. The one real case (chat 135, turn 4211): the resolve's transfer
+named "warming stone with towels", which resolves to nothing, so
+`derive_inventory_placements` keeps the bottle with its holder by design,
+while the same beat's `stations` put it `at` `warming_stone` by id. The same
+beat's towel, sent to "massage table", is released by the current code.
+Candidate, not built because it is rare (one beat in both databases'
+history): read an unresolved transfer FROM a holder beside a same-beat
+station AT a fixture of the holder's room as the set-down it names.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

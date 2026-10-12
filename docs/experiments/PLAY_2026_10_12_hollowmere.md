@@ -62,7 +62,7 @@ ask. $4.78 on OpenRouter.
   interpretation's movement field, and her pending approach to the platform
   walked her back out of the office the page had her reading in.
 
-## Found, not fixed (registered)
+## Found, not fixed (registered; the wave after, below, says what became of each)
 
 1. **A read answered by the record of the act** (beat 2). She broke the seal
    and read her orders; the resolve described "a single sheet, dense with
@@ -87,7 +87,8 @@ ask. $4.78 on OpenRouter.
 ## Seen, recorded here only
 
 - A set-down written as a station alone (beat 9: the line-tester "set on the
-  shelf" stayed held as well) -- the inventory card's own rule.
+  shelf" stayed held as well) -- the inventory card's own rule. (It was not:
+  the narrator staged it; see the wave after.)
 - Rendering: "You are in Inside the funicular car" (an interior's minted
   name); "Mattias Brenn the car climbs the steep track" (an observable with
   its own subject, prefixed with the actor); "the grey-haired solid
@@ -98,3 +99,99 @@ ask. $4.78 on OpenRouter.
   warning said so at creation.
 - The Room's pre-story reply ended at its wall with no text, having settled
   its grant, a published package, lore and two planted people.
+
+## The wave after (2026-10-12)
+
+The owner approved eight follow-ups to the findings above. Each was measured
+on a copy of the scratch db, every turn rerolled from its own checkpoint (see
+the last section for why that has to be said). Design.md carries a row for
+each one that landed.
+
+**Landed.**
+
+- **What a read finds is the thing's state** (finding 1). The orders' gist
+  had gone into the envelope's *description*, which no reading delivers -- her
+  view said only "seal: broken; read: yes". `entities__examined` now authors
+  a perceived detail in state, and says a description is what any eye takes
+  in at a glance. Interpretation rerolls of turn 4660: what the orders say in
+  state 4 of 4, in the description 0 of 4. Resolve rerolls, which inherit the
+  stored interpretation's description and so find the record complete: 1 of 4.
+- **A mind's past is its own** (finding 2). The resolve card: a record may
+  carry any hand the world supplies, never the hand of a mind that did not
+  make it. Four resolve rerolls of turn 4669: none signed the log with her
+  name.
+- **A walk is recorded by where it is going** (finding 4). Core's movement
+  line no longer says `to_room` "is where the walk ends". Beat 6 ("heads
+  across the platform toward the telegraph office") 6 of 6 toward the office,
+  not arriving -- 0 of 4 wrote any movement before. Beat 10
+  ("up the mountain path toward the lineman's hut") writes the approach on
+  every reroll, 6 of 6 against 1 of 4, but decides the walk on only 2 of 6:
+  three arrive on the path with the approach as a trailing row that
+  `_final_movement` drops by design, and one marks the path itself not
+  arriving. Arrival controls: 7 of 8 under a first wording, 4 of 4 under the
+  final one (the miss was a step down from a docked car written as a
+  position, and "or already stands in" was cut for it). Two residuals stay in
+  §1.203.
+- **A tie may name a person the room plans** (the half of finding 3 that was
+  real). Preview accepted only registered characters and the player in a
+  plan's `known_by`, so the lineman, whose plan said he courts her, could not
+  be written as knowing her. It now takes a person the room plans, before or
+  in the package. Five replays of the turn-20 fill (from checkpoint 21, that
+  fill's own draft removed, the later beats deleted): none planned Agathe;
+  of 18 new people 8 named another planned person, every tie seeded both
+  ways, but all in two of the five replies -- and in another a retired
+  lineman's truths read "He knows Karl Wessel" with Wessel left out. So
+  preview now asks when a plan's brief names, whole, a person the story holds
+  and neither side lists the other: on the replays' own plans it fired on
+  that lineman alone (none of the six others), and on the original turn-20
+  plan it names the lineman's brief, "He courts Agathe Brenn".
+- **Rendering**: an interior is named by the pack ("Inside %s" was English in
+  every story); a label no longer takes a body's appearance for its noun ("the
+  grey-haired solid grey-haired ..." was two writers filing a description as
+  `role_hint`).
+- **A card's `known_by` written as identifiers reaches its person.**
+- **A stopped Room reply says what it settled**, by its packages' titles and
+  with no model call, in the story's language -- and the panel's own reply
+  now runs in the story's language at all (it read the English planner card
+  in a Japanese story).
+
+**Withdrawn.**
+
+- **Finding 3 was a misreading of my own brief.** It says Agathe "has not
+  answered the bell since" noon -- never that she is missing -- and the
+  story's secret, Wessel walking away from the poles with wire-cutters at
+  eleven, explains a dead instrument with its keeper sitting at it. The
+  turn-20 fill planted her at her post "so that the head of the line has its
+  keeper standing there", a valid reading, though it did undo the pre-story
+  note that she "deliberately holds no place". A planner clause about missing
+  people was drafted and removed before landing: no live case shows that
+  class. For when one does, a read-only survey of the Room's operations found
+  that `plan_entity`'s `where` only *starts* a body (the town routine walks it
+  home or to its post on the next advance); what holds a body away is
+  `charter_ops depart` with a `place` (until `arrive`), `move_body` with
+  `berth` for a person with no post, or `die` with condition `missing`
+  (nowhere, for good) -- never `arrival`, `errand`, `summons`,
+  `scheduled_consequence`, the post ops or a `hurt` incident -- and a hold
+  must go in a second package, since preview checks it against a body that
+  only exists once the plan publishes.
+- **The set-down "written as a station" was the narrator's.** The world kept
+  the line-tester in her hand at her own station; only the page said "She set
+  the instrument on the shelf beside the sounder", and the player's next beat
+  unclipped it and stowed it. Measured over the db's whole history, a floor
+  reading "a new station while held is a set-down" would have been wrong on
+  3 of the 4 distinct beats it fired on; the one real case is registered as
+  §1.204.
+
+**A measurement that measured the wrong world.** A stage rerun restores its
+own turn's checkpoint and deletes every later one, and `ensure_checkpoint`
+then rebuilds a missing checkpoint from whatever world is current -- with no
+error. The first batch for finding 4 rerolled turn 4660 before 4667 and
+4675, so both ran against the world before 4660 (the encoder walked her up
+from the lower station), and was discarded. The same ordering had produced
+two numbers in the wave before: Saltmarsh turn 4646's resolve rerolls (4 of
+4, remeasured 3 of 4 in full) and half of its looks (4 of 4, remeasured 3 of
+4), both corrected in Design.md and §1.200. Every batch since runs each
+chat's turns latest first, on a fresh copy.
+
+**Cost.** $3.27 on OpenRouter for every measurement above: about fifty
+stage rerolls and five Room fills of 7-10 minutes each.

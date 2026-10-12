@@ -327,6 +327,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.194 — A vessel moving within one room stays in it — BUILT 2026-10-09, residuals open](UNBUILT_WORLD.md#unbuilt-1-194)
 - [§1.199 — A thing a body carries is left where it was minted — BUILT 2026-10-11, residuals open](UNBUILT_WORLD.md#unbuilt-1-199)
 - [§1.203 — An approach the encoder does not record as one — clause landed 2026-10-12, residuals open](UNBUILT_WORLD.md#unbuilt-1-203)
+- [§1.204 — A set-down whose transfer names its fixture in words stays in the hand (2026-10-12)](UNBUILT_WORLD.md#unbuilt-1-204)
 
 **2. Roadmap**
 
