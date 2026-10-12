@@ -305,6 +305,40 @@ STOP_LINES = {"steps": BOUNDED_LINE, "calls": BOUNDED_LINE, "wall": BOUNDED_LINE
               "rewound": REWOUND_LINE, "model": LOST_ANSWER_LINE}
 #: Stops after which a background task resumes in its next pass.
 RESUMABLE_STOPS = ("steps", "calls", "wall")
+#: Stops whose reply says what the room settled before it stopped, when it
+#: settled anything (`_settled_line`); a spend stop keeps its own line,
+#: which carries the grant it stopped under.
+SETTLED_STOPS = ("steps", "calls", "wall", "model")
+
+
+def _settled_line(cid, frame_id, published, opened):
+    """What a room stopped short of its reply settled, as that reply, in the
+    story's language: the packages it published and the ones it left
+    drafted. "" when it settled nothing, and the fixed line stands.
+
+    A REPLY STOPPED AT ITS WALL STILL SAYS WHAT IT DID. Hollowmere's
+    pre-story reply (scratch chat 196, 2026-10-12) recorded a grant,
+    published a package with two people and the town's lore in it, and
+    opened a second -- and the player read only "The room stopped at its
+    budget for this reply; what it settled stands", with nothing to say what
+    that was. No model call: the titles are the room's own."""
+    from language_runtime import compositor_text
+    from story.plot_packages import list_packages
+    try:
+        titles = {str(p.get("uid")): str(p.get("title") or "").strip()
+                  for p in list_packages(cid, frame_id=frame_id) or []}
+    except Exception:
+        return ""
+    items = [compositor_text("room_settled_published", title=titles[uid])
+             for uid in dict.fromkeys(str(u) for u in published or ())
+             if titles.get(uid)]
+    items += [compositor_text("room_settled_drafted", title=titles[uid])
+              for uid in dict.fromkeys(str(u) for u in opened or ())
+              if titles.get(uid) and uid not in set(map(str, published or ()))]
+    if not items:
+        return ""
+    return compositor_text("room_stopped_settled",
+                           items=compositor_text("room_settled_join").join(items))
 
 
 # ---------------------------------------------------------------------------
@@ -1565,7 +1599,9 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                 "steps": steps, "notes": notes, "stopped": stopped,
                 "regime": regime}
     if stopped and not reply:
-        reply = STOP_LINES.get(stopped, BOUNDED_LINE)
+        reply = (_settled_line(cid, frame_id, published, opened)
+                 if stopped in SETTLED_STOPS else "") \
+            or STOP_LINES.get(stopped, BOUNDED_LINE)
         if stopped in ("spend_reply", "spend_hour"):
             key = "calls_per_reply" if stopped == "spend_reply" else "calls_per_hour"
             cited = spend_citation(cid, frame_id, key, turn_idx)
@@ -2136,6 +2172,22 @@ def room_town_planner(cid, frame_id=None):
 
 
 def planner_reply(cid, frame_id, text, *, on_event=None):
+    """`_planner_reply` in the story's language.
+
+    THE PANEL IS A DOOR OUTSIDE THE TURN, and every such door sets the
+    story's language itself (`language_runtime.language_scope` says why).
+    This one did not: a reply asked from the panel read the English planner
+    card in a Japanese story, and the jobs it queued -- the Dramaturge's
+    brief, the bible fold -- copied that English scope with them, while the
+    same room's passes queued from a beat ran in Japanese. Found 2026-10-12,
+    when a stopped reply's own line (`_settled_line`) had to speak the
+    story's language and nothing on this path said which one that was."""
+    from language_runtime import story_language_scope
+    with story_language_scope(cid):
+        return _planner_reply(cid, frame_id, text, on_event=on_event)
+
+
+def _planner_reply(cid, frame_id, text, *, on_event=None):
     """The seam's shape: what `room_conversation.PLANNER` returns. When the
     Planner hands a brief to the Dramaturge, the pass runs OUT OF BAND (a
     background task has no wall) and its lines land in the thread; the
