@@ -1296,6 +1296,22 @@ def _route_doorway_rows(sc, out, room_ids):
     return routed
 
 
+def _restamped_target(tags, line):
+    """The addressee a declared line keeps when its tags are re-stamped from
+    the declaration: the declaration's own, else the target the line already
+    carries.
+
+    A DECLARED LINE'S TAGS ARE THE DECLARATION'S -- BUT NOT ITS ADDRESSEE
+    WHERE IT NAMED NONE. A character's declaration often names nobody, and
+    the line's target is then what `_addressees_from_speech_spans` read off
+    the encoded row; re-stamping from the bare declaration erased it. Chat
+    168 turn 4590 (2026-10-12): "Hinami? It is late." through her door left
+    the log aimed at no one."""
+    return (tags.get("intended_target")
+            or (tags.get("targets") or [None])[0]
+            or line.get("intended_target"))
+
+
 def _final_movement(rows, scene=None, warn=None, built=()):
     """The beat's relocation: the LAST movement row that arrives.
 
@@ -7567,8 +7583,7 @@ def director_resolve(ctx, nonce, _corrections=None):
                 visibility, conceal_from, volume = speech_concealment[key]
                 line.update(visibility=visibility,
                             conceal_from=list(conceal_from), volume=volume)
-            aimed = tags.get("intended_target") or (tags.get("targets") or [None])[0]
-            line["intended_target"] = aimed
+            line["intended_target"] = _restamped_target(tags, line)
             occurrences.append(line)
             represented.add(key)
         deduped = occurrences + [d for d in deduped if (

@@ -1172,7 +1172,7 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             if any(str(e.get("to")) == uid for e in back.get("adjacent") or ()):
                 continue
             reciprocal = {"to": uid, **{k: v for k, v in edge.items()
-                                        if k in ("barrier", "distance") and v}}
+                                        if k in ("barrier", "distance", "material") and v}}
             # The way back down a way up: a vertical edge reverses; a
             # bearing is the declaring side's and is not copied.
             vertical = str(edge.get("vertical") or "")
@@ -1332,7 +1332,8 @@ def materialize_planned_fringe(cid, scene):
                                     for pe in planned_edges):
                     planned_edges.append({
                         "to": other_uid,
-                        **{k: v for k, v in (("barrier", e.get("barrier")),)
+                        **{k: v for k, v in (("barrier", e.get("barrier")),
+                                             ("material", e.get("material")))
                            if v}})
         targets.update(str(e.get("to")) for e in planned_edges)
         if uid in rooms and planned_edges:

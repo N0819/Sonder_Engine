@@ -1106,7 +1106,10 @@ def _mirror_symmetric_barriers(prior_rooms, incoming_rooms):
     milling floor and wrote nothing of it on the wheelhouse side, so from
     there it stayed "the open doorway" -- and a pose stood Emory "on the open
     doorway's rung" (playerless Aldermill round 7, 2026-09-23, idx 7-22).
-    `vertical` is not mirrored: up from one side is down from the other."""
+    AND WHAT IT IS MADE OF: a shoji is paper from both sides, and the side
+    the edge was not written on heard it as an oak door (chat 168,
+    2026-10-12). `vertical` is not mirrored: up from one side is down from
+    the other."""
     if not isinstance(incoming_rooms, dict) or not isinstance(prior_rooms, dict):
         return incoming_rooms
     out = {rid: room for rid, room in incoming_rooms.items()}
@@ -1139,7 +1142,7 @@ def _mirror_symmetric_barriers(prior_rooms, incoming_rooms):
         for edge in room.get("adjacent") or []:
             if not isinstance(edge, dict) or not edge.get("to"):
                 continue
-            fields = [f for f in ("barrier", "name")
+            fields = [f for f in ("barrier", "name", "material")
                       if f in edge and (f == "barrier"
                                         or str(edge.get(f) or "").strip())]
             if not fields:
