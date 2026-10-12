@@ -1762,17 +1762,23 @@ the name, never whose body it is"):
 - **The resolve's answered-read clause** gains "What the story keeps from
   someone stays kept by what is there, which may be false or missing, never
   by leaving what was asked unanswered".
+- **A reading that ends in a stop keeps one** (the wave after): "falling.."
+  was the template's stop after the reading's own, in both packs.
 
 What it leaves:
 
-- **The clause answers about half the time.** 2 of 4 rerolls of turn 4644
-  (1 of 2 when measured, 1 of 2 on 2026-10-11) against 0 of 3 without it.
-- **A thing standing in a body's hands is read only on a beat that hands
-  it over or looks at it**, and the interpretation writes no `look` for a
-  read -- the other candidate, not built. Turn 4644's copied figures were
-  filed on her own ledger, which nothing then read.
-- **A reading that ends in a stop doubles it** ("Tide: ebb, falling.."),
-  in both templates; older than this change.
+- **A read inside a long compound act is still answered only half the
+  time.** The wave after (2026-10-11) found why the clause alone fell short:
+  the player's read reaches the resolve only as `already_happened`, told
+  "do not do it again", and the card now says what such an act asked is
+  still the author's to answer. 8 rerolls on a copy: turn 4646 (reading the
+  entry back aloud, the signature under it) 4 of 4, turn 4644 (pages turned,
+  a column found, figures copied, two questions asked) 2 of 4 -- 6 of 8,
+  against 0 of 3 before any clause.
+- **A read now writes a `look`** (the encoder's `look` takes a thing, and a
+  step whose point is what something says or shows looks at it): 4 of 4
+  interpretation rerolls of turns 4644 and 4656 wrote one on the read step,
+  and one named the window the slip was held to rather than the slip.
 - **Quoting moved the reading's ledger key**, so each reading naming a body
   its reader does not know re-renders once as changed (turn 4656's tally
   papers did).

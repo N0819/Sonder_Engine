@@ -231,3 +231,16 @@ def test_the_observers_gate_writes_it_in_her_language():
                                  [{"name": "Agnes Holloway"}, *STRANGERS])
     assert "Loading supervised: Larkerwick." in known.written(SLIP_TEXT), \
         "a name she knows is hers to read plainly"
+
+
+def test_a_reading_that_ends_its_sentence_is_not_stopped_twice():
+    def said(readings, language):
+        (p,) = composer.thing_reading_percepts([("slip", readings, "slip", "sight")])
+        return p.data["desc"]
+    from language_runtime import language_scope
+    with language_scope("en"):
+        assert said("Tide: ebb, falling.", "en").endswith("falling.")
+        assert said("DANGER!", "en").endswith("DANGER!")
+        assert said("Tide: ebb", "en").endswith("ebb.")
+    with language_scope("ja"):
+        assert said("引き潮。", "ja").endswith("引き潮。") and not said("引き潮。", "ja").endswith("。。")

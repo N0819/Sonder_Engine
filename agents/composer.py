@@ -3508,7 +3508,14 @@ def thing_reading_percepts(rows):
             continue
         template = ("thing_reads_touch" if channel == "touch"
                     else "thing_reads_sight")
-        data = {"desc": _cap(_t(template, label=label, readings=readings))}
+        desc = _cap(_t(template, label=label, readings=readings))
+        # A reading that already ends its sentence keeps its own stop and
+        # the template's is dropped ("Tide: ebb, falling.." -- Saltmarsh
+        # Crossing's loading slip, 2026-10-11; "。。" in Japanese alike).
+        ends = linguistic("agents.common", "_SENTENCE_END_CHARS")
+        if len(desc) > 1 and desc[-1] in ends and desc[-2] in ends:
+            desc = desc[:-1]
+        data = {"desc": desc}
         if asked:
             data["asked"] = True
         out.append(Percept(
