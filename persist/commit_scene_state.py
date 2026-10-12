@@ -694,6 +694,15 @@ def _entity_labels(eid, ent):
     return out
 
 
+def _own_labels(eid, ent):
+    """What one entity is called by its own record, folded: its key and its
+    display name -- never an alias, which says what else it answers to."""
+    ent = ent if isinstance(ent, dict) else {}
+    out = {str(x or "").strip().casefold() for x in (eid, ent.get("name"))}
+    out.discard("")
+    return out
+
+
 #: Channels of a diff, and ledgers of a scene, keyed by ROOM rather than by
 #: subject. A folded entity key is never a room key, so these are left alone
 #: rather than walked -- the walk below matches a bare string, and a room that
@@ -788,7 +797,19 @@ def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
     Matched on what a thing ANSWERS TO -- its key, its display name, its
     aliases, folded -- and never on a resemblance between two nouns: a second
     lamp beside a lamp is a real second lamp, and only a thing calling itself
-    by the standing thing's own name is the standing thing. The mint's fields
+    by the standing thing's own name is the standing thing.
+
+    A NAME TWO THINGS ONLY SHARE IS NOBODY'S. One side's own key or display
+    name has to be something the other answers to (`_own_labels`); two
+    records that each list the same word among their aliases -- a kind's
+    name, as a lamp and a lamp both answer to "lamp" -- are two things.
+    Measured, Saltmarsh Crossing (2026-10-11, scratch chat 170): the
+    player's "survey ledger" was minted with the alias "ledger", so beat 8's
+    harbour book (`lading_ledger`, "cloth-bound ledger", aliases including
+    "ledger") was folded onto it -- its tally then filed on her ledger -- and
+    by beat 14 her ledger carried a grain office's description. The buzzer
+    case below still folds: the mint's own key was the standing buzzer's
+    alias. The mint's fields
     are folded onto the record that exists (the merge's own rule: a value the
     incoming record states wins, silence changes nothing), its key is dropped,
     and any room it was given is given to the survivor if the survivor had
@@ -829,9 +850,12 @@ def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
         return []
     before = (prev_scene or {}).get("entities") or {}
     standing = {}
+    standing_own = {}
     for eid, ent in before.items():
         for label in _entity_labels(eid, ent):
             standing.setdefault(label, str(eid))
+        for label in _own_labels(eid, ent):
+            standing_own.setdefault(label, str(eid))
     positions = sc.get("positions") if isinstance(sc.get("positions"), dict) else {}
     folded = []
     for eid in minted:
@@ -839,8 +863,10 @@ def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
         if not isinstance(ent, dict):
             continue
         labels = _entity_labels(eid, ent)
-        held = next((standing[label] for label in sorted(labels)
-                     if label in standing), "")
+        held = next((standing[label] for label in sorted(_own_labels(eid, ent))
+                     if label in standing), "") or next(
+            (standing_own[label] for label in sorted(labels)
+             if label in standing_own), "")
         if not held or held == eid or held not in entities:
             continue
         _moved_between = set()

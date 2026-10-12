@@ -180,7 +180,7 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     _guard_occupied_mover_removal, _advance_ground, prepare_scene_commit,
     commit_scene, _record_subject_last_seen, _dedupe_overlay_entries,
     _merge_overlays, _overlay_handles, _overlay_ending_handles,
-    _is_overlay_ending, _minted_this_beat, _entity_labels,
+    _is_overlay_ending, _minted_this_beat, _entity_labels, _own_labels,
     _fold_duplicate_mints, _place_orphan_mints, _report_started_sources,
     BEARING_MANNERS, _bearing_subject_key, derive_borne_containment,
     _refuse_unheld_transfers, ComposedBeat, compose_beat_key,

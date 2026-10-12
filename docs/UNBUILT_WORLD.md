@@ -2109,6 +2109,9 @@ fixture reaches it"):
   says so to the Director. Replayed on the recorded beat: the old scene
   reproduces the recorded refusal word for word; with the opening's carriage
   the same hand-off puts the letter on the harbour office's desk.
+- **Two ledgers stay two** (2026-10-11, the wave after): the generic alias
+  "ledger" no longer folds the harbour's book onto hers (`Design.md`, "A mint
+  naming a thing the scene holds is that thing").
 
 What it leaves:
 
@@ -2118,10 +2121,6 @@ What it leaves:
 - **`held_by` is carriage in view.** `derive_borne_containment` records it
   `carried`, so a letter a passage puts in a pocket is shown to everyone in
   the room: the opening has no concealed mode to write.
-- **The generic alias "ledger" swallows every ledger.** Turn 4640 folded the
-  harbour's lading ledger onto the player's own (`'lading_ledger' is
-  'agnes_ledger'`), and a later read of it was filed on hers. The next
-  Saltmarsh wave, with the foreman named four ways.
 - **A fixture is matched by its id**, as written or spelled as one; a
   fixture named only by its description ("the slant-topped desk") still
   names nothing, and the thing stays with its holder.
