@@ -1772,12 +1772,14 @@ What it leaves:
   the player's read reaches the resolve only as `already_happened`, told
   "do not do it again", and the card now says what such an act asked is
   still the author's to answer. 8 rerolls on a copy: turn 4646 (reading the
-  entry back aloud, the signature under it) 4 of 4, turn 4644 (pages turned,
-  a column found, figures copied, two questions asked) 2 of 4 -- 6 of 8,
-  against 0 of 3 before any clause.
+  entry back aloud, the signature under it) 3 of 4 in full -- the fourth
+  named the signer and not the figures -- and turn 4644 (pages turned, a
+  column found, figures copied, two questions asked) 2 of 4: 5 of 8, against
+  0 of 3 before any clause. (Corrected 2026-10-12: the first count, 4 of 4 and 6 of 8, came from rerolls run on a world two beats early -- the turn-4644 rerolls had deleted every later checkpoint, and `ensure_checkpoint` rebuilt 4646's and 4656's from the world before 4644. Remeasured, each turn from its own checkpoint.)
 - **A read now writes a `look`** (the encoder's `look` takes a thing, and a
-  step whose point is what something says or shows looks at it): 4 of 4
-  interpretation rerolls of turns 4644 and 4656 wrote one on the read step,
+  step whose point is what something says or shows looks at it): 3 of 4
+  interpretation rerolls of turns 4644 and 4656 wrote one on the read step
+  (the fourth wrote no look at all; remeasured as above),
   and one named the window the slip was held to rather than the slip.
 - **Quoting moved the reading's ledger key**, so each reading naming a body
   its reader does not know re-renders once as changed (turn 4656's tally
