@@ -1220,6 +1220,33 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
 .wb-lg-lint{background:var(--warn);border-radius:50%}
 .wb-overlay-toggles{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
 .wb-overlay.on{background:var(--acc);color:var(--bg)}
+/* A storey as the layout lab draws it (2026-10-12, the owner: "look kind of
+   like the layout lab we made"). The lab's palette in the page's tokens, so
+   every theme draws it, the paper one too; on the pane, which holds both
+   the drawing and its legend. */
+.wb-map-pane,.wb-plan-svg{--wbp-ink:var(--fg);--wbp-line:var(--dim);--wbp-sheet:var(--bg2);
+--wbp-cobalt:var(--acc);--wbp-ok:var(--ok);--wbp-room:var(--bg3);
+--wbp-living:color-mix(in srgb,var(--warn) 24%,var(--bg3));
+--wbp-private:color-mix(in srgb,var(--acc) 22%,var(--bg3));
+--wbp-service:color-mix(in srgb,var(--ok) 22%,var(--bg3));
+--wbp-circ:color-mix(in srgb,var(--fg) 10%,var(--bg3));
+--wbp-store:color-mix(in srgb,var(--dim) 28%,var(--bg3));
+--wbp-sacred:color-mix(in srgb,var(--err) 18%,var(--bg3));
+--wbp-grass:color-mix(in srgb,var(--ok) 14%,var(--bg2));
+--wbp-gravel:color-mix(in srgb,var(--dim) 24%,var(--bg2))}
+.wb-map-pane.wb-plan-wide{flex:1 1 auto;max-width:none}
+.wb-plan-svg{display:block;width:100%;height:auto;max-height:68vh;font-family:inherit}
+.wb-plan-svg text{user-select:none}
+.wb-plan-room{outline:none}
+.wb-plan-room:not(.planned){cursor:pointer}
+.wb-plan-room.planned rect{opacity:.5}
+.wb-plan-room:not(.planned):hover rect,.wb-plan-room:focus-visible rect{stroke:var(--acc);stroke-width:3}
+.wb-plan-levels{display:inline-flex;gap:2px}
+.wb-plan-levels button.on{background:var(--acc);color:var(--bg)}
+.wb-plan-below{display:inline-flex;gap:4px;align-items:center}
+.wb-plan-swatch.planned{opacity:.5}
+.wb-map-svg text.wb-sm-plan.link{pointer-events:auto;cursor:pointer;text-decoration:underline}
+.wb-map-svg text.wb-sm-plan.link:focus-visible{outline:1px solid var(--acc)}
 .wb-map-shape{font-size:11px}
 .wb-region-field{display:inline-flex;gap:4px;align-items:center}
 .wb-region-rename{max-width:10em;flex:none}

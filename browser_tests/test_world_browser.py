@@ -365,9 +365,13 @@ def _grid(rid, slices, charter=()):
     # that carries geometry (every mocked room has anchors or a size).
     overlays = {"light": {f"{x},{y}": "lit" if x < w // 2 else "dim" for x, y in cells},
                 "noise": {f"{x},{y}": "quiet" for x, y in cells}}
+    # The kitchen -- the player's room, where the browser opens -- stands on
+    # a site plan (`grid_view` names the plan and the storey of a room that
+    # stands on one), so its bar offers the plan.
+    on_plan = {"plan": "layout:hallway", "level": 0} if rid == "kitchen" else {}
     return {"frame_id": None,
             "room": {"id": rid, "name": room["name"], "w": w, "d": d, "shape": geometry["shape"],
-                     "measured": geometry["measured"], "cells": cells},
+                     "measured": geometry["measured"], "cells": cells, **on_plan},
             "rims": rims, "anchors": anchors, "doorways": doorways, "bodies": bodies,
             "things": things, "walls": walls, "neighbours": neighbours,
             "lint": list(room.get("lint") or []), "overlays": overlays,
@@ -405,6 +409,49 @@ def _map(slices):
          "collisions": [{"room": "pantry", "onto": "kitchen", "via": "hallway"}]},
         {"start": "garden", "rooms": [row("garden", "Garden", [0, 0])], "collisions": []},
     ]}
+
+
+def _plan(query):
+    """A mock of `GET /map/plan` (`web.storey_plan`): two storeys of one
+    plan. The ground holds the study and the hallway (live), the stair's hall
+    (live, a stair climbing on) and a pantry nobody has come near (planned);
+    a window in the study's north wall, a shut door between the study and
+    the hallway, an opening onto the stair, a desk, and Nathan in the study.
+    Storey 1 is the stair's upper hall and a loft, the ground its ghost."""
+    def rect(x, y, w, d):
+        return {"x": x, "y": y, "w": w, "d": d}
+
+    def room(rid, name, x, y, w, d, purpose="", planned=False, level=0):
+        return {"id": rid, "name": name, "level": level, "purpose": purpose, "ground": False,
+                "cells": [[cx, cy] for cx in range(x, x + w) for cy in range(y, y + d)],
+                "rects": [rect(x, y, w, d)], "planned": planned}
+    level = int((query.get("level") or ["0"])[0])
+    if level == 1:
+        return {"plan": "layout:hallway", "level": 1, "levels": [0, 1], "title": "Old Manor",
+                "rooms": [room("stair_1", "the stair", 6, 0, 2, 4, "stair", level=1),
+                          room("loft", "Loft", 0, 0, 6, 4, "bedroom", level=1)],
+                "doors": [{"a": "loft", "b": "stair_1", "cells": [[5, 1]], "side": "e",
+                           "barrier": "closed_door", "name": "", "outside": False}],
+                "windows": [], "fixtures": [], "bodies": [],
+                "stairs": [{"room": "stair_1", "kind": "straight", "up": False, "down": True,
+                            "name": "the stair", "rects": [rect(6, 0, 2, 4)]}],
+                "below": [{"id": "study", "rects": [rect(0, 0, 6, 4)]}], "frame_id": None}
+    return {"plan": "layout:hallway", "level": 0, "levels": [0, 1], "title": "Old Manor",
+            "rooms": [room("study", "Study", 0, 0, 6, 4, "study"),
+                      room("hallway", "Hallway", 0, 4, 8, 2, "hallway"),
+                      room("stair_0", "the stair", 6, 0, 2, 4, "stair"),
+                      room("pantry", "Pantry", 8, 0, 3, 3, "storage", planned=True)],
+            "doors": [{"a": "study", "b": "hallway", "cells": [[2, 3]], "side": "s",
+                       "barrier": "closed_door", "name": "", "outside": False},
+                      {"a": "study", "b": "stair_0", "cells": [[5, 1], [5, 2]], "side": "e",
+                       "barrier": "open", "name": "", "outside": False}],
+            "windows": [{"room": "study", "cells": [[2, 0]], "side": "n", "name": "a tall window"}],
+            "fixtures": [{"room": "study", "id": "desk", "name": "a writing desk", "kind": "desk",
+                          "rect": rect(1, 1, 2, 1), "height": "waist", "front": "s"}],
+            "bodies": [{"name": "Nathan", "room": "study", "cell": [3, 2]}],
+            "stairs": [{"room": "stair_0", "kind": "straight", "up": True, "down": False,
+                        "name": "the stair", "rects": [rect(6, 0, 2, 4)]}],
+            "below": [], "frame_id": None}
 
 
 def _mount(page: Page):
@@ -695,6 +742,8 @@ def _mount(page: Page):
             body = index
         elif path == "/api/chats/1/map":
             body = _map(slices)
+        elif path == "/api/chats/1/map/plan":
+            body = _plan(parse_qs(url.query))
         elif path.startswith("/api/chats/1/rooms/") and path.endswith("/grid"):
             rid = path.split("/")[5]
             if rid in slices:
@@ -1585,6 +1634,48 @@ def test_the_structure_map_draws_doors_where_they_stand_and_a_drag_re_bears(
     modal.locator(".wb-room-map .wb-m-neighbour[data-room=kitchen]").click()
     expect(modal.locator(".wb-map-bar")).to_contain_text("Kitchen")
     expect(modal.locator(".wb-card textarea").first).to_have_value("A rustic kitchen with a heavy oak table.")
+
+
+def test_a_storey_is_drawn_as_the_layout_lab_draws_it_and_its_rooms_open(
+        page: Page, ui_base_url: str) -> None:
+    """The owner, 2026-10-12: "the in engine ui should be adjusted to look
+    kind of like the layout lab we made". A room standing on a site plan
+    offers its storey as a plan: every room of it on one frame, filled by
+    what it is for, a planned one faint, walls broken where the doorways
+    are, a window in its wall, the stair by its shape, fixtures, who stands
+    where; a storey chosen, the one beneath drawn as a ghost; and a live
+    room opens its grid and card, where every edit is made."""
+    seen, writes, modal = _open_map(page, ui_base_url)
+    modal.locator(".wb-map-bar .wb-map-plan").click()
+    plan = modal.locator(".wb-plan-svg")
+    expect(plan).to_be_visible()
+    assert "/api/chats/1/map/plan" in seen
+    expect(modal.locator(".wb-map-bar")).to_contain_text("Old Manor")
+    expect(plan.locator(".wb-plan-room")).to_have_count(4)
+    expect(plan.locator(".wb-plan-room.planned")).to_have_count(1)
+    expect(plan.locator(".wb-plan-room.planned")).to_have_attribute("data-room", "pantry")
+    expect(plan.locator(".wb-plan-window")).to_have_count(1)
+    expect(plan.locator(".wb-plan-door")).to_have_count(1)        # the opening is a gap only
+    expect(plan.locator(".wb-plan-fixture")).to_have_count(1)
+    expect(plan.locator(".wb-plan-body")).to_have_count(1)
+    expect(plan).to_contain_text("▲")
+    expect(modal.locator(".wb-map-legend")).to_contain_text("Circulation")
+    expect(modal.locator(".wb-map-bar .wb-plan-levels button")).to_have_count(2)
+    # the storey above, with the ground beneath it as a ghost, and off again
+    modal.locator(".wb-map-bar .wb-plan-levels button[data-level='1']").click()
+    expect(plan.locator(".wb-plan-room[data-room=loft]")).to_have_count(1)
+    expect(plan.locator(".wb-plan-below")).to_have_count(1)
+    expect(plan).to_contain_text("▼")
+    modal.locator(".wb-map-bar .wb-plan-below-toggle").uncheck()
+    expect(modal.locator(".wb-plan-svg .wb-plan-below")).to_have_count(0)
+    # a planned room opens nothing; a live one opens its grid and card
+    modal.locator(".wb-map-bar .wb-plan-levels button[data-level='0']").click()
+    plan = modal.locator(".wb-plan-svg")
+    expect(plan.locator(".wb-plan-room.planned")).not_to_have_attribute("role", "button")
+    plan.locator(".wb-plan-room[data-room=hallway]").click()
+    expect(modal.locator(".wb-room-map")).to_be_visible()
+    expect(modal.locator(".wb-map-bar")).to_contain_text("Hallway")
+    assert not writes, "drawing a plan writes nothing"
 
 
 # ---- Townspeople on the map (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map) --

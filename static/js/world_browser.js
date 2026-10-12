@@ -2580,12 +2580,18 @@ function wbRenderStructureMap(host, data, ctx, selectedId) {
   // A site plan's storey is captioned with its plan and storey, since the
   // storeys of one building are drawn side by side (`world/site_plan`).
   const storeyWord = t("storey");
+  const openPlan = t("click to draw this storey as a plan");
   for (const { comp, dx } of laid) {
     if (comp.plan == null) continue;   // absent on a component no plan placed
     let minX = Infinity;
     for (const r of comp.rooms) minX = Math.min(minX, r.offset[0]);
-    svg.append(wbSvg("text", { x: (minX + dx) * S, y: -S * 0.25, class: "wb-sm-plan" },
-      wbSvg("title", {}, `${comp.plan} · ${storeyWord} ${comp.level}`), `${storeyWord} ${comp.level}`));
+    // the caption opens the storey as the layout lab draws it
+    const caption = wbSvg("text", { x: (minX + dx) * S, y: -S * 0.25, class: "wb-sm-plan link",
+      role: "button", tabindex: "0", "data-plan": comp.plan, "data-level": String(comp.level) },
+      wbSvg("title", {}, `${comp.plan} · ${storeyWord} ${comp.level} — ${openPlan}`),
+      `${storeyWord} ${comp.level}`);
+    if (ctx.showPlan) wbActivatable(caption, () => ctx.showPlan(comp.plan, comp.level));
+    svg.append(caption);
   }
   for (const { comp, dx, dy } of laid) {
     for (const r of comp.rooms) {
@@ -2693,6 +2699,310 @@ function wbRenderStructureMap(host, data, ctx, selectedId) {
   }
   host.append(svg);
   return svg;
+}
+
+// ---------------------------------------------------------------------------
+// A storey as the layout lab draws it (the owner, 2026-10-12: "the in engine
+// ui should be adjusted to look kind of like the layout lab we made"). Fed by
+// GET .../plan_view (`web/storey_plan.py`): every room of one storey of a site
+// plan on one frame, filled by what it is for, its walls broken where its
+// doorways are, a window a thin line in its wall, a stair by its shape in its
+// hall, fixtures by their kind, the ground and its ways, the storey beneath as
+// a ghost. A port of `tools/layout_lab/page.html`'s drawPlan and its helpers.
+// ---------------------------------------------------------------------------
+const WB_PLAN_NS = "http://www.w3.org/2000/svg";
+const WB_PLAN_GROUP = {
+  living: ["living", "hall", "common_room", "dining"],
+  private: ["bedroom", "guest_room", "study", "office", "meditation", "attic"],
+  service: ["kitchen", "washroom", "bath", "toilet", "latrine", "workshop"],
+  circ: ["entryway", "hallway", "corridor", "stair"],
+  store: ["storage", "closet", "cellar", "basement"],
+  sacred: ["shrine"],
+};
+
+function wbPlanEl(tag, attrs, parent) {
+  const e = document.createElementNS(WB_PLAN_NS, tag);
+  for (const k in (attrs || {})) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function wbPlanFill(purpose) {
+  if (purpose === "ground") return "var(--wbp-grass)";
+  if (purpose === "way") return "url(#wbp-gravel)";
+  for (const g in WB_PLAN_GROUP) if (WB_PLAN_GROUP[g].includes(purpose)) return `var(--wbp-${g})`;
+  return "var(--wbp-room)";
+}
+
+function wbPlanFrame(host, rects, pad = 1) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const r of rects) { x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.d); }
+  if (!isFinite(x0)) { x0 = 0; y0 = 0; x1 = 1; y1 = 1; }
+  const W = x1 - x0 + 2 * pad, D = y1 - y0 + 2 * pad;
+  const avail = Math.max(320, host.clientWidth || 800);
+  const C = Math.max(12, Math.min(36, Math.floor(avail / W)));
+  const svg = wbPlanEl("svg", { viewBox: `0 0 ${W * C} ${D * C}`, width: W * C, height: D * C, role: "img", class: "wb-plan-svg" }, host);
+  return { svg, C, X: x => (x - x0 + pad) * C, Y: y => (y - y0 + pad) * C };
+}
+
+function wbPlanDefs(svg) {
+  const d = wbPlanEl("defs", {}, svg);
+  const p = wbPlanEl("pattern", { id: "wbp-hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, d);
+  wbPlanEl("rect", { width: 6, height: 6, fill: "var(--wbp-sheet)" }, p);
+  wbPlanEl("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--wbp-cobalt)", "stroke-width": 2 }, p);
+  const g = wbPlanEl("pattern", { id: "wbp-gravel", width: 8, height: 8, patternUnits: "userSpaceOnUse" }, d);
+  wbPlanEl("rect", { width: 8, height: 8, fill: "var(--wbp-gravel)" }, g);
+  wbPlanEl("circle", { cx: 2, cy: 2, r: .9, fill: "var(--wbp-line)", opacity: .45 }, g);
+  wbPlanEl("circle", { cx: 6, cy: 5, r: .7, fill: "var(--wbp-line)", opacity: .35 }, g);
+}
+
+// each room's own outline, broken where `gaps` ("x,y,side") opens it
+function wbPlanWalls(svg, cells, X, Y, gaps, stroke, width, dash) {
+  const segs = [];
+  for (const key of cells) {
+    const [x, y] = key.split(",").map(Number);
+    const sides = { n: [x, y - 1, X(x), Y(y), X(x + 1), Y(y)], s: [x, y + 1, X(x), Y(y + 1), X(x + 1), Y(y + 1)],
+      w: [x - 1, y, X(x), Y(y), X(x), Y(y + 1)], e: [x + 1, y, X(x + 1), Y(y), X(x + 1), Y(y + 1)] };
+    for (const s in sides) {
+      const [nx, ny, ax, ay, bx, by] = sides[s];
+      if (cells.has(nx + "," + ny)) continue;
+      if (gaps.has(`${x},${y},${s}`) || gaps.has(`${nx},${ny},${({ n: "s", s: "n", e: "w", w: "e" })[s]}`)) continue;
+      segs.push(`M${ax} ${ay}L${bx} ${by}`);
+    }
+  }
+  if (segs.length) wbPlanEl("path", { d: segs.join(""), stroke, "stroke-width": width, "stroke-linecap": "square", fill: "none", "stroke-dasharray": dash || "" }, svg);
+}
+
+function wbPlanEdge(X, Y, x, y, s, inset) {
+  const i = inset || 0;
+  return { n: [X(x) + i, Y(y), X(x + 1) - i, Y(y)], s: [X(x) + i, Y(y + 1), X(x + 1) - i, Y(y + 1)],
+    w: [X(x), Y(y) + i, X(x), Y(y + 1) - i], e: [X(x + 1), Y(y) + i, X(x + 1), Y(y + 1) - i] }[s];
+}
+
+function wbPlanLabel(svg, x, y, text, size, weight, fill) {
+  const t = wbPlanEl("text", { x, y, "text-anchor": "middle", "font-size": size, "font-weight": weight || 600, fill: fill || "var(--wbp-ink)", "pointer-events": "none", "paint-order": "stroke", stroke: "var(--wbp-sheet)", "stroke-width": 3 }, svg);
+  t.textContent = text;
+  return t;
+}
+
+// A fixture as a floor plan draws it: the kind's symbol where the solve
+// recorded one, a plain body where it did not (an anchor a model wrote).
+function wbPlanFixture(g, f, X, Y, C) {
+  const r = f.rect, k = String(f.kind || "").toLowerCase().replace(/ /g, "_");
+  const x = X(r.x) + 2, y = Y(r.y) + 2, w = r.w * C - 4, h = r.d * C - 4;
+  const ink = { stroke: "var(--wbp-ink)", "stroke-width": 1, fill: "none", "stroke-opacity": .75 };
+  const body = extra => wbPlanEl("rect", Object.assign({ x, y, width: w, height: h, rx: 1.5, fill: "var(--wbp-sheet)", stroke: "var(--wbp-ink)", "stroke-width": 1.1, "stroke-opacity": .8 }, extra || {}), g);
+  const line = (x1, y1, x2, y2) => wbPlanEl("line", Object.assign({ x1, y1, x2, y2 }, ink), g);
+  const circ = (cx, cy, rr, extra) => wbPlanEl("circle", Object.assign({ cx, cy, r: rr }, ink, extra || {}), g);
+  const front = f.front || "s";
+  const is = (...names) => names.some(n => k === n || k.includes(n));
+  if (is("bed", "futon", "nest")) {
+    body();
+    const long = w >= h, pad = Math.min(w, h) * .12;
+    if (long) { const px = front === "e" ? x + pad : x + w - pad - Math.min(w * .22, C * .8); wbPlanEl("rect", Object.assign({ x: px, y: y + pad, width: Math.min(w * .22, C * .8), height: h - 2 * pad, rx: 2 }, ink), g); }
+    else { const py = front === "s" ? y + pad : y + h - pad - Math.min(h * .22, C * .8); wbPlanEl("rect", Object.assign({ x: x + pad, y: py, width: w - 2 * pad, height: Math.min(h * .22, C * .8), rx: 2 }, ink), g); }
+  } else if (is("table", "chabudai", "chair", "stool")) {
+    body({ fill: "var(--wbp-living)" });
+  } else if (is("cushion", "zabuton")) {
+    wbPlanEl("rect", Object.assign({ x: x + 2, y: y + 2, width: w - 4, height: h - 4, rx: 4 }, ink, { fill: "var(--wbp-living)" }), g);
+  } else if (is("stove", "hearth", "range", "kamado", "oven", "fireplace", "brazier", "hibachi")) {
+    body({ fill: "var(--wbp-store)" });
+    const n = Math.max(1, Math.round(Math.max(w, h) / C));
+    for (let i = 0; i < n; i++) { const t = (i + .5) / n; circ(w >= h ? x + w * t : x + w / 2, w >= h ? y + h / 2 : y + h * t, Math.min(w, h) * .28); }
+  } else if (is("tub", "bath", "ofuro")) {
+    body(); wbPlanEl("rect", Object.assign({ x: x + 4, y: y + 4, width: w - 8, height: h - 8, rx: Math.min(w, h) / 3 }, ink), g);
+  } else if (is("toilet", "latrine")) {
+    wbPlanEl("ellipse", Object.assign({ cx: x + w / 2, cy: y + h / 2, rx: w * .35, ry: h * .42 }, ink, { fill: "var(--wbp-sheet)" }), g);
+  } else if (is("sink", "basin")) {
+    body(); circ(x + w / 2, y + h / 2, Math.min(w, h) * .3);
+  } else if (is("closet", "oshiire", "wardrobe", "cabinet", "shelf", "bookshelf", "rack", "shelves")) {
+    body(); line(x, y, x + w, y + h);
+  } else if (is("chest", "trunk", "box", "crate")) {
+    body(); const lid = w >= h ? h * .3 : w * .3; if (w >= h) line(x, y + lid, x + w, y + lid); else line(x + lid, y, x + lid, y + h);
+  } else if (is("bar", "counter", "desk", "workbench")) {
+    body({ fill: "var(--wbp-living)" });
+    const e = { n: [x, y + 3, x + w, y + 3], s: [x, y + h - 3, x + w, y + h - 3], w: [x + 3, y, x + 3, y + h], e: [x + w - 3, y, x + w - 3, y + h] }[front] || [x, y + h - 3, x + w, y + h - 3];
+    line(...e);
+  } else if (is("altar", "tokonoma", "alcove", "shrine", "seal")) {
+    body(); wbPlanEl("rect", Object.assign({ x: x + w * .25, y: y + h * .25, width: w * .5, height: h * .5 }, ink), g);
+  } else if (is("barrel", "pond", "spring", "pool", "well")) {
+    circ(x + w / 2, y + h / 2, Math.min(w, h) / 2 - 1, { fill: is("pond", "spring", "pool") ? "var(--wbp-private)" : "var(--wbp-sheet)" });
+    if (is("well")) circ(x + w / 2, y + h / 2, Math.min(w, h) / 4);
+  } else if (is("lantern", "lamp")) {
+    const rr = Math.min(w, h) / 2 - 1; circ(x + w / 2, y + h / 2, rr, { fill: "var(--wbp-sheet)" });
+    line(x + w / 2 - rr * .7, y + h / 2, x + w / 2 + rr * .7, y + h / 2); line(x + w / 2, y + h / 2 - rr * .7, x + w / 2, y + h / 2 + rr * .7);
+  } else if (is("statue", "guardian")) {
+    wbPlanEl("polygon", Object.assign({ points: `${x + w / 2},${y} ${x + w},${y + h / 2} ${x + w / 2},${y + h} ${x},${y + h / 2}` }, ink, { fill: "var(--wbp-sheet)" }), g);
+  } else if (is("pillar", "column")) {
+    wbPlanEl("rect", { x: x + w * .2, y: y + h * .2, width: w * .6, height: h * .6, fill: "var(--wbp-ink)", "fill-opacity": .6 }, g);
+  } else if (is("tree")) {
+    circ(x + w / 2, y + h / 2, Math.min(w, h) / 2 - 1, { fill: "var(--wbp-grass)", "stroke-dasharray": "3 2" });
+    circ(x + w / 2, y + h / 2, 2, { fill: "var(--wbp-ink)" });
+  } else if (is("boulder", "rock", "stone")) {
+    wbPlanEl("rect", Object.assign({ x, y, width: w, height: h, rx: Math.min(w, h) / 2.5 }, ink, { fill: "var(--wbp-store)" }), g);
+  } else if (is("gate", "torii")) {
+    body({ fill: "var(--wbp-sacred)" });
+    const s = Math.min(w, h);
+    wbPlanEl("rect", { x, y, width: s, height: s, fill: "var(--wbp-ink)", "fill-opacity": .6 }, g);
+    wbPlanEl("rect", { x: x + w - s, y: y + h - s, width: s, height: s, fill: "var(--wbp-ink)", "fill-opacity": .6 }, g);
+  } else if (is("rug", "mat")) {
+    wbPlanEl("rect", Object.assign({ x, y, width: w, height: h }, ink, { "stroke-dasharray": "4 3" }), g);
+  } else {
+    body();
+  }
+}
+
+// a stair by its shape, in its hall: a straight flight, an L, a U with its
+// half landing, a spiral, a ladder; ▲ where it climbs on, ▼ where it goes down
+function wbPlanStair(svg, s, X, Y, C) {
+  const g = wbPlanEl("g", {}, svg);
+  const r = s.rects.reduce((a, b) => (a.w * a.d >= b.w * b.d ? a : b));
+  const x0 = X(r.x) + 3, y0 = Y(r.y) + 3, w = r.w * C - 6, h = r.d * C - 6;
+  const ink = { stroke: "var(--wbp-cobalt)", "stroke-width": 1, fill: "none" };
+  const treads = (ax, ay, bw, bh, alongX, n) => {
+    for (let i = 1; i < n; i++) {
+      if (alongX) wbPlanEl("line", Object.assign({ x1: ax + bw * i / n, y1: ay, x2: ax + bw * i / n, y2: ay + bh }, ink), g);
+      else wbPlanEl("line", Object.assign({ x1: ax, y1: ay + bh * i / n, x2: ax + bw, y2: ay + bh * i / n }, ink), g);
+    }
+    wbPlanEl("rect", Object.assign({ x: ax, y: ay, width: bw, height: bh }, ink), g);
+  };
+  const long = w >= h;
+  if (s.kind === "spiral") {
+    const cx = x0 + w / 2, cy = y0 + h / 2, rr = Math.min(w, h) / 2;
+    wbPlanEl("circle", Object.assign({ cx, cy, r: rr }, ink), g);
+    wbPlanEl("circle", Object.assign({ cx, cy, r: rr * .18 }, ink), g);
+    for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5; wbPlanEl("line", Object.assign({ x1: cx + Math.cos(a) * rr * .18, y1: cy + Math.sin(a) * rr * .18, x2: cx + Math.cos(a) * rr, y2: cy + Math.sin(a) * rr }, ink), g); }
+  } else if (s.kind === "ladder") {
+    const lx = long ? 0 : w * .2, ly = long ? h * .2 : 0;
+    treads(x0 + lx, y0 + ly, w - 2 * lx, h - 2 * ly, long, 6);
+  } else if (s.kind === "u") {
+    if (long) { const land = w * .25; treads(x0 + land, y0, w - land, h / 2, true, 6); treads(x0 + land, y0 + h / 2, w - land, h / 2, true, 6); wbPlanEl("rect", Object.assign({ x: x0, y: y0, width: land, height: h }, ink), g); }
+    else { const land = h * .25; treads(x0, y0 + land, w / 2, h - land, false, 6); treads(x0 + w / 2, y0 + land, w / 2, h - land, false, 6); wbPlanEl("rect", Object.assign({ x: x0, y: y0, width: w, height: land }, ink), g); }
+  } else if (s.kind === "l") {
+    const t = Math.min(w, h) * .45;
+    treads(x0, y0, w, t, true, 5); treads(x0 + w - t, y0 + t, t, h - t, false, 4);
+  } else {
+    treads(x0, y0, w, h, long, 8);
+  }
+  wbPlanLabel(g, X(r.x + r.w / 2), Y(r.y + r.d / 2) + 4, (s.up ? "▲" : "") + (s.down ? "▼" : ""), Math.max(10, C * .4), 700, "var(--wbp-cobalt)");
+  wbPlanEl("title", {}, g).textContent = s.name;
+}
+
+// A storey's name by how far it stands from the ground -- the storey
+// above it is Floor 1, the one beneath Below 1 -- which every language can
+// say with the one number: Japanese counts its floors from 1 at the ground,
+// so a "1階" for Floor 1 would name the ground (its catalog says 地上階,
+// 1階上, 地下1階).
+function wbPlanLevelName(lv) {
+  if (lv === 0) return t("Ground");
+  if (lv < 0) return t("Below {below}", { below: -lv });
+  return t("Floor {above}", { above: lv });
+}
+
+// The storey itself: the ground first, then the storey beneath as a ghost,
+// the rooms filled by what they are for (a room nobody has come near yet,
+// planned, faint), stairs, fixtures, walls broken at their doorways, the
+// doorways, the windows, who stands where, and the names last. A live room
+// opens on click, where every edit to it is made; a planned one is no room
+// of the story yet and opens nothing.
+function wbRenderStoreyPlan(host, data, ctx, { below = true } = {}) {
+  host.innerHTML = "";
+  const extent = [];
+  for (const r of data.rooms || []) extent.push(...r.rects);
+  if (below) for (const g of data.below || []) extent.push(...g.rects);
+  const { svg, C, X, Y } = wbPlanFrame(host, extent);
+  svg.setAttribute("translate", "no");
+  svg.setAttribute("aria-label", t("Plan of the storey: {storey}", { storey: wbPlanLevelName(data.level) }));
+  wbPlanDefs(svg);
+  const planned = t("planned, not yet in the story");
+  const openIt = t("click to open it");
+  const room = (r, fill, extra) => {
+    const g = wbPlanEl("g", Object.assign({ class: "wb-plan-room" + (r.planned ? " planned" : ""), "data-room": r.id }, extra || {}), svg);
+    for (const rect of r.rects) wbPlanEl("rect", { x: X(rect.x), y: Y(rect.y), width: rect.w * C, height: rect.d * C, fill }, g);
+    wbPlanEl("title", {}, g).textContent = r.name + " — " + (r.planned ? planned : openIt);
+    if (!r.planned) {
+      g.setAttribute("tabindex", "0");
+      g.setAttribute("role", "button");
+      g.setAttribute("aria-label", r.name);
+      wbActivatable(g, () => ctx.select(r.id));
+    }
+    return g;
+  };
+  // the ground and its ways, under everything
+  for (const r of (data.rooms || []).filter(r => r.ground)) {
+    const g = room(r, wbPlanFill(r.purpose));
+    wbPlanWalls(g, new Set(r.cells.map(c => c[0] + "," + c[1])), X, Y, new Set(), "var(--wbp-ok)", 1, "6 4");
+  }
+  if (below) for (const g of data.below || []) for (const r of g.rects) {
+    wbPlanEl("rect", { x: X(r.x), y: Y(r.y), width: r.w * C, height: r.d * C, fill: "none", stroke: "var(--wbp-line)", "stroke-dasharray": "3 4", opacity: .7, class: "wb-plan-below" }, svg);
+  }
+  const gaps = new Set();
+  for (const d of data.doors || []) for (const c of d.cells) gaps.add(`${c[0]},${c[1]},${d.side}`);
+  for (const r of (data.rooms || []).filter(r => !r.ground)) room(r, wbPlanFill(r.purpose));
+  for (const s of data.stairs || []) wbPlanStair(svg, s, X, Y, C);
+  for (const f of data.fixtures || []) {
+    const r = f.rect, g = wbPlanEl("g", { class: "wb-plan-fixture" }, svg);
+    wbPlanFixture(g, f, X, Y, C);
+    wbPlanEl("title", {}, g).textContent = f.name;
+    const name = String(f.name || "");
+    const room_ = r.w * C / 6;
+    if (r.w * C >= 70 && !/(_\d+)$/.test(f.id)) wbPlanLabel(g, X(r.x + r.w / 2), Y(r.y + r.d) + 11, name.length > room_ ? name.slice(0, Math.floor(room_)) + "…" : name, Math.max(8, Math.min(10, C * .28)), 500, "var(--wbp-line)");
+  }
+  for (const r of (data.rooms || []).filter(r => !r.ground)) {
+    wbPlanWalls(svg, new Set(r.cells.map(c => c[0] + "," + c[1])), X, Y, gaps, "var(--wbp-ink)", 2.4);
+  }
+  for (const d of data.doors || []) {
+    if (d.barrier === "open") continue;          // an opening: the gap is all of it
+    for (const c of d.cells) {
+      const seg = wbPlanEdge(X, Y, c[0], c[1], d.side, 0);
+      if (!seg) continue;
+      const line = wbPlanEl("line", { x1: seg[0], y1: seg[1], x2: seg[2], y2: seg[3], stroke: d.outside ? "var(--wbp-ok)" : "var(--wbp-cobalt)", "stroke-width": 5, "stroke-linecap": "butt", class: "wb-plan-door" }, svg);
+      if (d.name) wbPlanEl("title", {}, line).textContent = d.name;
+    }
+  }
+  for (const w of data.windows || []) {
+    const g = wbPlanEl("g", { class: "wb-plan-window" }, svg);
+    for (const c of w.cells) {
+      const seg = wbPlanEdge(X, Y, c[0], c[1], w.side, 3);
+      if (!seg) continue;
+      wbPlanEl("line", { x1: seg[0], y1: seg[1], x2: seg[2], y2: seg[3], stroke: "var(--wbp-sheet)", "stroke-width": 5 }, g);
+      wbPlanEl("line", { x1: seg[0], y1: seg[1], x2: seg[2], y2: seg[3], stroke: "var(--wbp-cobalt)", "stroke-width": 1.2 }, g);
+    }
+    if (w.name) wbPlanEl("title", {}, g).textContent = w.name;
+  }
+  for (const b of data.bodies || []) {
+    const g = wbPlanEl("g", { class: "wb-plan-body" }, svg);
+    wbPlanEl("circle", { cx: X(b.cell[0] + .5), cy: Y(b.cell[1] + .5), r: Math.max(3, C * .22), fill: "var(--wbp-cobalt)", stroke: "var(--wbp-sheet)", "stroke-width": 1.5 }, g);
+    wbPlanEl("title", {}, g).textContent = b.name;
+    wbPlanLabel(g, X(b.cell[0] + .5), Y(b.cell[1]) - 3, b.name, Math.max(8, Math.min(11, C * .3)), 600, "var(--wbp-cobalt)");
+  }
+  for (const r of data.rooms || []) {
+    const top = r.rects.reduce((a, b) => (a.y < b.y || (a.y === b.y && a.w > b.w) ? a : b));
+    // the name fits its room, or ends where the room does: a stair's hall
+    // two paces wide beside a hallway read as one long name (the shrine of
+    // chat 168, 2026-10-12)
+    const size = Math.max(9, Math.min(14, C * .4));
+    const fits = Math.max(3, Math.floor(top.w * C / (size * .58)));
+    const name = r.name.length > fits ? r.name.slice(0, fits - 1).trimEnd() + "…" : r.name;
+    const label = wbPlanLabel(svg, X(top.x + top.w / 2), Y(top.y) + Math.max(12, Math.min(16, C * .45)) + 4, name,
+      size, r.ground ? 600 : 700, r.ground ? "var(--wbp-ok)" : "var(--wbp-ink)");
+    if (name !== r.name) wbPlanEl("title", {}, label).textContent = r.name;
+  }
+  return svg;
+}
+
+// What the plan's fills and marks mean, as the lab's legend says them.
+function wbPlanLegend(host) {
+  host.innerHTML = "";
+  const swatch = (fill, label, extra) => el("span", { class: "wb-legend-item" },
+    el("i", { class: "wb-legend-mark wb-plan-swatch" + (extra ? " " + extra : ""), style: `background:${fill}` }), label);
+  host.append(
+    swatch("var(--wbp-living)", "Living"), swatch("var(--wbp-private)", "Private"),
+    swatch("var(--wbp-service)", "Service"), swatch("var(--wbp-circ)", "Circulation"),
+    swatch("var(--wbp-store)", "Storage"), swatch("var(--wbp-sacred)", "Sacred"),
+    swatch("var(--wbp-grass)", "Open ground"), swatch("var(--wbp-gravel)", "Way"),
+    swatch("var(--wbp-room)", "Planned, not yet in the story", "planned"));
+  host.classList.add("wb-plan-legend");
 }
 
 // The regions of the structure map, one swatch each in the hue the rooms
@@ -2861,9 +3171,14 @@ async function openWorldBrowser(opts = {}) {
     positions,
     selected: opts.room || positions?.persona?.room || firstRoom(index),
     tab: tabs.some(([id]) => id === opts.tab) ? opts.tab : "rooms",
-    // The map's zoom: "room" (the selected room's grid) or "map" (every
-    // room placed by bearing); the grid last drawn; the overlay chosen.
+    // The map's zoom: "room" (the selected room's grid), "map" (every
+    // room placed by bearing) or "plan" (one storey of a site plan as the
+    // layout lab draws it); the grid last drawn; the overlay chosen.
     zoom: "room",
+    // The storey the plan shows -- {plan, level, levels, data} -- and
+    // whether the storey beneath is drawn under it.
+    plan: null,
+    planBelow: true,
     slice: null,
     grid: null,
     overlay: null,
@@ -2893,7 +3208,10 @@ async function openWorldBrowser(opts = {}) {
       if (!alive() || S.chatId !== chatId) return;
       if (state.tab === "rooms") {
         if (state.zoom === "map") await Promise.all([showStructure(), loadCard(state.selected)]);
-        else await loadRoom(state.selected);
+        // a write can move a derived site: the plan is read again
+        else if (state.zoom === "plan" && state.plan) {
+          await Promise.all([showPlan(state.plan.plan, state.plan.level), loadCard(state.selected)]);
+        } else await loadRoom(state.selected);
       } else if (state.tab === "bodies") {
         wbRenderBodies(bodies, ctx);
       }
@@ -2908,6 +3226,7 @@ async function openWorldBrowser(opts = {}) {
       // dialog, and remembers what the host folded since.
       openBodies: new Set(opts.expandAttire ? (index.bodies || []).map(b => b.name) : []),
       select: id => loadRoom(id),
+      showPlan: (plan, level) => showPlan(plan, level),
       showRoom: id => { state.selected = id; selectTab("rooms"); },
       showBody: name => { ctx.openBodies.add(name); selectTab("bodies"); },
       // The card rebuilt from a write's fresh slice, the grid re-read (an
@@ -3163,12 +3482,36 @@ async function openWorldBrowser(opts = {}) {
     // Undo for the last drag, and the room's removal.
     function renderMapBar() {
       map.bar.innerHTML = "";
+      // a storey drawn as a plan takes the width a whole building needs
+      map.pane.classList.toggle("wb-plan-wide", state.zoom === "plan");
       const undo = ctx.undo.peek();
       const undoButton = undo ? el("button", { class: "small wb-undo", title: undo.label,
         onclick: async () => { await ctx.undo.run(); renderMapBar(); } }, "Undo") : null;
       if (state.zoom === "map") {
         map.bar.append(el("b", {}, "Every room, placed by bearing"),
           el("span", { class: "dim" }, "— click a room to open its grid; drag one to re-bear it"),
+          ...(undoButton ? [undoButton] : []));
+        return;
+      }
+      if (state.zoom === "plan") {
+        const at = state.plan || {};
+        const storeys = el("span", { class: "wb-plan-levels", role: "group", "aria-label": "Storey" },
+          ...(at.levels || []).map(lv => el("button", {
+            class: "small" + (lv === at.level ? " on" : ""), "aria-pressed": lv === at.level ? "true" : "false",
+            "data-level": String(lv), onclick: () => showPlan(at.plan, lv),
+          }, txt(wbPlanLevelName(lv)))));
+        const beneath = el("input", { type: "checkbox", class: "wb-plan-below-toggle" });
+        beneath.checked = state.planBelow;
+        beneath.onchange = () => {
+          state.planBelow = beneath.checked;
+          if (at.data) wbRenderStoreyPlan(map.canvas, at.data, ctx, { below: state.planBelow });
+        };
+        map.bar.append(
+          el("button", { class: "wb-link wb-map-up", onclick: () => showStructure() }, "All rooms"),
+          el("span", { class: "dim" }, "›"),
+          el("b", { translate: "no" }, txt((at.data && at.data.title) || at.plan || "")),
+          storeys,
+          el("label", { class: "small wb-plan-below" }, beneath, " ", "Show the storey beneath"),
           ...(undoButton ? [undoButton] : []));
         return;
       }
@@ -3187,6 +3530,10 @@ async function openWorldBrowser(opts = {}) {
         map.bar.append(shape);
       }
       const view = state.grid && !state.grid.error ? state.grid : null;
+      if (view && view.room && view.room.plan) {
+        map.bar.append(el("button", { class: "small wb-map-plan", title: "Open this room's storey as a plan",
+          onclick: () => showPlan(view.room.plan, view.room.level) }, "Plan"));
+      }
       const overlays = Object.keys((view && view.overlays) || {});
       if (view && (overlays.length || (view.sound_sources || []).length)) {
         const toggles = el("span", { class: "wb-overlay-toggles" });
@@ -3284,6 +3631,43 @@ async function openWorldBrowser(opts = {}) {
           "lands on", " ", el("b", { translate: "no" }, txt(names.get(c.onto) || c.onto)),
           " ", "(reached through", " ", el("span", { translate: "no" }, txt(names.get(c.via) || c.via)), ")")));
       }
+      renderMapBar();
+    }
+
+    // ONE STOREY OF A SITE PLAN AS THE LAYOUT LAB DRAWS IT (the owner's
+    // choice, 2026-10-12): the whole building the plan holds, every room on
+    // one frame; a live room opens on click, where its edits are made.
+    async function showPlan(plan, level) {
+      if (!plan) return;
+      state.zoom = "plan";
+      state.plan = { plan, level: level == null ? null : level,
+        levels: (state.plan && state.plan.plan === plan && state.plan.levels) || [] };
+      renderMapBar();
+      map.canvas.innerHTML = "";
+      map.canvas.append(el("div", { class: "small dim" }, "Loading…"));
+      map.legend.innerHTML = "";
+      map.notes.innerHTML = "";
+      map.forms.innerHTML = "";
+      map.marks.innerHTML = "";
+      const params = new URLSearchParams({ plan });
+      if (level != null) params.set("level", String(level));
+      if (S.currentFrameId != null) params.set("frame_id", String(S.currentFrameId));
+      let data;
+      try {
+        data = await api("GET", `/api/chats/${chatId}/map/plan?${params}`);
+      } catch (error) {
+        if (!alive() || S.chatId !== chatId || state.zoom !== "plan") return;
+        map.canvas.innerHTML = "";
+        map.canvas.append(el("div", { class: "err small" }, txt(error?.message || String(error))));
+        return;
+      }
+      if (!alive() || S.chatId !== chatId || state.zoom !== "plan"
+          || !state.plan || state.plan.plan !== plan) return;
+      state.plan = { plan, level: data.level, levels: data.levels || [], data };
+      wbRenderStoreyPlan(map.canvas, data, ctx, { below: state.planBelow });
+      wbPlanLegend(map.legend);
+      map.notes.append(el("div", { class: "small dim wb-plan-hint" },
+        "Click a room to open it. A gap in a wall is a doorway, a coloured bar in one a door, a thin line a window. A stair is a room of its own on each storey it joins, drawn by its shape: ▲ it climbs on, ▼ it goes down. A faint room is planned, and nobody has come near it yet; the dashed outline is the storey beneath."));
       renderMapBar();
     }
 

@@ -1007,10 +1007,17 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
               "aperture": [float(w["aperture"][0]), float(w["aperture"][1])],
               "to": str(w["to"]), "name": _room_name(scene, w["to"])}
              for w in (field.walls if field else [])]
+    # THE PLAN IT STANDS ON AND ITS STOREY, where it stands on one, so the
+    # map can open the storey as the layout lab draws it (`/map/plan`); a
+    # room on no plan reads as it always did
+    from world.site_plan import room_level, room_site
+    site = room_site(scene, room_id)
+    on_plan = {"plan": site["plan"], "level": room_level(scene, room_id)} if site else {}
     return {
         "room": {"id": str(room_id), "name": _room_name(scene, room_id),
                  "w": grid.w, "d": grid.d, "shape": grid.shape,
-                 "measured": bool(grid.measured), "cells": _cells(grid.cells)},
+                 "measured": bool(grid.measured), "cells": _cells(grid.cells),
+                 **on_plan},
         # In the rim's OWN order (along the wall from its start), not sorted:
         # it is the order `offset` counts in, and on a round room's arc the
         # two differ.
@@ -1268,6 +1275,45 @@ def map_index(cid: int, frame_id: int | None = None):
     view["frame_id"] = frame_id
     view["location"] = str(scene.get("location") or "")
     return view
+
+
+@map_router.get("/plan")
+def map_plan(cid: int, plan: str, level: int | None = None, frame_id: int | None = None):
+    """One storey of a site plan as the layout lab draws it
+    (`web.storey_plan`): the whole building the plan holds, the rooms nobody
+    has come near yet among them, on one frame. The owner's choice of
+    2026-10-12 for the World Browser's map."""
+    from web.storey_plan import plan_scene, storey_plan
+    from world.structure import registry_rows
+    _chat_or_404(cid)
+    with _era(cid, frame_id):
+        scene = rooms.read_scene(cid)
+        specs = {uid: (entry["name"], entry["planned"])
+                 for uid, entry in registry_rows(cid).items() if entry["planned"]}
+        view = storey_plan(plan_scene(cid, scene, plan), plan, level, specs,
+                           live=set((scene.get("rooms") or {})))
+    if view is None:
+        raise HTTPException(404, f"No room stands on {plan}")
+    view["title"] = _plan_title(cid, scene, specs, plan)
+    view["frame_id"] = frame_id
+    return view
+
+
+def _plan_title(cid, scene, specs, plan):
+    """What a site plan is called: the structure the room it is named after
+    was planned in (`layout:<room>`, `structure.LAYOUT_PLAN_PREFIX`), else
+    that room's name, else the plan's own id."""
+    from world.structure import LAYOUT_PLAN_PREFIX, STRUCTURES_KEY, normalize_structures
+    named = str(plan)[len(LAYOUT_PLAN_PREFIX):] if str(plan).startswith(LAYOUT_PLAN_PREFIX) else ""
+    spec = (specs.get(named) or (None, {}))[1] or {}
+    key = str(spec.get("structure") or "")
+    if key:
+        held = normalize_structures(db.wget_for_frame(cid, STRUCTURES_KEY, None, {}) or {})
+        name = str(((held.get("items") or {}).get(key) or {}).get("name") or "").strip()
+        if name:
+            return name
+    room = ((scene or {}).get("rooms") or {}).get(named)
+    return str((room or {}).get("name") or (specs.get(named) or ("",))[0] or plan)
 
 
 # ---------------------------------------------------------------------------

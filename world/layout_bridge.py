@@ -1649,10 +1649,17 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             rect = f["rect"]
             placed_ids.add((uid, fid))
             kind = str(src.get("kind") or "").strip().casefold().replace(" ", "_")
+            # WHAT THE SOLVER TOOK IT FOR, kept on the anchor so a plan of the
+            # building can draw it as the layout lab does (a bed with its
+            # pillow, a stove with its burners); never read as what it IS --
+            # that is its `desc`, the plan's word
+            drawn = kind or str(f.get("kind") or "").strip().casefold().replace(" ", "_")
             if at and at != "walls" and not _stands_at(room, rect, at, kind):
                 stands = [s for s in _SIDES if _flush(room, rect, s)] or ["middle"]
                 anchor = {"desc": f.get("name") or aid,
                           "footprint": footprint_for_extent(rect.w, rect.d), "height": f["height"]}
+                if drawn:
+                    anchor["kind"] = drawn
                 if at in _SIDES:
                     anchor["dir"] = at
                 elif at in _CORNERS:
@@ -1675,6 +1682,8 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
                       "extent": {"w": rect.w, "d": rect.d},
                       "footprint": footprint_for_extent(rect.w, rect.d),
                       "height": f["height"]}
+            if drawn:
+                anchor["kind"] = drawn
             if side:
                 anchor["dir"] = side
             out[uid]["anchors"][aid] = anchor
@@ -1695,6 +1704,9 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
                 w, d, height = fixture_footprint(f)
                 anchor = {"desc": f.get("name") or aid, "footprint": footprint_for_extent(w, d),
                           "height": height}
+                drawn = str(f.get("kind") or "").strip().casefold().replace(" ", "_")
+                if drawn:
+                    anchor["kind"] = drawn
                 if at in _SIDES:
                     anchor["dir"] = at
                 elif at in _CORNERS:
@@ -1968,6 +1980,12 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         out[uid]["layout"] = {"plan": building["plan"], "turn": turn,
                               "moved": record["moved"], "unplaced": record["unplaced"],
                               "sides": record.get("sides", [])}
+        # what the solver took the room for, from its closed set -- a hall a
+        # stair -- so a plan of the building can colour it as the lab does
+        purpose = "stair" if out[uid].get("room") else str(
+            (spec_rooms.get(uid) or {}).get("purpose") or "")
+        if purpose:
+            out[uid]["layout"]["purpose"] = purpose
         for key in ("stated", "described_m2", "restored", "split", "grounds"):
             if key in record:
                 out[uid]["layout"][key] = record[key]
@@ -2234,7 +2252,10 @@ def _stair_halls(building, layout, rects, levels, halls, out):
                                   "elev_m": round(lv * STOREY_M, 2)}},
             "anchors": {}, "edges": {}, "record": {"moved": [], "unplaced": []},
             "room": {"name": name, "purpose": name, "structure": building["structure"],
-                     LAYOUT_MADE_KEY: True, "stair_of": sorted(entry["serves"])}})
+                     LAYOUT_MADE_KEY: True, "stair_of": sorted(entry["serves"]),
+                     # its shape, which a plan of it draws: a straight flight,
+                     # an L, a U, a spiral, a ladder (`layout_solver`)
+                     "stair_kind": str(well.get("kind") or "")}})
     # THE FLIGHT: each hall to the one a storey above it in its stairwell
     way = {"ladder": "ladder"}
     for well in layout.stairwells:
