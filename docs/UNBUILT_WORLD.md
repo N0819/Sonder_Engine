@@ -2125,6 +2125,24 @@ What it leaves:
   fixture named only by its description ("the slant-topped desk") still
   names nothing, and the thing stays with its holder.
 
+<a id="unbuilt-1-203"></a>
+
+### 1.203 An approach the encoder does not record as one
+
+**Found 2026-10-12** by the Hollowmere test story
+(`docs/experiments/PLAY_2026_10_12_hollowmere.md`, scratch chat 196). The
+PA12 floor (`director_movement._walk_short_of`) walks a declaration marked
+`arrives=false` and fired live once (beat 13, "starts back down the path
+toward the telegraph office": 2 paces, to the doorway). Two other approaches
+never reached it: "heads across the platform toward the telegraph office"
+(beat 6) wrote no `movement` at all, and the page walked her to the office
+door while the state left her where she stood; "up the mountain path toward
+the lineman's hut" (beat 10) was declared as arriving on the path. The
+encoder's `movement` line asks for every walk a body sets off on, arriving or
+not; a candidate is measuring that line on these two beats' copies before
+writing anything.
+
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

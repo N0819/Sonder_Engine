@@ -259,6 +259,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.181 — What the Kirinoura wording fixes left on purpose (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-181)
 - [§1.182 — What the review of the present-tense rule found that predates it (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-182)
 - [§1.200 — What a body reads does not reach it — BUILT 2026-10-11, residuals open](UNBUILT_PERCEPTION.md#unbuilt-1-200)
+- [§1.201 — What a read finds can be the record of the act, or the reader's own name (2026-10-12)](UNBUILT_PERCEPTION.md#unbuilt-1-201)
 
 **2. Roadmap**
 
@@ -326,6 +327,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.193 — A declared follow carries the player — BUILT 2026-10-09, residuals open](UNBUILT_WORLD.md#unbuilt-1-193)
 - [§1.194 — A vessel moving within one room stays in it — BUILT 2026-10-09, residuals open](UNBUILT_WORLD.md#unbuilt-1-194)
 - [§1.199 — A thing a body carries is left where it was minted — BUILT 2026-10-11, residuals open](UNBUILT_WORLD.md#unbuilt-1-199)
+- [§1.203 — An approach the encoder does not record as one (2026-10-12)](UNBUILT_WORLD.md#unbuilt-1-203)
 
 **2. Roadmap**
 
@@ -489,6 +491,7 @@ Not scheduled and not committed to a phase. See the
 
 - [§1.134 — What the campaign-3 plan/structure/tools wave left open (2026-09-05)](UNBUILT_PLANNING.md#unbuilt-1-134)
 - [§1.198 — A person someone claims, and a planned person's mind — residuals (2026-10-10)](UNBUILT_PLANNING.md#unbuilt-1-198)
+- [§1.202 — An absence the story's premise states never reaches the town (2026-10-12)](UNBUILT_PLANNING.md#unbuilt-1-202)
 
 **2. Roadmap**
 

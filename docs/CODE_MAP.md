@@ -21,8 +21,8 @@
 | `agents/director_floors.py` | 2548 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_layout.py` | 497 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
-| `agents/director_movement.py` | 3179 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 3399 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `agents/director_movement.py` | 3248 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
+| `agents/director_prose.py` | 3410 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1632 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 2812 |  | — |
@@ -429,24 +429,24 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_apply_following_movement()` | 1632 | 419 lines |
+| `_apply_following_movement()` | 1652 | 452 lines |
 | `_reconcile_near_group_positions()` | 308 | 289 lines |
-| `_travel_continues()` | 2746 | 175 lines |
-| `walk_declared()` | 2481 | 136 lines |
-| `_guard_approach_is_not_arrival()` | 3016 | 103 lines |
+| `_travel_continues()` | 2799 | 191 lines |
+| `walk_declared()` | 2534 | 136 lines |
+| `_guard_approach_is_not_arrival()` | 3085 | 103 lines |
 | `follow_through_the_steps()` | 1440 | 91 lines |
-| `_walk_short_of()` | 2923 | 91 lines |
+| `_walk_short_of()` | 2992 | 91 lines |
 | `follow_walk_waits()` | 1287 | 85 lines |
 
 ### `agents/director_prose.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 2994 | 272 lines |
-| `encode()` | 2542 | 143 lines |
-| `a_walk_is_its_owners()` | 1843 | 132 lines |
+| `run()` | 3005 | 272 lines |
+| `a_walk_is_its_owners()` | 1843 | 143 lines |
+| `encode()` | 2553 | 143 lines |
 | `select_channels()` | 594 | 107 lines |
-| `entity_keys_name_held_things()` | 2080 | 86 lines |
+| `entity_keys_name_held_things()` | 2091 | 86 lines |
 | `rooms_named_by_part()` | 896 | 83 lines |
 | `implied_tools()` | 1292 | 80 lines |
 | `rooms_in_play()` | 1006 | 75 lines |
