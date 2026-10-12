@@ -186,7 +186,21 @@ PLANNER_REPLY_CHARS = 80_000
 #: ~100 calls to land nothing; at 48k the same reply published and concluded
 #: in 19 steps and 34 calls. A larger cut costs characters per step and
 #: saves the steps that only re-read.
-PLANNER_TRANSCRIPT_CHARS = 48_000
+#:
+#: RAISED AGAIN, TO 96,000 (2026-10-11; the owner: "raising the cap is
+#: probably for the best"). Three replays of the same chat at 48k ran every
+#: reply that checked the plan against the lore at ~42k of the 48k -- seven
+#: lore entries are ~27k on their own, beside the rooms and the packages --
+#: and still re-read what the cut had trimmed: "Was anything unfinished?"
+#: read 7 entries 38 times in 105 calls, and the per-room echo
+#: (`_echo_items`) could point at only 6-9% of the rooms it re-read, the rest
+#: already trimmed out of view. At 96k, two replays of the same lines with
+#: the stop clause: not one lore entry read twice within a reply, where the
+#: 48k replay beside them re-read 3 and 1; one run cost $0.65 for 61 calls
+#: against the 48k run's $0.64 for 56 and the same model time, the other
+#: drew nine answers of over 20k tokens and doubled both -- the model's
+#: draw, not the cut's, as the first run showed.
+PLANNER_TRANSCRIPT_CHARS = 96_000
 PLANNER_TRIM_HEAD_CHARS = 1_500
 #: A read tool result's RECEIPT: what was called and the shape of what came
 #: back. The tools are pure reads of a database that is still there, so a
