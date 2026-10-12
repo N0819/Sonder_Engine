@@ -132,5 +132,8 @@ def test_the_encoder_is_told_where_a_walk_ends():
     causal Director's interpret sheet that said this was deleted 2026-09-27."""
     from llm.prompts import unified_specialist_prompt
     sheet = unified_specialist_prompt(["positions"], "en", [])
-    assert "to_room is where the walk ends" in sheet
+    # Where the walk is GOING, not where the beat leaves it (2026-10-12:
+    # "where the walk ends" was read as the room a body stands in at the
+    # beat's end, so a walk toward the office was recorded as none at all).
+    assert "to_room is where the walk is going" in sheet
     assert "WHERE THE WORLD PUTS IT IS YOURS TO WRITE" in sheet

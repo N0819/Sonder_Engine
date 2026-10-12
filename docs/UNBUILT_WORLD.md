@@ -2127,20 +2127,35 @@ What it leaves:
 
 <a id="unbuilt-1-203"></a>
 
-### 1.203 An approach the encoder does not record as one
+### 1.203 An approach the encoder does not record as one — clause landed 2026-10-12, residuals open
 
 **Found 2026-10-12** by the Hollowmere test story
 (`docs/experiments/PLAY_2026_10_12_hollowmere.md`, scratch chat 196). The
 PA12 floor (`director_movement._walk_short_of`) walks a declaration marked
-`arrives=false` and fired live once (beat 13, "starts back down the path
-toward the telegraph office": 2 paces, to the doorway). Two other approaches
-never reached it: "heads across the platform toward the telegraph office"
-(beat 6) wrote no `movement` at all, and the page walked her to the office
-door while the state left her where she stood; "up the mountain path toward
-the lineman's hut" (beat 10) was declared as arriving on the path. The
-encoder's `movement` line asks for every walk a body sets off on, arriving or
-not; a candidate is measuring that line on these two beats' copies before
-writing anything.
+`arrives=false`, and the encoder seldom wrote one: "heads across the
+platform toward the telegraph office" (beat 6) wrote no `movement` at all on
+4 of 4 interpretation rerolls, and "up the mountain path toward the
+lineman's hut" (beat 10) arrived on the path or in the hut. Core's movement
+line said `to_room` "is where the walk ends", read as where the beat leaves
+the body. It now says heading toward a place is setting off for it, and
+`to_room` is where the walk is going, never a room it only crosses on the
+way (en, ja): beat 6 toward the office, not arriving, 6 of 6 (Design.md, "A
+walk is recorded by where it is going"). What it leaves:
+
+- **A trailing approach is dropped.** Beat 10 now writes the approach to the
+  hut on every reroll, mostly as a not-arriving row AFTER the arrival on the
+  path; `director._final_movement` keeps the last arrival and skips a
+  trailing row that does not arrive, by design ("a move refused or
+  interrupted"), so the beat ends on the path with its heading lost.
+  `_walk_short_of` walks an approach from where the beat began by the beat's
+  own seconds, so simply letting the trailing row win could leave a short
+  beat short of the path the prose reached. A candidate walks it on from the
+  last arrival, after a count of how often a trailing not-arriving row is a
+  refusal rather than an approach.
+- **A walk named by the room it crosses.** "Starts back down the path toward
+  the telegraph office" (beat 13) names the platform, not arriving, on 3 of 4
+  rerolls (the fourth wrote none), as the original run did; the floor walks
+  it to that door, and the next beat takes her in.
 
 
 ## 2. Roadmap

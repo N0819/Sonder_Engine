@@ -176,10 +176,19 @@ def test_the_owners_sheet_is_half_what_it_was():
     0.61 since 2026-10-08, from 0.6: the core's `world_index.elsewhere` line
     (183 characters), which the encoder needs once it is handed only the
     rooms in play whole -- a room on the map alone is a room the world holds.
-    The sheet stood at 19,455 of the old 19,526 ceiling; it is 19,638."""
+    The sheet stood at 19,455 of the old 19,526 ceiling; it is 19,638.
+
+    0.62 since 2026-10-12, from 0.61: two measured core lines. A step whose
+    point is what something says or shows looks at that thing (2026-10-11:
+    3 of 4 rerolls wrote a look on a read, against none before), and a
+    walk's `to_room` is where it is going, never a room it only crosses
+    (2026-10-12: a walk toward an office 6 of 6, against no movement at all
+    4 of 4). The first put the sheet at about 19,890, over the 19,851
+    ceiling -- unnoticed, because that day's gate ran a subset of the
+    suite; with both it is 20,025."""
     sheet = prompts.unified_specialist_prompt(
         ["obligations", "entities", "sensory_events", "poses"], parts=[])
-    assert len(sheet) < 32543 * 0.61, len(sheet)
+    assert len(sheet) < 32543 * 0.62, len(sheet)
 
 
 def _scores(scores):
