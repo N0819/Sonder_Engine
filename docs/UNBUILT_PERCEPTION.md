@@ -1783,30 +1783,6 @@ What it leaves:
   its reader does not know re-renders once as changed (turn 4656's tally
   papers did).
 
-<a id="unbuilt-1-201"></a>
-
-### 1.201 What a read finds can be the record of the act, or the reader's own name
-
-**Found 2026-10-12** by the Hollowmere test story
-(`docs/experiments/PLAY_2026_10_12_hollowmere.md`, scratch chat 196), after
-§1.200's wave. Two ways a read was answered with something other than what
-is there:
-
-- **The act recorded in place of the answer** (beat 2). She broke the seal
-  and read her orders; the resolve wrote "a single sheet, dense with type,
-  stamped at the bottom with the district office's ink" and the encoder,
-  with `entities__examined` routed at 0.92, wrote `{seal: broken, read:
-  yes}`. The resolve card says "writing on it" answers nothing; the encoder's
-  examined card does not say a record OF the reading is not the reading.
-  Candidate: one sentence in that card, measured on this beat's copy.
-- **The reader written into what she read** (beats 7 and 14). The telegraph
-  logbook's last sent entry was authored "CONFIRMED -- line nominal -- Varga"
-  at 08:31, hours before the player (Ilse Varga) arrived, and seven beats
-  later the page called it "her own morning confirmation". No candidate yet:
-  the encoder authors a reading from what the thing is, where it has been and
-  what happened to it (`entities__examined`), and none of those names her.
-
-
 ## 2. Roadmap
 
 <a id="unbuilt-2-11"></a>

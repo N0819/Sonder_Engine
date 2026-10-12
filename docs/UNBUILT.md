@@ -259,7 +259,6 @@ Not scheduled and not committed to a phase. See the
 - [§1.181 — What the Kirinoura wording fixes left on purpose (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-181)
 - [§1.182 — What the review of the present-tense rule found that predates it (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-182)
 - [§1.200 — What a body reads does not reach it — BUILT 2026-10-11, residuals open](UNBUILT_PERCEPTION.md#unbuilt-1-200)
-- [§1.201 — What a read finds can be the record of the act, or the reader's own name (2026-10-12)](UNBUILT_PERCEPTION.md#unbuilt-1-201)
 
 **2. Roadmap**
 
