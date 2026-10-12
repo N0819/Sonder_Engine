@@ -1929,6 +1929,17 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             patch = transform.get("patch") if isinstance(transform, dict) else None
             if isinstance(patch, dict) and isinstance(patch.get("positions"), dict):
                 moved.update(k for k in (mind(n) for n in patch["positions"]) if k)
+            # A BOARDING MOVES A BODY TOO (2026-10-11): a containment that
+            # puts a mind inside or upon something is a move by another
+            # name, and it went through this floor because only positions
+            # and movement counted -- Hollowmere turn 4661, the player's
+            # "she steps aboard the car after him" seated the brakeman.
+            # A release (null) moves nobody, and a hold between the two is
+            # still `_linked`'s to allow.
+            if isinstance(patch, dict) and isinstance(patch.get("containment"), dict):
+                moved.update(k for k, record in ((mind(n), r) for n, r
+                                                 in patch["containment"].items())
+                             if k and isinstance(record, dict) and record.get("in"))
         refused = {key for key in moved
                    if key != source and key not in declarers
                    and not _linked(scene, events, names.get(key) or key,
@@ -1949,7 +1960,7 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             patch = transform.get("patch") if isinstance(transform, dict) else None
             if isinstance(patch, dict):
                 patch = dict(patch)
-                for channel in ("positions", "stations"):
+                for channel in ("positions", "stations", "containment"):
                     if isinstance(patch.get(channel), dict):
                         patch[channel] = {k: v for k, v in patch[channel].items()
                                           if str(k).strip().casefold() not in forms}

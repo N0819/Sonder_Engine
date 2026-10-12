@@ -151,3 +151,44 @@ def test_a_claim_beside_a_kept_mind_in_the_room_it_kept_stands():
     keeper = _sitting(KEEPER, [PLAYER])
     out, _ = _run([follow, keeper], scene=CHAPEL_AND_BRIDGE)
     assert out[-1]["transforms"][0]["patch"]["stations"][KEEPER]["near"] == [PLAYER]
+
+
+# ---------------------------------------------------------------------------
+# A BOARDING IS A MOVE (2026-10-11). Hollowmere turn 4661 (scratch chat 196):
+# the player's "she steps aboard the car after him" seated the brakeman in
+# the funicular car through `containment`, which this floor did not count.
+
+def _board(source, event_id, who, holder="skiff"):
+    return {"source_entity_id": source, "source_event_id": event_id,
+            "event": f"{who} boards the {holder}", "movement": None,
+            "transforms": [{"item": who, "patch": {
+                "containment": {who: {"in": holder, "mode": "inside"}}}}]}
+
+
+def test_the_players_span_does_not_seat_another_mind():
+    primary = "turn:9:primary:raw"
+    inputs = [{"entity_id": "persona:21", "authority_mode": "world_author",
+               "events": [{"event_id": primary, "type": "raw_input"}]}]
+    span = _board("persona:21", primary, PLAYER)
+    span["transforms"][0]["patch"]["containment"][PILOT] = {"in": "skiff", "mode": "inside"}
+    out, warnings = _run([span], inputs)
+    assert out[0]["transforms"][0]["patch"]["containment"] == {
+        PLAYER: {"in": "skiff", "mode": "inside"}}
+    assert warnings and PILOT in warnings[0]
+
+
+def test_a_mind_boarding_by_its_own_declaration_stands():
+    hers = _board("character:81", HER_ACT, PILOT)
+    out, warnings = _run([hers])
+    assert out == [hers] and not warnings
+
+
+def test_a_release_moves_nobody():
+    primary = "turn:9:primary:raw"
+    inputs = [{"entity_id": "persona:21", "authority_mode": "world_author",
+               "events": [{"event_id": primary, "type": "raw_input"}]}]
+    span = _board("persona:21", primary, PLAYER)
+    span["transforms"][0]["patch"]["containment"][PILOT] = None
+    out, warnings = _run([span], inputs)
+    assert out[0]["transforms"][0]["patch"]["containment"][PILOT] is None
+    assert not warnings

@@ -1629,6 +1629,26 @@ def _set_down_where_they_are(merged, state_diff, body, origin, target, destinati
         owner != support and room_of(merged, owner) == origin)
 
 
+#: The containment modes that put a body INSIDE a thing -- in its interior,
+#: a place -- rather than carried by it in view (`spatial_containment`'s
+#: `_INTERIOR_MODES`, the engine's own pair).
+_BOARDING_MODES = frozenset({"inside", "interior"})
+
+
+def _placed_by_containment(state_diff, name):
+    """`(holder, mode)` of the containment this beat's own diff writes for
+    `name`, or None."""
+    rows = state_diff.get("containment") if isinstance(state_diff, dict) else None
+    if not isinstance(rows, dict):
+        return None
+    key = _ci_mapping_key(rows, name)
+    record = rows.get(key) if key else None
+    if isinstance(record, dict) and str(record.get("in") or "").strip():
+        return (str(record["in"]).strip(),
+                str(record.get("mode") or "").strip().casefold())
+    return None
+
+
 def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
                               out=None, held=None):
     """Carry willing followers through ordinary travel, never pursuit.
@@ -1826,8 +1846,27 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             origin = room_of(scene, follower)
             target_origin = room_of(scene, target)
             target_dest = positions.get(target)
+            # A FOLLOW FOLLOWS WHERE ITS TARGET ENDS THE BEAT, AND BOARDING
+            # IS AN ENDING (2026-10-11). The carry read room changes alone:
+            # a target who boards something has a containment, not a room,
+            # and a follower the beat had already seated was written the
+            # target's walk room on top of it, which the merge then read as
+            # stepping back out. Hollowmere turn 4661 (scratch chat 196):
+            # the brakeman declared his own follow of the inspector, both
+            # were seated in the funicular car, and the carry put him on
+            # the platform -- the car climbed without its brakeman and he
+            # was split into a scene of his own. A follower the beat
+            # already places inside or upon something stays as placed; a
+            # target who boards a thing with an interior is followed aboard.
+            if _placed_by_containment(state_diff, follower) is not None:
+                continue
+            boarding = _placed_by_containment(state_diff, target)
+            if boarding is not None and boarding[1] not in _BOARDING_MODES:
+                boarding = None
+            if boarding is not None:
+                target_dest = room_of(route_scene, boarding[0]) or target_dest or target_origin
             if not origin or origin != target_origin or not target_dest \
-                    or target_dest == target_origin:
+                    or (target_dest == target_origin and boarding is None):
                 continue
             if target.casefold() in rapid:
                 continue
@@ -1851,7 +1890,7 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
             if origin != target_dest and not passable_route_exists(
                     route_scene, origin, target_dest, body=follower):
                 continue
-            if positions.get(follower) == target_dest:
+            if positions.get(follower) == target_dest and boarding is None:
                 continue
             # THE PLAYER'S ROOM THIS BEAT IS HER OWN DECLARATION'S, or the
             # hold of whoever carries her: the carry never replaces a room
@@ -1865,6 +1904,16 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
                     and follower.casefold() == str(player_name or "").casefold():
                 continue
             if not _keeps_track(follower, target, target_dest):
+                continue
+            if boarding is not None:
+                # Aboard as the one followed is: the same holder, the same
+                # way in, and no room of the follower's own to undo it.
+                state_diff.setdefault("containment", {})[follower] = {
+                    "in": boarding[0], "mode": boarding[1]}
+                ctx.add_warning(
+                    f"Follow: {follower} boards {boarding[0]!r} after "
+                    f"{target}, whom they follow.")
+                progressed = changed = True
                 continue
             positions[follower] = target_dest
             # BESIDE THE ONE FOLLOWED: a body carried through a doorway
@@ -1946,6 +1995,10 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
         if held is not None and follower in held:
             continue
         if positions.get(follower) and positions[follower] != origin:
+            continue
+        # Seated by this beat's own diff, inside or upon something, and no
+        # walk of the follow's undoes it (the relation loop's rule above).
+        if _placed_by_containment(state_diff, follower) is not None:
             continue
         if target.casefold() in rapid:
             continue
