@@ -2221,6 +2221,37 @@ Candidate: the establish keeps a planned room's bearings and extents and
 re-authors only what the plan leaves open, checked against the plan before
 the solve.
 
+**Landed since (2026-10-12), for the fixtures:** the layout tier mints no
+door or stair "fixture" the plan never listed and writes no window as an
+anchor -- a window is its room's record in the wall, or a `window` edge onto
+the ground beyond it -- and the sort files a floor covering as the room's
+`floor` (Design.md: "A door is its edge", "A window is in its wall", "What
+covers a floor is the floor"). Re-laid from the recorded answers, the shrine
+holds none of the nine door marks and none of the four window anchors; the
+establish, rerun twice on that solve, wrote 0 and 1 anchors for a window (a
+place beneath it, whose desc still describes it) where it wrote 2. The
+duplicated roost fixtures and the unplaced futon and tokonoma stand.
+
+<a id="unbuilt-1-209"></a>
+
+### 1.209 A floor word the sound tables do not hold reads as masonry
+
+**Found 2026-10-12** landing the sort's `floor` answer (Design.md: "What
+covers a floor is the floor"). A room's `floor` is read by two closed engine
+tables -- `spatial_levels.FLOOR_LOSS_DB` (sound through the floor) and
+`spatial_sound_field.FLOOR_IMPACT_DB` (a tread heard below) -- which held
+timber, board, plank, stone, concrete and masonry. Every other word falls to
+masonry: 50 dB through, 40 for a tread. Three live sorts of chat 168's shrine
+wrote `wood` for 8 of its 11 rooms, `tatami` for 2 and `stone` for 2, so
+`wood` and `tatami` were added at timber's numbers. Every other word a card
+writes into `floor` still falls through: the establish's, the encoder's, the
+room author's, a Room plan's -- each free text (`plot_packages._plan_geometry`
+holds twenty characters of it), and no card states which words the engine
+reads. Candidate: `floor` becomes a closed set the engine owns, stated on
+every card that writes it as `barrier` is, with what lies on the floor going
+to the desc. Open for the owner: what tatami, or any covering, takes off a
+tread -- it reads as the timber under it.
+
 
 ## 2. Roadmap
 

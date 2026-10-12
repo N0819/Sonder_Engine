@@ -207,7 +207,7 @@
 | `world/frontage.py` | 1216 |  | `world.spatial` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1761 |  | — |
-| `world/layout_bridge.py` | 2253 |  | `world.layout_solver`, `world.structure` |
+| `world/layout_bridge.py` | 2276 |  | `world.layout_solver`, `world.structure` |
 | `world/layout_solver.py` | 2349 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1332 |  | `core`, `world.spatial`, `world.spatial_frames` |
@@ -232,7 +232,7 @@
 | `world/spatial_frames.py` | 2581 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2339 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 902 |  | — |
-| `world/spatial_levels.py` | 244 |  | `world.spatial_orientation` |
+| `world/spatial_levels.py` | 250 |  | `world.spatial_orientation` |
 | `world/spatial_light.py` | 848 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_light_field.py` | 1477 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 858 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
@@ -243,12 +243,12 @@
 | `world/spatial_routing.py` | 1322 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
 | `world/spatial_senses.py` | 1936 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
-| `world/spatial_sound_field.py` | 3368 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
+| `world/spatial_sound_field.py` | 3372 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 1258 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 494 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 2634 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 2647 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
 | `world/vistas.py` | 391 |  | — |
@@ -2577,12 +2577,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `planned_layout()` | 1539 | 389 lines |
-| `spec_from_answers()` | 917 | 223 lines |
+| `planned_layout()` | 1555 | 396 lines |
+| `spec_from_answers()` | 933 | 223 lines |
 | `_building()` | 471 | 189 lines |
-| `_ground_plan()` | 1142 | 149 lines |
-| `hold_inventory()` | 748 | 96 lines |
-| `_ground_geometry()` | 2006 | 82 lines |
+| `_ground_plan()` | 1158 | 149 lines |
+| `hold_inventory()` | 748 | 103 lines |
+| `_ground_geometry()` | 2029 | 82 lines |
 | `_grounds_of()` | 347 | 73 lines |
 | `plan_buildings()` | 268 | 59 lines |
 
@@ -2880,14 +2880,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `infer_room_levels()` | 137 | 44 lines |
-| `_edges()` | 95 | 21 lines |
-| `floor_edges()` | 220 | 20 lines |
-| `_over_pairs()` | 123 | 12 lines |
-| `stack_of()` | 197 | 12 lines |
-| `normalize_level()` | 57 | 8 lines |
-| `declared_way()` | 76 | 8 lines |
-| `edge_way()` | 67 | 7 lines |
+| `infer_room_levels()` | 143 | 44 lines |
+| `_edges()` | 101 | 21 lines |
+| `floor_edges()` | 226 | 20 lines |
+| `_over_pairs()` | 129 | 12 lines |
+| `stack_of()` | 203 | 12 lines |
+| `normalize_level()` | 63 | 8 lines |
+| `declared_way()` | 82 | 8 lines |
+| `edge_way()` | 73 | 7 lines |
 
 ### `world/spatial_light.py`
 
@@ -3019,13 +3019,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `sound_sources()` | 1478 | 171 lines |
-| `stamp_sound_relation()` | 2323 | 98 lines |
-| `sound_shape()` | 3274 | 95 lines |
+| `sound_sources()` | 1482 | 171 lines |
+| `stamp_sound_relation()` | 2327 | 98 lines |
+| `sound_shape()` | 3278 | 95 lines |
 | `spread()` | 1146 | 88 lines |
-| `room_sound_flood()` | 2932 | 73 lines |
-| `far_path_gain()` | 2234 | 66 lines |
-| `distant_sounds()` | 3083 | 59 lines |
+| `room_sound_flood()` | 2936 | 73 lines |
+| `far_path_gain()` | 2238 | 66 lines |
+| `distant_sounds()` | 3087 | 59 lines |
 | `quantise_hearing_db()` | 1020 | 56 lines |
 
 ### `world/spatial_substance.py`
@@ -3080,14 +3080,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `claim_frontier_spaces()` | 2273 | 207 lines |
+| `claim_frontier_spaces()` | 2286 | 207 lines |
 | `mint_frontier()` | 965 | 197 lines |
 | `plant_structure()` | 1164 | 191 lines |
-| `prepare_frontier_expansion()` | 2043 | 174 lines |
+| `prepare_frontier_expansion()` | 2056 | 174 lines |
 | `materialize_planned_fringe()` | 1357 | 153 lines |
 | `write_planned_layout()` | 484 | 104 lines |
-| `planned_context()` | 1916 | 75 lines |
-| `apply_planned_layout()` | 228 | 74 lines |
+| `planned_room_brief()` | 1694 | 86 lines |
+| `planned_context()` | 1929 | 75 lines |
 
 ### `world/subjects.py`
 

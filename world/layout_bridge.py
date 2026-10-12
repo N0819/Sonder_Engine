@@ -778,6 +778,13 @@ def hold_inventory(building, answer):
             continue
         uid = str(raw["id"])
         held = rooms.setdefault(uid, fresh(uid))
+        # WHAT COVERS THE FLOOR WALL TO WALL IS THE FLOOR (chat 168,
+        # 2026-10-12: the shrine's tatami was sorted as a fixture, and every
+        # view read "Tatami mats within arm's reach"): the room's word for
+        # it, as a plan's own `floor` is read (`plot_packages._plan_geometry`)
+        floor = _floor_word(raw.get("floor"))
+        if floor and not held.get("floor"):
+            held["floor"] = floor
         used = {item["id"] for key in ("fixtures", "zones", "windows", "marks")
                 for item in held[key]}
         ways = _ways_of(building, uid)
@@ -841,6 +848,15 @@ def hold_inventory(building, answer):
     if building.get("grounds"):
         held["grounds"] = hold_grounds(building, answer.get("grounds"))
     return held
+
+
+def _floor_word(value) -> str:
+    """A floor is a word: what a room's floor is made of, or covered with
+    from wall to wall -- the engine's sound reads it (`spatial_levels`,
+    `spatial_sound_field.FLOOR_IMPACT_DB`). Anything that is not a string is
+    no word, and a word is held as a plan holds one."""
+    word = value.strip().casefold() if isinstance(value, str) else ""
+    return " ".join(word.split())[:20]
 
 
 def hold_grounds(building, answer):
@@ -1552,6 +1568,8 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
                        "stated": [], "described": [], "marks": [], "restored": [],
                        "split": [], "warnings": list(layout.warnings)}
     spec_rooms = {r["id"]: r for r in spec.get("rooms") or ()}
+    held_floors = {str(r.get("id")): r["floor"] for r in (inventory or {}).get("rooms") or ()
+                   if isinstance(r, dict) and r.get("floor")}
     for uid in building["rooms"]:
         r = rects[uid]
         geometry = {"extent": {"w": r.w, "d": r.d}, "shape": SOLVED_SHAPE, "level": levels[uid],
@@ -1564,6 +1582,11 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             geometry.pop("shape")
         out[uid] = {"geometry": geometry, "anchors": {}, "edges": {},
                     "record": {"moved": [], "unplaced": []}}
+        # THE FLOOR THE FIRST CALL READ IN THE LORE, where the plan states
+        # none: never a fixture standing on it (`hold_inventory`)
+        floor = held_floors.get(uid)
+        if floor and not str(building["specs"][uid].get("floor") or "").strip():
+            geometry["floor"] = floor
         stated = _stated_sides(building["specs"][uid])
         if stated is not None:
             # THE PLAN'S ESTIMATE IS FILED AGAINST THE SOLVE: the Room's own

@@ -45,7 +45,13 @@ WAYS = ("stair", "ladder", "hatch", "overlook")
 #: footfall through; masonry lets almost nothing. The owner's numbers
 #: (2026-09-15); a floor with no word takes the sound field's
 #: `FLOOR_CEILING_LOSS_DB` (50).
-FLOOR_LOSS_DB = {"timber": 30.0, "board": 30.0, "plank": 30.0,
+#: `tatami` and `wood` (2026-10-12): rush mats are laid over a timber floor,
+#: so the floor between two storeys is the timber's, and `wood` is the word
+#: the layout tier's first call writes for every other wooden floor (8 of
+#: chat 168's shrine's 11 rooms, in each of three calls) -- each read as
+#: masonry before, as every word the table does not hold still is.
+FLOOR_LOSS_DB = {"timber": 30.0, "board": 30.0, "plank": 30.0, "wood": 30.0,
+                 "tatami": 30.0,
                  "stone": 50.0, "concrete": 50.0, "masonry": 50.0}
 
 

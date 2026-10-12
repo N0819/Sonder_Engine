@@ -1412,7 +1412,11 @@ TREAD_LEVEL = {"walk": "faint", "run": "audible"}
 #: voice through the same floor never reaches. The level heard in the room
 #: below a walk, by the upper room's `floor` word (masonry for anything
 #: else); a run is `TREAD_RUN_DB` louder. The owner's numbers.
-FLOOR_IMPACT_DB = {"timber": 55.0, "board": 55.0, "plank": 55.0,
+#: `wood` and `tatami` read as timber -- tatami as the timber under its mats
+#: (`spatial_levels.FLOOR_LOSS_DB` says why); what the mats take off a tread
+#: is the owner's number to set.
+FLOOR_IMPACT_DB = {"timber": 55.0, "board": 55.0, "plank": 55.0, "wood": 55.0,
+                   "tatami": 55.0,
                    "stone": 40.0, "concrete": 40.0, "masonry": 40.0}
 TREAD_RUN_DB = 8.0
 

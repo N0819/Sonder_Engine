@@ -1693,7 +1693,8 @@ def rooms_in_view_or_ahead(scene, focus_room, *, next_leg=None, bound_for=None):
 
 def planned_room_brief(cid, scene, room_ids):
     """The Director's development brief for the planned stubs among
-    `room_ids`: {room_id: {name, purpose, access, exits, structure}}.
+    `room_ids`: {room_id: {name, purpose, access, exits, structure, floor?,
+    windows?}}.
 
     THE SEED, HANDED TO THE HAND THAT FURNISHES. The plan says what a room
     is FOR and what it joins; the Director says what is in it. Purpose and
@@ -1732,6 +1733,18 @@ def planned_room_brief(cid, scene, room_ids):
             "access": str(spec.get("access") or room.get("access") or ""),
             "exits": list(exits.values()),
         }
+        # WHAT ITS FLOOR IS AND WHERE ITS WINDOWS STAND, where the plan holds
+        # them (the layout tier writes both, 2026-10-12): the room's own, so
+        # the hand describing it says them as the room's -- the floor in its
+        # desc, never a fixture on it; a window in its wall, never a thing
+        floor = str(room.get("floor") or spec.get("floor") or "").strip()
+        if floor:
+            brief["floor"] = floor
+        from world.spatial import room_windows
+        windows = [{"dir": w["dir"], **({"name": w["name"]} if w["name"] else {})}
+                   for w in room_windows(room if room.get("windows") else spec)]
+        if windows:
+            brief["windows"] = windows
         # HOW IT READS FROM FAR OFF, as far eyes have been seeing it: the
         # stub's own look first -- a beat that burned the place or a host
         # who edited it wrote there, and the far layer reads nothing else --
