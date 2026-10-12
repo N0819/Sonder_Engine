@@ -278,6 +278,8 @@
     "sound_tread_walk": "footsteps",
     "sound_tread_run": "running footsteps",
     "sound_tread_overhead": "{tread} overhead",
+    "sound_door_opens": "a door opening",
+    "sound_door_shuts": "a door shutting",
     "body_part_tucked": ", currently beneath clothing",
     "body_part_where_aspect": "from the {aspect} of {whose} {at}",
     "body_part_where_side": "from the {aspect} side of {whose} {at}",

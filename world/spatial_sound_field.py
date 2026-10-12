@@ -1625,6 +1625,12 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
             cells = list((fixture or {}).get("cells") or ())
             if cells:
                 cell = tuple(cells[len(cells) // 2])
+        if cell is None and source.startswith(DOOR_SOURCE_PREFIX):
+            # ...AND WHERE IT IS ONE OF THE ROOM'S DOORWAYS, AT THE DOORWAY:
+            # a door opened or shut sounds where it hangs (`door_events`).
+            cells, _bearing = _door_cells(scene, room, source[len(DOOR_SOURCE_PREFIX):])
+            if cells:
+                cell = tuple(cells[len(cells) // 2])
         out.append({"id": "event:%d" % idx, "kind": "event", "room": room,
                     "cell": cell or room_centre(scene, room),
                     "power": _event_power(event), "level": None,
@@ -2504,6 +2510,71 @@ def tread_events(scene: dict, movers) -> list:
             out.append({"kind": "sound", "room": str(edge["to"]), "db": float(level_db),
                         "source": str(name), "tread": True,
                         "detail": compositor_text("sound_tread_overhead", tread=tread)})
+    return out
+
+
+#: Where a door event sounds: the doorway of the event's room onto the room
+#: this names (`door_events`, and the seeding rung in `sound_field`).
+DOOR_SOURCE_PREFIX = "door:"
+#: How loud a door is worked, at its doorway: the event ladder's quietest
+#: word, a door opened or shut with care. A slam is the Director's to write
+#: as a sound of its own; this is only the noise a doorway makes by changing.
+DOOR_LEVEL = "faint"
+#: The barriers a door stands in, open or shut. A way with no door in it
+#: (`open`), a curtain (`membrane`) and a window are not doors being worked.
+_DOOR_OPEN = {"open_door": True, "closed_door": False}
+
+
+def door_events(prev_scene: dict, scene: dict) -> list:
+    """Every doorway that went from shut to open, or open to shut, between
+    `prev_scene` and `scene`, as one-beat sound events: one in each of the
+    two rooms it joins, sounding at that room's side of the doorway, so a
+    body in either room hears it as its own and one further off hears it
+    through the field. Both carry the same `detail`, so a listener the two
+    reach hears one door. Reads the two scenes' edges -- the typed barrier --
+    and never prose; names nobody who worked it.
+
+    A DOOR OPENED BEHIND YOU IS HEARD. Chat 168 turn 4591 (2026-10-12):
+    Tamamo slid Hinami's shoji open a hand's width; the resolve's prose had
+    "a soft rasp of paper and a dry tick of wood", no sound event was
+    written, and the body lying three paces off with her back to the door
+    was told nothing at all. A barrier changing state is a sound the
+    doorway makes, whoever wrote the change."""
+    from language_runtime import compositor_text
+    from world.spatial_barriers import normalize_barrier
+    rooms_now = (scene or {}).get("rooms") or {}
+    rooms_then = (prev_scene or {}).get("rooms") or {}
+
+    def _edge(rooms, rid, to):
+        room = rooms.get(rid)
+        for edge in (room or {}).get("adjacent") or () if isinstance(room, dict) else ():
+            if isinstance(edge, dict) and str(edge.get("to") or "") == to:
+                return edge
+        return None
+
+    out, seen = [], set()
+    for rid, room in sorted(rooms_now.items()):
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or ():
+            if not isinstance(edge, dict):
+                continue
+            to = str(edge.get("to") or "")
+            pair = tuple(sorted((str(rid), to)))
+            if not to or to == str(rid) or to not in rooms_now or pair in seen:
+                continue
+            before = _edge(rooms_then, str(rid), to)
+            if before is None:
+                continue                      # a doorway the beat made is not one worked
+            now = _DOOR_OPEN.get(normalize_barrier(edge.get("barrier")))
+            then = _DOOR_OPEN.get(normalize_barrier(before.get("barrier")))
+            if now is None or then is None or now == then:
+                continue
+            seen.add(pair)
+            detail = compositor_text("sound_door_opens" if now else "sound_door_shuts")
+            for here, there in ((str(rid), to), (to, str(rid))):
+                out.append({"kind": "sound", "room": here, "level": DOOR_LEVEL,
+                            "source": DOOR_SOURCE_PREFIX + there, "detail": detail})
     return out
 
 

@@ -57,6 +57,7 @@ from story.scene import (
 from mind import affect
 from world.spatial import (
     tread_events,
+    door_events,
     apply_contact_ops,
     room_display_name,
     hiding_holders_of,
@@ -7315,6 +7316,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     # THE BEAT'S FOOTFALLS ARE SOUND EVENTS (`spatial_sound_field.tread_events`):
     # a tread in the walker's room, and one in every room it lies over.
     _incoming = list(_incoming) + tread_events(sc, _beat_movers(ctx))
+    # ...AND SO ARE ITS DOORS: a doorway that went from shut to open, or open
+    # to shut, this beat sounds at itself in both its rooms
+    # (`spatial_sound_field.door_events`), whoever wrote the change.
+    _incoming = _incoming + door_events(prev_scene, sc)
     # WHEN IT SOUNDED: the causal step a sound came from (`from_event`),
     # kept beside the normalised record so it is graded against the world
     # of that moment rather than the world the beat ended in. Chat 160 turn

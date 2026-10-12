@@ -182,6 +182,8 @@
     "sound_tread_walk": "足音",
     "sound_tread_run": "駆ける足音",
     "sound_tread_overhead": "頭上の{tread}",
+    "sound_door_opens": "戸が開く音",
+    "sound_door_shuts": "戸が閉まる音",
     "body_part": "{where}{part}が{count}生えている。",
     "body_part_tucked": "今は衣服の下に隠れている。",
     "body_part_where_aspect": "{whose}の{at}の{aspect}から",
