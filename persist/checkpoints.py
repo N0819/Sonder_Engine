@@ -881,6 +881,9 @@ SETTING_PROVENANCE = {
     # (`agents.director_layout.LAYOUT_GROUNDS_STORY_KEY`): the same kind of
     # dial, set by hand to turn the grounds off, or on, for one story.
     "layout_grounds": SET_BY_HAND,
+    # Whether the Writers' Room has a free hand in this story
+    # (`story.mandates.FREE_HAND_STORY_KEY`): a dial set by hand.
+    "room_free_hand": SET_BY_HAND,
     # NOT a preference -- the one entry here preserved on a correctness
     # argument instead. The secret nonce that keys every viewer-scoped
     # anonymous `body:` id (web/story_view.py), minted lazily on first

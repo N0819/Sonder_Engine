@@ -561,9 +561,75 @@ def renew_mandate(cid, frame_id, uid, *, request=None, expires_turn=None,
                          request=request, renewed_from=source["uid"])
 
 
+#: THE FREE HAND (owner, 2026-10-11: "test a mode where the writers room can
+#: just do whatever"). Off unless the story or the host turns it on
+#: (`free_hand_enabled`). On, the Room holds one standing grant for every
+#: capability but `research` -- the web stays the player's to open in words,
+#: because a search ships the story's particulars off the machine
+#: (`story/room_research.py`) -- and the card tells it to act on its own
+#: judgement without asking first. The Saltmarsh run (scratch chat 170) is
+#: why: the Room offered to plant the foreman its own truths named, the
+#: player never asked, and every figure model named him its own way.
+#:
+#: SYNTHETIC, on purpose: the grant is part of what `active_mandates`
+#: answers -- the one reader every gate goes through -- and is never written
+#: to the stored rows, so turning the mode off takes it away with nothing
+#: left behind. Its uid is fixed, so the fill's back-off, keyed on the
+#: standing uids, does not reset every beat. It holds from the story's first
+#: beat: the prelude, the location plan and the opening run before it under
+#: the grants the engine gives them (`story/opening_plan.py`).
+FREE_HAND_SETTING = "room_free_hand"
+FREE_HAND_STORY_KEY = "room_free_hand"
+FREE_HAND_UID = "mandate_free_hand"
+#: What the free hand does not grant, and why: `research`, above; and the
+#: total word, because the free hand is the list, read at the time of asking.
+FREE_HAND_WITHHELD = ("research", TOTAL_CAPABILITY)
+_ON = ("1", "on", "true", "yes")
+_OFF = ("0", "off", "false", "no")
+
+
+def free_hand_enabled(cid=None) -> bool:
+    """Whether the Room has a free hand in chat `cid`: the story's own switch
+    when it states one, else the host's -- OFF unless one of them says on."""
+    from core.db import get_setting, wget
+    if cid is not None:
+        try:
+            story = str(wget(cid, FREE_HAND_STORY_KEY) or "").strip().casefold()
+        except Exception:
+            story = ""
+        if story in _ON:
+            return True
+        if story in _OFF:
+            return False
+    try:
+        return str(get_setting(FREE_HAND_SETTING) or "").strip().casefold() in _ON
+    except Exception:
+        return False
+
+
+def free_hand_row(cid):
+    """The free hand's standing grant (`FREE_HAND_UID`), or None when the
+    story has none or has not had its first beat."""
+    if cid is None or not free_hand_enabled(cid):
+        return None
+    try:
+        if _turn_now(cid) < 1:
+            return None
+    except Exception:
+        return None
+    return {"uid": FREE_HAND_UID, "text": "free hand", "scope": DEFAULT_SCOPE,
+            "capabilities": [c for c in MANDATE_CAPABILITIES
+                             if c not in FREE_HAND_WITHHELD],
+            "limits": {}, "granted_turn": 1, "expires_turn": None,
+            "status": "active", "revoked_turn": None, "request": None,
+            "lapsed_reason": "", "renewed_from": ""}
+
+
 def active_mandates(cid, frame_id, turn_idx=None):
     expire_mandates(cid, frame_id, turn_idx)
-    return [r for r in _load(cid, frame_id) if r["status"] == "active"]
+    rows = [r for r in _load(cid, frame_id) if r["status"] == "active"]
+    hand = free_hand_row(cid)
+    return rows + [hand] if hand else rows
 
 
 def coverage(cid, frame_id, needed, *, turn_idx=None):
@@ -587,6 +653,9 @@ def coverage(cid, frame_id, needed, *, turn_idx=None):
 def citation(cid, frame_id, uids):
     """The mandates by uid, as the Planner cites them: uid and sentence."""
     by_uid = {r["uid"]: r for r in _load(cid, frame_id)}
+    hand = free_hand_row(cid)
+    if hand:
+        by_uid[hand["uid"]] = hand
     out = []
     for uid in uids or ():
         row = by_uid.get(str(uid))

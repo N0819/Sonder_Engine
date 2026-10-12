@@ -783,6 +783,11 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
         payload["player_says"] = text
     if task is not None:
         payload["task"] = task
+    # THE FREE HAND (`story.mandates.free_hand_row`): its grant rides in
+    # `mandates` like any other; this says what the card makes of it.
+    from story.mandates import free_hand_row
+    if free_hand_row(cid):
+        payload["free_hand"] = True
     return payload
 
 

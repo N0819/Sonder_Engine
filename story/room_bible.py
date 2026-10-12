@@ -102,8 +102,10 @@ def source_exists(cid, frame_id, ref):
             from story.plot_packages import packages
             return ref in packages(cid, frame_id)
         if ref.startswith("mandate_"):
+            from story.mandates import FREE_HAND_UID, free_hand_row
             from story.room_conversation import mandates
-            return any(m["uid"] == ref for m in mandates(cid, frame_id))
+            return (any(m["uid"] == ref for m in mandates(cid, frame_id))
+                    or (ref == FREE_HAND_UID and free_hand_row(cid) is not None))
         if ref.startswith("need_"):
             from world.planning_needs import planning_needs
             return any(n["uid"] == ref for n in planning_needs(cid, frame_id))
