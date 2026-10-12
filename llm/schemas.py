@@ -1631,6 +1631,16 @@ class SceneEntityDef(LenientModel):
     # deposited somewhere is `substance_ops`, and a body's own smell is on its
     # card. Absent means the thing has no smell worth a percept.
     scent: Optional[str] = None
+    # The body carrying this thing, by name: the opening's way of saying a
+    # body holds it, read by `derive_borne_containment`, which records the
+    # thing as carried by that body for as long as this says so. Asked of the
+    # opening since 2026-09-15 (Hollin Mill: a lantern and a key stood loose
+    # in the lane) and never declared here, so the validation round-trip
+    # dropped it from every opening that wrote it: Saltmarsh Crossing's
+    # (2026-10-11) left a letter and a ledger its passage put under a
+    # traveller's arm on the far bank of a river she then crossed, and the
+    # letter's hand-off at the harbour office was refused as not hers.
+    held_by: Optional[str] = None
 
 class RoomDef(LenientModel):
     # See the canonical note on `PoseEntry.from_event`.

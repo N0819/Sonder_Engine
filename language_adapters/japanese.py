@@ -655,7 +655,8 @@ class JapaneseRenderer:
                     # only shortened (PM6).
                     if p.kind == "presence":
                         brief = True
-                    elif p.kind not in composer.ACTIVE_STANDING_KINDS:
+                    elif (p.kind not in composer.ACTIVE_STANDING_KINDS
+                          and not composer.asked_this_beat(p)):
                         continue
             if composer.is_landscape(p):
                 landscape_group.append(p)

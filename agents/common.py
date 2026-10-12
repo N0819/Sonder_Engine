@@ -6357,7 +6357,7 @@ def _act_surface_admission(surface, *, actor, observer, forms_by_body,
 
 
 def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
-                              labels=None):
+                              labels=None, as_written=None):
     """Deterministic identity floor for perception view prose.
 
     The knows_identity/_unknown_actor_label gate used to be enforced only
@@ -6376,6 +6376,16 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
 
     Returns (scrubbed_view, leaked_names) so callers can surface a
     warning; a silent leak was exactly how the original bug hid.
+
+    ``as_written`` is for text WRITTEN ON A THING -- a slip, a ledger, a
+    sign -- and takes each name as matched to what replaces it (the name in
+    quotation marks, which this pass leaves alone outside-quotes-only on
+    every later run). There the descriptor is the leak: a slip that reads
+    "Loading supervised: Larkerwick" tells its reader a name, and rewritten
+    to "the old thickset tally clerk" it told her which of the men in front
+    of her the name was -- a fact the slip does not carry (Saltmarsh
+    Crossing, 2026-10-11, scratch chat 170 idx 22 and 24, the second onto
+    the page).
     """
     text = str(view or "")
     if not text or not unknown_sources:
@@ -6535,13 +6545,15 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
         name, label = entry
         if name not in leaked:
             leaked.append(name)
+        if as_written is not None:
+            return as_written(match.group(0))
         return label
 
     for i in range(0, len(segments), 2):  # even = outside quotes
         if segments[i]:
             segments[i] = combined.sub(_replace, segments[i])
-    if not leaked:
-        return view, []
+    if not leaked or as_written is not None:
+        return "".join(segments) if leaked else view, leaked
     # A LABEL BRINGS ITS OWN FIRST WORD, and where the view had already
     # written that word in front of the name the page doubled it: "facing the
     # the unfamiliar person's trousers" (a thing named for its owner, chat 154

@@ -1107,7 +1107,8 @@ def _refuse_unheld_transfers(ctx, sc, diff):
         # A repeated transfer from a former holder is idempotent only when
         # the exact typed destination is already satisfied; being nearby is
         # not enough to acquit another destination or another carry mode.
-        kind, target = resolve_placement_target(sc, op.get("to_id"))
+        kind, target = resolve_placement_target(
+            sc, op.get("to_id"), here=_room_of(sc, op.get("from_id")) or _room_of(sc, obj))
         relation = str(op.get("relation") or "carried").strip().casefold()
         _, target_entity = _unique_entity_keyed(sc, target)
         carried = (kind in ("carrier", "vouched")

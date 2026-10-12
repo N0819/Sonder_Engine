@@ -91,9 +91,14 @@ class TestAnUndressedPersonIsStillABody:
             "room", "tap_room")
 
     def test_a_destination_nobody_vouches_for_is_still_refused(self):
+        """Refused as a destination, and the letter stays with the courier
+        the op says had it -- in his hand, where until 2026-10-11 it stayed
+        on the floor (`test_a_thing_set_down_reaches_the_fixture_at_hand`)."""
         scene = _scene()
         assert resolve_placement_target(scene, "the harbourmaster") == (
             None, None)
         before = copy.deepcopy(scene)
-        _hand_over(scene, to_id="the harbourmaster")
-        assert scene["contained"] == before["contained"]
+        report = _hand_over(scene, to_id="the harbourmaster")
+        assert scene["contained"] == {"letter": {"in": "char_aleth", "mode": "held"}}
+        assert before["contained"] == {}
+        assert "stays with 'Aleth'" in report[0], report

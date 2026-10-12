@@ -1221,11 +1221,15 @@ def _positions_write(positions: dict, subject: str, room: str) -> None:
 # exactly as unplaced as it is today.
 
 
-def resolve_placement_target(scene: dict, to_id, carriers=None):
+def resolve_placement_target(scene: dict, to_id, carriers=None, here=None):
     """What a transfer's destination refers to, resolved against the scene.
 
     Returns one of:
-      ("room", room_id)   -- a place; the subject stands in it.
+      ("room", room_id)   -- a place; the subject stands in it -- or a FIXTURE
+                             of `here`, the room the hand-off happens in
+                             (`fixture_in`): the subject stands in that room,
+                             and `derive_inventory_placements` puts it at the
+                             fixture.
       ("carrier", holder) -- a BODY; the subject is carried, and where it then
                              is follows from where the holder is.
       ("anchor", key)     -- something else the scene already places; the
@@ -1292,7 +1296,34 @@ def resolve_placement_target(scene: dict, to_id, carriers=None):
     spelling, _room = carrier_lookup(carriers, text)
     if spelling:
         return ("vouched", spelling)
+    # A FIXTURE OF THE ROOM THE HAND-OFF HAPPENS IN (2026-10-11). A desk, a
+    # counter, a shelf is a feature of its room, never an entity, and this
+    # never looked at one: Saltmarsh Crossing's letter went `to_id: "desk"`,
+    # the harbour office's own fixture by its exact id, was refused, and
+    # stayed on the far bank while every page had it on the desk. Only the
+    # room the hand-off happens in is searched -- three rooms of that story
+    # hold a `desk`, and a thing set down reaches the one at hand.
+    if here and fixture_in(scene, here, text):
+        return ("room", here)
     return (None, None)
+
+
+def fixture_in(scene: dict, room_id, name) -> str:
+    """The id of the fixture of room `room_id` that `name` names -- its id as
+    the room keeps it, or spelled as an id would be -- or ""."""
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    anchors = room.get("anchors") if isinstance(room, dict) else None
+    text = str(name or "").strip()
+    if not isinstance(anchors, dict) or not anchors or not text:
+        return ""
+    if text in anchors:
+        return text
+    folded, slug = text.casefold(), normalize_room_id(text)
+    for aid in anchors:
+        spelled = str(aid)
+        if spelled.casefold() == folded or (slug and normalize_room_id(spelled) == slug):
+            return spelled
+    return ""
 
 
 def _placement_subject_key(scene: dict, eid: str, entity) -> str:
@@ -1322,7 +1353,21 @@ def _placement_subject_key(scene: dict, eid: str, entity) -> str:
     return eid
 
 
-def _report_unvouched_destination(report, op) -> None:
+def _kept_by(scene: dict, op, subject):
+    """The body standing in the scene that a transfer says the thing left,
+    when nothing else holds the thing; else None. A body the town stands
+    off-scene is not one: the floor never carries a thing out of the scene."""
+    kind, who = resolve_placement_target(scene, op.get("from_id"))
+    if kind != "carrier":
+        return None
+    record = _ci_get(scene.get("contained") or {}, subject)
+    held_by = record.get("in") if isinstance(record, dict) else None
+    if held_by is not None and not same_subject(scene, held_by, who):
+        return None
+    return who
+
+
+def _report_unvouched_destination(report, op, kept_with=None) -> None:
     """Say what the transfer ledger could not resolve as a destination."""
     if report is None:
         return
@@ -1330,11 +1375,13 @@ def _report_unvouched_destination(report, op) -> None:
     where = str(op.get("to_id") or "").strip()
     if not thing or not where:
         return
+    outcome = ("so the thing stays with %r" % kept_with if kept_with
+               else "so the thing stayed where it was")
     note = ("possession: a transfer moved %r to %r, but %r names no room, "
-            "no body and nobody the town stands in the scene, so the thing "
-            "stayed where it was. Name the holder as the payload lists them "
-            "if a person took it, or the room if it was set down."
-            % (thing, where, where))
+            "no body, no fixture of the room it happened in and nobody the "
+            "town stands in the scene, %s. Name the holder as the payload "
+            "lists them if a person took it, or the room, or the fixture of "
+            "it by its id, if it was set down." % (thing, where, where, outcome))
     if note not in report:
         report.append(note)
 
@@ -1564,16 +1611,37 @@ def derive_inventory_placements(scene: dict, inventory_ops,
                   str(entity.get("name") or "").strip().casefold()}
         labels |= {str(a).strip().casefold()
                    for a in (entity.get("aliases") or [])}
+        subject = _placement_subject_key(scene, eid, entity)
+        # The room the hand-off happens in: where the hand it leaves stands,
+        # else where the thing is (`resolve_placement_target`'s fixtures).
+        here = room_of(scene, op.get("from_id")) or room_of(scene, subject)
         kind, destination = resolve_placement_target(
-            scene, op.get("to_id"), carriers=carriers)
+            scene, op.get("to_id"), carriers=carriers, here=here)
         if not kind:
             # A destination nobody vouches for is the other half of rule 4,
             # and it was silent until 2026-09-03: the thing was known, the
             # holder was not, and the op fell through this line without a
             # word. Said out loud now, in the same voice.
-            _report_unvouched_destination(report, op)
-            continue
-        subject = _placement_subject_key(scene, eid, entity)
+            #
+            #
+            # AND THE THING STAYS WITH THE BODY IT LEFT (2026-10-11). The op
+            # names who had it; where it went names nothing in the room it
+            # happened in, so the one thing the beat does say is that body
+            # had it. A thing lying loose goes into that hand; one the body
+            # already has stays exactly as it has it (a pocket stays a
+            # pocket, a garment stays worn -- taking one off is attire's);
+            # one another body or a container holds stays there, which the
+            # op cannot overrule. Before, "nothing" left a loose thing
+            # wherever it lay: Saltmarsh Crossing's letter, minted loose on
+            # the far bank at the opening, stayed there through every beat
+            # it was handled on.
+            keeper = _kept_by(scene, op, subject)
+            _report_unvouched_destination(
+                report, op, kept_with=str(op.get("from_id")).strip() if keeper else None)
+            if keeper is None or _ci_get(scene.get("contained") or {}, subject):
+                continue
+            kind, destination = "carrier", keeper
+            op = dict(op, relation="held")
         folded_subject = subject.strip().casefold()
         prior_record = _ci_get(scene.get("contained") or {}, subject)
         prior_wearer = (prior_record.get("in") if isinstance(prior_record, dict)
@@ -1665,6 +1733,12 @@ def derive_inventory_placements(scene: dict, inventory_ops,
         _retire_transferred_wearing(
             scene, subject, prior_wearer,
             destination if carried and relation == "worn" else None)
+        if kind == "room" and not any(same_subject(scene, key, subject)
+                                      for key in (stations or {})):
+            # Set down at a fixture of the room (`fixture_in`): AT it.
+            fixture = fixture_in(scene, destination, op.get("to_id"))
+            if fixture:
+                scene.setdefault("stations", {})[subject] = {"at": fixture, "near": []}
         if kind == "anchor":
             from world.spatial_geometry import _anchor_for_entity
             anchor = _anchor_for_entity(scene, room, destination)

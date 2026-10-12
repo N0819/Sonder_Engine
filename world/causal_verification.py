@@ -428,7 +428,9 @@ def _inventory_receipts(before, after, changes, patch):
             continue
         target = operation.get("object_id") or ""
         key, entity = _unique_entity_keyed(after, target)
-        kind, destination = resolve_placement_target(after, operation.get("to_id"))
+        # the room the hand-off happens in, whose fixtures it may name
+        here = room_of(after, operation.get("from_id")) or room_of(after, target)
+        kind, destination = resolve_placement_target(after, operation.get("to_id"), here=here)
         relation = str(operation.get("relation") or "carried").strip().casefold()
         holder = _unique_entity_keyed(after, destination)[1] if destination else {}
         carry = kind in {"carrier", "vouched"} or (

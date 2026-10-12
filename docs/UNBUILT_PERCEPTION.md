@@ -1738,35 +1738,44 @@ These remain:
 
 <a id="unbuilt-1-200"></a>
 
-### 1.200 What a body reads does not reach it
+### 1.200 What a body reads does not reach it — BUILT 2026-10-11, residuals open
 
 **Found 2026-10-11** by the Saltmarsh Crossing run
-(`docs/experiments/PLAY_2026_10_11_saltmarsh.md`, scratch chat 170). Four
+(`docs/experiments/PLAY_2026_10_11_saltmarsh.md`, scratch chat 170): four
 reads -- a tally in a harbour book, the signature under it, a loading slip --
-and none reached the page. The encoder's `entities__examined` card works: it
-authored the answer every time it was given one. Three gaps sit around it:
+and none reached the page. Built (`Design.md`, "A thing a body handled is
+read, and an act that asks is answered" and "A name written on a thing is
+the name, never whose body it is"):
 
-- **The resolve leaves a read unanswered under a secret.** 3 of 3 (turns 4644,
-  4646 and a copy reroll), beside a Room note phrased as a prohibition ("Do not
-  let a character arrive at it ..."). The card already says a read is
-  answered. A clause -- "What the story keeps from someone stays kept by what
-  is there, which may be false or missing, never by leaving what was asked
-  unanswered" -- answered on 1 of 2 copy rerolls. Not landed, because of the
-  next two gaps.
-- **The thing read is somewhere else** (§1.199). The examined text was filed
-  on her survey ledger, which stood on the far bank, so `_things_read_by` saw
-  it at visual level `none`.
-- **A read made by handling is admitted by nothing** (turn 4656). The slip's
-  own state held "220 qtrs barley, 40 qtrs wheat ... Consignor: Venn". She
-  held it only within the beat (two `inventory_ops` transfers), which is no
-  standing contact, and the interpretation wrote no `look` for "reads it line
-  by line". None of the three admissions -- a standing contact, a shared
-  station, her own `look` -- fired.
+- **HANDLED**: a thing this beat's transfers put into the observer's hands
+  is read as a look is (`perception._own_handled`).
+- **An act that asks is answered, unchanged or not**
+  (`composer.asked_this_beat`). Turn 4656's slip had already reached her
+  view at idx 22, when she stood at the desk it lay on -- not her page --
+  and the delta view dropped it as furniture on the beat she read it line
+  by line. Re-delivered in the beat, both languages; the copy's page now
+  answers the read.
+- **A name written on a thing is the name.** The view's identity floor had
+  turned "Loading supervised: Larkerwick" into "the old thickset tally
+  clerk", telling her which man the name was; the page then said so
+  (`_scrub_unknown_identities(as_written=)`, `gate.written`).
+- **The resolve's answered-read clause** gains "What the story keeps from
+  someone stays kept by what is there, which may be false or missing, never
+  by leaving what was asked unanswered".
 
-Candidates, the owner's call: the interpretation writes `look` for a read (a
-clause), and/or a thing the observer's own act took into the hand this beat
-reads like one in a standing contact (a floor on the inventory record, never
-a verb list).
+What it leaves:
+
+- **The clause answers about half the time.** 2 of 4 rerolls of turn 4644
+  (1 of 2 when measured, 1 of 2 on 2026-10-11) against 0 of 3 without it.
+- **A thing standing in a body's hands is read only on a beat that hands
+  it over or looks at it**, and the interpretation writes no `look` for a
+  read -- the other candidate, not built. Turn 4644's copied figures were
+  filed on her own ledger, which nothing then read.
+- **A reading that ends in a stop doubles it** ("Tide: ebb, falling.."),
+  in both templates; older than this change.
+- **Quoting moved the reading's ledger key**, so each reading naming a body
+  its reader does not know re-renders once as changed (turn 4656's tally
+  papers did).
 
 ## 2. Roadmap
 

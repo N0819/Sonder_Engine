@@ -423,6 +423,7 @@
     "thing_carried_by_you": "You are carrying {desc}.",
     "thing_reads_touch": "Under your hands, {label}: {readings}.",
     "thing_reads_sight": "{label} shows: {readings}.",
+    "written_name": "“{name}”",
     "walk_underway": "You are still on your way to {to}: {at} is as far as you have come.",
     "vista_unseen_walls": "To the {compass}, the walls around you stand between you and {name}.",
     "vista_unseen_air": "To the {compass}, the {air} closes in well short of {name}.",

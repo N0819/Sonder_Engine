@@ -458,6 +458,11 @@ _ENTITY_DEFAULT_FIELDS = {
     # the None validation fills in for every beat that does not re-declare it
     # would overwrite a standing smell rather than read as silence.
     "scent": None,
+    # Who carries the thing (`SceneEntityDef.held_by`, declared 2026-10-11),
+    # for the same reason: a later beat re-echoing the thing without it must
+    # not set it down. Setting down is a transfer, which retires `held_by`
+    # itself (`retire_carriage_evidence`).
+    "held_by": None,
 }
 
 

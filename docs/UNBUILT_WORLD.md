@@ -2083,31 +2083,48 @@ room stays in it"; `spatial_transit.settle_departures`). What it leaves:
 
 <a id="unbuilt-1-199"></a>
 
-### 1.199 A thing a body carries is left where it was minted
+### 1.199 A thing a body carries is left where it was minted — BUILT 2026-10-11, residuals open
 
 **Found 2026-10-11** by the Saltmarsh Crossing run
-(`docs/experiments/PLAY_2026_10_11_saltmarsh.md`, scratch chat 170). The
-opening minted the player's ledger, lantern, bag and letter of commission as
-free-standing portable things in the room she stood in, though her card shows
-her "with a ledger under one arm and a dark-lantern handle in the other".
-Nothing put them on her, so when she crossed the river they stayed on the far
-bank while every page had her writing in the ledger. Three ways in, one story:
+(`docs/experiments/PLAY_2026_10_11_saltmarsh.md`, scratch chat 170): the
+opening minted the player's ledger, lantern and letter of commission loose on
+the slip her passage had her holding them on, so they stayed on the far bank
+when she crossed the river, and the letter's hand-off at the harbour office
+(turn 4640, `to_id: "desk"`) was refused as not hers -- and would have been
+refused again by its destination. Built, three ways in (`Design.md`, "What
+the opening puts in a body's keeping goes with it" and "A thing set down at a
+fixture reaches it"):
 
-- **At the opening:** positions, never `contained` with her as holder.
-- **A transfer whose destination does not resolve writes nothing** (turn
-  4640): the letter went "to desk", and `derive_inventory_placements` rule 1
-  refused the unknown id silently. The letter's state says it lies on the
-  desk; its position is still the far bank.
-- **A pickup written as a position** (turn 4637): "takes up her canvas bag"
-  moved the bag to the room she stepped into and left it there.
+- **The opening's `held_by` reaches the scene.** It had been asked of the
+  opening since 2026-09-15 and was never declared on `SceneEntityDef`, so
+  validation dropped it from every opening that wrote it. Declared, listed
+  with the fields whose silence is never an erasure, and lifted out of the
+  output line into a clause of its own on the establish card. The copy's
+  rerun opening wrote it for the lantern, the ledger and the letter and left
+  the bag she had set down loose; all three crossed with her.
+- **A fixture of the room a hand-off happens in is a destination**
+  (`fixture_in`, `resolve_placement_target(here=)`), set down AT it.
+- **A hand-off to nothing keeps the thing with the body it left** -- a loose
+  thing goes into that hand, one it already has stays as it has it -- and
+  says so to the Director. Replayed on the recorded beat: the old scene
+  reproduces the recorded refusal word for word; with the opening's carriage
+  the same hand-off puts the letter on the harbour office's desk.
 
-An explicit pickup (turn 4650, "tucks it under her arm and takes up her
-lantern") wrote `contained {in: the player, mode: held}`, and both have
-followed her since, so the carrier rail itself works. What needs deciding is
-where the first holder comes from: a clause (the encoder's opening card: a
-thing a body is described carrying is minted held by it) or a floor (a
-transfer whose destination does not resolve leaves the object with its holder
-and says so). Owner's call; §1.200 is the visible cost.
+What it leaves:
+
+- **The opening's carriage is a clause.** One rerun measured (three of three
+  carried things written, the set-down bag left loose); watch the next
+  openings.
+- **`held_by` is carriage in view.** `derive_borne_containment` records it
+  `carried`, so a letter a passage puts in a pocket is shown to everyone in
+  the room: the opening has no concealed mode to write.
+- **The generic alias "ledger" swallows every ledger.** Turn 4640 folded the
+  harbour's lading ledger onto the player's own (`'lading_ledger' is
+  'agnes_ledger'`), and a later read of it was filed on hers. The next
+  Saltmarsh wave, with the foreman named four ways.
+- **A fixture is matched by its id**, as written or spelled as one; a
+  fixture named only by its description ("the slant-topped desk") still
+  names nothing, and the thing stays with its holder.
 
 ## 2. Roadmap
 

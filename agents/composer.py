@@ -3489,25 +3489,31 @@ def thing_reading_text(state):
 
 def thing_reading_percepts(rows):
     """Standing readings off things this observer is reading, as
-    ``[(label, readings, uid, channel)]`` -- admission already decided by
-    `perception._things_read_by` (hands on it, or standing at its own
-    station with light to see by), so a non-reader contributes nothing
-    here by construction.
+    ``[(label, readings, uid, channel[, asked])]`` -- admission already
+    decided by `perception._things_read_by` (hands on it, or standing at its
+    own station with light to see by), so a non-reader contributes nothing
+    here by construction. ``asked`` marks a thing this observer's own act
+    looked at or took into its hands this beat (`asked_this_beat`).
 
     `ambient`, like the rest of `room_content_percepts`' family: a standing
     fact of the room, re-rendered when it CHANGES and furniture when it does
     not -- the dedupe key is the reading itself, never the sentence."""
     out = []
-    for label, readings, uid, channel in rows or []:
+    for row in rows or []:
+        label, readings, uid, channel = row[:4]
+        asked = bool(row[4]) if len(row) > 4 else False
         readings = str(readings or "").strip()
         label = _noun_phrase(label)
         if not readings or not label:
             continue
         template = ("thing_reads_touch" if channel == "touch"
                     else "thing_reads_sight")
+        data = {"desc": _cap(_t(template, label=label, readings=readings))}
+        if asked:
+            data["asked"] = True
         out.append(Percept(
             kind="ambient", channel=channel,
-            data={"desc": _cap(_t(template, label=label, readings=readings))},
+            data=data,
             salience=0.5,
             dedupe_key=standing_key("reading", (uid,), (readings,)),
         ))
@@ -4466,6 +4472,24 @@ def appearance_delta(percept):
     return str((percept.data or {}).get("delta") or "").strip()
 
 
+def asked_this_beat(percept):
+    """Did this observer's own act ask for this standing percept this beat:
+    a thing it looked at, or took into its hands (`thing_reading_percepts`).
+
+    AN ACT THAT ASKS IS ANSWERED, unchanged or not. A reading is standing
+    state, so a delta view said it once and dropped it as furniture after --
+    right for a panel a body happens to stand beside, and the opposite of
+    right for a slip it holds up to the window and reads line by line.
+    Measured, Saltmarsh Crossing (2026-10-11, scratch chat 170): the slip's
+    lines reached the player's view on idx 22, when she stood at the desk it
+    lay on, and when she took it in her hands on idx 24 and read it, her
+    view held nothing of it and the page answered nothing. Re-delivering it
+    tells this mind only what it was already told, so the firewall is not
+    in question; both renderers read this, and `leads_the_beat` puts it in
+    the beat, where the act that asked is."""
+    return bool((getattr(percept, "data", None) or {}).get("asked"))
+
+
 def leads_the_beat(percept, verdict, prev_standing):
     """Does this standing percept belong in the BEAT half of a player view.
 
@@ -4477,7 +4501,7 @@ def leads_the_beat(percept, verdict, prev_standing):
     """
     if not prev_standing:
         return False
-    if verdict in ("changed", "ceased"):
+    if verdict in ("changed", "ceased") or asked_this_beat(percept):
         return True
     if percept.kind == "appearance" and appearance_delta(percept):
         return True
@@ -5422,7 +5446,8 @@ def _render_view_english(percepts, *, mode="character",
                 # once. Nothing here claims it moved, so it stays told.
                 continue
         elif (delta and p.dedupe_key in prev_standing
-              and p.kind not in ACTIVE_STANDING_KINDS):
+              and p.kind not in ACTIVE_STANDING_KINDS
+              and not asked_this_beat(p)):
             continue
         elif (not full_render and p.dedupe_key in prev_standing
                 and _is_own_body_description(p)):

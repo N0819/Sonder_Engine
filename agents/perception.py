@@ -474,7 +474,8 @@ def _station_anchor_of(scene, name):
     return ""
 
 
-def _things_read_by(sc, name, room, *, bodies=(), looks=(), senses=None):
+def _things_read_by(sc, name, room, *, bodies=(), looks=(), handled=(),
+                    senses=None):
     """The things whose own record this observer is READING right now, as
     ``[(entity_id, entity, channel)]`` -- for `composer.thing_reading_percepts`.
 
@@ -503,6 +504,19 @@ def _things_read_by(sc, name, room, *, bodies=(), looks=(), senses=None):
         record, and her view said only that she was studying it -- so the
         page invented the opposite. The look is the observer's own, so the
         station rule's "nothing is read from afar" still holds for a glance.
+
+      * HANDLED: a thing this beat's transfers put into this observer's
+        hands (`_own_handled`), read as a look is -- seen in full, by the
+        same test, so light, sight and where it now is still decide. A thing
+        held is a thing at arm's reach with a body's attention on it, which
+        is what the station rule reads at one remove; it needs no `look`
+        written for it. Measured, Saltmarsh Crossing (2026-10-11, scratch
+        chat 170, idx 24): a clerk handed the player a loading slip, she held
+        it to the window and read it line by line, and set it down -- two
+        transfers, no standing contact, no look -- while the slip's own record
+        held every line she read, and her view held none of them. A transfer
+        the commit refused names a thing out of reach, and the seen-in-full
+        test refuses it with the rest.
 
     A body is never a thing (rule 2 of `_visible_things`, the same
     `same_subject` test), and a thing the observer only WATCHES someone else
@@ -552,22 +566,37 @@ def _things_read_by(sc, name, room, *, bodies=(), looks=(), senses=None):
             if _is_body(eid, entity) or not _here(eid):
                 continue
             found[eid] = (entity, "sight")
-    for look in looks or ():
-        look = str(look or "").strip()
-        if not look:
+    for eid in _things_asked_by(sc, looks=looks, handled=handled):
+        entity = entities.get(eid)
+        if not isinstance(entity, dict) or eid in found:
+            continue
+        if _is_body(eid, entity):
+            continue
+        if visual_level_between(sc, name, str(eid), senses) != "full":
+            continue
+        found[eid] = (entity, "sight")
+    return [(eid, entity, channel) for eid, (entity, channel) in found.items()]
+
+
+def _things_asked_by(sc, *, looks=(), handled=()):
+    """The entity ids this observer's own act asked about this beat, in the
+    order asked: what it looked at (`_own_looks`) and what it took into its
+    hands (`_own_handled`), each matched by id, name or alias. Admission is
+    `_things_read_by`'s; this only says which reads an act asked for, which
+    `composer.asked_this_beat` answers even when nothing about them changed."""
+    entities = (sc or {}).get("entities") or {}
+    out = []
+    for ask in list(looks or ()) + list(handled or ()):
+        ask = str(ask or "").strip()
+        if not ask or not isinstance(entities, dict):
             continue
         for eid, entity in entities.items():
-            if not isinstance(entity, dict) or eid in found:
+            if not isinstance(entity, dict) or eid in out:
                 continue
-            if not (same_subject(sc, str(eid), look)
-                    or same_subject(sc, str(entity.get("name") or ""), look)):
-                continue
-            if _is_body(eid, entity):
-                continue
-            if visual_level_between(sc, name, str(eid), senses) != "full":
-                continue
-            found[eid] = (entity, "sight")
-    return [(eid, entity, channel) for eid, (entity, channel) in found.items()]
+            if (same_subject(sc, str(eid), ask)
+                    or same_subject(sc, str(entity.get("name") or ""), ask)):
+                out.append(eid)
+    return out
 
 
 _BODY_DETAIL_GENERIC = frozenset({
@@ -1531,6 +1560,26 @@ def _own_looks(res, interp, name, player_name, ctx):
         if who.strip().casefold() == str(name or "").strip().casefold():
             looks.append(element["look"])
     return looks
+
+
+def _own_handled(sc, res, name):
+    """Every thing this beat's transfers put into `name`'s hands: the
+    resolve's `inventory_ops` whose destination is this body, carried in
+    view (`relation` held, carried or unstated). Shut away -- a pocket, a
+    container -- is not in the hand, and worn is attire's.
+    `_things_read_by`'s HANDLED admission."""
+    diff = (res or {}).get("state_diff") if isinstance(res, dict) else None
+    ops = (diff or {}).get("inventory_ops") if isinstance(diff, dict) else None
+    out = []
+    for op in ops if isinstance(ops, list) else ():
+        if not isinstance(op, dict):
+            continue
+        if str(op.get("relation") or "").strip().casefold() not in ("", "held", "carried"):
+            continue
+        thing = str(op.get("object_id") or "").strip()
+        if thing and same_subject(sc, str(op.get("to_id") or ""), name):
+            out.append(thing)
+    return out
 
 
 def _walk_underway(sc, res, name):
@@ -4940,7 +4989,20 @@ def _authored_prose_gate(ctx, stage, name, known, identity_space):
         return _composer_scrub_surface(text, name, recognized, unknown,
                                        labels=labels)
 
+    def written(text):
+        """Text written on a thing, for this observer: a name in it of a
+        body this observer does not know stays the name as written, quoted
+        (`_scrub_unknown_identities`' ``as_written``), and is never turned
+        into what this observer calls that body."""
+        if not text or not unknown:
+            return text
+        out, _leaked = _scrub_unknown_identities(
+            text, allowed_forms=[name, *recognized], unknown_sources=unknown,
+            as_written=lambda form: composer._t("written_name", name=form))
+        return out
+
     gate.names = names
+    gate.written = written
     return gate
 
 
@@ -5938,13 +6000,21 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # objects hand has been required to write these facts since the detail
     # clause and no view path read them back (chat 152 t4337-4338: two beats
     # of "checking the console for damage" answered with nothing).
+    # A read this body's own act asked for this beat is said this beat,
+    # unchanged or not (`composer.asked_this_beat`).
+    # A name WRITTEN on the thing reaches this mind as written, never as
+    # whose body it is (`gate.written`).
+    _asked = set(_things_asked_by(sc, looks=p.get("own_looks") or (),
+                                  handled=p.get("own_handled") or ()))
+    _written = getattr(gate, "written", None) or (lambda text: text)
     percepts.extend(composer.thing_reading_percepts([
-        (str(entity.get("name") or ""), composer.thing_reading_text(
-            entity.get("state")), str(eid), channel)
+        (str(entity.get("name") or ""), _written(composer.thing_reading_text(
+            entity.get("state"))), str(eid), channel, eid in _asked)
         for eid, entity, channel in _things_read_by(
             sc, name, room,
             bodies=[name] + [str(b.get("name") or "") for b in others or []],
-            looks=p.get("own_looks") or (), senses=p.get("sense_card"))
+            looks=p.get("own_looks") or (), handled=p.get("own_handled") or (),
+            senses=p.get("sense_card"))
     ]))
     region_labels = {name: "you"}
     for body in others:
@@ -7516,6 +7586,9 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             # (`world.landscape.looked_far`, matched where the view is
             # composed, against the same far walk the view reads).
             p["own_looks"] = _own_looks(res, interp, name, p_name, ctx)
+            # ...and what this beat put in its hands, read as a look is
+            # (`_things_read_by`'s HANDLED admission).
+            p["own_handled"] = _own_handled(sc, res, name)
             display_map = composer.observer_display_map(
                 sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(
