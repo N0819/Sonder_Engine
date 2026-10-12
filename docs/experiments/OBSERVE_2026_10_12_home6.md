@@ -80,6 +80,46 @@ batch ran on a fresh copy, latest turn first.
   3 of 7 times, its reach holding only the house. All eight escalations were
   right, at three to fourteen minutes of the Room's background time each.
 
+## The layout wave (the owner's follow-up, 2026-10-12)
+
+The owner, reading the generated shrine: "windows are bieng made as fixtures
+instead of being actual windows. there are no genned stairs as far as i can
+tell and, i think tatami should be a floor description rather than a
+fixture, and shoji door being placed ontop of the door is weird anddoors
+should have a description and material type field, etc etc, and perhaps in
+the in engine ui should be adjusted to look kind of like the layout lab we
+made." Asked, the owner chose a stairwell room per storey and the lab's own
+plan view. Each fix was measured by replaying the shrine's recorded layout
+answers (`engine.db` captures 5674-5676, read only) through the real path on
+a copy -- the solve stayed the same, every room's site and extent unchanged
+-- and, for the cards, by live calls on that copy.
+
+- **A door is its edge** (4e4d102e). The sort had made up nine door and stair
+  "fixtures", each minted as an anchor on its own door's cell; a mark now
+  pins only a fixture the plan lists, and a door's own words live on its edge
+  as `desc` beside `material`. Marks 9 to 0. Three live sorts with the new
+  card still listed 10, 13 and 16 such marks: the bridge's drop is what holds.
+- **A window is in its wall** (34438d08). A window with ground the solve laid
+  beyond it is a `window` edge onto that ground; every other one a record in
+  its room's `windows`, never an anchor. Window anchors 4 to 0; Hinami's east
+  window now looks onto the camphor tree, and two opening reruns read
+  "Through the window facing the moonrise is The Sacred Camphor Tree".
+- **What covers a floor is the floor** (e1935082). The sort answers each
+  room's `floor`; three live sorts filed no tatami fixture (the recorded one
+  filed two) and answered tatami for exactly those two rooms. `tatami` and
+  `wood` read as timber for sound.
+- **A stair is a room of its own** (e8019559). Each of the solver's stair
+  halls is a planned room the tier makes, replacing the plan's stair edge:
+  6 halls for the shrine's 3 stairs. It also settles the "unconfirmed" bullet
+  of §1.205 -- the second storey stood over unwritten stair space.
+- **The World Browser draws a storey as the lab does** (33a517e6), the whole
+  building the plan holds on one frame, the rooms nobody has come near yet
+  faint; rendered from the re-laid shrine. Found on the way: the pipeline
+  drawer's map had never drawn (c0f595de).
+
+Residuals: `docs/UNBUILT_WORLD.md` §1.209 (floor words the sound tables do
+not hold) and §1.210 (what the stair halls left open).
+
 ## Open, registered
 
 The rest of what the chat showed is registered in four entries:
