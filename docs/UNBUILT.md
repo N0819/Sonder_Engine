@@ -203,6 +203,8 @@ Not scheduled and not committed to a phase. See the
 - [§1.188 — Encoder payload scope: residuals (2026-10-08)](UNBUILT_PIPELINE.md#unbuilt-1-188)
 - [§1.195 — Two defects found replaying a follow (2026-10-09)](UNBUILT_PIPELINE.md#unbuilt-1-195)
 - [§1.196 — One fresh attempt before a malformed beat aborts: what it leaves (2026-10-09)](UNBUILT_PIPELINE.md#unbuilt-1-196)
+- [§1.207 — Prose the world does not hold (2026-10-12)](UNBUILT_PIPELINE.md#unbuilt-1-207)
+- [§1.208 — Two frames, a lagging station, a full mind (2026-10-12)](UNBUILT_PIPELINE.md#unbuilt-1-208)
 
 **2. Roadmap**
 
@@ -259,6 +261,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.181 — What the Kirinoura wording fixes left on purpose (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-181)
 - [§1.182 — What the review of the present-tense rule found that predates it (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-182)
 - [§1.200 — What a body reads does not reach it — BUILT 2026-10-11, residuals open](UNBUILT_PERCEPTION.md#unbuilt-1-200)
+- [§1.206 — Words in the view that break (2026-10-12)](UNBUILT_PERCEPTION.md#unbuilt-1-206)
 
 **2. Roadmap**
 
@@ -328,6 +331,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.199 — A thing a body carries is left where it was minted — BUILT 2026-10-11, residuals open](UNBUILT_WORLD.md#unbuilt-1-199)
 - [§1.203 — An approach the encoder does not record as one — clause landed 2026-10-12, residuals open](UNBUILT_WORLD.md#unbuilt-1-203)
 - [§1.204 — A set-down whose transfer names its fixture in words stays in the hand (2026-10-12)](UNBUILT_WORLD.md#unbuilt-1-204)
+- [§1.205 — The opening re-authors the Room's planned layout, and the solver follows it (2026-10-12)](UNBUILT_WORLD.md#unbuilt-1-205)
 
 **2. Roadmap**
 

@@ -1785,6 +1785,35 @@ What it leaves:
   its reader does not know re-renders once as changed (turn 4656's tally
   papers did).
 
+<a id="unbuilt-1-206"></a>
+
+### 1.206 Words in the view that break
+
+**Found 2026-10-12** in the views of the owner's chat 168 (`docs/experiments/OBSERVE_2026_10_12_home6.md`):
+
+- **The opening view says the pose three times, once as someone else**: "You
+  are lying on your back on the futon -- ... You are lying on her back. You
+  are lying still, just woken." The establish wrote the posture "lying on her
+  back" and the composer put "You are" in front of it.
+- **A duplicated fixture is listed twice** ("Window facing the moonrise close
+  by, ... a wooden window in the east wall ... close by"), and layout-tier
+  fixture labels are capitalised mid-sentence ("You can see Tatami mats within
+  arm's reach"); "fluffy pointed, and golden" lost its comma.
+- **An ambient sound's phrase is rendered lowercase and bare**: "The light is
+  dim. a door opening." Capitalising it in `_render_ambient` broke the tests
+  that hold the render-to-observation inverse, so it was left.
+- **"Nothing shows through a shoji door"**: a shut paper screen passes light
+  and silhouettes, and sight reads it as a solid door (`material` reaches only
+  sound).
+- **Bearings for a lying body**: "side-lying on the futon toward the east
+  window" and, in the same view, "Window facing the moonrise close by on your
+  right".
+- **A lit light source is never rendered as light** ("There is the Foxfire
+  Lantern here." for `lit: true`), so the page put it "somewhere in the dark".
+- **The body's own appearance is delivered every beat**, and the narrator
+  repeated the ears and tails on every page.
+
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-11"></a>

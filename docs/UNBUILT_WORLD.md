@@ -2181,6 +2181,47 @@ Candidate, not built because it is rare (one beat in both databases'
 history): read an unresolved transfer FROM a holder beside a same-beat
 station AT a fixture of the holder's room as the set-down it names.
 
+<a id="unbuilt-1-205"></a>
+
+### 1.205 The opening re-authors the Room's planned layout, and the solver follows it
+
+**Found 2026-10-12** observing the owner's chat 168 (`docs/experiments/OBSERVE_2026_10_12_home6.md`). The Room's
+`plan_rooms` was consistent and agreed with the lorebook -- washroom west of
+the main hall, privy north of it, kitchen east, torii south of the lantern
+path -- and the opening's establish rewrote three bearings (washroom east,
+kitchen south, torii east). The layout tier laid the house out by the
+establish while its architect's brief kept the plan's, so the world, the brief
+and the Room's own account ("the privy out past the west end") disagree.
+Downstream of it:
+
+- **The solver ignored the planned extents.** Hinami's "six-mat room" 4x3
+  became 6x5 (about eighteen mats), the roost 6x6 became 11x6 against its own
+  "smaller than those below", the hallway 2x10 became 3x6, the main hall 7x5
+  became 12x4. The lint's `size_disagrees_with_extent` told it at the opening
+  and nothing acted.
+- **Bearings broke after the solve.** Two reciprocal pairs the establish wrote
+  consistently disagree (garden and washroom both say `e`; kitchen `s`, well
+  `e`), and the washroom's `near` back door opens onto a garden 12 cells away
+  across the main hall.
+- **Fixtures.** Four are duplicated where the plan's and the establish's both
+  stood (`window`/`east_window`; the roost's `nest`/`futon_nest`,
+  `boxes_of_works`/`wooden_boxes`, `window`/`south_gable_window`, which
+  overfill its east wall); 13 have no cell, Hinami's futon -- her station --
+  and the main hall's tokonoma among them; the main hall's two doors stand on
+  the wrong sides of the tokonoma their descriptions name.
+- **The torii's two posts stand nine rows apart**, not astride the path (lint:
+  parts disconnected).
+- **Unconfirmed:** the second floor stands almost wholly where no ground-floor
+  room is (Hinami's room 0 of 30 cells), the basement beneath it; unwritten
+  stair space may explain part.
+- The room author gave the hallway's west windows a view of the camphor tree,
+  which stands east of the house.
+
+Candidate: the establish keeps a planned room's bearings and extents and
+re-authors only what the plan leaves open, checked against the plan before
+the solve.
+
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

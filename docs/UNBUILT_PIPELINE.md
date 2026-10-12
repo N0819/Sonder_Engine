@@ -1942,6 +1942,49 @@ fails'). Left:
   464 captured); the rule is pinned by scripted ladders and by turn 4601's
   two captured answers replayed through the ladder (`mended`, one call).
 
+<a id="unbuilt-1-207"></a>
+
+### 1.207 Prose the world does not hold
+
+**Found 2026-10-12** in the owner's chat 168 (`docs/experiments/OBSERVE_2026_10_12_home6.md`):
+
+- **The Director wrote states the record contradicts, and no transform**: the
+  Foxfire Lantern "pale and unlit" (`lit: true`), the altar's incense "cold
+  grey ash" (`burning: true`; "has not gone out in centuries" in the lore), the
+  laptop's pulsing light (`power: off`), Hinami's hair "dark" (copper-gold).
+- **The player's rain was recorded nowhere.** The decision model put `weather`
+  at 0.16 on "Rain patters against the shrine", so every page rained and the
+  world never did; the resolve then backdated it ("falling for hours"), and a
+  page took the window's described "facing the moonrise" for moonlight under a
+  sky the resolve had called moonless.
+- **The narrator's tense flips every page.** The fallback that inherits the
+  story's tense wants a 2:1 lead and the evidence ran 11:7, 13:22, 22:23, so
+  no tense was ever sent; the opening, plainly past, counts seven presents.
+- **The player's yawn reached the view and not the page.**
+
+<a id="unbuilt-1-208"></a>
+
+### 1.208 Two frames, a lagging station, a full mind
+
+**Found 2026-10-12** in the owner's chat 168 (`docs/experiments/OBSERVE_2026_10_12_home6.md`):
+
+- **Two frames contradict at the same second.** Tamamo's own frame and the
+  player's ran together: the player's resolve asserted "no boards creaking, no
+  footsteps... no sound from the roost" while Tamamo creaked down the stair
+  beside the door. Sounds do not cross frames.
+- **A pose moved and the station did not.** Turn 4590 wrote Tamamo beside
+  Hinami's door and left her station at the roost stair, so 4591 walked her
+  down the hallway again -- the third telling of the same walk.
+- **The seal's world pressure ticked as a tremor through the floorboards**
+  Hinami lay on, and reached only Tamamo.
+- **Three of Tamamo's four intention slots hold her card's lifelong goals**
+  (authored, progress 0), so the intention she acted on in 4591 was refused
+  into her notebook.
+- **An imported chat's stored step outputs keep the source database's ids**
+  (`character:41` after Tamamo became id 1), so a stage rerun on the import
+  cannot match a speaker to its line.
+
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>
