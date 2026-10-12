@@ -309,10 +309,11 @@ def outlook(scene, rid, graph=None):
         bearing = normalize_bearing8(edge.get("dir"))
         if bearing:
             widen(bearing)
-    for raw in (rooms.get(rid) or {}).get("windows") or ():
-        bearing = normalize_bearing8(raw)
-        if bearing:
-            widen(bearing)
+    # a window onto open air: a bearing as a model writes it, or the record
+    # code placed (`spatial_geometry.room_windows`)
+    from world.spatial import window_bearings
+    for bearing in window_bearings(rooms.get(rid) or {}):
+        widen(bearing)
     return out
 
 
@@ -442,9 +443,10 @@ def _openings_toward(scene, rid, graph, back):
         return True                  # open-sided: a lantern room, a loggia
     bearings, any_opening = [], False
     room = _rooms(scene).get(rid) or {}
-    for raw in room.get("windows") or ():
+    from world.spatial import window_bearings
+    for bearing in window_bearings(room):
         any_opening = True
-        bearings.append(normalize_bearing8(raw))
+        bearings.append(bearing)
     for edge in graph.get(rid) or ():
         if (normalize_barrier(edge.get("barrier")) in _LOOKS_OUT
                 and declared_ground(scene, str(edge.get("to"))) in OPEN_GROUND):

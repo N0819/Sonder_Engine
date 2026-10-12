@@ -310,6 +310,76 @@ def door_anchor_id(neighbor_room_id) -> str:
     return f"{_DOOR_ANCHOR_PREFIX}{neighbor_room_id}"
 
 
+# ---------------------------------------------------------------------------
+# A window is in its wall (2026-10-12)
+# ---------------------------------------------------------------------------
+#
+# A WINDOW IS PART OF ITS WALL, NEVER A THING STANDING IN THE ROOM. One onto
+# a place the world holds is that way's `window` barrier, and its doorway
+# anchor is the one every edge derives. One onto open air is an entry in
+# the room's `windows`: a compass bearing, as a model writes it, or -- where
+# code placed it (the layout tier) -- a record that also says WHERE in the
+# wall it stands and what it is called:
+#
+#     windows = ["e", {"id": "east_window", "dir": "e", "cell": [5, 2],
+#                      "name": "a window facing the moonrise"}]
+#
+# The owner's shrine (chat 168, 2026-10-12) had every window laid as an
+# anchor among the furniture -- "windows are being made as fixtures instead
+# of being actual windows" -- which gave a view no outlook through any of
+# them, since only `windows` and window edges look out. Each entry derives a
+# `window:<id>` pseudo-anchor below, as a doorway derives `door:<to>`: a
+# body can stand at it, a view grades it by the cone like any feature, and
+# it is never written anywhere.
+
+_WINDOW_ANCHOR_PREFIX = "window:"
+
+
+def window_anchor_id(window_id) -> str:
+    """The id of the pseudo-anchor a room's window contributes."""
+    return f"{_WINDOW_ANCHOR_PREFIX}{window_id}"
+
+
+def is_window_anchor(aid) -> bool:
+    return str(aid or "").startswith(_WINDOW_ANCHOR_PREFIX)
+
+
+def is_door_anchor(aid) -> bool:
+    """A doorway's pseudo-anchor (`door:<to>`) -- the test for a doorway,
+    where `implicit` says only that an anchor was derived."""
+    return str(aid or "").startswith(_DOOR_ANCHOR_PREFIX)
+
+
+def room_windows(room) -> list:
+    """The room's windows onto open air as records `{id, dir, cell, name}`,
+    in the order the room holds them: `dir` an 8-way bearing, `cell` the
+    room-local cell in the wall where code placed it (else None), `name`
+    what it is called (else ""), and `id` its own word, or its bearing with
+    a count where two share one. An entry with no bearing the engine reads
+    is no window."""
+    out, used = [], set()
+    for raw in ((room or {}).get("windows") if isinstance(room, dict) else None) or ():
+        rec = raw if isinstance(raw, dict) else {"dir": raw}
+        bearing = normalize_bearing(rec.get("dir"))
+        if not bearing:
+            continue
+        wid = re.sub(r"[^a-z0-9_]+", "_", str(rec.get("id") or "").casefold()).strip("_")
+        wid = wid or bearing
+        base, n = wid, 1
+        while wid in used:
+            n += 1
+            wid = f"{base}_{n}"
+        used.add(wid)
+        out.append({"id": wid, "dir": bearing, "cell": normalize_cell(rec.get("cell")),
+                    "name": " ".join(str(rec.get("name") or "").split())})
+    return out
+
+
+def window_bearings(room) -> list:
+    """The bearings the room's windows onto open air look out along."""
+    return [w["dir"] for w in room_windows(room)]
+
+
 #: What a boundary is CALLED in a view, when the edge itself carries no
 #: authored name. The `closed_door` row said "the doorway" until 2026-09-19,
 #: which is the same noun an opening gets with one adjective removed, so the
@@ -483,6 +553,21 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
                     opposite_vertical(normalize_vertical(edge.get("vertical"))),
                     normalize_offset(edge.get("offset")), edge.get("width"),
                     desc=edge.get("desc"))
+    # EACH WINDOW ONTO OPEN AIR, where it stands in its wall (`room_windows`):
+    # a point at head height that hides nothing, named as the room names it.
+    # `described`, so a view lists it with its side as it lists a door whose
+    # edge says what it is like (`perception._visible_features`).
+    for window in room_windows(room):
+        aid = window_anchor_id(window["id"])
+        if aid in out:
+            continue
+        anchor = {"desc": window["name"] or _BARRIER_ANCHOR_DESC["window"],
+                  "implicit": True, "described": True, "window": True,
+                  "dir": window["dir"], "footprint": "point", "height": "head",
+                  "opacity": "see_through"}
+        if window["cell"] is not None:
+            anchor["cell"] = list(window["cell"])
+        out[aid] = anchor
     return out
 
 

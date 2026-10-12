@@ -199,6 +199,8 @@ from world.spatial_geometry import (
     normalize_offset, size_from_extent, _sector_label, _station,
     anchor_bearing_of, apply_pose_diff, crossing_of, derive_scene_stations,
     door_anchor_id, effective_anchors, effective_facing, effective_room_size,
+    is_door_anchor, is_window_anchor, room_windows, window_anchor_id,
+    window_bearings,
     effective_station, egocentric_frame, entity_arc, entity_side,
     guessed_room_sizes, invalidate_contact_bound_poses,
     _CONTACT_BOUND_POSE_WORDS,

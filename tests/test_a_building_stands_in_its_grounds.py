@@ -533,3 +533,40 @@ def test_a_door_of_the_house_always_opens_onto_something():
     assert "privy" in {a["id"] for a in spec["grounds"]["areas"]}
     _layout, refused = lb.solve_for(b, spec)
     assert refused == []
+
+
+def test_a_window_with_ground_beyond_it_is_a_window_onto_that_ground():
+    """A window is in its wall (chat 168, 2026-10-12: "windows are being made
+    as fixtures instead of being actual windows"). One with ground the solve
+    laid beyond it -- the garden below the loft, past the roof of the storey
+    under it -- is a `window` edge to that ground, pinned on both sides, so
+    sight crosses it with height and a fall from it lands there: the lab
+    converter's rule. One whose room already has a way to that ground keeps
+    it in its wall, as every window with no ground beyond does. Never an
+    anchor."""
+    sort, relate = copy.deepcopy(SORT), copy.deepcopy(RELATE)
+    for rid, side in (("hall", "s"), ("kitchen", "e"), ("loft", "n")):
+        i = next(k for k, r in enumerate(sort["rooms"]) if r["id"] == rid)
+        sort["rooms"][i]["windows"] = [{"id": f"{rid}_window", "name": f"the {rid} window",
+                                        "faces": "the ground outside"}]
+        j = next(k for k, r in enumerate(relate["rooms"]) if r["id"] == rid)
+        relate["rooms"][j]["windows"] = [{"id": f"{rid}_window", "side": side}]
+    _b, spec, _layout, refused, solved, report = _laid(sort, relate)
+    assert not refused
+    rows = {r["window"]: r for r in report["windows"]}
+    assert set(rows) == {"hall_window", "kitchen_window", "loft_window"}, rows
+    for wid, row in rows.items():
+        uid, onto = row["room"], row["onto"]
+        assert not any(aid.startswith(wid) for aid in solved[uid]["anchors"]), "never an anchor"
+        records = {w["id"] for w in solved[uid]["geometry"].get("windows") or ()}
+        if onto is None:
+            assert wid in records, (wid, solved[uid]["geometry"])
+            continue
+        assert wid not in records
+        assert spec["ground_is"][onto] in ("open", "way", "feature")
+        mine, theirs = solved[uid]["window_edges"][onto], solved[onto]["window_edges"][uid]
+        assert mine["barrier"] == theirs["barrier"] == "window"
+        assert mine["dir"] in ("n", "e", "s", "w") and ("offset" in theirs or "cell" in theirs)
+        assert onto not in solved[uid]["edges"], "one way a pair of rooms"
+        assert solved[uid]["layout"]["window_edges"] == sorted(solved[uid]["window_edges"])
+    assert rows["loft_window"]["onto"], "the loft looks out over the ground below"

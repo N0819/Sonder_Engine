@@ -200,9 +200,16 @@ def test_a_solved_building_becomes_the_plans_own_geometry():
         cell = tuple(solved[uid]["edges"][other]["cell"])
         ext = solved[uid]["geometry"]["extent"]
         assert 0 <= cell[0] < ext["w"] and 0 <= cell[1] < ext["d"]
-    # a window blocks no line, and every record names its plan
-    window = solved["loft"]["anchors"]["gable_window"]
-    assert window["opacity"] == "see_through" and window["desc"] == "a gable window over the water"
+    # A WINDOW IS THE WALL'S (chat 168, 2026-10-12): a record of the loft's
+    # own, where it stands in its wall, named as the plan names it -- never an
+    # anchor among the furniture, and the plan's record of it is taken off
+    # its anchors. Every record names its plan.
+    (window,) = solved["loft"]["geometry"]["windows"]
+    assert window["id"] == "gable_window" and window["name"] == "a gable window over the water"
+    assert window["dir"] in ("n", "e", "s", "w") and len(window["cell"]) == 2
+    assert "gable_window" not in solved["loft"]["anchors"]
+    assert solved["loft"]["layout"]["windows_from"] == ["gable_window"]
+    assert solved["hall"]["geometry"]["windows"] is None, "none laid is none held"
     assert all(s["layout"]["plan"] == b["plan"] for s in solved.values())
     json.dumps(solved)
 
@@ -240,7 +247,7 @@ def test_a_fixture_the_solver_moved_or_could_not_place_is_never_pinned():
     assert ("kitchen", "range") in unplaced and ("loft", "bed") in unplaced
     assert solved["kitchen"]["anchors"]["range"]["dir"] == "n"
     assert "cell" not in solved["kitchen"]["anchors"]["range"]
-    assert solved["loft"]["anchors"]["gable_window"]["dir"] == "e"
+    assert solved["loft"]["geometry"]["windows"][0]["dir"] == "e"
     assert solved["hall"]["layout"]["moved"] and solved["kitchen"]["layout"]["unplaced"]
 
 
@@ -940,11 +947,11 @@ def test_several_windows_the_plan_named_under_one_record_are_one_each():
     relate["rooms"][2]["windows"] = [{"id": "gable_windows", "side": "n", "count": 2}]
     b, inv, spec, layout = _solve(specs=specs, sort=sort, relate=relate)
     solved, report = lb.planned_layout(b, spec, layout, inventory=inv)
-    loft = solved["loft"]["anchors"]
-    ids = {aid for aid in loft if aid.startswith("gable_windows")}
-    assert ids == {"gable_windows", "gable_windows_2"}, ids
-    assert {loft[aid]["desc"] for aid in ids} == {"a gable window"}
-    assert all(loft[aid]["opacity"] == "see_through" for aid in ids)
+    loft = {w["id"]: w for w in solved["loft"]["geometry"]["windows"]}
+    assert set(loft) == {"gable_windows", "gable_windows_2"}, loft
+    assert {w["name"] for w in loft.values()} == {"a gable window"}
+    assert not any(aid.startswith("gable_windows") for aid in solved["loft"]["anchors"])
+    assert solved["loft"]["layout"]["windows_from"] == ["gable_windows"]
     assert [(s["room"], s["anchor"], s["desc"]) for s in report["split"]] == [
         ("loft", "gable_windows", "two gable windows over the water")]
 

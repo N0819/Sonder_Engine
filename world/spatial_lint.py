@@ -250,7 +250,9 @@ def _wall_rows(scene, rooms):
         doors = {}
         for aid, rec in placed.items():
             bearing = rec.get("dir")
-            if bearing in _WALLS and rec["implicit"]:
+            # a doorway's derived anchor -- never a window's, and never an
+            # authored anchor that happens to carry the prefix
+            if bearing in _WALLS and rec["implicit"] and str(aid).startswith("door:"):
                 doors.setdefault(bearing, []).append(
                     (aid, set(rec["cells"]), _whole_side(rec)))
         for (bearing, height), paces in sorted(wall_loads(scene, rid).items()):

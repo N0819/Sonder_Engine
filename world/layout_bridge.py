@@ -52,9 +52,18 @@ WHAT A SOLVE BECOMES (`planned_layout`):
   unpinned fixture, the designer that dresses the room sees whatever it
   crowds, and settling it is the model's (the owner: "capacity goes back to
   the model"). Both are listed in the solve's record;
-* each window an anchor in its wall that blocks no line (`see_through`) --
-  in the outside wall the solver found, since a window in an inside wall is
-  none, and listed as moved when that is not the wall the model named;
+* each window in its wall, the room's own and never an anchor among its
+  furniture (chat 168, 2026-10-12: the owner's shrine had every window laid
+  as a fixture, and no view ever looked out of one) -- in the outside wall
+  the solver found, since a window in an inside wall is none, and listed as
+  moved when that is not the wall the model named. One with open ground the
+  solve laid beyond it -- the garden below, past the roof of a lower wing --
+  is a `window` edge to that ground, pinned on both sides, so sight crosses
+  it with height (`site_plan.plan_sight`) and a fall from it lands there
+  (`drop_m`): the lab converter's rule. Every other one is a record in the
+  room's `windows` (`spatial_geometry.room_windows`), where it stands in the
+  wall. A record of the plan that IS a window is taken off the plan's
+  anchors when the window is laid;
 * each doorway between two of the building's rooms, and each onto the ground
   outside, its `dir` and `offset` on the plan's edge;
 * each stair the plan's own vertical edge, its `cell` where each room meets
@@ -1653,11 +1662,13 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
                 left = {"room": uid, "anchor": aid, "name": f.get("name") or aid, "asked": at or ""}
                 report["unplaced"].append(left)
                 out[uid]["record"]["unplaced"].append(left)
-    # WINDOWS: in their wall, blocking no line
+    # WINDOWS: each in its wall, the room's own (module docstring) -- laid
+    # below, once the ground beyond them is (ONTO THE GROUND)
     names = {}
     for uid, sroom in spec_rooms.items():
         for w in sroom.get("windows") or ():
             names[(uid, w["id"])] = w
+    laid_windows = []
     for win in layout.windows:
         uid = win["room"]
         if uid not in out:
@@ -1669,7 +1680,8 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         if int(base.get("count") or 1) > 1:
             # SEVERAL ALIKE, as fixtures are: each a window of its own,
             # named as one of them, the first under the plan's own id when
-            # the plan named them under one record (`SPLIT`, below)
+            # the plan named them under one record, whose words for the
+            # group go to the solve's record (`SPLIT`, below)
             if base_id in plan_ids[uid]:
                 if aid == _slug(f"{base_id}_1"):
                     aid = base_id
@@ -1677,10 +1689,15 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             desc = str(base.get("name") or base_id or "window")
         else:
             desc = _window_desc(building, uid, base_id, base)
-        out[uid]["anchors"][aid] = {
-            "desc": desc, "dir": win["side"],
-            "cell": [win["cell"][0] - room.x, win["cell"][1] - room.y],
-            "footprint": "point", "height": "head", "opacity": "see_through"}
+        if base_id in plan_ids[uid]:
+            # A RECORD OF THE PLAN THAT IS A WINDOW is no anchor once the
+            # window is laid: taken off the plan, and off its stub
+            # (`structure._lay_stub_on_its_plan`), never left standing
+            # among the furniture beside the window it was
+            out[uid].setdefault("windows_from", set()).add(base_id)
+        laid_windows.append({"room": uid, "id": aid, "dir": win["side"],
+                             "cell": (int(win["cell"][0]), int(win["cell"][1])),
+                             "name": desc})
         if base.get("side") in _SIDES and base["side"] != win["side"]:
             # A WINDOW IS IN AN OUTSIDE WALL OR IT IS NO WINDOW, so it keeps
             # the wall the solver found -- and the move is said, never made
@@ -1859,6 +1876,38 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
                             "dir": door["side"], "cell": None,
                             "offset": _offset(layout.floors[0][a][0], door["side"], door["cell"])}
         _ground_doorways(building, spec, layout, laid, out)
+    # ONTO THE GROUND: a window with open ground the solve laid beyond it is
+    # that ground's window edge; every other window a record in its room's
+    # `windows` (module docstring). ONE EDGE A PAIR OF ROOMS: a room with a
+    # way to that ground already -- a door out, in the plan or the solve --
+    # or a window onto it laid first keeps this one in its wall.
+    beyond = _ground_cells(spec, laid) if building.get("grounds") else {}
+    joined = _plan_joins(building)
+    report["windows"] = []
+    for window in laid_windows:
+        uid, side, cell = window["room"], window["dir"], window["cell"]
+        hit = _ground_beyond(window, rects, levels, beyond)
+        onto = hit[0] if hit else None
+        mine = out[uid].setdefault("window_edges", {})
+        if onto and onto in out and onto not in out[uid]["edges"] \
+                and uid not in out[onto]["edges"] and onto not in mine \
+                and frozenset((uid, onto)) not in joined:
+            mine[onto] = {"barrier": "window", "dir": side,
+                          "offset": _offset(rects[uid], side, cell), "name": window["name"]}
+            pin = _ground_pin(laid[onto], hit[1], _OPP[side])
+            out[onto].setdefault("window_edges", {})[uid] = dict(
+                {"barrier": "window", "name": window["name"]},
+                **{k: v for k, v in pin.items() if v is not None})
+            report["windows"].append({"room": uid, "window": window["id"], "onto": onto})
+            continue
+        room = rects[uid]
+        out[uid]["geometry"].setdefault("windows", []).append({
+            "id": window["id"], "dir": side,
+            "cell": [cell[0] - room.x, cell[1] - room.y], "name": window["name"]})
+        report["windows"].append({"room": uid, "window": window["id"], "onto": None})
+    for uid in building["rooms"]:
+        # none laid is none held: an earlier solve's go with it
+        out[uid]["geometry"].setdefault("windows", None)
     for uid in out:
         record = out[uid]["record"]
         out[uid]["layout"] = {"plan": building["plan"], "turn": turn,
@@ -1867,6 +1916,13 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         for key in ("stated", "described_m2", "restored", "split", "grounds"):
             if key in record:
                 out[uid]["layout"][key] = record[key]
+        # the ways the solve itself made -- each window edge -- and the
+        # records of the plan it laid as windows, so a re-plan takes back
+        # exactly these (`structure._take_the_solve_off`)
+        if out[uid].get("window_edges"):
+            out[uid]["layout"]["window_edges"] = sorted(out[uid]["window_edges"])
+        if out[uid].get("windows_from"):
+            out[uid]["layout"]["windows_from"] = sorted(out[uid].pop("windows_from"))
         del out[uid]["record"]
     return out, report
 
@@ -2055,6 +2111,67 @@ def _ground_pin(geometry, cell, side):
         rect = Rect(site["x"], site["y"], geometry["extent"]["w"], geometry["extent"]["d"])
         return {"dir": side, "offset": _offset(rect, side, cell), "cell": None}
     return {"dir": side, "cell": [cell[0] - site["x"], cell[1] - site["y"]], "offset": None}
+
+
+def _ground_cells(spec, laid):
+    """`{plan cell: place id}` for every cell of open ground, a way or a
+    feature the solve laid (`_ground_geometry`) -- the ground a window can
+    look out onto. An outbuilding is a roofed room, never ground."""
+    is_of = spec.get("ground_is") or {}
+    out = {}
+    for pid, geometry in sorted(laid.items()):
+        if is_of.get(pid) not in ("open", "way", "feature"):
+            continue
+        site, extent = geometry["site"], geometry["extent"]
+        parts = geometry.get("parts") or [{"at": [0, 0], "w": extent["w"], "d": extent["d"]}]
+        for part in parts:
+            ax, ay = part["at"]
+            for dx in range(int(part["w"])):
+                for dy in range(int(part["d"])):
+                    out.setdefault((site["x"] + ax + dx, site["y"] + ay + dy), pid)
+    return out
+
+
+def _ground_beyond(window, rects, levels, ground):
+    """`(place id, plan cell)`: the first ground (`_ground_cells`) a window
+    looks out onto, walking straight out of its wall -- over the roof of
+    any room of the building lower than its own floor, and never through a
+    wall at its own height or above, which is a wall in front of it. None
+    where the walk leaves the plan with no ground met."""
+    side, (x, y), level = window["dir"], window["cell"], levels[window["room"]]
+    dx, dy = _STEP[side]
+    xs = [r.x for r in rects.values()] + [r.x + r.w for r in rects.values()] \
+        + [c[0] for c in ground]
+    ys = [r.y for r in rects.values()] + [r.y + r.d for r in rects.values()] \
+        + [c[1] for c in ground]
+    lo_x, hi_x, lo_y, hi_y = min(xs), max(xs), min(ys), max(ys)
+    while True:
+        x, y = x + dx, y + dy
+        if not (lo_x <= x <= hi_x and lo_y <= y <= hi_y):
+            return None
+        if any(rid != window["room"] and levels[rid] >= level
+               and r.x <= x < r.x + r.w and r.y <= y < r.y + r.d
+               for rid, r in rects.items()):
+            return None
+        if (x, y) in ground:
+            return ground[(x, y)], (x, y)
+
+
+def _plan_joins(building):
+    """Every pair of rooms the plan joins by a way, either side declaring
+    it, as frozensets -- save a window edge an earlier solve made, which is
+    this solve's to make again or take back (`structure.write_planned_layout`)."""
+    out = set()
+    specs = dict(building.get("ground_specs") or {})
+    specs.update(building.get("specs") or {})
+    for uid, planned in specs.items():
+        planned = planned if isinstance(planned, dict) else {}
+        record = planned.get("layout") if isinstance(planned.get("layout"), dict) else {}
+        solved = {str(t) for t in record.get("window_edges") or ()}
+        for edge in planned.get("adjacent") or ():
+            if isinstance(edge, dict) and edge.get("to") and str(edge["to"]) not in solved:
+                out.add(frozenset((str(uid), str(edge["to"]))))
+    return out
 
 
 def _facing(cells, target):

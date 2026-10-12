@@ -320,6 +320,12 @@ def render_room(scene, room_id):
             to = str(aid)[5:]
             legend.append(f"D  doorway to {to} ({(rooms.get(to) or {}).get('name') or to})"
                           f" on the {placed.get('dir') or '?'} side at {cells[:1]}")
+        elif str(aid).startswith("window:"):
+            # a window is the wall's (`spatial_geometry.room_windows`),
+            # never a fixture to dress: drawn so nothing is hung over it
+            mark = "W"
+            legend.append(f"W  window ({str(placed.get('desc') or '')[:60]}) in the "
+                          f"{placed.get('dir') or '?'} wall at {cells[:1]}")
         else:
             mark = next(letters, "*")
             legend.append(
@@ -347,8 +353,8 @@ def render_room(scene, room_id):
         "room": room_id,
         "name": room.get("name"),
         "grid": f"{grid.w} x {grid.d} paces, {grid.shape}; north at the top, east "
-                "to the right; '.' is floor, blank is outside the shape, '!' is two "
-                "fixtures at the same height on one cell",
+                "to the right; '.' is floor, blank is outside the shape, 'D' a doorway, "
+                "'W' a window, '!' is two fixtures at the same height on one cell",
         "map": lines,
         "legend": legend,
     }

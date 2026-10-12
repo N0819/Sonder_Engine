@@ -871,8 +871,14 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
     edges = {str(e.get("to")): e for e in effective_adjacent(scene, room_id)
              if isinstance(e, dict) and e.get("to")}
 
-    anchors, doorways = {}, []
+    anchors, doorways, windows = {}, [], []
     for aid, rec in placed.items():
+        if rec["implicit"] and str(aid).startswith("window:"):
+            # A WINDOW IS THE WALL'S (`spatial_geometry.room_windows`): drawn
+            # in its wall, never among the furniture
+            windows.append({"id": str(aid), "dir": rec["dir"], "desc": rec["desc"],
+                            "cells": _cells(rec["cells"]) if rec["dir"] else []})
+            continue
         if rec["implicit"] and str(aid).startswith(_DOOR_ANCHOR_PREFIX):
             to = str(aid)[len(_DOOR_ANCHOR_PREFIX):]
             edge = edges.get(to) or {}
@@ -1012,6 +1018,8 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
                  for wall in WALLS},
         "anchors": anchors,
         "doorways": doorways,
+        # only where there are any, so a room with none reads as it did
+        **({"windows": windows} if windows else {}),
         "bodies": bodies,
         "things": things_out,
         "walls": walls,

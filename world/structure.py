@@ -84,8 +84,13 @@ def normalize_structures(stored):
 #: (`write_planned_layout`). Carried onto the stub so a sited room is
 #: "described, never re-measured" from the beat it is first seen
 #: (`spatial_merge`).
+#: `windows` (2026-10-12) is where each window onto open air stands in the
+#: room's walls (`spatial_geometry.room_windows`), written on a plan by the
+#: layout tier alone -- a Room's plan carries none
+#: (`story.plot_packages._plan_geometry`).
 GEOMETRY_FIELDS = ("extent", "shape", "parts", "exposure", "sound",
-                   "level", "over", "floor", "surface", "quiet", "site")
+                   "level", "over", "floor", "surface", "quiet", "site",
+                   "windows")
 
 #: The fields of an anchor and of an edge that say WHERE it is, which a
 #: solved plan lays onto the stub it already made (`apply_planned_layout`).
@@ -106,7 +111,8 @@ LAYOUT_EDGE_FIELDS = ("dir", "offset", "cell")
 LAYOUT_PLAN_PREFIX = "layout:"
 #: THE RECORD A SOLVE LEAVES ON THE STUB IT LAYS (`_lay_stub_on_its_plan`):
 #: `{"plan": <the plan it was laid on>, "edges": [<each room the solve
-#: placed this stub's doorway or stair to>]}`. Only that code writes it --
+#: placed this stub's doorway or stair to>], "windows": [<each room the
+#: solve's own window edge joins it to>]}`. Only that code writes it --
 #: derivation places a room by its `site` alone, and a model cannot write a
 #: key `RoomDef` does not declare -- so a stub carrying it stands where a solve
 #: put it. The rule that takes a re-planned building's solve back off its
@@ -304,7 +310,15 @@ def _lay_stub_on_its_plan(room, spec):
         # the plan owns a stub's measurements, and parts are one: a stub its
         # solve laid as a rectangle keeps none an earlier solve gave it
         room.pop("parts", None)
+    if "windows" not in geometry:
+        # ...and so are its windows: none laid is none held
+        room.pop("windows", None)
     held = room.get("anchors") if isinstance(room.get("anchors"), dict) else {}
+    record = spec.get("layout") if isinstance(spec.get("layout"), dict) else {}
+    for aid in record.get("windows_from") or ():
+        # a record of the plan the solve laid as a window: the window is
+        # the wall's now, never also a thing in the room
+        held.pop(aid, None)
     split = _split_records(spec)
     for aid, anchor in (planned_anchors(spec).get("anchors") or {}).items():
         live = held.get(aid)
@@ -343,7 +357,20 @@ def _lay_stub_on_its_plan(room, spec):
                 edge[key] = copy.deepcopy(plan_edge[key])
         if "offset" in plan_edge or "cell" in plan_edge:
             placed.append(str(edge["to"]))
+    # THE SOLVE'S OWN WINDOW EDGES, on a stub minted before the solve made
+    # them (the opening's: planted, then laid out before turn 0 describes
+    # anything); `protect_planned_edges` puts them back on a room that
+    # loses one afterwards
+    windows = [str(t) for t in record.get("window_edges") or () if planned.get(str(t))]
+    present = {str(e.get("to")) for e in room.get("adjacent") or () if isinstance(e, dict)}
+    for to in windows:
+        if to not in present:
+            if not isinstance(room.get("adjacent"), list):
+                room["adjacent"] = []
+            room["adjacent"].append(copy.deepcopy(planned[to]))
     room[LAID_OUT_KEY] = {"plan": room["site"]["plan"], "edges": sorted(set(placed))}
+    if windows:
+        room[LAID_OUT_KEY]["windows"] = sorted(windows)
 
 
 def _split_records(spec):
@@ -365,7 +392,7 @@ def _take_the_solve_off(room, spec, record):
     # `parts` with the box they lie in: ground the layout tier laid round a
     # building is a composite whose parts are the solve's
     # (`layout_bridge.planned_layout`), and goes with it
-    for key in ("extent", "shape", "parts", "level"):
+    for key in ("extent", "shape", "parts", "level", "windows"):
         if key in stated:
             room[key] = stated[key]
         else:
@@ -382,6 +409,12 @@ def _take_the_solve_off(room, spec, record):
                 live[key] = copy.deepcopy(plan_anchors[aid][key])
     placed = {str(to) for to in record.get("edges") or ()}
     planned = _plan_edges(spec)
+    # the window edges the solve made, where the plan it has now holds no
+    # way to that room
+    made = {str(to) for to in record.get("windows") or ()} - set(planned)
+    if made and isinstance(room.get("adjacent"), list):
+        room["adjacent"] = [e for e in room["adjacent"]
+                            if not (isinstance(e, dict) and str(e.get("to") or "") in made)]
     for edge in room.get("adjacent") or ():
         if not isinstance(edge, dict) or str(edge.get("to") or "") not in placed:
             continue
@@ -503,6 +536,7 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
                     planned.pop(key, None)
                 else:
                     planned[key] = copy.deepcopy(value)
+            earlier = planned.get("layout") if isinstance(planned.get("layout"), dict) else {}
             anchors = planned.get("anchors") if isinstance(planned.get("anchors"), dict) else {}
             split = set(_split_records(solved))
             for aid, fields in (solved.get("anchors") or {}).items():
@@ -517,12 +551,34 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
                     fields.pop("desc", None)
                 record.update(fields)
                 anchors[aid] = record
+            # a record of the plan the solve laid as a window is no anchor
+            # (`layout_bridge.planned_layout`, `windows_from`)
+            for aid in (solved.get("layout") or {}).get("windows_from") or ():
+                anchors.pop(aid, None)
             if anchors:
                 planned["anchors"] = anchors
             moves = solved.get("edges") or {}
             for edge in planned.get("adjacent") or ():
                 if isinstance(edge, dict) and str(edge.get("to") or "") in moves:
                     edge.update(copy.deepcopy(moves[str(edge["to"])]))
+            # THE SOLVE'S OWN WAYS: a window onto the ground beyond it
+            # (`layout_bridge`, ONTO THE GROUND). Added where the plan holds
+            # no way to that room; one an earlier solve made is this solve's
+            # to move or take back, and nothing else is ever touched.
+            windows = solved.get("window_edges") or {}
+            made = {str(t) for t in earlier.get("window_edges") or ()}
+            if windows or made:
+                adjacent = [e for e in planned.get("adjacent") or ()
+                            if not (isinstance(e, dict) and str(e.get("to") or "") in made
+                                    and str(e.get("to") or "") not in windows)]
+                for to, fields in windows.items():
+                    edge = next((e for e in adjacent if isinstance(e, dict)
+                                 and str(e.get("to") or "") == str(to)), None)
+                    if edge is None:
+                        adjacent.append(dict({"to": str(to)}, **copy.deepcopy(fields)))
+                    elif str(to) in made:
+                        edge.update(copy.deepcopy(fields))
+                planned["adjacent"] = adjacent
             if solved.get("layout"):
                 planned["layout"] = copy.deepcopy(solved["layout"])
             qi("UPDATE room_registry SET payload=? WHERE chat_id=? AND room_uid=? "

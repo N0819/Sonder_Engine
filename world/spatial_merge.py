@@ -291,6 +291,8 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
         if key == "anchors" and isinstance(value, dict) \
                 and isinstance(existing.get("anchors"), dict):
             value = _merge_anchor_fields(existing["anchors"], value)
+        if key == "windows" and isinstance(value, list):
+            value = _merge_windows(existing.get("windows"), value)
         merged_room[key] = value
 
     if removals:
@@ -353,6 +355,37 @@ def _anchor_removals(room) -> set:
 def _drop_anchors(anchors: dict, removals: set) -> dict:
     return {aid: rec for aid, rec in anchors.items()
             if str(aid).strip().casefold() not in removals}
+
+
+def _merge_windows(prior, incoming):
+    """A room's `windows` after a beat writes them. Where the room holds
+    windows code PLACED -- records saying where each stands in its wall, the
+    layout tier's (`spatial_geometry.room_windows`) -- a bearing list is
+    read against them: a bearing one of them already looks along adds
+    nothing, and a new one is added; a placed window is never wiped by a
+    beat that re-echoes the room with bare bearings. The opening of chat 168
+    (2026-10-12) wrote `windows: ["e"]` over a room whose solve placed an
+    east window: read as a replacement, every window the layout tier laid
+    would lose its place in the wall the first time the room was described.
+    Where the room holds only bearings, the beat's list is the room's, as
+    it always was."""
+    if not isinstance(prior, list) or not any(isinstance(w, dict) for w in prior):
+        return incoming
+    from world.spatial_orientation import normalize_bearing
+    out = list(prior)
+    looks = {normalize_bearing(w.get("dir") if isinstance(w, dict) else w) for w in prior}
+    ids = {str(w.get("id")) for w in prior if isinstance(w, dict) and w.get("id")}
+    for entry in incoming or ():
+        if isinstance(entry, dict):
+            if entry.get("id") and str(entry["id"]) in ids:
+                continue
+        else:
+            bearing = normalize_bearing(entry)
+            if not bearing or bearing in looks:
+                continue
+            looks.add(bearing)
+        out.append(entry)
+    return out
 
 
 def _merge_anchor_fields(prior: dict, incoming: dict) -> dict:

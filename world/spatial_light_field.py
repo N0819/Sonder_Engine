@@ -1285,7 +1285,10 @@ def light_shape(scene: dict, observer: str, *, sweep=False) -> Optional[dict]:
         if not row.get("visible"):
             continue
         if row.get("implicit"):
-            visible_doors.add(row["anchor"])
+            # a doorway's pseudo-anchor, or a window's: only the first is a
+            # door (`spatial_geometry.is_door_anchor`)
+            if str(row["anchor"]).startswith("door:"):
+                visible_doors.add(row["anchor"])
             continue
         rec = placed.get(row["anchor"]) or {}
         anchor_cells = rec.get("cells") or ()

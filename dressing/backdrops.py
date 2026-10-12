@@ -710,7 +710,9 @@ def _openings_of(scene, room_id):
     declared from either side (`effective_adjacent`), by the wall it opens in;
     `unplaced` for one with no bearing. Never `to`: where a door LEADS is
     somebody's whereabouts, not the room's fabric. Sorted by the neighbour's
-    id before the id is dropped, so the order is deterministic."""
+    id before the id is dropped, so the order is deterministic. Then each of
+    the room's windows onto open air (`room_windows`), in its wall as the
+    room holds them: a window is the wall's, never furniture against it."""
     edges = [e for e in effective_adjacent(scene or {}, room_id)
              if isinstance(e, dict) and e.get("to")]
     out = {}
@@ -727,6 +729,14 @@ def _openings_of(scene, room_id):
             rec["vertical"] = vertical
         out.setdefault(normalize_bearing(edge.get("dir")) or "unplaced",
                        []).append(rec)
+    from world.spatial import room_windows
+    room = ((scene or {}).get("rooms") or {}).get(room_id) or {}
+    for window in room_windows(room):
+        rec = {"barrier": "window"}
+        name = to_visual_register(_setting_only(window["name"]))
+        if name:
+            rec["name"] = name
+        out.setdefault(window["dir"], []).append(rec)
     return out
 
 

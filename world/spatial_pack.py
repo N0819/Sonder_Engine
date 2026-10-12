@@ -253,7 +253,8 @@ def doorway_places(scene: dict, movable) -> dict:
             moving.add((to, "door:" + str(room_id)))
     for room_id in {r for pair in (movable or ()) for r in pair if r in rooms}:
         for aid, rec in anchor_cells(scene, room_id).items():
-            if not rec.get("implicit") or rec.get("dir") not in _STRAIGHT:
+            if not rec.get("implicit") or not _doorway(aid) \
+                    or rec.get("dir") not in _STRAIGHT:
                 continue
             doors[(room_id, aid)] = rec
             if rec.get("source") == "side" or (room_id, aid) in moving:

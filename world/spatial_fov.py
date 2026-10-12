@@ -279,7 +279,15 @@ def room_has_geometry(scene: dict, room_id) -> bool:
     that says how tall its counter is has asked to be seen from somewhere.
     """
     room = ((scene or {}).get("rooms") or {}).get(room_id)
-    if not isinstance(room, dict) or not isinstance(room.get("anchors"), dict):
+    if not isinstance(room, dict):
+        return False
+    # A WINDOW CODE PLACED IN ITS WALL is geometry too (the layout tier's,
+    # `spatial_geometry.room_windows`): a room whose only placed thing is its
+    # window still asks to be seen from somewhere. A bare bearing never does.
+    if any(isinstance(w, dict) and w.get("cell") is not None
+           for w in room.get("windows") or ()):
+        return True
+    if not isinstance(room.get("anchors"), dict):
         return False
     for anchor in room["anchors"].values():
         if isinstance(anchor, dict) and any(
@@ -1383,7 +1391,7 @@ def _hold_doorways(scene, field):
             continue
         doors = set()
         for aid, rec in (field.anchors.get(room_id) or {}).items():
-            if rec.get("implicit") or str(aid).startswith("door:"):
+            if str(aid).startswith("door:"):
                 doors.update(tuple(c) for c in rec.get("cells") or ())
         if tuple(cell) not in doors:
             continue
