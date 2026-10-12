@@ -2889,6 +2889,22 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         if here and here == destination:
             record["arrived"].append(subject)
             continue
+        # A BEAT THAT MOVED THEM IS NOT A SILENCE (2026-10-12). `declared`
+        # is the interpretation's one `movement` field; a walker the beat
+        # placed some other way -- a positions entry, beside another's
+        # declared walk -- read as silent, and the old walk was carried on
+        # from where the beat had just put them. Hollowmere turn 4683
+        # (scratch chat 196): the beat took the inspector into the
+        # telegraph office while the lineman's walk held the movement field,
+        # and her pending approach to the platform walked her back out of
+        # the office she was reading in. Where this beat leaves them is not
+        # where it found them: the old walk ends, and says why.
+        was = room_of(sc, subject)
+        if here and was and here != was:
+            record["interrupted"].append(
+                {"subject": subject, "reason": "this beat moved them itself",
+                 "source": "diff"})
+            continue
         reason = stopped.get(str(subject).casefold())
         if reason is not None:
             record["interrupted"].append(

@@ -425,3 +425,22 @@ def test_a_continued_walk_keeps_the_end_it_was_given(temp_db, monkeypatch):
     out = director.director_resolve(ctx, nonce=0)
     leg = next(a for a in out["travel"]["advanced"] if a["subject"] == "The Stranger")
     assert leg["underway"] and leg["to_anchor"] == "desk", leg
+
+
+def test_a_beat_that_moved_her_is_not_a_silence(temp_db, monkeypatch):
+    """Hollowmere turn 4683 (scratch chat 196, 2026-10-12): the beat put the
+    inspector in the telegraph office while another body's walk held the
+    interpretation's movement field, and her pending approach walked her
+    back out of the office she was reading in. A walker the beat placed
+    somewhere new is not silent: the old walk ends, and is not walked on."""
+    import agents.director as director
+
+    ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
+    monkeypatch.setattr(director, "_agent_json", prose_resolve_agent(_resolved(
+        state_diff={"positions": {"The Stranger": "hotel"}})))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert out["state_diff"]["positions"]["The Stranger"] == "hotel"
+    assert any(e.get("subject") == "The Stranger" and "moved them itself" in e.get("reason", "")
+               for e in out["travel"]["interrupted"])
