@@ -115,3 +115,25 @@ def test_the_transport_asks_a_runaway_again_unless_told_not_to():
     assert not providers._should_retry(runaway, 0, providers.RetryConfig(degenerate_retries=0))
     outage = LLMError("HTTP 503", 503, True)
     assert providers._should_retry(outage, 0, providers.RetryConfig(degenerate_retries=0))
+
+
+def test_the_fresh_ask_after_a_runaway_samples_differently(monkeypatch, warnings):
+    """Asked identically, a loop the request induces comes back: Saltmarsh
+    Crossing's ferrywoman ran away on three beats, first and fresh asks alike
+    -- 13 of 18 identical re-asks of her requests ran away, 0 of 18 with the
+    measured penalties and a temperature a step higher (`_runaway_sampler`)."""
+    llm = _ladder(monkeypatch, [_runaway(), GOOD])
+    _run()
+    first, fresh = llm.calls
+    assert not (first.get("sampler") or {}).get("frequency_penalty")
+    assert fresh["sampler"]["frequency_penalty"] == llm_quality.RUNAWAY_FRESH_PENALTIES["frequency_penalty"]
+    assert fresh["sampler"]["presence_penalty"] == llm_quality.RUNAWAY_FRESH_PENALTIES["presence_penalty"]
+    assert fresh["sampler"]["temperature"] == pytest.approx(0.2 + llm_quality.RUNAWAY_FRESH_TEMPERATURE_STEP)
+    assert any("afresh with varied sampling" in w for w in warnings), warnings
+
+
+def test_the_raised_temperature_keeps_under_its_cap():
+    assert llm_quality._runaway_sampler({"temperature": 0.95}, None)["temperature"] == \
+        llm_quality.RUNAWAY_FRESH_TEMPERATURE_CAP
+    assert llm_quality._runaway_sampler(None, None)["temperature"] == pytest.approx(0.95)
+    assert llm_quality._runaway_sampler({"top_p": 0.9}, 0.5)["top_p"] == 0.9

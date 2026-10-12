@@ -780,6 +780,36 @@ MALFORMED_REASKS = 1
 #: re-asked the first request's runaway up to its own retries.
 _FRESH_ASK_RETRY = RetryConfig(degenerate_retries=0)
 
+#: THE FRESH ASK AFTER A RUNAWAY ASKS DIFFERENTLY (2026-10-11). The transport
+#: re-asks a runaway identically and the fresh ask did too, so a loop the
+#: request itself induces came back every time: Saltmarsh Crossing's
+#: ferrywoman ran away on turns 4647, 4655 and 4657 (scratch chat 170), first
+#: asks and fresh asks alike, and each of those beats stopped after
+#: `perception_act`. Her three requests, rebuilt from their captures and
+#: asked again 18 times an arm: identical, 13 ran away; with these penalties,
+#: 2; with them and the temperature raised a step, 0 -- and 1 of 6 more in a
+#: validity pass whose other five were valid turns that read in character.
+#: Only after a runaway: a malformed answer's fresh ask stays identical,
+#: because the same request asked again parsed (`MALFORMED_REASKS`).
+RUNAWAY_FRESH_PENALTIES = {"frequency_penalty": 0.4, "presence_penalty": 0.3}
+RUNAWAY_FRESH_TEMPERATURE_STEP = 0.15
+RUNAWAY_FRESH_TEMPERATURE_CAP = 1.0
+
+
+def _runaway_sampler(sampler, temperature):
+    """The fresh ask's sampler after a runaway: the request's own, with the
+    measured penalties, and its temperature (the sampler's, else the call's,
+    else the transport's 0.8) raised a step, under the cap."""
+    sampler = dict(sampler or {})
+    base = sampler.get("temperature", temperature)
+    try:
+        base = float(base) if base is not None else 0.8
+    except (TypeError, ValueError):
+        base = 0.8
+    return {**sampler, **RUNAWAY_FRESH_PENALTIES,
+            "temperature": min(RUNAWAY_FRESH_TEMPERATURE_CAP,
+                               base + RUNAWAY_FRESH_TEMPERATURE_STEP)}
+
 
 def _content_size(step_key, obj):
     """`(events or answers, writes)` a transform-writing step's answer
@@ -1694,6 +1724,10 @@ def complete_validated_json(
         else:
             _fresh_why = ("the answer came back malformed and its repair did "
                           "not validate")
+        # A RUNAWAY IS ASKED DIFFERENTLY (`_runaway_sampler`); a malformed
+        # answer is asked as it was.
+        _varied = ({"sampler": _runaway_sampler(sampler, temperature)}
+                   if runaway is not None else {})
         for _attempt in range(MALFORMED_REASKS):
             _t0 = time.monotonic()
             _wall0 = time.time()
@@ -1704,7 +1738,7 @@ def complete_validated_json(
             _asked_system, _asked_payload = _same_request_record()
             try:
                 fresh = _same_request(token_ceiling=token_ceiling,
-                                      retry_config=_FRESH_ASK_RETRY)
+                                      retry_config=_FRESH_ASK_RETRY, **_varied)
             except Aborted:
                 raise
             except LLMError as exc:
@@ -1722,7 +1756,8 @@ def complete_validated_json(
                 break
             note_step_warning(
                 f"llm second call: {_fresh_why}; asked the original request "
-                f"afresh ({step_key}, {time.monotonic() - _t0:.1f}s)")
+                f"afresh{' with varied sampling' if _varied else ''} "
+                f"({step_key}, {time.monotonic() - _t0:.1f}s)")
             fresh_parsed, fresh_error = _parse_or_bare(step_key, fresh)
             fresh_report = validate_llm_output_strict(
                 step_key, fresh_parsed, source_payload=payload)

@@ -135,6 +135,9 @@ class TestTheFreshAsk:
         assert fresh["system"] == first["system"] == "THE ENCODER SHEET"
         assert fresh["user"] == first["user"]
         assert fresh.get("temperature") == 0.2
+        # Asked as it was: only a runaway is asked with different sampling
+        # (`llm_quality._runaway_sampler`).
+        assert not (fresh.get("sampler") or {}).get("frequency_penalty")
         assert any("no answer parsed; asked the original request afresh" in w
                    for w in warnings), warnings
 
