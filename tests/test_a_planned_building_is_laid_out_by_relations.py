@@ -74,6 +74,11 @@ RELATE = {"front": "e", "rooms": [
     "stairs": [{"from": "hall", "to": "loft", "from_at": "n", "to_at": "n", "kind": "l"}]}
 
 
+#: The stair between the hall and the loft, a room of its own on each storey
+#: it joins once the building is laid out (the owner's choice of 2026-10-12).
+HALLS = {"hall__loft_stair_0", "hall__loft_stair_1"}
+
+
 def _scene():
     return {"rooms": {"hall": {"name": "the Hall", "planned": True, "adjacent": []},
                       "street": {"name": "the Street", "desc": "A street.",
@@ -155,8 +160,10 @@ def test_a_solved_building_becomes_the_plans_own_geometry():
     """Each room its rectangle on one plan at its storey's height; each
     fixture the solver stood where asked pinned to its whole rectangle, which
     the engine lays on exactly the solver's cells; each doorway's two sides
-    meeting across the wall; the stair the plan's own vertical edge, pinned
-    where each room meets it."""
+    meeting across the wall; the stair A ROOM OF ITS OWN on each storey it
+    joins (the owner's choice of 2026-10-12): a hall on the solver's
+    rectangle, open to the room it serves, joined to the hall above by the
+    flight, and the plan's own stair between the rooms replaced by it."""
     from world.spatial import _door_cells, anchor_cells
     b = _building()
     inv = lb.hold_inventory(b, SORT)
@@ -164,7 +171,8 @@ def test_a_solved_building_becomes_the_plans_own_geometry():
     layout = lb.solve_spec(spec)
     assert lb.refusals(b, spec, layout) == []
     solved, report = lb.planned_layout(b, spec, layout, turn=3)
-    assert set(solved) == {"hall", "kitchen", "loft"}
+    halls = {"hall__loft_stair_0", "hall__loft_stair_1"}
+    assert set(solved) == {"hall", "kitchen", "loft"} | halls
     sites = {uid: s["geometry"]["site"] for uid, s in solved.items()}
     assert {s["plan"] for s in sites.values()} == {b["plan"]}
     assert sites["loft"]["elev_m"] == 3.0 and sites["hall"]["elev_m"] == 0.0
@@ -181,7 +189,7 @@ def test_a_solved_building_becomes_the_plans_own_geometry():
                 edge["vertical"] = "up" if uid == "hall" else "down"
                 edge["way"] = "stair"
     sc = {"rooms": rooms, "positions": {}, "entities": {}}
-    for uid in solved:
+    for uid in b["rooms"]:
         placed = anchor_cells(sc, uid)
         r = layout.floors[b["levels"][uid]][uid][0]
         for f in layout.fixtures.get(uid) or ():
@@ -195,11 +203,21 @@ def test_a_solved_building_becomes_the_plans_own_geometry():
     pa = (da[0] + sites["hall"]["x"], da[1] + sites["hall"]["y"])
     pb = (db[0] + sites["kitchen"]["x"], db[1] + sites["kitchen"]["y"])
     assert abs(pa[0] - pb[0]) + abs(pa[1] - pb[1]) == 1
-    # the stair: the plan's edge, pinned inside each room it joins
-    for uid, other in (("hall", "loft"), ("loft", "hall")):
-        cell = tuple(solved[uid]["edges"][other]["cell"])
-        ext = solved[uid]["geometry"]["extent"]
-        assert 0 <= cell[0] < ext["w"] and 0 <= cell[1] < ext["d"]
+    # the stair: a hall on each storey, open to the room it serves -- the
+    # stair rises in the room -- and the halls joined by the flight
+    low, high = solved["hall__loft_stair_0"], solved["hall__loft_stair_1"]
+    assert (low["geometry"]["level"], high["geometry"]["level"]) == (0, 1)
+    assert low["room"]["made_by_layout"] and low["room"]["stair_of"] == ["hall"]
+    assert high["room"]["stair_of"] == ["loft"]
+    for room, hall in (("hall", "hall__loft_stair_0"), ("loft", "hall__loft_stair_1")):
+        way, back = solved[room]["made_edges"][hall], solved[hall]["made_edges"][room]
+        assert way["barrier"] == back["barrier"] == "open" and way["width"] >= 1
+        assert way["dir"] == {"n": "s", "s": "n", "e": "w", "w": "e"}[back["dir"]]
+    assert low["made_edges"]["hall__loft_stair_1"]["vertical"] == "up"
+    assert high["made_edges"]["hall__loft_stair_0"]["vertical"] == "down"
+    assert solved["hall"]["layout"]["replaced"] == ["loft"]
+    assert solved["loft"]["layout"]["replaced"] == ["hall"]
+    assert "loft" not in solved["hall"]["edges"], "no landing pinned on a stair it replaced"
     # A WINDOW IS THE WALL'S (chat 168, 2026-10-12): a record of the loft's
     # own, where it stands in its wall, named as the plan names it -- never an
     # anchor among the furniture, and the plan's record of it is taken off
@@ -393,7 +411,7 @@ def test_the_tier_writes_the_plan_never_the_scene_and_the_commit_carries_it(temp
     scene = copy.deepcopy(stored)
     _scene_back, laid_out = lay_out_buildings(None, cid, scene, ["hall"], "en",
                                               call=_answers(calls))
-    assert laid_out == {"hall", "kitchen", "loft"}
+    assert laid_out == {"hall", "kitchen", "loft"} | HALLS
     assert calls == ["director_rooms_layout_brief", "director_rooms_layout_sort", "director_rooms_layout_relate"]
     plan = _registry(cid)
     for uid in ("hall", "kitchen", "loft"):
@@ -655,17 +673,21 @@ def test_the_room_in_view_of_the_next_beat_stands_on_its_solved_site(temp_db, mo
         assert hall["anchors"][aid]["cell"] == anchor["cell"], aid
         assert hall["anchors"][aid].get("extent") == anchor.get("extent"), aid
     # The walker steps in: the next commit's fringe mints the rest of the
-    # building on the same plan, and the hall meets its stair where the plan
-    # pinned it -- one building, not half of one.
+    # building on the same plan -- the kitchen, and the stair, a room on each
+    # storey it joins, both halls of it at once -- and the hall meets its
+    # stair where the plan put the way, with no second way up beside it: one
+    # building, not half of one.
     from world.structure import materialize_planned_fringe
     inside = copy.deepcopy(stored)
     inside["positions"]["The Stranger"] = "hall"
     inside, _added = materialize_planned_fringe(cid, inside)
-    for uid in ("kitchen", "loft"):
+    for uid in ("kitchen",) + tuple(sorted(HALLS)):
         assert inside["rooms"][uid]["site"] == plan[uid]["site"], uid
-    stair = next(e for e in inside["rooms"]["hall"]["adjacent"] if e.get("to") == "loft")
-    assert stair.get("cell") == next(e for e in plan["hall"]["adjacent"]
-                                     if e.get("to") == "loft").get("cell")
+    stair = next(e for e in inside["rooms"]["hall"]["adjacent"]
+                 if e.get("to") == "hall__loft_stair_0")
+    assert stair.get("offset") == next(e for e in plan["hall"]["adjacent"]
+                                       if e.get("to") == "hall__loft_stair_0").get("offset")
+    assert not any(e.get("to") == "loft" for e in inside["rooms"]["hall"]["adjacent"])
 
 
 def test_the_design_job_designs_on_the_plan_an_earlier_run_solved(temp_db, monkeypatch):
@@ -685,7 +707,7 @@ def test_the_design_job_designs_on_the_plan_an_earlier_run_solved(temp_db, monke
     stored = temp_db.wget(cid, "scene")
     _scene, laid = director_layout.lay_out_buildings(None, cid, copy.deepcopy(stored), ["hall"],
                                                      "en", call=_answers([]))
-    assert laid == {"hall", "kitchen", "loft"}
+    assert laid == {"hall", "kitchen", "loft"} | HALLS
     plan = _registry(cid)
     assert not temp_db.wget(cid, "scene")["rooms"]["hall"].get("site")
     seen = []
@@ -742,7 +764,11 @@ def test_a_design_filed_before_its_building_was_laid_out_is_made_again_on_the_pl
     _wait(director_rooms.schedule_room_predevelopment(ctx))
     assert _registry(cid)["hall"]["site"]["plan"] == "layout:hall"
     after = temp_db.wget(cid, director_rooms.PREPARED_KEY)["hall"]
-    assert after["brief"] == before["brief"], "the solve left the hall's brief as it was"
+    # Since 2026-10-12 the solve changes the hall's brief whatever its sides:
+    # the stair is a room of its own, so the hall's way up to the loft is a
+    # way into the stair's hall. The design is dropped and made again on the
+    # plan either way -- the run that lays the building out drops it.
+    assert after["brief"] != before["brief"]
     assert calls.count("director_rooms") == 2, "designed again, on the plan"
 
 
@@ -865,8 +891,11 @@ def test_a_plan_anchor_the_answer_leaves_out_or_files_as_a_zone_stays_as_the_pla
     assert plan["hall"]["anchors"]["stair_foot"] == {"desc": "the foot of the stair, where people wait"}
     street = {"name": "the Street", "desc": "A street.",
               "adjacent": [{"to": "hall", "dir": "n", "barrier": "open_door"}]}
+    # someone at the head of the stair, a room of its own since 2026-10-12,
+    # so the loft is the fringe's too
     sc, _ = materialize_planned_fringe(cid, {"rooms": {"street": street},
-                                             "positions": {"Walker": "street", "Mara": "hall"},
+                                             "positions": {"Walker": "street", "Mara": "hall",
+                                                           "Oda": "hall__loft_stair_1"},
                                              "entities": {}})
     for uid, aid in (("loft", "gable_window"), ("hall", "stair_foot")):
         anchor = sc["rooms"][uid]["anchors"][aid]
@@ -977,7 +1006,14 @@ def test_a_fixture_that_marks_where_a_way_meets_the_room_is_pinned_there():
     assert lb.refusals(b, spec, layout) == []
     solved, report = lb.planned_layout(b, spec, layout, inventory=inv)
     foot = solved["hall"]["anchors"]["stair_foot"]
-    assert foot["cell"] == solved["hall"]["edges"]["loft"]["cell"]
+    # where the stair meets the hall: its doorway into the stair's hall, a
+    # room of its own since 2026-10-12
+    way = solved["hall"]["made_edges"]["hall__loft_stair_0"]
+    ext = solved["hall"]["geometry"]["extent"]
+    along = round(way["offset"] * ((ext["w"] if way["dir"] in "ns" else ext["d"]) - 1))
+    assert foot["dir"] == way["dir"]
+    assert foot["cell"] == {"n": [along, 0], "s": [along, ext["d"] - 1],
+                            "w": [0, along], "e": [ext["w"] - 1, along]}[way["dir"]]
     assert foot["opacity"] == "see_through" and foot["footprint"] == "point"
     door = solved["hall"]["anchors"]["kitchen_door"]
     edge = solved["hall"]["edges"]["kitchen"]
@@ -1151,7 +1187,7 @@ def test_a_plan_written_while_a_frontier_expansion_prepares_is_never_written_bac
     # ...the tier lays the building out meanwhile...
     _scene, laid = lay_out_buildings(None, cid, copy.deepcopy(sc), ["hall"], "en",
                                      call=_answers([]))
-    assert laid == {"hall", "kitchen", "loft"}
+    assert laid == {"hall", "kitchen", "loft"} | HALLS
     solved = _registry(cid)
     # ...and the commit writes what it prepared, inside the lock
     with transaction():
@@ -1364,14 +1400,23 @@ def test_a_re_planned_building_is_laid_out_again_and_its_ground_with_it(temp_db)
         room.pop("structure", None)
     rooms["hall"]["purpose"] = "a hall with a hearth, a long table and a settle"
     plant_structure(cid, {"key": "town", "name": "Town"}, rooms)
-    # the job between turns reads the scene through the plan, as it does
+    # the job between turns reads the scene through the plan, as it does --
+    # the building's rooms the scene holds (the walker never climbed the
+    # stair, so the loft is not minted) give the solve back
+    assert HALLS <= set(sc["rooms"])
     job_copy = copy.deepcopy(sc)
     apply_solved_plans(cid, job_copy)
-    for uid in ("hall", "kitchen", "loft"):
+    for uid in ("hall", "kitchen"):
         room = job_copy["rooms"][uid]
         assert "laid_out" not in room, uid
         assert (room.get("site") or {}).get("plan") != "layout:hall", uid
         assert not any("extent" in a for a in (room.get("anchors") or {}).values()), uid
+    # ...and NO STAIR STANDS BESIDE THE PLAN'S OWN: the old solve's halls,
+    # prose-free and empty, leave the scene, with every way to them, and the
+    # hall has the plan's own stair to the loft back
+    assert not HALLS & set(job_copy["rooms"])
+    assert not any(e.get("to") in HALLS for e in job_copy["rooms"]["hall"]["adjacent"])
+    assert any(e.get("to") == "loft" for e in job_copy["rooms"]["hall"]["adjacent"])
     assert (job_copy["rooms"]["street"].get("site") or {}).get("plan") != "layout:hall", \
         "the ground beside the old solve is read again from the rooms"
     (b,) = lb.plan_buildings(_planned_specs(cid), job_copy,
@@ -1379,10 +1424,10 @@ def test_a_re_planned_building_is_laid_out_again_and_its_ground_with_it(temp_db)
     assert b["refusal"] is None, b["refusal"]
     calls = []
     _scene, laid = lay_out_buildings(None, cid, job_copy, ["hall"], "en", call=_answers(calls))
-    assert calls and laid == {"hall", "kitchen", "loft"}, (calls, laid)
+    assert calls and laid == {"hall", "kitchen", "loft"} | HALLS, (calls, laid)
     # and the commit that follows stores the new solve, the street beside it
     sc = _commit_like(cid, sc)
-    for uid in ("hall", "kitchen", "loft"):
+    for uid in ("hall", "kitchen"):
         assert sc["rooms"][uid]["laid_out"]["plan"] == "layout:hall", uid
     street = sc["rooms"]["street"]
     assert street["site"]["plan"] == "layout:hall" and site_is_derived(street["site"])
@@ -1437,9 +1482,11 @@ def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db
                       copy.deepcopy(job_copy), ["hall"], "en", call=_answers(calls))
     assert len(calls) == 6, calls
     assert wget(cid, LAYOUT_RUNS_KEY)[b["key"]]["failed"] == 2
-    # and the commit that follows stores no stub with the old solve on it
+    # and the commit that follows stores no stub with the old solve on it --
+    # and none of the old solve's stair halls
     sc = _commit_like(cid, sc)
-    for uid in ("hall", "kitchen", "loft"):
+    assert not HALLS & set(sc["rooms"])
+    for uid in ("hall", "kitchen"):
         room = sc["rooms"][uid]
         assert "laid_out" not in room, uid
         assert not any("extent" in a for a in (room.get("anchors") or {}).values()), uid
@@ -1473,7 +1520,7 @@ def test_the_tier_can_be_turned_on_for_one_story_and_a_rewind_keeps_the_dial(tem
     assert layout_tier_enabled(one) and not layout_tier_enabled(other)
     # ...the tier lays a building out in that story...
     _scene_back, laid = lay_out_buildings(None, one, _scene(), ["hall"], "en", call=_answers([]))
-    assert laid == {"hall", "kitchen", "loft"}
+    assert laid == {"hall", "kitchen", "loft"} | HALLS
     # ...and a reroll restores the checkpoint: the plan it solved rolls back
     # with the story, and the dial stays where the author turned it
     restore_checkpoint(one, 1)
@@ -1507,7 +1554,7 @@ def test_the_building_the_opening_stands_in_is_laid_out_before_anything_is_descr
     record_placement(cid, None, "Nia", "hall")
     calls = []
     laid = lay_out_opening_ground(cid, None, call=_answers(calls))
-    assert laid == {"hall", "kitchen", "loft"}
+    assert laid == {"hall", "kitchen", "loft"} | HALLS
     assert calls, "the three calls were made"
     assert all((p or {}).get("site") for uid, p in _registry(cid).items()
                if uid in laid), "the plan holds the solve the opening reads"

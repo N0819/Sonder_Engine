@@ -111,7 +111,7 @@ def test_the_solves_windows_go_onto_its_stub_and_come_off_with_it():
             "adjacent": [{"to": "hall", "vertical": "down", "way": "stair"},
                          {"to": "garden", "barrier": "window", "dir": "n", "offset": 0.5,
                           "name": "a little window under the eaves"}],
-            "layout": {"plan": "layout:hall", "window_edges": ["garden"],
+            "layout": {"plan": "layout:hall", "made_edges": ["garden"],
                        "windows_from": ["gable_window"]}}
     room = {"name": "the Loft", "planned": True,
             "adjacent": [{"to": "hall", "vertical": "down", "way": "stair"}],
@@ -120,7 +120,7 @@ def test_the_solves_windows_go_onto_its_stub_and_come_off_with_it():
     assert room["windows"] == [WINDOW]
     assert {e["to"]: e.get("barrier") for e in room["adjacent"]} == {"hall": None, "garden": "window"}
     assert set(room["anchors"]) == {"bed"}
-    assert room[structure.LAID_OUT_KEY]["windows"] == ["garden"]
+    assert room[structure.LAID_OUT_KEY]["made"] == ["garden"]
     replanned = {"extent": {"w": 6, "d": 5},
                  "adjacent": [{"to": "hall", "vertical": "down", "way": "stair"}]}
     structure._take_the_solve_off(room, replanned, room[structure.LAID_OUT_KEY])
@@ -153,18 +153,18 @@ def test_a_re_solve_moves_or_takes_back_its_own_window_edges_and_nothing_else(te
 
     first = {
         "loft": {"geometry": {"windows": None},
-                 "window_edges": {"garden": {"barrier": "window", "dir": "n", "offset": 0.5}},
-                 "layout": {"plan": "layout:loft", "window_edges": ["garden"],
+                 "made_edges": {"garden": {"barrier": "window", "dir": "n", "offset": 0.5}},
+                 "layout": {"plan": "layout:loft", "made_edges": ["garden"],
                             "windows_from": ["gable_window"]}},
         "garden": {"geometry": {},
-                   "window_edges": {"loft": {"barrier": "window", "dir": "s", "cell": [3, 4]}},
-                   "layout": {"plan": "layout:loft", "window_edges": ["loft"]}}}
+                   "made_edges": {"loft": {"barrier": "window", "dir": "s", "cell": [3, 4]}},
+                   "layout": {"plan": "layout:loft", "made_edges": ["loft"]}}}
     assert write_planned_layout(cid, first, expected=plans())
     assert ways("loft")["garden"]["barrier"] == "window" and ways("garden")["loft"]["cell"] == [3, 4]
     assert "gable_window" not in (plans()["loft"].get("anchors") or {})
     assert ways("loft")["yard"]["barrier"] == "closed_door"
     moved = copy.deepcopy(first)
-    moved["loft"]["window_edges"]["garden"]["offset"] = 0.25
+    moved["loft"]["made_edges"]["garden"]["offset"] = 0.25
     assert write_planned_layout(cid, moved, expected=plans())
     assert ways("loft")["garden"]["offset"] == 0.25 and len(plans()["loft"]["adjacent"]) == 2
     # a solve that lays the window in the wall instead takes its edge back

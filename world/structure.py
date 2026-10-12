@@ -109,10 +109,20 @@ LAYOUT_EDGE_FIELDS = ("dir", "offset", "cell")
 #: building opens onto, and a planned yard behind it, stand on a `layout:`
 #: plan without any solve having placed them.
 LAYOUT_PLAN_PREFIX = "layout:"
+#: A room the layout tier MAKES -- a stair's hall on one storey -- says so on
+#: its plan, with the rooms it serves (`stair_of`), and is planted by the
+#: tier's one write (`write_planned_layout`). The registry's shared parse
+#: holds it a planned room only while each of those still stands on its plan
+#: (`_read_registry_rows`): a re-plan that took the building's solve off
+#: leaves no hall standing beside the plan's own stair, and a re-solve makes
+#: every hall again.
+LAYOUT_MADE_KEY = "made_by_layout"
 #: THE RECORD A SOLVE LEAVES ON THE STUB IT LAYS (`_lay_stub_on_its_plan`):
 #: `{"plan": <the plan it was laid on>, "edges": [<each room the solve
-#: placed this stub's doorway or stair to>], "windows": [<each room the
-#: solve's own window edge joins it to>]}`. Only that code writes it --
+#: placed this stub's doorway or stair to>], "made": [<each room a way the
+#: solve itself made joins it to -- a stair hall's, a window's onto the
+#: ground>], "replaced": [<each room the plan's own stair to it was replaced
+#: by the halls>]}`. Only that code writes it --
 #: derivation places a room by its `site` alone, and a model cannot write a
 #: key `RoomDef` does not declare -- so a stub carrying it stands where a solve
 #: put it. The rule that takes a re-planned building's solve back off its
@@ -277,6 +287,26 @@ def apply_planned_layout(scene, specs, room_ids=None):
     from world.site_plan import normalize_site
     rooms = (scene or {}).get("rooms") or {}
     touched = []
+    # A ROOM THE TIER MADE THAT NO PLAN HOLDS ANY MORE -- a stair hall whose
+    # building was re-planned, or a re-solve withdrew -- leaves the scene
+    # while it is a prose-free stub nobody stands in, and every way to it
+    # with it: a stair standing beside the plan's own is a second way up
+    # that no plan has (`LAYOUT_MADE_KEY`). One the story has described, or
+    # a body stands in, is the story's.
+    held = {str(where) for where in ((scene or {}).get("positions") or {}).values()}
+    gone = [uid for uid, room in rooms.items()
+            if isinstance(room, dict) and room.get(LAYOUT_MADE_KEY)
+            and uid not in (specs or {}) and uid not in held
+            and not str(room.get("desc") or room.get("description") or "").strip()
+            and (room_ids is None or uid in room_ids)]
+    for uid in gone:
+        rooms.pop(uid, None)
+        touched.append(uid)
+    if gone:
+        for room in rooms.values():
+            if isinstance(room, dict) and isinstance(room.get("adjacent"), list):
+                room["adjacent"] = [e for e in room["adjacent"]
+                                    if not (isinstance(e, dict) and str(e.get("to") or "") in gone)]
     for uid, (_name, spec) in (specs or {}).items():
         if room_ids is not None and uid not in room_ids:
             continue
@@ -306,6 +336,10 @@ def _lay_stub_on_its_plan(room, spec):
     and the record of what the solve laid on it (`LAID_OUT_KEY`)."""
     geometry = planned_geometry(spec)
     room.update(geometry)
+    if spec.get(LAYOUT_MADE_KEY):
+        # a room the tier made says so on its stub too, so a re-solve of
+        # its building knows it for its own (`layout_bridge._building`)
+        room[LAYOUT_MADE_KEY] = True
     if "parts" not in geometry:
         # the plan owns a stub's measurements, and parts are one: a stub its
         # solve laid as a rectangle keeps none an earlier solve gave it
@@ -357,20 +391,27 @@ def _lay_stub_on_its_plan(room, spec):
                 edge[key] = copy.deepcopy(plan_edge[key])
         if "offset" in plan_edge or "cell" in plan_edge:
             placed.append(str(edge["to"]))
-    # THE SOLVE'S OWN WINDOW EDGES, on a stub minted before the solve made
-    # them (the opening's: planted, then laid out before turn 0 describes
-    # anything); `protect_planned_edges` puts them back on a room that
-    # loses one afterwards
-    windows = [str(t) for t in record.get("window_edges") or () if planned.get(str(t))]
+    # THE SOLVE'S OWN WAYS -- a stair hall's, a window's onto the ground --
+    # on a stub minted before the solve made them (the opening's: planted,
+    # then laid out before turn 0 describes anything), and the plan's own
+    # stair the halls replaced taken off it; `protect_planned_edges` puts a
+    # planned way back on a room that loses one afterwards
+    made = [str(t) for t in record.get("made_edges") or () if planned.get(str(t))]
+    replaced = [str(t) for t in record.get("replaced") or () if str(t) not in planned]
+    if replaced and isinstance(room.get("adjacent"), list):
+        room["adjacent"] = [e for e in room["adjacent"]
+                            if not (isinstance(e, dict) and str(e.get("to") or "") in replaced)]
     present = {str(e.get("to")) for e in room.get("adjacent") or () if isinstance(e, dict)}
-    for to in windows:
+    for to in made:
         if to not in present:
             if not isinstance(room.get("adjacent"), list):
                 room["adjacent"] = []
             room["adjacent"].append(copy.deepcopy(planned[to]))
     room[LAID_OUT_KEY] = {"plan": room["site"]["plan"], "edges": sorted(set(placed))}
-    if windows:
-        room[LAID_OUT_KEY]["windows"] = sorted(windows)
+    if made:
+        room[LAID_OUT_KEY]["made"] = sorted(made)
+    if replaced:
+        room[LAID_OUT_KEY]["replaced"] = sorted(replaced)
 
 
 def _split_records(spec):
@@ -409,12 +450,18 @@ def _take_the_solve_off(room, spec, record):
                 live[key] = copy.deepcopy(plan_anchors[aid][key])
     placed = {str(to) for to in record.get("edges") or ()}
     planned = _plan_edges(spec)
-    # the window edges the solve made, where the plan it has now holds no
-    # way to that room
-    made = {str(to) for to in record.get("windows") or ()} - set(planned)
+    # the ways the solve made, where the plan it has now holds no way to
+    # that room -- and the plan's own stair the halls replaced, back
+    made = {str(to) for to in record.get("made") or ()} - set(planned)
     if made and isinstance(room.get("adjacent"), list):
         room["adjacent"] = [e for e in room["adjacent"]
                             if not (isinstance(e, dict) and str(e.get("to") or "") in made)]
+    present = {str(e.get("to")) for e in room.get("adjacent") or () if isinstance(e, dict)}
+    for to in record.get("replaced") or ():
+        if str(to) in planned and str(to) not in present:
+            if not isinstance(room.get("adjacent"), list):
+                room["adjacent"] = []
+            room["adjacent"].append(copy.deepcopy(planned[str(to)]))
     for edge in room.get("adjacent") or ():
         if not isinstance(edge, dict) or str(edge.get("to") or "") not in placed:
             continue
@@ -504,7 +551,14 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
 
     The plan tier writes the plan; the scene is the commit's
     (`materialize_planned_fringe` -> `apply_planned_layout`), so this is
-    never a second scene writer."""
+    never a second scene writer.
+
+    THE ROOMS THE SOLVE MAKES (`solved[uid]["room"]`, a stair's hall on one
+    storey, `layout_bridge.LAYOUT_MADE_KEY`) are planted here, in the same
+    transaction: a row of their own, or the one an earlier solve made --
+    never over a room anybody else planned, and never a retired one. A hall
+    an earlier solve of this plan made that this one does not is withdrawn,
+    so no stair stands where the building no longer has one."""
     from core import jobs
     from core.db import q, qi, transaction
 
@@ -516,6 +570,19 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
             return False
         current = {}
         for uid in rooms:
+            if rooms[uid].get("room") is not None:
+                row = q("SELECT payload,retired_turn_id FROM room_registry WHERE "
+                        "chat_id=? AND room_uid=?", (cid, uid))
+                if not row:
+                    current[uid] = None
+                    continue
+                payload = _payload(row[0])
+                planned = payload.get("planned") if isinstance(payload, dict) else None
+                if row[0]["retired_turn_id"] is not None or not (
+                        isinstance(planned, dict) and planned.get(LAYOUT_MADE_KEY)):
+                    return False
+                current[uid] = payload
+                continue
             row = q("SELECT payload FROM room_registry WHERE chat_id=? AND "
                     "room_uid=? AND retired_turn_id IS NULL", (cid, uid))
             if not row:
@@ -526,7 +593,11 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
                     (expected or {}).get(uid)):
                 return False
             current[uid] = payload
+        plans = {str((s.get("layout") or {}).get("plan") or "") for s in rooms.values()} - {""}
         for uid, solved in rooms.items():
+            if solved.get("room") is not None:
+                _plant_made_room(cid, uid, solved, current[uid])
+                continue
             payload = current[uid]
             planned = payload["planned"]
             for key, value in (solved.get("geometry") or {}).items():
@@ -561,17 +632,21 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
             for edge in planned.get("adjacent") or ():
                 if isinstance(edge, dict) and str(edge.get("to") or "") in moves:
                     edge.update(copy.deepcopy(moves[str(edge["to"])]))
-            # THE SOLVE'S OWN WAYS: a window onto the ground beyond it
-            # (`layout_bridge`, ONTO THE GROUND). Added where the plan holds
-            # no way to that room; one an earlier solve made is this solve's
-            # to move or take back, and nothing else is ever touched.
-            windows = solved.get("window_edges") or {}
-            made = {str(t) for t in earlier.get("window_edges") or ()}
-            if windows or made:
+            # THE SOLVE'S OWN WAYS: a stair hall's, a window's onto the ground
+            # beyond it (`layout_bridge`). Added where the plan holds no way
+            # to that room; one an earlier solve made is this solve's to move
+            # or take back, and nothing else is ever touched -- save the
+            # plan's own stair between two rooms, which the halls replace
+            # (`replaced`).
+            ways = solved.get("made_edges") or {}
+            made = {str(t) for t in earlier.get("made_edges") or ()}
+            replaced = {str(t) for t in (solved.get("layout") or {}).get("replaced") or ()}
+            if ways or made or replaced:
                 adjacent = [e for e in planned.get("adjacent") or ()
-                            if not (isinstance(e, dict) and str(e.get("to") or "") in made
-                                    and str(e.get("to") or "") not in windows)]
-                for to, fields in windows.items():
+                            if not (isinstance(e, dict) and (
+                                str(e.get("to") or "") in made - set(ways)
+                                or str(e.get("to") or "") in replaced))]
+                for to, fields in ways.items():
                     edge = next((e for e in adjacent if isinstance(e, dict)
                                  and str(e.get("to") or "") == str(to)), None)
                     if edge is None:
@@ -584,7 +659,55 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
             qi("UPDATE room_registry SET payload=? WHERE chat_id=? AND room_uid=? "
                "AND retired_turn_id IS NULL",
                (json.dumps(payload, ensure_ascii=False), cid, uid))
+        _withdraw_made_rooms(cid, plans, set(rooms))
     return True
+
+
+def _plant_made_room(cid, uid, solved, payload):
+    """A room the solve makes (`write_planned_layout`), planted as a plan of
+    its own: its name, what it is for, its structure, its ways (every one of
+    them the solve's), its geometry and the solve's record."""
+    from core.db import qi
+    room = solved["room"]
+    planned = {key: copy.deepcopy(value) for key, value in room.items()}
+    planned.update({"access": "", "frontier": [],
+                    "adjacent": [dict({"to": str(to)}, **copy.deepcopy(fields))
+                                 for to, fields in sorted((solved.get("made_edges") or {}).items())]})
+    for key, value in (solved.get("geometry") or {}).items():
+        if value is not None:
+            planned[key] = copy.deepcopy(value)
+    if solved.get("layout"):
+        planned["layout"] = copy.deepcopy(solved["layout"])
+    held = payload if isinstance(payload, dict) else {}
+    held["planned"] = planned
+    name = str(room.get("name") or derived_room_name(uid))
+    qi("INSERT INTO room_registry(chat_id,room_uid,owning_book_id,parent_entity,name,"
+       "aliases,payload,created_turn_id,retired_turn_id) VALUES(?,?,?,?,?,?,?,?,NULL) "
+       "ON CONFLICT(chat_id,room_uid) DO UPDATE SET name=excluded.name,"
+       "payload=excluded.payload",
+       (cid, uid, None, None, name, json.dumps([name, uid.replace("_", " ")]),
+        json.dumps(held, ensure_ascii=False), None))
+
+
+def _withdraw_made_rooms(cid, plans, kept):
+    """Every room an earlier solve of `plans` made that this one did not
+    (`kept`), withdrawn: its plan is no plan any reader holds
+    (`_read_registry_rows`), so no stair stands where the building has
+    none. The row stays, as every registry identity does."""
+    from core.db import q, qi
+    for row in q("SELECT room_uid,payload FROM room_registry WHERE chat_id=? AND "
+                 "retired_turn_id IS NULL", (cid,)):
+        uid = str(row["room_uid"])
+        payload = _payload(row)
+        planned = payload.get("planned") if isinstance(payload, dict) else None
+        if uid in kept or not isinstance(planned, dict) or not planned.get(LAYOUT_MADE_KEY):
+            continue
+        site = planned.get("site") if isinstance(planned.get("site"), dict) else {}
+        if str(site.get("plan") or "") not in plans or planned.get("withdrawn"):
+            continue
+        planned["withdrawn"] = True
+        qi("UPDATE room_registry SET payload=? WHERE chat_id=? AND room_uid=?",
+           (json.dumps(payload, ensure_ascii=False), cid, uid))
 
 
 def planned_seed(planned):
@@ -738,6 +861,22 @@ def _read_registry_rows(cid):
             "payload": payload,
             "planned": planned if isinstance(planned, dict) else None,
         }
+    # A ROOM THE LAYOUT TIER MADE STANDS ONLY WITH ITS BUILDING
+    # (`layout_bridge.LAYOUT_MADE_KEY`): a stair hall is a plan while every
+    # room it serves stands on the hall's own plan, and no plan once a
+    # re-solve withdrew it -- a re-plan that took the building's solve off
+    # leaves no stair standing beside the plan's own (2026-10-12)
+    from world.site_plan import normalize_site
+    for entry in out.values():
+        planned = entry["planned"]
+        if not planned or not planned.get(LAYOUT_MADE_KEY):
+            continue
+        site = normalize_site(planned.get("site")) or {}
+        serves = [out.get(str(r)) for r in planned.get("stair_of") or ()]
+        if planned.get("withdrawn") or not site or not serves or any(
+                not (s and s["planned"]) or (normalize_site(s["planned"].get("site")) or {}).get(
+                    "plan") != site["plan"] for s in serves):
+            entry["planned"] = None
     return out
 
 
@@ -1399,6 +1538,24 @@ def materialize_planned_fringe(cid, scene):
         targets.update(str(e.get("to")) for e in planned_edges)
         if uid in rooms and planned_edges:
             supply.setdefault(uid, []).extend(planned_edges)
+    # A STAIRWELL IS ONE SHAFT (`layout_bridge`'s stair halls,
+    # `LAYOUT_MADE_KEY`): a hall minted on one storey brings the halls over
+    # and under it, as the stair edge the halls replaced brought the room at
+    # its far end -- so the scene holds the storey above the moment a body
+    # stands at the foot of a stair, and the site derivation lays the
+    # building's neighbours onto its plan, which it does only for a plan
+    # the scene shows on two storeys (`site_plan._derive`)
+    def _made(uid):
+        return bool(((planned.get(uid) or (None, {}))[1] or {}).get(LAYOUT_MADE_KEY))
+
+    stack = [uid for uid in targets | occupied if _made(uid)]
+    while stack:
+        here = stack.pop()
+        for e in (planned.get(here) or (None, {}))[1].get("adjacent") or ():
+            to = str((e or {}).get("to") or "") if isinstance(e, dict) else ""
+            if e.get("vertical") and to and to not in targets and _made(to):
+                targets.add(to)
+                stack.append(to)
     for uid in sorted(targets):
         if uid in rooms or uid not in planned:
             continue
@@ -2631,7 +2788,7 @@ def structure_warnings(structure, rooms, known=()):
 
 __all__ = [
     "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "LAID_LOOKS_KEY",
-    "LAYOUT_ANCHOR_FIELDS", "LAYOUT_EDGE_FIELDS", "LAYOUT_PLAN_PREFIX",
+    "LAYOUT_ANCHOR_FIELDS", "LAYOUT_EDGE_FIELDS", "LAYOUT_MADE_KEY", "LAYOUT_PLAN_PREFIX",
     "PLAN_SEEDED_FIELDS", "STRUCTURES_KEY", "apply_planned_layout",
     "seed_planned_far_look",
     "apply_solved_plans", "planned_anchors", "planned_seed",

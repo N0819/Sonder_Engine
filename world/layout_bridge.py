@@ -66,10 +66,22 @@ WHAT A SOLVE BECOMES (`planned_layout`):
   anchors when the window is laid;
 * each doorway between two of the building's rooms, and each onto the ground
   outside, its `dir` and `offset` on the plan's edge;
-* each stair the plan's own vertical edge, its `cell` where each room meets
-  the stair. The solver's stair halls, stores and voids are NOT rooms: the
-  plan holds no such room, and a tier that invents rooms has been refused
-  once (98827d9f, reverted: "a loft space that didn't exist before").
+* EACH STAIR A ROOM OF ITS OWN ON EVERY STOREY IT JOINS (the owner's
+  choice of 2026-10-12, asked against a stair standing in its room: "there
+  are no genned stairs as far as i can tell" -- the solver's stair halls,
+  rooms in the layout lab and its converter, were left off the plan, and a
+  stair was one vertical edge with a landing cell). Each hall is a planned
+  room the tier makes (`LAYOUT_MADE_KEY`), on its storey and the solver's
+  rectangle, named for its stair: joined to the room it serves by the
+  solver's doorway -- the whole run of their shared wall open for an open
+  stair, its door for an enclosed one -- and to the hall above or below by
+  the flight itself. The plan's own stair between the two rooms is replaced
+  by that way through, where every piece of it was laid; where one was not,
+  the stair stays the plan's edge, its `cell` where each room meets it. The
+  solver's stores and voids are still no rooms: 98827d9f (reverted, "a loft
+  space that didn't exist before") made one of a void where a window
+  belonged. Each way the tier makes -- a hall's, or a window's onto the
+  ground -- is the solve's own (`made_edges`) to move or take back.
 Zones (a floor area with no walls) are not carried yet: an anchor is the
 engine's only floor place, and a zone holding a cushion would read as two
 fixtures on one cell to the designer's check.
@@ -113,7 +125,7 @@ import re
 from world.layout_solver import (FIXTURE_SIZES, PURPOSE_AREA, SIZE_WORD_FOOTPRINT,
                                  STAIR_FALLBACK, STAIRS, ZONE_SIZES, check, fixture_footprint,
                                  solve)
-from world.structure import LAYOUT_PLAN_PREFIX
+from world.structure import LAYOUT_MADE_KEY, LAYOUT_PLAN_PREFIX
 
 #: Rooms one building may hold for the tier to lay it out. The solver
 #: divides every storey many times over (`layout_solver.QUICK`/`TRIES`): the
@@ -283,6 +295,10 @@ def plan_buildings(specs, scene, *, held_open=(), max_rooms=LAYOUT_TIER_MAX_ROOM
     from world.site_plan import normalize_site
     from world.spatial import normalize_level
     rooms = ((scene or {}).get("rooms") or {})
+    # A ROOM THE TIER MADE is no room of a building to lay out: a stair's
+    # hall is the solve's, made again by the next one (`LAYOUT_MADE_KEY`)
+    specs = {uid: entry for uid, entry in (specs or {}).items()
+             if not (isinstance(entry[1], dict) and entry[1].get(LAYOUT_MADE_KEY))}
     edges = _edges_of(specs)
     structure_of = {uid: str((spec or {}).get("structure") or "") for uid, (_n, spec) in specs.items()}
 
@@ -647,9 +663,11 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
         # (`site_plan.DERIVED_KEY`) -- a re-planned building, whose stubs gave
         # their solve back, is laid out again.
         laid_again = {g["id"] for g in building.get("grounds") or ()}
+        # ...and a stair hall an earlier solve of this building made, which
+        # this one makes again or withdraws (`LAYOUT_MADE_KEY`)
         holder = next((rid for rid, live in sorted(rooms.items())
                        if rid not in building["rooms"] and rid not in laid_again
-                       and isinstance(live, dict)
+                       and isinstance(live, dict) and not live.get(LAYOUT_MADE_KEY)
                        and (_on_a_plan(live, normalize_site, solved) or {}).get("plan")
                        == building["plan"]), None)
         if holder is not None:
@@ -1786,7 +1804,21 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
                 cell = (cell[0] + dx, cell[1] + dy)
             room = rects[room_id]
             landing[(halls[hall_id]["id"], room_id)] = ([cell[0] - room.x, cell[1] - room.y], wall)
+    made_halls = _stair_halls(building, layout, rects, levels, halls, out)
+    report["halls"] = [{"hall": entry["uid"], "serves": sorted(entry["serves"])}
+                       for _hall, entry in sorted(made_halls.items())]
     for st in spec.get("stairs") or ():
+        well = next((w for w in layout.stairwells
+                     if w["id"] == shaft_of.get(st["id"])), None)
+        through = [made_halls.get((well or {}).get("halls", {}).get(str(levels.get(r))), {})
+                   for r in (st["from"], st["to"])]
+        if all(room in hall.get("serves", ()) for room, hall in zip((st["from"], st["to"]), through)) \
+                and st["from"] in out and st["to"] in out:
+            # the way through the halls, every piece laid: the plan's own
+            # stair between the two rooms is replaced by it
+            out[st["from"]].setdefault("replaced", set()).add(st["to"])
+            out[st["to"]].setdefault("replaced", set()).add(st["from"])
+            continue
         for here, there in ((st["from"], st["to"]), (st["to"], st["from"])):
             spot = landing.get((shaft_of.get(st["id"]), here))
             if spot is not None and here in out:
@@ -1911,14 +1943,14 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         uid, side, cell = window["room"], window["dir"], window["cell"]
         hit = _ground_beyond(window, rects, levels, beyond)
         onto = hit[0] if hit else None
-        mine = out[uid].setdefault("window_edges", {})
+        mine = out[uid].setdefault("made_edges", {})
         if onto and onto in out and onto not in out[uid]["edges"] \
                 and uid not in out[onto]["edges"] and onto not in mine \
                 and frozenset((uid, onto)) not in joined:
             mine[onto] = {"barrier": "window", "dir": side,
                           "offset": _offset(rects[uid], side, cell), "name": window["name"]}
             pin = _ground_pin(laid[onto], hit[1], _OPP[side])
-            out[onto].setdefault("window_edges", {})[uid] = dict(
+            out[onto].setdefault("made_edges", {})[uid] = dict(
                 {"barrier": "window", "name": window["name"]},
                 **{k: v for k, v in pin.items() if v is not None})
             report["windows"].append({"room": uid, "window": window["id"], "onto": onto})
@@ -1939,11 +1971,15 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         for key in ("stated", "described_m2", "restored", "split", "grounds"):
             if key in record:
                 out[uid]["layout"][key] = record[key]
-        # the ways the solve itself made -- each window edge -- and the
-        # records of the plan it laid as windows, so a re-plan takes back
-        # exactly these (`structure._take_the_solve_off`)
-        if out[uid].get("window_edges"):
-            out[uid]["layout"]["window_edges"] = sorted(out[uid]["window_edges"])
+        # the ways the solve itself made -- a hall's, a window's onto the
+        # ground -- the plan's own stairs those replace, and the records of
+        # the plan it laid as windows, so a re-solve and a re-plan take back
+        # exactly these (`structure.write_planned_layout`,
+        # `structure._take_the_solve_off`)
+        if out[uid].get("made_edges"):
+            out[uid]["layout"]["made_edges"] = sorted(out[uid]["made_edges"])
+        if out[uid].get("replaced"):
+            out[uid]["layout"]["replaced"] = sorted(out[uid].pop("replaced"))
         if out[uid].get("windows_from"):
             out[uid]["layout"]["windows_from"] = sorted(out[uid].pop("windows_from"))
         del out[uid]["record"]
@@ -2136,6 +2172,87 @@ def _ground_pin(geometry, cell, side):
     return {"dir": side, "cell": [cell[0] - site["x"], cell[1] - site["y"]], "offset": None}
 
 
+def hall_room_id(hall) -> str:
+    """The room a stair hall is on the plan: the solver's `<shaft>@<level>`,
+    its storey spelled `m1` below the ground as the layout lab's converter
+    spells it (`tools/site_plan_from_layout.room_id`)."""
+    base, _at, level = str(hall).partition("@")
+    return _slug(f"{base}_stair_{level.replace('-', 'm')}")
+
+
+def _door_words(text) -> str:
+    """The first call's words for a stair's door, as a doorway's name: an
+    answer that gave an id for it (`stone_stair_door`) is spelled out, and
+    the bare word for any door says nothing a barrier does not."""
+    words = _text(text, 80)
+    if words and not any(ch.isspace() for ch in words):
+        words = words.replace("_", " ").strip()
+    return "" if words.casefold() in ("door", "a door", "the door") else words
+
+
+def _stair_halls(building, layout, rects, levels, halls, out):
+    """Each stair hall the solver laid, as a room of the plan (module
+    docstring): written into `out` under `hall_room_id`, with its ways --
+    to each room it serves through the solver's doorway, and to the hall
+    above or below by the flight. `{hall: {"uid", "serves": {room}}}` for
+    every hall laid; a hall the solver gave no doorway to a room of the
+    building serves nothing and is not made."""
+    from world.site_plan import STOREY_M
+    made = {}
+    for door in layout.doors:
+        for hall, room, side_of_hall in ((door["a"], door["b"], door["side"]),
+                                         (door["b"], door["a"], _OPP[door["side"]])):
+            if hall not in halls or room not in out or room in halls:
+                continue
+            cells = [tuple(c) for c in door.get("span") or [door["cell"]]]
+            cell = cells[len(cells) // 2]
+            dx, dy = _STEP[door["side"]]
+            beyond = (cell[0] + dx, cell[1] + dy)
+            hall_cell, room_cell = (cell, beyond) if door["a"] == hall else (beyond, cell)
+            well = halls[hall]
+            uid = hall_room_id(hall)
+            entry = made.setdefault(hall, {"uid": uid, "serves": set(), "well": well})
+            entry["serves"].add(room)
+            way = {"barrier": "closed_door"}
+            if str(door.get("kind") or "") == "open":
+                # an open stair has no wall to its room: the whole run of
+                # wall the two share stands open
+                way = {"barrier": "open", "width": len(cells)}
+            elif _door_words(door.get("kind")):
+                way["name"] = _door_words(door.get("kind"))
+            out[room].setdefault("made_edges", {})[uid] = dict(
+                way, dir=_OPP[side_of_hall], offset=_offset(rects[room], _OPP[side_of_hall], room_cell))
+            out.setdefault(uid, {"made_edges": {}})["made_edges"][room] = dict(
+                way, dir=side_of_hall, offset=_offset(rects[hall], side_of_hall, hall_cell))
+    for hall, entry in made.items():
+        r, lv, well = rects[hall], levels[hall], entry["well"]
+        name = _text(well.get("name"), 80) or "stair"
+        out[entry["uid"]].update({
+            "geometry": {"extent": {"w": r.w, "d": r.d}, "shape": SOLVED_SHAPE, "level": lv,
+                         "exposure": "enclosed",
+                         "site": {"plan": building["plan"], "x": r.x, "y": r.y,
+                                  "elev_m": round(lv * STOREY_M, 2)}},
+            "anchors": {}, "edges": {}, "record": {"moved": [], "unplaced": []},
+            "room": {"name": name, "purpose": name, "structure": building["structure"],
+                     LAYOUT_MADE_KEY: True, "stair_of": sorted(entry["serves"])}})
+    # THE FLIGHT: each hall to the one a storey above it in its stairwell
+    way = {"ladder": "ladder"}
+    for well in layout.stairwells:
+        mine = sorted((int(lv), hall) for lv, hall in (well.get("halls") or {}).items()
+                      if hall in made)
+        for (lo, low), (hi, high) in zip(mine, mine[1:]):
+            if hi != lo + 1:
+                continue
+            kind = way.get(str(well.get("kind") or ""), "stair")
+            name = _text(well.get("name"), 80)
+            up = {"barrier": "open", "vertical": "up", "way": kind}
+            if name:
+                up["name"] = name
+            out[made[low]["uid"]]["made_edges"][made[high]["uid"]] = up
+            out[made[high]["uid"]]["made_edges"][made[low]["uid"]] = dict(up, vertical="down")
+    return made
+
+
 def _ground_cells(spec, laid):
     """`{plan cell: place id}` for every cell of open ground, a way or a
     feature the solve laid (`_ground_geometry`) -- the ground a window can
@@ -2182,15 +2299,15 @@ def _ground_beyond(window, rects, levels, ground):
 
 def _plan_joins(building):
     """Every pair of rooms the plan joins by a way, either side declaring
-    it, as frozensets -- save a window edge an earlier solve made, which is
-    this solve's to make again or take back (`structure.write_planned_layout`)."""
+    it, as frozensets -- save a way an earlier solve made, which is this
+    solve's to make again or take back (`structure.write_planned_layout`)."""
     out = set()
     specs = dict(building.get("ground_specs") or {})
     specs.update(building.get("specs") or {})
     for uid, planned in specs.items():
         planned = planned if isinstance(planned, dict) else {}
         record = planned.get("layout") if isinstance(planned.get("layout"), dict) else {}
-        solved = {str(t) for t in record.get("window_edges") or ()}
+        solved = {str(t) for t in record.get("made_edges") or ()}
         for edge in planned.get("adjacent") or ():
             if isinstance(edge, dict) and edge.get("to") and str(edge["to"]) not in solved:
                 out.add(frozenset((str(uid), str(edge["to"]))))

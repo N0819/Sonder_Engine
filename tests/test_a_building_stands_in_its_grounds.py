@@ -407,8 +407,13 @@ def test_the_tier_writes_the_grounds_onto_the_plan_and_the_stubs_take_them(temp_
     _scene, laid_out = lay_out_buildings(None, cid, scene, ["hall"], "en",
                                          call=_farm_answers([]))
     ground = {"path", "well", "privy", "garden", "gate", "tree"}
-    assert laid_out == {"hall", "kitchen", "washroom", "loft"} | ground
+    # the stair a room of its own on each storey it joins (the owner's
+    # choice of 2026-10-12), made by the tier
+    halls = {"hall__loft_stair_0", "hall__loft_stair_1"}
+    assert laid_out == {"hall", "kitchen", "washroom", "loft"} | ground | halls
     plan = {uid: e["planned"] for uid, e in registry_rows(cid).items()}
+    for uid in halls:
+        assert plan[uid]["made_by_layout"] and plan[uid]["site"]["plan"] == "layout:hall"
     for pid in ground:
         assert plan[pid]["site"]["plan"] == "layout:hall", pid
         assert plan[pid]["layout"]["grounds"], pid
@@ -564,9 +569,9 @@ def test_a_window_with_ground_beyond_it_is_a_window_onto_that_ground():
             continue
         assert wid not in records
         assert spec["ground_is"][onto] in ("open", "way", "feature")
-        mine, theirs = solved[uid]["window_edges"][onto], solved[onto]["window_edges"][uid]
+        mine, theirs = solved[uid]["made_edges"][onto], solved[onto]["made_edges"][uid]
         assert mine["barrier"] == theirs["barrier"] == "window"
         assert mine["dir"] in ("n", "e", "s", "w") and ("offset" in theirs or "cell" in theirs)
         assert onto not in solved[uid]["edges"], "one way a pair of rooms"
-        assert solved[uid]["layout"]["window_edges"] == sorted(solved[uid]["window_edges"])
+        assert solved[uid]["layout"]["made_edges"] == sorted(solved[uid]["made_edges"])
     assert rows["loft_window"]["onto"], "the loft looks out over the ground below"

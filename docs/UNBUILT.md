@@ -333,6 +333,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.204 — A set-down whose transfer names its fixture in words stays in the hand (2026-10-12)](UNBUILT_WORLD.md#unbuilt-1-204)
 - [§1.205 — The opening re-authors the Room's planned layout, and the solver follows it (2026-10-12)](UNBUILT_WORLD.md#unbuilt-1-205)
 - [§1.209 — A floor word the sound tables do not hold reads as masonry (2026-10-12)](UNBUILT_WORLD.md#unbuilt-1-209)
+- [§1.210 — A stair is a room of its own — built 2026-10-12, residuals open](UNBUILT_WORLD.md#unbuilt-1-210)
 
 **2. Roadmap**
 

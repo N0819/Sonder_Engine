@@ -2230,7 +2230,11 @@ covers a floor is the floor"). Re-laid from the recorded answers, the shrine
 holds none of the nine door marks and none of the four window anchors; the
 establish, rerun twice on that solve, wrote 0 and 1 anchors for a window (a
 place beneath it, whose desc still describes it) where it wrote 2. The
-duplicated roost fixtures and the unplaced futon and tokonoma stand.
+duplicated roost fixtures and the unplaced futon and tokonoma stand. The sort
+card's clause against door and stair marks the plan never listed stopped none
+of them: three live sorts with it listed 10, 13 and 16; the bridge's drop is
+what holds. The "unconfirmed" bullet is confirmed: the second storey stood
+over the solver's stair halls, which are rooms since (§1.210).
 
 <a id="unbuilt-1-209"></a>
 
@@ -2251,6 +2255,36 @@ reads. Candidate: `floor` becomes a closed set the engine owns, stated on
 every card that writes it as `barrier` is, with what lies on the floor going
 to the desc. Open for the owner: what tatami, or any covering, takes off a
 tread -- it reads as the timber under it.
+
+<a id="unbuilt-1-210"></a>
+
+### 1.210 A stair is a room of its own -- built 2026-10-12, residuals open
+
+The owner's choice (Design.md: "A stair is a room of its own on every storey
+it joins"). What the first measurement on chat 168's shrine left open:
+
+- **One name on every storey.** A stair's halls all carry its stair's name
+  ("Narrow wooden staircase" below and above), as the layout lab names them,
+  and a hall's `purpose` is that name. Nothing yet tells the foot of a stair
+  from its head by name.
+- **The solver's hall is not the same shape on every storey, and takes
+  leftover space.** The shrine's basement stair is 2 by 6 below ground and
+  12 by 5 on the ground floor: on the ground and below, a hall swallows the
+  pieces of a storey no room can take whole (`layout_solver._absorb`,
+  `docs/design/DESIGN_LAYOUT_TIER.md`), and as a room it now says so. The lab
+  draws a stair "at the same cells on every storey it joins"; the shrine's
+  solve does not hold that.
+- **An enclosed stair's door is the first call's words**, and those can be
+  an id: two of three live sorts gave `stone_stair_door`, spelled out as
+  "stone stair door".
+- **A hall a body stands in, or the story described, stays** when its
+  building is re-planned: the story's room, never taken out of the scene, and
+  joined to the re-planned rooms by its own ways.
+- **Test coverage.** `test_a_design_filed_before_its_building_was_laid_out_is_made_again_on_the_plan`
+  pinned that a design is dropped by the run that lays its building out even
+  where the brief's fingerprint matches; a solve now changes the brief of any
+  room a stair leaves, so the test no longer tells that path from a changed
+  brief.
 
 
 ## 2. Roadmap

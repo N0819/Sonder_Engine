@@ -207,7 +207,7 @@
 | `world/frontage.py` | 1216 |  | `world.spatial` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1761 |  | — |
-| `world/layout_bridge.py` | 2276 |  | `world.layout_solver`, `world.structure` |
+| `world/layout_bridge.py` | 2393 |  | `world.layout_solver`, `world.structure` |
 | `world/layout_solver.py` | 2349 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1332 |  | `core`, `world.spatial`, `world.spatial_frames` |
@@ -248,7 +248,7 @@
 | `world/spatial_transit.py` | 1258 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 494 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 2647 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 2804 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
 | `world/vistas.py` | 391 |  | — |
@@ -2577,14 +2577,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `planned_layout()` | 1555 | 396 lines |
-| `spec_from_answers()` | 933 | 223 lines |
-| `_building()` | 471 | 189 lines |
-| `_ground_plan()` | 1158 | 149 lines |
-| `hold_inventory()` | 748 | 103 lines |
-| `_ground_geometry()` | 2029 | 82 lines |
-| `_grounds_of()` | 347 | 73 lines |
-| `plan_buildings()` | 268 | 59 lines |
+| `planned_layout()` | 1573 | 414 lines |
+| `spec_from_answers()` | 951 | 223 lines |
+| `_building()` | 487 | 191 lines |
+| `_ground_plan()` | 1176 | 149 lines |
+| `hold_inventory()` | 766 | 103 lines |
+| `_ground_geometry()` | 2065 | 82 lines |
+| `_grounds_of()` | 363 | 73 lines |
+| `plan_buildings()` | 280 | 63 lines |
 
 ### `world/layout_solver.py`
 
@@ -3080,14 +3080,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `claim_frontier_spaces()` | 2286 | 207 lines |
-| `mint_frontier()` | 965 | 197 lines |
-| `plant_structure()` | 1164 | 191 lines |
-| `prepare_frontier_expansion()` | 2056 | 174 lines |
-| `materialize_planned_fringe()` | 1357 | 153 lines |
-| `write_planned_layout()` | 484 | 104 lines |
-| `planned_room_brief()` | 1694 | 86 lines |
-| `planned_context()` | 1929 | 75 lines |
+| `claim_frontier_spaces()` | 2443 | 207 lines |
+| `mint_frontier()` | 1104 | 197 lines |
+| `plant_structure()` | 1303 | 191 lines |
+| `prepare_frontier_expansion()` | 2213 | 174 lines |
+| `materialize_planned_fringe()` | 1496 | 171 lines |
+| `write_planned_layout()` | 531 | 133 lines |
+| `apply_planned_layout()` | 238 | 94 lines |
+| `planned_room_brief()` | 1851 | 86 lines |
 
 ### `world/subjects.py`
 

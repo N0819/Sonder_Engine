@@ -190,12 +190,19 @@ beds), each named as one of them, and the plan's words for the group kept in
 the solve's record (`planned.layout.split`) rather than on the first copy (the
 second live run wrote "three box beds along the wall" on one bed and "box
 beds" on two more); each doorway's `dir` and
-`offset` on the plan's edges; each stair the plan's own vertical edge, pinned
-(`cell`) where each room meets it; each window an anchor in its wall that
-blocks no line; each stated measurement filed against the solved one
-(`planned.layout.stated`). The solver's stair halls, stores and voids are not
-rooms: the plan holds no such room, and a tier that invents rooms was refused
-once (98827d9f, reverted). Zones are not carried: an anchor is the engine's
+`offset` on the plan's edges; each stated measurement filed against the
+solved one (`planned.layout.stated`). Superseded on 2026-10-12, after the
+owner read chat 168's shrine: each window is in its wall -- a record of its
+room's `windows`, or a `window` edge onto the ground beyond it -- and never an
+anchor; and each stair is a room of its own on every storey it joins, the
+solver's hall planted as a room the tier makes (`structure.LAYOUT_MADE_KEY`),
+replacing the plan's own stair edge (the owner's choice: "Its own stairwell
+room per storey"; Design.md, "A window is in its wall" and "A stair is a
+room of its own"). Until then each stair was the plan's own vertical edge,
+pinned (`cell`) where each room meets it, and the halls, stores and voids
+were not rooms: a tier that invents rooms was refused once (98827d9f,
+reverted -- a void made a loft where a window belonged). Stores and voids
+still are not. Zones are not carried: an anchor is the engine's
 only floor place, and a zone holding a cushion would read as two fixtures on
 one cell to the designer's check.
 
