@@ -12,8 +12,7 @@ engine's own moving kinds (`MOVING_KINDS`), never for a building.
 """
 from __future__ import annotations
 
-from world.spatial import merge_scene_with_diff
-from world.spatial_transit import MOVING_KINDS, sync_entity_interior_rooms
+from world.spatial import MOVING_KINDS, merge_scene_with_diff, sync_entity_interior_rooms
 
 
 def _diff(kind="vehicle", claimed_by=None):
