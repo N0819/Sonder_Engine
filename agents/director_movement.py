@@ -2920,7 +2920,100 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         out["travel"] = record
 
 
-def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
+def _walk_short_of(ctx, interp, sd, sc, out, subject, mv, was):
+    """THE WALK A BODY SET OUT ON IS WALKED, SHORT OF WHERE IT IS GOING (PA12).
+
+    `arrives=false` says the body does not REACH `to_room` this beat -- never
+    that it does not move -- and the encoder's card promises the walk "walked
+    as far as the beat carries it". Nothing walked it. Where the beat placed
+    the body nowhere, or placed it in the destination and the guard below
+    refused that, the body ended the beat where it began: Saltmarsh Crossing
+    turn 4650 (2026-10-11), "she goes out along the quay toward Venn's
+    counting-room" -- the resolve took her through the Grain Office door,
+    the guard refused it, and she stood in the harbour office she had walked
+    out of, six paces from that door, while the page put the quay ahead of
+    her. Registered as PA12, measured twice.
+
+    So the declared walk is walked over the cells, from where the beat began,
+    by the beat's own paces, toward the door of the destination in the room
+    before it -- never through it -- and recorded under way, which is what
+    the commit makes of an approach in any case: silence, or a second
+    declaration, carries it in. A body carried, restrained, or with no
+    passable way is left where it stood, as the walk's continuation leaves
+    it (`_travel_continues`). Returns the walk's result, or None when it
+    moved nobody."""
+    from world.spatial import passable_path, standing_cell
+    canonical = movement_for_resolve(ctx, interp) or mv
+    try:
+        route_scene = route_scene_for(ctx, sc, sd)
+    except Exception:
+        route_scene = merge_scene_with_diff(copy.deepcopy(sc), copy.deepcopy(sd))
+    rooms = route_scene.get("rooms") or {}
+    to_room = str((canonical or {}).get("to_room") or "").strip()
+    if to_room not in rooms:
+        to_room = str(mv.get("to_room") or "").strip()
+    if not was or to_room not in rooms or to_room == was:
+        return None
+    if (sc.get("contained") or {}).get(subject):
+        return None
+    try:
+        from story.scene import (apply_awareness_diff, apply_restraint_records_diff,
+                                 awareness_map, restraint_conditions)
+        from .director_floors import _restraint_blocked_moves, _restraint_holder_pool
+        chat = getattr(ctx, "chat", None)
+        chat_id = chat["id"] if isinstance(chat, dict) else getattr(chat, "id", None)
+        restraints = (apply_restraint_records_diff(restraint_conditions(chat_id), sd)
+                      if chat_id is not None else [])
+        if restraints and _restraint_blocked_moves(
+                {"positions": {subject: to_room}}, sc, restraints,
+                apply_awareness_diff(awareness_map(chat_id), sd),
+                _restraint_holder_pool(sc, [subject])):
+            return None
+    except Exception:
+        pass
+    path = passable_path(route_scene, was, to_room, limit=None)
+    if not path or path[-1] != to_room:
+        return None
+    stop = path[-2] if len(path) > 1 else was
+    door = door_cell(route_scene, stop, to_room)
+    pace = str(mv.get("pace") or "").strip().casefold()
+    if not pace and _declares_rapid_movement(interp):
+        pace = "run"
+    result = walk(route_scene, subject, stop,
+                  to_cell=list(door) if door is not None else None,
+                  paces=paces_for(beat_seconds(ctx, sd), pace),
+                  from_room=was, from_cell=standing_cell(sc, subject))
+    if result is None or (result["room"] == was and not result.get("paces")):
+        return None
+    positions = sd.setdefault("positions", {})
+    if result["room"] != was:
+        positions[subject] = result["room"]
+    else:
+        positions.pop(subject, None)
+    stations = sd.setdefault("stations", {})
+    entry = stations.get(subject) if isinstance(stations.get(subject), dict) else {}
+    entry["cell"] = list(result["cell"])
+    entry.pop("at", None)
+    entry["near"] = []
+    stations[subject] = entry
+    poses = sd.get("poses") if isinstance(sd.get("poses"), dict) else None
+    if poses is None:
+        poses = sd["poses"] = {}
+    poses[subject] = _on_the_way_pose()
+    if isinstance(out, dict):
+        _travel_record(out)["advanced"].append({
+            "subject": subject, "from": was, "to": result["room"],
+            "destination": to_room, "to_anchor": None, "to_cell": None,
+            "paces": result["paces"], "pace": pace or "walk", "underway": True})
+    ctx.warnings.append(
+        f"Approach under way: {subject} walked {result['paces']} paces toward "
+        f"'{to_room}' and ends the beat in '{result['room']}' at cell "
+        f"{list(result['cell'])}, short of it -- heading somewhere is neither "
+        "arriving nor standing still.")
+    return result
+
+
+def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name, out=None):
     """A declaration that only reaches TOWARD somewhere does not end inside it.
 
     Observed live, story "The Blizzard", turn 2. The player wrote "You wander
@@ -2986,6 +3079,10 @@ def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
     was = room_of(sc, subject)
     now = (sd.get("positions") or {}).get(subject)
     if not now or now == was:
+        # The beat placed the body nowhere new: its walk is walked short of
+        # the destination (`_walk_short_of`), for the walker who is its own.
+        if str(mv.get("mover") or "self") == "self":
+            _walk_short_of(ctx, interp, sd, sc, out, subject, mv, was)
         return
     # Being moved WITHOUT walking is somebody else's doing -- carried, dragged,
     # shut in a crate -- and that is the resolve's to assert, not this guard's
@@ -3016,6 +3113,9 @@ def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
         "unchanged -- moving closer to somewhere is not being there, and "
         "reaching a building is not entering it."
     )
+    # ...and the walk is still walked, as far as the door it may not pass.
+    if str(mv.get("mover") or "self") == "self":
+        _walk_short_of(ctx, interp, sd, sc, out, subject, mv, was)
 
 
 def crossing_legs(scene, from_room, to_room):

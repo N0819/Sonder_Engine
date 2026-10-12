@@ -923,13 +923,15 @@ patch in a file another hand was editing that day:
   not reach dropped (`_strip_unreached_placement`), and every body the same
   beat sent to that destination out of the mover's own room stopping where the
   mover stopped. Measured cases closed: PE2 (four of six declared inter-room
-  moves in an ordinary flat), PC7's turn 13. **What is NOT closed is F28's own
-  remainder, PA12**: a declaration marked `arrives=false` for a step the
-  player wrote as taken. The prefix rule was scoped to ARRIVING declarations
-  deliberately, so that `scene.approach` and the approach-leg rule stay the
-  one seam answering how far a non-arriving walk got; PA12 needs either the
-  interpret's reading of such a sentence or a leg the approach guard derives
-  when the beat placed the body nowhere.
+  moves in an ordinary flat), PC7's turn 13. **F28's own remainder, PA12, was
+  closed 2026-10-11** by the second of its two candidates: a declaration
+  marked `arrives=false` whose beat placed the body nowhere -- or placed it in
+  the destination, which the guard refuses -- is walked over the cells by the
+  beat's own paces, toward the destination's door in the room before it, and
+  recorded under way (`director_movement._walk_short_of`, inside the approach
+  guard; `Design.md`, "A walk toward somewhere is walked, short of it").
+  Measured again on Saltmarsh Crossing turn 4650 before it closed; replayed on
+  that beat, she ends on the quay at the Grain Office's door.
 - **One whisper, two grades in one beat (F61).** The act stage's
   deterministic floor grades speech through `hear_level`'s edge model (same
   room, whisper, near -> fragment); the outcome's delivery grades it through

@@ -7656,7 +7656,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # Running it after reconciliation costs nothing -- nothing between the two
     # points reads `sd` -- and gives the deterministic refusal the last word,
     # which is what it was always documented to have.
-    _guard_approach_is_not_arrival(ctx, interp, out["state_diff"], sc, p_name)
+    _guard_approach_is_not_arrival(ctx, interp, out["state_diff"], sc, p_name, out=out)
 
     # CAUSAL PHASE FLOOR.  Compound declarations carry explicit dependencies;
     # the Director adjudicates their contested effects, while deterministic
