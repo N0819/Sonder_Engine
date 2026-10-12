@@ -177,13 +177,20 @@ def test_a_place_the_first_call_left_unsaid_is_laid_as_the_tier_always_laid_it()
     assert "tree" not in spec["ground_is"] and "tree" not in solved
 
 
-def test_the_grounds_switch_is_off_unless_turned_on(temp_db):
+def test_the_grounds_are_on_unless_turned_off(temp_db):
+    """On since the owner saw the comparison: "I would like layout grounds
+    on" (2026-10-11). The host's setting turns them off; the story's own key
+    reads first, either way."""
     from agents import director_layout as dl
     from core.db import set_setting, wset
     cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES('g','',0)")
-    assert dl.layout_grounds_enabled(cid) is False
-    set_setting(dl.LAYOUT_GROUNDS_SETTING, "on")
     assert dl.layout_grounds_enabled(cid) is True
+    for word in ("off", "0", "false", "no"):
+        set_setting(dl.LAYOUT_GROUNDS_SETTING, word)
+        assert dl.layout_grounds_enabled(cid) is False, word
+    wset(cid, dl.LAYOUT_GROUNDS_STORY_KEY, "on")
+    assert dl.layout_grounds_enabled(cid) is True
+    set_setting(dl.LAYOUT_GROUNDS_SETTING, "on")
     wset(cid, dl.LAYOUT_GROUNDS_STORY_KEY, "off")
     assert dl.layout_grounds_enabled(cid) is False
 

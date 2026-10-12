@@ -79,10 +79,11 @@ LAYOUT_TIER_SETTING = "layout_solver_tier"
 LAYOUT_TIER_STORY_KEY = "layout_solver_tier"
 #: THE GROUNDS' SWITCH (2026-10-11, the owner: "Tier lays out the grounds"):
 #: whether the tier lays out the outdoor places a planned building stands in
-#: with it (`layout_bridge._grounds_of`). OFF until the owner has judged the
-#: comparison against the layout lab's liked shrine -- the lab's rule, that
-#: a layout change is shown before it turns on. The host's setting, and the
-#: story's own key read first, as the tier's own switch is.
+#: with it (`layout_bridge._grounds_of`). ON unless set to `0`/`off`/`false`/
+#: `no` -- the owner's word the same day, having seen the comparison against
+#: the layout lab's liked shrine (the lab's rule, that a layout change is
+#: shown before it turns on): "I would like layout grounds on". The host's
+#: setting, and the story's own key read first, as the tier's own switch is.
 LAYOUT_GROUNDS_SETTING = "layout_grounds"
 LAYOUT_GROUNDS_STORY_KEY = "layout_grounds"
 #: Buildings laid out per run of the rooms-in-view job, at most. Each is two
@@ -111,8 +112,8 @@ _OFF = ("0", "off", "false", "no")
 
 def layout_grounds_enabled(cid=None) -> bool:
     """Whether the tier lays out a building's grounds with it in chat `cid`:
-    the story's own switch when it states one, else the host's -- OFF unless
-    one of them says on (`LAYOUT_GROUNDS_SETTING`)."""
+    the story's own switch when it states one, else the host's -- ON unless
+    one of them says off (`LAYOUT_GROUNDS_SETTING`)."""
     from core.db import get_setting, wget
     if cid is not None:
         try:
@@ -126,8 +127,8 @@ def layout_grounds_enabled(cid=None) -> bool:
     try:
         raw = get_setting(LAYOUT_GROUNDS_SETTING)
     except Exception:
-        return False
-    return str(raw or "").strip().casefold() in _ON
+        return True
+    return str(raw or "").strip().casefold() not in _OFF
 
 
 def layout_tier_enabled(cid=None) -> bool:

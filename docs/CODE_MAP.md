@@ -19,7 +19,7 @@
 | `agents/director_evidence.py` | 4022 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1095 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2548 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
-| `agents/director_layout.py` | 496 |  | — |
+| `agents/director_layout.py` | 497 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3079 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 3399 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
@@ -410,14 +410,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `lay_out_buildings()` | 400 | 97 lines |
-| `building_description()` | 306 | 57 lines |
-| `lay_out_opening_ground()` | 365 | 33 lines |
-| `lay_out()` | 225 | 32 lines |
-| `_briefed()` | 259 | 25 lines |
-| `layout_tier_enabled()` | 133 | 20 lines |
-| `layout_grounds_enabled()` | 112 | 19 lines |
-| `_recording()` | 170 | 16 lines |
+| `lay_out_buildings()` | 401 | 97 lines |
+| `building_description()` | 307 | 57 lines |
+| `lay_out_opening_ground()` | 366 | 33 lines |
+| `lay_out()` | 226 | 32 lines |
+| `_briefed()` | 260 | 25 lines |
+| `layout_tier_enabled()` | 134 | 20 lines |
+| `layout_grounds_enabled()` | 113 | 19 lines |
+| `_recording()` | 171 | 16 lines |
 
 ### `agents/director_lingua.py`
 

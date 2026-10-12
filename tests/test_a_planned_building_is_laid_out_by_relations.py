@@ -15,6 +15,17 @@ import json
 
 from world import layout_bridge as lb
 
+
+@pytest.fixture(autouse=True)
+def _the_house_alone(monkeypatch):
+    """This module pins the tier on the house alone: the street and the yard
+    are the engine's derived neighbours here, never its ground. The grounds,
+    on by default since 2026-10-11 ("I would like layout grounds on"), have
+    their own module (`test_a_building_stands_in_its_grounds.py`); off is
+    still a host's choice, and this is that configuration."""
+    from agents import director_layout
+    monkeypatch.setattr(director_layout, "layout_grounds_enabled", lambda cid=None: False)
+
 SPECS = {
     "hall": ("the Hall", {
         "purpose": "a hall with a hearth and a long table", "structure": "town",

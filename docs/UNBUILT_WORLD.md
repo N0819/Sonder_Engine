@@ -3089,10 +3089,10 @@ Left, each with what it needs:
   room meets it, the hall's cells belong to no room, and an enclosed stair's
   walls and door are not kept. Needs a floor-area record the check reads as
   floor, and a ruling on whether a stairwell is a room.
-- **The grounds: built 2026-10-11, OFF until the owner has judged them**
-  (`layout_grounds`; `design/DESIGN_LAYOUT_TIER.md`, "The grounds"). The
-  comparison is beside the lab's liked shrine on three replicas of Home 5's
-  plan. Left:
+- **The grounds: built 2026-10-11, and on by default the same day** on the
+  owner's word, having seen the comparison beside the lab's liked shrine on
+  three replicas of Home 5's plan (`layout_grounds` turns them off;
+  `design/DESIGN_LAYOUT_TIER.md`, "The grounds"). Left:
   - a ground place the Room re-plans alone is never laid again, and a place
     planned after its building was laid out is never laid, because the
     house still stands on its solve and the building is refused as laid --

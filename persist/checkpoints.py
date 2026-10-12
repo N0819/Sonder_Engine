@@ -879,7 +879,7 @@ SETTING_PROVENANCE = {
     "layout_solver_tier": SET_BY_HAND,
     # Whether the tier lays out a building's grounds with it
     # (`agents.director_layout.LAYOUT_GROUNDS_STORY_KEY`): the same kind of
-    # dial, set by hand to compare the grounds in one story.
+    # dial, set by hand to turn the grounds off, or on, for one story.
     "layout_grounds": SET_BY_HAND,
     # NOT a preference -- the one entry here preserved on a correctness
     # argument instead. The secret nonce that keys every viewer-scoped

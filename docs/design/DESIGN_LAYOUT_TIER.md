@@ -392,9 +392,10 @@ engine laid the house out alone and left every outdoor place where the
 Writers' Room's own estimates put it: a 60 by 60 garden, a 20 by 20 camphor
 tree and a lantern path 40 long, each a box beside a house a fraction their
 size. The owner's choice: "Tier lays out the grounds". Built behind its own
-switch, OFF until the owner has judged it beside the lab (`layout_grounds`,
-the host's setting or the story's world key, read as the tier's own is;
-`director_layout.layout_grounds_enabled`).
+switch, off until the owner had judged it beside the lab, and ON since the
+same day, the owner having seen the comparison: "I would like layout grounds
+on" (`layout_grounds`, the host's setting or the story's world key, read as
+the tier's own is, and turning them off; `director_layout.layout_grounds_enabled`).
 
 **What is ground** (`layout_bridge._grounds_of`). The outdoor places of the
 building's own structure its doors reach through other such places, nearest
