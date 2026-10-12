@@ -1108,7 +1108,9 @@ def _mirror_symmetric_barriers(prior_rooms, incoming_rooms):
     doorway's rung" (playerless Aldermill round 7, 2026-09-23, idx 7-22).
     AND WHAT IT IS MADE OF: a shoji is paper from both sides, and the side
     the edge was not written on heard it as an oak door (chat 168,
-    2026-10-12). `vertical` is not mirrored: up from one side is down from
+    2026-10-12). AND WHAT IT IS LIKE (`desc`), which the cards keep to the
+    door itself and never the wall it stands in, so it reads true from
+    either side. `vertical` is not mirrored: up from one side is down from
     the other."""
     if not isinstance(incoming_rooms, dict) or not isinstance(prior_rooms, dict):
         return incoming_rooms
@@ -1142,7 +1144,7 @@ def _mirror_symmetric_barriers(prior_rooms, incoming_rooms):
         for edge in room.get("adjacent") or []:
             if not isinstance(edge, dict) or not edge.get("to"):
                 continue
-            fields = [f for f in ("barrier", "name", "material")
+            fields = [f for f in ("barrier", "name", "material", "desc")
                       if f in edge and (f == "barrier"
                                         or str(edge.get(f) or "").strip())]
             if not fields:

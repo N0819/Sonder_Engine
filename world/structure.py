@@ -336,6 +336,11 @@ def _lay_stub_on_its_plan(room, spec):
         for key in LAYOUT_EDGE_FIELDS:
             if key in plan_edge:
                 edge[key] = copy.deepcopy(plan_edge[key])
+        # what the doorway is made of and like, where the stub's own edge
+        # says nothing: the plan's word, never over one written live
+        for key in ("material", "desc"):
+            if plan_edge.get(key) and not edge.get(key):
+                edge[key] = copy.deepcopy(plan_edge[key])
         if "offset" in plan_edge or "cell" in plan_edge:
             placed.append(str(edge["to"]))
     room[LAID_OUT_KEY] = {"plan": room["site"]["plan"], "edges": sorted(set(placed))}
@@ -1172,7 +1177,7 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             if any(str(e.get("to")) == uid for e in back.get("adjacent") or ()):
                 continue
             reciprocal = {"to": uid, **{k: v for k, v in edge.items()
-                                        if k in ("barrier", "distance", "material") and v}}
+                                        if k in ("barrier", "distance", "material", "desc") and v}}
             # The way back down a way up: a vertical edge reverses; a
             # bearing is the declaring side's and is not copied.
             vertical = str(edge.get("vertical") or "")

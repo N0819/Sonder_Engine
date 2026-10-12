@@ -791,7 +791,19 @@ def hold_inventory(building, answer):
                 if key == "fixtures":
                     marks = str(item.get("marks") or "").strip()
                     if marks and marks in ways:
-                        held["marks"].append(dict(entry, to=marks))
+                        # A MARK THE PLAN NEVER LISTED IS THE DOORWAY ITSELF.
+                        # `marks` pins a fixture the plan lists where its way
+                        # meets the room (the live inn's `stair_foot`); one
+                        # the answer made up is the way through, which is
+                        # its edge and already stands where it meets the
+                        # room -- never a second thing on it (room
+                        # vocabulary: "A DOORWAY IS ITS EDGE, NEVER ALSO AN
+                        # ANCHOR"). Chat 168 (2026-10-12): all nine door and
+                        # stair anchors were the answer's own, each on its
+                        # door's cell, and the one a body stood at stayed
+                        # shut when the door it copied was opened.
+                        if keep:
+                            held["marks"].append(dict(entry, to=marks))
                         continue
                     entry["mount"] = _text(item.get("mount") or "floor", 80)
                     entry["count"] = max(1, min(FIXTURE_COUNT_MAX, _int(item.get("count"), 1)))

@@ -824,7 +824,7 @@ def effective_adjacent(scene: dict, room_id) -> list:
 #: and read by none yet; `offset` stays the per-edge fraction the map
 #: writes on both edges, because a wall's start is the same end from either
 #: room. Additive: a scene with no `passages` reads byte for byte as before.
-PASSAGE_FIELDS = ("barrier", "name", "material", "width")
+PASSAGE_FIELDS = ("barrier", "name", "material", "width", "desc")
 
 #: The barrier that is asymmetric BY DESIGN (it carries `sight_from`) and is
 #: the one field a passage does not force onto both edges -- the same

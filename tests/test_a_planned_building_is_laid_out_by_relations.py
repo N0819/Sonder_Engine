@@ -989,6 +989,24 @@ def test_a_fixture_that_marks_where_a_way_meets_the_room_is_pinned_there():
     assert {m["anchor"] for m in report["marks"]} == {"stair_foot", "kitchen_door"}
 
 
+
+def test_a_mark_the_plan_never_listed_is_the_doorway_and_mints_nothing():
+    """Chat 168 (2026-10-12): the sort made up nine door and stair "fixtures"
+    from the lore, each given with `marks`, and the bridge minted every one
+    as an anchor on its own door's cell. A mark pins a fixture THE PLAN
+    LISTS; one the answer made up is the way through, which is its edge."""
+    sort = copy.deepcopy(SORT)
+    sort["rooms"][0]["fixtures"] += [
+        {"id": "kitchen_shoji", "name": "a shoji door to the kitchen", "marks": "kitchen"}]
+    b, inv, spec, layout = _solve(sort=sort)
+    held = {r["id"]: r for r in inv["rooms"]}["hall"]
+    assert "kitchen_shoji" not in {m["id"] for m in held["marks"]}
+    assert "kitchen_shoji" not in {f["id"] for f in held["fixtures"]}
+    solved, report = lb.planned_layout(b, spec, layout, inventory=inv)
+    assert "kitchen_shoji" not in solved["hall"]["anchors"]
+    assert "kitchen" in solved["hall"]["edges"], "the doorway itself is still laid"
+
+
 OPEN_WALKS = {
     "low_walk": ("the Low Walk", {
         "purpose": "a plank walk over the mud", "structure": "town", "exposure": "open",

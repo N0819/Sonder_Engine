@@ -2364,7 +2364,7 @@ def body_pose_put(cid: int, name: str, body: dict = Body(...),
 doorways_router = APIRouter(prefix="/api/chats/{cid}/doorways", tags=["world-browser"])
 
 #: What a doorway PATCH may carry.
-DOORWAY_FIELDS = ("barrier", "dir", "offset", "name", "material", "width",
+DOORWAY_FIELDS = ("barrier", "dir", "offset", "name", "material", "desc", "width",
                   "vertical", "state")
 
 #: The widest doorway in paces: the extent ceiling, since a doorway cannot be

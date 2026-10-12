@@ -5284,10 +5284,18 @@ def _visible_features(sc, name, room, *, sweep=False):
     if not room or not room_has_geometry(sc, room):
         return None
     rows = feature_visibility(sc, name, sweep=bool(sweep))
+    # ...save a door whose edge says what it is like (`desc`): the exits
+    # digest names the way through, and this is the door itself, where it
+    # stands from here -- once on an anchor minted on top of the edge, now
+    # the edge's own words (`spatial_geometry.effective_anchors`).
+    from world.spatial import effective_anchors
+    described = {aid for aid, a in (effective_anchors(sc, room) or {}).items()
+                 if isinstance(a, dict) and a.get("implicit") and a.get("described")}
     return [
         {"desc": r["desc"], "tier": r["tier"], "side": r["side"],
          "peripheral": r["peripheral"]}
-        for r in rows if r.get("visible") and not r.get("implicit")
+        for r in rows if r.get("visible")
+        and (not r.get("implicit") or r.get("anchor") in described)
     ]
 
 

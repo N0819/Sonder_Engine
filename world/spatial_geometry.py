@@ -378,15 +378,23 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
             out[aid] = anchor
 
     def add(neighbor_id, barrier, bearing, vertical, offset=None, width=None,
-            cell=None):
+            cell=None, desc=None):
         aid = door_anchor_id(neighbor_id)
         if aid in out:
             return
+        # WHAT THE DOOR ITSELF IS LIKE IS ITS EDGE'S `desc`, when one is
+        # written: a doorway is its edge, never also an anchor, so its own
+        # description lives there and reaches every reader of this anchor
+        # (chat 168, 2026-10-12: the only descriptions of its doors were on
+        # anchors minted on top of them).
+        described = " ".join(str(desc or "").split())
         anchor = {
-            "desc": _BARRIER_ANCHOR_DESC.get(normalize_barrier(barrier))
+            "desc": described or _BARRIER_ANCHOR_DESC.get(normalize_barrier(barrier))
             or "the way through",
             "implicit": True,
         }
+        if described:
+            anchor["described"] = True
         if bearing:
             anchor["dir"] = bearing
         if vertical:
@@ -459,7 +467,7 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
                 or derived.get((str(room_id), str(edge["to"]))),
                 normalize_vertical(edge.get("vertical")),
                 normalize_offset(edge.get("offset")), edge.get("width"),
-                normalize_cell(edge.get("cell")))
+                normalize_cell(edge.get("cell")), edge.get("desc"))
     # An edge declared only from the neighbour's side is still a doorway in
     # THIS room; its bearing and verticality read reciprocally, the same rule
     # travel_bearing already applies.
@@ -473,7 +481,8 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
                     opposite_bearing(normalize_bearing(edge.get("dir")))
                     or derived.get((str(room_id), str(other_id))),
                     opposite_vertical(normalize_vertical(edge.get("vertical"))),
-                    normalize_offset(edge.get("offset")), edge.get("width"))
+                    normalize_offset(edge.get("offset")), edge.get("width"),
+                    desc=edge.get("desc"))
     return out
 
 

@@ -611,7 +611,7 @@ def _same_entity(scene, a, b) -> bool:
 #: target and the barrier, never these. The edge used to be rebuilt as {to,
 #: barrier, distance}: in chat 154 turn 4398 the TARDIS doors shut, and the
 #: console room's doorway lost its bearing.
-_DOORWAY_OWN_FIELDS = ("dir", "offset", "name", "material", "width", "way",
+_DOORWAY_OWN_FIELDS = ("dir", "offset", "name", "material", "desc", "width", "way",
                        "vertical")
 
 
