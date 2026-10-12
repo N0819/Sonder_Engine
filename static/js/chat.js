@@ -2051,10 +2051,22 @@ function pipelineMapPanel(p) {
       const view = player
         ? await api("GET", `/api/chats/${S.chatId}/rooms/${encodeURIComponent(room)}/grid?sight_from=${encodeURIComponent(player[0])}`)
         : first;
+      // THE DRAWER'S MAP IS READ ONLY. The room renderer asks its context
+      // for the room's slice and for the writers its drags and clicks call,
+      // and this one had neither: every render threw on
+      // `ctx.currentSlice()`, so the drawer only ever said "Map unavailable"
+      // (found 2026-10-12, surveying the map code). No slice draws no
+      // handles, and every writer does nothing.
+      const nothing = async () => false;
       const ctx = {
         vocab: index.vocab || {},
         pendingCell: null,
-        select() {}, chooseCell() {}, focusRow() {},
+        select() {}, chooseCell() {}, chooseWall() {}, focusRow() {}, refocus() {},
+        currentSlice() { return null; },
+        undo: { remember() {}, peek() { return null; } },
+        patchRoom: nothing, putStation: nothing, patchDoorway: nothing, moveBody: nothing,
+        putCharterStation: nothing, clearCharterStation: nothing, moveCharter: nothing,
+        moveThing: nothing,
       };
       host.innerHTML = "";
       if (typeof wbRenderRoomMap === "function") {
