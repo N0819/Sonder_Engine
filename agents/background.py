@@ -1845,12 +1845,35 @@ def _room_presences_in(ctx, sc, room):
         # "deliberately a short label for repeat/inline reference, not a
         # substitute for the full appearance description"), and using it here
         # keeps one implementation for both halves of one list.
+        role = str(sketch.get("role_hint") or "")
+        if sketch.get("surface") and _restates_surface(role, sketch["surface"]):
+            role = ""
         label = _unknown_actor_label(
             name, str(sketch.get("appearance") or ""),
-            role=str(sketch.get("role_hint") or ""),
-            surface=sketch.get("surface"))
+            role=role, surface=sketch.get("surface"))
         out.append((name, " ".join(str(label or "").split()), record))
     return sorted(out)
+
+
+def _restates_surface(hint, surface):
+    """Whether a `role_hint` is the body's appearance rather than a noun for
+    what it is: it repeats a word of the body's own structured surface.
+
+    A ROLE IS A NOUN, AND TWO WRITERS PUT AN APPEARANCE THERE (the scene's
+    presence derivation and the figure ledger file a minted body's
+    description as its `role_hint`). With a surface the label is the
+    surface's adjectives followed by the role as its noun, so a town body
+    the Director also minted was called "the grey-haired solid grey-haired
+    medium solid ruddy heavy person, with cropped grey with cropped grey"
+    in the lineman's own payload, and he addressed her by it (Hollowmere,
+    scratch chat 196 turn 4685, 2026-10-12). A post -- "telegraph keeper" --
+    shares no word with how its holder looks, and stays the noun."""
+    if not hint:
+        return False
+    from world.charter_surface import surface_words
+    own = {re.sub(r"[^\w-]", "", str(w)).casefold() for w in surface_words(surface, "full")}
+    own.discard("")
+    return any(re.sub(r"[^\w-]", "", w).casefold() in own for w in str(hint).split())
 
 
 def _presence_label_fn(ctx, *presence_names):

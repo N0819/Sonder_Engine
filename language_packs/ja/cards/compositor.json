@@ -340,6 +340,7 @@
     "thing_carried_by_you": "あなたは{desc}を運んでいる。",
     "thing_reads_touch": "手の下の{label}：{readings}。",
     "thing_reads_sight": "{label}の表示：{readings}。",
+    "interior_room_name": "{name}の中",
     "written_name": "「{name}」",
     "walk_underway": "まだ{to}へ向かう途中です。いまは{at}まで来たところです。",
     "vista_unseen_walls": "{compass}の{name}との間には、周りの壁が立っている。",

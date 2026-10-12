@@ -2164,7 +2164,7 @@ def _mint_minimal_interior(scene: dict, eid: str, occupant: str,
     name = _declared_interior_region(scene, occupant, holder)
     name = " ".join(str(name).split())[:_MINTED_INTERIOR_NAME_MAX].strip()
     if not name:
-        name = "Inside %s" % _display_name(scene, holder)
+        name = _interior_room_name(scene, holder)
     rooms[rid] = {
         "name": name,
         # A PROSE-FREE STUB, the `world/structure.py` materialize_planned_fringe
@@ -2241,7 +2241,7 @@ def _mint_thing_interior(scene: dict, subject: str, holder: str, eid: str,
     name = _declared_interior_region(scene, subject, holder)
     name = " ".join(str(name).split())[:_MINTED_INTERIOR_NAME_MAX].strip()
     if not name:
-        name = "Inside %s" % _display_name(scene, holder)
+        name = _interior_room_name(scene, holder)
     rooms[rid] = {
         "name": name,
         "desc": "",
@@ -3490,6 +3490,16 @@ def containment_broken_by_scale_change(scene: dict, previous_scales) -> list:
             contained.pop(subject, None)
             released.append(subject)
     return sorted(released)
+
+
+def _interior_room_name(scene: dict, holder: str) -> str:
+    """What a minted interior is called with nothing better declared: the
+    holder's own name, in the story's language (`interior_room_name`, both
+    packs). It was the English literal "Inside %s", so every story -- a
+    Japanese one included -- read "You are in Inside the funicular car"
+    (Hollowmere, scratch chat 196, 2026-10-12)."""
+    from language_runtime import compositor_text
+    return compositor_text("interior_room_name", name=_display_name(scene, holder))
 
 
 def _display_name(scene: dict, name: str) -> str:

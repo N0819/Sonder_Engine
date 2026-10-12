@@ -171,8 +171,15 @@ class TestTheNameComesFromTheLedger:
         assert merged["rooms"][MINTED]["name"] == "the close dark"
 
     def test_with_no_declared_region_the_holder_names_it(self):
+        """In the story's own language: the English literal "Inside %s" read
+        "You are in Inside the funicular car" in every story (Hollowmere,
+        scratch chat 196, 2026-10-12)."""
         merged = merge_scene_with_diff(_scene(), {})
-        assert merged["rooms"][MINTED]["name"] == "Inside %s" % HOLDER
+        assert merged["rooms"][MINTED]["name"] == HOLDER
+        from language_runtime import language_scope
+        with language_scope("ja"):
+            merged = merge_scene_with_diff(_scene(), {})
+        assert merged["rooms"][MINTED]["name"] == HOLDER + "の中"
 
     def test_an_overlong_region_is_capped_rather_than_dropped(self):
         merged = merge_scene_with_diff(
