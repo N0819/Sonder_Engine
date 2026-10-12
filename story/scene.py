@@ -3046,6 +3046,25 @@ def own_private_history(chat, viewer_name, frame_id=None):
     return out
 
 
+def _spelled(name) -> str:
+    """A name as an identifier spells it: casefolded, every run of
+    characters that are not letters or digits one underscore."""
+    return _re.sub(r"[\W_]+", "_", str(name or "").casefold()).strip("_")
+
+
+def _shares_with(viewer, known_by) -> bool:
+    """Whether a `known_by` list names this viewer: by name, case aside, or
+    as an identifier spells the name. A generated card wrote
+    `["mattias_brenn", "agathe_brenn"]` (Hollowmere, scratch chat 196,
+    2026-10-12), and matched by name alone those entries reached nobody,
+    forever; a class of people written that way still names no one."""
+    names = [str(x).lower().strip() for x in (known_by or [])]
+    if viewer in names:
+        return True
+    spelled = _spelled(viewer)
+    return bool(spelled) and any(_spelled(x) == spelled for x in names)
+
+
 def private_knowledge_for(chat, viewer_name, frame_id=None, turn_idx=None):
     """What one mind privately knows: its own card's private history, what
     another card shares with it (`known_by`), what it knows of the player,
@@ -3059,12 +3078,11 @@ def private_knowledge_for(chat, viewer_name, frame_id=None, turn_idx=None):
     out = []
     for owner, entries in _cast_private_histories(chat, frame_id):
         for e in entries:
-            kb = [str(x).lower().strip() for x in (e.get("known_by") or [])]
             if owner.lower() == vn:
                 out.append({"about": e.get("about") or owner,
                             "content": e["content"],
                             "source": "your own private history"})
-            elif vn in kb:
+            elif _shares_with(vn, e.get("known_by")):
                 out.append({"about": e.get("about") or owner,
                             "content": e["content"],
                             "source": f"private knowledge shared by {owner}"})
@@ -3074,8 +3092,7 @@ def private_knowledge_for(chat, viewer_name, frame_id=None, turn_idx=None):
         pents = persona_private_history(pers)
     for e in pents:
         if isinstance(e, dict) and e.get("content"):
-            kb = [str(x).lower().strip() for x in (e.get("known_by") or [])]
-            if vn in kb:
+            if _shares_with(vn, e.get("known_by")):
                 out.append({"about": persona_name(pers),
                             "content": e["content"],
                             "source": "something you privately know about them"})

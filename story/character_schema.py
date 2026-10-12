@@ -2513,30 +2513,6 @@ def _dead_sibling_keys(sheet):
     return found
 
 
-def _unmatchable_known_by(sheet):
-    """`known_by` entries that no viewer can ever be.
-
-    A private entry is routed to a viewer by exact equality against their
-    display name, folding case and stripping the ends -- nothing else. A
-    separator-joined token is therefore not a name the matcher can reach,
-    whether it was meant as a person written in identifier style or as a class
-    of people; either way the entry stays private forever and nothing says so.
-
-    Only the decidable half is reported: whether a spaced phrase names
-    somebody needs the cast, which a sheet on its own does not have.
-    """
-    out, seen = [], set()
-    for entry in ((sheet.get("knowledge") or {}).get("private_history") or []):
-        if not isinstance(entry, dict):
-            continue
-        for who in (entry.get("known_by") or []):
-            text = str(who).strip()
-            if "_" in text and text.casefold() not in seen:
-                seen.add(text.casefold())
-                out.append(text)
-    return out
-
-
 def character_card_warnings(sheet):
     """What is missing from a character CARD that will make them read as
     passive, as a list of human-readable strings.
@@ -2695,20 +2671,6 @@ def character_card_warnings(sheet):
             "This card fills %s, which nothing in the engine reads. The same "
             "field is read at %s, and there it is still empty \u2014 move the "
             "content there, or the story runs without it." % (path, home)
-        )
-    # A NAME LIST HOLDING A DESCRIPTION. Private history reaches a viewer by
-    # exact name match, case aside, so an entry that is not somebody's name is
-    # an entry nobody will ever be.
-    unmatchable = _unmatchable_known_by(sheet)
-    if unmatchable:
-        shown = ", ".join(unmatchable[:5])
-        if len(unmatchable) > 5:
-            shown += " and %d more" % (len(unmatchable) - 5)
-        warnings.append(
-            "knowledge.private_history shares an entry with whoever is named "
-            "in known_by, matched against their name exactly. %s cannot be "
-            "anyone's name, so those entries stay private to this character "
-            "forever. Write the names as the story spells them." % shown
         )
     return warnings
 
