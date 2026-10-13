@@ -54,7 +54,7 @@
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 325 |  | `core.db` |
 | `llm/json_mend.py` | 302 |  | — |
-| `llm/llm_quality.py` | 1877 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 2083 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 700 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 5837 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
@@ -793,14 +793,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 897 | 981 lines |
-| `_targeted_field_patch()` | 332 | 98 lines |
-| `note_provider_exchange()` | 601 | 59 lines |
-| `output_ran_out_of_room()` | 151 | 47 lines |
-| `json_failure_diagnosis()` | 200 | 39 lines |
-| `_extract_balanced_object()` | 64 | 37 lines |
-| `_unshrunk()` | 860 | 35 lines |
-| `_without_trailing_commas()` | 28 | 34 lines |
+| `complete_validated_json()` | 1102 | 982 lines |
+| `_targeted_field_patch()` | 521 | 98 lines |
+| `note_provider_exchange()` | 794 | 68 lines |
+| `output_ran_out_of_room()` | 291 | 47 lines |
+| `_read_json()` | 186 | 40 lines |
+| `json_failure_diagnosis()` | 340 | 39 lines |
+| `_first_object()` | 93 | 38 lines |
+| `_answer_goes_on()` | 137 | 38 lines |
 
 ### `llm/prompt_cache.py`
 

@@ -1927,12 +1927,14 @@ fails'). Left:
 - **The fresh ask is every validated step's, not only the encoder's** (the
   class, as the 2026-10-08 landing scoped it): a narrator, character or room
   author failure with a malformed answer in it is asked afresh as well.
-- **Only three rungs' answers are mended locally.** The first answer, the
-  rebuild and the fresh answer are offered to `json_mend` before another
-  call is made; the re-asks of the same request (with room, and after an
-  empty object) and the fallback candidates go to the next rung unmended.
+- **Only three rungs' malformed answers are mended locally.** The first
+  answer, the rebuild and the fresh answer are offered to `json_mend` before
+  another call is made; the re-asks of the same request (with room, and after
+  an empty object) and the fallback candidates go to the next rung unmended.
   True before D5; found scripting the re-ask with room's malformed answer
-  into the fresh ask.
+  into the fresh ask. Since 2026-10-13 every rung reads an answer whose object
+  CLOSED EARLY whole (`_read_answer`, §1.214) -- the one malformation that
+  parsed, and so never reached a mend at all.
 - **The capture does not name a call's rung.** `llm_capture` rows carry
   `ok` and `error`, not which attempt they were; the prose-contract record
   says which attempt the encoder's answer came from (`encoder.attempt`), and
@@ -1984,6 +1986,34 @@ fails'). Left:
   (`character:41` after Tamamo became id 1), so a stage rerun on the import
   cannot match a speaker to its line.
 
+
+<a id="unbuilt-1-214"></a>
+
+### 1.214 An answer is never cut at its first brace -- built 2026-10-13, residuals open
+
+Design.md: "An answer is never cut at its first brace". What it does not
+reach:
+
+- **A slip in an answer's LAST list is said, not mended.** When the early
+  close falls in the last list -- the root closes after a list item and only
+  stray closers follow -- the object read keeps the next item's members as
+  its own, a key the two share is named twice and the later value stands
+  (a note overwritten by the next notebook entry's). The read now says so (the
+  stray closers, the key named twice); no mend moves the members back into
+  the list. That mend -- one that REOPENS the list -- is the owner's call, as
+  is mending two list items that ran together in a whole answer (7 of the
+  5,327 captured).
+- **6087's fifth step is not recovered.** The mend reads the answer whole,
+  but the step the slip broke (`ponder` "the sound of Hinami's laugh") lands
+  at the answer's top level, where the schema has no field for it.
+- **The restart reader has no cut-off guard outside the ladder.** Captures
+  3907, 2203 and 2204 were cut answers whose own value, or a `{}`, a restart
+  read as the whole answer; the ladder refuses salvage from a cut answer
+  (`_refuse_cut_salvage`), and `jparse` and the generators do not.
+- **The card importers salvage on their own.** `story/importers.
+  _jparse_salvage` takes the first item of a top-level list and drops the
+  rest, and reads 6087's shape as `{}`, after which `_require_whole_json`
+  reports a false "ran out of output budget" at every card-authoring site.
 
 ## 2. Roadmap
 

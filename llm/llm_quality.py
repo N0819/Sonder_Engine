@@ -66,6 +66,35 @@ def _extract_balanced_object(text: str):
     Some models habitually prefix "Here is the JSON:" or append commentary
     after the closing fence, which defeats the fence-strip anchors and burns
     every repair/candidate attempt on a fully-valid object buried in prose."""
+    found = _first_object(text)
+    return found[0] if found is not None else None
+
+
+def _loads_noting(text: str):
+    """`(value, keys)`: `text` parsed, and every key some object in it NAMES
+    TWICE, in the order met. JSON keeps the later value and says nothing, and
+    that silence is a measured loss: 7 of the 5,327 answers in the owner's
+    capture (2026-10-13) named a key twice in one object -- two list items run
+    together where the model dropped a `},{` -- and in one the story planner's
+    two tool calls became one, the first lost. Read the same, said aloud."""
+    named = []
+
+    def pairs(items):
+        out = {}
+        for key, value in items:
+            if key in out and key not in named:
+                named.append(key)
+            out[key] = value
+        return out
+
+    return json.loads(text, object_pairs_hook=pairs), named
+
+
+def _first_object(text: str):
+    """`(value, start, end, keys)` for the first balanced {...} object in
+    `text` that parses (a trailing comma forgiven): `end` is the index after
+    its closing brace and `keys` those it names twice (`_loads_noting`).
+    None when the first balanced object does not parse, or none closes."""
     start = text.find("{")
     if start == -1:
         return None
@@ -92,12 +121,123 @@ def _extract_balanced_object(text: str):
                 span = text[start:i + 1]
                 for candidate in (span, _without_trailing_commas(span)):
                     try:
-                        value = json.loads(candidate)
+                        value, named = _loads_noting(candidate)
                     except json.JSONDecodeError:
                         continue
-                    return value if isinstance(value, dict) else None
+                    return ((value, start, i + 1, named)
+                            if isinstance(value, dict) else None)
                 return None
     return None
+
+
+#: A quoted key and its colon: the answer's own grammar, not a word.
+_KEY_AHEAD = re.compile(r'"(?:[^"\\]|\\.)*"\s*:')
+
+
+def _answer_goes_on(text: str, end: int) -> bool:
+    """Does the ANSWER carry on after the object that closed at `end`?
+
+    A MODEL THAT CLOSES ITS ANSWER EARLY KEEPS WRITING IT. Measured, Home 10
+    (chat 173, capture 6087, 2026-10-12): after the fourth step of `sequence`
+    the model wrote `}],` where it meant `},{`, so the answer's object closed
+    at character 1138 of 1,841 and the text went on `],"demeanor":...,
+    "tells":...,"changes":...,"note":...,"notebook":[...]}`. Reading the first
+    balanced object took the steps and dropped the rest without a word --
+    `note` empty, the notebook empty -- and the room designer's 5697 and 6055
+    lost their `notes` the same way. Those three are every such answer among
+    the 5,327 captured; the 13 other answers read out of surrounding text are
+    a whole object in prose, or followed by closers or markup, and read as
+    they did.
+
+    The test is the grammar of what follows, never its words: past stray
+    closers, commas and any complete JSON value the early close left behind,
+    the answer goes on when the next thing is a quoted key and its colon --
+    a member of the object that closed too soon -- or JSON that will not
+    parse. Prose, the end of the text, or a string that is no key, and the
+    object stands as the answer, as it always has."""
+    decoder = json.JSONDecoder()
+    i, n = end, len(text)
+    while i < n:
+        ch = text[i]
+        if ch.isspace() or ch in "]},":
+            i += 1
+            continue
+        if ch in "{[":
+            try:
+                _value, i = decoder.raw_decode(text, i)
+            except json.JSONDecodeError:
+                return True
+            continue
+        if ch == '"':
+            return bool(_KEY_AHEAD.match(text, i))
+        return False
+    return False
+
+
+def _duplicate_note(keys):
+    """The read note for keys an object names twice, or ""."""
+    if not keys:
+        return ""
+    return ("the answer names %s twice in one object; the later value stood "
+            "(two of a list's items may have run together)"
+            % ", ".join(repr(k) for k in keys[:4]))
+
+
+def _read_json(text: str):
+    """`(value, notes, goes_on)` for a model's JSON answer, read as every
+    reader of model JSON reads it: whole; else the first object out of the
+    text around it; else the object a restarted answer ends with.
+
+    `notes` say what the read took or left out, for the caller's warnings and
+    capture row; `goes_on` says the first object CLOSED EARLY and more of the
+    answer follows it (`_answer_goes_on`), which a caller mends whole before
+    taking the object as it closed. Raises RuntimeError when nothing reads.
+    """
+    raw = _strip_fences(text)
+    try:
+        value, named = _loads_noting(raw)
+        return value, [n for n in [_duplicate_note(named)] if n], False
+    except json.JSONDecodeError as exc:
+        found = _first_object(raw)
+        if found is not None:
+            value, start, end, named = found
+            goes_on = _answer_goes_on(raw, end)
+            after = raw[end:].lstrip()
+            if goes_on:
+                notes = ["the answer's object closed early, at character "
+                         f"{end} of {len(raw)}, and more of the answer "
+                         "follows it"]
+            else:
+                notes = [f"read the answer's object out of the text around "
+                         f"it ({len(raw) - (end - start)} characters left out"
+                         + ("; the text after it opens with closers that end "
+                            "nothing, so a list or object in it may have "
+                            "closed early" if after[:1] in ("]", "}") else "")
+                         + ")"]
+            dup = _duplicate_note(named)
+            return value, notes + ([dup] if dup else []), goes_on
+        value = _restarted_object(raw)
+        if value is None:
+            raise RuntimeError(
+                "LLM returned invalid JSON: "
+                f"{exc.msg} at position {exc.pos}"
+            ) from exc
+        return value, ["read the object a restarted answer ends with"], False
+
+
+def _mend_texts(raw: str):
+    """The texts a mend is tried on: the answer as the parser reads it (fence
+    off), then -- where prose stands around it -- the answer's own region,
+    its first brace to its last. A preamble is prose and no edit to brackets
+    reads prose, so a broken answer behind "Here is the beat:" went to a
+    model rebuild that is handed the broken text and copies its slips."""
+    text = _strip_fences(raw)
+    yield text, None
+    a, b = text.find("{"), text.rfind("}")
+    if a != -1 and b > a and (a > 0 or b < len(text) - 1):
+        yield text[a:b + 1], ("read from its first brace to its last, leaving "
+                              f"out {len(text) - (b + 1 - a)} characters of "
+                              "text around it")
 
 
 def _restarted_object(text: str):
@@ -239,19 +379,19 @@ def json_failure_diagnosis(raw: str, *, max_tokens=None) -> str:
 
 
 def strict_json_parse(text: str) -> dict:
-    raw = _strip_fences(text)
-
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        value = _extract_balanced_object(raw)
-        if value is None:
-            value = _restarted_object(raw)
-        if value is None:
-            raise RuntimeError(
-                "LLM returned invalid JSON: "
-                f"{exc.msg} at position {exc.pos}"
-            ) from exc
+    """One JSON object out of a model's answer (`_read_json`), for every
+    caller outside the repair ladder. An answer whose object closed early and
+    goes on is read WHOLE where its brackets mend (`llm/json_mend.py`), else
+    the object stands as it closed -- what this returned before 2026-10-13,
+    so no caller is worse off than it was."""
+    value, _notes, goes_on = _read_json(text)
+    if goes_on:
+        from llm.json_mend import mend_candidates
+        for candidate, _note in _mend_texts(text):
+            mended = next(iter(mend_candidates(candidate)), None)
+            if mended is not None:
+                value = mended[0]
+                break
 
     if not isinstance(value, dict):
         raise RuntimeError(
@@ -277,7 +417,16 @@ def _parse_whole(raw: str) -> dict:
     and the truncation witness says it ran out of room, nothing salvaged
     from it is taken: the re-ask with room is the remedy.
     """
-    value = strict_json_parse(raw)
+    value, _notes, _goes_on = _read_json(raw)
+    _refuse_cut_salvage(raw)
+    if not isinstance(value, dict):
+        raise RuntimeError("LLM output must be one JSON object")
+    return value
+
+
+def _refuse_cut_salvage(raw: str):
+    """Raise when `raw` ran out of room and does not parse whole: anything
+    read out of it is a fragment (`_parse_whole`)."""
     if output_ran_out_of_room(raw):
         try:
             json.loads(_strip_fences(raw))
@@ -285,7 +434,47 @@ def _parse_whole(raw: str) -> dict:
             raise RuntimeError(
                 "LLM returned a cut-off answer; what parsed out of it is a "
                 "fragment, not the answer") from None
-    return value
+
+
+def _read_answer(step_key, raw, payload=None):
+    """`(parsed, error, notes, mended)`: how EVERY RUNG OF THE LADDER reads
+    its answer -- the first attempt, each re-ask, the rebuild, each fallback
+    candidate and the fresh ask alike (2026-10-13).
+
+    `_parse_whole`'s read, and then: an answer whose object CLOSED EARLY and
+    goes on (`_answer_goes_on`) is mended whole against the step's schema
+    (`_mended`) before the object is taken as it closed. Home 10's Tamamo
+    lost her note, her notebook, her tells and her demeanor to a `}],` that
+    meant `},{`, and the rungs after the first lifted the same object the
+    same way. Where no mend reads it whole, the object stands as it closed,
+    as it did before -- with the loss said, never silent. `notes` are said
+    as the step's warnings here and go on the call's capture row; `mended`
+    says the answer that stands was mended. `error` is set, and `parsed`
+    empty, when nothing reads."""
+    try:
+        value, notes, goes_on = _read_json(raw)
+        _refuse_cut_salvage(raw)
+    except Exception as exc:
+        return {}, str(exc), [], False
+    mended = False
+    if goes_on:
+        # Only a mend the step's schema accepts replaces the object as it
+        # closed: a mend that merely parses may have put a member in the
+        # wrong place, and the object as it closed is what stood before.
+        found = _mended(step_key, raw, payload)
+        if found is not None and found[1].valid:
+            value, mended = found[0], True
+            notes = notes + ["read whole by mending its JSON locally ("
+                             + "; ".join(found[2]) + "); no model call"]
+        else:
+            notes = notes + ["no local mend reads it whole, so the object "
+                             "stands as it closed and the rest is left out"]
+    if not isinstance(value, dict):
+        return {}, "LLM output must be one JSON object", [], False
+    for note in notes:
+        note_step_warning(f"{step_key}: {note}")
+    return value, None, notes, mended
+
 
 # --- The cheap rung: patch the fields that failed, not the whole beat -------
 
@@ -436,6 +625,10 @@ def _targeted_field_patch(parsed, errors, *, validate=None):
 #: after the call returns, on the same thread: one of
 #:   first           the request's own answer
 #:   mended          that answer with its brackets mended locally, no call
+#:                   -- an answer whose object closed early and was read
+#:                   whole included (`_read_answer`); a re-ask, rebuild or
+#:                   fallback read whole that way keeps its own name, and
+#:                   the step's warnings say it was mended
 #:   stall_reask     the request asked again after an empty object
 #:   room_reask      asked again with more room after a cut answer
 #:   runaway_reask   asked again at the same budget after a runaway
@@ -599,7 +792,7 @@ def _step_json_schema(step_key: str):
 
 
 def note_provider_exchange(*, role, system, payload, response, ok,
-                           started, error=""):
+                           started, error="", read_notes=()):
     """Record ONE provider call for the debug capture: what was actually sent
     on that call, what came back, and whether it stood.
 
@@ -623,8 +816,17 @@ def note_provider_exchange(*, role, system, payload, response, ok,
     swallowed. No-op outside a step; the sink is armed on every step, so the
     debug-capture setting gates the WRITE (`llm_capture.record_exchange`) and
     not this funnel.
+
+    `read_notes` are what the read of `response` took or left out
+    (`_read_answer`), set AFTER `error` as `read: ...` -- the field is cut at
+    400 characters, and why a row failed comes first. A row that said ok with
+    an empty error while the read had dropped half the answer (capture 6087)
+    recorded the one thing that was not true about it.
     """
     try:
+        if read_notes:
+            read = "read: " + "; ".join(read_notes)
+            error = (str(error) + " -- " + read) if error else read
         from core.pipeline_context import note_step_exchange
         from llm import providers
         from llm.providers import last_reasoning
@@ -673,12 +875,14 @@ def _mended(step_key, raw, payload):
     from llm.json_mend import mend_candidates
 
     first = None
-    for value, edits in mend_candidates(_strip_fences(raw)):
-        report = validate_llm_output_strict(step_key, value, source_payload=payload)
-        if report.valid:
-            return value, report, edits
-        if first is None:
-            first = (value, report, edits)
+    for text, region in _mend_texts(raw):
+        for value, edits in mend_candidates(text):
+            edits = ([region] if region else []) + list(edits)
+            report = validate_llm_output_strict(step_key, value, source_payload=payload)
+            if report.valid:
+                return value, report, edits
+            if first is None:
+                first = (value, report, edits)
     return first
 
 
@@ -711,10 +915,11 @@ def _bare_prose_answer(step_key, raw):
     return {"prose": text}
 
 
-def _parse_or_bare(step_key, raw):
-    """`(parsed, error)`: the answer parsed whole, or -- where it does not
-    parse -- the bare-prose page a prose step may answer with
-    (`_bare_prose_answer`), read exactly as the first attempt reads it.
+def _parse_or_bare(step_key, raw, payload=None):
+    """`(parsed, error, notes)`: the answer read as every rung reads it
+    (`_read_answer`), or -- where it does not parse -- the bare-prose page a
+    prose step may answer with (`_bare_prose_answer`), read exactly as the
+    first attempt reads it. `notes` go on the call's capture row.
 
     EVERY ASKING OF THE SAME REQUEST READS ITS ANSWER THE SAME WAY. The
     runaway or escalation re-ask, the empty-object stall re-ask and the
@@ -722,16 +927,16 @@ def _parse_or_bare(step_key, raw):
     the first attempt would have taken as bare prose -- which GLM 5.2
     thinking wrote on 4 of 13 first answers -- failed the beat when it came
     back on a re-ask (review of the 2026-10-08 landing)."""
-    try:
-        return _parse_whole(raw), None
-    except Exception as exc:
-        bare = _bare_prose_answer(step_key, raw)
-        if bare is not None:
-            note_step_warning(
-                f"{step_key}: the answer came as bare prose without its JSON "
-                "envelope; the prose is the answer")
-            return bare, None
-        return {}, str(exc)
+    parsed, error, notes, _mended_read = _read_answer(step_key, raw, payload)
+    if error is None:
+        return parsed, None, notes
+    bare = _bare_prose_answer(step_key, raw)
+    if bare is not None:
+        note_step_warning(
+            f"{step_key}: the answer came as bare prose without its JSON "
+            "envelope; the prose is the answer")
+        return bare, None, []
+    return {}, error, []
 
 
 #: The response format of a rung that rebuilds a broken answer -- the
@@ -1123,11 +1328,10 @@ def complete_validated_json(
 
     parse_error = None
 
-    try:
-        parsed = _parse_whole(raw)
-    except Exception as exc:
+    parsed, parse_error, read_notes, read_mended = _read_answer(
+        step_key, raw, payload)
+    if parse_error is not None:
         parsed = {}
-        parse_error = str(exc)
         bare = None if provider_errored else _bare_prose_answer(step_key, raw)
         if bare is not None:
             parsed, parse_error = bare, None
@@ -1162,7 +1366,8 @@ def complete_validated_json(
         note_provider_exchange(
             role=role, system=_sent_system, payload=_sent, response=raw,
             ok=bool(report.valid), started=_capture_t0,
-            error="" if report.valid else "; ".join(report.errors[:3]))
+            error="" if report.valid else "; ".join(report.errors[:3]),
+            read_notes=read_notes)
 
     # A BROKEN ANSWER IS MENDED HERE, BEFORE A MODEL IS ASKED
     # (`llm/json_mend.py`): its brackets and a key's quotes, never a value and
@@ -1213,10 +1418,8 @@ def complete_validated_json(
         note_step_warning(
             "llm second call: empty-object reply treated as a stall; "
             f"re-asked the original request ({time.monotonic() - _t0:.1f}s)")
-        try:
-            again_parsed = _parse_whole(again)
-        except Exception:
-            again_parsed = None
+        again_parsed, _again_error, again_notes, _ = _read_answer(
+            step_key, again, payload)
         _asked_system, _asked_payload = _same_request_record()
         if isinstance(again_parsed, dict) and again_parsed:
             again_report = validate_llm_output_strict(
@@ -1225,7 +1428,8 @@ def complete_validated_json(
                 role=role, system=_asked_system, payload=_asked_payload,
                 response=again, ok=bool(again_report.valid), started=_wall0,
                 error="" if again_report.valid
-                else "; ".join(again_report.errors[:3]))
+                else "; ".join(again_report.errors[:3]),
+                read_notes=again_notes)
             if again_report.valid:
                 return _accepted(again_report, "stall_reask")
         else:
@@ -1236,7 +1440,7 @@ def complete_validated_json(
         return _accepted(report)
 
     if report.valid:
-        return _accepted(report)
+        return _accepted(report, "mended" if read_mended else "first")
 
     previous_raw = raw
     previous_parsed = parsed
@@ -1331,7 +1535,8 @@ def complete_validated_json(
                        f"once with {token_ceiling} tokens")
                     + f" ({time.monotonic() - _t0:.1f}s)")
                 max_tokens = _budget
-                parsed, parse_error = _parse_or_bare(step_key, raw)
+                parsed, parse_error, read_notes = _parse_or_bare(
+                    step_key, raw, payload)
                 # The re-ask's own answer is a rung like any other: one that
                 # comes back malformed, and not cut again, earns the fresh
                 # ask below exactly as the stall re-ask's and the rebuild's
@@ -1358,7 +1563,8 @@ def complete_validated_json(
                     role=role, system=_asked_system, payload=_asked_payload,
                     response=raw, ok=bool(report.valid), started=_wall0,
                     error=("" if report.valid
-                           else "; ".join(report.errors[:3])))
+                           else "; ".join(report.errors[:3])),
+                    read_notes=read_notes)
 
                 if report.valid:
                     return _accepted(report, "runaway_reask" if ran_away
@@ -1420,7 +1626,8 @@ def complete_validated_json(
             note_step_warning(
                 "llm second call: empty-object reply treated as a stall; "
                 f"re-asked the original request ({time.monotonic() - _t0:.1f}s)")
-            previous_parsed, parse_error = _parse_or_bare(step_key, previous_raw)
+            previous_parsed, parse_error, read_notes = _parse_or_bare(
+                step_key, previous_raw, payload)
             malformed_seen = malformed_seen or (
                 parse_error is not None
                 and not output_ran_out_of_room(previous_raw))
@@ -1437,7 +1644,8 @@ def complete_validated_json(
                 role=role, system=_asked_system, payload=_asked_payload,
                 response=previous_raw, ok=bool(report.valid),
                 started=_wall0,
-                error="" if report.valid else "; ".join(report.errors[:3]))
+                error="" if report.valid else "; ".join(report.errors[:3]),
+                read_notes=read_notes)
             if report.valid:
                 return _accepted(report, "stall_reask")
 
@@ -1545,15 +1753,11 @@ def complete_validated_json(
 
         ran_out_of_room = output_ran_out_of_room(previous_raw)
 
-        try:
-            previous_parsed = _parse_whole(
-                previous_raw
-            )
-            parse_error = None
+        previous_parsed, parse_error, read_notes, _ = _read_answer(
+            step_key, previous_raw, payload)
+        if parse_error is None:
             any_parsed = True
-        except Exception as exc:
-            previous_parsed = {}
-            parse_error = str(exc)
+        else:
             malformed_seen = malformed_seen or not ran_out_of_room
 
         report = validate_llm_output_strict(
@@ -1569,7 +1773,8 @@ def complete_validated_json(
         note_provider_exchange(
             role=role, system=_repair_system, payload=repair_payload,
             response=previous_raw, ok=bool(report.valid), started=_wall0,
-            error="" if report.valid else "; ".join(report.errors[:3]))
+            error="" if report.valid else "; ".join(report.errors[:3]),
+            read_notes=read_notes)
 
         if report.valid:
             kept, pruned = _unshrunk(step_key, _original, _original_errors,
@@ -1642,18 +1847,16 @@ def complete_validated_json(
 
         ran_out_of_room = output_ran_out_of_room(fallback_raw)
 
-        try:
-            fallback_parsed = _parse_whole(
-                fallback_raw
-            )
-        except Exception as exc:
-            report.errors.append(str(exc))
-            parse_error = str(exc)
+        fallback_parsed, fallback_error, read_notes, _ = _read_answer(
+            step_key, fallback_raw, payload)
+        if fallback_error is not None:
+            report.errors.append(fallback_error)
+            parse_error = fallback_error
             malformed_seen = malformed_seen or not ran_out_of_room
             note_provider_exchange(
                 role=role, system=_fallback_system, payload=fallback_payload,
                 response=fallback_raw, ok=False, started=_wall0,
-                error=str(exc))
+                error=fallback_error)
             continue
         parse_error = None
         any_parsed = True
@@ -1669,7 +1872,8 @@ def complete_validated_json(
             response=fallback_raw, ok=bool(fallback_report.valid),
             started=_wall0,
             error=("" if fallback_report.valid
-                   else "; ".join(fallback_report.errors[:3])))
+                   else "; ".join(fallback_report.errors[:3])),
+            read_notes=read_notes)
 
         if fallback_report.valid:
             kept, pruned = _unshrunk(step_key, _original, _original_errors,
@@ -1758,7 +1962,8 @@ def complete_validated_json(
                 f"llm second call: {_fresh_why}; asked the original request "
                 f"afresh{' with varied sampling' if _varied else ''} "
                 f"({step_key}, {time.monotonic() - _t0:.1f}s)")
-            fresh_parsed, fresh_error = _parse_or_bare(step_key, fresh)
+            fresh_parsed, fresh_error, read_notes = _parse_or_bare(
+                step_key, fresh, payload)
             fresh_report = validate_llm_output_strict(
                 step_key, fresh_parsed, source_payload=payload)
             if fresh_error:
@@ -1773,7 +1978,8 @@ def complete_validated_json(
                 ok=bool(fresh_report.valid) and not stalled, started=_wall0,
                 error="empty object" if stalled
                 else "" if fresh_report.valid
-                else "; ".join(fresh_report.errors[:3]))
+                else "; ".join(fresh_report.errors[:3]),
+                read_notes=read_notes)
             if stalled:
                 break
             if fresh_report.valid:

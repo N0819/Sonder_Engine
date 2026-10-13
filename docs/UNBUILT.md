@@ -205,6 +205,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.196 — One fresh attempt before a malformed beat aborts: what it leaves (2026-10-09)](UNBUILT_PIPELINE.md#unbuilt-1-196)
 - [§1.207 — Prose the world does not hold (2026-10-12)](UNBUILT_PIPELINE.md#unbuilt-1-207)
 - [§1.208 — Two frames, a lagging station, a full mind (2026-10-12)](UNBUILT_PIPELINE.md#unbuilt-1-208)
+- [§1.214 — An answer is never cut at its first brace — built 2026-10-13, residuals open](UNBUILT_PIPELINE.md#unbuilt-1-214)
 
 **2. Roadmap**
 

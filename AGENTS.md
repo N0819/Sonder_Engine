@@ -304,6 +304,14 @@ before entering field/full repair and configured fallbacks. An answer that
 does not parse and did not run out of room is first mended locally
 (`llm/json_mend.py`: brackets, commas and a key's quotes, never a value, and
 never closing a cut-off answer), and a mend is used only if it validates.
+An answer whose object CLOSED EARLY and goes on after it (`llm_quality.
+_answer_goes_on`: past stray closers, commas and complete values, a quoted
+key and its colon) is mended whole -- the text, then its first brace to its
+last -- on every rung (`_read_answer`) and for every caller outside the ladder
+(`strict_json_parse`), before the object is taken as it closed; where no mend
+reads it whole the object stands as before and the loss is said. A key an
+object names twice is said too, on the step's warnings and the capture row's
+`error` (`read: ...`, after the reason a row failed).
 A failure with a malformed answer in it -- nothing parsed (not the mend, not the rebuild, not a fallback), or any rung's answer that came back malformed and was not cut for room: the first answer, the re-ask with room, the stall re-ask, the rebuild, a fallback (the owner's D5, 2026-10-09) -- is asked for afresh, as the original request with its own sheet and sampler, `MALFORMED_REASKS` (1) times before the stage fails -- unless the request's OWN answer was cut for room (`_original_cut`; a rebuild or a fallback cut for room does not count); a content failure whose every answer parsed is the repair rungs' alone. The rebuild is handed the broken text and copies its slips (turn 4601). The mend also closes an object left open before its next sibling. Every accepted answer names its attempt in `llm_quality.answered_by` (`_accepted(report, rung)`; `first_pruned` when `_unshrunk` keeps the first answer over a thinner repair -- it returns which answer it kept); the encoder files it as `prose_contract.encoder.attempt`, and a widened encoder request that fails to the end keeps the first answer (`widen_failed`) instead of aborting the beat.
 A length stop is escalated only when thinking could have crowded the answer out (`providers.answer_ran_away`). The provider's own finish reason and reasoning-token count ride `providers.last_output_spend` (written by `_log_usage`, cleared at every completion's start). When the answer -- the output the provider did not count as reasoning -- is at least `RUNAWAY_ANSWER_SHARE` (0.5) of the spend AND strictly longer than one stage's worth (`_ESCALATION_HEADROOM`, widened by the pack's `output_token_scale`), the answer ran away, and `complete_validated_json` asks it again once at its own budget, never with more room. A provider that splits nothing out, and every stop at or under one stage's worth, escalates as before. Measured: Brackwater capture 6416, a 50,000-token `<fragment>` loop re-asked at 70,000 and answered in 10,893 tokens.
 
