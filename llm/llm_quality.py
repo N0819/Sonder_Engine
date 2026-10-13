@@ -74,9 +74,11 @@ def _loads_noting(text: str):
     """`(value, keys)`: `text` parsed, and every key some object in it NAMES
     TWICE, in the order met. JSON keeps the later value and says nothing, and
     that silence is a measured loss: 7 of the 5,327 answers in the owner's
-    capture (2026-10-13) named a key twice in one object -- two list items run
-    together where the model dropped a `},{` -- and in one the story planner's
-    two tool calls became one, the first lost. Read the same, said aloud."""
+    capture (2026-10-13) named a key twice in one object. In 3858 the story
+    planner's one `calls` item held four tool/args pairs -- four calls run
+    together, three lost -- and 2391 swallowed a `},{` into a key; the rest
+    repeat a key far apart, echo a schema, or are degenerate output. Read the
+    same, said aloud."""
     named = []
 
     def pairs(items):
@@ -165,8 +167,14 @@ def _answer_goes_on(text: str, end: int) -> bool:
         if ch in "{[":
             try:
                 _value, i = decoder.raw_decode(text, i)
-            except json.JSONDecodeError:
-                return True
+            except json.JSONDecodeError as exc:
+                # JSON that will not parse goes on; an aside in brackets --
+                # `[End of narration]`, `{placeholder}` -- fails at its first
+                # character and does not.
+                first = i + 1
+                while first < n and text[first].isspace():
+                    first += 1
+                return exc.pos > first
             continue
         if ch == '"':
             return bool(_KEY_AHEAD.match(text, i))
@@ -381,17 +389,27 @@ def json_failure_diagnosis(raw: str, *, max_tokens=None) -> str:
 def strict_json_parse(text: str) -> dict:
     """One JSON object out of a model's answer (`_read_json`), for every
     caller outside the repair ladder. An answer whose object closed early and
-    goes on is read WHOLE where its brackets mend (`llm/json_mend.py`), else
-    the object stands as it closed -- what this returned before 2026-10-13,
-    so no caller is worse off than it was."""
-    value, _notes, goes_on = _read_json(text)
+    goes on is read where its brackets mend (`llm/json_mend.py`) -- the first
+    mend that parses, since no step's schema is in hand here to choose by --
+    else the object stands as it closed, what this returned before
+    2026-10-13, so no caller is worse off than it was. Either way the read is
+    said (a step's warnings, or the log)."""
+    value, notes, goes_on = _read_json(text)
     if goes_on:
         from llm.json_mend import mend_candidates
+        read = "no local mend reads it whole, so the object stands as it closed"
         for candidate, _note in _mend_texts(text):
             mended = next(iter(mend_candidates(candidate)), None)
             if mended is not None:
                 value = mended[0]
+                read = "read by mending its JSON locally (%s)" % "; ".join(mended[1])
                 break
+        # Said where a step is listening, and to the log where none is (the
+        # Room's calls are not steps); a prose-wrapped answer stays quiet.
+        from core.logging_utils import logger
+        for note in notes + [read]:
+            note_step_warning(f"json read: {note}")
+        logger.info("json read: %s", "; ".join(notes + [read])[:400])
 
     if not isinstance(value, dict):
         raise RuntimeError(
@@ -401,9 +419,10 @@ def strict_json_parse(text: str) -> dict:
     return value
 
 
-def _parse_whole(raw: str) -> dict:
-    """`strict_json_parse`, refusing what salvage reads out of a CUT-OFF
-    answer. Every parse of the repair ladder goes through here.
+def _refuse_cut_salvage(raw: str):
+    """Raise when `raw` ran out of room and does not parse whole: anything
+    read out of it is a fragment, not the answer. Every rung of the repair
+    ladder asks this (`_read_answer`).
 
     Salvage exists for an answer that is whole but wrapped -- in prose, or
     after a restarted fragment -- and reads the object that runs to the end
@@ -415,18 +434,7 @@ def _parse_whole(raw: str) -> dict:
     the beat's encoding was lost without a word -- the check-and-repair pass
     rebuilt it from the prose. So when the text as a whole does not parse
     and the truncation witness says it ran out of room, nothing salvaged
-    from it is taken: the re-ask with room is the remedy.
-    """
-    value, _notes, _goes_on = _read_json(raw)
-    _refuse_cut_salvage(raw)
-    if not isinstance(value, dict):
-        raise RuntimeError("LLM output must be one JSON object")
-    return value
-
-
-def _refuse_cut_salvage(raw: str):
-    """Raise when `raw` ran out of room and does not parse whole: anything
-    read out of it is a fragment (`_parse_whole`)."""
+    from it is taken: the re-ask with room is the remedy."""
     if output_ran_out_of_room(raw):
         try:
             json.loads(_strip_fences(raw))
@@ -441,7 +449,8 @@ def _read_answer(step_key, raw, payload=None):
     its answer -- the first attempt, each re-ask, the rebuild, each fallback
     candidate and the fresh ask alike (2026-10-13).
 
-    `_parse_whole`'s read, and then: an answer whose object CLOSED EARLY and
+    `_read_json`'s read, refused when the answer was cut for room
+    (`_refuse_cut_salvage`), and then: an answer whose object CLOSED EARLY and
     goes on (`_answer_goes_on`) is mended whole against the step's schema
     (`_mended`) before the object is taken as it closed. Home 10's Tamamo
     lost her note, her notebook, her tells and her demeanor to a `}],` that
@@ -461,11 +470,29 @@ def _read_answer(step_key, raw, payload=None):
         # Only a mend the step's schema accepts replaces the object as it
         # closed: a mend that merely parses may have put a member in the
         # wrong place, and the object as it closed is what stood before.
-        found = _mended(step_key, raw, payload)
+        # Validating the candidates is how one is chosen; the caller
+        # validates the one that stands, and says its warnings once.
+        from core.pipeline_context import current_warning_sink
+        _quiet = current_warning_sink.set(None)
+        try:
+            found = _mended(step_key, raw, payload)
+        finally:
+            current_warning_sink.reset(_quiet)
         if found is not None and found[1].valid:
             value, mended = found[0], True
-            notes = notes + ["read whole by mending its JSON locally ("
-                             + "; ".join(found[2]) + "); no model call"]
+            # A lenient schema ignores a key it has no field for, so a mend
+            # that left a slipped list item's members at the top level still
+            # validates -- capture 6087's fifth step. Say what it cost
+            # (review of 2026-10-13).
+            output = found[1].output if isinstance(found[1].output, dict) else {}
+            left = [k for k in value if k not in output]
+            notes = notes + [
+                ("read by mending its JSON locally (" if left
+                 else "read whole by mending its JSON locally (")
+                + "; ".join(found[2]) + "); no model call"
+                + ("; left out %s, which the answer's top level has no field "
+                   "for -- a list item may have closed early"
+                   % ", ".join(repr(k) for k in left[:4]) if left else "")]
         else:
             notes = notes + ["no local mend reads it whole, so the object "
                              "stands as it closed and the rest is left out"]

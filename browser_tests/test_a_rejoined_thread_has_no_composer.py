@@ -60,11 +60,19 @@ def test_a_rejoined_threads_composer_says_it_has_ended(page: Page, ui_base_url: 
     expect(page.locator("#input")).to_be_disabled()
     expect(page.locator("#send")).to_be_disabled()
     expect(page.locator("#input")).to_have_attribute(
-        "placeholder", "This thread has rejoined the frame it split from. Switch back to play on.")
+        "placeholder", "This thread has ended. Switch to another thread to play on.")
 
     page.evaluate("() => switchFrame(null)")
     expect(page.locator("#input")).to_be_enabled()
     expect(page.locator("#send")).to_be_enabled()
     expect(page.locator("#input")).not_to_have_attribute(
-        "placeholder", "This thread has rejoined the frame it split from. Switch back to play on.")
+        "placeholder", "This thread has ended. Switch to another thread to play on.")
+
+    # ...and a story closed while the ended thread was showing leaves no
+    # dead composer behind (review of 2026-10-13)
+    page.evaluate("() => switchFrame(12)")
+    expect(page.locator("#input")).to_be_disabled()
+    page.evaluate("() => { S.chat = null; renderChat(); }")
+    expect(page.locator("#input")).to_be_enabled()
+    expect(page.locator("#send")).to_be_enabled()
     assert not errors, errors

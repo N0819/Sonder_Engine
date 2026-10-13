@@ -145,7 +145,10 @@ class TestEveryRungReadsItWhole:
         assert len(llm.calls) == 1, "no model call buys it back"
         assert llm_quality.answered_by.get() == "mended"
         assert any("closed early" in w for w in warnings)
-        assert any("read whole by mending" in w for w in warnings)
+        # the slipped step's members land at the top level, where the schema
+        # has no field for them: said, never "read whole" (review 2026-10-13)
+        assert any("read by mending" in w and "left out 'ponder', 'why'" in w for w in warnings)
+        assert not any("read whole" in w for w in warnings)
         # it stood, and its row says how it was read -- the row for 6087 said
         # ok with an empty error while the read had dropped half the answer
         (row,) = rows
@@ -190,6 +193,27 @@ class TestEveryRungReadsItWhole:
         assert len(llm.calls) == 1
         assert any("rest is left out" in w for w in warnings)
         assert "left out" in rows[0]["error"], "the row no longer says nothing"
+
+
+class TestWhatAMendCannotPlaceIsSaid:
+    def test_a_mend_with_nothing_left_over_reads_whole(self, monkeypatch, seen):
+        warnings, _rows = seen
+        whole_slip = ('{"want": "to be heard", "sequence": [' + STEPS + ']}], ' + REST + '}')
+        _ladder(monkeypatch, [whole_slip])
+        assert _run()["note"] == "kept"
+        assert any("read whole by mending" in w for w in warnings)
+
+    def test_candidates_that_lost_say_nothing_and_the_one_that_stood_says_it_once(
+            self, monkeypatch, seen):
+        warnings, _rows = seen
+        _ladder(monkeypatch, [SLIP])
+        _run()
+        pruned = [w for w in warnings if "pruned" in w]
+        assert len(pruned) == len(set(pruned)), pruned
+
+    @pytest.mark.parametrize("aside", ["[End of narration]", "{placeholder for summary}"])
+    def test_an_aside_in_brackets_after_the_answer_is_not_more_of_it(self, aside):
+        assert not llm_quality._read_json('{"prose": "<p>x</p>"}\n\n' + aside)[2]
 
 
 class TestAKeyNamedTwiceIsSaid:

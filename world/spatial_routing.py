@@ -456,11 +456,12 @@ def attended_rooms(scene: dict, centers, *, hops: int = 1, names=(),
       no barrier allowlist -- a room behind a locked door, or beyond a window,
       is still a room the beat may be about). `agents/common._contextual_rooms`
       is this plus the walk over cast rows.
-    * THE CAUSALITY BUBBLE (`walked=True`) walks the story's radius in ROOMS
-      WALKED (`rooms_walked_within`: only a way a body takes, a whole stair
-      one room), because it asks whether two people are near enough to be one
-      story (owner, 2026-10-13). `spatial_bubbles.bubble_reach` is the one
-      caller.
+    * THE CAUSALITY BUBBLE (`walked=True`) walks the story's radius
+      (`rooms_walked_within`: a step is an edge two people are together
+      across -- a way a body takes or a voice carries at full -- and a whole
+      stair is one room), because it asks whether two people are near enough
+      to be one story (owner, 2026-10-13). `spatial_bubbles.bubble_reach` is
+      the one caller.
 
     They used to be one walk, and the docstring here said what the Director
     is shown and what the engine calls in range "cannot drift apart". What
@@ -713,9 +714,10 @@ def rooms_walked_within(scene: dict, center_room_ids, radius: int) -> dict:
       a way an ordinary voice carries at full (`spatial_senses.
       _SOUND_WALK_BARRIERS`: bars, which a prisoner talks face to face
       through; an overlook, a gallery called down from), a link that admits
-      a named body, and a thing's own way out of its inside whatever that is
-      made of -- a shut glass lid or a barred cage door is a hatch, though
-      `spatial_transit` writes it `window` or `bars`. Never a window between
+      a named body, and a thing's own way out of its inside onto where the
+      thing stands, whatever that is made of -- a shut glass lid or a barred
+      cage door is a hatch, though `spatial_transit` writes it `window` or
+      `bars`. Never a window between
       two rooms, or a wall: seen through, or heard muffled, is not together.
       Home 9 (chat 172) had the garden one edge from a second-storey bedroom
       through the window the layout tier made, and six rooms walked. A SHUT
@@ -763,19 +765,33 @@ def rooms_walked_within(scene: dict, center_room_ids, radius: int) -> dict:
         for there in theres:
             join(str(here), str(there))
     # A thing's own way out of its inside, whatever it is made of: the one
-    # doorway `spatial_transit` derives from where the thing stands, which a
-    # thing under way has none of -- so a ship's record of the room it left
-    # is never walked.
+    # doorway `spatial_transit` derives, onto the room the thing stands in --
+    # or, for a thing the scene does not place, the shut lid its enclosure
+    # writes (`_closed_enclosure_barrier`). Any other edge from an inside --
+    # a porthole the Director drew onto a rock -- is judged as every edge is
+    # (review of 2026-10-13); a thing under way has no such doorway.
+    from world.spatial_identity import room_of_record
+    from world.spatial_transit import _closed_enclosure_barrier
+
+    entities = (scene or {}).get("entities") or {}
     for rid, room in rooms.items():
         holder = str((room or {}).get("parent_entity") or "") \
             if isinstance(room, dict) else ""
         if not holder:
             continue
+        ent = entities.get(holder) if isinstance(entities, dict) else None
+        ent = ent if isinstance(ent, dict) else {}
+        where = room_of_record(scene, holder, ent)
         for edge in room.get("adjacent") or []:
-            target = str(edge.get("to") or "") if isinstance(edge, dict) else ""
+            if not isinstance(edge, dict) or edge.get("via_link"):
+                continue
+            target = str(edge.get("to") or "")
             other = rooms.get(target)
-            if target and not (isinstance(other, dict)
-                               and str(other.get("parent_entity") or "") == holder):
+            if not target or (isinstance(other, dict)
+                              and str(other.get("parent_entity") or "") == holder):
+                continue
+            if (target == str(where)) if where else (
+                    normalize_barrier(edge.get("barrier")) == _closed_enclosure_barrier(ent)):
                 join(str(rid), target)
     limit = max(0, int(radius))
     dist = {str(r): 0 for r in (center_room_ids or ()) if r}

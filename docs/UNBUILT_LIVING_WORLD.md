@@ -2523,11 +2523,17 @@ walked, a stair one) and comes back inside it. What that does not reach:
 - **A rejoin can catch a bubble's beat mid-run.** The parent's merge before
   its beat can land while that bubble's own scheduled beat is running; the
   beat's commit is then refused whole (`persist.commit.
-  _refuse_an_ended_frame`) -- nothing of it lands where nobody reads, and
-  nothing of it lands at all: what she did in that beat is not lived. Its
-  turn row stays, uncommitted, in the frame that ended. The same holds for a
-  sibling absorbed while its beat ran. What is running in a story is Home
-  10's item 6 (`docs/experiments/OBSERVE_2026_10_13_home10.md`, §1.215).
+  _refuse_an_ended_frame`) and the beat discarded (`offscreen_beat.
+  _discard_refused_beat`) -- nothing of it lands, so what she did in that
+  beat is not lived. The same holds for a sibling absorbed while its beat
+  ran. A beat somebody TYPED that is refused this way stays, uncommitted, in
+  the frame that ended; it cannot be recomputed (`_require_latest`) and
+  nothing deletes it yet. What is running in a story is Home 10's item 6
+  (`docs/experiments/OBSERVE_2026_10_13_home10.md`, §1.215).
+- **A typed beat not yet landed holds its frame open** (`spatial_frames.
+  _typed_beat_open`): a party that has reunited stays split while a typed
+  turn in its frame is unfinished -- a failed one included, until it is
+  resumed or deleted.
 - **A beat a host types into a bubble's frame still merges it from its own
   commit**, and a merge from there can still be overwritten by a beat the
   parent is running at the same moment -- two people, or two tabs, playing

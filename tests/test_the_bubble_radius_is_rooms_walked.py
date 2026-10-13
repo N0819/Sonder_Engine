@@ -208,15 +208,55 @@ class TestAStepIsAnEdgeTwoPeopleAreTogetherAcross:
         scene = {"rooms": rooms, "positions": {"Hinami": "gallery", "Tamamo": "court"}}
         assert _decide(scene, radius=1) is None
 
-    def test_a_things_own_way_out_is_a_step_whatever_it_is_made_of(self):
-        """A shut glass jar on the study table: `spatial_transit` writes its
-        hatch `window`, and the body in it is in the study all the same."""
-        rooms = {"study": {"adjacent": []},
+    def _jar(self, **positions):
+        """A shut glass jar on the study table, as `spatial_transit` writes
+        it: its hatch onto the room it stands in is a `window`."""
+        rooms = {"study": {"adjacent": [_edge("rock", "open")]},
+                 "rock": {"adjacent": []},
                  "jar_inside": {"parent_entity": "glass_jar",
-                                "adjacent": [_edge("study", "window")]}}
-        scene = {"rooms": rooms, "entities": {"glass_jar": {"kind": "object"}},
-                 "positions": {"Hinami": "jar_inside", "Tamamo": "study"}}
+                                "adjacent": [_edge("study", "window"),
+                                             _edge("rock", "window")]}}
+        jar = {"kind": "object", "enclosure": "transparent", "state": {"hatch": "closed"}}
+        return {"rooms": rooms, "entities": {"glass_jar": jar},
+                "positions": dict({"glass_jar": "study"}, **positions)}
+
+    def test_a_things_own_way_out_is_a_step_whatever_it_is_made_of(self):
+        scene = self._jar(Hinami="jar_inside", Tamamo="study")
         assert _decide(scene, radius=1) is None
+
+    def test_any_other_window_out_of_an_inside_is_no_step(self):
+        """A porthole the Director drew onto a rock is a window like any other
+        (review of 2026-10-13): only the hatch onto where the thing stands is
+        the thing's own way out."""
+        from world.spatial import rooms_walked_within
+        scene = self._jar()
+        assert "jar_inside" in rooms_walked_within(scene, {"study"}, 1)
+        assert "jar_inside" not in rooms_walked_within(scene, {"rock"}, 1)
+
+    def test_a_vessel_arriving_where_nothing_is_built_keeps_no_door_onto_the_port_it_left(self):
+        """`arriving` with no room yet, after `settle_departures` took it from
+        the port: the doorway onto the port stood open behind it, walked by
+        the range and by a body stepping off at sea (review of 2026-10-13)."""
+        from world.spatial import merge_scene_with_diff, rooms_walked_within
+        for enclosure, hatch in ((None, None), ("transparent", "closed")):
+            ship = {"name": "The Grebe", "kind": "vehicle", "interior_rooms": ["ship_deck"],
+                    "state": {}}
+            if enclosure:
+                ship["enclosure"] = enclosure
+            if hatch:
+                ship["state"]["transit"] = {"phase": "docked", "hatch": hatch}
+            world = {"rooms": {
+                "street": {"name": "Street", "adjacent": [_edge("port")]},
+                "port": {"name": "Port", "adjacent": [_edge("street")]},
+                "ship_deck": {"name": "Deck", "parent_entity": "grebe",
+                              "adjacent": [_edge("port", "open_door")]}},
+                "entities": {"grebe": ship},
+                "positions": {"grebe": "port", "Tamamo": "ship_deck", "Hinami": "street"}}
+            docked = merge_scene_with_diff(world, {})
+            away = merge_scene_with_diff(docked, {"entities": {"grebe": {"state": {"transit": {
+                "phase": "arriving", "destination_room": "new:far isle", "hatch": "closed"}}}}})
+            assert away["rooms"]["ship_deck"]["adjacent"] == [], away["rooms"]["ship_deck"]
+            assert "ship_deck" not in rooms_walked_within(away, {"street"}, 3)
 
     def test_a_link_that_admits_a_body_is_a_step(self):
         rooms = {"cavern": {"adjacent": [_edge("divine_realm", "window", admits=["tamamo"])]},
@@ -565,7 +605,7 @@ class TestAnEndedFrameTakesNoCommit:
         ctx = types.SimpleNamespace(turn=types.SimpleNamespace(frame_id=child))
         commit._refuse_an_ended_frame(ctx)                # live: nothing to say
         temp_db.qi("UPDATE frames SET merged_turn_idx=? WHERE id=?", (4, child))
-        with pytest.raises(RuntimeError, match="rejoined"):
+        with pytest.raises(RuntimeError, match="ended while this beat ran"):
             commit._refuse_an_ended_frame(ctx)
         commit._refuse_an_ended_frame(types.SimpleNamespace(
             turn=types.SimpleNamespace(frame_id=None)))   # the present never ends
@@ -595,3 +635,151 @@ class TestNoNumberBreaksTheDial:
         with pytest.raises(HTTPException) as refused:
             app.dlg_put(_chat(temp_db), {"bubble_radius": float("inf")})
         assert refused.value.status_code == 400
+
+
+# --------------------------------------------- the second review, 2026-10-13
+
+
+def _turn_in(db, cid, frame_id, idx, typed="", committed=False):
+    tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+                "VALUES(?,?,?,?,?)", (cid, idx, typed, time.time(), frame_id))
+    for key in ["director_interpret"] + (["commit"] if committed else []):
+        sid = db.qi("INSERT INTO steps(turn_id,key,ord,label) VALUES(?,?,?,?)",
+                    (tid, key, 0, key))
+        db.qi("INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
+              (sid, "{}", time.time()))
+    return tid
+
+
+class TestARefusedBeatLeavesNothing:
+    """A scheduled beat whose frame the player's beat rejoined is refused at
+    commit; a turn left behind offered Resume, which restored a checkpoint
+    taken before the commit that ended the frame."""
+
+    def test_it_is_discarded_whole_and_restores_nothing(self, temp_db):
+        from agents.offscreen_beat import _discard_refused_beat
+        from persist.checkpoints import ensure_checkpoint
+        cid, child = _bubble(temp_db)
+        ensure_checkpoint(cid, 5)
+        tid = _turn_in(temp_db, cid, child, 5)
+        assert not _discard_refused_beat(cid, child, tid, 5), "a live frame keeps it"
+        temp_db.qi("UPDATE frames SET merged_turn_idx=? WHERE id=?", (4, child))
+        assert _discard_refused_beat(cid, child, tid, 5)
+        assert not temp_db.q("SELECT 1 FROM turns WHERE id=?", (tid,), one=True)
+        assert not temp_db.q("SELECT 1 FROM steps WHERE turn_id=?", (tid,), one=True)
+        assert not temp_db.q("SELECT 1 FROM checkpoints WHERE chat_id=? AND turn_idx=5",
+                             (cid,), one=True)
+
+    def test_a_beat_that_committed_is_never_discarded(self, temp_db):
+        from agents.offscreen_beat import _discard_refused_beat
+        cid, child = _bubble(temp_db)
+        tid = _turn_in(temp_db, cid, child, 5, committed=True)
+        temp_db.qi("UPDATE frames SET merged_turn_idx=? WHERE id=?", (4, child))
+        assert not _discard_refused_beat(cid, child, tid, 5)
+
+    def test_a_busy_frame_writes_no_row(self, temp_db):
+        from agents.offscreen_beat import run_offscreen_beat
+        from agents.runtime import ABORTS
+        cid, child = _bubble(temp_db)
+        ABORTS[(cid, child)] = object()
+        try:
+            assert run_offscreen_beat(cid, child)["skipped"] == "its frame is busy"
+        finally:
+            ABORTS.pop((cid, child), None)
+        assert not temp_db.q("SELECT 1 FROM turns WHERE frame_id=?", (child,), one=True)
+
+    def test_a_turn_its_frame_outlived_is_not_rewound(self, temp_db):
+        from fastapi import HTTPException
+        from web import app
+        cid, child = _bubble(temp_db)
+        tid = _turn_in(temp_db, cid, child, 5, typed="Tamamo waits.")
+        temp_db.qi("UPDATE frames SET merged_turn_idx=? WHERE id=?", (4, child))
+        turn = temp_db.q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
+        with pytest.raises(HTTPException) as refused:
+            app._require_latest(turn)
+        assert "ended while this turn ran" in refused.value.detail
+        temp_db.qi("UPDATE frames SET merged_turn_idx=? WHERE id=?", (5, child))
+        app._require_latest(turn)                 # the beat that rejoined her
+
+
+class TestWhatSheLivedComesHome:
+    def test_her_own_state_and_relationships_are_the_ones_she_lived(self, temp_db):
+        import json as _json
+        from core.db import wget_for_frame, wset_for_frame
+        from story.scene import char_state, set_char_state
+        from world import spatial_frames
+        cid = _story(temp_db, tamamo_at="r7")
+        char_id = temp_db.q("SELECT char_id FROM chat_chars WHERE chat_id=?", (cid,), one=True)["char_id"]
+        set_char_state(cid, char_id, _json.dumps({"goal": "before the split"}))
+        child = spatial_frames.perform_split(cid, None, 0, bubble=True, away_names=["Tamamo"])
+        set_char_state(cid, char_id, _json.dumps({"goal": "lived in the bubble"}), frame_id=child)
+        wset_for_frame(cid, f"relationships:{char_id}", {"Hinami": {"trust": 0.1}}, None)
+        wset_for_frame(cid, f"relationships:{char_id}", {"Hinami": {"trust": 0.9}}, child)
+        assert spatial_frames.perform_merge(cid, None, child, 4) is not None
+        assert char_state(cid, char_id, None)["goal"] == "lived in the bubble"
+        assert wget_for_frame(cid, f"relationships:{char_id}", None)["Hinami"]["trust"] == 0.9
+
+    def test_a_merge_is_asked_again_under_the_lock(self, temp_db):
+        from core.frames import get_frame
+        from world import spatial_frames
+        cid, child = _bubble(temp_db)
+        assert spatial_frames.perform_merge(cid, None, child, 4) is not None
+        assert spatial_frames.perform_merge(cid, None, child, 9) is None
+        assert get_frame(child)["merged_turn_idx"] == 4, "never merged twice"
+
+
+class TestEveryChildBackInOneCommit:
+    def test_two_bubbles_back_within_reach_both_rejoin(self, temp_db):
+        from core.frames import get_frame
+        from world import spatial_frames
+        cid = _chat(temp_db)
+        _persona(temp_db, cid, "Hinami")
+        _cast(temp_db, cid, "Tamamo")
+        _cast(temp_db, cid, "Ren")
+        temp_db.wset(cid, "scene", {"rooms": _line(14), "entities": {}, "comms": {},
+                                    "positions": {"Hinami": "r7", "Tamamo": "r0", "Ren": "r13"}})
+        first = spatial_frames.perform_split(cid, None, 0, bubble=True, away_names=["Tamamo"])
+        second = spatial_frames.perform_split(cid, None, 1, bubble=True, away_names=["Ren"])
+        _move(cid, first, "Tamamo", "r5")
+        _move(cid, second, "Ren", "r8")
+        result = _reconcile_as(cid, None, 7, typed="I wait.")
+        assert sorted(result["merged_frames"]) == sorted([first, second])
+        assert get_frame(first)["merged_turn_idx"] == get_frame(second)["merged_turn_idx"] == 7
+
+    def test_a_typed_beat_not_yet_landed_holds_its_frame_open(self, temp_db):
+        from world import spatial_frames
+        cid, child = _bubble(temp_db)
+        _move(cid, child, "Tamamo", "r1")
+        _turn_in(temp_db, cid, child, 5, typed="Tamamo goes back down.")
+        assert spatial_frames.detect_merge(cid, None) is None
+        temp_db.qi("DELETE FROM turns WHERE frame_id=?", (child,))
+        assert spatial_frames.detect_merge(cid, None) == (None, child)
+
+
+class TestABranchSeesItsOwnPoint:
+    def test_a_bubble_that_rejoined_after_the_branch_point_is_live_in_the_branch(self, temp_db):
+        from core.frames import get_frame
+        from persist.checkpoints import ensure_checkpoint
+        from web import app
+        from world import spatial_frames
+        cid, child = _bubble(temp_db)
+        _turn_in(temp_db, cid, None, 0, typed="I wake.", committed=True)
+        branch_at = _turn_in(temp_db, cid, None, 1, typed="I wait.", committed=True)
+        ensure_checkpoint(cid, 2)                  # the world after turn 1: still split
+        temp_db.qi("UPDATE frames SET merged_turn_idx=? WHERE id=?", (2, child))
+        ncid = app.turn_branch(branch_at)["id"]
+        copy = temp_db.q("SELECT id, merged_turn_idx FROM frames WHERE chat_id=? AND kind='spatial'",
+                         (ncid,), one=True)
+        assert copy["merged_turn_idx"] is None
+        assert copy["id"] in [c["id"] for c in spatial_frames._spatial_children(ncid, None)]
+
+
+class TestARerolledStageReadsTheTurnsWorld:
+    def test_a_single_stage_reroll_merges_again_after_its_restore(self):
+        import inspect
+        from agents import runtime
+        source = inspect.getsource(runtime._run_pipeline)
+        restore = source.index("restored = True")
+        merge = source.index("filed_under=only_key")
+        rehydrate = source.index("_rehydrate_side_channels(ctx, _key, _content)")
+        assert restore < merge < rehydrate

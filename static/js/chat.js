@@ -559,7 +559,7 @@ function syncComposerToFrame() {
   const ended = !!(frame && frame.merged_turn_idx !== null && frame.merged_turn_idx !== undefined);
   input.disabled = ended;
   input.placeholder = ended
-    ? t("This thread has rejoined the frame it split from. Switch back to play on.")
+    ? t("This thread has ended. Switch to another thread to play on.")
     : input.dataset.placeholder;
   if (ended) send.disabled = true;
   else if (!S.busy) send.disabled = false;
@@ -588,6 +588,9 @@ function renderChat() {
   resetRerollNav();
   updateChatScopedButtons();
   renderFrameBar();
+  // before the early returns below: a composer an ended thread disabled must
+  // come back when no story, or one awaiting Begin, is what renders next
+  syncComposerToFrame();
   if (typeof backdropResetForRender === "function") backdropResetForRender();
   if (typeof ambienceResetForRender === "function") ambienceResetForRender();
 
@@ -643,7 +646,6 @@ function renderChat() {
   // overwhelmingly common case) has every turn's frame_id === null,
   // so this filter is a no-op for it.
   const frameTurns = S.chat.turns.filter(t => (t.frame_id ?? null) === S.currentFrameId);
-  syncComposerToFrame();
 
   const last = frameTurns[frameTurns.length - 1];
 

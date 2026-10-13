@@ -1468,9 +1468,26 @@ def detect_merge(chat_id, frame_id, *, played=False):
         # open, and a merge mid-call left the body in neither frame.
         if live_couple_for(chat_id, child_id):
             continue
+        # A BEAT SOMEBODY TYPED THERE, NOT YET LANDED, HOLDS THE CHILD OPEN:
+        # its own commit merges it once it lands, where a merge from here
+        # would have its commit refused and the typed line lost
+        # (`persist.commit._refuse_an_ended_frame`). A bubble's scheduled
+        # beat holds nothing -- it never merges itself.
+        if child_id != frame_id and _typed_beat_open(chat_id, child_id):
+            continue
         if _back_together(chat_id, parent_id, child_id):
             return (parent_id, child_id)
     return None
+
+
+def _typed_beat_open(chat_id, frame_id):
+    """A turn in this frame that somebody typed and that has not committed."""
+    return bool(q(
+        "SELECT 1 FROM turns t WHERE t.chat_id=? AND t.frame_id=? "
+        "AND TRIM(COALESCE(t.player_input,''))<>'' AND NOT EXISTS ("
+        " SELECT 1 FROM steps s JOIN variants v ON v.step_id=s.id AND v.active=1"
+        " WHERE s.turn_id=t.id AND s.key='commit') LIMIT 1",
+        (chat_id, frame_id), one=True))
 
 
 def _back_together(chat_id, parent_id, child_id):
@@ -1590,7 +1607,8 @@ def bubbles_the_beat_reaches(chat_id, frame_id, beat_rooms, party_names=()):
 
     The rooms are the beat's, the range is the split's: `bubble_reach` at the
     story's radius. And this is where a body that walked back in her own beat
-    comes home -- a bubble never merges itself (`detect_merge`) -- so it asks
+    comes home -- a bubble's scheduled beat never merges itself
+    (`detect_merge`) -- so it asks
     everything the commit's rejoin asks: the beat's rooms hold where the
     player stood when it began, and the rooms the rest of the party stands in
     are centres too. Asked on every player beat, so a story with no bubble
@@ -1652,6 +1670,14 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
     diverged."""
     warnings = []
     with transaction():
+        # STILL A LIVE SPLIT, asked under the write lock: the merge before a
+        # beat reads its children outside any transaction, and a sibling
+        # absorbed or a frame merged in that gap was merged a second time
+        # (review of 2026-10-13). None says nothing was merged.
+        child = get_frame(child_frame_id)
+        if (not child or child.get("kind") != "spatial"
+                or child.get("merged_turn_idx") is not None):
+            return None
         parent_clock = wget_for_frame(chat_id, "simulation_clock", parent_frame_id, {}) or {}
         child_clock = wget_for_frame(chat_id, "simulation_clock", child_frame_id, {}) or {}
         p_elapsed = float(parent_clock.get("elapsed_seconds") or 0.0)
@@ -1675,13 +1701,20 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
                     existing.append(name)
         wset_for_frame(chat_id, "known", parent_known, parent_frame_id)
 
+        # WHAT THE AWAY CAST LIVED COMES HOME WITH THEM, as it does through a
+        # sibling meeting (`perform_sibling_merge`): the parent's copy of a
+        # returning body is the one frozen at the split, since she was not
+        # there to change it. Her relationships and her own lived state --
+        # goals, projects, psychology (`chat_char_frames`) -- are the away
+        # frame's; the cast who stayed keep the parent's, with the warning.
+        returning = {row["id"] for row in active_cast(chat_id, child_frame_id)}
         for row in active_cast(chat_id, parent_frame_id) + active_cast(chat_id, child_frame_id):
             key = f"relationships:{row['id']}"
             parent_rel = wget_for_frame(chat_id, key, parent_frame_id, None)
             child_rel = wget_for_frame(chat_id, key, child_frame_id, None)
             if child_rel is None:
                 continue
-            if parent_rel is None:
+            if parent_rel is None or row["id"] in returning:
                 wset_for_frame(chat_id, key, child_rel, parent_frame_id)
                 continue
             if parent_rel != child_rel:
@@ -1697,6 +1730,10 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
         wset_for_frame(chat_id, "scene", parent_scene, parent_frame_id)
 
         for row in active_cast(chat_id, child_frame_id):
+            lived = char_state(chat_id, row["id"], child_frame_id)
+            if lived is not None:
+                set_char_state(chat_id, row["id"], json.dumps(lived, ensure_ascii=False),
+                               frame_id=parent_frame_id)
             set_char_status(chat_id, row["id"], "active", frame_id=parent_frame_id)
 
         qi(
@@ -2571,11 +2608,24 @@ def detect_and_reconcile(ctx, nonce):
     merge = detect_merge(chat_id, frame_id, played=played)
     if merge:
         parent_id, child_id = merge
-        warnings = perform_merge(chat_id, parent_id, child_id, turn_idx)
+        warnings = perform_merge(chat_id, parent_id, child_id, turn_idx) or []
         for w in warnings:
             ctx.add_warning(w)
+        # EVERY CHILD BACK, IN ONE COMMIT, when this commit is the parent's: a
+        # second bubble back within reach was otherwise scheduled one more
+        # beat of her own while standing in the player's (review of
+        # 2026-10-13). Each merge takes its child out of the next question.
+        merged = [child_id]
+        while parent_id == frame_id:
+            more = detect_merge(chat_id, frame_id, played=played)
+            if not more or more[1] in merged:
+                break
+            for w in perform_merge(chat_id, more[0], more[1], turn_idx) or []:
+                warnings.append(w)
+                ctx.add_warning(w)
+            merged.append(more[1])
         return {"merged": True, "parent_frame_id": parent_id, "child_frame_id": child_id,
-                "warnings": warnings}
+                "merged_frames": merged, "warnings": warnings}
 
     from world.spatial_bubbles import detect_sibling_meeting
     meeting = detect_sibling_meeting(chat_id, frame_id)

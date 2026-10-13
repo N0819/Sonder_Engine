@@ -2003,9 +2003,16 @@ reach:
   the list. That mend -- one that REOPENS the list -- is the owner's call, as
   is mending two list items that ran together in a whole answer (7 of the
   5,327 captured).
-- **6087's fifth step is not recovered.** The mend reads the answer whole,
-  but the step the slip broke (`ponder` "the sound of Hinami's laugh") lands
-  at the answer's top level, where the schema has no field for it.
+- **6087's fifth step is not recovered.** The mend reads the rest of the
+  answer, but the step the slip broke (`ponder` "the sound of Hinami's
+  laugh") lands at the answer's top level, where the lenient schema has no
+  field for it and drops it. The read now names what it left out; nothing
+  puts the members back in the list.
+- **The Room reads a whole answer with plain `json.loads`.** `agents.common.
+  jparse` parses the text whole before it reaches `strict_json_parse`, so a
+  key named twice in a Room answer -- 3858, the planner's four tool calls
+  run together -- is still unsaid; and the Room's calls are not pipeline
+  steps, so what `strict_json_parse` says reaches the log only.
 - **The restart reader has no cut-off guard outside the ladder.** Captures
   3907, 2203 and 2204 were cut answers whose own value, or a `{}`, a restart
   read as the whole answer; the ladder refuses salvage from a cut answer

@@ -850,7 +850,14 @@ def apply_transit_dock_edges(scene: dict) -> bool:
         # doorway FROM, and severing on missing data would cut off a cabin
         # whose authored edge is the only truth available. Leave it alone --
         # only an explicit sealed/in_transit state severs without a target.
-        if target is None and phase not in _TRANSIT_CLOSED_PHASES:
+        # ...save a vessel ARRIVING that has left the room it was in
+        # (`departed_from`, set by `settle_departures`) and holds no room yet:
+        # it is under way like one in transit, and the doorway onto the port
+        # it left stood open behind it -- walked by the bubble's range and by
+        # any body stepping off a ship at sea (review of 2026-10-13).
+        if target is None and phase not in _TRANSIT_CLOSED_PHASES \
+                and not (phase == "arriving"
+                         and str((transit or {}).get("departed_from") or "").strip()):
             continue
 
         for rid in interior_ids:

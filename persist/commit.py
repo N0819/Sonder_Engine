@@ -498,8 +498,8 @@ def _refuse_an_ended_frame(ctx):
     frame = get_frame(frame_id)
     if frame and frame.get("merged_turn_idx") is not None:
         raise RuntimeError(
-            "frame %s rejoined the frame it split from while this beat ran; "
-            "nothing of the beat is committed" % frame_id)
+            "frame %s ended while this beat ran; nothing of the beat is "
+            "committed" % frame_id)
 
 
 def _commit_all_locked(ctx, nonce):

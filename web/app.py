@@ -754,9 +754,10 @@ def _require_turn_idle(turn):
     its own frame's run slot is held and it is that frame's newest turn --
     the only turn a reroll, rerun or resume may be running on. A beat running
     in another frame, or a new beat after this one, touches none of this
-    turn's rows. Home 10 (item 6): every control on the page answered "Abort
-    it" for the 28 s Tamamo's off-screen beat ran, a typo fix included, and
-    nothing on the page could reach her frame to abort."""
+    turn's rows. Home 10 (item 6): for the 28 s Tamamo's off-screen beat ran
+    on after page 2 committed (52 s in all), every control on the page
+    answered "Abort it", a typo fix included, and nothing on the page could
+    reach her frame to abort."""
     chat_id, frame_id = turn["chat_id"], turn["frame_id"]
     if (chat_id, frame_id) not in ABORTS:
         return
@@ -1035,6 +1036,17 @@ def _require_latest(turn):
     lt = _latest_turn_in_frame(turn["chat_id"], frame_id)
     if not lt or lt["id"] != turn["id"]:
         raise HTTPException(409, "Only the latest turn in this frame can be recomputed.")
+    # A TURN ITS FRAME OUTLIVED IS NOT REWOUND. A frame that ended at a turn
+    # below this one's ended while this turn ran: its checkpoint predates the
+    # commit that ended the frame, so restoring it would take that commit
+    # back (review of 2026-10-13; a scheduled beat refused this way is
+    # discarded by `offscreen_beat`, a typed one is held here).
+    if frame_id is not None:
+        fr = get_frame(frame_id)
+        if fr and fr.get("merged_turn_idx") is not None \
+                and int(fr["merged_turn_idx"]) < int(turn["idx"]):
+            raise HTTPException(
+                409, "This thread ended while this turn ran; it cannot be recomputed.")
     if _other_frame_has_advanced_past(turn["chat_id"], frame_id, turn["idx"]):
         raise HTTPException(
             409,
@@ -6589,16 +6601,15 @@ def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
         # would let a request operate on another chat's frame.
         if fr is None or fr["chat_id"] != cid:
             raise HTTPException(404, f"Frame {frame_id} not found")
-        # A THREAD THAT HAS ENDED TAKES NO NEW BEAT. Every writer of
-        # `merged_turn_idx` ends a frame -- a spatial frame merged back, a
-        # bubble absorbed by its sibling, a couple closed -- and the frame
-        # keeps its turns for reading while its world rows stand frozen at the
-        # merge. A beat played into one runs on that stale copy and commits
-        # where nobody reads: chat 166 turn 4583, a player line played into
-        # bubble frame 7 after it had rejoined (Home 10 observation, item 6).
+        # A THREAD THAT HAS ENDED TAKES NO NEW BEAT. A frame ends three ways --
+        # a spatial frame merged back, a bubble absorbed by its sibling, a call
+        # closed -- and each sets `merged_turn_idx`; its turns stay for
+        # reading. A beat played into one runs on a world nobody reads again
+        # (or, for a closed call, none): chat 166 turn 4583, a player line
+        # played into bubble frame 7 after it had rejoined (Home 10, item 6).
         if fr.get("merged_turn_idx") is not None:
             raise HTTPException(
-                409, "This thread has rejoined the frame it split from. Play on there.")
+                409, "This thread has ended; its people play on in another thread.")
     # A BEAT SUBMITTED TO A COUPLED FRAME IS PLAYED IN THE COUPLE. While a live
     # comm channel joins two spatial frames, the beat has to run somewhere both
     # parties exist -- every reader in `agents/` resolves one scene through one
@@ -6871,12 +6882,22 @@ def turn_branch(tid: int):
         # at THIS chat's own frame rows instead of dangling on the source
         # chat's.
         frame_idmap = {}
+        # WHETHER A FRAME HAD ENDED IS THE BRANCH POINT'S, as the snapshot
+        # holds it (`checkpoints._restore_frames` reads the same field): a
+        # bubble that rejoined after the branch point is live in the branch,
+        # where copying today's mark made it an ended thread nobody could
+        # play or rejoin (review of 2026-10-13). A frame the snapshot does not
+        # record keeps the source row's.
+        at_branch = {sf.get("id"): sf for sf in (blob.get("frames") or [])
+                     if isinstance(sf, dict)}
         for f in q("SELECT * FROM frames WHERE chat_id=?", (cid,)):
+            snap = at_branch.get(f["id"])
+            merged = snap.get("merged_turn_idx") if snap is not None else f["merged_turn_idx"]
             nfid = qtx(
                 "INSERT INTO frames(chat_id,label,ordinal,kind,travelers,nonexistent_cast,created,"
                 "split_turn_idx,merged_turn_idx) VALUES(?,?,?,?,?,?,?,?,?)",
                 (ncid, f["label"], f["ordinal"], f["kind"], f["travelers"], f["nonexistent_cast"], f["created"],
-                 f["split_turn_idx"], f["merged_turn_idx"]),
+                 f["split_turn_idx"], merged),
             )
             frame_idmap[f["id"]] = nfid
         # parent_frame_id is self-referential -- deferred to a second pass,

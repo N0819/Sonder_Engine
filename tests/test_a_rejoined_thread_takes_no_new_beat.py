@@ -45,7 +45,7 @@ class TestAnEndedThread:
         with pytest.raises(HTTPException) as refused:
             app.turn_new(cid, {"input": "You yawn and stretch.", "frame_id": bubble})
         assert refused.value.status_code == 409
-        assert "rejoined" in refused.value.detail
+        assert "has ended" in refused.value.detail
         assert temp_db.q("SELECT COUNT(*) AS n FROM turns WHERE chat_id=?",
                          (cid,), one=True)["n"] == 0, "no row left behind"
         assert (cid, bubble) not in app.ABORTS, "no slot left claimed"

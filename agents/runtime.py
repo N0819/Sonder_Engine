@@ -1359,7 +1359,10 @@ def _merge_bubbles_now(ctx, chat_id, turn_row):
         if not children:
             return None
         for child_id in children:
-            for warning in perform_merge(chat_id, frame_id, child_id, turn_row["idx"]):
+            done = perform_merge(chat_id, frame_id, child_id, turn_row["idx"])
+            if done is None:
+                continue                    # it ended since it was asked
+            for warning in done:
                 ctx.add_warning(warning)
             ctx.add_warning(f"This beat brought the player within reach of a bubble "
                             f"(frame {child_id}); it rejoined before the beat resolved.")
@@ -1501,8 +1504,10 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                 f"step '{stale_upstream['key']}' is stale and must be resumed "
                 f"or rerun before rerolling '{only_key}'"
             )
+        restored = False
         if only_key == "commit" and has_existing_steps:
             _restore_and_refresh()
+            restored = True
         elif (
             only_key != "commit"
             and has_existing_steps
@@ -1519,6 +1524,13 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # leaving the turn in an explicit needs-resume state rather than a
             # half-committed one.
             _restore_and_refresh()
+            restored = True
+        # The restore takes back the merges this turn's run made before its
+        # stages; ask them again, as the full run does, so a stage rerolled
+        # alone reads the world the turn's run read (review of 2026-10-13).
+        if restored and not is_offscreen_beat(chat_id, turn_row):
+            cast_rows = _merge_bubbles_the_beat_reaches(
+                ctx, chat_id, turn_row, filed_under=only_key) or cast_rows
         # AFTER the restore, never before: a side channel rebuilt from the
         # live world would be rebuilt from the OUTCOME this branch just rolled
         # back, which is the leak the restore exists to prevent.

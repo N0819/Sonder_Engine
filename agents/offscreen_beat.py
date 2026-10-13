@@ -216,22 +216,38 @@ def run_offscreen_beat(chat_id, frame_id):
     made: the bubbles to run are listed once, and a meeting earlier in the
     same pass can fold one into its sibling (`perform_sibling_merge`).
     """
-    from agents.runtime import run_pipeline
+    from agents.runtime import (ABORTS, _ABORTS_LOCK, PipelineBusyError,
+                                begin_pipeline, run_pipeline)
     from core.db import q, qi, transaction
     from persist.checkpoints import ensure_checkpoint, snapshot_blob
     from world.spatial_frames import is_bubble_frame
 
     if not is_bubble_frame(chat_id, frame_id):
         return {"frame_id": frame_id, "skipped": "not a live bubble"}
-    blob = snapshot_blob(chat_id)
-    with transaction():
-        last = q("SELECT idx FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
-                 (chat_id,), one=True)
-        idx = (last["idx"] + 1) if last else 0
-        ensure_checkpoint(chat_id, idx, blob=blob)
-        turn_id = qi(
-            "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
-            "VALUES(?,?,?,?,?)", (chat_id, idx, "", time.time(), frame_id))
+    # THE SLOT FIRST, THE ROW SECOND, as `turn_new` does: a row written and
+    # then refused the slot stayed behind with no step, and the frame's
+    # newest turn was no longer the one its run was writing -- which
+    # `_require_turn_idle` reads (review of 2026-10-13). The next commit of
+    # the parent offers a skipped bubble again.
+    try:
+        abort = begin_pipeline(chat_id, frame_id)
+    except PipelineBusyError:
+        return {"frame_id": frame_id, "skipped": "its frame is busy"}
+    try:
+        blob = snapshot_blob(chat_id)
+        with transaction():
+            last = q("SELECT idx FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
+                     (chat_id,), one=True)
+            idx = (last["idx"] + 1) if last else 0
+            ensure_checkpoint(chat_id, idx, blob=blob)
+            turn_id = qi(
+                "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+                "VALUES(?,?,?,?,?)", (chat_id, idx, "", time.time(), frame_id))
+    except BaseException:
+        with _ABORTS_LOCK:
+            if ABORTS.get((chat_id, frame_id)) is abort:
+                ABORTS.pop((chat_id, frame_id), None)
+        raise
 
     from core.db import wget_for_frame
 
@@ -241,12 +257,48 @@ def run_offscreen_beat(chat_id, frame_id):
 
     before = _rooms()
     started = time.time()
-    for _ in run_pipeline(chat_id, turn_id, frame_id=frame_id):
-        pass
+    try:
+        for _ in run_pipeline(chat_id, turn_id, abort=abort, frame_id=frame_id):
+            pass
+    except Exception:
+        # HER FRAME ENDED WHILE THE BEAT RAN -- the player's beat rejoined her
+        # -- and its commit was refused whole (`persist.commit.
+        # _refuse_an_ended_frame`). Nothing of it landed, so nothing of it is
+        # kept: a turn left behind would offer Resume, which restores a
+        # checkpoint taken before the commit that ended the frame and takes
+        # that commit back (review of 2026-10-13).
+        if not _discard_refused_beat(chat_id, frame_id, turn_id, idx):
+            raise
+        return {"frame_id": frame_id, "turn_id": turn_id, "idx": idx,
+                "skipped": "its frame rejoined while the beat ran"}
     after = _rooms()
     stalled = note_beat_movement(chat_id, frame_id, idx, before, after)
     return {"frame_id": frame_id, "turn_id": turn_id, "idx": idx,
             "seconds": round(time.time() - started, 1), "stalled": stalled}
+
+
+def _discard_refused_beat(chat_id, frame_id, turn_id, idx):
+    """Remove a scheduled beat whose frame ended before it could commit --
+    its steps, its row and the checkpoint taken for it, restoring nothing,
+    since nothing of it was committed. True when it removed one."""
+    from core.db import q, qi, transaction
+    from core.frames import get_frame
+
+    frame = get_frame(frame_id)
+    if not frame or frame.get("merged_turn_idx") is None:
+        return False
+    if q("SELECT 1 FROM steps s JOIN variants v ON v.step_id=s.id AND v.active=1 "
+         "WHERE s.turn_id=? AND s.key='commit' LIMIT 1", (turn_id,), one=True):
+        return False
+    with transaction():
+        for step in q("SELECT id FROM steps WHERE turn_id=?", (turn_id,)):
+            qi("DELETE FROM variants WHERE step_id=?", (step["id"],))
+        qi("DELETE FROM steps WHERE turn_id=?", (turn_id,))
+        qi("DELETE FROM turns WHERE id=?", (turn_id,))
+        if not q("SELECT 1 FROM turns WHERE chat_id=? AND idx=? LIMIT 1",
+                 (chat_id, idx), one=True):
+            qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx=?", (chat_id, idx))
+    return True
 
 
 def stalling_bodies(scene):
