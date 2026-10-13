@@ -89,7 +89,7 @@ class TestWhatItReturns:
 
         out = run_tool(cid, "inspect_config", {})
 
-        assert out["offscreen"] == {"max_bubbles": 1}
+        assert out["offscreen"] == {"max_bubbles": 1, "bubble_radius": 3}
 
     def test_it_reports_the_counts_a_plan_has_to_live_within(self, temp_db):
         cid = _chat(temp_db)

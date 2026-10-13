@@ -2494,6 +2494,45 @@ the player is watching honours it, and the one that runs when they are not
 does not. That is worse than a barrier nothing implements, because the
 first path teaches the player a rule the second does not keep.
 
+<a id="unbuilt-1-213"></a>
+
+### 1.213 The bubble radius -- built 2026-10-13, residuals open
+
+Design.md: "A causality bubble opens at a radius of rooms walked". A body
+leaves the player's thread past the story's `bubble_radius` (three rooms
+walked, a stair one) and comes back inside it. What that does not reach:
+
+- **A bubble's own beat can walk through the radius and out again.** The
+  split and the rejoin read where a beat LEAVES a body, so a beat that brings
+  her within three rooms and away again is resolved inside the bubble. It is
+  detectable deterministically (`run_offscreen_beat` holds where each body
+  started and ended; `passable_path` gives the rooms between); stopping the
+  beat at the radius would change when a bubble's beats run, which the owner
+  left open on 2026-10-13 ("not sure").
+- **Seen, but far on foot.** Sight and earshot are not part of the range: a
+  body in view through a window, or below an overlook, but more than the
+  radius walked gets a thread. Home 9's garden is one edge through Hinami's
+  window and six rooms walked. A floor between two stacked rooms carries a
+  shout and is no way a body walks, so a body overhead can be in earshot and
+  past the radius.
+- **A live channel's far end carries the whole radius.** The range walks
+  from every seed, a channel's far end included, so a body within three
+  rooms of the far end of a live channel stays in the player's thread (it was
+  one room at the old range).
+- **A merge before a beat can land on a bubble whose own beat is running**
+  (scheduled by the parent's previous commit); that beat's commit then lands
+  in a frame that has ended. It predates the radius -- a player walking up to
+  a bubble took the same path -- and the rejoin now takes it too, since a
+  bubble never merges itself. What is running in a story is Home 10's item 6
+  (`docs/experiments/OBSERVE_2026_10_13_home10.md`). A sibling meeting is
+  still taken from a bubble's own commit (the committing frame survives) and
+  can race the absorbed sibling's running beat the same way.
+- **The parent's commit asks only its first spatial child** (`detect_merge`'s
+  `children[0]`); a second bubble that rejoined waits for the merge before
+  the next beat, and may be given one more beat of its own first.
+- **Flapping at the boundary** (a body pacing between three and four rooms
+  off) is unmeasured.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-7"></a>

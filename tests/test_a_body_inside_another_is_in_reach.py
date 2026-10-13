@@ -191,7 +191,7 @@ class TestTheHolderIsNeverAway:
     def test_the_holder_is_not_split_off(self):
         from world.spatial_bubbles import bubble_split_decision
         assert bubble_split_decision(_stomach(), party_names=["Hinami"],
-                                     cast_names=["Mirelle"]) is None
+                                     cast_names=["Mirelle"], radius=1) is None
 
     def test_the_insides_of_a_body_in_the_room_are_attended(self):
         from world.spatial import attended_rooms

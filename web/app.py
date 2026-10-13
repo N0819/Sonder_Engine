@@ -88,7 +88,8 @@ from story.scene import (background_config, dialogue_config, interaction_limits,
                    OFFSCREEN_COGNITION_DEFAULT,
                    OFFSCREEN_LIFE_BUILT, OFFSCREEN_LIFE_DEFAULT,
                    OFFSCREEN_LIFE_DESCRIPTIONS, OFFSCREEN_LIFE_LADDER,
-                   STYLE_GUIDE_FIELDS)
+                   STYLE_GUIDE_FIELDS, BUBBLE_RADIUS_CEILING,
+                   BUBBLE_RADIUS_DEFAULT, BUBBLE_RADIUS_FLOOR)
 from story.importers import (
     import_character, import_persona, import_lorebook,
     generate_character, generate_persona, generate_lore_entries,
@@ -5917,6 +5918,16 @@ def dlg_put(cid: int, body: dict = Body(...)):
             # legitimate way to say "not right now" without losing the level.
             "max_offscreen_actors": max(
                 0, min(12, int(submitted("max_offscreen_actors", 3)))),
+            # THE TWO ABSENT-THREAD DIALS the panel renders. `max_bubbles` was
+            # sent by the panel since 2026-09-20 and never stored here: a save
+            # of 1 read back 3 (measured 2026-10-13). Its stored fallback is the
+            # dial it replaced, as `dialogue_config` reads it.
+            "max_bubbles": max(0, min(12, int(submitted(
+                "max_bubbles", stored.get("max_offscreen_actors", 3))))),
+            # How far, in rooms walked, before a thread opens (owner,
+            # 2026-10-13). A value that is not a number is the 400 below.
+            "bubble_radius": max(BUBBLE_RADIUS_FLOOR, min(BUBBLE_RADIUS_CEILING, int(
+                submitted("bubble_radius", BUBBLE_RADIUS_DEFAULT)))),
         })
 
         for key, default in derived.items():

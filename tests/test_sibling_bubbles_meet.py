@@ -20,7 +20,8 @@ from core.db import active_frame_id, q, wget_for_frame, wset, wset_for_frame
 from core.frames import get_frame, is_memory_visible
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.character_schema import default_character_data
-from story.scene import active_cast, char_state, set_char_state
+from story.scene import (BUBBLE_RADIUS_DEFAULT, active_cast, char_state,
+                         set_char_state)
 from world import spatial as sp
 from world import spatial_bubbles, spatial_frames
 from world.charter_place import rehold_leases
@@ -29,8 +30,12 @@ from world.charter_place import rehold_leases
 ROOMS = {
     "mill_race": {"name": "Mill Race", "adjacent": [{"to": "mill_floor", "barrier": "open"}]},
     "mill_floor": {"name": "Mill Floor", "adjacent": [
-        {"to": "mill_race", "barrier": "open"}, {"to": "market", "barrier": "open"}]},
-    "market": {"name": "Market Square", "adjacent": [{"to": "mill_floor", "barrier": "open"}]},
+        {"to": "mill_race", "barrier": "open"}, {"to": "lane", "barrier": "open"}]},
+    "lane": {"name": "Mill Lane", "adjacent": [
+        {"to": "mill_floor", "barrier": "open"}, {"to": "bridge", "barrier": "open"}]},
+    "bridge": {"name": "Alde Bridge", "adjacent": [
+        {"to": "lane", "barrier": "open"}, {"to": "market", "barrier": "open"}]},
+    "market": {"name": "Market Square", "adjacent": [{"to": "bridge", "barrier": "open"}]},
     "attic": {"name": "Attic", "adjacent": []},
 }
 
@@ -94,13 +99,16 @@ class TestTheRange:
             for scene in (a, b):
                 sp.apply_comms_ops(scene, comms)
         return spatial_bubbles.sibling_meet_decision(
-            a, ["Emory Vane"], b, ["Sal Weatherby"])
+            a, ["Emory Vane"], b, ["Sal Weatherby"], radius=BUBBLE_RADIUS_DEFAULT)
 
     def test_one_room_or_one_step_is_together(self):
         assert self._decide("mill_floor", "mill_floor")
         assert self._decide("mill_race", "mill_floor")
 
-    def test_two_steps_is_apart(self):
+    def test_three_rooms_walked_is_together(self):
+        assert self._decide("mill_race", "bridge")
+
+    def test_four_rooms_walked_is_apart(self):
         assert not self._decide("mill_race", "market")
 
     def test_a_voice_over_a_wire_is_not_standing_together(self):

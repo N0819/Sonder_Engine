@@ -778,12 +778,14 @@ def _t_inspect_config(cid, frame_id):
         },
         # WHAT RUNS BESIDE THE PLAYER. The off-screen cognition ladder is
         # retired (2026-09-20): Charter, the Writers' Room and causality bubbles
-        # superseded every rung of it, and the one question a plan can still ask
-        # is how many absent threads this story is carrying -- because a thread
-        # is what costs, and a plan that wants to send somebody away should know
-        # whether there is room for them.
+        # superseded every rung of it, and what a plan can still ask is how many
+        # absent threads this story is carrying -- a thread is what costs, and
+        # a plan that wants to send somebody away should know whether there is
+        # room for them -- and how far away is away: the rooms walked before a
+        # thread opens (2026-10-13).
         "offscreen": {
             "max_bubbles": dialogue.get("max_bubbles"),
+            "bubble_radius": dialogue.get("bubble_radius"),
         },
     }
 
@@ -1515,7 +1517,7 @@ TOOLS = [
      "args": _schema({}), "reads": True,
      "handler": _t_inspect_clock, "payload_key": "clock"},
     {"name": "inspect_config",
-     "description": "The dials this story runs under, which the host owns and the room only reads: house style (genre, tone, what to avoid, weather, tense, day length), the scene's pacing and call budget, how many of the populace may speak in a beat and what earns a promotion, and whether minds may think off screen. Read it before proposing anything that leans on one, and when asked whether a change would land.",
+     "description": "The dials this story runs under, which the host owns and the room only reads: house style (genre, tone, what to avoid, weather, tense, day length), the scene's pacing and call budget, how many of the populace may speak in a beat and what earns a promotion, how many absent characters may live threads of their own at once, and how far, in rooms walked, a character goes from the player before getting one. Read it before proposing anything that leans on one, and when asked whether a change would land.",
      "args": _schema({}), "reads": True,
      "handler": _t_inspect_config},
     {"name": "inspect_needs",

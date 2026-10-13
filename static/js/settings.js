@@ -289,6 +289,16 @@ $("#b-dlg").onclick = async () => {
   // turn. The cap refuses to OPEN the next thread and never pauses an open one.
   const maxBubbles = el("input", { type: "number", min: "0", max: "12",
                                    value: c.max_bubbles ?? 3 });
+  // HOW FAR A CHARACTER MAY WALK BEFORE THEIR LIFE GOES ON IN A THREAD OF ITS
+  // OWN (`bubble_radius`, owner 2026-10-13): rooms walked from you, a whole
+  // stair counting as one. An emptied field saves what it showed, never 0 --
+  // the server would clamp that to one room and split anyone next door.
+  const bubbleRadius = el("input", { type: "number", min: "1", max: "12",
+                                     value: c.bubble_radius ?? 3 });
+  const shownNumber = (input, fallback) => {
+    const n = parseInt(input.value, 10);
+    return Number.isFinite(n) ? n : fallback;
+  };
   // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). There is now
   // exactly ONE way a defined institution can be inert, and it is not a
   // setting: `charter_runtime.schedule_charter_ticks` is ungated, so a story
@@ -398,13 +408,20 @@ $("#b-dlg").onclick = async () => {
         + "run themselves the whole time, things already on a clock still "
         + "land, and word still travels by whoever carried it."),
       el("table", { class: "grid", style: "margin-top:6px" },
-        el("tr", {}, el("td", {}, "max open threads"), el("td", {}, maxBubbles))),
+        el("tr", {}, el("td", {}, "max open threads"), el("td", {}, maxBubbles)),
+        el("tr", {}, el("td", {}, "rooms before a thread opens"), el("td", {}, bubbleRadius))),
       el("div", { class: "small dim", style: "margin-top:6px" },
         el("div", {}, el("b", {}, "Max open threads"), " — how many absent "
           + "characters may be living a thread of their own at once. Each one "
           + "costs a little thinking every turn you take, off your turn, so "
           + "this is the dial for how much story is running beside yours. "
           + "0 means none."),
+        el("div", { style: "margin-top:4px" },
+          el("b", {}, "Rooms before a thread opens"), " — how far, in rooms "
+          + "walked, a character may go from you before their life carries on "
+          + "in a thread of its own. A stair counts as one room however many "
+          + "floors it climbs. Nearer than that they stay in your scene, and "
+          + "what they do happens in your turns. 3 by default."),
         el("div", { style: "margin-top:4px" },
           "At the limit, the next character to walk away simply does not get a "
           + "thread — they are off screen the way everyone was before threads "
@@ -493,7 +510,8 @@ $("#b-dlg").onclick = async () => {
           autonomy: +auto.value, allow_npc_initiative: npcInit.checked, allow_npc_to_npc_dialogue: npcNpc.checked,
           stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked,
           promote_after_addressed: +promoteAfter.value,
-          max_bubbles: +maxBubbles.value
+          max_bubbles: shownNumber(maxBubbles, c.max_bubbles ?? 3),
+          bubble_radius: shownNumber(bubbleRadius, c.bubble_radius ?? 3)
         });
         await api("PUT", `/api/chats/${chatId}/background_config`, {
           scene_life: sceneLife.value, max_managed: +maxManaged.value,

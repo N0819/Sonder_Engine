@@ -38,14 +38,15 @@ def town_for_sweep(cid, frame_id, scene):
     minted before rows were stamped with the era carries the bubble that
     ticked it, and must still come due somewhere. `claims` names, for each
     room some LIVE frame's people attend (`spatial_bubbles.in_range_rooms`,
-    the range a bubble opens and closes on), the frame that answers for it
+    the range a bubble opens and closes on, at the story's `bubble_radius`),
+    the frame that answers for it
     -- the committing frame first, so a room two frames attend is this
     commit's to fire. `presence_rooms` are the rooms the committing frame's
     own people stand in, for a frame with no player to walk in on anything.
     """
     from core.db import era_of_frame, wget_for_frame
     from world.spatial import room_of
-    from world.spatial_bubbles import frame_body_names, in_range_rooms
+    from world.spatial_bubbles import bubble_radius, frame_body_names, in_range_rooms
 
     era = era_of_frame(frame_id)
     members = [row for row in q(
@@ -55,11 +56,13 @@ def town_for_sweep(cid, frame_id, scene):
         return None
     live = [era] + [row["id"] for row in members
                     if row["merged_turn_idx"] is None]
+    radius = bubble_radius(cid)
     claims = {}
     for fid in [frame_id] + [f for f in live if f != frame_id]:
         seen = scene if fid == frame_id else (
             wget_for_frame(cid, "scene", fid, {}) or {})
-        for room in in_range_rooms(seen, frame_body_names(cid, fid)) or ():
+        for room in in_range_rooms(seen, frame_body_names(cid, fid),
+                                   radius=radius) or ():
             claims.setdefault(str(room), fid)
     presence = {str(room_of(scene, name))
                 for name in frame_body_names(cid, frame_id)

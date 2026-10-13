@@ -139,8 +139,12 @@ class TestItLandsWhereSomebodyStands:
 
 ROOMS = {"mill_race": {"adjacent": [{"to": "mill_floor", "barrier": "open"}]},
          "mill_floor": {"adjacent": [{"to": "mill_race", "barrier": "open"},
-                                     {"to": "market", "barrier": "open"}]},
-         "market": {"adjacent": [{"to": "mill_floor", "barrier": "open"}]},
+                                     {"to": "lane", "barrier": "open"}]},
+         "lane": {"adjacent": [{"to": "mill_floor", "barrier": "open"},
+                               {"to": "bridge", "barrier": "open"}]},
+         "bridge": {"adjacent": [{"to": "lane", "barrier": "open"},
+                                 {"to": "market", "barrier": "open"}]},
+         "market": {"adjacent": [{"to": "bridge", "barrier": "open"}]},
          "weir": {"adjacent": []}}
 
 
@@ -162,7 +166,7 @@ class TestWhoStandsWhere:
         town = town_for_sweep(cid, emory, emory_scene)
         assert town["frames"] == {None, emory, sal} and town["root"] is None
         assert town["claims"]["mill_race"] == emory
-        assert town["claims"]["mill_floor"] == emory     # both attend it; this commit's
+        assert town["claims"]["bridge"] == emory         # both attend it; this commit's
         assert town["claims"]["market"] == sal
         assert "weir" not in town["claims"]
         assert town["presence_rooms"] == {"mill_race"}

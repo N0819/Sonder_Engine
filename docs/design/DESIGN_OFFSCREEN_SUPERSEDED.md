@@ -136,6 +136,21 @@ construction. `_bubble_rejoined` asks the same predicate backwards, which it
 must -- a trigger and a release in two vocabularies is a body that leaves on
 one rule and can only return under another.
 
+**Amended 2026-10-13 (owner: "same building should probably be the same
+bubble", then "maybe it should be a radius of rooms?").** The range is no
+longer the payload's: a stage payload still walks one doorway, and the bubble
+walks the story's `bubble_radius` -- three ROOMS WALKED by default, a whole
+stair one room, only ways a body takes (`spatial_routing.
+rooms_walked_within`, `spatial_bubbles.bubble_reach`). So "a body in the
+payload is in the beat" no longer states the rule. What replaces it is weaker
+and still enough: every cast member's own room is a payload centre, so a body
+inside the bubble's range is never missing from a payload, though the rooms
+between it and the player need not be in one. Measured on Home 10 (chat
+173): the one-doorway range split Tamamo off four rooms from Hinami -- three
+with the ladder as one -- while her voice reached Hinami at full strength.
+The rejoin asks the same radius, from the parent's side only: a bubble's own
+commit never merges itself (`spatial_frames.detect_merge`).
+
 `detect_split` keeps the zone rule, deliberately. It answers whether two
 PLAYERS have separated, a split that restores permanent bidirectional memory
 visibility when it is undone, and a declared locale is the positive evidence

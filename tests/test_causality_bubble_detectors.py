@@ -19,6 +19,7 @@ import time
 
 import pytest
 
+from story.scene import BUBBLE_RADIUS_DEFAULT
 from world import spatial_bubbles as bubbles
 from world import spatial_frames
 
@@ -52,9 +53,15 @@ def _one_frame_scene(**over):
                                   {"to": "road", "barrier": "open"}]},
             "road": {"name": "The north road",
                      "adjacent": [{"to": "lane", "barrier": "open"},
+                                  {"to": "ford", "barrier": "open"}]},
+            "ford": {"name": "The ford",
+                     "adjacent": [{"to": "road", "barrier": "open"},
                                   {"to": "landing", "barrier": "open"}]},
             "landing": {"name": "Ferry landing",
-                        "adjacent": [{"to": "road", "barrier": "open"}]},
+                        "adjacent": [{"to": "ford", "barrier": "open"},
+                                     {"to": "quay", "barrier": "open"}]},
+            "quay": {"name": "The quay",
+                     "adjacent": [{"to": "landing", "barrier": "open"}]},
         },
         "positions": {"The Stranger": "tap", "Hinami": "landing"},
         "comms": {},
@@ -70,7 +77,8 @@ def _side(positions, comms=None, rooms=None):
 
 
 def _decide(scene, **over):
-    kw = {"party_names": ["The Stranger"], "cast_names": ["Hinami"]}
+    kw = {"party_names": ["The Stranger"], "cast_names": ["Hinami"],
+          "radius": BUBBLE_RADIUS_DEFAULT}
     kw.update(over)
     return bubbles.bubble_split_decision(scene, **kw)
 
@@ -82,7 +90,7 @@ class TestTheBubbleFires:
     def test_a_character_out_of_the_beats_reach_gets_a_bubble(self):
         assert _decide(_one_frame_scene()) == {
             "kind": "bubble", "characters": ["Hinami"],
-            "rooms": ["landing", "road"]}
+            "rooms": ["ford", "landing", "lane", "quay", "road"]}
 
     def test_no_zone_is_needed_anywhere_which_is_the_whole_point(self):
         # The zone-era trigger required somebody to have LABELLED the away
@@ -120,27 +128,27 @@ class TestTheBubbleFires:
         )
         decision = bubbles.bubble_split_decision(
             scene, party_names=["The Stranger"],
-            cast_names=["Hinami", "Vela"])
+            cast_names=["Hinami", "Vela"], radius=BUBBLE_RADIUS_DEFAULT)
         assert decision["characters"] == ["Hinami"]
         assert "cellar" not in decision["rooms"]
 
     def test_two_who_left_together_are_one_thread(self):
         scene = _one_frame_scene(
             positions={"The Stranger": "tap", "Hinami": "landing",
-                       "Vela": "road"})
+                       "Vela": "quay"})
         decision = bubbles.bubble_split_decision(
             scene, party_names=["The Stranger"],
-            cast_names=["Hinami", "Vela"])
+            cast_names=["Hinami", "Vela"], radius=BUBBLE_RADIUS_DEFAULT)
         assert decision["characters"] == ["Hinami", "Vela"]
 
     def test_the_answer_does_not_depend_on_the_callers_list_order(self):
         scene = _one_frame_scene(
             positions={"The Stranger": "tap", "Hinami": "landing",
-                       "Vela": "road"})
+                       "Vela": "quay"})
         one = bubbles.bubble_split_decision(
-            scene, party_names=["The Stranger"], cast_names=["Hinami", "Vela"])
+            scene, party_names=["The Stranger"], cast_names=["Hinami", "Vela"], radius=BUBBLE_RADIUS_DEFAULT)
         two = bubbles.bubble_split_decision(
-            scene, party_names=["The Stranger"], cast_names=["Vela", "Hinami"])
+            scene, party_names=["The Stranger"], cast_names=["Vela", "Hinami"], radius=BUBBLE_RADIUS_DEFAULT)
         assert one == two
 
 
@@ -180,6 +188,12 @@ class TestTheBubbleRefuses:
         scene = _one_frame_scene(
             positions={"The Stranger": "tap", "Hinami": "lane"})
         assert _decide(scene) is None
+
+    def test_refuses_a_character_three_rooms_walked_away(self):
+        scene = _one_frame_scene(
+            positions={"The Stranger": "tap", "Hinami": "ford"})
+        assert _decide(scene) is None
+        assert _decide(scene, radius=1)["characters"] == ["Hinami"]
 
     def test_a_shut_door_is_not_distance(self):
         # The tap/lane edge is a closed door in every fixture here, and the
@@ -235,7 +249,7 @@ class TestTheBubbleRefuses:
         )
         decision = bubbles.bubble_split_decision(
             scene, party_names=["The Stranger"],
-            cast_names=["Hinami", "Vela"])
+            cast_names=["Hinami", "Vela"], radius=BUBBLE_RADIUS_DEFAULT)
         assert decision["characters"] == ["Vela"]
 
 
@@ -486,7 +500,7 @@ class TestNoSideEffects:
         before = copy.deepcopy((one, a, b, couple))
 
         bubbles.bubble_split_decision(one, party_names=["The Stranger"],
-                                      cast_names=["Hinami"])
+                                      cast_names=["Hinami"], radius=BUBBLE_RADIUS_DEFAULT)
         bubbles.couple_decision(a, ["The Stranger"], b, ["Hinami"])
         bubbles.uncouple_decision(couple, ["The Stranger"], ["Hinami"])
 
@@ -525,9 +539,15 @@ class TestDetectBubbleAgainstAChat:
                 "tap": {"name": "Tap", "adjacent": [{"to": "lane", "barrier": "open"}]},
                 "lane": {"name": "Lane", "adjacent": [
                     {"to": "tap", "barrier": "open"},
+                    {"to": "road", "barrier": "open"}]},
+                "road": {"name": "Road", "adjacent": [
+                    {"to": "lane", "barrier": "open"},
+                    {"to": "ford", "barrier": "open"}]},
+                "ford": {"name": "Ford", "adjacent": [
+                    {"to": "road", "barrier": "open"},
                     {"to": "landing", "barrier": "open"}]},
                 "landing": {"name": "Landing", "adjacent": [
-                    {"to": "lane", "barrier": "open"}]},
+                    {"to": "ford", "barrier": "open"}]},
             },
             "positions": {"The Stranger": "tap", "Hinami": "landing"},
             "entities": {}, "attire": {}, "overlays": {}, "comms": {},
@@ -564,9 +584,15 @@ class TestDetectBubbleAgainstAChat:
                 "tap": {"name": "Tap", "adjacent": [{"to": "lane", "barrier": "open"}]},
                 "lane": {"name": "Lane", "adjacent": [
                     {"to": "tap", "barrier": "open"},
+                    {"to": "road", "barrier": "open"}]},
+                "road": {"name": "Road", "adjacent": [
+                    {"to": "lane", "barrier": "open"},
+                    {"to": "ford", "barrier": "open"}]},
+                "ford": {"name": "Ford", "adjacent": [
+                    {"to": "road", "barrier": "open"},
                     {"to": "landing", "barrier": "open"}]},
                 "landing": {"name": "Landing", "adjacent": [
-                    {"to": "lane", "barrier": "open"}]},
+                    {"to": "ford", "barrier": "open"}]},
             },
             "positions": {"The Stranger": "tap", "Hinami": "landing"},
             "entities": {}, "attire": {}, "overlays": {},

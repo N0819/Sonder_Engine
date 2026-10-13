@@ -5,9 +5,11 @@ routes, sprint reach, and corridor sightlines."""
 import re
 from typing import Optional
 
-from world.spatial_orientation import normalize_bearing, opposite_bearing
+from world.spatial_orientation import (normalize_bearing, normalize_vertical,
+                                       opposite_bearing)
 
-from world.spatial_barriers import (_PASSABLE_BARRIERS, _SIGHT_BARRIERS,
+from world.spatial_barriers import (_PASSABLE_BARRIERS, _ROUTE_MEMORY_BARRIERS,
+                              _SIGHT_BARRIERS,
                               edge_admits, edge_passable, effective_adjacent, neighbor_map,
                               normalize_barrier, resolve_edge)
 from world.spatial_containment import container_of
@@ -438,24 +440,33 @@ def room_locale(room) -> str:
     return ""
 
 
-def attended_rooms(scene: dict, centers, *, hops: int = 1, names=()) -> dict:
+def attended_rooms(scene: dict, centers, *, hops: int = 1, names=(),
+                   walked: bool = False) -> dict:
     """The rooms a beat ATTENDS TO from a set of standing places.
 
-    THE DIRECTOR'S RANGE, and it is not a new notion: this is the room math
-    `agents/common._contextual_rooms` has always done to decide which rooms a
-    stage payload carries, lifted here so the question "is this body inside
-    the beat" can be asked without importing a stage helper into `world/`.
-    `_contextual_rooms` is now this function plus the walk over cast rows, so
-    what the Director is SHOWN and what the engine calls in range cannot drift
-    apart -- which they would the moment they were two pieces of arithmetic.
+    ONE COMPOSITION, TWO WALKS. What this composes is the engine's one answer
+    for everybody: the far end of any live TWO-WAY channel reaching a standing
+    place (`comms_reachable_rooms`, capped at `COMMS_ATTENDED_ROOMS`), and a
+    body's inside together with the body. Attending is not disclosing: the
+    channel carries the voice and nothing else, and what the far end perceives
+    stays theirs. The walk under it is the caller's, because two questions ask
+    it and they are right to differ:
 
-    Two inputs, both already the engine's own: the rooms within `hops`
-    adjacency steps (`nearby_rooms`, undirected, no barrier allowlist -- a
-    room behind a locked door is still a room the beat may be about), and the
-    far end of any live TWO-WAY channel reaching one of them
-    (`comms_reachable_rooms`, capped at `COMMS_ATTENDED_ROOMS`). Attending is
-    not disclosing: the channel carries the voice and nothing else, and what
-    the far end perceives stays theirs.
+    * A STAGE PAYLOAD walks `hops` adjacency steps (`nearby_rooms`, undirected,
+      no barrier allowlist -- a room behind a locked door, or beyond a window,
+      is still a room the beat may be about). `agents/common._contextual_rooms`
+      is this plus the walk over cast rows.
+    * THE CAUSALITY BUBBLE (`walked=True`) walks the story's radius in ROOMS
+      WALKED (`rooms_walked_within`: only a way a body takes, a whole stair
+      one room), because it asks whether two people are near enough to be one
+      story (owner, 2026-10-13). `spatial_bubbles.bubble_reach` is the one
+      caller.
+
+    They used to be one walk, and the docstring here said what the Director
+    is shown and what the engine calls in range "cannot drift apart". What
+    still holds is the part that mattered: no cast body inside the bubble's
+    range is missing from a payload, because `_contextual_rooms` centres
+    every cast member's own room. The rooms BETWEEN them need not be in it.
     """
     from world.spatial_senses import comms_reachable_rooms
 
@@ -472,7 +483,8 @@ def attended_rooms(scene: dict, centers, *, hops: int = 1, names=()) -> dict:
             if name:
                 seeds.update(comms_reachable_rooms(scene, here, str(name)))
     seeds |= _body_enclosure_rooms(scene, seeds)
-    reach = nearby_rooms(scene, seeds, hops=hops)
+    reach = (rooms_walked_within(scene, seeds, hops) if walked
+             else nearby_rooms(scene, seeds, hops=hops))
     # ...and a body the walk reached brings its inside with it: a holder one
     # step off is in range, so the body she holds is too.
     extra = _body_enclosure_rooms(scene, set(reach))
@@ -680,6 +692,71 @@ def nearby_rooms(
         frontier = next_frontier
 
     return {rid: rooms[rid] for rid in included if rid in rooms}
+
+
+def rooms_walked_within(scene: dict, center_room_ids, radius: int) -> dict:
+    """Rooms within `radius` ROOMS WALKED of any of center_room_ids, a whole
+    stair counting as one room.
+
+    HOW FAR APART TWO PEOPLE ARE, as the causality bubble asks it. The owner,
+    2026-10-13: "same building should probably be the same bubble", then
+    "maybe it should be a radius of rooms?" Two readings differ from
+    `nearby_rooms`, which trims payloads and crosses every declared edge:
+
+    * ONLY A WAY A BODY TAKES IS A STEP: the edges a remembering mind records
+      as routes (`_ROUTE_MEMORY_BARRIERS` -- open, an open or a shut door, a
+      membrane), never a window, a wall, bars or an overlook. Seen through is
+      not walked through: Home 9 (chat 172) had the garden one edge from a
+      second-storey bedroom through the window the layout tier made, and six
+      rooms walked. A SHUT DOOR IS ONE ROOM, not a wall -- a body opens it.
+      Undirected, because the distance between two people is the same both
+      ways: a chute a body can only fall down still puts its two ends one
+      room apart.
+    * A WHOLE STAIR IS ONE ROOM. The layout tier makes a stairwell as one hall
+      per storey (`structure.LAYOUT_MADE_KEY`), each joined to the next by a
+      flight (an edge whose `vertical` is up or down). A step from one such
+      hall to the next along a flight costs nothing, so a stair is one room
+      however many storeys it climbs. Home 10 (chat 173): Tamamo's roost was
+      four rooms from Hinami's by plain steps and three with the ladder as one.
+    """
+    from collections import deque
+    from world.structure import LAYOUT_MADE_KEY   # structure imports spatial
+
+    rooms = (scene or {}).get("rooms") or {}
+
+    def made(rid):
+        room = rooms.get(rid)
+        return isinstance(room, dict) and bool(room.get(LAYOUT_MADE_KEY))
+
+    flights = set()
+    for rid, room in rooms.items():
+        if not made(rid):
+            continue
+        for edge in room.get("adjacent") or []:
+            if isinstance(edge, dict) and made(str(edge.get("to") or "")) \
+                    and normalize_vertical(edge.get("vertical")):
+                flights.add(frozenset((str(rid), str(edge["to"]))))
+    # The body's own map (directional drops an overlook), joined both ways.
+    neighbors: dict = {}
+    for here, theres in neighbor_map(scene, _ROUTE_MEMORY_BARRIERS,
+                                     directional=True).items():
+        for there in theres:
+            neighbors.setdefault(str(here), set()).add(str(there))
+            neighbors.setdefault(str(there), set()).add(str(here))
+    limit = max(0, int(radius))
+    dist = {str(r): 0 for r in (center_room_ids or ()) if r}
+    queue = deque(sorted(dist))
+    while queue:                          # a 0-1 walk: a flight costs nothing
+        here = queue.popleft()
+        for there in sorted(neighbors.get(here, ())):
+            step = 0 if frozenset((here, there)) in flights else 1
+            walked = dist[here] + step
+            if walked > limit or walked >= dist.get(there, limit + 1):
+                continue
+            dist[there] = walked
+            (queue.appendleft if step == 0 else queue.append)(there)
+    return {rid: rooms[rid] for rid in dist if rid in rooms}
+
 
 def rooms_adjacent(scene, room_a, room_b):
     """Undirected: is room_b a declared neighbor of room_a (edge from either

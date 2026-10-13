@@ -36,9 +36,15 @@ here, no word list, and no new notion of "far".
 WHY THE FUSED VIEW CARRIES NO ROOMS. `comms_link` reads `scene["rooms"]`
 for exactly one thing: the suppression clause that refuses to put a radio
 between two bodies an ordinary voice already reaches. Two bodies in two
-frames are never that pair -- a frame split is the engine's own statement
-that they are not within earshot -- so the clause must not fire, and an
-empty room map is what guarantees it cannot. Everything else `comms_link`
+frames are treated as never that pair, so the clause must not fire, and an
+empty room map is what guarantees it cannot. That a split means "not within
+earshot" is the engine's statement, not a fact of geometry: the split is
+taken at the story's `bubble_radius` in rooms walked (three by default,
+2026-10-13), which from two rooms up is past every room a raised voice walks
+to (`spatial_senses.sound_walk_level`) -- save a floor between two rooms
+stacked one over the other, which carries a shout and is no way a body
+walks. At the old one-doorway range it was false: Home 10's split put Tamamo
+in a frame of her own while her voice reached Hinami at full strength. Everything else `comms_link`
 needs is in `positions` and `comms`. The room dicts -- the expensive,
 collision-prone half -- would have to be fused to ACT on the answer, which
 is why the room-id collision check below is a refusal rather than a merge
@@ -47,8 +53,9 @@ strategy.
 
 from __future__ import annotations
 
-from world.spatial import comms_link, room_of
+from world.spatial import comms_link, room_of, rooms_walked_within
 from world.spatial_frames import _effective_zone
+from story.scene import BUBBLE_RADIUS_DEFAULT
 
 
 # --------------------------------------------------------------- fusing comms
@@ -176,17 +183,45 @@ def _occupied_rooms(scene, names=None):
 # --------------------------------------------------------- 1. the bubble split
 
 
-def in_range_rooms(scene, party_names, *, hops=1):
-    """The rooms the player's beat attends to -- the PLAYER'S CAUSALITY BUBBLE.
+def bubble_radius(chat_id):
+    """The story's radius, in rooms walked (`dialogue_config["bubble_radius"]`,
+    normalized there). Only a value that cannot be read as a number reads as
+    the default here; a failing database raises, so a commit rolls back and
+    says why rather than splitting on a number nobody set."""
+    from story.scene import dialogue_config
 
-    `spatial.attended_rooms` is the same arithmetic that decides which rooms a
-    stage payload carries (`agents/common._contextual_rooms`), asked from the
-    human party's standing places instead of from the whole cast's. So "inside
-    the Director's range" and "in the Director's payload" are one answer, and
-    cannot drift into two.
-    """
+    try:
+        return int(dialogue_config(chat_id)["bubble_radius"])
+    except (KeyError, TypeError, ValueError):
+        return BUBBLE_RADIUS_DEFAULT
+
+
+def bubble_reach(scene, rooms, *, radius, names=()):
+    """THE BUBBLE'S RANGE, defined once: every room within `radius` rooms
+    walked of `rooms`, a whole stair one room (`spatial.rooms_walked_within`),
+    with the far end of any live two-way channel and a body's inside along
+    with the body (`spatial.attended_rooms`, `walked=True`). The split, the
+    rejoin at commit, the merge before a beat and the town's claims all ask
+    this, so a body leaves and returns on one rule. `radius` has no default:
+    a caller that forgot the story's setting must fail, not quietly use 3."""
     from world.spatial import attended_rooms
 
+    return set(attended_rooms(scene, {str(r) for r in (rooms or ()) if r},
+                              hops=radius, walked=True,
+                              names=[str(n) for n in (names or ()) if n]))
+
+
+def in_range_rooms(scene, party_names, *, radius):
+    """The rooms the player's beat reaches -- the PLAYER'S CAUSALITY BUBBLE:
+    `bubble_reach` from where the human party stands.
+
+    Not the payload's rooms, any more (2026-10-13). A stage payload walks one
+    plain doorway from every cast member's own room (`agents/common.
+    _contextual_rooms`); the bubble walks the story's radius from the party's.
+    What still holds is what made them one answer: a cast body inside this
+    range is in a payload, because its own room is a payload centre -- though
+    the rooms on the way between them need not be.
+    """
     centers = set()
     for name in (party_names or []):
         room = room_of(scene, str(name)) if name else None
@@ -194,11 +229,10 @@ def in_range_rooms(scene, party_names, *, hops=1):
             centers.add(room)
     if not centers:
         return None                      # no reference frame; see refusal 3
-    return set(attended_rooms(scene, centers, hops=hops,
-                              names=[str(n) for n in (party_names or []) if n]))
+    return bubble_reach(scene, centers, radius=radius, names=party_names)
 
 
-def _clusters(scene, names, *, hops=1):
+def _clusters(scene, names, *, radius):
     """The away bodies grouped by whether they are in each other's range.
 
     TWO PEOPLE WHO WALKED OFF IN DIFFERENT DIRECTIONS ARE TWO THREADS. One
@@ -208,14 +242,12 @@ def _clusters(scene, names, *, hops=1):
     among themselves -- the primitive is already here -- so there is one
     notion of "together" in this module rather than two.
     """
-    from world.spatial import attended_rooms
-
     groups = []
     for name in sorted(str(n) for n in (names or []) if n):
         room = room_of(scene, name)
         if not room:
             continue
-        reach = set(attended_rooms(scene, {room}, hops=hops))
+        reach = bubble_reach(scene, {room}, radius=radius)
         for group in groups:
             if room in group["rooms"] or group["reach"] & {room} or \
                     reach & group["rooms"]:
@@ -228,21 +260,30 @@ def _clusters(scene, names, *, hops=1):
     return groups
 
 
-def bubble_split_decision(scene, *, party_names, cast_names,
-                          frame_is_live_spatial=False, paradox_active=False,
-                          hops=1):
+def bubble_split_decision(scene, *, party_names, cast_names, radius,
+                          frame_is_live_spatial=False, paradox_active=False):
     """Should a major character get a causality bubble of their own?
 
     Pure: a function of the scene, the bodies each side answers for, and two
     flat facts about the frame. Returns `None`, or
     `{"kind": "bubble", "characters": [...], "rooms": [...]}`.
 
-    THE RULE IS ONE SENTENCE: a cast body the beat does not attend to has left
-    the player's causality bubble, and gets its own. Attending is
-    `spatial.attended_rooms` -- where the human party stands, the rooms one
-    step off them, and the far end of any live two-way channel reaching those
-    -- which is the same set the Director is shown. A body in the payload is
-    in range; a body outside it is outside the beat.
+    THE RULE IS ONE SENTENCE: a cast body standing more than the story's
+    radius from every human has left the player's causality bubble, and gets
+    its own. The range is `bubble_reach` -- every room within `radius` rooms
+    WALKED of where the human party stands, a whole stair one room, plus the
+    far end of any live two-way channel reaching those and the inside of any
+    body in them.
+
+    A RADIUS OF ROOMS, NOT ONE DOORWAY (owner, 2026-10-13: "same building
+    should probably be the same bubble", then "maybe it should be a radius of
+    rooms?"). The range used to be the rooms one step off the party, the same
+    walk that trims a payload. Measured on Home 10 (chat 173): the opening
+    split Tamamo off in her roost, four rooms from Hinami -- three with the
+    ladder as one -- while her voice reached Hinami at full strength, and
+    the beat that brought her back to the court two rooms off kept her away.
+    Every bubble the owner's database had opened (chats 163-173) was that
+    story's opening, two or three rooms off; none opens at three.
 
     ZONES ARE NO LONGER THE TRIGGER (owner ruling, 2026-09-17: "whenever they
     are outside the player causality bubble"). A declared `zone` was the
@@ -297,7 +338,7 @@ def bubble_split_decision(scene, *, party_names, cast_names,
         return None
 
     party = [str(n) for n in (party_names or []) if n]
-    in_range = in_range_rooms(scene, party, hops=hops)
+    in_range = in_range_rooms(scene, party, radius=radius)
     if in_range is None:
         return None                                     # refusal 3
 
@@ -316,15 +357,16 @@ def bubble_split_decision(scene, *, party_names, cast_names,
         if room and room not in in_range:
             return None                                 # refusal 5
 
-    groups = _clusters(scene, away, hops=hops)
+    groups = _clusters(scene, away, radius=radius)
     if not groups:
         return None
     first = groups[0]
-    # THE REACH, NOT JUST THE ROOM THEY STAND IN. A frame holding one room has
-    # nowhere for its occupant to walk to, so her first beat would be a person
-    # in a sealed box -- and the movement she is in the middle of is exactly
-    # what a bubble exists to keep going. Same `attended_rooms` the trigger
-    # used, so what she can reach and what counted as range are one function.
+    # WHAT THE THREAD STANDS IN, for the record and nothing else: the rooms
+    # the bodies stand in and the range around them. `perform_split` gives
+    # the new frame the whole map whatever this says (`away_rooms`), so a
+    # body is never sealed in the rooms named here -- and at a radius of
+    # three the range reaches back toward the player, which is why it must
+    # not be read as where the thread may go.
     return {"kind": "bubble", "characters": sorted(first["names"]),
             "rooms": sorted(first["reach"] | first["rooms"])}
 
@@ -469,7 +511,8 @@ def detect_bubble(chat_id, frame_id, turn_idx=None):
     # and a persona query. `_all_party_names` is one query; the range is pure
     # arithmetic over the scene in hand.
     party = _all_party_names(chat_id, frame_id)
-    in_range = in_range_rooms(scene, party)
+    radius = bubble_radius(chat_id)
+    in_range = in_range_rooms(scene, party, radius=radius)
     if in_range is None:
         return None
     positions = scene.get("positions") or {}
@@ -493,6 +536,7 @@ def detect_bubble(chat_id, frame_id, turn_idx=None):
             frame and frame.get("kind") == "spatial"
             and frame.get("merged_turn_idx") is None),
         paradox_active=bool(get_paradox(chat_id, frame_id)),
+        radius=radius,
     )
 
 
@@ -526,7 +570,7 @@ def detect_couple_between_frames(chat_id, frame_a, frame_b):
     )
 
 
-def sibling_meet_decision(scene_a, names_a, scene_b, names_b, *, hops=1):
+def sibling_meet_decision(scene_a, names_a, scene_b, names_b, *, radius):
     """Have two sibling bubbles' people come within each other's range?
 
     TWO BUBBLES OF ONE ERA ARE TWO THREADS OF ONE TOWN, and two people within
@@ -537,22 +581,21 @@ def sibling_meet_decision(scene_a, names_a, scene_b, names_b, *, hops=1):
     not see each other, because only a bubble and its parent could merge.
 
     THE RANGE A BUBBLE OPENS ON, asked across two scenes: the same room, or a
-    room within `hops` adjacency steps of the other's -- each side's position
-    read from its own scene, the only place it exists. Adjacency only: a voice
+    room within the story's `radius` of rooms walked of the other's, a whole
+    stair one room (`spatial.rooms_walked_within`) -- each side's position
+    read from its own scene, the only place it exists. The walk only: a voice
     carried between rooms (an intercom, a handset) is a couple's to carry
     (`couple_decision`), and two people talking over a wire are not standing
     together. Pure.
     """
-    from world.spatial import nearby_rooms
-
     rooms_a = {room_of(scene_a, str(n)) for n in (names_a or []) if n} - {None}
     rooms_b = {room_of(scene_b, str(n)) for n in (names_b or []) if n} - {None}
     if not rooms_a or not rooms_b:
         return False
     if rooms_a & rooms_b:
         return True
-    return bool(set(nearby_rooms(scene_a, rooms_a, hops=hops)) & rooms_b
-                or set(nearby_rooms(scene_b, rooms_b, hops=hops)) & rooms_a)
+    return bool(set(rooms_walked_within(scene_a, rooms_a, radius)) & rooms_b
+                or set(rooms_walked_within(scene_b, rooms_b, radius)) & rooms_a)
 
 
 def detect_sibling_meeting(chat_id, frame_id):
@@ -578,6 +621,7 @@ def detect_sibling_meeting(chat_id, frame_id):
         return None
     scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
     names = frame_body_names(chat_id, frame_id)
+    radius = bubble_radius(chat_id)
     for row in _spatial_children(chat_id, frame.get("parent_frame_id")):
         other = row["id"]
         if other == frame_id or not is_bubble_frame(chat_id, other):
@@ -587,6 +631,6 @@ def detect_sibling_meeting(chat_id, frame_id):
         if sibling_meet_decision(
                 scene, names,
                 wget_for_frame(chat_id, "scene", other, {}) or {},
-                frame_body_names(chat_id, other)):
+                frame_body_names(chat_id, other), radius=radius):
             return (frame_id, other)
     return None

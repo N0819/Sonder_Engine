@@ -279,6 +279,12 @@ def build_story(db):
 
     db.wset(cid, "scene", scene())
     db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0})
+    # ONE DOORWAY, as this drive was written for. A bubble opens past the
+    # story's `bubble_radius` of rooms walked -- three by default since
+    # 2026-10-13 -- and this map is too small to walk three rooms from the tap
+    # room and still be on it, so its first question ("does the bubble open by
+    # itself") could never be answered at the default.
+    db.wset(cid, "dialogue_config", {"bubble_radius": 1})
     return cid, char_id
 
 

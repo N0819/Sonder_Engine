@@ -475,6 +475,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.142 — An edge cost ten minutes because the courier said so](UNBUILT_LIVING_WORLD.md#unbuilt-1-142)
 - [§1.150 — A creature has no held hunt — the courier maze problem, one subsystem over](UNBUILT_LIVING_WORLD.md#unbuilt-1-150)
 - [§1.152 — A creature can be stopped by the shape of an opening and by nothing else](UNBUILT_LIVING_WORLD.md#unbuilt-1-152)
+- [§1.213 — The bubble radius — built 2026-10-13, residuals open](UNBUILT_LIVING_WORLD.md#unbuilt-1-213)
 
 **2. Roadmap**
 

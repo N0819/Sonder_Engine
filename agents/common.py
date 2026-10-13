@@ -1370,14 +1370,17 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
     for extra in extra_room_ids:
         if extra:
             centers.add(extra)
-    # THE ROOM MATH IS `spatial.attended_rooms`, and it is shared on purpose.
+    # THE COMPOSITION IS `spatial.attended_rooms`, and it is shared on purpose.
     # A live channel's far end is a room this beat attends to -- everything
     # that decides who may act reads where bodies STAND, so a person on the
-    # other end of a radio was outside every payload -- and the same set is
-    # what `spatial_bubbles` calls the Director's RANGE when it asks whether a
-    # body has left the beat. Two copies of that arithmetic would drift, and
-    # the drift would be a character who is in the payload and outside the
-    # range, or the reverse.
+    # other end of a radio was outside every payload -- and a body's inside
+    # goes where the body goes. The WALK under it differs from the causality
+    # bubble's since 2026-10-13: a payload walks `hops` plain doorways, the
+    # bubble the story's `bubble_radius` in rooms walked
+    # (`spatial_bubbles.bubble_reach`). What keeps the two from disagreeing
+    # where it matters is that every cast member's own room is a centre here:
+    # a body inside the bubble's range is never missing from a payload, though
+    # the rooms between it and the player need not be in one.
     try:
         from world.spatial import attended_rooms
         return attended_rooms(sc, centers, hops=hops, names=names)

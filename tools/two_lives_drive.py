@@ -408,6 +408,8 @@ def main():
         # lives share one town, which runs at the later of their clocks. Asked
         # every round, because two lives that meet become one thread
         # (`perform_sibling_merge`) and a frame that has ended plays no beat.
+        # They meet within the story's `bubble_radius` of rooms walked (three
+        # by default since 2026-10-13; one doorway before it).
         for frame_id in live_bubbles(cid, None):
             if not is_bubble_frame(cid, frame_id):
                 continue                    # folded into its sibling this round

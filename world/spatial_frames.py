@@ -1438,6 +1438,26 @@ def detect_merge(chat_id, frame_id):
     if not frame:
         return None
     if frame.get("kind") == "spatial" and frame.get("merged_turn_idx") is None:
+        # A BUBBLE NEVER ENDS ITS OWN FRAME FROM ITS OWN COMMIT. Two reasons,
+        # and the rejoin radius (2026-10-13) made this the ordinary way a body
+        # that walks back comes home rather than a corner case:
+        #  * every commit domain after the spatial one writes to the frame
+        #    being committed -- memories, plans, presences, the beat's pending
+        #    notices -- so ending it here strands this beat's own writes in a
+        #    frame that has ended (`detect_sibling_meeting` keeps the
+        #    committing frame for the same reason);
+        #  * a bubble's beat runs beside the player's, under its own turn's
+        #    lock, and the player's commit writes the parent's whole scene as
+        #    its beat composed it. A merge landing while that beat runs is
+        #    overwritten: the body is active in the parent with no position,
+        #    and nowhere.
+        # The parent asks instead, on its own path: before its next beat
+        # resolves (`bubbles_the_beat_reaches`, every bubble within the radius
+        # of where the player stands) and at its commit (below). Bubble beats
+        # are scheduled only from the parent's commit, so nothing happens in
+        # between and the player sees no difference.
+        if is_bubble_frame(chat_id, frame_id):
+            return None
         parent_id, child_id = frame.get("parent_frame_id"), frame_id
     else:
         children = _spatial_children(chat_id, frame_id)
@@ -1524,18 +1544,21 @@ def _bubble_rejoined(chat_id, parent_id, parent_scene, child_id, child_scene):
     the beat's reach, get a frame, walk back into the next room, and stay in
     it forever because nobody had labelled anything.
 
-    So: the bubble ends when one of its bodies is standing in a room the
-    parent's beat attends to. `in_range_rooms` is computed on the PARENT's
-    scene (which keeps every room, so it can name hers) and her position is
-    read from her OWN scene (which is the only place it exists after the
-    split) -- each side asked about the half it actually holds.
+    So: the bubble ends when one of its bodies is standing within the story's
+    radius of the party -- the split's own range, at the split's own radius
+    (`spatial_bubbles.bubble_radius`): a body leaves past the radius and comes
+    back inside it, never on two numbers. `in_range_rooms` is computed on the
+    PARENT's scene (which keeps every room, so it can name hers) and her
+    position is read from her OWN scene (which is the only place it exists
+    after the split) -- each side asked about the half it actually holds.
 
     Fails CLOSED for the reason the merge fails closed everywhere: it is
     one-way, and it restores permanent bidirectional memory visibility.
     """
-    from world.spatial_bubbles import in_range_rooms
+    from world.spatial_bubbles import bubble_radius, in_range_rooms
 
-    in_range = in_range_rooms(parent_scene, _all_party_names(chat_id, parent_id))
+    in_range = in_range_rooms(parent_scene, _all_party_names(chat_id, parent_id),
+                              radius=bubble_radius(chat_id))
     if not in_range:
         return False
     cast_rooms, _zones = _bubble_cast_places(chat_id, child_id, child_scene)
@@ -1553,19 +1576,31 @@ def bubbles_the_beat_reaches(chat_id, frame_id, beat_rooms, party_names=()):
     from the station to the clinic door and knocked, the doctor stood in a
     bubble two rooms from where the beat began, nobody in the player's world
     could hear the knock, and the Director's prose answered it with a
-    stranger the encoder filed under the doctor's id."""
-    from world.spatial import attended_rooms
+    stranger the encoder filed under the doctor's id.
+
+    The rooms are the beat's, the range is the split's: `bubble_reach` at the
+    story's radius. And this is where a body that walked back in her own beat
+    comes home -- a bubble never merges itself (`detect_merge`) -- so it asks
+    everything the commit's rejoin asks: the beat's rooms hold where the
+    player stood when it began, and the rooms the rest of the party stands in
+    are centres too. Asked on every player beat, so a story with no bubble
+    reads no scene."""
+    from world.spatial_bubbles import bubble_radius, bubble_reach
 
     centers = {str(r) for r in beat_rooms or () if r}
     if not centers:
         return []
+    children = [child for child in _spatial_children(chat_id, frame_id)
+                if is_bubble_frame(chat_id, child["id"])]
+    if not children:
+        return []
     parent_scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
-    reach = set(attended_rooms(parent_scene, centers, hops=1,
-                               names=[str(n) for n in party_names or () if n]))
+    centers |= {str(room) for room in (room_of(parent_scene, str(name))
+                                       for name in party_names or () if name) if room}
+    reach = bubble_reach(parent_scene, centers, radius=bubble_radius(chat_id),
+                         names=party_names)
     out = []
-    for child in _spatial_children(chat_id, frame_id):
-        if not is_bubble_frame(chat_id, child["id"]):
-            continue
+    for child in children:
         child_scene = wget_for_frame(chat_id, "scene", child["id"], {}) or {}
         rooms, _zones = _bubble_cast_places(chat_id, child["id"], child_scene)
         if rooms & reach:
@@ -2481,8 +2516,9 @@ def detect_and_reconcile(ctx, nonce):
       * A COUPLE OPENS when a live channel joins a split to the frame it
         split from, whether the away party is a player's or a bubble's. The
         voice needs somewhere both parties exist to be spoken in.
-      * A BUBBLE OPENS for cast who walked into a zone with no human in it
-        and no voice reaching them. Last, because every cheaper answer above
+      * A BUBBLE OPENS for cast standing more than the story's `bubble_radius`
+        of rooms walked (a stair one room) from every human, with no voice
+        reaching them. Last, because every cheaper answer above
         is a reason it should not: a channel that still carries makes the
         bubble's sixth refusal fire, and that refusal lifting by itself on a
         later beat is the whole of the uncouple driver.

@@ -2337,6 +2337,32 @@ def normalize_offscreen_life(value):
     return level if level in OFFSCREEN_LIFE_LADDER else OFFSCREEN_LIFE_DEFAULT
 
 
+# HOW FAR A CHARACTER MAY WALK BEFORE THEIR LIFE GOES ON IN A THREAD OF ITS
+# OWN, in rooms walked, a whole stair counting as one room
+# (`spatial_routing.rooms_walked_within`). The owner's numbers, 2026-10-13:
+# "same building should probably be the same bubble", then "maybe it should be
+# a radius of rooms?" -- three, one named setting (`dialogue_config
+# ["bubble_radius"]`, the Absent threads card) replacing the one doorway the
+# split, the rejoin, the sibling meeting and the town's claims each asked.
+# Measured on Home 10 (chat 173): the opening split Tamamo off four rooms from
+# Hinami -- three with the ladder as one -- while her voice reached Hinami at
+# full strength. The floor is one room (a doorway, the old rule); the ceiling
+# keeps a story from being one thread by accident.
+BUBBLE_RADIUS_DEFAULT = 3
+BUBBLE_RADIUS_FLOOR = 1
+BUBBLE_RADIUS_CEILING = 12
+
+
+def normalize_bubble_radius(value):
+    """`value` as a radius within the floor and ceiling; a value that does
+    not read as a number reads as the default, never as the floor -- a typo
+    must not split every character who steps next door."""
+    try:
+        return max(BUBBLE_RADIUS_FLOOR, min(BUBBLE_RADIUS_CEILING, int(value)))
+    except (TypeError, ValueError):
+        return BUBBLE_RADIUS_DEFAULT
+
+
 DEFAULT_INTERACTION_CONFIG = {
     "style": "natural",
     "min_lines": 0,
@@ -2392,6 +2418,8 @@ DEFAULT_INTERACTION_CONFIG = {
     # 0 means none -- the "off" the old cognition toggle spelled as a ladder
     # rung. A refusal is always reported, never silent.
     "max_bubbles": 3,
+    # How far, in rooms walked, before a thread opens (BUBBLE_RADIUS_DEFAULT).
+    "bubble_radius": BUBBLE_RADIUS_DEFAULT,
 }
 
 def offscreen_life_allows(level, rung):
@@ -2468,6 +2496,8 @@ def dialogue_config(chat_id):
         config["max_bubbles"] = max(0, min(12, int(raw)))
     except (TypeError, ValueError):
         config["max_bubbles"] = 3
+    config["bubble_radius"] = normalize_bubble_radius(
+        stored.get("bubble_radius", BUBBLE_RADIUS_DEFAULT))
     # THE RETIRED LADDER KEYS STAY IN THE DICT AND GATE NOTHING. Measured
     # 2026-09-20 when they were deleted outright: 120 readers index
     # `offscreen_life` directly, several inside the commit path, so the turn

@@ -2923,8 +2923,9 @@ named only once the mind knows it. Built as `world/landscape.py` (Design.md,
 critic and a panel of three designs and three judges. Left:
 
 - **People at that range**, by the plan. Showing them would need rulings on
-  causality bubbles (a major character more than one hop off lives in her own
-  frame and is absent from the player's), the beat aperture (`rooms_in_view`
+  causality bubbles (a major character more than the story's `bubble_radius`
+  off -- three rooms walked by default, a stair one -- lives in her own frame
+  and is absent from the player's), the beat aperture (`rooms_in_view`
   is "sight plus earshot", owner 2026-09-23 -- far sight inside it puts far
   townsfolk on screen and model-voiced), the `seen` ledger (which licenses
   attire deltas and prunes appearance) and hailing what is seen.
