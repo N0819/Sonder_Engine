@@ -2881,5 +2881,8 @@
   "The engine's files changed after this server started. Restart the server to run them.": "このサーバーの起動後にエンジンのファイルが変更されました。反映するにはサーバーを再起動してください。",
   "Rooms before a thread opens": "筋が分かれるまでの部屋数",
   "rooms before a thread opens": "筋が分かれるまでの部屋数",
-  "— how far, in rooms walked, a character may go from you before their life carries on in a thread of its own. A stair counts as one room however many floors it climbs. Nearer than that they stay in your scene, and what they do happens in your turns. 3 by default.": "——歩いて何部屋あなたから離れたら、キャラクターの暮らしが別の筋として続くか。階段は何階分を上っても一部屋と数えます。それより近ければあなたの場面に留まり、その行動はあなたのターンの中で起こります。既定は3。"
+  "— how far, in rooms walked, a character may go from you before their life carries on in a thread of its own. A stair counts as one room however many floors it climbs. Nearer than that they stay in your scene, and what they do happens in your turns. 3 by default.": "——歩いて何部屋あなたから離れたら、キャラクターの暮らしが別の筋として続くか。階段は何階分を上っても一部屋と数えます。それより近ければあなたの場面に留まり、その行動はあなたのターンの中で起こります。既定は3。",
+  "This thread has rejoined the frame it split from. Play on there.": "この筋は分かれたもとのフレームに合流しました。そちらで続けてください。",
+  "This thread has rejoined the frame it split from. Switch back to play on.": "この筋は分かれたもとのフレームに合流しました。続けるにはそちらに切り替えてください。",
+  "This turn is still being written; wait for it to finish before editing it.": "このターンはまだ書かれている最中です。編集するには書き終わるまでお待ちください。"
 }

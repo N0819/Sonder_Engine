@@ -745,6 +745,24 @@ def _require_frame_idle(chat_id: int, frame_id):
             "for the aborted response before submitting another turn.",
         )
 
+def _require_turn_idle(turn):
+    """Refuse a write to ONE TURN only while a pipeline could be rewriting it:
+    its own frame's run slot is held and it is that frame's newest turn --
+    the only turn a reroll, rerun or resume may be running on. A beat running
+    in another frame, or a new beat after this one, touches none of this
+    turn's rows. Home 10 (item 6): every control on the page answered "Abort
+    it" for the 28 s Tamamo's off-screen beat ran, a typo fix included, and
+    nothing on the page could reach her frame to abort."""
+    chat_id, frame_id = turn["chat_id"], turn["frame_id"]
+    if (chat_id, frame_id) not in ABORTS:
+        return
+    newest = q("SELECT id FROM turns WHERE chat_id=? AND frame_id IS ? "
+               "ORDER BY idx DESC LIMIT 1", (chat_id, frame_id), one=True)
+    if newest and newest["id"] == turn["id"]:
+        raise HTTPException(
+            409, "This turn is still being written; wait for it to finish before editing it.")
+
+
 def _frame_of(cid: int, frame_id):
     """One route's era as a validated frame id, or None for the present.
 
@@ -6567,6 +6585,16 @@ def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
         # would let a request operate on another chat's frame.
         if fr is None or fr["chat_id"] != cid:
             raise HTTPException(404, f"Frame {frame_id} not found")
+        # A THREAD THAT HAS ENDED TAKES NO NEW BEAT. Every writer of
+        # `merged_turn_idx` ends a frame -- a spatial frame merged back, a
+        # bubble absorbed by its sibling, a couple closed -- and the frame
+        # keeps its turns for reading while its world rows stand frozen at the
+        # merge. A beat played into one runs on that stale copy and commits
+        # where nobody reads: chat 166 turn 4583, a player line played into
+        # bubble frame 7 after it had rejoined (Home 10 observation, item 6).
+        if fr.get("merged_turn_idx") is not None:
+            raise HTTPException(
+                409, "This thread has rejoined the frame it split from. Play on there.")
     # A BEAT SUBMITTED TO A COUPLED FRAME IS PLAYED IN THE COUPLE. While a live
     # comm channel joins two spatial frames, the beat has to run somewhere both
     # parties exist -- every reader in `agents/` resolves one scene through one
@@ -7281,15 +7309,17 @@ def edit_prose(tid: int, body: dict = Body(...)):
     if not turn:
         raise HTTPException(404, "Turn not found")
 
-    # The same reason `edit_input` above takes it, and the reason applies
-    # here more sharply rather than less: this route WRITES a variant, so a
-    # prose edit issued while a reroll of the same turn is running races the
-    # pipeline's own write to that step. Whichever `UPDATE variants SET
-    # active=0` lands second wins, and the edit either vanishes or silences
-    # the beat the pipeline just produced. Not marking anything stale
-    # (argued below) is what makes this route safe to run on an OLD turn --
-    # it was never an argument for running it against a LIVE one.
-    _require_chat_idle(turn["chat_id"])
+    # This route WRITES a variant, so a prose edit issued while a reroll of
+    # the same turn is running races the pipeline's own write to that step.
+    # Whichever `UPDATE variants SET active=0` lands second wins, and the edit
+    # either vanishes or silences the beat the pipeline just produced. Not
+    # marking anything stale (argued below) is what makes this route safe to
+    # run on an OLD turn -- it was never an argument for running it against a
+    # LIVE one. So it waits for a pipeline that could be writing THIS turn
+    # (`_require_turn_idle`), never for one in another frame (2026-10-13; it
+    # waited for the whole chat until then, the bubble beats beside a player's
+    # included).
+    _require_turn_idle(turn)
 
     step = q(
         "SELECT * FROM steps WHERE turn_id=? AND key='narrator'",

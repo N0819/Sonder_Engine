@@ -545,6 +545,26 @@ function switchFrame(frameId) {
   renderChat();
 }
 
+// A THREAD THAT HAS REJOINED TAKES NO NEW BEAT (`turn_new` refuses it). A
+// merged frame keeps its pill so its history can be read, and the composer
+// says it has ended instead of taking a line the server will refuse --
+// chat 166 turn 4583 was a player line played into a bubble frame that had
+// already rejoined, on that frame's stale copy of the world.
+function syncComposerToFrame() {
+  const input = $("#input"), send = $("#send");
+  if (!input || !send) return;
+  if (input.dataset.placeholder === undefined) input.dataset.placeholder = input.placeholder;
+  const frame = S.chat && S.currentFrameId !== null && S.currentFrameId !== undefined
+    ? (S.chat.frames || []).find(f => f.id === S.currentFrameId) : null;
+  const ended = !!(frame && frame.merged_turn_idx !== null && frame.merged_turn_idx !== undefined);
+  input.disabled = ended;
+  input.placeholder = ended
+    ? t("This thread has rejoined the frame it split from. Switch back to play on.")
+    : input.dataset.placeholder;
+  if (ended) send.disabled = true;
+  else if (!S.busy) send.disabled = false;
+}
+
 // Every toolbar button whose handler opens with `if (!S.chatId) return` is
 // listed here. Such a button no-ops with no chat open, and disabling it turns
 // a silent dead click into an honest, visibly-inert control. The membership
@@ -623,6 +643,7 @@ function renderChat() {
   // overwhelmingly common case) has every turn's frame_id === null,
   // so this filter is a no-op for it.
   const frameTurns = S.chat.turns.filter(t => (t.frame_id ?? null) === S.currentFrameId);
+  syncComposerToFrame();
 
   const last = frameTurns[frameTurns.length - 1];
 

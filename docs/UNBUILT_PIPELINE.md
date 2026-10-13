@@ -2015,6 +2015,46 @@ reach:
   rest, and reads 6087's shape as `{}`, after which `_require_whole_json`
   reports a false "ran out of output budget" at every card-authoring site.
 
+<a id="unbuilt-1-215"></a>
+
+### 1.215 Home 10's fifteen failings -- what is built, what waits on a ruling (2026-10-13)
+
+The evidence is `docs/experiments/OBSERVE_2026_10_13_home10.md` (chat 173);
+this is their status, the one list of it.
+
+- **Built:** 1, Tamamo split off while within earshot (Design.md "A causality
+  bubble opens at a radius of rooms walked"); 4, the room designer killed by
+  a server holding two versions of the code ("One server process runs one
+  version of the engine"); 5, her answer cut at its first brace ("An answer
+  is never cut at its first brace"); and two pieces of 6 ("A thread that has
+  ended takes no new beat, and a prose edit waits only for its own turn").
+- **Waiting on the owner's ruling -- 3 and the rest of 6.** A checkpoint is
+  an instant, and turn numbers are not commit order: every player commit
+  schedules each live bubble's beat, which takes the next idx, so while a
+  bubble lives the newest page can never be rerolled, edited or deleted
+  (`_require_latest`), and a lower-numbered bubble beat that committed after
+  a player turn's checkpoint is silently erased by rewinding that turn
+  (chats 167, 170 and 173, turn 2). The question both designs end on: when a
+  turn is rewound, are the unseen bubble beats its commit scheduled TAKEN
+  BACK and lived again after the re-commit, or does the rewind refuse? The
+  designs and their reviews are in the 2026-10-13 batch notes; a schema
+  change (a commit clock) is needed either way, and its backfill must not
+  rewrite every checkpoint blob (2.8 GB on the owner's database).
+- **Waiting on the owner's ruling -- 7.** The grounds solver split Home 10's
+  court in two and stranded the storehouse. A deterministic floor that
+  refuses such grounds, as designed, would also drop every ground place of
+  Home 6 -- the owner's own shrine and the layout lab's twin -- so it does
+  not ship before the owner compares Home 6's plan before and after.
+- **Batch B, ruled 2026-10-13, not built:** 9, a resident who does not know
+  her own home (residents get their home's room graph at placement), and 11,
+  travel clothes worn to bed (authored alternative outfits; code never strips
+  garments).
+- **Open:** 2 (a look around re-tells the opening), 8 (the opening furnished
+  planned rooms blind, §1.205), 10 (the ward-reading not stored), 12 (stair
+  records disagree), 13 (perception loses its frame), 14 (a slow launch and
+  a yes-only question) and 15 (records that mislead -- the capture row's
+  read is now said, the rest is not).
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

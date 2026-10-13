@@ -206,6 +206,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.207 — Prose the world does not hold (2026-10-12)](UNBUILT_PIPELINE.md#unbuilt-1-207)
 - [§1.208 — Two frames, a lagging station, a full mind (2026-10-12)](UNBUILT_PIPELINE.md#unbuilt-1-208)
 - [§1.214 — An answer is never cut at its first brace — built 2026-10-13, residuals open](UNBUILT_PIPELINE.md#unbuilt-1-214)
+- [§1.215 — Home 10's fifteen failings — what is built, what waits on a ruling (2026-10-13)](UNBUILT_PIPELINE.md#unbuilt-1-215)
 
 **2. Roadmap**
 
