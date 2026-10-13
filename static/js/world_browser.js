@@ -793,21 +793,27 @@ function wbExits(slice, ctx) {
   });
   const passageRow = (to, edge) => {
     // The passage's fields as the stored edge carries them (the sync writes
-    // them onto both edges), '' when the doorway has none yet.
+    // them onto both edges), '' when the doorway has none yet. WHAT THE
+    // DOOR IS is its `desc` (the owner, 2026-10-12: "doors should have a
+    // description and material type field"); the edge's `name` is the far
+    // room's, which this row showed under the passage's placeholder.
     const wide = edge && edge.width != null ? edge.width : "";
     return el("div", { class: "wb-exit wb-doorway-fields small", "data-doorway": to },
       el("span", { class: "dim" }, "Doorway"),
-      wbText((edge && edge.name) || "", v => doorway(to, { name: v }),
-        { placeholder: "What the passage is — a shoji, a hatch, a stair" }),
+      wbText((edge && edge.desc) || "", v => doorway(to, { desc: v }),
+        { placeholder: "What the door is — paper over a lattice, iron-bound oak", multiline: true }),
       wbText((edge && edge.material) || "", v => doorway(to, { material: v }),
         { placeholder: "Material" }),
       el("span", { class: "dim" }, "Width"),
       wbNumber(wide, v => doorway(to, { width: v }),
         { min: 1, max: (ctx.vocab.extent || {}).max, title: "Paces wide — the doorway's aperture", placeholder: "1" }));
   };
+  // A window is no way out: it is listed under Windows (`wbWindows`).
+  const isWindow = b => (vocab.window_barriers || []).includes(b);
   const rows = [];
   if (stored) {
     for (const edge of stored) {
+      if (isWindow(edge.barrier)) continue;
       const far = byTo.get(edge.to) || { to: edge.to, name: edge.to, status: null };
       const mine = stored.map(asExit);
       const update = (changes) => patchExits(
@@ -828,7 +834,7 @@ function wbExits(slice, ctx) {
   }
   const storedTo = new Set((stored || []).map(e => e.to));
   for (const x of slice.exits || []) {
-    if (storedTo.has(x.to)) continue;
+    if (storedTo.has(x.to) || isWindow(x.barrier)) continue;
     const farDeclared = stored && !slice.planned_stub && x.status === "live";
     rows.push(el("div", { class: "wb-exit", "data-exit": x.to },
       el("button", { class: "wb-link", translate: "no",
@@ -873,6 +879,79 @@ function wbExits(slice, ctx) {
   }
   kids.push(...wbLintRows(slice, "exits"));
   return wbSection("Exits", ...kids);
+}
+
+// Windows: each in its wall, never a way out (the owner, 2026-10-12:
+// "windows are being read like doors in the editor"). One onto another room
+// is that way's edge whose barrier is a window -- edited here as the edge it
+// is: what it looks onto, what it is (`desc`) and its glass through the
+// doorways route, its barrier and its wall through the room's exit list.
+// One onto open air is the room's own record, listed with its wall. A room
+// with neither shows no section.
+function wbWindows(slice, ctx) {
+  const vocab = ctx.vocab;
+  const isWindow = b => (vocab.window_barriers || []).includes(b);
+  const stored = slice.record ? slice.record.adjacent || [] : null;
+  const byTo = new Map((slice.exits || []).map(x => [x.to, x]));
+  const asExit = e => ({ to: e.to, barrier: e.barrier || "", dir: e.dir || "" });
+  const patchExits = exits => wbWrite(ctx, async () => {
+    const fresh = await api("PATCH",
+      `/api/chats/${ctx.chatId}/rooms/${encodeURIComponent(slice.id)}${frameQuery()}`,
+      { exits });
+    await ctx.replaceCard(fresh);
+    return fresh;
+  });
+  const edgeWrite = (to, fields) => wbWrite(ctx, async () => {
+    const out = await api("PATCH",
+      `/api/chats/${ctx.chatId}/doorways/${encodeURIComponent(slice.id)}/${encodeURIComponent(to)}${frameQuery()}`,
+      fields);
+    await ctx.replaceCard(out.slice);
+    return out;
+  });
+  const describe = (to, edge) => el("div", { class: "wb-exit wb-doorway-fields small", "data-doorway": to },
+    el("span", { class: "dim" }, "Window"),
+    wbText((edge && edge.desc) || "", v => edgeWrite(to, { desc: v }),
+      { placeholder: "What the window is — its frame, its glass, what hangs in it", multiline: true }),
+    wbText((edge && edge.material) || "", v => edgeWrite(to, { material: v }),
+      { placeholder: "Material" }));
+  const rows = [];
+  const storedTo = new Set((stored || []).map(e => e.to));
+  for (const edge of stored || []) {
+    if (!isWindow(edge.barrier)) continue;
+    const far = byTo.get(edge.to) || { to: edge.to, name: edge.to, status: null };
+    const mine = stored.map(asExit);
+    const update = changes => patchExits(mine.map(x => x.to === edge.to ? { ...x, ...changes } : x));
+    rows.push(el("div", { class: "wb-exit wb-window", "data-window": `door:${edge.to}`, "data-exit": edge.to },
+      el("span", { class: "dim" }, "Window onto"),
+      el("button", { class: "wb-link", translate: "no", onclick: () => ctx.select(edge.to) },
+        txt(far.name || edge.to)),
+      wbStatusBadge(far.status),
+      wbSelect(vocab.barriers, edge.barrier || "",
+        { title: "Barrier", onchange: v => update({ barrier: v }) }),
+      wbSelect(vocab.dirs, edge.dir || "",
+        { blank: "—", title: "Bearing — the wall the window is in", onchange: v => update({ dir: v }) }),
+      el("button", { class: "small wb-remove", title: "Remove this window",
+                     onclick: () => patchExits(mine.filter(x => x.to !== edge.to)) }, "✕")),
+      far.status === "live" ? describe(edge.to, edge) : null);
+  }
+  for (const x of slice.exits || []) {
+    if (storedTo.has(x.to) || !isWindow(x.barrier)) continue;
+    rows.push(el("div", { class: "wb-exit wb-window", "data-window": `door:${x.to}`, "data-exit": x.to },
+      el("span", { class: "dim" }, "Window onto"),
+      el("button", { class: "wb-link", translate: "no", onclick: () => ctx.select(x.to) }, txt(x.name || x.to)),
+      wbStatusBadge(x.status),
+      x.dir ? el("span", { class: "small dim", translate: "no" }, txt(x.dir.toUpperCase())) : null,
+      stored ? el("span", { class: "small dim" }, "Declared from the far side") : null));
+  }
+  for (const a of (slice.stationable || []).filter(a => a.kind === "window" && String(a.id).startsWith("window:"))) {
+    rows.push(el("div", { class: "wb-exit wb-window small", "data-window": a.id },
+      el("span", { class: "dim" }, "Window"),
+      el("span", { translate: "no" }, txt(a.desc)),
+      a.dir ? el("span", { class: "dim", translate: "no" }, txt(a.dir.toUpperCase())) : null,
+      el("span", { class: "dim" }, "onto open air")));
+  }
+  if (!rows.length) return null;
+  return wbSection("Windows", ...rows);
 }
 
 // Anchors: the room's named features, each with a wall and its geometry --
@@ -952,7 +1031,7 @@ function wbAnchors(slice, ctx) {
         paces != null ? el("span", { class: "dim wb-wall-paces", title: "How many paces this wall has, from the extent or the size tier" },
           `${paces} paces`) : null),
       ...hereDoors.map(a => el("div", { class: "wb-exit wb-doorway small dim" },
-        el("span", {}, "Doorway"), el("span", { translate: "no" }, txt(a.desc)),
+        el("span", {}, a.kind === "window" ? "Window" : "Doorway"), el("span", { translate: "no" }, txt(a.desc)),
         el("span", { translate: "no" }, txt(`(${a.id})`)))),
       ...here.map(([aid, a]) => row(aid, a)),
       ...wbLintRows(slice, "anchors", { wall })));
@@ -1184,6 +1263,8 @@ function wbRenderCard(host, slice, ctx) {
   }
 
   host.append(wbExits(slice, ctx));
+  const windows = wbWindows(slice, ctx);
+  if (windows) host.append(windows);
   const anchors = wbAnchors(slice, ctx);
   if (anchors) host.append(anchors);
 
@@ -1902,17 +1983,38 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   if (unplaced.length) { maxY = Math.max(maxY, laneY + 1); maxX = Math.max(maxX, unplaced.length); }
   minX -= 1.5; minY -= 1.5; maxX += 1.5; maxY += 1.5;
 
+  // DRAWN AS THE LAYOUT LAB DRAWS A ROOM (the owner, 2026-10-12: "i was
+  // refering to the editor when i wanted th window to look more like the
+  // layout lab"): the storey plan's own pieces -- each room filled by what
+  // it is for, ink walls broken at their doorways, a door a bar in its gap,
+  // a window a thin line in its wall, a fixture by its kind's symbol, a stair
+  // by its shape -- over the grid the editing still needs, faint. Every drag
+  // and click below is the editor's as it was.
   const svg = wbSvg("svg", {
-    class: "wb-map-svg wb-room-map", role: "group",
+    class: "wb-map-svg wb-room-map wb-room-plan", role: "group",
     "aria-label": t(`Map of ${room.name}`),
     viewBox: [minX * S, minY * S, (maxX - minX) * S, (maxY - minY) * S].join(" "),
   });
+  wbPlanDefs(svg);
+  const PX = v => v * S;
   const layer = name => { const g = wbSvg("g", { class: name }); svg.append(g); return g; };
   const gFar = layer("wb-m-far"), gCells = layer("wb-m-cells"), gTint = layer("wb-m-tints"),
+        gStair = layer("wb-m-stair"),
         gParts = layer("wb-m-parts"), gWalls = layer("wb-m-walls"), gHits = layer("wb-m-hits"),
         gAnchors = layer("wb-m-anchors"), gThings = layer("wb-m-things"),
         gBodies = layer("wb-m-bodies"), gLint = layer("wb-m-lint"), gHandles = layer("wb-m-handles"),
         gLabels = layer("wb-m-labels");
+  // The box a set of cells fills, as the plan draws a fixture or a stair in.
+  const boxOf = (cs, ox = 0, oy = 0) => {
+    const xs = cs.map(c => c[0] + ox), ys = cs.map(c => c[1] + oy);
+    const x = Math.min(...xs), y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x + 1, d: Math.max(...ys) - y + 1 };
+  };
+  // A name cut to what fits a box `w` paces wide, at `size`.
+  const fit = (name, w, size) => {
+    const room_ = Math.max(3, Math.floor(w * S / (size * .56)));
+    return name.length > room_ ? name.slice(0, room_ - 1).trimEnd() + "…" : name;
+  };
 
   const cellOf = p => [Math.floor(p.x / S), Math.floor(p.y / S)];
   const inRoom = c => cellSet.has(c.join(","));
@@ -1930,6 +2032,10 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   const anchorHint = t("click to edit, drag onto a wall or any cell to move, arrows nudge");
   const doorwayTo = t("Doorway to");
   const doorHint = t("click for the exit, drag along the wall to move it, arrows nudge");
+  const windowHint = t("click for the window, drag along the wall to move it, arrows nudge");
+  const windowRecordHint = t("click for the window");
+  const windowWord = t("Window");
+  const ontoWord = t("looks onto");
   const thingHint = t("click to edit, drag onto any cell to place, arrows nudge");
   const bodyHint = t("click for the station, drag onto any cell to place, arrows nudge");
   const partHint = t("a part of the room — drag to move it, drag its corner to resize, arrows nudge");
@@ -1944,30 +2050,35 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
 
   // -- the neighbours, faintly, where the field lays them ------------------
   for (const n of far) {
-    const g = wbSvg("g", { class: "wb-m-neighbour", "data-room": n.id, tabindex: "0", role: "button" },
+    const g = wbSvg("g", { class: "wb-m-neighbour" + (n.ground ? " ground" : ""), "data-room": n.id,
+                           tabindex: "0", role: "button" },
       wbSvg("title", {}, `${n.name} — ${openHint}`));
+    // filled by what it is for, as the plan fills it, faintly
+    const fill = wbPlanFill(n.purpose || "");
     for (const [x, y] of n.cells) {
       g.append(wbSvg("rect", { x: (x + n.offset[0]) * S, y: (y + n.offset[1]) * S,
-                               width: S, height: S, class: "wb-m-far-cell" }));
+                               width: S, height: S, class: "wb-m-far-cell", style: `--wbm-floor:${fill}` }));
     }
     for (const seg of wbBoundary(n.cells)) {
       g.append(wbSvg("line", { x1: (seg[0] + n.offset[0]) * S, y1: (seg[1] + n.offset[1]) * S,
                                x2: (seg[2] + n.offset[0]) * S, y2: (seg[3] + n.offset[1]) * S,
                                class: "wb-m-far-edge" }));
     }
+    if (n.stair && n.cells.length) {
+      wbPlanStair(g, { ...n.stair, name: n.name, rects: [boxOf(n.cells, n.offset[0], n.offset[1])] }, PX, PX, S);
+    }
     for (const [aid, a] of Object.entries(n.anchors || {})) {
-      if (a.implicit) continue;
-      for (const [x, y] of a.cells) {
-        g.append(wbSvg("rect", { x: (x + n.offset[0]) * S + 2, y: (y + n.offset[1]) * S + 2,
-                                 width: S - 4, height: S - 4, rx: 3, class: "wb-m-far-anchor" },
-          wbSvg("title", {}, `${a.desc} (${aid})`)));
-      }
+      if (a.implicit || !a.cells.length) continue;
+      const fg = wbSvg("g", { class: "wb-m-far-anchor" }, wbSvg("title", {}, `${a.desc} (${aid})`));
+      wbPlanFixture(fg, { rect: boxOf(a.cells, n.offset[0], n.offset[1]), kind: a.kind || "" }, PX, PX, S);
+      g.append(fg);
     }
     if (n.cells.length) {
-      const cx = n.cells.reduce((s, c) => s + c[0], 0) / n.cells.length + n.offset[0] + 0.5;
-      const cy = n.cells.reduce((s, c) => s + c[1], 0) / n.cells.length + n.offset[1] + 0.5;
-      g.append(wbSvg("text", { x: cx * S, y: cy * S + 3, "text-anchor": "middle",
-                               class: "wb-m-far-name" }, n.name));
+      const top = boxOf(n.cells, n.offset[0], n.offset[1]);
+      const size = 9;
+      const label = wbPlanLabel(g, (top.x + top.w / 2) * S, top.y * S + 12, fit(n.name, top.w, size),
+        size, 600, n.ground ? "var(--wbp-ok)" : "var(--wbp-line)");
+      label.setAttribute("class", "wb-m-far-name");
     }
     wbActivatable(g, () => ctx.select(n.id));
     gFar.append(g);
@@ -1992,14 +2103,21 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   for (const a of Object.values(view.anchors || {})) for (const c of a.cells) taken.add(c.join(","));
   for (const th of view.things || []) if (th.cell) taken.add(th.cell.join(","));
   for (const [, b] of bodies) if (b.cell) taken.add(b.cell.join(","));
+  // the floor filled by what the room is for (`storey_plan.room_look`, the
+  // plan's own reading), the grid over it faint: the editor's cells
+  const floor = wbPlanFill(room.purpose || "");
   for (const [x, y] of cells) {
     const free = !taken.has(`${x},${y}`);
     const rect = wbSvg("rect", { x: x * S, y: y * S, width: S, height: S,
                                  class: "wb-m-cell" + (free ? " free" : "") + (pending && same(pending, [x, y]) ? " chosen" : ""),
-                                 "data-cell": `${x},${y}` },
+                                 style: `--wbm-floor:${floor}`, "data-cell": `${x},${y}` },
       free ? wbSvg("title", {}, `(${x}, ${y}) — ${cellHint}`) : null);
     if (free) rect.addEventListener("click", event => { event.stopPropagation(); ctx.chooseCell([x, y]); });
     gCells.append(rect);
+  }
+  // a stair hall's stair by its shape, under its fixtures
+  if (room.stair && cells.length) {
+    wbPlanStair(gStair, { ...room.stair, name: room.name, rects: [boxOf(cells)] }, PX, PX, S);
   }
   const readings = overlay && view.overlays && view.overlays[overlay];
   if (readings && typeof readings === "object") {
@@ -2024,25 +2142,35 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   for (const seg of wbBoundary(cells)) {
     if (doorAt.has(`${seg[5][0]},${seg[5][1]}|${seg[4]}`)) continue;
     gWalls.append(wbSvg("line", { x1: seg[0] * S, y1: seg[1] * S, x2: seg[2] * S, y2: seg[3] * S,
-                                  class: "wb-m-edge" }));
+                                  class: "wb-m-edge" + (room.ground ? " ground" : "") }));
   }
+  // The wall segment a straight wall's cell lies along: [x1, y1, x2, y2].
+  const wallSeg = (x, y, u) => {
+    const x1 = u[0] === 1 ? x + 1 : x, x2 = u[0] === -1 ? x : x + 1;
+    const y1 = u[1] === 1 ? y + 1 : y, y2 = u[1] === -1 ? y : y + 1;
+    return [(u[0] ? x1 : x) * S, (u[1] ? y1 : y) * S, (u[0] ? x1 : x2) * S, (u[1] ? y1 : y2) * S];
+  };
   const placedFar = new Set(far.map(n => n.id));
   for (const d of view.doorways || []) {
     if (!d.cells.length || !WB_UNIT[d.dir]) continue;
     const u = WB_UNIT[d.dir];
-    const g = wbSvg("g", { class: "wb-m-doorway", "data-exit": d.to, tabindex: "0", role: "button" },
-      wbSvg("title", {}, `${doorwayTo} ${d.name} (${d.barrier}) — ${doorHint}`));
+    // The plan's door rule: an opening is its gap and nothing else; any
+    // other doorway carries a bar in the gap, green where it gives onto
+    // open ground. The bar is drawn faintly for an opening only while it is
+    // hovered or focused (CSS), so it can still be found and dragged.
+    const kind = d.barrier === "open" ? " opening" : d.ground ? " ground" : "";
+    const g = wbSvg("g", { class: "wb-m-doorway" + kind, "data-exit": d.to, tabindex: "0", role: "button" },
+      wbSvg("title", {}, `${doorwayTo} ${d.name} (${d.barrier})${d.desc ? " — " + d.desc : ""} — ${doorHint}`));
     for (const [x, y] of d.cells) {
       if (u[0] && u[1]) {
         g.append(wbSvg("circle", { cx: (x + 0.5 + u[0] * 0.5) * S, cy: (y + 0.5 + u[1] * 0.5) * S,
                                    r: S * 0.22, class: "wb-m-door-corner" }));
         continue;
       }
-      const x1 = u[0] === 1 ? x + 1 : x, x2 = u[0] === -1 ? x : x + 1;
-      const y1 = u[1] === 1 ? y + 1 : y, y2 = u[1] === -1 ? y : y + 1;
-      g.append(wbSvg("line", { x1: (u[0] ? x1 : x) * S, y1: (u[1] ? y1 : y) * S,
-                               x2: (u[0] ? x1 : x2) * S, y2: (u[1] ? y1 : y2) * S,
-                               class: "wb-m-door" }));
+      const x1 = u[0] === 1 ? x + 1 : x;
+      const y1 = u[1] === 1 ? y + 1 : y;
+      const [ax, ay, bx, by] = wallSeg(x, y, u);
+      g.append(wbSvg("line", { x1: ax, y1: ay, x2: bx, y2: by, class: "wb-m-door" }));
       // A line has no area to press on; the hit rect straddling it does.
       g.append(wbSvg("rect", {
         x: u[0] ? x1 * S - 5 : x * S, y: u[1] ? y1 * S - 5 : y * S,
@@ -2052,14 +2180,54 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     // there already (its own label says it then).
     if (!placedFar.has(d.to)) {
       const [x, y] = d.cells[0];
-      g.append(wbSvg("text", { x: (x + 0.5 + u[0] * 1.6) * S, y: (y + 0.5 + u[1] * 1.6) * S + 3,
-                               "text-anchor": "middle", class: "wb-m-far-name" }, d.name));
+      // cut to the width two doorways a few paces apart can both say
+      const label = wbPlanLabel(g, (x + 0.5 + u[0] * 1.6) * S, (y + 0.5 + u[1] * 1.6) * S + 3,
+        fit(d.name, 2.8, 9), 9, 600, "var(--wbp-line)");
+      label.setAttribute("class", "wb-m-far-name");
     }
     wbDraggable(svg, g, {
       onClick: () => ctx.focusRow(`.wb-exit[data-exit="${CSS.escape(d.to)}"]`),
       onDrop: p => dropDoorway(d, p),
       onArrow: (dx, dy) => dropDoorway(d, centre([d.cells[0][0] + dx, d.cells[0][1] + dy]), true),
     });
+    gWalls.append(g);
+  }
+
+  // -- windows: each a thin line in its wall, never a gap in it ------------
+  // A window onto another room (`to`, an edge whose barrier is a window)
+  // moves along its wall through the doorways route, as the edge it is; one
+  // onto open air (a `windows` record) is the room's and is listed on the
+  // card. Neither is a way through, so neither is offered as one.
+  const windowAt = new Set();
+  for (const w of view.windows || []) {
+    const u = WB_UNIT[w.dir];
+    if (!w.cells || !w.cells.length || !u || (u[0] && u[1])) continue;
+    for (const c of w.cells) windowAt.add(`${c[0]},${c[1]}|${w.dir}`);
+    const segs = w.cells.map(([x, y]) => wallSeg(x, y, u));
+    const xs = segs.flatMap(s => [s[0], s[2]]), ys = segs.flatMap(s => [s[1], s[3]]);
+    const along = u[0] ? 1 : 0;           // a wall on e/w runs along y
+    const lo = along ? Math.min(...ys) : Math.min(...xs), hi = along ? Math.max(...ys) : Math.max(...xs);
+    const at = along ? xs[0] : ys[0];
+    const inset = 3;
+    const ends = along ? [at, lo + inset, at, hi - inset] : [lo + inset, at, hi - inset, at];
+    const said = [w.desc, w.to ? `${ontoWord} ${w.name}` : null].filter(Boolean).join(" — ");
+    const g = wbSvg("g", { class: "wb-m-window", "data-window": w.id, tabindex: "0", role: "button" },
+      wbSvg("title", {}, `${windowWord}${said ? " — " + said : ""} — ${w.to ? windowHint : windowRecordHint}`),
+      wbSvg("line", { x1: ends[0], y1: ends[1], x2: ends[2], y2: ends[3], class: "wb-m-window-gap" }),
+      wbSvg("line", { x1: ends[0], y1: ends[1], x2: ends[2], y2: ends[3], class: "wb-m-window-pane" }),
+      wbSvg("rect", { x: along ? at - 5 : lo, y: along ? lo : at - 5,
+                      width: along ? 10 : hi - lo, height: along ? hi - lo : 10, class: "wb-m-door-hit" }));
+    const focus = () => ctx.focusRow(`.wb-window[data-window="${CSS.escape(w.id)}"]`);
+    if (w.to) {
+      const d = { id: w.id, to: w.to, dir: w.dir, cells: w.cells, offset: w.offset, name: w.name, window: true };
+      wbDraggable(svg, g, {
+        onClick: focus,
+        onDrop: p => dropDoorway(d, p),
+        onArrow: (dx, dy) => dropDoorway(d, centre([w.cells[0][0] + dx, w.cells[0][1] + dy]), true),
+      });
+    } else {
+      wbActivatable(g, focus);
+    }
     gWalls.append(g);
   }
 
@@ -2075,20 +2243,27 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     const g = wbSvg("g", { class: "wb-m-anchor", "data-anchor": aid, tabindex: "0", role: "button" },
       wbSvg("title", {}, `${a.desc} (${aid}) — ${anchorHint}`));
     const passes = opaque && a.opacity && a.opacity !== opaque;
+    // each cell the grab and the hover land on, the fixture drawn over them
+    // all as the plan draws it -- by its kind's symbol (`wbPlanFixture`)
     for (const [x, y] of a.cells) {
       g.append(wbSvg("rect", { x: x * S + 1, y: y * S + 1, width: S - 2, height: S - 2, rx: 3,
                                class: "wb-m-anchor-cell" + (passes ? " see-through" : "") }));
     }
     const [x0, y0] = a.cells[0];
+    const box = boxOf(a.cells);
+    const symbol = wbSvg("g", { class: "wb-m-anchor-symbol" + (passes ? " see-through" : "") });
+    wbPlanFixture(symbol, { rect: box, kind: a.kind || "", front: a.dir }, PX, PX, S);
+    g.append(symbol);
     const rank = Math.max(0, heights.indexOf(a.height));
     const top = Math.max(1, heights.length - 1);
     if (rank > 0) {
       const h = (S - 6) * rank / top;
-      g.append(wbSvg("rect", { x: x0 * S + S - 6, y: y0 * S + S - 3 - h, width: 3, height: h,
+      g.append(wbSvg("rect", { x: (box.x + box.w) * S - 6, y: (box.y + box.d) * S - 3 - h, width: 3, height: h,
                                class: "wb-m-height" }, wbSvg("title", {}, a.height)));
     }
-    g.append(wbSvg("text", { x: x0 * S + 3, y: y0 * S + 10, class: "wb-m-label" },
-      aid.length > 9 ? aid.slice(0, 8) + "…" : aid));
+    const label = wbPlanLabel(g, (box.x + box.w / 2) * S, box.y * S + 9,
+      fit(aid.replace(/_/g, " "), box.w, 8), 8, 600, "var(--wbp-ink)");
+    label.setAttribute("class", "wb-m-label");
     wbDraggable(svg, g, {
       onClick: () => ctx.focusRow(`.wb-anchor[data-anchor="${CSS.escape(aid)}"]`),
       onDrop: p => dropAnchor(aid, a, p),
@@ -2312,6 +2487,8 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   const blank = new Set();
   for (const seg of wbBoundary(cells)) {
     if (doorAt.has(`${seg[5][0]},${seg[5][1]}|${seg[4]}`)) continue;
+    // a window's stretch of wall is the window's: no doorway is opened there
+    if (windowAt.has(`${seg[5][0]},${seg[5][1]}|${seg[4]}`)) continue;
     const wall = wbWallOf(view, ctx.vocab.walls, seg[5]);
     if (!wall || wall.wall !== seg[4]) continue;
     const key = `${seg[5][0]},${seg[5][1]}|${seg[4]}`;
@@ -2452,8 +2629,10 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     const width = Math.max(1, d.cells.length);
     const offset = wbOffsetAlong(idx, rim.length, width);
     if (quiet && d.offset != null && Math.abs(offset - d.offset) < 1e-9) return;
-    const label = t(`Moved the doorway to ${d.name} along the wall`);
-    ctx.refocus(`.wb-m-doorway[data-exit="${CSS.escape(d.to)}"]`);
+    const label = d.window ? t(`Moved the window onto ${d.name} along the wall`)
+                           : t(`Moved the doorway to ${d.name} along the wall`);
+    ctx.refocus(d.window ? `.wb-m-window[data-window="${CSS.escape(d.id)}"]`
+                         : `.wb-m-doorway[data-exit="${CSS.escape(d.to)}"]`);
     const done = await ctx.patchDoorway(d.to, { offset }, label);
     if (done) ctx.undo.remember(label, () => ctx.patchDoorway(d.to, { offset: d.offset }, t(`Undid: ${label}`)));
   }
@@ -2991,17 +3170,25 @@ function wbRenderStoreyPlan(host, data, ctx, { below = true } = {}) {
   return svg;
 }
 
+// What the plan's fills mean, as the lab's legend says them -- the storey
+// plan's legend and the room editor's alike, since both fill a room by what
+// it is for.
+function wbPurposeSwatches() {
+  const swatch = (fill, label, extra) => el("span", { class: "wb-legend-item" },
+    el("i", { class: "wb-legend-mark wb-plan-swatch" + (extra ? " " + extra : ""), style: `background:${fill}` }), label);
+  return [swatch("var(--wbp-living)", "Living"), swatch("var(--wbp-private)", "Private"),
+    swatch("var(--wbp-service)", "Service"), swatch("var(--wbp-circ)", "Circulation"),
+    swatch("var(--wbp-store)", "Storage"), swatch("var(--wbp-sacred)", "Sacred"),
+    swatch("var(--wbp-grass)", "Open ground"), swatch("var(--wbp-gravel)", "Way")];
+}
+
 // What the plan's fills and marks mean, as the lab's legend says them.
 function wbPlanLegend(host) {
   host.innerHTML = "";
-  const swatch = (fill, label, extra) => el("span", { class: "wb-legend-item" },
-    el("i", { class: "wb-legend-mark wb-plan-swatch" + (extra ? " " + extra : ""), style: `background:${fill}` }), label);
-  host.append(
-    swatch("var(--wbp-living)", "Living"), swatch("var(--wbp-private)", "Private"),
-    swatch("var(--wbp-service)", "Service"), swatch("var(--wbp-circ)", "Circulation"),
-    swatch("var(--wbp-store)", "Storage"), swatch("var(--wbp-sacred)", "Sacred"),
-    swatch("var(--wbp-grass)", "Open ground"), swatch("var(--wbp-gravel)", "Way"),
-    swatch("var(--wbp-room)", "Planned, not yet in the story", "planned"));
+  host.append(...wbPurposeSwatches(),
+    el("span", { class: "wb-legend-item" },
+      el("i", { class: "wb-legend-mark wb-plan-swatch planned", style: "background:var(--wbp-room)" }),
+      "Planned, not yet in the story"));
   host.classList.add("wb-plan-legend");
 }
 
@@ -3026,12 +3213,14 @@ function wbMarksLegend(host) {
   host.innerHTML = "";
   const item = (cls, label) => el("span", { class: "wb-legend-item" }, el("span", { class: "wb-legend-mark " + cls }), label);
   host.append(
-    item("wb-lg-anchor", "Anchor"), item("wb-lg-door", "Doorway"), item("wb-lg-body", "Cast"),
+    item("wb-lg-anchor", "Anchor"), item("wb-lg-door", "Doorway"), item("wb-lg-window", "Window"),
+    item("wb-lg-body", "Cast"),
     item("wb-lg-player", "Player"), item("wb-lg-presence", "Presence"),
     item("wb-lg-charter", "Townsperson"), item("wb-lg-charter dealt", "Townsperson, dealt a cell"),
     item("wb-lg-thing", "Thing"),
     item("wb-lg-ring", "Ceiling light (casts no shadow)"), item("wb-lg-part", "Part of the room"),
-    item("wb-lg-handle", "Resize handle"), item("wb-lg-lint", "Layout lint"));
+    item("wb-lg-handle", "Resize handle"), item("wb-lg-lint", "Layout lint"),
+    ...wbPurposeSwatches());
 }
 
 // The pane: the map's bar, the canvas, the overlay legend, the notes, and
@@ -3487,6 +3676,27 @@ async function openWorldBrowser(opts = {}) {
       const undo = ctx.undo.peek();
       const undoButton = undo ? el("button", { class: "small wb-undo", title: undo.label,
         onclick: async () => { await ctx.undo.run(); renderMapBar(); } }, "Undo") : null;
+      // THE THREE VIEWS AS ONE SWITCH, first in the bar: the room, the
+      // storey it stands on drawn as a plan, every room. The owner never
+      // found the plan behind the small button it had (2026-10-12: "I didn't
+      // even know that you made the plan tab").
+      const planAt = state.zoom === "plan" && state.plan && state.plan.plan
+        ? { plan: state.plan.plan, level: state.plan.level }
+        : state.grid && state.grid.room && state.grid.room.plan
+          ? { plan: state.grid.room.plan, level: state.grid.room.level }
+          : state.lastPlan || null;
+      if (planAt) state.lastPlan = planAt;
+      const zoomButton = (key, cls, label, go, enabled = true) => {
+        const attrs = { class: "small wb-zoom " + cls + (state.zoom === key ? " on" : ""),
+                        "aria-pressed": state.zoom === key ? "true" : "false", onclick: go };
+        if (!enabled) attrs.disabled = "disabled";
+        return el("button", attrs, label);
+      };
+      const zooms = el("span", { class: "wb-zooms", role: "group", "aria-label": t("View") },
+        zoomButton("room", "wb-map-room", "Room", () => state.selected && loadRoom(state.selected), !!state.selected),
+        zoomButton("plan", "wb-map-plan", "Storey plan", () => planAt && showPlan(planAt.plan, planAt.level), !!planAt),
+        zoomButton("map", "wb-map-up", "All rooms", () => showStructure()));
+      map.bar.append(zooms);
       if (state.zoom === "map") {
         map.bar.append(el("b", {}, "Every room, placed by bearing"),
           el("span", { class: "dim" }, "— click a room to open its grid; drag one to re-bear it"),
@@ -3507,8 +3717,6 @@ async function openWorldBrowser(opts = {}) {
           if (at.data) wbRenderStoreyPlan(map.canvas, at.data, ctx, { below: state.planBelow });
         };
         map.bar.append(
-          el("button", { class: "wb-link wb-map-up", onclick: () => showStructure() }, "All rooms"),
-          el("span", { class: "dim" }, "›"),
           el("b", { translate: "no" }, txt((at.data && at.data.title) || at.plan || "")),
           storeys,
           el("label", { class: "small wb-plan-below" }, beneath, " ", "Show the storey beneath"),
@@ -3517,10 +3725,7 @@ async function openWorldBrowser(opts = {}) {
       }
       const name = state.grid && state.grid.room ? state.grid.room.name
         : (state.slice ? state.slice.name : state.selected || "");
-      map.bar.append(
-        el("button", { class: "wb-link wb-map-up", onclick: () => showStructure() }, "All rooms"),
-        el("span", { class: "dim" }, "›"),
-        el("b", { translate: "no" }, txt(name)));
+      map.bar.append(el("b", { translate: "no" }, txt(name)));
       if (state.slice && state.slice.record) {
         const shape = wbSelect(ctx.vocab.shapes, state.slice.record.shape || "", {
           blank: t("Shape…"), title: "The room's shape — a rectangle when unset",
@@ -3530,10 +3735,6 @@ async function openWorldBrowser(opts = {}) {
         map.bar.append(shape);
       }
       const view = state.grid && !state.grid.error ? state.grid : null;
-      if (view && view.room && view.room.plan) {
-        map.bar.append(el("button", { class: "small wb-map-plan", title: "Open this room's storey as a plan",
-          onclick: () => showPlan(view.room.plan, view.room.level) }, "Plan"));
-      }
       const overlays = Object.keys((view && view.overlays) || {});
       if (view && (overlays.length || (view.sound_sources || []).length)) {
         const toggles = el("span", { class: "wb-overlay-toggles" });

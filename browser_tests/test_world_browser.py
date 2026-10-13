@@ -576,7 +576,7 @@ def _mount(page: Page):
                 for a, b in ((rid, to), (to, rid)):
                     edge = edge_of(a, b)
                     edge["passage"] = pid
-                    for key in ("offset", "barrier", "name", "material", "width"):
+                    for key in ("offset", "barrier", "name", "material", "width", "desc"):
                         if key in payload:
                             edge[key] = payload[key]
                     if "dir" in payload:
@@ -871,30 +871,33 @@ def test_adding_an_exit_shows_the_doorway_from_both_rooms(page: Page, ui_base_ur
     expect(card.locator(".wb-exit[data-exit=kitchen]")).to_have_count(1)
 
 
-def test_a_doorways_name_material_and_width_are_one_object_from_either_room(
+def test_a_doorways_description_material_and_width_are_one_object_from_either_room(
         page: Page, ui_base_url: str) -> None:
     """The passage record: the doorway's fields go through the doorways PATCH
-    from whichever room is open, and the far room reads the same."""
+    from whichever room is open, and the far room reads the same. What the
+    door IS is its description (the owner, 2026-10-12: "doors should have a
+    description and material type field"); the edge's `name` is the far
+    room's, and is not offered as the door's."""
     _, writes = _open_story(page, ui_base_url)
     page.locator("#b-world").click()
     card = page.locator("#modal .wb-card")
     fields = card.locator(".wb-doorway-fields[data-doorway=hallway]")
     expect(fields).to_have_count(1)
-    fields.locator("input").nth(0).fill("the arch")
-    fields.locator("input").nth(0).press("Enter")
+    fields.locator("textarea").fill("a broad stone arch")
+    fields.locator("textarea").blur()
     expect(page.locator("#toasts")).to_contain_text("Saved.")
-    assert ("PATCH", "/api/chats/1/doorways/kitchen/hallway", {"name": "the arch"}) in writes
+    assert ("PATCH", "/api/chats/1/doorways/kitchen/hallway", {"desc": "a broad stone arch"}) in writes
     fields = card.locator(".wb-doorway-fields[data-doorway=hallway]")
-    fields.locator("input").nth(2).fill("2")
+    fields.locator("input").nth(1).fill("2")
     # Waited on its own response, as the region rename is: "Saved." is still
-    # up from the name above, and a write is recorded once the route runs.
+    # up from the description above, and a write is recorded once the route runs.
     with page.expect_response(lambda r: r.request.method == "PATCH"
                               and r.url.endswith("/api/chats/1/doorways/kitchen/hallway")):
-        fields.locator("input").nth(2).press("Enter")
+        fields.locator("input").nth(1).press("Enter")
     assert ("PATCH", "/api/chats/1/doorways/kitchen/hallway", {"width": 2}) in writes
-    # From the hallway the same doorway carries the same name.
+    # From the hallway the same doorway carries the same description.
     card.locator(".wb-exit .wb-link", has_text="Hallway").click()
-    expect(card.locator(".wb-doorway-fields[data-doorway=kitchen] input").nth(0)).to_have_value("the arch")
+    expect(card.locator(".wb-doorway-fields[data-doorway=kitchen] textarea")).to_have_value("a broad stone arch")
 
 
 def test_setting_an_extent_disables_size_and_shows_the_derived_tier(

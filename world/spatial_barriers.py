@@ -540,6 +540,21 @@ def _barrier_against_its_own_name(barrier, name):
     return "closed_door"
 
 
+#: The barriers that are a WINDOW: sight passes (one way, for a one-way
+#: window) and a body never does. An edge's anchor carries the `door:`
+#: prefix whatever stands in it (`spatial_geometry.door_anchor_id`), so the
+#: barrier is the only thing that says a window is one, and every reader that
+#: draws or lists an edge asks it here rather than spelling the pair -- the
+#: World Browser's room editor listed Hinami's east window as a doorway onto
+#: the garden because its feed asked only the prefix (Home 9, 2026-10-12).
+WINDOW_BARRIERS = frozenset({"window", "one_way_window"})
+
+
+def is_window_barrier(value) -> bool:
+    """Is this edge a window, in whatever spelling it was written?"""
+    return normalize_barrier(value) in WINDOW_BARRIERS
+
+
 _PASSABLE_BARRIERS = {"open", "open_door", "membrane"}
 
 

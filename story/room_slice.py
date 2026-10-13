@@ -265,12 +265,17 @@ def room_graph(cid, scene, extra_edges=None, contained=None, planned=None):
     shut doors read as a house of unreachable rooms and the Room's map put
     most of it beyond the frontier (PX15, masque run, 2026-09-05). The
     question a hop count answers is what the story can REACH.
+
+    AND A WINDOW IS NOT A DOOR: the plan's edges join here only where a body
+    could take them (`planned_topology(routes_only=True)`), as the world's
+    do. Home 9 (2026-10-12) had the garden one hop from a second-storey room
+    through the window the layout tier made an edge onto it.
     """
     from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
     from world.structure import planned_topology
 
     contained = containment(scene) if contained is None else contained
-    planned = planned_topology(cid) if planned is None else planned
+    planned = planned_topology(cid, routes_only=True) if planned is None else planned
     graph = {}
     for k, vs in neighbor_map(scene, _ROUTE_MEMORY_BARRIERS,
                               directional=True).items():

@@ -71,6 +71,55 @@ def _plan_of(specs, rid) -> dict:
     return spec if isinstance(spec, dict) else {}
 
 
+def room_look(scene, rid, spec=None) -> dict:
+    """What the lab's drawing needs of one room beyond its cells: what it is
+    for (``purpose``: the solve's record; a stair hall the layout tier made is
+    a ``stair``, open ground its kind of ground), whether it is open
+    ``ground``, and for a stair hall its ``stair`` (``kind``, ``up``,
+    ``down``). The ONE reading the storey plan and the room editor draw by
+    (the owner, 2026-10-12: the editor should look like the lab too), so the
+    two cannot fill a room differently. `spec` is the room's planned
+    registry record, when it has one."""
+    from world.landscape import OPEN_GROUND, declared_ground
+    from world.spatial import effective_adjacent, normalize_vertical
+    from world.structure import LAYOUT_MADE_KEY
+    room = ((scene or {}).get("rooms") or {}).get(rid)
+    room = room if isinstance(room, dict) else {}
+    spec = spec if isinstance(spec, dict) else {}
+    record = spec.get("layout") if isinstance(spec.get("layout"), dict) else {}
+    ground = declared_ground(scene, rid) in OPEN_GROUND
+    purpose = str(record.get("purpose") or "")
+    made = bool(spec.get(LAYOUT_MADE_KEY) or room.get(LAYOUT_MADE_KEY))
+    if made:
+        purpose = "stair"
+    if ground:
+        purpose = _GROUND_FILL.get(str(record.get("grounds") or ""), "ground")
+    out = {"purpose": purpose, "ground": ground}
+    if made:
+        ways = {normalize_vertical(e.get("vertical")) for e in effective_adjacent(scene, rid)
+                if isinstance(e, dict) and e.get("to")}
+        out["stair"] = {"kind": str(spec.get("stair_kind") or ""),
+                        "up": "up" in ways, "down": "down" in ways}
+    return out
+
+
+def fixture_kinds(scene, rid, spec=None) -> dict:
+    """``{anchor id: kind}`` -- what each fixture of the room is, as the
+    solve recorded it (the planned record's anchors), else as the room's own
+    anchor says; a fixture with neither has no kind and is drawn as a plain
+    body (`wbPlanFixture`)."""
+    spec = spec if isinstance(spec, dict) else {}
+    planned = spec.get("anchors") if isinstance(spec.get("anchors"), dict) else {}
+    room = ((scene or {}).get("rooms") or {}).get(rid)
+    authored = room.get("anchors") if isinstance(room, dict) and isinstance(room.get("anchors"), dict) else {}
+    out = {}
+    for aid in set(planned) | set(authored):
+        kind = str((planned.get(aid) or {}).get("kind") or (authored.get(aid) or {}).get("kind") or "")
+        if kind:
+            out[str(aid)] = kind
+    return out
+
+
 def plan_scene(cid, scene, plan) -> dict:
     """The live scene with every planned room that stands on `plan` beneath
     it (`structure.composed_scene`), read through the solved plans: the whole
@@ -139,12 +188,8 @@ def storey_plan(scene, plan, level: Optional[int] = None, specs=None,
         record = spec.get("layout") if isinstance(spec.get("layout"), dict) else {}
         site = room_site(scene, rid) or {"x": 0, "y": 0}
         cells = sorted(site_cells(scene, rid))
-        ground = declared_ground(scene, rid) in OPEN_GROUND
-        purpose = str(record.get("purpose") or "")
-        if spec.get(LAYOUT_MADE_KEY) or room.get(LAYOUT_MADE_KEY):
-            purpose = "stair"
-        if ground:
-            purpose = _GROUND_FILL.get(str(record.get("grounds") or ""), "ground")
+        look = room_look(scene, rid, spec)
+        ground, purpose = look["ground"], look["purpose"]
         out["rooms"].append({"id": rid, "name": str(room.get("name") or rid),
                              "level": room_level(scene, rid), "purpose": purpose,
                              "ground": ground, "cells": [list(c) for c in cells],
@@ -188,20 +233,12 @@ def storey_plan(scene, plan, level: Optional[int] = None, specs=None,
                                  "barrier": barrier, "name": str(edge.get("name") or ""),
                                  "outside": to not in on_storey})
         # THE STAIR, by its shape, in its hall
-        if purpose == "stair":
-            ups = [e for e in edges.values()
-                   if normalize_vertical(e.get("vertical")) == "up"]
-            downs = [e for e in edges.values()
-                     if normalize_vertical(e.get("vertical")) == "down"]
-            out["stairs"].append({"room": rid, "kind": str(spec.get("stair_kind") or ""),
-                                  "up": bool(ups), "down": bool(downs),
+        if look.get("stair"):
+            out["stairs"].append({"room": rid, **look["stair"],
                                   "name": str(room.get("name") or rid),
                                   "rects": _runs(cells)})
         # FIXTURES by their kind where the solve recorded one
-        kinds = {aid: str((a or {}).get("kind") or "")
-                 for aid, a in ((spec.get("anchors") or {}) if isinstance(spec.get("anchors"), dict)
-                                else {}).items()}
-        authored = room.get("anchors") if isinstance(room.get("anchors"), dict) else {}
+        kinds = fixture_kinds(scene, rid, spec)
         for aid, rec in placed.items():
             if rec.get("implicit") or not rec.get("cells"):
                 continue
@@ -209,7 +246,7 @@ def storey_plan(scene, plan, level: Optional[int] = None, specs=None,
             ys = [c[1] + oy for c in rec["cells"]]
             out["fixtures"].append({
                 "room": rid, "id": str(aid), "name": str(rec.get("desc") or aid),
-                "kind": kinds.get(aid) or str((authored.get(aid) or {}).get("kind") or ""),
+                "kind": kinds.get(str(aid), ""),
                 "rect": {"x": min(xs), "y": min(ys), "w": max(xs) - min(xs) + 1,
                          "d": max(ys) - min(ys) + 1},
                 "height": rec.get("height"), "front": rec.get("dir")})

@@ -292,7 +292,8 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
                 and isinstance(existing.get("anchors"), dict):
             value = _merge_anchor_fields(existing["anchors"], value)
         if key == "windows" and isinstance(value, list):
-            value = _merge_windows(existing.get("windows"), value)
+            value = _merge_windows(existing.get("windows"), value, edges=[
+                *(existing.get("adjacent") or ()), *(incoming.get("adjacent") or ())])
         merged_room[key] = value
 
     if removals:
@@ -357,7 +358,7 @@ def _drop_anchors(anchors: dict, removals: set) -> dict:
             if str(aid).strip().casefold() not in removals}
 
 
-def _merge_windows(prior, incoming):
+def _merge_windows(prior, incoming, edges=()):
     """A room's `windows` after a beat writes them. Where the room holds
     windows code PLACED -- records saying where each stands in its wall, the
     layout tier's (`spatial_geometry.room_windows`) -- a bearing list is
@@ -368,10 +369,30 @@ def _merge_windows(prior, incoming):
     east window: read as a replacement, every window the layout tier laid
     would lose its place in the wall the first time the room was described.
     Where the room holds only bearings, the beat's list is the room's, as
-    it always was."""
+    it always was.
+
+    A WINDOW EDGE IS THE WINDOW IN ITS WALL too: a window with laid ground
+    beyond it is the room's `window` edge onto that ground, so the room
+    holds no record of it, and Home 9's opening (chat 172, 2026-10-12)
+    echoed `windows: ["e"]` over Hinami's Room and kept the bearing as a
+    second east window beside the edge. A bare bearing one of the room's
+    window edges (`edges`: its own and the beat's) already looks along adds
+    nothing, one bearing per edge (`spatial_geometry.window_edge_bearings`,
+    the rule `room_windows` reads by)."""
+    from world.spatial_geometry import window_edge_bearings
+    from world.spatial_orientation import normalize_bearing
+    held = window_edge_bearings({"adjacent": list(edges or ())})
+
+    def _held(entry):
+        bearing = None if isinstance(entry, dict) else normalize_bearing(entry)
+        if bearing and held.get(bearing):
+            held[bearing] -= 1
+            return True
+        return False
+
+    incoming = [entry for entry in incoming or () if not _held(entry)]
     if not isinstance(prior, list) or not any(isinstance(w, dict) for w in prior):
         return incoming
-    from world.spatial_orientation import normalize_bearing
     out = list(prior)
     looks = {normalize_bearing(w.get("dir") if isinstance(w, dict) else w) for w in prior}
     ids = {str(w.get("id")) for w in prior if isinstance(w, dict) and w.get("id")}

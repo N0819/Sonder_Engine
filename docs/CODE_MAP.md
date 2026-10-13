@@ -135,11 +135,11 @@
 | `story/room_calls.py` | 249 |  | — |
 | `story/room_citations.py` | 221 |  | — |
 | `story/room_conversation.py` | 582 |  | `core.db` |
-| `story/room_frontier.py` | 725 |  | `core.db` |
+| `story/room_frontier.py` | 726 |  | `core.db` |
 | `story/room_proposals.py` | 906 |  | `core.db` |
 | `story/room_research.py` | 376 |  | `core.db` |
 | `story/room_sketch.py` | 1227 |  | `core.logging_utils` |
-| `story/room_slice.py` | 556 |  | `story.attire` |
+| `story/room_slice.py` | 561 |  | `story.attire` |
 | `story/room_tools.py` | 1789 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
 | `story/scene.py` | 3112 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
@@ -148,9 +148,9 @@
 | `web/guest_access.py` | 554 |  | `core.db` |
 | `web/pipeline_views.py` | 42 |  | `agents.composer` |
 | `web/room_routes.py` | 119 |  | `core.db`, `story` |
-| `web/storey_plan.py` | 230 |  | — |
+| `web/storey_plan.py` | 267 |  | — |
 | `web/story_view.py` | 1029 |  | `core.db`, `persist.steps`, `world.charter_runtime`, `world.living_world` |
-| `web/world_routes.py` | 2782 |  | `core`, `core.db`, `persist.commit`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.charter`, `world.charter_runtime`, `world.spatial`, `world.weather` |
+| `web/world_routes.py` | 2874 |  | `core`, `core.db`, `persist.commit`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.charter`, `world.charter_runtime`, `world.spatial`, `world.weather` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
 | `world/beat_ledger.py` | 184 |  | — |
@@ -223,21 +223,21 @@
 | `world/routines.py` | 256 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 195 |  | — |
 | `world/site_plan.py` | 1608 |  | — |
-| `world/spatial.py` | 378 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_pack`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
-| `world/spatial_barriers.py` | 945 |  | `world.spatial_orientation` |
+| `world/spatial.py` | 379 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_pack`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
+| `world/spatial_barriers.py` | 960 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 592 |  | `world.spatial`, `world.spatial_frames` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1976 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3612 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 2043 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2581 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
-| `world/spatial_geometry.py` | 2339 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_geometry.py` | 2373 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 902 |  | — |
 | `world/spatial_levels.py` | 250 |  | `world.spatial_orientation` |
 | `world/spatial_light.py` | 848 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_light_field.py` | 1477 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 858 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2769 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2790 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 432 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_pack.py` | 423 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_lint` |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
@@ -249,7 +249,7 @@
 | `world/spatial_transit.py` | 1258 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 494 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 2804 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 2816 |  | `world.charter_model`, `world.frontage`, `world.place_names`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
 | `world/vistas.py` | 391 |  | — |
@@ -1726,14 +1726,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `frontier_report()` | 352 | 89 lines |
-| `fill_signature()` | 558 | 50 lines |
-| `_bodies_ahead()` | 249 | 39 lines |
-| `fills_this_hour()` | 516 | 36 lines |
-| `_rooms_within()` | 219 | 28 lines |
-| `fill_due()` | 667 | 24 lines |
-| `_actor_rooms()` | 290 | 23 lines |
-| `looks_wanted()` | 315 | 23 lines |
+| `frontier_report()` | 353 | 89 lines |
+| `fill_signature()` | 559 | 50 lines |
+| `_bodies_ahead()` | 250 | 39 lines |
+| `fills_this_hour()` | 517 | 36 lines |
+| `_rooms_within()` | 219 | 29 lines |
+| `fill_due()` | 668 | 24 lines |
+| `_actor_rooms()` | 291 | 23 lines |
+| `looks_wanted()` | 316 | 23 lines |
 
 ### `story/room_proposals.py`
 
@@ -1778,14 +1778,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `room_slices()` | 453 | 83 lines |
-| `room_graph()` | 232 | 71 lines |
-| `_plan_here()` | 403 | 48 lines |
-| `_things_by_room()` | 375 | 26 lines |
-| `room_index()` | 346 | 23 lines |
+| `room_slices()` | 458 | 83 lines |
+| `room_graph()` | 232 | 76 lines |
+| `_plan_here()` | 408 | 48 lines |
+| `_things_by_room()` | 380 | 26 lines |
+| `room_index()` | 351 | 23 lines |
 | `read_scene()` | 106 | 21 lines |
 | `_registry()` | 166 | 21 lines |
-| `cast_rooms()` | 325 | 19 lines |
+| `cast_rooms()` | 330 | 19 lines |
 
 ### `story/room_tools.py`
 
@@ -1873,11 +1873,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `storey_plan()` | 107 | 124 lines |
+| `storey_plan()` | 156 | 112 lines |
+| `room_look()` | 74 | 30 lines |
 | `_runs()` | 40 | 26 lines |
-| `plan_scene()` | 74 | 25 lines |
+| `plan_scene()` | 123 | 25 lines |
+| `fixture_kinds()` | 106 | 15 lines |
 | `_plan_of()` | 68 | 4 lines |
-| `plan_levels()` | 101 | 4 lines |
+| `plan_levels()` | 150 | 4 lines |
 
 ### `web/story_view.py`
 
@@ -1896,14 +1898,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grid_view()` | 852 | 191 lines |
-| `room_entity_patch()` | 1717 | 95 lines |
-| `_apply_exits()` | 1356 | 92 lines |
-| `map_view()` | 1158 | 80 lines |
-| `body_station_put()` | 1888 | 77 lines |
-| `_apply_doorway_fields()` | 2429 | 77 lines |
-| `body_rows()` | 609 | 70 lines |
-| `room_patch()` | 1647 | 67 lines |
+| `grid_view()` | 879 | 217 lines |
+| `room_entity_patch()` | 1809 | 95 lines |
+| `_apply_exits()` | 1448 | 92 lines |
+| `map_view()` | 1217 | 80 lines |
+| `body_station_put()` | 1980 | 77 lines |
+| `_apply_doorway_fields()` | 2521 | 77 lines |
+| `body_rows()` | 617 | 70 lines |
+| `room_patch()` | 1739 | 67 lines |
 
 ### `world/background_claims.py`
 
@@ -2778,11 +2780,11 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `normalize_barrier()` | 331 | 82 lines |
-| `neighbor_map()` | 582 | 80 lines |
-| `effective_adjacent()` | 738 | 73 lines |
-| `normalize_scene_passages()` | 892 | 54 lines |
+| `neighbor_map()` | 597 | 80 lines |
+| `effective_adjacent()` | 753 | 73 lines |
+| `normalize_scene_passages()` | 907 | 54 lines |
 | `normalize_scene_barriers()` | 469 | 32 lines |
-| `passage_direction()` | 664 | 28 lines |
+| `passage_direction()` | 679 | 28 lines |
 | `_barrier_against_its_own_name()` | 514 | 27 lines |
 | `barrier_fastening()` | 415 | 24 lines |
 
@@ -2865,14 +2867,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_effective_anchors()` | 425 | 147 lines |
-| `invalidate_transferred_pose_details()` | 1886 | 113 lines |
+| `_effective_anchors()` | 459 | 147 lines |
+| `invalidate_transferred_pose_details()` | 1920 | 113 lines |
 | `spatial_digest()` | 150 | 107 lines |
-| `derive_scene_stations()` | 2236 | 104 lines |
-| `invalidate_moved_body_place_details()` | 1678 | 102 lines |
+| `derive_scene_stations()` | 2270 | 104 lines |
+| `invalidate_moved_body_place_details()` | 1712 | 102 lines |
 | `egocentric_frame()` | 62 | 86 lines |
-| `invalidate_moved_body_pose_details()` | 1568 | 79 lines |
-| `invalidate_contact_bound_poses()` | 2001 | 75 lines |
+| `invalidate_moved_body_pose_details()` | 1602 | 79 lines |
+| `invalidate_contact_bound_poses()` | 2035 | 75 lines |
 
 ### `world/spatial_identity.py`
 
@@ -2943,14 +2945,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1662 | 850 lines |
-| `_expire_transient_entity_state()` | 666 | 116 lines |
-| `_merge_room()` | 191 | 114 lines |
-| `_shield_standing_bearings()` | 948 | 107 lines |
-| `_shield_minted_edges()` | 1214 | 95 lines |
-| `beat_movement_cuts()` | 2640 | 94 lines |
-| `_mirror_symmetric_barriers()` | 1119 | 93 lines |
-| `sync_scene_passages()` | 1476 | 90 lines |
+| `merge_scene_with_diff()` | 1683 | 850 lines |
+| `_expire_transient_entity_state()` | 687 | 116 lines |
+| `_merge_room()` | 191 | 115 lines |
+| `_shield_standing_bearings()` | 969 | 107 lines |
+| `_shield_minted_edges()` | 1235 | 95 lines |
+| `beat_movement_cuts()` | 2661 | 94 lines |
+| `_mirror_symmetric_barriers()` | 1140 | 93 lines |
+| `sync_scene_passages()` | 1497 | 90 lines |
 
 ### `world/spatial_orientation.py`
 
@@ -3091,10 +3093,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `claim_frontier_spaces()` | 2443 | 207 lines |
+| `claim_frontier_spaces()` | 2455 | 207 lines |
 | `mint_frontier()` | 1104 | 197 lines |
 | `plant_structure()` | 1303 | 191 lines |
-| `prepare_frontier_expansion()` | 2213 | 174 lines |
+| `prepare_frontier_expansion()` | 2225 | 174 lines |
 | `materialize_planned_fringe()` | 1496 | 171 lines |
 | `write_planned_layout()` | 531 | 133 lines |
 | `apply_planned_layout()` | 238 | 94 lines |
@@ -3201,10 +3203,10 @@
 | GET | `/api/chats/{cid}/background_config` | `bg_cfg_get()` | `web/app.py:6072` |
 | PUT | `/api/chats/{cid}/background_config` | `bg_cfg_put()` | `web/app.py:6076` |
 | POST | `/api/chats/{cid}/begin` | `chat_begin()` | `web/app.py:3489` |
-| DELETE | `/api/chats/{cid}/bodies/{name}` | `body_presence_delete()` | `web/world_routes.py:2289` |
-| PUT | `/api/chats/{cid}/bodies/{name}/pose` | `body_pose_put()` | `web/world_routes.py:2374` |
-| PUT | `/api/chats/{cid}/bodies/{name}/room` | `body_room_put()` | `web/world_routes.py:2323` |
-| PUT | `/api/chats/{cid}/bodies/{name}/station` | `body_station_put()` | `web/world_routes.py:1888` |
+| DELETE | `/api/chats/{cid}/bodies/{name}` | `body_presence_delete()` | `web/world_routes.py:2381` |
+| PUT | `/api/chats/{cid}/bodies/{name}/pose` | `body_pose_put()` | `web/world_routes.py:2466` |
+| PUT | `/api/chats/{cid}/bodies/{name}/room` | `body_room_put()` | `web/world_routes.py:2415` |
+| PUT | `/api/chats/{cid}/bodies/{name}/station` | `body_station_put()` | `web/world_routes.py:1980` |
 | POST | `/api/chats/{cid}/characters` | `chat_add_char()` | `web/app.py:4702` |
 | DELETE | `/api/chats/{cid}/characters/{ch}` | `chat_del_char()` | `web/app.py:5245` |
 | PUT | `/api/chats/{cid}/characters/{ch}/card` | `chat_char_card_put()` | `web/app.py:5259` |
@@ -3231,14 +3233,14 @@
 | POST | `/api/chats/{cid}/charters/generate` | `charters_generate()` | `web/app.py:6014` |
 | DELETE | `/api/chats/{cid}/charters/job` | `charters_job_clear()` | `web/app.py:6055` |
 | GET | `/api/chats/{cid}/charters/job` | `charters_job_get()` | `web/app.py:6036` |
-| DELETE | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_delete()` | `web/world_routes.py:2768` |
-| PUT | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_put()` | `web/world_routes.py:2701` |
+| DELETE | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_delete()` | `web/world_routes.py:2860` |
+| PUT | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_put()` | `web/world_routes.py:2793` |
 | GET | `/api/chats/{cid}/debug` | `chat_debug_export()` | `web/app.py:2484` |
 | GET | `/api/chats/{cid}/dialogue_config` | `dlg_get()` | `web/app.py:5811` |
 | PUT | `/api/chats/{cid}/dialogue_config` | `dlg_put()` | `web/app.py:5828` |
-| POST | `/api/chats/{cid}/doorways` | `doorway_create()` | `web/world_routes.py:2509` |
-| DELETE | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_delete()` | `web/world_routes.py:2584` |
-| PATCH | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_patch()` | `web/world_routes.py:2548` |
+| POST | `/api/chats/{cid}/doorways` | `doorway_create()` | `web/world_routes.py:2601` |
+| DELETE | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_delete()` | `web/world_routes.py:2676` |
+| PATCH | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_patch()` | `web/world_routes.py:2640` |
 | GET | `/api/chats/{cid}/dramatic_irony` | `get_dramatic_irony_feed()` | `web/app.py:4805` |
 | GET | `/api/chats/{cid}/export` | `export_chat()` | `persist/chat_archive.py:268` |
 | GET | `/api/chats/{cid}/fixed_points` | `fixed_points_list()` | `web/app.py:6267` |
@@ -3259,8 +3261,8 @@
 | POST | `/api/chats/{cid}/lorebooks` | `attach_lore()` | `web/app.py:4260` |
 | DELETE | `/api/chats/{cid}/lorebooks/{lid}` | `detach_book()` | `web/app.py:4327` |
 | PUT | `/api/chats/{cid}/lorebooks/{lid}` | `set_book_enabled()` | `web/app.py:4291` |
-| GET | `/api/chats/{cid}/map` | `map_index()` | `web/world_routes.py:1269` |
-| GET | `/api/chats/{cid}/map/plan` | `map_plan()` | `web/world_routes.py:1281` |
+| GET | `/api/chats/{cid}/map` | `map_index()` | `web/world_routes.py:1361` |
+| GET | `/api/chats/{cid}/map/plan` | `map_plan()` | `web/world_routes.py:1373` |
 | GET | `/api/chats/{cid}/naming_profile` | `naming_profile_get()` | `web/app.py:6102` |
 | PUT | `/api/chats/{cid}/naming_profile` | `naming_profile_put()` | `web/app.py:6114` |
 | GET | `/api/chats/{cid}/paradox_policy` | `paradox_policy_get()` | `web/app.py:6252` |
@@ -3280,24 +3282,24 @@
 | GET | `/api/chats/{cid}/promotable` | `list_promotable_presences()` | `web/app.py:4801` |
 | POST | `/api/chats/{cid}/promotions/confirm` | `confirm_promotion()` | `web/app.py:4830` |
 | POST | `/api/chats/{cid}/promotions/draft` | `draft_promotion()` | `web/app.py:4813` |
-| POST | `/api/chats/{cid}/regions` | `region_create()` | `web/world_routes.py:2617` |
-| PATCH | `/api/chats/{cid}/regions/{region_id}` | `region_patch()` | `web/world_routes.py:1818` |
+| POST | `/api/chats/{cid}/regions` | `region_create()` | `web/world_routes.py:2709` |
+| PATCH | `/api/chats/{cid}/regions/{region_id}` | `region_patch()` | `web/world_routes.py:1910` |
 | POST | `/api/chats/{cid}/retry_start` | `chat_retry_start()` | `web/app.py:2427` |
 | GET | `/api/chats/{cid}/room` | `room_thread()` | `web/room_routes.py:52` |
 | POST | `/api/chats/{cid}/room/mandates/{uid}/revoke` | `room_revoke()` | `web/room_routes.py:108` |
 | POST | `/api/chats/{cid}/room/messages` | `room_say()` | `web/room_routes.py:65` |
 | POST | `/api/chats/{cid}/room/messages/stream` | `room_say_stream()` | `web/room_routes.py:78` |
 | GET | `/api/chats/{cid}/room/status` | `room_status()` | `web/room_routes.py:117` |
-| GET | `/api/chats/{cid}/rooms` | `rooms_index()` | `web/world_routes.py:682` |
-| POST | `/api/chats/{cid}/rooms` | `room_create()` | `web/world_routes.py:2063` |
-| DELETE | `/api/chats/{cid}/rooms/{room_id}` | `room_delete()` | `web/world_routes.py:2129` |
-| GET | `/api/chats/{cid}/rooms/{room_id}` | `rooms_slice()` | `web/world_routes.py:826` |
-| PATCH | `/api/chats/{cid}/rooms/{room_id}` | `room_patch()` | `web/world_routes.py:1647` |
-| POST | `/api/chats/{cid}/rooms/{room_id}/entities` | `room_entity_create()` | `web/world_routes.py:2168` |
-| DELETE | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_delete()` | `web/world_routes.py:2204` |
-| PATCH | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_patch()` | `web/world_routes.py:1717` |
-| GET | `/api/chats/{cid}/rooms/{room_id}/grid` | `rooms_grid()` | `web/world_routes.py:1241` |
-| POST | `/api/chats/{cid}/rooms/{room_id}/presences` | `room_presence_create()` | `web/world_routes.py:2249` |
+| GET | `/api/chats/{cid}/rooms` | `rooms_index()` | `web/world_routes.py:690` |
+| POST | `/api/chats/{cid}/rooms` | `room_create()` | `web/world_routes.py:2155` |
+| DELETE | `/api/chats/{cid}/rooms/{room_id}` | `room_delete()` | `web/world_routes.py:2221` |
+| GET | `/api/chats/{cid}/rooms/{room_id}` | `rooms_slice()` | `web/world_routes.py:853` |
+| PATCH | `/api/chats/{cid}/rooms/{room_id}` | `room_patch()` | `web/world_routes.py:1739` |
+| POST | `/api/chats/{cid}/rooms/{room_id}/entities` | `room_entity_create()` | `web/world_routes.py:2260` |
+| DELETE | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_delete()` | `web/world_routes.py:2296` |
+| PATCH | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_patch()` | `web/world_routes.py:1809` |
+| GET | `/api/chats/{cid}/rooms/{room_id}/grid` | `rooms_grid()` | `web/world_routes.py:1300` |
+| POST | `/api/chats/{cid}/rooms/{room_id}/presences` | `room_presence_create()` | `web/world_routes.py:2341` |
 | GET | `/api/chats/{cid}/setup_log` | `chat_setup_log()` | `web/app.py:2460` |
 | GET | `/api/chats/{cid}/story_view` | `story_view_get()` | `web/app.py:6127` |
 | GET | `/api/chats/{cid}/style_guide` | `style_guide_get()` | `web/app.py:5794` |
@@ -3555,11 +3557,11 @@ Sections: Weather effects (`:2`); the tile (`:219`); the layers (`:292`); lifecy
 
 Declared functions: `weatherFxLater()`, `weatherFxCancel()`, `weatherFxClearTimers()`, `weatherFxClearBolt()`, `weatherFxReduced()`, `weatherFxEffectsOff()`, `weatherFxSupported()`, `weatherFxHost()`, `weatherFxRandom()`, `weatherFxTile()`, `weatherFxReach()`, `weatherFxBuild()`, `weatherFxClearLayers()`, `weatherFxSetPlayState()`, `weatherFxStop()`, `weatherFxVisible()`, `weatherFxApply()`, `weatherFxStormy()`, `weatherFxScheduleFlash()`, `weatherFxFlash()`, `weatherFxOpenSky()`, `weatherFxBolt()`, `weatherFxThunder()`, `weatherFxForTurn()`.
 
-### `static/js/world_browser.js` (3788 lines)
+### `static/js/world_browser.js` (3989 lines)
 
-Sections: The World Browser (`:3`); with its room, station, pose, and its FULL attire ledger, (`:31`); Edit controls (`:113`); The tree (`:216`); The room card (`:296`); Townspeople (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map) (`:419`); `size` is the word for the floor and `extent` its measurement, so the (`:546`); The Bodies tab: every body, and the attire editor (`:1281`); The Raw JSON tab: the two editors, unchanged (`:1553`); The map editor (`:1640`); the neighbours, faintly, where the field lays them (`:1945`); the room's cells, and the overlay's tint over them (`:1986`); the boundary as a line, with each doorway a gap in it (`:2019`); anchors: footprint cells, the id, a height mark (`:2066`); things placed by a position and a station (`:2101`); bodies: a marked cell with a facing tick; the unstationed in a lane (`:2139`); the lint, drawn at the thing each row concerns (`:2195`); the shape: parts as rectangles, the box's sides as handles (`:2251`); blank wall segments open a doorway; empty floor places a thing (`:2308`); the drops (`:2332`); through the doorways route, so a doorway declared from the far room (`:2443`); The dialog (`:3147`).
+Sections: The World Browser (`:3`); with its room, station, pose, and its FULL attire ledger, (`:31`); Edit controls (`:113`); The tree (`:216`); The room card (`:296`); Townspeople (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map) (`:419`); `size` is the word for the floor and `extent` its measurement, so the (`:546`); The Bodies tab: every body, and the attire editor (`:1362`); The Raw JSON tab: the two editors, unchanged (`:1634`); The map editor (`:1721`); the neighbours, faintly, where the field lays them (`:2051`); the room's cells, and the overlay's tint over them (`:2097`); the boundary as a line, with each doorway a gap in it (`:2137`); windows: each a thin line in its wall, never a gap in it (`:2196`); anchors: footprint cells, the id, a height mark (`:2234`); things placed by a position and a station (`:2276`); bodies: a marked cell with a facing tick; the unstationed in a lane (`:2314`); the lint, drawn at the thing each row concerns (`:2370`); the shape: parts as rectangles, the box's sides as handles (`:2426`); blank wall segments open a doorway; empty floor places a thing (`:2483`); the drops (`:2509`); through the doorways route, so a doorway declared from the far room (`:2620`); The dialog (`:3336`).
 
-Declared functions: `wbStatusBadge()`, `wbRoomLabel()`, `wbSelect()`, `wbText()`, `wbCoalesced()`, `wbWrite()`, `wbRenderTree()`, `wbSection()`, `wbIndexRows()`, `wbCellOf()`, `wbCellText()`, `wbStationText()`, `wbPoseText()`, `wbMoveControl()`, `wbNumber()`, `wbBodyMove()`, `wbCharterUrl()`, `wbCharterStationBody()`, `wbSourceWord()`, `wbCharterWhere()`, `wbCharterRow()`, `wbPoseEditor()`, `wbLintRows()`, `wbRoomFields()`, `wbRegionLook()`, `wbExits()`, `wbAnchors()`, `wbOccupant()`, `wbThing()`, `wbRenderCard()`, `wbGroupGarments()`, `wbLedgerEntry()`, `wbAttireEditor()`, `wbBodyKind()`, `wbCharterDetails()`, `wbRenderBodies()`, `wbRenderRaw()`, `wbSvg()`, `wbSvgPoint()`, `wbDraggable()`, `wbUndoStack()`, `wbWallOf()`, `wbOffsetAlong()`, `wbBearingBetween()`, `wbActivatable()`, `wbBoundary()`, `wbFocusRow()`, `wbFootprintLength()`, `wbRenderRoomMap()`, `centre()`, `partBox()`, `writeParts()`, `movePart()`, `dropPart()`, `sizePart()`, `resizePart()`, `writeExtent()`, `dropHandle()`, `nudgeHandle()`, `writeAnchors()`, `dropAnchor()`, `dropDoorway()`, `dropBody()`, `dropCharter()`, `dropThing()`, `wbRenderStructureMap()`, `wbPlanEl()`, `wbPlanFill()`, `wbPlanFrame()`, `wbPlanDefs()`, `wbPlanWalls()`, `wbPlanEdge()`, `wbPlanLabel()`, `wbPlanFixture()`, `wbPlanStair()`, `wbPlanLevelName()`, `wbRenderStoreyPlan()`, `wbPlanLegend()`, `wbRegionLegend()`, `wbMarksLegend()`, `wbMapPane()`, `wbWallForm()`, `wbCellForm()`, `wbMapNotes()`, `wbMapLegend()`, `openWorldBrowser()`, `moveRoute()`, `renderMapBar()`, `drawGrid()`, `loadGrid()`, `showStructure()`, `showPlan()`, `refreshIndex()`, `loadCard()`, `loadRoom()`, `selectTab()`.
+Declared functions: `wbStatusBadge()`, `wbRoomLabel()`, `wbSelect()`, `wbText()`, `wbCoalesced()`, `wbWrite()`, `wbRenderTree()`, `wbSection()`, `wbIndexRows()`, `wbCellOf()`, `wbCellText()`, `wbStationText()`, `wbPoseText()`, `wbMoveControl()`, `wbNumber()`, `wbBodyMove()`, `wbCharterUrl()`, `wbCharterStationBody()`, `wbSourceWord()`, `wbCharterWhere()`, `wbCharterRow()`, `wbPoseEditor()`, `wbLintRows()`, `wbRoomFields()`, `wbRegionLook()`, `wbExits()`, `wbWindows()`, `wbAnchors()`, `wbOccupant()`, `wbThing()`, `wbRenderCard()`, `wbGroupGarments()`, `wbLedgerEntry()`, `wbAttireEditor()`, `wbBodyKind()`, `wbCharterDetails()`, `wbRenderBodies()`, `wbRenderRaw()`, `wbSvg()`, `wbSvgPoint()`, `wbDraggable()`, `wbUndoStack()`, `wbWallOf()`, `wbOffsetAlong()`, `wbBearingBetween()`, `wbActivatable()`, `wbBoundary()`, `wbFocusRow()`, `wbFootprintLength()`, `wbRenderRoomMap()`, `centre()`, `partBox()`, `writeParts()`, `movePart()`, `dropPart()`, `sizePart()`, `resizePart()`, `writeExtent()`, `dropHandle()`, `nudgeHandle()`, `writeAnchors()`, `dropAnchor()`, `dropDoorway()`, `dropBody()`, `dropCharter()`, `dropThing()`, `wbRenderStructureMap()`, `wbPlanEl()`, `wbPlanFill()`, `wbPlanFrame()`, `wbPlanDefs()`, `wbPlanWalls()`, `wbPlanEdge()`, `wbPlanLabel()`, `wbPlanFixture()`, `wbPlanStair()`, `wbPlanLevelName()`, `wbRenderStoreyPlan()`, `wbPurposeSwatches()`, `wbPlanLegend()`, `wbRegionLegend()`, `wbMarksLegend()`, `wbMapPane()`, `wbWallForm()`, `wbCellForm()`, `wbMapNotes()`, `wbMapLegend()`, `openWorldBrowser()`, `moveRoute()`, `renderMapBar()`, `drawGrid()`, `loadGrid()`, `showStructure()`, `showPlan()`, `refreshIndex()`, `loadCard()`, `loadRoom()`, `selectTab()`.
 
 ### `static/js/writers_room.js` (799 lines)
 

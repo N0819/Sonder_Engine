@@ -1090,7 +1090,7 @@ border-radius:0 6px 6px 0}
 /* The map editor (2026-09-04, the owner's ruling): the Rooms tab's left pane
    is the grid, the card is what it opens. SVG drawn by world_browser.js;
    every colour here is a page token, so the theme carries the map. */
-.wb-map-pane{flex:0 0 400px;max-width:48%;max-height:70vh;overflow:auto;
+.wb-map-pane{flex:0 0 520px;max-width:48%;max-height:70vh;overflow:auto;
 border-right:1px solid var(--bd);padding-right:8px}
 .wb-map-pane .wb-tree{flex:none;max-width:none;max-height:none;overflow:visible;
 border-right:none;padding-right:0}
@@ -1098,7 +1098,11 @@ border-right:none;padding-right:0}
 .wb-map-hint{flex-basis:100%;font-size:11px}
 .wb-map{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:6px;min-height:80px}
 .wb-map-svg{display:block;width:100%;height:auto;max-height:58vh;font-family:inherit;touch-action:none}
-.wb-map-svg text{fill:var(--fg);font-size:9px;pointer-events:none;user-select:none}
+/* a plan label carries its own fill and size (`wbPlanLabel`); every other
+   text of a map takes these */
+.wb-map-svg text{pointer-events:none;user-select:none}
+.wb-map-svg text:not([fill]){fill:var(--fg)}
+.wb-map-svg text:not([font-size]){font-size:9px}
 .wb-m-cell{fill:var(--bg3);stroke:var(--bd);stroke-width:.5}
 .wb-m-tint{pointer-events:none}
 .wb-m-edge{stroke:var(--fg);stroke-width:2.2;stroke-linecap:square}
@@ -1208,6 +1212,12 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
 .wb-legend-mark{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--bd)}
 .wb-lg-anchor{background:color-mix(in srgb,var(--acc) 42%,var(--bg3));border-color:var(--acc)}
 .wb-lg-door{background:var(--acc);height:4px;border:none;border-radius:0}
+/* the editor's marks as the plan draws them (2026-10-12) */
+.wb-map-pane .wb-lg-anchor{background:var(--wbp-sheet);border-color:var(--wbp-ink);border-radius:2px}
+.wb-map-pane .wb-lg-door{background:var(--wbp-cobalt);height:5px}
+.wb-lg-window{background:var(--wbp-cobalt);height:2px;border:none;border-radius:0;box-shadow:0 0 0 2px var(--wbp-sheet)}
+.wb-zooms{display:inline-flex;gap:2px;margin-right:6px}
+.wb-zooms button.on{background:var(--acc);color:var(--bg)}
 .wb-lg-body{background:var(--acc);border-radius:50%}
 .wb-lg-player{background:var(--ok);border-radius:50%}
 .wb-lg-presence{background:var(--warn);border-radius:50%}
@@ -1224,7 +1234,7 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
    like the layout lab we made"). The lab's palette in the page's tokens, so
    every theme draws it, the paper one too; on the pane, which holds both
    the drawing and its legend. */
-.wb-map-pane,.wb-plan-svg{--wbp-ink:var(--fg);--wbp-line:var(--dim);--wbp-sheet:var(--bg2);
+.wb-map-pane,.wb-plan-svg,.wb-room-plan{--wbp-ink:var(--fg);--wbp-line:var(--dim);--wbp-sheet:var(--bg2);
 --wbp-cobalt:var(--acc);--wbp-ok:var(--ok);--wbp-room:var(--bg3);
 --wbp-living:color-mix(in srgb,var(--warn) 24%,var(--bg3));
 --wbp-private:color-mix(in srgb,var(--acc) 22%,var(--bg3));
@@ -1235,6 +1245,46 @@ fill:var(--hover-bg,color-mix(in srgb,var(--acc) 10%,transparent))}
 --wbp-grass:color-mix(in srgb,var(--ok) 14%,var(--bg2));
 --wbp-gravel:color-mix(in srgb,var(--dim) 24%,var(--bg2))}
 .wb-map-pane.wb-plan-wide{flex:1 1 auto;max-width:none}
+/* THE ROOM EDITOR DRAWN AS THE LAYOUT LAB DRAWS A ROOM (the owner,
+   2026-10-12): the storey plan's tokens and pieces over the grid the editing
+   still needs, faint. The floor's fill is the room's purpose (`--wbm-floor`,
+   set per cell), so a hovered or chosen cell can still paint over it. */
+.wb-room-plan{font-family:"Barlow Semi Condensed","Roboto Condensed","Arial Narrow",system-ui,sans-serif}
+.wb-room-plan .wb-m-cell{fill:var(--wbm-floor,var(--wbp-room));stroke:var(--wbp-line);stroke-opacity:.22;stroke-width:.5}
+.wb-room-plan .wb-m-edge{stroke:var(--wbp-ink);stroke-width:2.4;stroke-linecap:square}
+.wb-room-plan .wb-m-edge.ground{stroke:var(--wbp-ok);stroke-width:1;stroke-dasharray:6 4}
+.wb-room-plan .wb-m-door{stroke:var(--wbp-cobalt);stroke-width:5;stroke-linecap:butt}
+.wb-room-plan .wb-m-doorway.ground .wb-m-door{stroke:var(--wbp-ok)}
+.wb-room-plan .wb-m-doorway.opening .wb-m-door{stroke-opacity:0}
+.wb-room-plan .wb-m-doorway.opening:hover .wb-m-door,.wb-room-plan .wb-m-doorway.opening:focus-visible .wb-m-door{stroke-opacity:.45}
+.wb-room-plan .wb-m-doorway:hover .wb-m-door,.wb-room-plan .wb-m-doorway:focus-visible .wb-m-door{stroke:var(--fg)}
+.wb-m-window{cursor:grab;outline:none}
+.wb-m-window-gap{stroke:var(--wbp-sheet);stroke-width:5}
+.wb-m-window-pane{stroke:var(--wbp-cobalt);stroke-width:1.4}
+.wb-m-window:hover .wb-m-window-pane,.wb-m-window:focus-visible .wb-m-window-pane{stroke:var(--fg);stroke-width:2.4}
+.wb-m-window.dragging{opacity:.55;cursor:grabbing}
+.wb-room-plan .wb-m-far-cell{fill:var(--wbm-floor,var(--wbp-room));stroke:none;opacity:.5}
+.wb-room-plan .wb-m-far-edge{stroke:var(--wbp-line);stroke-width:1.2;stroke-dasharray:none;opacity:.85}
+.wb-room-plan .wb-m-neighbour.ground .wb-m-far-edge{stroke:var(--wbp-ok);stroke-dasharray:6 4}
+.wb-room-plan .wb-m-far-anchor{opacity:.45;pointer-events:none}
+.wb-room-plan .wb-m-far-name{fill:var(--wbp-line)}
+.wb-room-plan .wb-m-neighbour.ground .wb-m-far-name{fill:var(--wbp-ok)}
+.wb-room-plan .wb-m-neighbour:hover .wb-m-far-cell,.wb-room-plan .wb-m-neighbour:focus-visible .wb-m-far-cell{opacity:.8}
+.wb-room-plan .wb-m-anchor-cell{fill:transparent;stroke:none}
+.wb-room-plan .wb-m-anchor:hover .wb-m-anchor-cell,.wb-room-plan .wb-m-anchor:focus-visible .wb-m-anchor-cell{
+fill:color-mix(in srgb,var(--acc) 16%,transparent);stroke:var(--acc);stroke-width:1}
+.wb-m-anchor-symbol{pointer-events:none}
+.wb-m-anchor-symbol.see-through{opacity:.6}
+.wb-room-plan .wb-m-height{fill:var(--wbp-line);opacity:.75}
+.wb-room-plan .wb-m-handle{fill:color-mix(in srgb,var(--acc) 9%,transparent)}
+.wb-room-plan .wb-m-part-rect{fill:color-mix(in srgb,var(--acc) 3%,transparent);stroke-opacity:.35;stroke-width:1}
+.wb-room-plan .wb-m-part-label{opacity:0}
+.wb-room-plan .wb-m-part:hover .wb-m-part-rect,.wb-room-plan .wb-m-part:focus-visible .wb-m-part-rect{stroke-opacity:1}
+.wb-room-plan .wb-m-part:hover .wb-m-part-label,.wb-room-plan .wb-m-part:focus-visible .wb-m-part-label{opacity:1}
+.wb-room-plan .wb-m-part-knob{opacity:.4}
+.wb-room-plan .wb-m-part:hover + .wb-m-part-knob,.wb-room-plan .wb-m-part-knob:hover{opacity:1}
+.wb-room-plan .wb-m-body-dot{fill:var(--wbp-cobalt);stroke:var(--wbp-sheet)}
+.wb-m-stair{pointer-events:none}
 .wb-plan-svg{display:block;width:100%;height:auto;max-height:68vh;font-family:inherit}
 .wb-plan-svg text{user-select:none}
 .wb-plan-room{outline:none}

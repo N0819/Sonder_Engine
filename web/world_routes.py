@@ -61,8 +61,12 @@ present, else a frame row of this chat, 404 otherwise -- the same contract
   opacity, desc, offset, cell, source}}`` (authored anchors; ``source`` is
   what placed it -- ``"cell"`` an authored origin cell, ``"offset"`` a place
   along its wall, ``"seed"`` the formula), ``doorways`` ``[{id, to,
-  name, dir, cells, barrier, offset, status}]`` (the implicit door anchors,
-  ``cells`` empty when the edge has no bearing to place it by), ``bodies``
+  name, dir, cells, barrier, offset, status, desc}]`` (the edges a body can
+  take, by their implicit door anchors; ``cells`` empty when the edge has no
+  bearing to place it by), ``windows`` ``[{id, to, dir, cells, desc, ...}]``
+  (each window in its wall: a `window:` record's, ``to`` None, or an edge
+  whose barrier is a window, ``to`` the room it looks onto, with the
+  doorway fields), ``bodies``
   ``{name: {cell, facing, kind, at, near, measured, source}}`` (``cell``
   None and ``measured`` false for a body with no station -- somewhere in the
   room; ``source`` ``"cell"`` for the station's own pin, ``"anchor"`` for a
@@ -265,7 +269,8 @@ from world.spatial import (
     SOUND_LEVELS, STEADINESS, anchor_cells, body_cell,
     body_cell_source,
     effective_adjacent, effective_anchors, effective_facing,
-    effective_station, invalidate_moved_body_pose_details, layout_rooms,
+    effective_station, invalidate_moved_body_pose_details, is_window_barrier,
+    layout_rooms,
     layout_warning, light_field, noise_word, normalize_barrier,
     normalize_bearing, normalize_cell, normalize_extent, normalize_offset,
     normalize_part_at, normalize_parts,
@@ -275,7 +280,7 @@ from world.spatial import (
     opposite_bearing, opposite_vertical, part_box, passage_id_for, passage_of,
     quantise_hearing,
     room_field, room_grid, room_layout_lint, room_of, scene_passages,
-    size_from_extent, sound_field, sync_scene_passages,
+    size_from_extent, sound_field, sync_scene_passages, WINDOW_BARRIERS,
 )
 from world.weather import EXPOSURES
 # The townspeople (`world/charter_place.py`, DESIGN_CHARTER_PLACEMENT § the
@@ -495,6 +500,9 @@ def vocabulary(cid, frame_id):
         "size": list(ROOM_SIZES),
         "exposure": list(EXPOSURES),
         "barriers": sorted(_VALID_BARRIERS),
+        # the barriers that make an edge a window (`spatial.WINDOW_BARRIERS`),
+        # so the card lists those edges as windows and not as ways out
+        "window_barriers": sorted(WINDOW_BARRIERS),
         "dirs": list(_BEARINGS),
         "heights": list(HEIGHTS),
         "footprints": list(FOOTPRINTS),
@@ -766,6 +774,24 @@ def _region_far_look(cid, frame_id, region_id):
     return str(entry.get("far_look") or "")
 
 
+def _anchor_kind(scene, room_id, aid) -> str:
+    """What a room's anchor is: ``"window"`` (a `window:` record's, or an
+    edge whose barrier is a window), ``"doorway"`` (any other edge's) or
+    ``"fixture"`` (one the room holds). `implicit` says only that an anchor
+    was derived, and the `door:` prefix only that an edge derived it, so the
+    card asked them and listed Hinami's window as a doorway (2026-10-12)."""
+    aid = str(aid)
+    if aid.startswith("window:"):
+        return "window"
+    if aid.startswith(_DOOR_ANCHOR_PREFIX):
+        to = aid[len(_DOOR_ANCHOR_PREFIX):]
+        for edge in effective_adjacent(scene, room_id):
+            if isinstance(edge, dict) and str(edge.get("to")) == to:
+                return "window" if is_window_barrier(edge.get("barrier")) else "doorway"
+        return "doorway"
+    return "fixture"
+
+
 def _decorated_slice(cid, frame_id, room_id, scene, lint_rows=None):
     row = rooms.room_slice(cid, frame_id, room_id, scene)
     if row is None:
@@ -785,7 +811,8 @@ def _decorated_slice(cid, frame_id, room_id, scene, lint_rows=None):
         row["stationable"] = [
             {"id": str(aid), "desc": str((a or {}).get("desc") or aid),
              "implicit": bool((a or {}).get("implicit")),
-             "dir": normalize_bearing((a or {}).get("dir"))}
+             "dir": normalize_bearing((a or {}).get("dir")),
+             "kind": _anchor_kind(scene, room_id, aid)}
             for aid, a in effective_anchors(scene, room_id).items()]
         # The layout rows naming this room, each with the card field it
         # concerns and its sentence, so the card puts a row beside the field
@@ -876,13 +903,34 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
         if rec["implicit"] and str(aid).startswith("window:"):
             # A WINDOW IS THE WALL'S (`spatial_geometry.room_windows`): drawn
             # in its wall, never among the furniture
-            windows.append({"id": str(aid), "dir": rec["dir"], "desc": rec["desc"],
+            windows.append({"id": str(aid), "to": None, "dir": rec["dir"], "desc": rec["desc"],
                             "cells": _cells(rec["cells"]) if rec["dir"] else []})
             continue
         if rec["implicit"] and str(aid).startswith(_DOOR_ANCHOR_PREFIX):
             to = str(aid)[len(_DOOR_ANCHOR_PREFIX):]
             edge = edges.get(to) or {}
             record = passage_of(scene, edge) or {}
+            if is_window_barrier(edge.get("barrier")):
+                # A WINDOW ONTO ANOTHER ROOM IS STILL A WINDOW. Every edge
+                # derives a `door:` anchor, so the barrier is what says this
+                # one is a window: listed with the windows and drawn in its
+                # wall as one, never offered as a way through (Home 9,
+                # 2026-10-12: Hinami's east window read as a doorway onto
+                # the garden in the room editor). ``to`` names the room it
+                # looks onto; it moves and is described through the doorway
+                # routes, as the edge it is.
+                windows.append({
+                    "id": str(aid), "to": to, "name": _room_name(scene, to),
+                    "dir": rec["dir"],
+                    "cells": _cells(rec["cells"]) if rec["dir"] else [],
+                    "barrier": normalize_barrier(edge.get("barrier")),
+                    "offset": rec.get("offset"),
+                    "status": "live" if to in rooms_ else None,
+                    "desc": str(record.get("desc") or edge.get("desc") or ""),
+                    "material": str(record.get("material") or edge.get("material") or ""),
+                    "declared_here": not bool(edge.get("implicit")),
+                })
+                continue
             doorways.append({
                 "id": str(aid), "to": to, "name": _room_name(scene, to),
                 "dir": rec["dir"],
@@ -902,6 +950,11 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
                 "passage": str(edge.get("passage")) if record else None,
                 "label": str(record.get("name") or edge.get("name") or ""),
                 "material": str(record.get("material") or edge.get("material") or ""),
+                # what the door IS (a shoji of paper over a lattice): the
+                # edge's own description, the layout tier's or a host's;
+                # only where there is one
+                **({"desc": str(record.get("desc") or edge.get("desc"))}
+                   if (record.get("desc") or edge.get("desc")) else {}),
                 "width": record.get("width"),
                 "state": record.get("state") if isinstance(record.get("state"), dict) else {},
                 "declared_here": not bool(edge.get("implicit")),
@@ -1122,6 +1175,12 @@ def _map_component(scene, rooms_, occupants, lint_rows, start, layout, *,
             exits.append({"to": to, "name": _room_name(scene, to),
                           "dir": normalize_bearing(edge.get("dir")),
                           "barrier": normalize_barrier(edge.get("barrier")),
+                          # a window is drawn in its wall, never as a way
+                          # out, and re-bears nothing (Home 9, 2026-10-12);
+                          # only where it is one, so a map with none reads
+                          # byte for byte as it did
+                          **({"window": True} if is_window_barrier(edge.get("barrier"))
+                             else {}),
                           "cells": _cells(door_cells or []),
                           "passage": str(edge["passage"])
                           if passage_of(scene, edge) else None,
@@ -1258,8 +1317,41 @@ def rooms_grid(cid: int, room_id: str, frame_id: int | None = None,
             charter=charter_body_records(
                 cid, frame_id, scene,
                 frame_rooms=rooms_in_frame(scene, [room_id])))
+        _draw_as_the_lab(cid, scene, view)
     view["frame_id"] = frame_id
     return view
+
+
+def _draw_as_the_lab(cid, scene, view):
+    """What the room editor needs to draw a room as the layout lab draws it
+    (the owner, 2026-10-12: "i was refering to the editor when i wanted th
+    window to look more like the layout lab"): what the room and each laid
+    neighbour are for and whether they are open ground (their fills), a
+    stair hall's stair, each fixture's kind (its symbol), and whether a
+    doorway leads onto open ground. The storey plan's own reading
+    (`storey_plan.room_look`, `fixture_kinds`), so a room is filled and
+    furnished alike in both. Each key only where it says something, so a
+    story with no plan reads as it did."""
+    from web.storey_plan import fixture_kinds, room_look
+    from world.structure import registry_rows
+    planned = {uid: entry["planned"] for uid, entry in registry_rows(cid).items()
+               if isinstance(entry.get("planned"), dict)}
+
+    def look(rid):
+        got = room_look(scene, rid, planned.get(rid))
+        return {k: v for k, v in got.items() if v}
+
+    view["room"].update(look(view["room"]["id"]))
+    for n in view.get("neighbours") or ():
+        n.update(look(n["id"]))
+    kinds = fixture_kinds(scene, view["room"]["id"], planned.get(view["room"]["id"]))
+    for aid, a in (view.get("anchors") or {}).items():
+        if kinds.get(aid):
+            a["kind"] = kinds[aid]
+    rooms_ = scene.get("rooms") or {}
+    for d in view.get("doorways") or ():
+        if d.get("to") in rooms_ and look(d["to"]).get("ground"):
+            d["ground"] = True
 
 
 map_router = APIRouter(prefix="/api/chats/{cid}/map", tags=["world-browser"])

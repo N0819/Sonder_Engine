@@ -1987,14 +1987,26 @@ def planned_room_index(cid, scene=None):
             if rid not in rooms}
 
 
-def planned_topology(cid):
+def planned_topology(cid, *, routes_only=False):
     """``{room_uid: [adjacent room uids]}`` for every live planned registry
     row -- the plan's edges by ID. `planned_context` renders the same edges
-    by NAME for a reader; a walk over the graph wants the ids."""
+    by NAME for a reader; a walk over the graph wants the ids.
+
+    ``routes_only`` keeps only the edges a body could take -- passable, or a
+    door it opens (`route_memory_barrier`; an edge with no barrier is an
+    opening, as everywhere) -- for a caller that WALKS the plan. A window,
+    bars or a wall the plan holds is a fact about what is beside what, and
+    no way through: the layout tier makes a window with laid ground beyond
+    it a `window` edge onto that ground, and the story's walk then stepped
+    from a second-storey room straight onto the garden (Home 9, chat 172,
+    2026-10-12: the World Browser listed the garden one hop from Hinami's
+    room, through her window). Every room keeps its key either way."""
+    from world.spatial import route_memory_barrier
     out = {}
     for rid, (_name, spec) in _planned_specs(cid).items():
         out[rid] = [str(edge.get("to")) for edge in spec.get("adjacent") or ()
-                    if isinstance(edge, dict) and edge.get("to")]
+                    if isinstance(edge, dict) and edge.get("to")
+                    and (not routes_only or route_memory_barrier(edge.get("barrier")))]
     return out
 
 

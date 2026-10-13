@@ -75,10 +75,11 @@ from world.spatial_barriers import (
     _ROUTE_MEMORY_BARRIERS, _SCENT_BARRIER_LEVELS,
     _SIGHT_BARRIERS, _VALID_BARRIERS, barrier_fastening,
     barrier_opens_to_a_hand, edge_admits, edge_crossable_from, edge_passable,
-    effective_adjacent, neighbor_map, normalize_barrier,
+    effective_adjacent, is_window_barrier, neighbor_map, normalize_barrier,
     normalize_scene_barriers, normalize_scene_passages, PASSAGE_FIELDS,
     passage_direction, passage_id_for, passage_of, resolve_edge,
     route_memory_barrier, scene_passages, unresolved_barrier_words,
+    WINDOW_BARRIERS,
 )
 
 

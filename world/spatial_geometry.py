@@ -21,8 +21,8 @@ from world.spatial_orientation import (
     travel_bearing,
 )
 
-from world.spatial_barriers import (effective_adjacent, normalize_barrier,
-                                    resolve_edge)
+from world.spatial_barriers import (WINDOW_BARRIERS, effective_adjacent,
+                                    normalize_barrier, resolve_edge)
 from world.spatial_containment import (_NEVER_STATIONED_KINDS,
                                        containment_conceals,
                                        scale_changed_names)
@@ -345,8 +345,10 @@ def is_window_anchor(aid) -> bool:
 
 
 def is_door_anchor(aid) -> bool:
-    """A doorway's pseudo-anchor (`door:<to>`) -- the test for a doorway,
-    where `implicit` says only that an anchor was derived."""
+    """An EDGE's pseudo-anchor (`door:<to>`), where `implicit` says only
+    that an anchor was derived. Every edge derives one, a `window` edge
+    included, so this is the test for a way in the wall; whether a body can
+    take it is the edge's barrier's to say (`is_window_barrier`)."""
     return str(aid or "").startswith(_DOOR_ANCHOR_PREFIX)
 
 
@@ -356,12 +358,25 @@ def room_windows(room) -> list:
     room-local cell in the wall where code placed it (else None), `name`
     what it is called (else ""), and `id` its own word, or its bearing with
     a count where two share one. An entry with no bearing the engine reads
-    is no window."""
+    is no window.
+
+    A BARE BEARING A WINDOW EDGE ALREADY LOOKS ALONG IS THAT WINDOW. A
+    window with laid ground beyond it is the room's `window` edge onto that
+    ground (`layout_bridge`), standing in the wall its `dir` names; a beat
+    that re-echoes the room as bare bearings names the same window again,
+    and read as a second one it put two windows in Hinami's east wall (Home
+    9, chat 172, 2026-10-12). Each window edge of the room's own list
+    answers one bare bearing along its wall (`window_edge_bearings`); a
+    record says where it stands, and is never answered this way."""
     out, used = [], set()
+    held = window_edge_bearings(room)
     for raw in ((room or {}).get("windows") if isinstance(room, dict) else None) or ():
         rec = raw if isinstance(raw, dict) else {"dir": raw}
         bearing = normalize_bearing(rec.get("dir"))
         if not bearing:
+            continue
+        if not isinstance(raw, dict) and held.get(bearing):
+            held[bearing] -= 1
             continue
         wid = re.sub(r"[^a-z0-9_]+", "_", str(rec.get("id") or "").casefold()).strip("_")
         wid = wid or bearing
@@ -373,6 +388,22 @@ def room_windows(room) -> list:
         out.append({"id": wid, "dir": bearing, "cell": normalize_cell(rec.get("cell")),
                     "name": " ".join(str(rec.get("name") or "").split())})
     return out
+
+
+def window_edge_bearings(room) -> dict:
+    """``{bearing: count}`` of the room's own window edges that stand in a
+    wall -- each a window in the wall its `dir` names (a way up or down has
+    no wall). What answers a bare bearing in `windows` (`room_windows`)."""
+    held = {}
+    for edge in ((room or {}).get("adjacent") if isinstance(room, dict) else None) or ():
+        if not isinstance(edge, dict) or normalize_vertical(edge.get("vertical")):
+            continue
+        if normalize_barrier(edge.get("barrier")) not in WINDOW_BARRIERS:
+            continue
+        bearing = normalize_bearing(edge.get("dir"))
+        if bearing:
+            held[bearing] = held.get(bearing, 0) + 1
+    return held
 
 
 def window_bearings(room) -> list:
@@ -397,6 +428,9 @@ _BARRIER_ANCHOR_DESC = {
     "open_door": "the open doorway",
     "closed_door": "the shut door",
     "window": "the window",
+    # the side that sees through it holds the edge (`_apply_exits` mirrors
+    # none to the far side), so from its own room it is a window
+    "one_way_window": "the window",
     "bars": "the bars",
     "membrane": "the curtained way",
     "wall": "the far wall",

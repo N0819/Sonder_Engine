@@ -230,7 +230,8 @@ def _rooms_within(cid, scene, start, depth=FRONTIER_DEPTH_HOPS, contained=None):
     if not start:
         return [], [], []
     contained = containment(scene) if contained is None else contained
-    topology = planned_topology(cid)
+    # the plan's ROUTES: a window or a wall it holds is no way through
+    topology = planned_topology(cid, routes_only=True)
     hops = room_hops(cid, scene, [str(start)],
                      graph=room_graph(cid, scene, contained=contained,
                                       planned=topology))

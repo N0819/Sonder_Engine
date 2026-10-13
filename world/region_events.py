@@ -159,7 +159,7 @@ def _graph(cid, scene):
     from world.structure import planned_topology
     graph = {str(k): {str(v) for v in vs}
              for k, vs in passable_neighbors(scene).items()}
-    for rid, others in planned_topology(cid).items():
+    for rid, others in planned_topology(cid, routes_only=True).items():
         for other in others:
             graph.setdefault(rid, set()).add(other)
             graph.setdefault(other, set()).add(rid)

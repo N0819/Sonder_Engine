@@ -2286,6 +2286,30 @@ it joins"). What the first measurement on chat 168's shrine left open:
   room a stair leaves, so the test no longer tells that path from a changed
   brief.
 
+<a id="unbuilt-1-211"></a>
+
+### 1.211 A window onto a room is a window -- fixed 2026-10-12, residuals open
+
+Design.md: "A window onto a room is a window, not a doorway". What Home 9
+(chat 172) left open once the walk, the editor's feed and its drawing read
+a window edge as a window:
+
+- **A window onto open air is read-only in the World Browser.** A `windows`
+  record (`spatial_geometry.room_windows`) is listed on the card and drawn in
+  its wall, but the room PATCH takes no `windows`, so none can be added,
+  moved along its wall or removed there; a window onto another room is an
+  edge, and moves and is described through the doorways route.
+- **The structure map lays a room reached only through a window beside it.**
+  `spatial_lint._beared_neighbours` skips walls and ways up or down, not
+  windows, so `layout_rooms` places such a room as if through a door. Rooms
+  on a site plan are placed by their sites, so only a story with no plan
+  meets it -- an upper room's window onto ground below would set that ground
+  on the upper storey there.
+- **The routes still say doorway.** A window edge's description and glass
+  go through `PATCH /doorways`, which mints a passage record for it
+  (`_ensure_passage`) as for a door; the record is right, the route's name
+  and its toasts are a door's.
+
 
 ## 2. Roadmap
 
