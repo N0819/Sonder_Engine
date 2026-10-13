@@ -1322,7 +1322,9 @@ class TestOffset:
                                   "adjacent": [{"to": "q", "barrier": "open", "dir": "n"}]},
                             "q": {"name": "Q", "size": "small"}},
                   "positions": {}, "stations": {}, "entities": {}}
-            bare = anchor_cells(sc, "r")
+            # the SEED's formula, read before code keeps its places clear of
+            # doorways and of each other (`raw`; 2026-10-12)
+            bare = anchor_cells(sc, "r", raw=True)
             assert "door:q" in bare
             assert all(rec["offset"] is None for rec in bare.values())
             for junk in (None, "half", True, 1.5, -0.1, [0.5], {"along": 0.5}):
@@ -1330,7 +1332,7 @@ class TestOffset:
                 for anchor in sc2["rooms"]["r"]["anchors"].values():
                     anchor["offset"] = junk
                 sc2["rooms"]["r"]["adjacent"][0]["offset"] = junk
-                assert {aid: rec["cells"] for aid, rec in anchor_cells(sc2, "r").items()} \
+                assert {aid: rec["cells"] for aid, rec in anchor_cells(sc2, "r", raw=True).items()} \
                     == {aid: rec["cells"] for aid, rec in bare.items()}, junk
             # The seeded index along the wall's own rim, as the note wrote it.
             grid = room_grid(sc, "r")

@@ -256,17 +256,27 @@ def _harbour_office():
     """Saltmarsh Crossing's harbour office as it was laid out (scratch chat
     170, 2026-10-11): a small room whose chair the furnishing laid over the
     only doorway, and whose desk, chart table, tide slate and window seat
-    closed a three-cell pocket round where the player stood."""
+    closed a three-cell pocket round where the player stood. Pinned where
+    they stood then: since 2026-10-12 a place code chooses keeps clear of a
+    doorway (`spatial_fov._place_anchors`), so the seed no longer lays the
+    chair there -- a chair a story puts there still stands there, and a walk
+    still goes past it."""
     return {
         "rooms": {
             "harbour_office": {"name": "Harbour Office", "extent": {"w": 4.0, "d": 6.0},
                                "shape": "rectangle", "size": "small", "anchors": {
-                "chart_table": {"dir": "w", "height": "waist", "footprint": "large"},
-                "tide_slate": {"dir": "w", "height": "head", "footprint": "point"},
-                "desk": {"dir": "e", "height": "waist", "footprint": "large"},
-                "hearth": {"dir": "w", "height": "floor", "footprint": "small"},
-                "window_seat": {"dir": "s", "height": "waist", "footprint": "run"},
-                "chair": {"dir": "e", "height": "waist", "footprint": "small"},
+                "chart_table": {"dir": "w", "height": "waist", "footprint": "large",
+                                "cell": [0, 1], "extent": {"w": 2, "d": 2}},
+                "tide_slate": {"dir": "w", "height": "head", "footprint": "point",
+                               "cell": [0, 4], "extent": {"w": 1, "d": 1}},
+                "desk": {"dir": "e", "height": "waist", "footprint": "large",
+                         "cell": [2, 3], "extent": {"w": 2, "d": 2}},
+                "hearth": {"dir": "w", "height": "floor", "footprint": "small",
+                           "cell": [0, 1], "extent": {"w": 1, "d": 2}},
+                "window_seat": {"dir": "s", "height": "waist", "footprint": "run",
+                                "cell": [1, 5], "extent": {"w": 2, "d": 1}},
+                "chair": {"dir": "e", "height": "waist", "footprint": "small",
+                          "cell": [3, 2], "extent": {"w": 1, "d": 2}},
             }, "adjacent": [{"to": "north_quay", "barrier": "open_door", "dir": "e"}]},
             "north_quay": {"name": "North Quay", "extent": {"w": 16.0, "d": 6.0},
                            "shape": "rectangle", "anchors": {},

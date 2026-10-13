@@ -499,6 +499,11 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
         }
         if described:
             anchor["described"] = True
+        # A WINDOW EDGE'S ANCHOR SAYS SO, as a window record's does: the
+        # placement keeps furniture clear of the ways in and out of a room
+        # and has nothing to keep clear beneath a window (2026-10-12)
+        if normalize_barrier(barrier) in WINDOW_BARRIERS:
+            anchor["window"] = True
         if bearing:
             anchor["dir"] = bearing
         if vertical:

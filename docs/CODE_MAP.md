@@ -25,7 +25,7 @@
 | `agents/director_prose.py` | 3410 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1632 |  | `core.db`, `llm`, `llm.prompts` |
-| `agents/director_rooms.py` | 2818 |  | — |
+| `agents/director_rooms.py` | 2819 |  | — |
 | `agents/director_scopes.py` | 599 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 754 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 469 |  | `core.db`, `core.logging_utils`, `story.room_proposals` |
@@ -150,7 +150,7 @@
 | `web/room_routes.py` | 119 |  | `core.db`, `story` |
 | `web/storey_plan.py` | 267 |  | — |
 | `web/story_view.py` | 1029 |  | `core.db`, `persist.steps`, `world.charter_runtime`, `world.living_world` |
-| `web/world_routes.py` | 2874 |  | `core`, `core.db`, `persist.commit`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.charter`, `world.charter_runtime`, `world.spatial`, `world.weather` |
+| `web/world_routes.py` | 2879 |  | `core`, `core.db`, `persist.commit`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.charter`, `world.charter_runtime`, `world.spatial`, `world.weather` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
 | `world/beat_ledger.py` | 184 |  | — |
@@ -209,7 +209,7 @@
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/landscape.py` | 1761 |  | — |
 | `world/layout_bridge.py` | 2414 |  | `world.layout_solver`, `world.structure` |
-| `world/layout_solver.py` | 2349 |  | — |
+| `world/layout_solver.py` | 2382 |  | — |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 1332 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
@@ -229,9 +229,9 @@
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1976 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3612 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_fov.py` | 2043 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_fov.py` | 2173 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2581 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
-| `world/spatial_geometry.py` | 2373 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_geometry.py` | 2378 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 902 |  | — |
 | `world/spatial_levels.py` | 250 |  | `world.spatial_orientation` |
 | `world/spatial_light.py` | 848 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
@@ -239,7 +239,7 @@
 | `world/spatial_lint.py` | 858 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
 | `world/spatial_merge.py` | 2790 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 432 | Bearing math and reciprocal spatial-edge normalization. | — |
-| `world/spatial_pack.py` | 423 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_lint` |
+| `world/spatial_pack.py` | 448 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_lint` |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1322 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
@@ -482,14 +482,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `design_rooms()` | 1681 | 264 lines |
-| `_predevelop_run()` | 2627 | 192 lines |
-| `_doorways_that_fit()` | 1129 | 176 lines |
-| `_derive_far_bearings()` | 869 | 103 lines |
-| `_place_doorways()` | 757 | 92 lines |
-| `_pack()` | 599 | 90 lines |
-| `_groundwork()` | 1417 | 82 lines |
-| `schedule_room_predevelopment()` | 2539 | 79 lines |
+| `design_rooms()` | 1682 | 264 lines |
+| `_predevelop_run()` | 2628 | 192 lines |
+| `_doorways_that_fit()` | 1130 | 176 lines |
+| `_derive_far_bearings()` | 870 | 103 lines |
+| `_place_doorways()` | 758 | 92 lines |
+| `_pack()` | 600 | 90 lines |
+| `_groundwork()` | 1418 | 82 lines |
+| `schedule_room_predevelopment()` | 2540 | 79 lines |
 
 ### `agents/director_scopes.py`
 
@@ -1899,13 +1899,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `grid_view()` | 879 | 217 lines |
-| `room_entity_patch()` | 1809 | 95 lines |
-| `_apply_exits()` | 1448 | 92 lines |
+| `room_entity_patch()` | 1814 | 95 lines |
+| `_apply_exits()` | 1453 | 92 lines |
 | `map_view()` | 1217 | 80 lines |
-| `body_station_put()` | 1980 | 77 lines |
-| `_apply_doorway_fields()` | 2521 | 77 lines |
+| `body_station_put()` | 1985 | 77 lines |
+| `_apply_doorway_fields()` | 2526 | 77 lines |
 | `body_rows()` | 617 | 70 lines |
-| `room_patch()` | 1739 | 67 lines |
+| `room_patch()` | 1744 | 67 lines |
 
 ### `world/background_claims.py`
 
@@ -2603,9 +2603,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_grounds()` | 1999 | 317 lines |
+| `_grounds()` | 2032 | 317 lines |
 | `solve()` | 1282 | 250 lines |
-| `_place_fixtures()` | 1806 | 189 lines |
+| `_place_fixtures()` | 1819 | 209 lines |
 | `_place_blocks()` | 589 | 127 lines |
 | `_spine_h()` | 918 | 91 lines |
 | `_place_doors()` | 1549 | 78 lines |
@@ -2841,14 +2841,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `body_visibility()` | 1875 | 117 lines |
-| `feature_visibility()` | 1627 | 111 lines |
-| `_place_anchors()` | 667 | 103 lines |
-| `body_cell()` | 885 | 76 lines |
-| `neighbour_feature_visibility()` | 1771 | 69 lines |
-| `_room_field()` | 1317 | 59 lines |
-| `_placed_neighbours()` | 1225 | 55 lines |
-| `shadowcast()` | 1064 | 53 lines |
+| `body_visibility()` | 2005 | 117 lines |
+| `feature_visibility()` | 1757 | 111 lines |
+| `_place_anchor()` | 764 | 100 lines |
+| `body_cell()` | 1015 | 76 lines |
+| `neighbour_feature_visibility()` | 1901 | 69 lines |
+| `_room_field()` | 1447 | 59 lines |
+| `_placed_neighbours()` | 1355 | 55 lines |
+| `shadowcast()` | 1194 | 53 lines |
 
 ### `world/spatial_frames.py`
 
@@ -2867,14 +2867,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_effective_anchors()` | 459 | 147 lines |
-| `invalidate_transferred_pose_details()` | 1920 | 113 lines |
+| `_effective_anchors()` | 459 | 152 lines |
+| `invalidate_transferred_pose_details()` | 1925 | 113 lines |
 | `spatial_digest()` | 150 | 107 lines |
-| `derive_scene_stations()` | 2270 | 104 lines |
-| `invalidate_moved_body_place_details()` | 1712 | 102 lines |
+| `derive_scene_stations()` | 2275 | 104 lines |
+| `invalidate_moved_body_place_details()` | 1717 | 102 lines |
 | `egocentric_frame()` | 62 | 86 lines |
-| `invalidate_moved_body_pose_details()` | 1602 | 79 lines |
-| `invalidate_contact_bound_poses()` | 2035 | 75 lines |
+| `invalidate_moved_body_pose_details()` | 1607 | 79 lines |
+| `invalidate_contact_bound_poses()` | 2040 | 75 lines |
 
 ### `world/spatial_identity.py`
 
@@ -2971,14 +2971,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `pack_anchors()` | 137 | 87 lines |
-| `doorway_places()` | 226 | 83 lines |
-| `_full_lines()` | 371 | 50 lines |
-| `_end_to_end()` | 311 | 35 lines |
-| `_would_fit()` | 348 | 21 lines |
-| `_along_wall()` | 94 | 13 lines |
-| `_places()` | 116 | 10 lines |
-| `_reach()` | 128 | 7 lines |
+| `pack_anchors()` | 145 | 104 lines |
+| `doorway_places()` | 251 | 83 lines |
+| `_full_lines()` | 396 | 50 lines |
+| `_end_to_end()` | 336 | 35 lines |
+| `_would_fit()` | 373 | 21 lines |
+| `_along_wall()` | 102 | 13 lines |
+| `_places()` | 124 | 10 lines |
+| `_trial()` | 93 | 7 lines |
 
 ### `world/spatial_prose.py`
 
@@ -3203,10 +3203,10 @@
 | GET | `/api/chats/{cid}/background_config` | `bg_cfg_get()` | `web/app.py:6072` |
 | PUT | `/api/chats/{cid}/background_config` | `bg_cfg_put()` | `web/app.py:6076` |
 | POST | `/api/chats/{cid}/begin` | `chat_begin()` | `web/app.py:3489` |
-| DELETE | `/api/chats/{cid}/bodies/{name}` | `body_presence_delete()` | `web/world_routes.py:2381` |
-| PUT | `/api/chats/{cid}/bodies/{name}/pose` | `body_pose_put()` | `web/world_routes.py:2466` |
-| PUT | `/api/chats/{cid}/bodies/{name}/room` | `body_room_put()` | `web/world_routes.py:2415` |
-| PUT | `/api/chats/{cid}/bodies/{name}/station` | `body_station_put()` | `web/world_routes.py:1980` |
+| DELETE | `/api/chats/{cid}/bodies/{name}` | `body_presence_delete()` | `web/world_routes.py:2386` |
+| PUT | `/api/chats/{cid}/bodies/{name}/pose` | `body_pose_put()` | `web/world_routes.py:2471` |
+| PUT | `/api/chats/{cid}/bodies/{name}/room` | `body_room_put()` | `web/world_routes.py:2420` |
+| PUT | `/api/chats/{cid}/bodies/{name}/station` | `body_station_put()` | `web/world_routes.py:1985` |
 | POST | `/api/chats/{cid}/characters` | `chat_add_char()` | `web/app.py:4702` |
 | DELETE | `/api/chats/{cid}/characters/{ch}` | `chat_del_char()` | `web/app.py:5245` |
 | PUT | `/api/chats/{cid}/characters/{ch}/card` | `chat_char_card_put()` | `web/app.py:5259` |
@@ -3233,14 +3233,14 @@
 | POST | `/api/chats/{cid}/charters/generate` | `charters_generate()` | `web/app.py:6014` |
 | DELETE | `/api/chats/{cid}/charters/job` | `charters_job_clear()` | `web/app.py:6055` |
 | GET | `/api/chats/{cid}/charters/job` | `charters_job_get()` | `web/app.py:6036` |
-| DELETE | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_delete()` | `web/world_routes.py:2860` |
-| PUT | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_put()` | `web/world_routes.py:2793` |
+| DELETE | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_delete()` | `web/world_routes.py:2865` |
+| PUT | `/api/chats/{cid}/charters/{charter_key}/bodies/{body_key}/station` | `charter_body_station_put()` | `web/world_routes.py:2798` |
 | GET | `/api/chats/{cid}/debug` | `chat_debug_export()` | `web/app.py:2484` |
 | GET | `/api/chats/{cid}/dialogue_config` | `dlg_get()` | `web/app.py:5811` |
 | PUT | `/api/chats/{cid}/dialogue_config` | `dlg_put()` | `web/app.py:5828` |
-| POST | `/api/chats/{cid}/doorways` | `doorway_create()` | `web/world_routes.py:2601` |
-| DELETE | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_delete()` | `web/world_routes.py:2676` |
-| PATCH | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_patch()` | `web/world_routes.py:2640` |
+| POST | `/api/chats/{cid}/doorways` | `doorway_create()` | `web/world_routes.py:2606` |
+| DELETE | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_delete()` | `web/world_routes.py:2681` |
+| PATCH | `/api/chats/{cid}/doorways/{room_id}/{to}` | `doorway_patch()` | `web/world_routes.py:2645` |
 | GET | `/api/chats/{cid}/dramatic_irony` | `get_dramatic_irony_feed()` | `web/app.py:4805` |
 | GET | `/api/chats/{cid}/export` | `export_chat()` | `persist/chat_archive.py:268` |
 | GET | `/api/chats/{cid}/fixed_points` | `fixed_points_list()` | `web/app.py:6267` |
@@ -3261,8 +3261,8 @@
 | POST | `/api/chats/{cid}/lorebooks` | `attach_lore()` | `web/app.py:4260` |
 | DELETE | `/api/chats/{cid}/lorebooks/{lid}` | `detach_book()` | `web/app.py:4327` |
 | PUT | `/api/chats/{cid}/lorebooks/{lid}` | `set_book_enabled()` | `web/app.py:4291` |
-| GET | `/api/chats/{cid}/map` | `map_index()` | `web/world_routes.py:1361` |
-| GET | `/api/chats/{cid}/map/plan` | `map_plan()` | `web/world_routes.py:1373` |
+| GET | `/api/chats/{cid}/map` | `map_index()` | `web/world_routes.py:1366` |
+| GET | `/api/chats/{cid}/map/plan` | `map_plan()` | `web/world_routes.py:1378` |
 | GET | `/api/chats/{cid}/naming_profile` | `naming_profile_get()` | `web/app.py:6102` |
 | PUT | `/api/chats/{cid}/naming_profile` | `naming_profile_put()` | `web/app.py:6114` |
 | GET | `/api/chats/{cid}/paradox_policy` | `paradox_policy_get()` | `web/app.py:6252` |
@@ -3282,8 +3282,8 @@
 | GET | `/api/chats/{cid}/promotable` | `list_promotable_presences()` | `web/app.py:4801` |
 | POST | `/api/chats/{cid}/promotions/confirm` | `confirm_promotion()` | `web/app.py:4830` |
 | POST | `/api/chats/{cid}/promotions/draft` | `draft_promotion()` | `web/app.py:4813` |
-| POST | `/api/chats/{cid}/regions` | `region_create()` | `web/world_routes.py:2709` |
-| PATCH | `/api/chats/{cid}/regions/{region_id}` | `region_patch()` | `web/world_routes.py:1910` |
+| POST | `/api/chats/{cid}/regions` | `region_create()` | `web/world_routes.py:2714` |
+| PATCH | `/api/chats/{cid}/regions/{region_id}` | `region_patch()` | `web/world_routes.py:1915` |
 | POST | `/api/chats/{cid}/retry_start` | `chat_retry_start()` | `web/app.py:2427` |
 | GET | `/api/chats/{cid}/room` | `room_thread()` | `web/room_routes.py:52` |
 | POST | `/api/chats/{cid}/room/mandates/{uid}/revoke` | `room_revoke()` | `web/room_routes.py:108` |
@@ -3291,15 +3291,15 @@
 | POST | `/api/chats/{cid}/room/messages/stream` | `room_say_stream()` | `web/room_routes.py:78` |
 | GET | `/api/chats/{cid}/room/status` | `room_status()` | `web/room_routes.py:117` |
 | GET | `/api/chats/{cid}/rooms` | `rooms_index()` | `web/world_routes.py:690` |
-| POST | `/api/chats/{cid}/rooms` | `room_create()` | `web/world_routes.py:2155` |
-| DELETE | `/api/chats/{cid}/rooms/{room_id}` | `room_delete()` | `web/world_routes.py:2221` |
+| POST | `/api/chats/{cid}/rooms` | `room_create()` | `web/world_routes.py:2160` |
+| DELETE | `/api/chats/{cid}/rooms/{room_id}` | `room_delete()` | `web/world_routes.py:2226` |
 | GET | `/api/chats/{cid}/rooms/{room_id}` | `rooms_slice()` | `web/world_routes.py:853` |
-| PATCH | `/api/chats/{cid}/rooms/{room_id}` | `room_patch()` | `web/world_routes.py:1739` |
-| POST | `/api/chats/{cid}/rooms/{room_id}/entities` | `room_entity_create()` | `web/world_routes.py:2260` |
-| DELETE | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_delete()` | `web/world_routes.py:2296` |
-| PATCH | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_patch()` | `web/world_routes.py:1809` |
+| PATCH | `/api/chats/{cid}/rooms/{room_id}` | `room_patch()` | `web/world_routes.py:1744` |
+| POST | `/api/chats/{cid}/rooms/{room_id}/entities` | `room_entity_create()` | `web/world_routes.py:2265` |
+| DELETE | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_delete()` | `web/world_routes.py:2301` |
+| PATCH | `/api/chats/{cid}/rooms/{room_id}/entities/{entity_id}` | `room_entity_patch()` | `web/world_routes.py:1814` |
 | GET | `/api/chats/{cid}/rooms/{room_id}/grid` | `rooms_grid()` | `web/world_routes.py:1300` |
-| POST | `/api/chats/{cid}/rooms/{room_id}/presences` | `room_presence_create()` | `web/world_routes.py:2341` |
+| POST | `/api/chats/{cid}/rooms/{room_id}/presences` | `room_presence_create()` | `web/world_routes.py:2346` |
 | GET | `/api/chats/{cid}/setup_log` | `chat_setup_log()` | `web/app.py:2460` |
 | GET | `/api/chats/{cid}/story_view` | `story_view_get()` | `web/app.py:6127` |
 | GET | `/api/chats/{cid}/style_guide` | `style_guide_get()` | `web/app.py:5794` |

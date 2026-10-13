@@ -313,7 +313,8 @@ def render_room(scene, room_id):
     marks, legend = {}, []
     held = {}   # (cell, height) -> the fixture already there
     letters = iter("ABCEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
-    for aid, placed in (anchor_cells(scene, room_id) or {}).items():
+    # the seeds the designer's places are written over (`anchor_cells(raw=True)`)
+    for aid, placed in (anchor_cells(scene, room_id, raw=True) or {}).items():
         cells = [tuple(c) for c in (placed.get("cells") or [])]
         if str(aid).startswith("door:"):
             mark = "D"
@@ -425,7 +426,7 @@ def _check(scene, draft, owed, rows_out=None, settled=(), reading=None):
         from world.spatial import anchor_cells
         for rid in drafted:
             held = {}
-            for aid, placed in (anchor_cells(merged, rid) or {}).items():
+            for aid, placed in (anchor_cells(merged, rid, raw=True) or {}).items():
                 if str(aid).startswith("door:"):
                     continue
                 if not placed.get("cells"):
@@ -548,8 +549,8 @@ def _new_anchor_ids(scene, draft, rid, merged) -> list:
     if not isinstance(anchors, dict):
         return []
     world = (scene or {}).get("rooms") or {}
-    before = anchor_cells(scene, rid) if isinstance(world.get(rid), dict) else {}
-    after = anchor_cells(merged, rid)
+    before = anchor_cells(scene, rid, raw=True) if isinstance(world.get(rid), dict) else {}
+    after = anchor_cells(merged, rid, raw=True)
     out = []
     for aid, anchor in anchors.items():
         if not isinstance(anchor, dict):

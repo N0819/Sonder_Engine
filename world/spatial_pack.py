@@ -54,7 +54,13 @@ WHAT COUNTS AS TAKEN is what the room designer's check counts as two
 fixtures on one cell: same cell, same height, doorways excluded (an object in
 front of a door is a placement the world allows; the owner's ruling of
 2026-09-16). The check and the packer read one rule, so "free" here is
-"clean" there.
+"clean" there. But a place the packer CHOOSES keeps clear of every doorway's
+step and the pace inside it where its wall allows (the owner, reading Home 9
+on 2026-10-12: furniture placed in front of doors is an oddity;
+`spatial_fov.doorway_clearance`): a fixture whose seed stands in a way in or
+out moves to the nearest place on its wall clear of it, and stands where its
+seed put it when none is -- a doorway never makes a wall crowded. The packer
+reads the seeds it writes places over (`anchor_cells(raw=True)`).
 
 Pure, total, no I/O, no model.
 """
@@ -62,7 +68,8 @@ Pure, total, no I/O, no model.
 from __future__ import annotations
 
 from world.spatial_fov import (
-    ROOM_CORNERS, _place_anchors, _seed, _wall_slot, anchor_cells, room_grid,
+    ROOM_CORNERS, _place_anchors, _seed, _wall_slot, anchor_cells, doorway_clearance,
+    room_grid,
 )
 from world.spatial_geometry import effective_anchors
 from world.spatial_lint import wall_loads
@@ -88,7 +95,8 @@ def _trial(room_id, grid, aid, anchor, **place) -> list:
     `cell`), and nothing else of it changed."""
     trial = {k: v for k, v in anchor.items() if k not in ("offset", "cell")}
     trial.update(place)
-    return [tuple(c) for c in _place_anchors(room_id, grid, {aid: trial})[aid]["cells"]]
+    return [tuple(c) for c in _place_anchors(room_id, grid, {aid: trial},
+                                             clear=False)[aid]["cells"]]
 
 
 def _along_wall(room_id, grid, aid, anchor, wall, footprint):
@@ -154,7 +162,8 @@ def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
     describes every one."""
     grid = room_grid(scene, room_id)
     anchors = effective_anchors(scene, room_id)
-    placed = anchor_cells(scene, room_id)
+    placed = anchor_cells(scene, room_id, raw=True)
+    doors = doorway_clearance(grid, anchors, placed)
     drafted = [aid for aid in dict.fromkeys(movable or ())
                if aid in placed and not _doorway(aid) and not placed[aid]["implicit"]
                and isinstance(anchors.get(aid), dict)
@@ -172,24 +181,40 @@ def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
     def free(cells, height):
         return all((tuple(cell), height) not in held for cell in cells)
 
+    def clear(cells):
+        return not any(tuple(cell) in doors for cell in cells)
+
+    def nearest(aid, rec, *, keep_clear):
+        return next(((pin, cells) for pin, cells
+                     in _places(room_id, grid, aid, anchors[aid], rec)
+                     if cells and free(cells, rec["height"])
+                     and (not keep_clear or clear(cells))), None)
+
     for aid, rec in placed.items():
         if _doorway(aid) or rec["implicit"] or aid in mine:
             continue
         take(aid, rec["cells"], rec["height"])
-    kept, later = [], []
+    pins, kept, later = {}, [], []
     for aid in order:
         rec = placed[aid]
         if free(rec["cells"], rec["height"]):
-            take(aid, rec["cells"], rec["height"])
-            kept.append(aid)
+            # free, but standing in a way in or out: the nearest place on
+            # what the model chose that is clear of both, where one is; a
+            # doorway is never crowding (the check's rule), so where none
+            # is it stands where its seed put it
+            spot = None if clear(rec["cells"]) else nearest(aid, rec, keep_clear=True)
+            if spot is None:
+                take(aid, rec["cells"], rec["height"])
+                kept.append(aid)
+            else:
+                pins[aid], cells = spot
+                take(aid, cells, rec["height"])
         else:
             later.append(aid)
-    pins, stuck = {}, []
+    stuck = []
     for aid in later:
         rec = placed[aid]
-        spot = next(((pin, cells) for pin, cells
-                     in _places(room_id, grid, aid, anchors[aid], rec)
-                     if cells and free(cells, rec["height"])), None)
+        spot = nearest(aid, rec, keep_clear=True) or nearest(aid, rec, keep_clear=False)
         if spot is None:
             stuck.append(aid)
             take(aid, rec["cells"], rec["height"])

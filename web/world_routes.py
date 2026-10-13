@@ -1349,9 +1349,14 @@ def _draw_as_the_lab(cid, scene, view):
         if kinds.get(aid):
             a["kind"] = kinds[aid]
     rooms_ = scene.get("rooms") or {}
-    for d in view.get("doorways") or ():
+    names = {uid: str(entry.get("name") or "") for uid, entry in registry_rows(cid).items()}
+    for d in list(view.get("doorways") or ()) + list(view.get("windows") or ()):
         if d.get("to") in rooms_ and look(d["to"]).get("ground"):
             d["ground"] = True
+        # a room only the plan holds yet is called what the plan calls it,
+        # never its id (a stair's hall after the opening, 2026-10-12)
+        if d.get("to") and d["to"] not in rooms_ and names.get(d["to"]):
+            d["name"] = names[d["to"]]
 
 
 map_router = APIRouter(prefix="/api/chats/{cid}/map", tags=["world-browser"])

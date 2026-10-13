@@ -2209,6 +2209,13 @@ Downstream of it:
   overfill its east wall); 13 have no cell, Hinami's futon -- her station --
   and the main hall's tokonoma among them; the main hall's two doors stand on
   the wrong sides of the tokonoma their descriptions name.
+  Still so on Home 9 (chat 172): the opening wrote `shelf` beside the plan's
+  `shelf_of_small_gods`, `boxes` beside `wooden_boxes` and `desk` beside
+  `writing_desk`, each pair on one cell; a live rerun of that opening wrote
+  `manuscript_boxes` over `wooden_boxes`. Since 2026-10-12 code keeps the
+  places IT chooses clear of each other (Design.md: "A place code chooses
+  keeps the doorways clear"), so what still stacks is this -- one thing
+  written twice, which no placement rule can tell from two.
 - **The torii's two posts stand nine rows apart**, not astride the path (lint:
   parts disconnected).
 - **Unconfirmed:** the second floor stands almost wholly where no ground-floor

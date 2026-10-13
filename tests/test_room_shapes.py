@@ -139,7 +139,11 @@ def test_a_room_without_extent_composes_byte_identically(tier):
     assert grid.cells == frozenset((x, y) for x in range(side)
                                    for y in range(side))
     assert grid_side(sc, "r") == side
-    placed = {aid: rec["cells"] for aid, rec in anchor_cells(sc, "r").items()}
+    # the SEED's arithmetic, which is what the reference states: since
+    # 2026-10-12 a place code chooses is then kept clear of the doorways and
+    # of another fixture's cells at its height (`spatial_fov._place_anchors`,
+    # its own tests), and `raw` reads the seeds before that
+    placed = {aid: rec["cells"] for aid, rec in anchor_cells(sc, "r", raw=True).items()}
     assert placed == _square_reference("r", side, ANCHORS)
 
 

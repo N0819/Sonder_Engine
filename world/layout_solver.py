@@ -1783,16 +1783,29 @@ def _furnish(layout, rooms):
             continue
         solid = _solid(layout, lv)
         cells = _room_cells(layout, rid, lv) - solid
+        # A DOORWAY'S STEP AND THE PACE INSIDE IT are the room's to walk
+        # through, never a fixture's: a stove one pace in from the kitchen
+        # door, cushions across the genkan's step (the owner, reading Home 9
+        # on 2026-10-12: "furniture being placed in front of doors"; the
+        # solve had kept only the step itself clear)
         clear = set()
         for d in layout.doors:
             if d["level"] != lv:
                 continue
             x, y = d["cell"]
             dx, dy = _STEP[d["side"]]
+            # a stair open to its room along the whole wall they share (a
+            # `span` on a stair's door, laid as a doorway that wide) is
+            # walked onto anywhere along it: its one cell stands for it and
+            # keeps no pace. Every other doorway is laid at its cell, open
+            # joins included, and keeps the pace inside it.
+            inner = not (d.get("span") and d.get("stair"))
             if d["a"] == rid:
-                clear |= {c for c in ((x, y),) if c in cells}
+                clear |= {c for c in ((x, y),) + (((x - dx, y - dy),) if inner else ())
+                          if c in cells}
             if d["b"] == rid:
-                clear |= {c for c in ((x + dx, y + dy),) if c in cells}
+                clear |= {c for c in ((x + dx, y + dy),) + (((x + 2 * dx, y + 2 * dy),) if inner else ())
+                          if c in cells}
         zones = {z["id"]: z["rect"].cells() & cells for z in layout.zones.get(rid, ())}
         windows = {}
         for w in layout.windows:
@@ -1929,7 +1942,21 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
             u = use_space(fx, r)
             if u is None or u & furniture:
                 return False
+            # A TABLE STANDS WHERE ITS SEATS FIT ROUND IT: its ring, less the
+            # ways in and out of the room and the floor other fixtures need,
+            # holds every seat that belongs to it. With the pace inside a
+            # doorway kept clear, a tavern's fourth chair had gone to its
+            # table's corner (2026-10-12).
+            need = seats_of.get(str(fx.get("id"))) if _kind(fx) in _TABLES else 0
+            if need and len(u - clear - others) < need:
+                return False
         return _connected(cells - furniture - rc, clear)
+
+    seats_of = {}
+    for f in fixtures:
+        t = table_for(f)
+        if t is not None:
+            seats_of[str(t)] = seats_of.get(str(t), 0) + 1
 
     budget = [3000]
     moved = []
@@ -1944,9 +1971,15 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
         at = str(fx.get("at") or "").casefold()
         table = table_for(fx)
         if table in placed:
-            # a seat stands in its table's ring
+            # a seat stands in its table's ring -- and at one of its corners
+            # when the ring is spent, as when a way in takes a side of it
             ring = use_of.get(table, set())
             cands = [Rect(x, y, 1, 1) for x, y in sorted(ring) if fits(Rect(x, y, 1, 1), fx)]
+            if not cands:
+                t = placed[table]
+                corners = {(t.x - 1, t.y - 1), (t.x + t.w, t.y - 1),
+                           (t.x - 1, t.y + t.d), (t.x + t.w, t.y + t.d)} & cells
+                cands = [Rect(x, y, 1, 1) for x, y in sorted(corners) if fits(Rect(x, y, 1, 1), fx)]
         else:
             cands = [r for r in candidates(fx, at) if fits(r, fx)]
         if not cands and not zones.get(fx.get("in")):

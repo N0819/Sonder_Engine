@@ -393,8 +393,13 @@ def test_seats_stand_round_their_table_and_nothing_else_in_any_use_space():
     fx = {f["id"]: f for f in lay.fixtures["tap"]}
     table = fx["table"]["rect"]
     ring = {(x + dx, y + dy) for x, y in table.cells() for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}
+    # ...or at a corner of it, where a way in takes a side: the pace inside
+    # the tap's door is the floor's to walk through (2026-10-12)
+    corners = {(table.x - 1, table.y - 1), (table.x + table.w, table.y - 1),
+               (table.x - 1, table.y + table.d), (table.x + table.w, table.y + table.d)}
     seats = [f for k, f in fx.items() if k.startswith("chairs_")]
-    assert len(seats) == 4 and all(f["rect"].cells() <= ring for f in seats)
+    assert len(seats) == 4 and all(f["rect"].cells() <= ring | corners for f in seats)
+    assert sum(1 for f in seats if f["rect"].cells() <= ring) >= 3, "the sides first"
     for f in fx.values():
         for g in fx.values():
             if f is g or (g["id"] == "table" and f["id"].startswith("chairs_")):

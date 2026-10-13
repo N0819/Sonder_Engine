@@ -615,7 +615,7 @@ def _inward(bearing: str) -> tuple:
     return dx, dy
 
 
-def anchor_cells(scene: dict, room_id, *, derive=False) -> dict:
+def anchor_cells(scene: dict, room_id, *, derive=False, raw=False) -> dict:
     """{anchor_id: {cells: [(x,y)...], height, opacity, footprint, dir,
     desc, implicit}} for every effective anchor of the room.
 
@@ -636,24 +636,30 @@ def anchor_cells(scene: dict, room_id, *, derive=False) -> dict:
     RE-READ scene -- a new object with the same rooms -- reuse the placement
     a previous one paid for. A miss on the outer level runs exactly the code
     that ran before.
+
+    `raw` reads every anchor where its seed alone puts it, before the
+    places code chooses are kept clear of doorways and of each other
+    (`_place_anchors`): the room designer's own loop -- its map, its check
+    and the packer that writes each new fixture's place for good -- reads
+    the seeds it is writing places over.
     """
-    placed = scene_memo(scene, ("anchor_cells", str(room_id), bool(derive)),
-                        lambda: _anchor_cells(scene, room_id, derive=derive))
+    placed = scene_memo(scene, ("anchor_cells", str(room_id), bool(derive), bool(raw)),
+                        lambda: _anchor_cells(scene, room_id, derive=derive, raw=raw))
     return {aid: dict(rec, cells=list(rec["cells"]))
             for aid, rec in placed.items()}
 
 
-def _anchor_cells(scene: dict, room_id, *, derive=False) -> dict:
+def _anchor_cells(scene: dict, room_id, *, derive=False, raw=False) -> dict:
     """The placement itself, content-cached across scene objects."""
     grid = room_grid(scene, room_id)
     anchors = effective_anchors(scene, room_id, derive=derive)
     import json as _json
-    key = _json.dumps([str(room_id), grid.key(), anchors], sort_keys=True,
+    key = _json.dumps([str(room_id), grid.key(), anchors, bool(raw)], sort_keys=True,
                       default=str)
     cached = _ANCHOR_CACHE.get(key)
     if cached is not None:
         return cached
-    out = _place_anchors(room_id, grid, anchors)
+    out = _place_anchors(room_id, grid, anchors, clear=not raw)
     if len(_ANCHOR_CACHE) >= _ANCHOR_CACHE_MAX:
         _ANCHOR_CACHE.clear()
     _ANCHOR_CACHE[key] = out
@@ -664,109 +670,233 @@ _ANCHOR_CACHE: dict = {}
 _ANCHOR_CACHE_MAX = 256
 
 
-def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
+def _chosen_by_code(anchor) -> bool:
+    """Is this a fixture whose place nobody chose -- neither a cell nor a
+    place along its wall written for it, nor a corner it was put in -- so
+    that the seed chooses it? A doorway or a window is the edge's or the
+    wall's, and is never one."""
+    if not isinstance(anchor, dict) or anchor.get("implicit"):
+        return False
+    if normalize_cell(anchor.get("cell")) is not None:
+        return False
+    if normalize_offset(anchor.get("offset")) is not None:
+        return False
+    return normalize_bearing(anchor.get("dir")) not in ROOM_CORNERS
+
+
+def doorway_clearance(grid: RoomGrid, anchors, placed) -> set:
+    """The cells a placement CODE chooses keeps clear of a room's ways in
+    and out: each doorway's own cells and the pace inside each -- not a
+    window's (nothing is kept clear beneath one), not an open side's (the
+    whole side is the way). `anchors` is the room's effective anchors,
+    `placed` their cells (`_place_anchors`'s records for the doorways)."""
+    clear = set()
+    for aid, anchor in (anchors or {}).items():
+        if not (isinstance(anchor, dict) and anchor.get("implicit")
+                and str(aid).startswith("door:")):
+            continue
+        if anchor.get("window") or str(anchor.get("width") or "") == "wall":
+            continue
+        rec = (placed or {}).get(aid) or {}
+        cells = [tuple(c) for c in rec.get("cells") or ()]
+        clear.update(cells)
+        bearing = normalize_bearing(anchor.get("dir"))
+        if bearing in _UNIT:
+            dx, dy = _inward(bearing)
+            clear.update((x + dx, y + dy) for x, y in cells if grid.contains((x + dx, y + dy)))
+    return clear
+
+
+def _place_anchors(room_id, grid: RoomGrid, anchors, *, clear=True) -> dict:
+    """Every anchor's cells. What anyone placed -- a doorway, a window, a
+    cell or a place along a wall written for a fixture, a corner -- stands
+    exactly there, and two such may share a cell (it then blocks at the
+    taller). A fixture whose place NOBODY chose is placed by its seed, and
+    since 2026-10-12 kept clear of the room's ways in and out and of the
+    cells every other fixture holds: the owner, reading Home 9 (chat 172),
+    called furniture standing in front of doors an oddity, every one of the
+    eleven there a code placement, two pairs of them stacked on one cell.
+    Their ruling of 2026-09-16 ("an object in front of a door is entirely
+    spatially valid") stands for any placement a story or a host makes; this
+    governs only where code chooses. Each such fixture takes the place
+    nearest its seed that is clear (`doorway_clearance`, then the fixtures
+    placed before it: the chosen ones first, the rest in id order), and its
+    seed's own place when none is, so nothing is ever left unplaced. A
+    chosen fixture's place therefore depends on the room's doorways and on
+    the fixtures placed before it, where it depended on nothing else.
+
+    A CELL IS TAKEN AT ONE HEIGHT (the owner's ruling of 2026-10-08, which
+    the room designer's packer keeps): a bartop and the bottle shelf above it
+    share their cells. `clear=False` places every anchor by its seed alone
+    (`anchor_cells(raw=True)`)."""
     out = {}
+    later = []
     for aid, anchor in anchors.items():
         if not isinstance(anchor, dict):
             continue
-        geo = anchor_geometry(anchor)
-        bearing = normalize_bearing(anchor.get("dir"))
-        seed = _seed(room_id, aid)
-        fp = geo["footprint"]
-        pinned = normalize_cell(anchor.get("cell"))
-        source = "seed"
-        if pinned is not None:
-            # An authored ORIGIN cell (the World Browser's map, 2026-09-04:
-            # the owner could place an anchor anywhere only by taking it
-            # off its wall, and asked for any cell). The origin is the
-            # anchor's west-most, north-most cell; the footprint is laid
-            # from it eastward, and for `large` southward too -- the
-            # arrangement a free anchor's seed already uses -- clipped to
-            # the room, so a two-cell thing on the east wall is one cell
-            # rather than one outside. `dir` alongside is the wall it is
-            # against, for prose, and moves nothing: no inset, no wall
-            # cells. `offset` is a place along a wall and a cell is a
-            # place, so a cell outranks it; the route keeps the two
-            # exclusive. Snapped to the nearest cell when the extent or
-            # shape has since moved out from under it.
-            source = "cell"
-            x, y = grid.nearest(pinned)
-            cells = [(x, y)]
-            more = []
-            rect = anchor_extent(anchor)
-            if rect is not None:
-                # THE WHOLE RECTANGLE THE PLACER CHOSE, laid from the origin
-                # east and south (`anchor_extent`), clipped to the room like
-                # every footprint; its footprint word is the one that
-                # rectangle falls in, so the record cannot disagree with its
-                # own cells.
-                w, d = min(rect[0], grid.w), min(rect[1], grid.d)
-                more = [(x + i, y + j) for j in range(d) for i in range(w)
-                        if (i, j) != (0, 0)]
-                fp = footprint_for_extent(*rect)
-            elif fp in ("small", "run"):
-                more = [(x + 1, y)]
-            elif fp == "large":
-                more = [(x + 1, y), (x, y + 1), (x + 1, y + 1)]
-            cells += [c for c in more if grid.contains(c)]
-        elif bearing:
-            _along, length, offset, source = _wall_slot(grid, bearing, anchor,
-                                                        fp, seed)
-            cells = _wall_cells(grid, bearing, offset, length)
-            # A FIXTURE IS AGAINST ITS WALL UNLESS IT SAYS IT KEEPS A LANE
-            # (`lane`, and the note on DEFAULT_LANE for what it replaced and
-            # why). The lane is the pace of floor a body takes COVER in
-            # (`stations.cover`), so a bar has one and a bench does not, and
-            # a room too small to spare the pace never has one.
-            if geo["lane"] and bearing in _UNIT and min(grid.w, grid.d) > 3:
-                dx, dy = _inward(bearing)
-                inset = [(x + dx, y + dy) for x, y in cells
+        if clear and _chosen_by_code(anchor):
+            later.append(aid)
+            continue
+        out[aid] = _place_anchor(room_id, grid, aid, anchor)
+    if later:
+        doors = doorway_clearance(grid, anchors, out)
+        taken = {(tuple(c), rec["height"]) for aid, rec in out.items()
+                 if not rec["implicit"] for c in rec["cells"]}
+        for aid in sorted(later, key=str):
+            rec = _place_anchor(room_id, grid, aid, anchors[aid], avoid=(doors, taken))
+            out[aid] = rec
+            taken |= {(tuple(c), rec["height"]) for c in rec["cells"]}
+    return {aid: out[aid] for aid in anchors if aid in out}
+
+
+def _crowding(cells, avoid, height) -> tuple:
+    """How crowded a place a seed would choose is for a fixture of
+    `height`: `(doorway cells it stands on, cells another fixture holds at
+    its height)` -- a way in and out weighs more than a shared cell, so a
+    wall too full to hold a fixture clear of both gives up the cell before
+    the doorway."""
+    doors, taken = avoid
+    cells = [tuple(c) for c in cells]
+    return (sum(1 for c in cells if c in doors),
+            sum(1 for c in cells if (c, height) in taken))
+
+
+def _place_anchor(room_id, grid: RoomGrid, aid, anchor, *, avoid=None) -> dict:
+    """One anchor's record (`_place_anchors`). `avoid`, for a fixture whose
+    place nobody chose, is the cells its seed's choice must keep clear of;
+    None places it by its seed alone, as every anchor was placed until
+    2026-10-12."""
+    geo = anchor_geometry(anchor)
+    bearing = normalize_bearing(anchor.get("dir"))
+    seed = _seed(room_id, aid)
+    fp = geo["footprint"]
+    pinned = normalize_cell(anchor.get("cell"))
+    source = "seed"
+    if pinned is not None:
+        # An authored ORIGIN cell (the World Browser's map, 2026-09-04:
+        # the owner could place an anchor anywhere only by taking it
+        # off its wall, and asked for any cell). The origin is the
+        # anchor's west-most, north-most cell; the footprint is laid
+        # from it eastward, and for `large` southward too -- the
+        # arrangement a free anchor's seed already uses -- clipped to
+        # the room, so a two-cell thing on the east wall is one cell
+        # rather than one outside. `dir` alongside is the wall it is
+        # against, for prose, and moves nothing: no inset, no wall
+        # cells. `offset` is a place along a wall and a cell is a
+        # place, so a cell outranks it; the route keeps the two
+        # exclusive. Snapped to the nearest cell when the extent or
+        # shape has since moved out from under it.
+        source = "cell"
+        x, y = grid.nearest(pinned)
+        cells = [(x, y)]
+        more = []
+        rect = anchor_extent(anchor)
+        if rect is not None:
+            # THE WHOLE RECTANGLE THE PLACER CHOSE, laid from the origin
+            # east and south (`anchor_extent`), clipped to the room like
+            # every footprint; its footprint word is the one that
+            # rectangle falls in, so the record cannot disagree with its
+            # own cells.
+            w, d = min(rect[0], grid.w), min(rect[1], grid.d)
+            more = [(x + i, y + j) for j in range(d) for i in range(w)
+                    if (i, j) != (0, 0)]
+            fp = footprint_for_extent(*rect)
+        elif fp in ("small", "run"):
+            more = [(x + 1, y)]
+        elif fp == "large":
+            more = [(x + 1, y), (x, y + 1), (x + 1, y + 1)]
+        cells += [c for c in more if grid.contains(c)]
+    elif bearing:
+        _along, length, offset, source = _wall_slot(grid, bearing, anchor,
+                                                    fp, seed)
+        cells = _wall_run(grid, bearing, offset, length, geo["lane"], fp)
+        if avoid is not None and source == "seed" and bearing in _UNIT \
+                and _crowding(cells, avoid, geo["height"]) != (0, 0):
+            # THE LEAST CROWDED PLACE ALONG ITS OWN WALL, nearest its seed
+            # (`_place_anchors`, `_crowding`): the wall a model or a plan
+            # gave it is kept
+            limit = max(0, len(grid.rim(bearing)) - length)
+            trials = [(alt, _wall_run(grid, bearing, alt, length, geo["lane"], fp))
+                      for alt in range(limit + 1)]
+            cells = min(trials, key=lambda t: (_crowding(t[1], avoid, geo["height"]),
+                                               abs(t[0] - offset), t[0]))[1]
+    else:
+        # EVERY CELL OF THE ROOM, THE WALL RING INCLUDED (owner ruling
+        # 2026-09-16: "I'm still not convinced wall adjacent tiles
+        # should be restricted in any way. Yes they can contain doors,
+        # but an object in front of a door is entirely spatially
+        # valid."). This seeded `1 + seed % (side - 2)` until then, so a
+        # fixture with no bearing could land anywhere EXCEPT the ring
+        # against the walls -- the half of a small room's floor that a
+        # four-pace-square room has most of. Nothing is reserved for a
+        # placement a story or a host makes: a chest against a door, a rack
+        # beside one, a screen across it are all placements the world
+        # allows, and a cell two anchors share blocks at the taller. Where
+        # the SEED chooses, the ways in and out and every other fixture's
+        # cells are kept clear (2026-10-12, `_place_anchors`).
+        x = seed % max(1, grid.w)
+        y = (seed // 7) % max(1, grid.d)
+        x, y = grid.nearest((x, y))
+        cells = _floor_run(grid, (x, y), fp)
+        if avoid is not None and _crowding(cells, avoid, geo["height"]) != (0, 0):
+            # THE LEAST CROWDED PLACE ON THE FLOOR, nearest its seed
+            origin = (x, y)
+            cells = min((_floor_run(grid, tuple(c), fp) for c in grid.cells),
+                        key=lambda run: (_crowding(run, avoid, geo["height"]),
+                                         abs(run[0][0] - origin[0]) + abs(run[0][1] - origin[1]),
+                                         run[0][1], run[0][0]))
+    return {
+        "cells": sorted(set(cells)),
+        "height": geo["height"],
+        "opacity": geo["opacity"],
+        "footprint": fp,
+        "lane": geo["lane"],
+        "dir": bearing,
+        "desc": str(anchor.get("desc") or aid),
+        "implicit": bool(anchor.get("implicit")),
+        "offset": normalize_offset(anchor.get("offset")),
+        # The authored origin cell as read, and what placed the anchor:
+        # "cell" (that origin), "offset" (a place along its wall), or
+        # "seed" (the formula, byte for byte what it always was).
+        "cell": [pinned[0], pinned[1]] if pinned is not None else None,
+        "source": source,
+    }
+
+
+def _wall_run(grid: RoomGrid, bearing: str, offset: int, length: int, lane, fp) -> list:
+    """The cells a fixture laid along its wall from `offset` takes: its
+    wall's cells, one pace in for one that keeps a lane, and the pace inward
+    of them too for a large one."""
+    cells = _wall_cells(grid, bearing, offset, length)
+    # A FIXTURE IS AGAINST ITS WALL UNLESS IT SAYS IT KEEPS A LANE
+    # (`lane`, and the note on DEFAULT_LANE for what it replaced and
+    # why). The lane is the pace of floor a body takes COVER in
+    # (`stations.cover`), so a bar has one and a bench does not, and
+    # a room too small to spare the pace never has one.
+    if lane and bearing in _UNIT and min(grid.w, grid.d) > 3:
+        dx, dy = _inward(bearing)
+        inset = [(x + dx, y + dy) for x, y in cells
+                 if grid.contains((x + dx, y + dy))]
+        cells = inset or cells
+    if fp == "large" and bearing in _UNIT and cells:
+        dx, dy = _inward(bearing)
+        cells = cells + [(x + dx, y + dy) for x, y in cells
                          if grid.contains((x + dx, y + dy))]
-                cells = inset or cells
-            if fp == "large" and bearing in _UNIT and cells:
-                dx, dy = _inward(bearing)
-                cells = cells + [(x + dx, y + dy) for x, y in cells
-                                 if grid.contains((x + dx, y + dy))]
-        else:
-            # EVERY CELL OF THE ROOM, THE WALL RING INCLUDED (owner ruling
-            # 2026-09-16: "I'm still not convinced wall adjacent tiles
-            # should be restricted in any way. Yes they can contain doors,
-            # but an object in front of a door is entirely spatially
-            # valid."). This seeded `1 + seed % (side - 2)` until then, so a
-            # fixture with no bearing could land anywhere EXCEPT the ring
-            # against the walls -- the half of a small room's floor that a
-            # four-pace-square room has most of. Nothing is reserved now,
-            # for doorways or anything else: a chest against a door, a rack
-            # beside one, a screen across it are all placements the world
-            # allows, and a cell two anchors share blocks at the taller.
-            x = seed % max(1, grid.w)
-            y = (seed // 7) % max(1, grid.d)
-            x, y = grid.nearest((x, y))
-            cells = [(x, y)]
-            more = []
-            if fp in ("small", "run"):
-                more = [(min(grid.w - 1, x + 1), y)]
-            elif fp == "large":
-                more = [(min(grid.w - 1, x + 1), y), (x, min(grid.d - 1, y + 1)),
-                        (min(grid.w - 1, x + 1), min(grid.d - 1, y + 1))]
-            cells += [c for c in more if grid.contains(c)]
-        out[aid] = {
-            "cells": sorted(set(cells)),
-            "height": geo["height"],
-            "opacity": geo["opacity"],
-            "footprint": fp,
-            "lane": geo["lane"],
-            "dir": bearing,
-            "desc": str(anchor.get("desc") or aid),
-            "implicit": bool(anchor.get("implicit")),
-            "offset": normalize_offset(anchor.get("offset")),
-            # The authored origin cell as read, and what placed the anchor:
-            # "cell" (that origin), "offset" (a place along its wall), or
-            # "seed" (the formula, byte for byte what it always was).
-            "cell": [pinned[0], pinned[1]] if pinned is not None else None,
-            "source": source,
-        }
-    return out
+    return cells
+
+
+def _floor_run(grid: RoomGrid, origin, fp) -> list:
+    """The cells a fixture with no wall takes from `origin`: east of it for
+    a small one or a run, a square of four for a large one, clipped to the
+    room."""
+    x, y = origin
+    more = []
+    if fp in ("small", "run"):
+        more = [(min(grid.w - 1, x + 1), y)]
+    elif fp == "large":
+        more = [(min(grid.w - 1, x + 1), y), (x, min(grid.d - 1, y + 1)),
+                (min(grid.w - 1, x + 1), min(grid.d - 1, y + 1))]
+    return [(x, y)] + [c for c in more if grid.contains(c)]
 
 
 def _centre(side: int) -> tuple:
