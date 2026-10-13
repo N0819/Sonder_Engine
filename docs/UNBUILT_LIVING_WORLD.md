@@ -2509,27 +2509,29 @@ walked, a stair one) and comes back inside it. What that does not reach:
   started and ended; `passable_path` gives the rooms between); stopping the
   beat at the radius would change when a bubble's beats run, which the owner
   left open on 2026-10-13 ("not sure").
-- **Seen, but far on foot.** Sight and earshot are not part of the range: a
-  body in view through a window, or below an overlook, but more than the
-  radius walked gets a thread. Home 9's garden is one edge through Hinami's
-  window and six rooms walked. A floor between two stacked rooms carries a
-  shout and is no way a body walks, so a body overhead can be in earshot and
-  past the radius.
+- **Seen, but far on foot.** A step is an edge two people are together
+  across -- a way a body takes, or a voice at full (bars, an overlook) -- so
+  a window between two rooms is not one: a body in view through a window
+  but more than the radius away by those edges gets a thread. Home 9's
+  garden is one edge through Hinami's window and six steps. A floor between
+  two stacked rooms carries a shout and is no edge at all, so a body
+  overhead can be in earshot and past the radius.
 - **A live channel's far end carries the whole radius.** The range walks
   from every seed, a channel's far end included, so a body within three
   rooms of the far end of a live channel stays in the player's thread (it was
   one room at the old range).
-- **A merge before a beat can land on a bubble whose own beat is running**
-  (scheduled by the parent's previous commit); that beat's commit then lands
-  in a frame that has ended. It predates the radius -- a player walking up to
-  a bubble took the same path -- and the rejoin now takes it too, since a
-  bubble never merges itself. What is running in a story is Home 10's item 6
-  (`docs/experiments/OBSERVE_2026_10_13_home10.md`). A sibling meeting is
-  still taken from a bubble's own commit (the committing frame survives) and
-  can race the absorbed sibling's running beat the same way.
-- **The parent's commit asks only its first spatial child** (`detect_merge`'s
-  `children[0]`); a second bubble that rejoined waits for the merge before
-  the next beat, and may be given one more beat of its own first.
+- **A rejoin can catch a bubble's beat mid-run.** The parent's merge before
+  its beat can land while that bubble's own scheduled beat is running; the
+  beat's commit is then refused whole (`persist.commit.
+  _refuse_an_ended_frame`) -- nothing of it lands where nobody reads, and
+  nothing of it lands at all: what she did in that beat is not lived. Its
+  turn row stays, uncommitted, in the frame that ended. The same holds for a
+  sibling absorbed while its beat ran. What is running in a story is Home
+  10's item 6 (`docs/experiments/OBSERVE_2026_10_13_home10.md`, §1.215).
+- **A beat a host types into a bubble's frame still merges it from its own
+  commit**, and a merge from there can still be overwritten by a beat the
+  parent is running at the same moment -- two people, or two tabs, playing
+  both frames at once.
 - **Flapping at the boundary** (a body pacing between three and four rooms
   off) is unmeasured.
 

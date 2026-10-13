@@ -2346,8 +2346,9 @@ def normalize_offscreen_life(value):
 # split, the rejoin, the sibling meeting and the town's claims each asked.
 # Measured on Home 10 (chat 173): the opening split Tamamo off four rooms from
 # Hinami -- three with the ladder as one -- while her voice reached Hinami at
-# full strength. The floor is one room (a doorway, the old rule); the ceiling
-# keeps a story from being one thread by accident.
+# full strength. The floor is one room -- not the old rule, which took one step
+# over ANY edge, a window included; the ceiling keeps a story from being one
+# thread by accident.
 BUBBLE_RADIUS_DEFAULT = 3
 BUBBLE_RADIUS_FLOOR = 1
 BUBBLE_RADIUS_CEILING = 12
@@ -2355,11 +2356,12 @@ BUBBLE_RADIUS_CEILING = 12
 
 def normalize_bubble_radius(value):
     """`value` as a radius within the floor and ceiling; a value that does
-    not read as a number reads as the default, never as the floor -- a typo
-    must not split every character who steps next door."""
+    not read as a number -- an infinity an archive carried included -- reads
+    as the default, never as the floor: a typo must not narrow a story to its
+    smallest range and split every character two rooms off."""
     try:
         return max(BUBBLE_RADIUS_FLOOR, min(BUBBLE_RADIUS_CEILING, int(value)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return BUBBLE_RADIUS_DEFAULT
 
 
@@ -2494,7 +2496,7 @@ def dialogue_config(chat_id):
         # carry-over from the old dial could never fire.
         raw = stored.get("max_bubbles", stored.get("max_offscreen_actors", 3))
         config["max_bubbles"] = max(0, min(12, int(raw)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         config["max_bubbles"] = 3
     config["bubble_radius"] = normalize_bubble_radius(
         stored.get("bubble_radius", BUBBLE_RADIUS_DEFAULT))

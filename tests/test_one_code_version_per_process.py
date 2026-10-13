@@ -158,3 +158,15 @@ def test_the_boot_and_a_turn_say_when_the_code_changed(monkeypatch):
         raise RuntimeError("boom")
     monkeypatch.setattr(code_version, "check", explode)
     assert app_module._bootstrap_code()["stale"] is False
+
+
+def test_the_fingerprint_is_taken_before_the_engine_loads():
+    """Review of 2026-10-13: taken after the ~5.5 s import, a file saved
+    while the engine loaded was recorded as held although the process kept
+    the old version -- Home 10's mixed state, with no warning ever. Taken
+    first, the same save reads as a change: at worst a false warning."""
+    source = open(os.path.join(INSTALL_ROOT, "web", "app.py"), encoding="utf-8").read()
+    snapshot = source.index("code_version.take_snapshot()")
+    engine = min(source.index(f"\nfrom {pkg}") for pkg in ("story", "world", "agents", "llm", "persist"))
+    assert snapshot < engine
+    assert source.rstrip().endswith("code_version.check()"), "the end checks, never re-baselines"

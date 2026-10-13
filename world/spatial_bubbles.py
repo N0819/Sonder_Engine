@@ -38,13 +38,14 @@ for exactly one thing: the suppression clause that refuses to put a radio
 between two bodies an ordinary voice already reaches. Two bodies in two
 frames are treated as never that pair, so the clause must not fire, and an
 empty room map is what guarantees it cannot. That a split means "not within
-earshot" is the engine's statement, not a fact of geometry: the split is
-taken at the story's `bubble_radius` in rooms walked (three by default,
-2026-10-13), which from two rooms up is past every room a raised voice walks
-to (`spatial_senses.sound_walk_level`) -- save a floor between two rooms
-stacked one over the other, which carries a shout and is no way a body
-walks. At the old one-doorway range it was false: Home 10's split put Tamamo
-in a frame of her own while her voice reached Hinami at full strength. Everything else `comms_link`
+earshot" is the engine's statement, and the range is built to keep it true:
+the split is taken at the story's `bubble_radius` (three by default,
+2026-10-13), counted across every edge an ordinary voice walks
+(`spatial_senses._SOUND_WALK_BARRIERS`) as well as every way a body takes, so
+from a radius of two up nobody a raised voice reaches by those edges
+(`earshot_rooms`, two rooms) is split off. At the old one-doorway range it
+was false: Home 10's split put Tamamo in a frame of her own while her voice
+reached Hinami at full strength. Everything else `comms_link`
 needs is in `positions` and `comms`. The room dicts -- the expensive,
 collision-prone half -- would have to be fused to ACT on the answer, which
 is why the room-id collision check below is a refusal rather than a merge
@@ -53,7 +54,7 @@ strategy.
 
 from __future__ import annotations
 
-from world.spatial import comms_link, room_of, rooms_walked_within
+from world.spatial import comms_link, room_of
 from world.spatial_frames import _effective_zone
 from story.scene import BUBBLE_RADIUS_DEFAULT
 
@@ -196,18 +197,19 @@ def bubble_radius(chat_id):
         return BUBBLE_RADIUS_DEFAULT
 
 
-def bubble_reach(scene, rooms, *, radius, names=()):
+def bubble_reach(scene, rooms, *, radius, names=(), channels=True):
     """THE BUBBLE'S RANGE, defined once: every room within `radius` rooms
     walked of `rooms`, a whole stair one room (`spatial.rooms_walked_within`),
     with the far end of any live two-way channel and a body's inside along
     with the body (`spatial.attended_rooms`, `walked=True`). The split, the
     rejoin at commit, the merge before a beat and the town's claims all ask
-    this, so a body leaves and returns on one rule. `radius` has no default:
-    a caller that forgot the story's setting must fail, not quietly use 3."""
+    this, so a body leaves and returns on one rule; the sibling meeting asks
+    it without the channels (`channels=False`). `radius` has no default: a
+    caller that forgot the story's setting must fail, not quietly use 3."""
     from world.spatial import attended_rooms
 
     return set(attended_rooms(scene, {str(r) for r in (rooms or ()) if r},
-                              hops=radius, walked=True,
+                              hops=radius, walked=True, channels=channels,
                               names=[str(n) for n in (names or ()) if n]))
 
 
@@ -581,10 +583,10 @@ def sibling_meet_decision(scene_a, names_a, scene_b, names_b, *, radius):
     not see each other, because only a bubble and its parent could merge.
 
     THE RANGE A BUBBLE OPENS ON, asked across two scenes: the same room, or a
-    room within the story's `radius` of rooms walked of the other's, a whole
-    stair one room (`spatial.rooms_walked_within`) -- each side's position
-    read from its own scene, the only place it exists. The walk only: a voice
-    carried between rooms (an intercom, a handset) is a couple's to carry
+    room within the other's `bubble_reach` at the story's radius -- a body's
+    inside as near as the body -- each side's position read from its own
+    scene, the only place it exists. Without the channels: a voice carried
+    between rooms (an intercom, a handset) is a couple's to carry
     (`couple_decision`), and two people talking over a wire are not standing
     together. Pure.
     """
@@ -594,8 +596,8 @@ def sibling_meet_decision(scene_a, names_a, scene_b, names_b, *, radius):
         return False
     if rooms_a & rooms_b:
         return True
-    return bool(set(rooms_walked_within(scene_a, rooms_a, radius)) & rooms_b
-                or set(rooms_walked_within(scene_b, rooms_b, radius)) & rooms_a)
+    return bool(bubble_reach(scene_a, rooms_a, radius=radius, channels=False) & rooms_b
+                or bubble_reach(scene_b, rooms_b, radius=radius, channels=False) & rooms_a)
 
 
 def detect_sibling_meeting(chat_id, frame_id):

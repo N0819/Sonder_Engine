@@ -164,9 +164,15 @@ class TestAWholeStairIsOneRoom:
         assert "loft" not in rooms_walked_within(scene, {"hall"}, 1)
 
 
-class TestOnlyAWayABodyTakesIsAStep:
+class TestAStepIsAnEdgeTwoPeopleAreTogetherAcross:
     """Home 9 (chat 172): the garden was one edge from Hinami's second-storey
-    room, through the window the layout tier made, and six rooms walked."""
+    room, through the window the layout tier made, and six rooms walked. A
+    window between two rooms, or a wall, is not a step: seen through, or heard
+    muffled, is not together. A way a body takes is, and so is a way an
+    ordinary voice carries at full -- bars, an overlook -- a thing's own way
+    out of its inside whatever it is made of, and a link that admits a body
+    (review of 2026-10-13: each of those split a body off at every radius
+    while the walk was routes alone)."""
 
     def _house(self):
         rooms = _line(7)
@@ -175,16 +181,13 @@ class TestOnlyAWayABodyTakesIsAStep:
         rooms["garden"] = {"name": "garden", "adjacent": [_edge("r6", "open_door")]}
         rooms["r1"]["adjacent"].append(_edge("yard", "wall"))
         rooms["yard"] = {"name": "yard", "adjacent": []}
-        # an overlook is a vertical edge: a gallery over a court, seen down into
-        rooms["r2"]["adjacent"].append(_edge("pit", "open", vertical="down", way="overlook"))
-        rooms["pit"] = {"name": "pit", "adjacent": []}
         return rooms
 
-    def test_a_window_a_wall_and_an_overlook_are_no_way_through(self):
+    def test_a_window_and_a_wall_are_no_step(self):
         from world.spatial import nearby_rooms, rooms_walked_within
         scene = {"rooms": self._house()}
         walked = rooms_walked_within(scene, {"r0"}, 3)
-        assert not {"garden", "yard", "pit"} & set(walked)
+        assert not {"garden", "yard"} & set(walked)
         assert "garden" in rooms_walked_within(scene, {"r0"}, 7), "the way round, on foot"
         # the payload's walk is unchanged: relevance crosses every edge
         assert "garden" in nearby_rooms(scene, {"r0"}, hops=1)
@@ -192,6 +195,34 @@ class TestOnlyAWayABodyTakesIsAStep:
     def test_a_body_seen_through_the_window_but_far_on_foot_gets_a_thread(self):
         scene = {"rooms": self._house(), "positions": {"Hinami": "r0", "Tamamo": "garden"}}
         assert _decide(scene)["characters"] == ["Tamamo"]
+
+    def test_bars_are_a_step_a_voice_carries_at_full(self):
+        rooms = {"guardroom": {"adjacent": [_edge("cell", "bars")]},
+                 "cell": {"adjacent": [_edge("guardroom", "bars")]}}
+        scene = {"rooms": rooms, "positions": {"Hinami": "guardroom", "Tamamo": "cell"}}
+        assert _decide(scene, radius=1) is None, "a prisoner talks face to face"
+
+    def test_an_overlook_is_a_step_a_voice_carries_down(self):
+        rooms = {"gallery": {"adjacent": [_edge("court", vertical="down", way="overlook")]},
+                 "court": {"adjacent": []}}
+        scene = {"rooms": rooms, "positions": {"Hinami": "gallery", "Tamamo": "court"}}
+        assert _decide(scene, radius=1) is None
+
+    def test_a_things_own_way_out_is_a_step_whatever_it_is_made_of(self):
+        """A shut glass jar on the study table: `spatial_transit` writes its
+        hatch `window`, and the body in it is in the study all the same."""
+        rooms = {"study": {"adjacent": []},
+                 "jar_inside": {"parent_entity": "glass_jar",
+                                "adjacent": [_edge("study", "window")]}}
+        scene = {"rooms": rooms, "entities": {"glass_jar": {"kind": "object"}},
+                 "positions": {"Hinami": "jar_inside", "Tamamo": "study"}}
+        assert _decide(scene, radius=1) is None
+
+    def test_a_link_that_admits_a_body_is_a_step(self):
+        rooms = {"cavern": {"adjacent": [_edge("divine_realm", "window", admits=["tamamo"])]},
+                 "divine_realm": {"adjacent": []}}
+        scene = {"rooms": rooms, "positions": {"Hinami": "cavern", "Tamamo": "divine_realm"}}
+        assert _decide(scene, radius=1) is None
 
 
 class TestThePayloadDidNotMove:
@@ -393,3 +424,174 @@ class TestTheRejoin:
         wset_for_frame(cid, "scene", scene, None)
         assert spatial_frames.bubbles_the_beat_reaches(
             cid, None, {"r0"}, party_names=["Hinami", "Ren"]) == [child]
+
+
+# ------------------------------------------------- the review of 2026-10-13
+
+
+def _reconcile_as(chat_id, frame_id, turn_idx, typed=""):
+    """`detect_and_reconcile` as commit calls it, for a beat that was typed
+    (`typed`) or one the engine scheduled (no input)."""
+    from core.db import active_frame_id
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
+    from world import spatial_frames
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Test", persona_id=None, lorebook_id=None,
+                      scenario="", created=time.time()),
+        turn=TurnData(id=None, chat_id=chat_id, idx=turn_idx, player_input=typed,
+                      created=time.time(), frame_id=frame_id),
+        cast=[], input=typed)
+    token = active_frame_id.set(frame_id)
+    try:
+        return spatial_frames.detect_and_reconcile(ctx, 0)
+    finally:
+        active_frame_id.reset(token)
+
+
+class TestWhoRejoinsHer:
+    def test_a_beat_typed_into_her_frame_still_rejoins_her(self, temp_db):
+        from world import spatial_frames
+        cid, child = _bubble(temp_db)
+        _move(cid, child, "Tamamo", "r1")
+        assert spatial_frames.detect_merge(cid, child, played=True) == (None, child)
+        assert _reconcile_as(cid, child, 5, typed="Tamamo goes back down.")["merged"]
+
+    def test_her_scheduled_beat_leaves_it_to_the_parent(self, temp_db):
+        from core.frames import get_frame
+        cid, child = _bubble(temp_db)
+        _move(cid, child, "Tamamo", "r1")
+        assert not (_reconcile_as(cid, child, 5) or {}).get("merged")
+        assert get_frame(child)["merged_turn_idx"] is None
+
+    def test_the_parent_asks_every_child_not_only_its_first(self, temp_db):
+        from world import spatial_frames
+        cid = _chat(temp_db)
+        _persona(temp_db, cid, "Hinami")
+        _cast(temp_db, cid, "Tamamo")
+        _cast(temp_db, cid, "Ren")
+        temp_db.wset(cid, "scene", {"rooms": _line(14), "entities": {}, "comms": {},
+                                    "positions": {"Hinami": "r7", "Tamamo": "r0", "Ren": "r13"}})
+        first = spatial_frames.perform_split(cid, None, 0, bubble=True, away_names=["Tamamo"])
+        second = spatial_frames.perform_split(cid, None, 1, bubble=True, away_names=["Ren"])
+        _move(cid, second, "Ren", "r8")
+        assert spatial_frames.detect_merge(cid, None) == (None, second)
+        assert first != second
+
+
+class TestACallHoldsHerApart:
+    """A bubble a live call holds stays apart until the call ends:
+    `close_couple` partitions back by the map recorded at open, and a merge
+    landing mid-call left her active in the parent with no position."""
+
+    def _called(self, db):
+        from tests.test_causality_bubbles_wired import _handset, _reconcile, _story
+        chat_id, _ = _story(db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+        _handset(chat_id, [None, bubble])
+        couple = _reconcile(chat_id, None, 4)[0]["couple_frame_id"]
+        return chat_id, bubble, couple
+
+    def test_neither_the_parents_commit_nor_its_next_beat_merges_her_mid_call(self, temp_db):
+        from world import spatial_frames
+        chat_id, bubble, _couple = self._called(temp_db)
+        _move(chat_id, bubble, "Hinami", "lane")          # back within reach
+        assert spatial_frames.detect_merge(chat_id, None) is None
+        assert spatial_frames.bubbles_the_beat_reaches(chat_id, None, {"bridge"}) == []
+
+    def test_a_bubble_already_back_within_reach_is_met_not_called(self, temp_db):
+        from tests.test_causality_bubbles_wired import _handset, _reconcile, _story
+        from world import spatial_frames
+        chat_id, _ = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+        _move(chat_id, bubble, "Hinami", "lane")
+        _handset(chat_id, [None, bubble])
+        assert spatial_frames.detect_couple(chat_id, bubble) is None
+        assert not (_reconcile_as(chat_id, bubble, 5) or {}).get("coupled")
+        assert spatial_frames.detect_merge(chat_id, None) == (None, bubble)
+
+
+class TestTheBeatBeforeItsInterpret:
+    def test_her_return_is_merged_before_the_director_reads_the_line(self, temp_db):
+        """No interpret yet: the rooms are where the party stands."""
+        from agents import runtime
+        from core.frames import get_frame
+        from core.pipeline_context import ChatData, PipelineContext, TurnData
+        cid, child = _bubble(temp_db)
+        _move(cid, child, "Tamamo", "r2")
+        chat = dict(temp_db.q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
+        ctx = PipelineContext(chat=ChatData.from_row(chat),
+                              turn=TurnData(id=None, chat_id=cid, idx=6, player_input="I wait.",
+                                            created=time.time(), frame_id=None),
+                              cast=[], input="I wait.")
+        cast = runtime._merge_bubbles_the_beat_reaches(
+            ctx, cid, {"frame_id": None, "idx": 6}, filed_under="director_interpret")
+        assert cast and get_frame(child)["merged_turn_idx"] == 6
+
+    def test_the_run_asks_before_the_interpret_and_again_after_it(self):
+        import inspect
+        from agents import runtime
+        source = inspect.getsource(runtime._run_pipeline)
+        before = source.index('filed_under="director_interpret"')
+        interpret = source.index('yield from _step_stream(bus, turn_id, "director_interpret"')
+        after = source.index("cast_rows = _merge_bubbles_the_beat_reaches(ctx, chat_id, turn_row) or cast_rows")
+        assert before < interpret < after
+
+
+class TestTwoThreadsMeetAsTheSplitSees:
+    def test_a_body_in_another_bodys_inside_meets_the_one_in_its_room(self):
+        from tests.test_a_body_inside_another_is_in_reach import _stomach
+        from world.spatial_bubbles import sibling_meet_decision
+        scene_b = _stomach()                               # Sal deep inside
+        scene_b["positions"] = {"Sal": "mirelle_stomach", "Mirelle": "treatment_room"}
+        scene_a = dict(_stomach(), positions={"Emory": "hall", "Mirelle": "treatment_room"})
+        assert sibling_meet_decision(scene_a, ["Emory"], scene_b, ["Sal"], radius=1)
+
+    def test_a_voice_over_a_wire_still_is_not_standing_together(self):
+        from world.spatial_bubbles import sibling_meet_decision
+        rooms = {"a": {"adjacent": []}, "b": {"adjacent": []}}
+        intercom = {"intercom": {"rooms": ["a", "b"], "live": True}}
+        scene_a = {"rooms": rooms, "comms": intercom, "positions": {"Emory": "a"}}
+        scene_b = {"rooms": rooms, "comms": intercom, "positions": {"Sal": "b"}}
+        from world.spatial_bubbles import bubble_reach
+        assert "b" in bubble_reach(scene_a, {"a"}, radius=3), "the channel is live"
+        assert not sibling_meet_decision(scene_a, ["Emory"], scene_b, ["Sal"], radius=3)
+
+
+class TestAnEndedFrameTakesNoCommit:
+    def test_a_beat_whose_frame_rejoined_while_it_ran_is_refused(self, temp_db):
+        import types
+        from persist import commit
+        cid, child = _bubble(temp_db)
+        ctx = types.SimpleNamespace(turn=types.SimpleNamespace(frame_id=child))
+        commit._refuse_an_ended_frame(ctx)                # live: nothing to say
+        temp_db.qi("UPDATE frames SET merged_turn_idx=? WHERE id=?", (4, child))
+        with pytest.raises(RuntimeError, match="rejoined"):
+            commit._refuse_an_ended_frame(ctx)
+        commit._refuse_an_ended_frame(types.SimpleNamespace(
+            turn=types.SimpleNamespace(frame_id=None)))   # the present never ends
+
+    def test_it_is_asked_first_inside_the_commits_transaction(self):
+        import inspect
+        from persist import commit
+        source = inspect.getsource(commit._commit_all_locked)
+        opened = source.index("with transaction(), registry_session():")
+        asked = source.index("_refuse_an_ended_frame(ctx)")
+        first_domain = source.index("_commit_domain(")
+        assert opened < asked < first_domain
+
+
+class TestNoNumberBreaksTheDial:
+    def test_an_infinity_an_archive_carried_reads_as_the_default(self, temp_db):
+        from story.scene import dialogue_config
+        cid = _chat(temp_db)
+        temp_db.wset(cid, "dialogue_config", {"bubble_radius": float("inf"),
+                                              "max_bubbles": float("inf")})
+        config = dialogue_config(cid)
+        assert (config["bubble_radius"], config["max_bubbles"]) == (3, 3)
+
+    def test_the_panel_answers_an_infinity_with_a_400(self, temp_db):
+        from fastapi import HTTPException
+        from web import app
+        with pytest.raises(HTTPException) as refused:
+            app.dlg_put(_chat(temp_db), {"bubble_radius": float("inf")})
+        assert refused.value.status_code == 400

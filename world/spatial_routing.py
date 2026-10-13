@@ -441,7 +441,7 @@ def room_locale(room) -> str:
 
 
 def attended_rooms(scene: dict, centers, *, hops: int = 1, names=(),
-                   walked: bool = False) -> dict:
+                   walked: bool = False, channels: bool = True) -> dict:
     """The rooms a beat ATTENDS TO from a set of standing places.
 
     ONE COMPOSITION, TWO WALKS. What this composes is the engine's one answer
@@ -467,6 +467,11 @@ def attended_rooms(scene: dict, centers, *, hops: int = 1, names=(),
     still holds is the part that mattered: no cast body inside the bubble's
     range is missing from a payload, because `_contextual_rooms` centres
     every cast member's own room. The rooms BETWEEN them need not be in it.
+
+    `channels=False` leaves out the far ends of channels and keeps the rest:
+    two bubbles' people meet by standing together, and two people talking
+    over a wire are a couple's to carry (`spatial_bubbles.
+    sibling_meet_decision`).
     """
     from world.spatial_senses import comms_reachable_rooms
 
@@ -477,7 +482,7 @@ def attended_rooms(scene: dict, centers, *, hops: int = 1, names=(),
     # told who is asking: a handset in a pocket is a channel only for the hand
     # that holds it. Asked room-only, the one channel shape that is even
     # expressible across a frame split reached nobody.
-    for here in list(seeds):
+    for here in (list(seeds) if channels else ()):
         seeds.update(comms_reachable_rooms(scene, here))
         for name in (names or ()):
             if name:
@@ -703,15 +708,22 @@ def rooms_walked_within(scene: dict, center_room_ids, radius: int) -> dict:
     "maybe it should be a radius of rooms?" Two readings differ from
     `nearby_rooms`, which trims payloads and crosses every declared edge:
 
-    * ONLY A WAY A BODY TAKES IS A STEP: the edges a remembering mind records
-      as routes (`_ROUTE_MEMORY_BARRIERS` -- open, an open or a shut door, a
-      membrane), never a window, a wall, bars or an overlook. Seen through is
-      not walked through: Home 9 (chat 172) had the garden one edge from a
-      second-storey bedroom through the window the layout tier made, and six
-      rooms walked. A SHUT DOOR IS ONE ROOM, not a wall -- a body opens it.
-      Undirected, because the distance between two people is the same both
-      ways: a chute a body can only fall down still puts its two ends one
-      room apart.
+    * A STEP IS AN EDGE TWO PEOPLE ARE TOGETHER ACROSS: a way a body takes
+      (`_ROUTE_MEMORY_BARRIERS` -- open, an open or a shut door, a membrane),
+      a way an ordinary voice carries at full (`spatial_senses.
+      _SOUND_WALK_BARRIERS`: bars, which a prisoner talks face to face
+      through; an overlook, a gallery called down from), a link that admits
+      a named body, and a thing's own way out of its inside whatever that is
+      made of -- a shut glass lid or a barred cage door is a hatch, though
+      `spatial_transit` writes it `window` or `bars`. Never a window between
+      two rooms, or a wall: seen through, or heard muffled, is not together.
+      Home 9 (chat 172) had the garden one edge from a second-storey bedroom
+      through the window the layout tier made, and six rooms walked. A SHUT
+      DOOR IS ONE ROOM, not a wall -- a body opens it. Undirected, because
+      the distance between two people is the same both ways: a chute a body
+      can only fall down still puts its two ends one room apart. (Review of
+      2026-10-13: bars, a jar's glass lid and a seal that admits one being
+      each split a body off at every radius while it was routes alone.)
     * A WHOLE STAIR IS ONE ROOM. The layout tier makes a stairwell as one hall
       per storey (`structure.LAYOUT_MADE_KEY`), each joined to the next by a
       flight (an edge whose `vertical` is up or down). A step from one such
@@ -720,9 +732,11 @@ def rooms_walked_within(scene: dict, center_room_ids, radius: int) -> dict:
       four rooms from Hinami's by plain steps and three with the ladder as one.
     """
     from collections import deque
+    from world.spatial_senses import _SOUND_WALK_BARRIERS
     from world.structure import LAYOUT_MADE_KEY   # structure imports spatial
 
     rooms = (scene or {}).get("rooms") or {}
+    together = frozenset(_ROUTE_MEMORY_BARRIERS) | frozenset(_SOUND_WALK_BARRIERS)
 
     def made(rid):
         room = rooms.get(rid)
@@ -736,13 +750,33 @@ def rooms_walked_within(scene: dict, center_room_ids, radius: int) -> dict:
             if isinstance(edge, dict) and made(str(edge.get("to") or "")) \
                     and normalize_vertical(edge.get("vertical")):
                 flights.add(frozenset((str(rid), str(edge["to"]))))
-    # The body's own map (directional drops an overlook), joined both ways.
     neighbors: dict = {}
-    for here, theres in neighbor_map(scene, _ROUTE_MEMORY_BARRIERS,
-                                     directional=True).items():
+
+    def join(a, b):
+        neighbors.setdefault(a, set()).add(b)
+        neighbors.setdefault(b, set()).add(a)
+
+    for here, theres in neighbor_map(
+            scene, None, crossable=lambda edge: (
+                normalize_barrier(edge.get("barrier")) in together
+                or bool(edge.get("admits")))).items():
         for there in theres:
-            neighbors.setdefault(str(here), set()).add(str(there))
-            neighbors.setdefault(str(there), set()).add(str(here))
+            join(str(here), str(there))
+    # A thing's own way out of its inside, whatever it is made of: the one
+    # doorway `spatial_transit` derives from where the thing stands, which a
+    # thing under way has none of -- so a ship's record of the room it left
+    # is never walked.
+    for rid, room in rooms.items():
+        holder = str((room or {}).get("parent_entity") or "") \
+            if isinstance(room, dict) else ""
+        if not holder:
+            continue
+        for edge in room.get("adjacent") or []:
+            target = str(edge.get("to") or "") if isinstance(edge, dict) else ""
+            other = rooms.get(target)
+            if target and not (isinstance(other, dict)
+                               and str(other.get("parent_entity") or "") == holder):
+                join(str(rid), target)
     limit = max(0, int(radius))
     dist = {str(r): 0 for r in (center_room_ids or ()) if r}
     queue = deque(sorted(dist))

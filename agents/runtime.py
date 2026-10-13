@@ -1325,7 +1325,7 @@ def _hydrate_steps_before(ctx, turn_id, ordn):
     return hydrated
 
 
-def _merge_bubbles_the_beat_reaches(ctx, chat_id, turn_row):
+def _merge_bubbles_the_beat_reaches(ctx, chat_id, turn_row, filed_under="perception_act"):
     """Merge every causality bubble whose cast the interpreted beat carries
     the player into reach of (`spatial_frames.bubbles_the_beat_reaches`,
     against `perception.beat_player_rooms`), and return the reloaded cast --
@@ -1341,7 +1341,7 @@ def _merge_bubbles_the_beat_reaches(ctx, chat_id, turn_row):
     from core.pipeline_context import current_step_key
     # Raised between steps, so filed under the first stage that reads the
     # merged world -- otherwise no step's notes would show it.
-    _filed = current_step_key.set("perception_act")
+    _filed = current_step_key.set(filed_under)
     try:
         return _merge_bubbles_now(ctx, chat_id, turn_row)
     finally:
@@ -1660,6 +1660,15 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         # only after everything, commit included, has already run.
 
     if start_key is None:
+        # A BODY THAT WALKED BACK IN HER OWN BUBBLE'S BEAT COMES HOME BEFORE THE
+        # INTERPRET: a bubble's scheduled beat never merges its own frame
+        # (`spatial_frames.detect_merge`), so this beat is where she rejoins,
+        # and the Director reads the player's line against a world she stands
+        # in (review of 2026-10-13). The call below, after the interpret, still
+        # catches the bubble this beat's own walk brings into reach.
+        if not is_offscreen_beat(chat_id, turn_row):
+            cast_rows = _merge_bubbles_the_beat_reaches(
+                ctx, chat_id, turn_row, filed_under="director_interpret") or cast_rows
         yield from _step_stream(bus, turn_id, "director_interpret",
             step_label("director_interpret"), 0, ctx,
             variant_count(turn_id, "director_interpret"))

@@ -292,7 +292,8 @@ $("#b-dlg").onclick = async () => {
   // HOW FAR A CHARACTER MAY WALK BEFORE THEIR LIFE GOES ON IN A THREAD OF ITS
   // OWN (`bubble_radius`, owner 2026-10-13): rooms walked from you, a whole
   // stair counting as one. An emptied field saves what it showed, never 0 --
-  // the server would clamp that to one room and split anyone next door.
+  // the server would clamp that to its floor of one room and split everyone
+  // two rooms off.
   const bubbleRadius = el("input", { type: "number", min: "1", max: "12",
                                      value: c.bubble_radius ?? 3 });
   const shownNumber = (input, fallback) => {

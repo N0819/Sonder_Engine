@@ -483,6 +483,25 @@ def _commit_domain(ctx, results, name, operation):
         raise RuntimeError(f"{name}: {exc}") from exc
 
 
+def _refuse_an_ended_frame(ctx):
+    """A BEAT NEVER LANDS IN A FRAME THAT ENDED WHILE IT RAN. A bubble's
+    scheduled beat runs beside the player's, and the player's beat can rejoin
+    her before hers commits (`spatial_frames.bubbles_the_beat_reaches`); her
+    commit would then write her world, her plans and her notices into a frame
+    nobody reads again. Asked inside the commit's transaction, so it is
+    atomic with the merge that ends the frame: the beat is refused whole and
+    the body stands where the merge put her (review of 2026-10-13)."""
+    frame_id = getattr(ctx.turn, "frame_id", None)
+    if frame_id is None:
+        return
+    from core.frames import get_frame
+    frame = get_frame(frame_id)
+    if frame and frame.get("merged_turn_idx") is not None:
+        raise RuntimeError(
+            "frame %s rejoined the frame it split from while this beat ran; "
+            "nothing of the beat is committed" % frame_id)
+
+
 def _commit_all_locked(ctx, nonce):
     import extension_runtime as _extensions_module
 
@@ -495,6 +514,7 @@ def _commit_all_locked(ctx, nonce):
         from world.charter_runtime import (flush_registry_session,
                                            registry_session)
         with transaction(), registry_session():
+            _refuse_an_ended_frame(ctx)
             # Transit sweep first: it mutates the prepared scene (timed
             # arrivals, engine notices) that the scene domain then persists.
             _commit_domain(

@@ -1426,45 +1426,55 @@ def _spatial_children(chat_id, parent_frame_id):
     )
 
 
-def detect_merge(chat_id, frame_id):
+def detect_merge(chat_id, frame_id, *, played=False):
     """Returns (parent_id, child_id) if the given frame's spatial split
     should merge back this commit, else None. Symmetric with
     detect_split: fires when the child's own zone group and the
     parent's now agree on where everyone is standing (same zone, or
     both have no declared zone at all -- either reads as "back
     together"). Works whichever SIDE (parent or child) is the one
-    actually committing this turn."""
+    actually committing this turn; the parent asks of EVERY live child,
+    first with positive evidence wins (it asked only its first until
+    2026-10-13, and a second bubble that walked back got one more beat of
+    its own while in reach).
+
+    `played`: the committing beat is one somebody typed, not one the engine
+    scheduled (below)."""
     frame = get_frame(frame_id)
     if not frame:
         return None
     if frame.get("kind") == "spatial" and frame.get("merged_turn_idx") is None:
-        # A BUBBLE NEVER ENDS ITS OWN FRAME FROM ITS OWN COMMIT. Two reasons,
-        # and the rejoin radius (2026-10-13) made this the ordinary way a body
-        # that walks back comes home rather than a corner case:
-        #  * every commit domain after the spatial one writes to the frame
-        #    being committed -- memories, plans, presences, the beat's pending
-        #    notices -- so ending it here strands this beat's own writes in a
-        #    frame that has ended (`detect_sibling_meeting` keeps the
-        #    committing frame for the same reason);
-        #  * a bubble's beat runs beside the player's, under its own turn's
-        #    lock, and the player's commit writes the parent's whole scene as
-        #    its beat composed it. A merge landing while that beat runs is
-        #    overwritten: the body is active in the parent with no position,
-        #    and nowhere.
-        # The parent asks instead, on its own path: before its next beat
-        # resolves (`bubbles_the_beat_reaches`, every bubble within the radius
-        # of where the player stands) and at its commit (below). Bubble beats
-        # are scheduled only from the parent's commit, so nothing happens in
-        # between and the player sees no difference.
-        if is_bubble_frame(chat_id, frame_id):
+        # A BUBBLE'S SCHEDULED BEAT NEVER ENDS ITS OWN FRAME. The engine runs
+        # it beside the player's beat, under its own turn's lock, and the
+        # player's commit writes the parent's whole scene as its beat composed
+        # it: a merge landing while that beat ran was overwritten, and the body
+        # was active in the parent with no position -- nowhere. And every
+        # commit domain after the spatial one writes to the frame being
+        # committed, so ending it here strands this beat's own writes
+        # (`detect_sibling_meeting` keeps the committing frame for the same
+        # reason). The parent asks instead, on its own path: before its next
+        # beat's interpret and again after it (`bubbles_the_beat_reaches`,
+        # every bubble within the radius of where the party stands), and at
+        # its commit. A beat a host TYPED into the bubble's frame is played,
+        # and still rejoins her the moment she is back (review of 2026-10-13).
+        if not played and is_bubble_frame(chat_id, frame_id):
             return None
-        parent_id, child_id = frame.get("parent_frame_id"), frame_id
+        pairs = [(frame.get("parent_frame_id"), frame_id)]
     else:
-        children = _spatial_children(chat_id, frame_id)
-        if not children:
-            return None
-        parent_id, child_id = frame_id, children[0]["id"]
+        pairs = [(frame_id, row["id"]) for row in _spatial_children(chat_id, frame_id)]
+    for parent_id, child_id in pairs:
+        # A CALL HOLDS TWO FRAMES APART UNTIL IT ENDS, as the sibling meeting
+        # already says: `close_couple` partitions back by the map recorded at
+        # open, and a merge mid-call left the body in neither frame.
+        if live_couple_for(chat_id, child_id):
+            continue
+        if _back_together(chat_id, parent_id, child_id):
+            return (parent_id, child_id)
+    return None
 
+
+def _back_together(chat_id, parent_id, child_id):
+    """`detect_merge`'s evidence for one (parent, child) pair."""
     parent_scene = wget_for_frame(chat_id, "scene", parent_id, {}) or {}
     child_scene = wget_for_frame(chat_id, "scene", child_id, {}) or {}
     parent_zones = set(zone_groups(chat_id, parent_id, parent_scene))
@@ -1587,16 +1597,19 @@ def bubbles_the_beat_reaches(chat_id, frame_id, beat_rooms, party_names=()):
     reads no scene."""
     from world.spatial_bubbles import bubble_radius, bubble_reach
 
-    centers = {str(r) for r in beat_rooms or () if r}
-    if not centers:
-        return []
+    # A bubble a live call holds stays apart until the call ends
+    # (`detect_merge`): `close_couple` partitions back by its own map.
     children = [child for child in _spatial_children(chat_id, frame_id)
-                if is_bubble_frame(chat_id, child["id"])]
+                if is_bubble_frame(chat_id, child["id"])
+                and not live_couple_for(chat_id, child["id"])]
     if not children:
         return []
     parent_scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
+    centers = {str(r) for r in beat_rooms or () if r}
     centers |= {str(room) for room in (room_of(parent_scene, str(name))
                                        for name in party_names or () if name) if room}
+    if not centers:
+        return []
     reach = bubble_reach(parent_scene, centers, radius=bubble_radius(chat_id),
                          names=party_names)
     out = []
@@ -2062,6 +2075,16 @@ def detect_couple(chat_id, frame_id):
 
     for parent_id, child_id in pairs:
         if live_couple_for(chat_id, child_id):
+            continue
+        # A BUBBLE BACK WITHIN REACH IS MET, NOT CALLED. Her own scheduled
+        # beat does not merge her (`detect_merge`); the parent does, before
+        # its next beat or at its commit. A call opened now would hold her
+        # apart until it ended -- and a parent commit already running would
+        # merge her mid-call (review of 2026-10-13).
+        if is_bubble_frame(chat_id, child_id) and _bubble_rejoined(
+                chat_id, parent_id,
+                wget_for_frame(chat_id, "scene", parent_id, {}) or {},
+                child_id, wget_for_frame(chat_id, "scene", child_id, {}) or {}):
             continue
         if spatial_bubbles.detect_couple_between_frames(chat_id, parent_id, child_id):
             return (parent_id, child_id)
@@ -2541,7 +2564,11 @@ def detect_and_reconcile(ctx, nonce):
                 "parent_frame_id": members[0], "child_frame_id": members[1],
                 "warnings": warnings}
 
-    merge = detect_merge(chat_id, frame_id)
+    # A beat somebody TYPED is played, whatever frame it is in; one the
+    # engine scheduled for a bubble carries no input (`is_offscreen_beat`).
+    played = bool(str(getattr(ctx.turn, "player_input", None)
+                      or getattr(ctx, "input", None) or "").strip())
+    merge = detect_merge(chat_id, frame_id, played=played)
     if merge:
         parent_id, child_id = merge
         warnings = perform_merge(chat_id, parent_id, child_id, turn_idx)

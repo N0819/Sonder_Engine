@@ -13,12 +13,14 @@ ram?" -- this makes it so.
 
 * `load_everything` imports every engine module when the app is imported, so
   nothing the process runs is read from disk later.
-* `take_snapshot` records what the process holds -- the engine's Python, and
-  the language packs it reads once and keeps (`language_runtime.
-  pack_source_files`) -- by content; `check` says which of those files the
-  disk no longer matches, so the host is WARNED that a restart would run
-  different code. It never refuses anything (the owner, 2026-10-13: warn,
-  never refuse).
+* `take_snapshot` records, by content, the files the process is about to
+  hold -- the engine's Python, and the language packs it reads once and keeps
+  (`language_runtime.pack_source_files`) -- BEFORE the engine is loaded
+  (`web/app.py` takes it first), so a file saved while the engine loads reads
+  as changed: a false warning at worst, never a silent miss. `check` says
+  which of those files the disk no longer matches, so the host is WARNED that
+  a restart would run different code. It never refuses anything (the owner,
+  2026-10-13: warn, never refuse).
 
 NOTHING HERE RAISES: a module that fails to import is reported and the server
 starts without it, as it would have done on first use; a file that cannot be

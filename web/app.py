@@ -1,6 +1,10 @@
 import contextvars, hashlib, ipaddress, json, queue, random, re, sys, time, threading, os, zlib
-# First, so its clock marks when this process began loading the engine.
+# First, so its clock marks when this process began loading the engine, and
+# its fingerprint is of the files BEFORE any of them is read: a save landing
+# while the engine loads then reads as a change -- at worst a false warning,
+# never a server holding two versions in silence (review of 2026-10-13).
 from core import code_version
+code_version.take_snapshot()
 from core import updates
 from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
@@ -5950,7 +5954,7 @@ def dlg_put(cid: int, body: dict = Body(...)):
 
         for key, default in derived.items():
             config[key] = max(0, int(body.get(key, default)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise HTTPException(400, "dialogue config numeric fields must be numbers")
 
     config["max_lines"] = max(config["min_lines"], config["max_lines"])
@@ -8112,12 +8116,13 @@ def ambience_pin_delete(cid: int, room: str):
 # Every engine module is imported now, with the app, so nothing this process
 # runs is read from disk later: 58 of 248 modules used to load on first use,
 # and a server left running while the working tree changed ran two versions
-# at once (Home 10's room designer failed on it). Then what the process holds
-# is fingerprinted, so a page boot and every turn can say when the disk no
-# longer matches and a restart would run different code. Neither raises.
+# at once (Home 10's room designer failed on it). The fingerprint was taken
+# before any of them was read (the top of this file), so this first check
+# already says whether the disk moved while they loaded; a page boot and every
+# turn ask again. Neither raises.
 _unloaded = code_version.load_everything()
 if _unloaded:
     print("Sonder Engine: %d engine module(s) could not be loaded: %s" % (
         len(_unloaded), "; ".join(f"{f['module']} ({f['error']})" for f in _unloaded[:5])),
         flush=True)
-code_version.take_snapshot()
+code_version.check()

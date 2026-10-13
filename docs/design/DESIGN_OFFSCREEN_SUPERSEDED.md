@@ -148,8 +148,10 @@ inside the bubble's range is never missing from a payload, though the rooms
 between it and the player need not be in one. Measured on Home 10 (chat
 173): the one-doorway range split Tamamo off four rooms from Hinami -- three
 with the ladder as one -- while her voice reached Hinami at full strength.
-The rejoin asks the same radius, from the parent's side only: a bubble's own
-commit never merges itself (`spatial_frames.detect_merge`).
+The rejoin asks the same radius, from the parent's side for a beat the engine
+scheduled: a bubble's own scheduled beat never merges its frame
+(`spatial_frames.detect_merge`); the parent rejoins her before its next
+beat's interpret, after it, and at its commit.
 
 `detect_split` keeps the zone rule, deliberately. It answers whether two
 PLAYERS have separated, a split that restores permanent bidirectional memory
