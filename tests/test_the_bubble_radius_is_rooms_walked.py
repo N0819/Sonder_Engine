@@ -783,3 +783,95 @@ class TestARerolledStageReadsTheTurnsWorld:
         merge = source.index("filed_under=only_key")
         rehydrate = source.index("_rehydrate_side_channels(ctx, _key, _content)")
         assert restore < merge < rehydrate
+
+
+# ---------------------------------------------- the third review, 2026-10-13
+
+
+class TestOnlyTheAwayCastComesHome:
+    def test_a_character_attached_at_home_after_the_split_keeps_her_state(self, temp_db):
+        """Attached after the split, she is "active" in the bubble only by the
+        base row's fallback; an overlay row the bubble's beat wrote for her is
+        stale, and must never be written over what she lived at home."""
+        import json as _json
+        from story.scene import char_state, set_char_state
+        from world import spatial_frames
+        cid = _story(temp_db, tamamo_at="r7")
+        child = spatial_frames.perform_split(cid, None, 0, bubble=True, away_names=["Tamamo"])
+        mira = _cast(temp_db, cid, "Mira")
+        set_char_state(cid, mira, _json.dumps({"goal": "stale copy"}), frame_id=child)
+        set_char_state(cid, mira, _json.dumps({"goal": "lived at home"}))
+        assert spatial_frames.perform_merge(cid, None, child, 4) is not None
+        assert char_state(cid, mira, None)["goal"] == "lived at home"
+
+    def test_a_bubble_off_an_era_carries_that_eras_self(self, temp_db):
+        import json as _json
+        from core.frames import create_frame
+        from story.scene import char_state, set_char_state, set_char_status
+        from world import spatial_frames
+        cid = _story(temp_db, tamamo_at="r7")
+        tamamo = temp_db.q("SELECT char_id FROM chat_chars WHERE chat_id=?", (cid,), one=True)["char_id"]
+        past = create_frame(cid, label="Before", ordinal=-1, kind="past")
+        set_char_status(cid, tamamo, "active", frame_id=past)
+        set_char_state(cid, tamamo, _json.dumps({"goal": "the past's own"}), frame_id=past)
+        set_char_state(cid, tamamo, _json.dumps({"goal": "the present's"}))
+        from core.db import wset_for_frame
+        wset_for_frame(cid, "scene", {"rooms": _line(), "entities": {}, "comms": {},
+                                      "positions": {"Hinami": "r0", "Tamamo": "r7"}}, past)
+        child = spatial_frames.perform_split(cid, past, 0, bubble=True, away_names=["Tamamo"])
+        assert char_state(cid, tamamo, child)["goal"] == "the past's own"
+
+
+class TestARefusedBeatsCheckpointStaysWhileLaterTurnsNeedIt:
+    def test_the_world_after_the_turn_before_is_kept(self, temp_db):
+        from agents.offscreen_beat import _discard_refused_beat
+        from persist.checkpoints import ensure_checkpoint
+        cid, child = _bubble(temp_db)
+        ensure_checkpoint(cid, 5)
+        tid = _turn_in(temp_db, cid, child, 5)
+        _turn_in(temp_db, cid, None, 6, typed="I walk up.")      # the beat that rejoined her
+        temp_db.qi("UPDATE frames SET merged_turn_idx=? WHERE id=?", (6, child))
+        assert _discard_refused_beat(cid, child, tid, 5)
+        assert temp_db.q("SELECT 1 FROM checkpoints WHERE chat_id=? AND turn_idx=5",
+                         (cid,), one=True)
+
+
+class TestATypedBeatHoldsItsFrameEverywhere:
+    def test_the_merge_before_a_beat_waits_for_it_too(self, temp_db):
+        from world import spatial_frames
+        cid, child = _bubble(temp_db)
+        _move(cid, child, "Tamamo", "r1")
+        _turn_in(temp_db, cid, child, 5, typed="Tamamo goes back down.")
+        assert spatial_frames.bubbles_the_beat_reaches(cid, None, {"r0"}) == []
+
+    def test_a_commit_a_reroll_took_back_has_not_landed(self, temp_db):
+        from world import spatial_frames
+        cid, child = _bubble(temp_db)
+        tid = _turn_in(temp_db, cid, child, 5, typed="Tamamo waits.", committed=True)
+        assert not spatial_frames._typed_beat_open(cid, child)
+        temp_db.qi("UPDATE steps SET stale=1 WHERE turn_id=? AND key='commit'", (tid,))
+        assert spatial_frames._typed_beat_open(cid, child)
+
+    def test_a_failed_turn_under_newer_ones_holds_nothing(self, temp_db):
+        from world import spatial_frames
+        cid, child = _bubble(temp_db)
+        _turn_in(temp_db, cid, child, 5, typed="Tamamo waits.")          # failed, never committed
+        _turn_in(temp_db, cid, child, 8, committed=True)                  # a later scheduled beat
+        assert not spatial_frames._typed_beat_open(cid, child)
+
+
+class TestABranchTakesItsStationsFromItsPoint:
+    def test_a_frame_split_after_the_branch_point_is_never_a_live_thread_there(self, temp_db):
+        from persist.checkpoints import ensure_checkpoint
+        from web import app
+        from world import spatial_frames
+        cid = _story(temp_db, tamamo_at="r7")
+        _turn_in(temp_db, cid, None, 0, typed="I wake.", committed=True)
+        branch_at = _turn_in(temp_db, cid, None, 1, typed="I wait.", committed=True)
+        ensure_checkpoint(cid, 2)                          # before any split
+        spatial_frames.perform_split(cid, None, 2, bubble=True, away_names=["Tamamo"])
+        ncid = app.turn_branch(branch_at)["id"]
+        copy = temp_db.q("SELECT merged_turn_idx FROM frames WHERE chat_id=? AND kind='spatial'",
+                         (ncid,), one=True)
+        assert copy["merged_turn_idx"] is not None
+        assert spatial_frames._spatial_children(ncid, None) == []

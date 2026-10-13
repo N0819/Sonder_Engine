@@ -6892,7 +6892,14 @@ def turn_branch(tid: int):
                      if isinstance(sf, dict)}
         for f in q("SELECT * FROM frames WHERE chat_id=?", (cid,)):
             snap = at_branch.get(f["id"])
-            merged = snap.get("merged_turn_idx") if snap is not None else f["merged_turn_idx"]
+            if snap is not None:
+                merged = snap.get("merged_turn_idx")
+            elif "frames" in blob and f["kind"] == "spatial":
+                # a split the branch point never had: cloned for the rows that
+                # may name it, and ended -- never a live thread with no world
+                merged = f["split_turn_idx"] if f["split_turn_idx"] is not None else idx
+            else:
+                merged = f["merged_turn_idx"]
             nfid = qtx(
                 "INSERT INTO frames(chat_id,label,ordinal,kind,travelers,nonexistent_cast,created,"
                 "split_turn_idx,merged_turn_idx) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -7261,7 +7268,17 @@ def turn_branch(tid: int):
         # (frame_id remapped; persona ids are same-DB in a branch). Without
         # these the branch loses every extra player's station and queued
         # beats.
+        # STATIONS ARE THE BRANCH POINT'S TOO, with the frames' ended marks
+        # above: a party that reunited after the branch point is split in the
+        # branch, its player stationed away (review of 2026-10-13). A persona
+        # the snapshot does not record keeps today's row.
+        stations = {sp.get("persona_id"): sp for sp in (blob.get("chat_personas") or [])
+                    if isinstance(sp, dict)}
         for p in q("SELECT * FROM chat_personas WHERE chat_id=?", (cid,)):
+            p = dict(p)
+            if p["persona_id"] in stations:
+                p["status"] = stations[p["persona_id"]].get("status", p["status"])
+                p["frame_id"] = stations[p["persona_id"]].get("frame_id")
             qtx(
                 "INSERT INTO chat_personas(chat_id,persona_id,status,frame_id) "
                 "VALUES(?,?,?,?)",

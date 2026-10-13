@@ -1390,8 +1390,18 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
         # back to the base row) -- without this, away NPCs would still
         # be "present" back home, and staying NPCs would show up away.
         for char_id in away_char_ids:
+            # THE AWAY BODY CARRIES THE STATE IT HAD WHERE IT STOOD. A new
+            # overlay row copies the BASE row (`set_char_status`), which is the
+            # present's view; split off a past or other era, that seeded the
+            # child with the present's goals, and the merge home wrote them over
+            # the era self (review of 2026-10-13).
+            seed = char_state(chat_id, char_id, parent_frame_id) \
+                if parent_frame_id is not None else None
             set_char_status(chat_id, char_id, "dormant", frame_id=parent_frame_id)
             set_char_status(chat_id, char_id, "active", frame_id=new_frame_id)
+            if seed is not None:
+                set_char_state(chat_id, char_id, json.dumps(seed, ensure_ascii=False),
+                               frame_id=new_frame_id)
         for char_id in stay_char_ids:
             set_char_status(chat_id, char_id, "dormant", frame_id=new_frame_id)
 
@@ -1481,13 +1491,18 @@ def detect_merge(chat_id, frame_id, *, played=False):
 
 
 def _typed_beat_open(chat_id, frame_id):
-    """A turn in this frame that somebody typed and that has not committed."""
-    return bool(q(
-        "SELECT 1 FROM turns t WHERE t.chat_id=? AND t.frame_id=? "
-        "AND TRIM(COALESCE(t.player_input,''))<>'' AND NOT EXISTS ("
-        " SELECT 1 FROM steps s JOIN variants v ON v.step_id=s.id AND v.active=1"
-        " WHERE s.turn_id=t.id AND s.key='commit') LIMIT 1",
-        (chat_id, frame_id), one=True))
+    """The frame's NEWEST turn is one somebody typed and its commit has not
+    landed: no commit step, none active, or one a single-stage reroll took
+    back (stale). An older failed turn, buried under newer ones, holds
+    nothing (review of 2026-10-13)."""
+    newest = q("SELECT id, player_input FROM turns WHERE chat_id=? AND frame_id=? "
+               "ORDER BY idx DESC LIMIT 1", (chat_id, frame_id), one=True)
+    if not newest or not str(newest["player_input"] or "").strip():
+        return False
+    return not q(
+        "SELECT 1 FROM steps s JOIN variants v ON v.step_id=s.id AND v.active=1 "
+        "WHERE s.turn_id=? AND s.key='commit' AND s.stale=0 LIMIT 1",
+        (newest["id"],), one=True)
 
 
 def _back_together(chat_id, parent_id, child_id):
@@ -1619,7 +1634,8 @@ def bubbles_the_beat_reaches(chat_id, frame_id, beat_rooms, party_names=()):
     # (`detect_merge`): `close_couple` partitions back by its own map.
     children = [child for child in _spatial_children(chat_id, frame_id)
                 if is_bubble_frame(chat_id, child["id"])
-                and not live_couple_for(chat_id, child["id"])]
+                and not live_couple_for(chat_id, child["id"])
+                and not _typed_beat_open(chat_id, child["id"])]
     if not children:
         return []
     parent_scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
@@ -1707,7 +1723,11 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
         # there to change it. Her relationships and her own lived state --
         # goals, projects, psychology (`chat_char_frames`) -- are the away
         # frame's; the cast who stayed keep the parent's, with the warning.
-        returning = {row["id"] for row in active_cast(chat_id, child_frame_id)}
+        # active in the child AND not in the parent: a character attached or
+        # promoted at home after the split is "active" in the child only by the
+        # base row's fallback, and never left (review of 2026-10-13)
+        staying = {row["id"] for row in active_cast(chat_id, parent_frame_id)}
+        returning = {row["id"] for row in active_cast(chat_id, child_frame_id)} - staying
         for row in active_cast(chat_id, parent_frame_id) + active_cast(chat_id, child_frame_id):
             key = f"relationships:{row['id']}"
             parent_rel = wget_for_frame(chat_id, key, parent_frame_id, None)
@@ -1730,7 +1750,8 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
         wset_for_frame(chat_id, "scene", parent_scene, parent_frame_id)
 
         for row in active_cast(chat_id, child_frame_id):
-            lived = char_state(chat_id, row["id"], child_frame_id)
+            lived = char_state(chat_id, row["id"], child_frame_id) \
+                if row["id"] in returning else None
             if lived is not None:
                 set_char_state(chat_id, row["id"], json.dumps(lived, ensure_ascii=False),
                                frame_id=parent_frame_id)

@@ -613,8 +613,8 @@ def detect_sibling_meeting(chat_id, frame_id):
     """
     from core.db import wget_for_frame
     from world.paradox import get_paradox
-    from world.spatial_frames import (_spatial_children, get_frame,
-                                      is_bubble_frame, live_couple_for)
+    from world.spatial_frames import (_spatial_children, _typed_beat_open,
+                                      get_frame, is_bubble_frame, live_couple_for)
 
     frame = get_frame(frame_id)
     if not frame or not is_bubble_frame(chat_id, frame_id):
@@ -630,6 +630,8 @@ def detect_sibling_meeting(chat_id, frame_id):
             continue
         if live_couple_for(chat_id, other) or get_paradox(chat_id, other):
             continue
+        if _typed_beat_open(chat_id, other):
+            continue                # its typed beat lands first (`detect_merge`)
         if sibling_meet_decision(
                 scene, names,
                 wget_for_frame(chat_id, "scene", other, {}) or {},

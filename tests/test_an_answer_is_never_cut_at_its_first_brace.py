@@ -231,3 +231,32 @@ class TestAKeyNamedTwiceIsSaid:
         _ladder(monkeypatch, [json.dumps({"sequence": [{"do": "waits"}], "note": "n"})])
         _run()
         assert not warnings and rows[0]["error"] == ""
+
+
+class TestTheThirdReview:
+    def test_a_candidate_is_validated_on_a_copy(self, monkeypatch):
+        """Validation moves things inside the dict it is given; the candidate
+        handed back must be the one the mend made (review of 2026-10-13)."""
+        real = llm_quality.validate_llm_output_strict
+
+        def moving(step_key, value, **kw):
+            value.pop("note", None)                      # what a lift does in place
+            return real(step_key, value, **kw)
+        monkeypatch.setattr(llm_quality, "validate_llm_output_strict", moving)
+        found = llm_quality._mended("character_bare", SLIP, {"x": 1})
+        assert found is not None and found[0].get("note") == "kept"
+
+    def test_a_declared_field_written_null_is_no_loss(self, monkeypatch, seen):
+        warnings, _rows = seen
+        nulled = SLIP.replace('"want": "to be heard"', '"want": "to be heard", "held_back": null')
+        _ladder(monkeypatch, [nulled])
+        _run()
+        said = [w for w in warnings if "left out" in w]
+        assert said and "held_back" not in said[0] and "'ponder', 'why'" in said[0]
+
+    def test_the_field_patch_refuses_a_cut_reply(self, monkeypatch):
+        llm = _Scripted(['{"sequence.0": {"do": "steps back", "note": "she yields"}'])
+        monkeypatch.setattr(llm_quality, "chat_complete", llm)
+        monkeypatch.setattr(llm_quality, "response_truncated", lambda: True)
+        out = llm_quality._targeted_field_patch({"sequence": "x"}, ["sequence: not a list"])
+        assert out is None, "a fragment of a cut patch is never spliced"

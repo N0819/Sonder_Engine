@@ -2531,9 +2531,9 @@ walked, a stair one) and comes back inside it. What that does not reach:
   nothing deletes it yet. What is running in a story is Home 10's item 6
   (`docs/experiments/OBSERVE_2026_10_13_home10.md`, §1.215).
 - **A typed beat not yet landed holds its frame open** (`spatial_frames.
-  _typed_beat_open`): a party that has reunited stays split while a typed
-  turn in its frame is unfinished -- a failed one included, until it is
-  resumed or deleted.
+  _typed_beat_open`, at every merge path): a party that has reunited stays
+  split while its frame's newest turn is a typed one with no live commit --
+  a failed one included, until it is resumed or deleted.
 - **A beat a host types into a bubble's frame still merges it from its own
   commit**, and a merge from there can still be overwritten by a beat the
   parent is running at the same moment -- two people, or two tabs, playing

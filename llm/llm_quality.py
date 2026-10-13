@@ -1,6 +1,7 @@
 """Strict JSON completion, semantic validation, and repair retries."""
 
 import contextvars
+import copy
 import json
 import re
 import time
@@ -422,7 +423,8 @@ def strict_json_parse(text: str) -> dict:
 def _refuse_cut_salvage(raw: str):
     """Raise when `raw` ran out of room and does not parse whole: anything
     read out of it is a fragment, not the answer. Every rung of the repair
-    ladder asks this (`_read_answer`).
+    ladder asks this -- the answers to the request through `_read_answer`,
+    the field patch's own reply in `_targeted_field_patch`.
 
     Salvage exists for an answer that is whole but wrapped -- in prose, or
     after a restarted fragment -- and reads the object that runs to the end
@@ -484,8 +486,12 @@ def _read_answer(step_key, raw, payload=None):
             # that left a slipped list item's members at the top level still
             # validates -- capture 6087's fifth step. Say what it cost
             # (review of 2026-10-13).
-            output = found[1].output if isinstance(found[1].output, dict) else {}
-            left = [k for k in value if k not in output]
+            # against the fields the step DECLARES -- a declared field written
+            # null is dropped from the validated dump and is no loss
+            from llm.schemas import SCHEMA_MAP, _fields
+            model = SCHEMA_MAP.get(step_key)
+            declared = set(_fields(model)) if model is not None else set(value)
+            left = [k for k in value if k not in declared]
             notes = notes + [
                 ("read by mending its JSON locally (" if left
                  else "read whole by mending its JSON locally (")
@@ -603,6 +609,8 @@ def _targeted_field_patch(parsed, errors, *, validate=None):
             temperature=0.0,
             max_tokens=1500,
         )
+        # the patch's own answer, cut for room, is a fragment like any other
+        _refuse_cut_salvage(raw)
         patch = strict_json_parse(raw)
     except Aborted:
         raise
@@ -905,7 +913,13 @@ def _mended(step_key, raw, payload):
     for text, region in _mend_texts(raw):
         for value, edits in mend_candidates(text):
             edits = ([region] if region else []) + list(edits)
-            report = validate_llm_output_strict(step_key, value, source_payload=payload)
+            # A COPY is validated: validation moves things inside the dict it
+            # is given (a sibling swallowed into `entities` is lifted out), so
+            # a candidate validated in place and returned would be validated
+            # again by its caller without what the first pass moved -- an
+            # opening's contact op lost that way (review of 2026-10-13).
+            report = validate_llm_output_strict(step_key, copy.deepcopy(value),
+                                                source_payload=payload)
             if report.valid:
                 return value, report, edits
             if first is None:

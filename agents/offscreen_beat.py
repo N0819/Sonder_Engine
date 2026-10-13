@@ -224,6 +224,13 @@ def run_offscreen_beat(chat_id, frame_id):
 
     if not is_bubble_frame(chat_id, frame_id):
         return {"frame_id": frame_id, "skipped": "not a live bubble"}
+    from core.db import wget_for_frame
+
+    def _rooms():
+        scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
+        return stalling_bodies(scene)
+
+    before = _rooms()                  # read before the slot is held
     # THE SLOT FIRST, THE ROW SECOND, as `turn_new` does: a row written and
     # then refused the slot stayed behind with no step, and the frame's
     # newest turn was no longer the one its run was writing -- which
@@ -249,13 +256,6 @@ def run_offscreen_beat(chat_id, frame_id):
                 ABORTS.pop((chat_id, frame_id), None)
         raise
 
-    from core.db import wget_for_frame
-
-    def _rooms():
-        scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
-        return stalling_bodies(scene)
-
-    before = _rooms()
     started = time.time()
     try:
         for _ in run_pipeline(chat_id, turn_id, abort=abort, frame_id=frame_id):
@@ -295,7 +295,12 @@ def _discard_refused_beat(chat_id, frame_id, turn_id, idx):
             qi("DELETE FROM variants WHERE step_id=?", (step["id"],))
         qi("DELETE FROM steps WHERE turn_id=?", (turn_id,))
         qi("DELETE FROM turns WHERE id=?", (turn_id,))
-        if not q("SELECT 1 FROM turns WHERE chat_id=? AND idx=? LIMIT 1",
+        # The checkpoint goes only when no turn at or after this idx remains:
+        # a later turn's readers take checkpoint idx as "the world after the
+        # turn before" (`turn_branch`, `backdrops.scene_after_turn`), and that
+        # is what it still is -- the beat committed nothing (review of
+        # 2026-10-13). Taken from the end, the next turn writes a fresh one.
+        if not q("SELECT 1 FROM turns WHERE chat_id=? AND idx>=? LIMIT 1",
                  (chat_id, idx), one=True):
             qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx=?", (chat_id, idx))
     return True
