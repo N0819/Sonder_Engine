@@ -2876,5 +2876,7 @@
   "What the window is — its frame, its glass, what hangs in it": "窓がどういうものか — 枠、ガラス、掛かっているもの",
   "Window": "窓",
   "Window onto": "窓の外:",
-  "Windows": "窓"
+  "Windows": "窓",
+  "The engine's files changed after this server started ({count} files). Restart the server to run them.": "このサーバーの起動後にエンジンのファイルが変更されました（{count} 件）。反映するにはサーバーを再起動してください。",
+  "The engine's files changed after this server started. Restart the server to run them.": "このサーバーの起動後にエンジンのファイルが変更されました。反映するにはサーバーを再起動してください。"
 }

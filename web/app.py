@@ -1,4 +1,6 @@
 import contextvars, hashlib, ipaddress, json, queue, random, re, sys, time, threading, os, zlib
+# First, so its clock marks when this process began loading the engine.
+from core import code_version
 from core import updates
 from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
@@ -907,6 +909,11 @@ def _stream(gen):
     """
     evt_queue = queue.Queue()
     DONE = _DRAIN_DONE
+    # THE CODE CHANGED UNDER THIS SERVER (`core.code_version`): said first, so
+    # the host knows a restart would run something else. Never raises -- an
+    # exception here would leave the frame's run slot claimed and the story
+    # refusing turns until a restart.
+    notice = code_version.stream_notice()
     thread = _drain_on_own_thread(gen, evt_queue.put)
 
     def w():
@@ -921,6 +928,8 @@ def _stream(gen):
         # the queue empty and each event still goes out immediately, so
         # latency to first byte of any event is untouched.
         try:
+            if notice:
+                yield json.dumps(notice) + "\n"
             while True:
                 evt = evt_queue.get()
                 if evt is DONE:
@@ -1780,10 +1789,22 @@ def bootstrap_response(known_install: str = ""):
         media_type="application/json")
 
 
+def _bootstrap_code():
+    """Whether the files this server holds still match the disk, and any
+    engine module it could not load (`core.code_version`) -- never fatally,
+    as `_bootstrap_language`: this route is the whole app's entry point."""
+    try:
+        return {**code_version.check(), "import_failures": code_version.import_failures()}
+    except Exception as exc:
+        return {"stale": False, "error": str(exc)}
+
+
 def bootstrap() -> dict:
     selected_ui, language_packs, language_error = _bootstrap_language()
     extensions, extension_errors, extension_lanes = _bootstrap_extensions()
     return {
+        # whether a restart would run different code (2026-10-13)
+        "code": _bootstrap_code(),
         "providers": [_provider_public(r["id"]) for r in q("SELECT id FROM providers")],
         "provider_presets": DEFAULT_BASES,
         "roles": ROLES,
@@ -8044,3 +8065,18 @@ def ambience_pin_delete(cid: int, room: str):
     """Drop a pin, returning the room to automatic selection."""
     return {"ok": True, "cleared": clear_ambience_pin(cid, str(room or "").strip()),
             "pin": ambience_pin_for(cid, str(room or "").strip())}
+
+
+# ONE SERVER PROCESS, ONE VERSION OF THE CODE (2026-10-13, `core.code_version`).
+# Every engine module is imported now, with the app, so nothing this process
+# runs is read from disk later: 58 of 248 modules used to load on first use,
+# and a server left running while the working tree changed ran two versions
+# at once (Home 10's room designer failed on it). Then what the process holds
+# is fingerprinted, so a page boot and every turn can say when the disk no
+# longer matches and a restart would run different code. Neither raises.
+_unloaded = code_version.load_everything()
+if _unloaded:
+    print("Sonder Engine: %d engine module(s) could not be loaded: %s" % (
+        len(_unloaded), "; ".join(f"{f['module']} ({f['error']})" for f in _unloaded[:5])),
+        flush=True)
+code_version.take_snapshot()

@@ -530,6 +530,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.172 — Every memory write scans the whole retrieval index](UNBUILT_PLATFORM.md#unbuilt-1-172)
 - [§1.186 — The format ladder after a hold, and service tiers (2026-10-08)](UNBUILT_PLATFORM.md#unbuilt-1-186)
 - [§1.197 — An active prompt preset masks every later change to the card it replaces (2026-10-09)](UNBUILT_PLATFORM.md#unbuilt-1-197)
+- [§1.212 — One code version per process — built 2026-10-13, residuals open](UNBUILT_PLATFORM.md#unbuilt-1-212)
 
 **2. Roadmap**
 

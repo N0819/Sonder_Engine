@@ -551,6 +551,25 @@ The owner's play on chats 160-166 ran with `active_preset` = `tes`, a preset who
 - **Owner decision, still open:** `tes` took "You know nothing else: what never reached you stays unknown," out of the bare card -- whether the pack card should lose it too.
 - **What would make it visible (not built):** keep, beside each prompt a preset replaces, the pack text (or its hash) it was saved against, and flag the override in the prompt editor, and once per process in the log, when the pack text has changed since.
 
+<a id="unbuilt-1-212"></a>
+
+### 1.212 One code version per process -- built 2026-10-13, residuals open
+
+Design.md: "One server process runs one version of the engine". What it does
+not reach:
+
+- **A spawned worker imports from disk.** The charter's pre-simulation pool
+  (`world/charter_runtime.py`, `ProcessPoolExecutor`) forks on Linux, where
+  the children share the parent's modules; on Windows and macOS it spawns,
+  and each child imports the engine from disk -- the version the parent holds
+  only if the tree has not changed since start.
+- **A file added after start is not noticed.** The fingerprint compares the
+  files the process held when it started; a new module or a new card part
+  appearing later is not a change until it is read, which today means a
+  restart.
+- **Extensions are out of scope**: they keep their own reload path.
+
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-5"></a>

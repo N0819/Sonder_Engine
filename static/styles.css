@@ -1323,3 +1323,5 @@ vertical-align:middle;margin-right:4px}
   .wb-fields{flex-direction:column}
   .wb-wall-head{flex-wrap:wrap}
 }
+/* the code changed under the server (`core.code_version`): restart to run it */
+#b-update.code-stale{color:var(--warn);border-color:var(--warn)}

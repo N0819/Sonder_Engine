@@ -359,6 +359,43 @@ def _load_pack(directory: Path) -> LanguagePack:
     )
 
 
+def pack_source_files() -> list[Path]:
+    """Every file `installed_language_packs` reads to load the packs: each
+    pack's manifest, its prompt policy and UI catalog, and each card the
+    manifest names -- `cards/<name>.json` and its `cards/<name>/` parts. A
+    file the loader never reads (a tool's translation report) is not one.
+    For `core.code_version`, which warns when what a running server holds is
+    no longer what is on disk. Never raises: a pack it cannot read lists what
+    it found."""
+    from language_runtime.card_source import PART_SUFFIX, card_parts_dir
+    out: list[Path] = []
+    try:
+        directories = sorted(path for path in _PACK_ROOT.iterdir() if path.is_dir())
+    except OSError:
+        return out
+    for directory in directories:
+        manifest = directory / "manifest.json"
+        if not manifest.is_file():
+            continue
+        out.append(manifest)
+        for name in ("prompt_policy.json", "ui.json"):
+            if (directory / name).is_file():
+                out.append(directory / name)
+        try:
+            cards = json.loads(manifest.read_text(encoding="utf-8")).get("cards") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        for card in cards:
+            if not isinstance(card, str) or not _CARD_NAME.fullmatch(card):
+                continue
+            if (directory / "cards" / f"{card}.json").is_file():
+                out.append(directory / "cards" / f"{card}.json")
+            parts = card_parts_dir(directory, card)
+            if parts.is_dir():
+                out.extend(sorted(parts.rglob(f"*{PART_SUFFIX}")))
+    return out
+
+
 def installed_language_packs(*, refresh: bool = False) -> dict[str, LanguagePack]:
     global _packs, _pack_failure
     with _lock:

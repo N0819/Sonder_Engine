@@ -188,6 +188,23 @@ async function api(method, url, body) {
     : response.text();
 }
 
+// THE CODE CHANGED UNDER THE SERVER (`core.code_version`, 2026-10-13): said
+// once a page, from the boot or from a turn's stream, whichever hears it
+// first. A warning, never a refusal -- the story plays on the code the server
+// holds, and a restart runs the new one.
+let staleCodeReported = false;
+function reportStaleCode(info) {
+  if (staleCodeReported || !info || !(info.stale || info.kind === "code_changed")) return;
+  staleCodeReported = true;
+  const count = Number(info.count) || 0;
+  toast(t("The engine's files changed after this server started ({count} files). Restart the server to run them.", { count }), "warn", 0);
+  const button = document.getElementById("b-update");
+  if (button) {
+    button.classList.add("code-stale");
+    button.title = t("The engine's files changed after this server started. Restart the server to run them.");
+  }
+}
+
 async function streamPost(url, body, onEvt) {
   const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
   if (!response.ok) {

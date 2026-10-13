@@ -976,6 +976,10 @@ function liveStep(key, label, group) {
 }
 
 function handleEvt(ev) {
+  if (ev.type === "notice") {
+    if (ev.kind === "code_changed" && typeof reportStaleCode === "function") reportStaleCode(ev);
+    return;
+  }
   if (ev.type === "step_start") {
     liveStep(ev.key, ev.label, ev.group);
     // A concurrent group fires several step_starts back to back, and the

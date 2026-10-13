@@ -54,6 +54,7 @@ async function boot() {
     languagePackErrorReported = true;
     toast(S.boot.language_error, "warn", 8000);
   }
+  if (typeof reportStaleCode === "function") reportStaleCode(S.boot.code);
 
   updateNSFWBtn();
   // See the guard in chat.js's observer: an optional experimental module must
