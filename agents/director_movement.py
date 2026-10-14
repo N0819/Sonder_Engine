@@ -19,7 +19,7 @@ import re
 from story.character_schema import character_name_from_text
 from world.mechanics import UNCLAIMED_BEAT_SECONDS, read_time_diff, time_diff_claims
 from world.spatial import (
-    anchor_stand_cell, beside_named, body_cell, free_cell_near, room_grid,
+    _ci_get, anchor_cells, anchor_stand_cell, beside_named, body_cell, free_cell_near, room_grid,
     _ROUTE_MEMORY_BARRIERS,
     door_cell,
     egocentric_frame,
@@ -31,6 +31,7 @@ from world.spatial import (
     passable_route_exists,
     paces_for,
     passable_route_next_step,
+    resting_on,
     room_of,
     spatial_rel,
     walk,
@@ -2678,6 +2679,27 @@ def _on_the_way_pose():
             "relation": "", "constraint": "", "detail": ""}
 
 
+def _written_on_its_support(scene, sd, subject, station, room) -> bool:
+    """Is the station's written `cell` a cell of the fixture the beat puts
+    the body ON -- its `at`, which the pose (this beat's, else the scene's)
+    names as its `support` (`world.spatial.resting_on`'s rule, read before
+    the merge)?"""
+    at = str(station.get("at") or "").strip()
+    poses = sd.get("poses") if isinstance(sd.get("poses"), dict) else {}
+    pose = poses.get(subject)
+    if not isinstance(pose, dict):
+        pose = _ci_get(scene.get("poses") or {}, subject)
+    support = str((pose or {}).get("support") or "").strip() if isinstance(pose, dict) else ""
+    if not at or support.casefold() != at.casefold():
+        return False
+    try:
+        written = room_grid(scene, room).nearest((int(station["cell"][0]), int(station["cell"][1])))
+    except (TypeError, ValueError, IndexError, KeyError):
+        return False
+    cells = (anchor_cells(scene, room).get(at) or {}).get("cells") or ()
+    return tuple(written) in {tuple(c) for c in cells}
+
+
 def walk_within_room(ctx, scene, sd, out, *, exclude=()):
     """A station the hands moved WITHIN a room is walked too. A body the
     beat re-stations across its room -- to a fixture, beside another body,
@@ -2697,13 +2719,26 @@ def walk_within_room(ctx, scene, sd, out, *, exclude=()):
         return
     positions = sd.get("positions") if isinstance(sd.get("positions"), dict) else {}
     paces = paces_for(beat_seconds(ctx, sd))
+    # THE BEAT'S LANDINGS SO FAR, over the stored stations: each walk below
+    # is planned against the scene before the beat, so two bodies walked to
+    # one person landed on one cell (chat 122's turn 5, fifth review of
+    # 2026-10-13); a cell written here is held for the walks after it
+    view = {**scene, "stations": dict(scene.get("stations") or {})}
+
+    def landed_at(subject, station):
+        # the station as the merge will hold it: the beat's own over the
+        # stored one, so a stored `at` the beat cleared reads cleared
+        folded = str(subject).strip().casefold()
+        key = next((k for k in view["stations"] if str(k).strip().casefold() == folded), subject)
+        view["stations"][key] = {**(view["stations"].get(key) or {}), **station}
+
     for subject, station in list(stations.items()):
         if subject in exclude or not isinstance(station, dict):
             continue
-        room = room_of(scene, subject)
+        room = room_of(view, subject)
         if not room or (positions.get(subject) and str(positions[subject]) != str(room)):
             continue
-        here = body_cell(scene, subject)
+        here = body_cell(view, subject)
         if here is None:
             continue
         # The fixture named outranks a pinned cell, and a body named
@@ -2711,19 +2746,76 @@ def walk_within_room(ctx, scene, sd, out, *, exclude=()):
         # echoed beside a new `at`, and the new `at` is what moved.
         goal = None
         if str(station.get("at") or "").strip():
-            goal = anchor_stand_cell(scene, room, str(station["at"]).strip(), near=here)
+            goal = anchor_stand_cell(view, room, str(station["at"]).strip(), near=here)
         if goal is None and station.get("near"):
-            goal = beside_named(scene, room, station["near"], subject)
+            # already beside the one it would walk to (`beside_named`: the
+            # first it names standing in the room): a restatement, never a
+            # walk (fourth review of 2026-10-13: a body at the elevator's
+            # gate, beside Hinami, was walked round to her far side every beat)
+            first = next((c for c in (body_cell(view, o) for o in station["near"]
+                                      if str(o or "").strip()
+                                      and str(o).strip() != str(subject)
+                                      and room_of(view, o) == room)
+                          if c is not None), None)
+            # -- never a body getting up off a thing it rests on: its cell is
+            # the thing's, and its `at` is leaving it (fifth review)
+            if first is not None and max(abs(first[0] - here[0]),
+                                         abs(first[1] - here[1])) <= 1 \
+                    and not resting_on(view, subject):
+                continue
+            goal = beside_named(view, room, station["near"], subject)
         if goal is None and station.get("cell") is not None:
             try:
-                goal = room_grid(scene, room).nearest((int(station["cell"][0]), int(station["cell"][1])))
+                goal = room_grid(view, room).nearest((int(station["cell"][0]), int(station["cell"][1])))
             except (TypeError, ValueError, IndexError):
                 goal = None
         if goal is None or tuple(goal) == tuple(here):
             continue
-        landed = walk(scene, subject, room, to_cell=list(goal), paces=paces,
+        landed = walk(view, subject, room, to_cell=list(goal), paces=paces,
                       from_room=room, from_cell=here)
-        if landed is None or landed.get("arrived"):
+        if landed is None:
+            continue
+        if landed.get("arrived"):
+            # ARRIVED, AND STANDING WHERE THE WALK LANDED: a cell written
+            # beside a new `at` is often the body's OLD cell echoed, and read
+            # first (`body_cell`) it drew the body where it started
+            # (2026-10-13). A cell written ON the fixture the body rests on
+            # is the hand's own answer and stays.
+            echoed = None
+            try:
+                echoed = tuple(room_grid(view, room).nearest(
+                    (int(station["cell"][0]), int(station["cell"][1])))) == tuple(here)
+            except (TypeError, ValueError, IndexError, KeyError):
+                echoed = False
+            # only the body's OLD cell echoed back: a cell the beat declared
+            # beside its `at` is the beat's own place for it (review of
+            # 2026-10-13). The echo is dropped, never replaced by the landing:
+            # the station's own `at` and `cover` then place the body, where a
+            # pinned landing beside the counter outranked the cover behind it
+            # (second review)
+            if echoed and station.get("cell") is not None \
+                    and list(station["cell"]) != list(landed["cell"]) \
+                    and not _written_on_its_support(view, sd, subject, station, room):
+                if str(station.get("at") or "").strip():
+                    station.pop("cell", None)
+                else:
+                    # a walk to someone: no `at` will take the stored pin
+                    # down at the merge, so the landing is written (third
+                    # review of 2026-10-13: the walk was undone, and the one
+                    # walked to was drawn beside the walker's old cell)
+                    station["cell"] = list(landed["cell"])
+                    landed_at(subject, station)
+                stations[subject] = station
+            elif station.get("cell") is None and not str(station.get("at") or "").strip() \
+                    and (_ci_get(scene.get("stations") or {}, subject) or {}).get("cell") is not None \
+                    and list(landed["cell"]) != list(here):
+                # the same walk with no cell written at all: the stored pin
+                # outlived it at the merge, and a body pinned on its bed got
+                # up beside the maid and stood on the bed (fifth review; 6 of
+                # the 398 stored near-walks with no cell carried a pin)
+                station["cell"] = list(landed["cell"])
+                landed_at(subject, station)
+                stations[subject] = station
             continue
         # SHORT OF IT: the body stands where the paces ran out, the station
         # it was written keeps only what the cell can honour, and the leg
@@ -2731,6 +2823,7 @@ def walk_within_room(ctx, scene, sd, out, *, exclude=()):
         station["cell"] = list(landed["cell"])
         station.pop("at", None)
         station["near"] = []
+        landed_at(subject, station)
         stations[subject] = station
         if isinstance(sd.get("poses", {}), dict):
             sd.setdefault("poses", {})[subject] = _on_the_way_pose()

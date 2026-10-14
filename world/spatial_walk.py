@@ -260,6 +260,51 @@ def free_cell_near(scene: dict, room_id, cell, walker=None) -> tuple:
     return min(free, key=lambda c: ((c[0] - cell[0]) ** 2 + (c[1] - cell[1]) ** 2, c))
 
 
+#: How far from where code meant to land a body it looks for a cell clear of
+#: every fixture and doorway before it settles for one only a floor-height
+#: thing stands on (`landing_cell`): two paces, the reach of a body placed
+#: beside another (`spatial_fov.body_cell`).
+LANDING_REACH = 2
+
+
+def landing_cell(scene: dict, room_id, cell, walker=None, share=(), avoid=()) -> tuple:
+    """Where CODE lands a body -- an arrival one pace inside its door, a body
+    beside the one it came to -- near `cell`: the nearest cell within
+    `LANDING_REACH` paces, ring by ring, that no fixture holds and no doorway
+    is -- or, nearer than any such, one of the floor-height things in `share`
+    (what the body it lands beside stands on: the rug they share) -- else the
+    nearest cell a floor-height thing stands on, else `free_cell_near`'s
+    answer. A floor height hides nobody; it is not ground to stand on -- a
+    pond, a low table, someone's futon (second review of 2026-10-13).
+    Never another body's cell, never a thing waist-high or taller. A cell
+    a story or a host DECLARED stands where it was put (`free_cell_near`).
+    Measured 2026-10-13 on a copy of the play database: 7 bodies whose cell
+    code chose stood in a doorway they were not stationed at -- Home 7's
+    Hinami in the hallway door -- and 9 inside a fixture they were not on."""
+    from world.spatial_fov import _floor_things, _stand_grades
+    grid = room_grid(scene, room_id)
+    cell = grid.nearest(tuple(cell))
+    grades = _stand_grades(scene, room_id)
+    things = _floor_things(scene, room_id)
+    share = set(share or ())
+    taken = blocked_cells(scene, room_id) | held_cells(scene, room_id, walker) \
+        | {tuple(c) for c in avoid or ()}
+    order = sorted((c for c in grid.cells if c not in taken),
+                   key=lambda c: ((c[0] - cell[0]) ** 2 + (c[1] - cell[1]) ** 2, c))
+    for reach in range(LANDING_REACH + 1):
+        ring = [c for c in order if max(abs(c[0] - cell[0]), abs(c[1] - cell[1])) == reach]
+        for c in ring:
+            if grades.get(c, 0) == 0:
+                return c
+        for c in ring:
+            if share and grades.get(c, 0) == 1 and things.get(c, set()) <= share:
+                return c
+    for c in order:
+        if grades.get(c, 0) < 2:
+            return c
+    return free_cell_near(scene, room_id, cell, walker)
+
+
 def beside_named(scene: dict, room_id, names, walker=None) -> Optional[tuple]:
     """The free cell beside the first of `names` standing in `room_id` on a
     cell, or None when none of them does. A BODY NAMED IS A PLACE: where a
@@ -273,7 +318,13 @@ def beside_named(scene: dict, room_id, names, walker=None) -> Optional[tuple]:
             continue
         cell = body_cell(scene, other)
         if cell is not None:
-            return free_cell_near(scene, room_id, cell, walker)
+            from world.spatial_fov import _floor_things
+            # beside it, never on it: a thing named that is no body holds no
+            # cell `held_cells` knows, and a walk to the TARDIS landed the
+            # Doctor in it (chat 122's turn 5, fifth review of 2026-10-13)
+            return landing_cell(scene, room_id, cell, walker,
+                                share=_floor_things(scene, room_id).get(tuple(cell), set()),
+                                avoid=(tuple(cell),))
     return None
 
 
@@ -356,9 +407,12 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
         if final:
             goal = goal_cell
             if goal is None:
-                goal = (inside_the_door(scene, room_id, came_from, entered_at)
-                        if came_from else cell)
-                goal = free_cell_near(scene, room_id, goal, name)
+                if came_from:
+                    # nobody said where in the room: code lands it
+                    goal = landing_cell(scene, room_id, inside_the_door(
+                        scene, room_id, came_from, entered_at), name)
+                else:
+                    goal = free_cell_near(scene, room_id, cell, name)
         else:
             taken = held_cells(scene, room_id, name, passing)
             goal = door_cell(scene, room_id, legs[0], near=cell, avoid=taken)

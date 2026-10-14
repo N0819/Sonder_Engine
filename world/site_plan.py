@@ -630,6 +630,30 @@ def decided_site(scene, room_id) -> Optional[dict]:
     return normalize_site(room.get("site"))
 
 
+def one_storey(scene, a, b) -> bool:
+    """Do rooms `a` and `b` stand on one storey of one plan, by what was
+    DECIDED: both sited on the same plan by a solve or a host (never a
+    derived site, `decided_site`), both on a stated storey and the same one
+    (`spatial_levels.room_level` -- never `room_level` here, which reads an
+    unknown storey as the ground), their floors less than a storey step
+    apart? Then the way between them is a doorway and never a way up or
+    down. Home 11 (2026-10-13): the opening tagged the doorway of each stair
+    hall `vertical` from the room beside it, on the same storey, and the
+    plan drew no door into any of them, every hall read as climbing both
+    ways, the shrine stood 21 m tall and the walk into a hall cost a flight.
+    A real shaft whose rooms carry one level and no site (chats 160/161's
+    elevator) is never touched: only a decided site says what storey a
+    room stands on."""
+    from world.spatial import room_level as stated_level
+    sa, sb = decided_site(scene, a), decided_site(scene, b)
+    if not sa or not sb or sa.get("plan") != sb.get("plan"):
+        return False
+    la, lb = stated_level(scene, a), stated_level(scene, b)
+    if la is None or lb is None or la != lb:
+        return False
+    return abs(room_elevation_m(scene, a) - room_elevation_m(scene, b)) < LEVEL_STEP_M
+
+
 def _placeable(scene, rid) -> bool:
     room = _scene_rooms(scene).get(rid)
     return isinstance(room, dict) and not room.get("parent_entity")

@@ -1509,6 +1509,53 @@ def _retire_pose_relation(pose, other):
     return pose
 
 
+def _off_its_support(scene, room_id, support, station) -> bool:
+    """Is the station's own `cell` off every cell of the fixture `support`?"""
+    cell = normalize_cell(station.get("cell"))
+    if cell is None:
+        return False
+    from world.spatial_fov import anchor_cells, room_grid
+    rec = (anchor_cells(scene, room_id) or {}).get(support) or {}
+    cells = {tuple(c) for c in rec.get("cells") or ()}
+    return bool(cells) and tuple(room_grid(scene, room_id).nearest(cell)) not in cells
+
+
+def release_stepped_off_supports(scene: dict, stated=(), stepped=()) -> list:
+    """Clear the pose `support` of every body that STEPPED OFF the fixture it
+    names, unless this beat stated that body's pose (`stated`, folded
+    names): one whose station this beat set to stand at nothing
+    (`stepped`, folded names -- the encoder card's `{at: null}` when a body
+    steps away, with a cell or without), and one whose stored station stands
+    at nothing on a cell that is not the fixture's (`_off_its_support`: a
+    host's drop on open floor, a step-off a beat before). Returns the names.
+    Run by the merge BEFORE a standing contact re-derives the station's `at`
+    (`derive_scene_stations`), so the body is not turned back into lying on
+    the bed (two reviews of 2026-10-13). The merge alone does this: a host's
+    drag is undone on the map without losing the pose."""
+    poses = scene.get("poses") if isinstance(scene.get("poses"), dict) else {}
+    positions = scene.get("positions") or {}
+    stations = scene.get("stations") or {}
+    rooms = scene.get("rooms") or {}
+    stated = {str(n).strip().casefold() for n in stated or ()}
+    stepped = {str(n).strip().casefold() for n in stepped or ()}
+    out = []
+    for name, pose in poses.items():
+        folded = str(name).strip().casefold()
+        if not isinstance(pose, dict) or folded in stated:
+            continue
+        support = pose.get("support")
+        room = _ci_get(positions, name)
+        if not support or support not in ((rooms.get(room) or {}).get("anchors") or {}):
+            continue
+        station = _ci_get(stations, name)
+        if folded in stepped or (
+                isinstance(station, dict) and "at" in station and not station.get("at")
+                and _off_its_support(scene, room, support, station)):
+            pose["support"] = ""
+            out.append(name)
+    return out
+
+
 def normalize_scene_poses(scene: dict) -> dict:
     """Prune pose relations invalidated by departure or room separation."""
     poses = scene.get("poses")

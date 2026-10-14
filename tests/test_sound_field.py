@@ -391,12 +391,19 @@ def test_a_loud_generator_masks_a_normal_voice():
     a raised voice clears the engine, and a whisper or a mutter -- a choice
     to be quiet -- is still gone. Speaker at the west wall (path 5.2) with
     the generator on: every effort arrives in pieces. The same pair with no
-    generator is `full`."""
+    generator is `full`.
+
+    The speaker beside the listener is PINNED one pace west of them, on the
+    side away from the engine: until 2026-10-13 a body placed beside the
+    listener was stood on the hearth's own cell, as far from the generator,
+    and the step beside a body now keeps out of every fixture
+    (`spatial_fov.body_cell`), which stood it two paces nearer the engine --
+    where it raises its voice clear of it."""
     quiet = scene(hall(), {"S": "hall", "L": "hall"},
                   {"L": {"at": "south"}, "S": {"near": ["L"]}})
     noisy = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
                   {"gen": {"at": "east"}, "L": {"at": "south"},
-                   "S": {"near": ["L"]}}, GENERATOR)
+                   "S": {"near": ["L"], "cell": [3, 6]}}, GENERATOR)
     assert levels(quiet, "S", "L")["normal"] == "full"
     assert levels(noisy, "S", "L") == {"mutter": "none", "whisper": "none",
                                        "normal": "fragment", "loud": "full",

@@ -81,7 +81,10 @@ def test_a_place_seen_from_outside_has_a_far_look_and_a_fixture_its_place_along_
     `far_look`, and `offset` on a doorway and on a fixture alike."""
     shape = _shape_line(room_author_prompt(language))
     adjacent = re.search(r"adjacent:\[\{([^}]*)\}\]", shape).group(1).split(",")
-    anchors = re.search(r"anchors\?:\{anchor_id:\{([^}]*)\}\}", shape).group(1).split(",")
+    # one level of nesting inside an anchor: a pinned fixture's own
+    # `extent?:{w,d}` (2026-10-13)
+    anchors = re.search(r"anchors\?:\{anchor_id:\{((?:[^{}]|\{[^{}]*\})*)\}\}",
+                        shape).group(1).split(",")
     assert "far_look?" in shape.split(",")
     assert "offset?" in adjacent and "sight_from?" in adjacent
     assert "offset?" in anchors

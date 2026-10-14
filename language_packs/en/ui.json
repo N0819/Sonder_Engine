@@ -140,6 +140,7 @@
   "'${name}' stands in no room, so has no station": "'${name}' stands in no room, so has no station",
   "'${name}' stands in no room; place a presence through the room it should stand in": "'${name}' stands in no room; place a presence through the room it should stand in",
   "'${other}' does not stand in '${room}' with '${key}'": "'${other}' does not stand in '${room}' with '${key}'",
+  "'${room_id}' and '${to}' stand on one storey of their plan (storey ${storey_of(scene, room_id)}), so the way between them is a doorway: it cannot go up or down": "'${room_id}' and '${to}' stand on one storey of their plan (storey ${storey_of(scene, room_id)}), so the way between them is a doorway: it cannot go up or down",
   "'${room}' has no anchor '${at}'. Anchors here: ${held}": "'${room}' has no anchor '${at}'. Anchors here: ${held}",
   "'s existing memories -- never replaces or deletes anything.": "'s existing memories -- never replaces or deletes anything.",
   "(${a.id})": "(${a.id})",

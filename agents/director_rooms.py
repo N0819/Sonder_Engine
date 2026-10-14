@@ -313,8 +313,13 @@ def render_room(scene, room_id):
     marks, legend = {}, []
     held = {}   # (cell, height) -> the fixture already there
     letters = iter("ABCEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
-    # the seeds the designer's places are written over (`anchor_cells(raw=True)`)
-    for aid, placed in (anchor_cells(scene, room_id, raw=True) or {}).items():
+    # every fixture WHERE THE MAP STANDS IT, as the check reads it (`_check`;
+    # drawn by its seed until the fourth review of 2026-10-13, the plan put a
+    # fixture read-time placement had moved where it no longer stood)
+    from world.spatial import effective_anchors, stands_on_floor
+    anchors = effective_anchors(scene, room_id) or {}
+    standing = {}
+    for aid, placed in (anchor_cells(scene, room_id) or {}).items():
         cells = [tuple(c) for c in (placed.get("cells") or [])]
         if str(aid).startswith("door:"):
             mark = "D"
@@ -335,17 +340,26 @@ def render_room(scene, room_id):
                 f"facing {placed.get('dir')}, {len(cells)} cell(s)"
                 + ("" if cells else " -- NOT PLACED"))
         height = placed.get("height")
+        on_floor = not placed.get("implicit") and stands_on_floor(anchors.get(aid)) \
+            and not str(aid).startswith(("door:", "window:"))
         for cell in cells:
             other = held.get((cell, height))
+            floor_other = standing.get(cell) if on_floor else None
             if other is not None and other != aid:
                 # A collision at the same height: both things cannot stand
                 # there. Drawn, never hidden by whichever came last.
                 marks[cell] = "!"
                 legend.append(f"!  {aid} and {other} both stand on {cell} at "
                               f"height {height}")
+            elif floor_other is not None and floor_other != aid:
+                marks[cell] = "!"
+                legend.append(f"!  {aid} and {floor_other} both stand on the floor "
+                              f"at {cell}")
             else:
                 marks.setdefault(cell, mark)
                 held[(cell, height)] = aid
+            if on_floor:
+                standing.setdefault(cell, aid)
     lines = []
     for y in range(grid.d):
         lines.append("".join(marks.get((x, y)) or ("." if (x, y) in grid.cells else " ")
@@ -355,7 +369,8 @@ def render_room(scene, room_id):
         "name": room.get("name"),
         "grid": f"{grid.w} x {grid.d} paces, {grid.shape}; north at the top, east "
                 "to the right; '.' is floor, blank is outside the shape, 'D' a doorway, "
-                "'W' a window, '!' is two fixtures at the same height on one cell",
+                "'W' a window, '!' is two fixtures on one cell at the same height, or "
+                "two standing on the floor",
         "map": lines,
         "legend": legend,
     }
@@ -425,26 +440,61 @@ def _check(scene, draft, owed, rows_out=None, settled=(), reading=None):
     try:
         from world.spatial import anchor_cells
         for rid in drafted:
-            held = {}
-            for aid, placed in (anchor_cells(merged, rid, raw=True) or {}).items():
-                if str(aid).startswith("door:"):
+            # every fixture WHERE THE MAP STANDS IT (`anchor_cells`): what the
+            # world commits is what the check reads and the plan draws, a
+            # seed, a corner and a pin alike (fourth review of 2026-10-13:
+            # read by its seed, a fixture read-time placement had moved was
+            # named where it no longer stood, and one it had stood on
+            # another was not named at all)
+            live = anchor_cells(merged, rid) or {}
+            unplaced += [f"{rid}.{aid}" for aid, placed in live.items()
+                         if not str(aid).startswith("door:") and not placed.get("cells")]
+            # Each pair is named where this draft made it: one the world
+            # already held, of two things the draft wrote no place for, is the
+            # world's (a host's pin, a fixture only re-described, a pair
+            # read-time placement made of a seed in a doorway: the reviews
+            # of 2026-10-13)
+            touched = _placed_by_draft(scene, draft, rid)
+            world_has = rid in (scene.get("rooms") or {})
+            try:
+                before_h = _height_pairs(scene, rid) if world_has else {}
+            except Exception:
+                before_h = {}
+            named = set()
+            for pair, (cell, height) in _height_pairs(merged, rid, live).items():
+                if pair in before_h and not pair & touched:
                     continue
-                if not placed.get("cells"):
-                    unplaced.append(f"{rid}.{aid}")
-                for cell in placed.get("cells") or []:
-                    key = (tuple(cell), placed.get("height"))
-                    if key in held and held[key] != aid:
-                        overlapping.append(f"{rid}: {held[key]} and {aid} share "
-                                           f"{tuple(cell)} at height {key[1]}")
-                        clashing.setdefault(rid, set()).update((held[key], aid))
-                    held.setdefault(key, aid)
+                a, b = sorted(pair)
+                overlapping.append(f"{rid}: {a} and {b} share {cell} at height {height}")
+                clashing.setdefault(rid, set()).update(pair)
+                named.add(pair)
+            # TWO THINGS STANDING ON THE FLOOR SHARE NO CELL, whatever their
+            # heights (the owner, 2026-10-13; only what is hung, from the
+            # ceiling, on or in another fixture shares)
+            try:
+                before = _standing_pairs(scene, rid) if world_has else {}
+            except Exception:
+                before = {}
+            for pair, cell in _standing_pairs(merged, rid, live).items():
+                if pair in named or (pair in before and not pair & touched):
+                    continue
+                a, b = sorted(pair)
+                overlapping.append(f"{rid}: {a} and {b} share {cell}, "
+                                   f"both standing on the floor")
+                clashing.setdefault(rid, set()).update(pair)
     except Exception:
         pass
     overlapping = list(dict.fromkeys(overlapping))
     unjoined = _no_way_in(scene, draft, owed)
+    stuck = []
+    crowded = _crowded_walls(scene, draft, merged, rows, drafted, clashing, settled, stuck)
     out = {"errors": errors, "owed_not_drafted": missing,
            "fixtures_not_placed": unplaced, "fixtures_overlapping": overlapping,
-           "clean": not (errors or missing or unplaced or overlapping or unjoined)}
+           "clean": not (errors or missing or unplaced or overlapping or unjoined or stuck)}
+    if stuck:
+        # no place along its own wall, or its corner, or the floor, stands it
+        # clear: the engine draws it where its seed put it, on another thing
+        out["fixtures_stuck"] = stuck
     if unjoined:
         out["no_way_in"] = {
             "places": unjoined,
@@ -452,7 +502,6 @@ def _check(scene, draft, owed, rows_out=None, settled=(), reading=None):
                    "where it lies, building the way there if the world has none, or give "
                    "it a zone if no walk from here could reach it. Left joined to "
                    "nothing, the engine opens it onto the room the bodies stood in"}
-    crowded = _crowded_walls(scene, draft, merged, rows, drafted, clashing, settled)
     if crowded:
         out["crowded_walls"] = crowded
     return out
@@ -562,7 +611,8 @@ def _new_anchor_ids(scene, draft, rid, merged) -> list:
     return out
 
 
-def _crowded_walls(scene, draft, merged, rows, drafted, clashing=None, settled=()):
+def _crowded_walls(scene, draft, merged, rows, drafted, clashing=None, settled=(),
+                   stuck_out=None):
     """ONE line for each wall of a drafted room that cannot hold its fixtures
     at one height (`spatial_pack.pack_anchors`): the wall's length and which
     side of the extent that is, what each fixture against it takes at that
@@ -572,36 +622,139 @@ def _crowded_walls(scene, draft, merged, rows, drafted, clashing=None, settled=(
     `d`). A wall gets its line when the check's count calls it overfull this
     draft, or when a new fixture sharing a cell at its height (`clashing`)
     finds no free place on it; moving a fixture to another wall is the
-    designer's call, never code's."""
-    from world.spatial import pack_anchors
+    designer's call, never code's. Every new fixture not yet settled goes to
+    the packer, whatever the check's own count saw: a thing standing on the
+    floor that finds no place clear of the others standing there is found by
+    the packer alone (a review of 2026-10-13 found a bench drawn across a
+    counter and a cabinet while the check called the room clean), and its
+    id goes to `stuck_out`."""
+    from world.spatial import (STANDING, anchor_cells, effective_anchors, pack_anchors,
+                               room_grid, stands_on_floor)
     out = []
     for rid in sorted(drafted):
         overfull = [(row.get("wall"), row.get("height")) for row in rows or ()
                     if row.get("kind") == "wall_overfull" and row.get("room") == rid]
+        # A WALL TOO SHORT FOR WHAT STANDS ON IT, where this draft placed one
+        # of those things there itself: counted where the map stands each,
+        # whatever their heights (the second review's line, which the third
+        # took with its raw count and the fourth asked back)
         try:
-            stuck = [aid for aid in _new_anchor_ids(scene, draft, rid, merged)
-                     if aid in (clashing or {}).get(rid, ()) and (rid, aid) not in settled]
-            out += pack_anchors(merged, rid, stuck, overfull=overfull)["full"]
+            touched = _placed_by_draft(scene, draft, rid)
+            grid = room_grid(merged, rid)
+            anchors = effective_anchors(merged, rid) or {}
+            live = anchor_cells(merged, rid) or {}
+            for wall in ("n", "e", "s", "w"):
+                rim = {tuple(c) for c in grid.rim(wall)}
+                along = 0 if wall in ("n", "s") else 1
+                paces = {x: len({c[along] for c in map(tuple, rec["cells"]) if c in rim})
+                         for x, rec in live.items()
+                         if not rec["implicit"] and stands_on_floor(anchors.get(x))}
+                paces = {x: n for x, n in paces.items() if n}
+                if paces and set(paces) & touched \
+                        and sum(paces.values()) > len(rim) \
+                        and len({live[x]["height"] for x in paces}) > 1:
+                    overfull.append((wall, STANDING))
+        except Exception:
+            pass
+        try:
+            fresh = [aid for aid in _new_anchor_ids(scene, draft, rid, merged)
+                     if (rid, aid) not in settled]
+            result = pack_anchors(merged, rid, fresh, overfull=overfull)
         except Exception:
             continue
+        out += result["full"]
+        if stuck_out is not None:
+            stuck_out.extend(f"{rid}.{aid}" for aid in result["stuck"])
     return out
+
+
+#: What a draft writes that says where a fixture stands, or whether on the
+#: floor: a draft naming one of these for a fixture has placed it.
+_PLACE_FIELDS = ("cell", "offset", "dir", "extent", "footprint", "mount")
+
+
+def _placed_by_draft(scene, draft, room_id) -> set:
+    """The fixtures of `room_id` this draft brought or wrote a place for
+    (`_PLACE_FIELDS`): never one it only re-described."""
+    drafted = ((draft.get("rooms") or {}).get(room_id) or {}).get("anchors") or {}
+    held = (((scene or {}).get("rooms") or {}).get(room_id) or {}).get("anchors") or {}
+    return {aid for aid, fields in drafted.items() if isinstance(fields, dict)
+            and (aid not in held or any(k in fields for k in _PLACE_FIELDS))}
+
+
+def _standing_pairs(scene, room_id, live=None) -> dict:
+    """`{frozenset((a, b)): cell}`: each two things standing on the floor
+    that share a cell where the map stands them (`anchor_cells`, or `live`,
+    its reading already made), at the first cell they share. A doorway and a
+    window are the wall's, never one of them."""
+    from world.spatial import anchor_cells, effective_anchors, stands_on_floor
+    anchors = effective_anchors(scene, room_id) or {}
+    if live is None:
+        live = anchor_cells(scene, room_id) or {}
+    on_cell = {}
+    for aid, rec in live.items():
+        if rec.get("implicit") or str(aid).startswith(("door:", "window:")) \
+                or not stands_on_floor(anchors.get(aid)):
+            continue
+        for cell in rec.get("cells") or ():
+            on_cell.setdefault(tuple(cell), []).append(aid)
+    pairs = {}
+    for cell in sorted(on_cell):
+        ids = on_cell[cell]
+        for i, a in enumerate(ids):
+            for b in ids[i + 1:]:
+                if a != b:
+                    pairs.setdefault(frozenset((a, b)), cell)
+    return pairs
+
+
+def _height_pairs(scene, room_id, live=None) -> dict:
+    """`{frozenset((a, b)): (cell, height)}`: each two things of one height
+    sharing a cell where the map stands them (`anchor_cells`, or `live`), at
+    the first cell they share. A doorway is never one; a window is (nothing
+    hangs over one)."""
+    from world.spatial import anchor_cells
+    if live is None:
+        live = anchor_cells(scene, room_id) or {}
+    at = {}
+    for aid, rec in live.items():
+        if str(aid).startswith("door:"):
+            continue
+        for cell in rec.get("cells") or ():
+            at.setdefault((tuple(cell), rec.get("height")), []).append(aid)
+    pairs = {}
+    for (cell, height) in sorted(at, key=lambda k: (k[0], str(k[1]))):
+        ids = at[(cell, height)]
+        for i, a in enumerate(ids):
+            for b in ids[i + 1:]:
+                if a != b:
+                    pairs.setdefault(frozenset((a, b)), (cell, height))
+    return pairs
+
+
+def _settled(placed_by_code) -> set:
+    """The `(room, anchor)` pairs code has settled this run, doorways aside:
+    what every check of one design reads, the final one included."""
+    return {key for key in placed_by_code if not str(key[1]).startswith("edge:")}
 
 
 def _pin_shape(merged, rid, anchor):
     """What a place code wrote was found FOR: the room's grid and the
     fixture's wall, footprint, height and lane. Changed, the place no longer
     answers the question it answered (`_pack`)."""
-    from world.spatial import anchor_geometry, normalize_bearing, room_grid
+    from world.spatial import anchor_geometry, normalize_bearing, room_grid, stands_on_floor
     geo = anchor_geometry(anchor)
     return (room_grid(merged, rid).key(), normalize_bearing(anchor.get("dir")),
-            geo["footprint"], geo["height"], geo["lane"])
+            geo["footprint"], geo["height"], geo["lane"], stands_on_floor(anchor))
 
 
 def _pack(scene, draft, placed_by_code, rooms=None, settle=False, reading=None):
     """CODE STANDS EACH NEW FIXTURE ALONG THE WALL THE MODEL CHOSE
     (`world/spatial_pack.py`, the owner's choice of 2026-10-08): a fixture
-    the draft adds keeps its seeded place when that place is free at its
-    height, and otherwise takes the nearest free place along its own wall --
+    the draft adds keeps its seeded place when that place is free -- of
+    anything at its height, and, for a thing standing on the floor, of every
+    other thing standing there (2026-10-13) -- and otherwise takes the
+    nearest free place along its own wall --
     written into the draft as `offset` (or `cell`, for a corner or a fixture
     with no wall) ONCE, so a later fixture never moves an earlier one. The
     world's standing fixtures and every place the model wrote are obstacles,
@@ -666,6 +819,12 @@ def _pack(scene, draft, placed_by_code, rooms=None, settle=False, reading=None):
         except Exception:
             continue
         anchors = drafted[rid]["anchors"]
+        # A seed kept in a doorway's way -- no place along its wall clear of
+        # the doorway and of what stands there -- is left unpinned: the map
+        # then gives up a shared cell before the doorway, and the check
+        # names the pair it makes, for the designer to move one (a code pin
+        # there, tried by the fourth review, put a place code chose in front
+        # of a door and froze it into a filed design -- the fifth review)
         for aid in result["kept"] if settle else ():
             try:
                 placed_by_code[(rid, aid)] = (None, None,
@@ -682,7 +841,7 @@ def _pack(scene, draft, placed_by_code, rooms=None, settle=False, reading=None):
                                               _pin_shape(merged, rid, anchors[aid]))
             except Exception:
                 placed_by_code[(rid, aid)] = (field, value, None)
-            notes.append(f"{rid}: {aid}'s place was taken at its height, so the engine "
+            notes.append(f"{rid}: {aid}'s place was already taken, so the engine "
                          f"set its {field} to {value}" + (
                              " -- the same wall, the nearest free place along it"
                              if field == "offset" else " -- the nearest free cell"))
@@ -1731,9 +1890,8 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None,
             record["doorways_placed"] = record.get("doorways_placed", 0) + len(doorways)
         placed = packed() + doorways
         rows = []
-        result = _check(scene, draft, owed, rows_out=rows, settled={
-            key for key in placed_by_code if not str(key[1]).startswith("edge:")},
-            reading=reading)
+        result = _check(scene, draft, owed, rows_out=rows, settled=_settled(placed_by_code),
+                        reading=reading)
         if agreed:
             result = dict(result, sizes_agreed=agreed)
         if derived:
@@ -1780,7 +1938,8 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None,
             if finished:
                 record.update(steps=0, calls=0, stopped="complete",
                               seconds=round(time.time() - started, 3),
-                              final_check=_check(scene, draft, owed, reading=reading))
+                              final_check=_check(scene, draft, owed, reading=reading,
+                                                 settled=_settled(placed_by_code)))
                 return draft
             if notes:
                 record["still_missing_said"] = 0
@@ -1938,7 +2097,10 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None,
             transcript.append({"step": step, "tool": "done", "by": "engine", "args": {},
                                "result": dict(last_check, refused="not finished: the "
                                               "check is not clean")})
-    final = _check(scene, draft, owed, reading=reading)
+    # the loop's own reading of what code has settled: a final check without
+    # it called a fixture the loop had settled stuck, and filed clean designs
+    # unclean (fourth review of 2026-10-13)
+    final = _check(scene, draft, owed, reading=reading, settled=_settled(placed_by_code))
     record.update(steps=step, calls=sum(1 for entry in transcript if not entry.get("by")),
                   stopped=stopped, seconds=round(time.time() - started, 3),
                   final_check=final)

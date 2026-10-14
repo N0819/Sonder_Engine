@@ -156,15 +156,20 @@ def test_a_whisper_across_the_deck_is_gone():
 
 def still_hall():
     """A large 12x10 enclosed room with nothing running in it: the 27.0 dB
-    floor an ordinary quiet room carries. A at (1,1); B one pace east; F
-    in the far corner, a path of 11.4."""
+    floor an ordinary quiet room carries. A at (2,1), beside the lectern;
+    B one pace east, beside the first bench; F in the far corner, a path of
+    11.4. A and B are pinned: until 2026-10-13 a body at the lectern was
+    stood in the bench beside it, which is what put the two one pace apart,
+    and a cell code chooses now keeps out of every fixture the body is not
+    on (`spatial_fov._stand_cell`)."""
     r = room("the Hall", light="lit", anchors={
         "a": {"desc": "the lectern", "cell": [1, 1]},
-        "b": {"desc": "the first bench", "cell": [2, 1]},
+        "b": {"desc": "the first bench", "cell": [2, 2]},
         "far": {"desc": "the far corner", "cell": [10, 8]}})
     r["extent"] = {"w": 12, "d": 10}
     return scene({"r": r}, {"A": "r", "B": "r", "F": "r"},
-                 stations={"A": {"at": "a"}, "B": {"at": "b"},
+                 stations={"A": {"at": "a", "cell": [2, 1]},
+                           "B": {"at": "b", "cell": [3, 1]},
                            "F": {"at": "far"}})
 
 

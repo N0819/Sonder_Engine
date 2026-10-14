@@ -85,6 +85,7 @@ from world.spatial_fov import (
     normalize_height,
     room_field,
     shadowcast,
+    support_cells,
     wall_aperture_cells,
 )
 from world.spatial_geometry import door_anchor_id, effective_facing
@@ -1303,12 +1304,13 @@ def light_shape(scene: dict, observer: str, *, sweep=False) -> Optional[dict]:
     openings = []
     beams = []                      # the in-view sources of this room
     seen_cache = {}
+    passable = support_cells(scene, field, observer)
 
     def in_view(cell, top):
         if how == "measured":
             key = top
             if key not in seen_cache:
-                seen_cache[key] = _visible_set(field, origin, eye, top)
+                seen_cache[key] = _visible_set(field, origin, eye, top, passable)
             if cell not in seen_cache[key]:
                 return False
         if facing:

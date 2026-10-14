@@ -2185,6 +2185,11 @@ station AT a fixture of the holder's room as the set-down it names.
 
 ### 1.205 The opening re-authors the Room's planned layout, and the solver follows it
 
+**Partly landed 2026-10-13** (§1.216 item 4): the opening is now handed a
+laid-out room's fixtures and held to them, so it no longer stands a second
+copy of a planned fixture in the first; it still re-authors a room's
+bearings as described below.
+
 **Found 2026-10-12** observing the owner's chat 168 (`docs/experiments/OBSERVE_2026_10_12_home6.md`). The Room's
 `plan_rooms` was consistent and agreed with the lorebook -- washroom west of
 the main hall, privy north of it, kitchen east, torii south of the lantern
@@ -2273,7 +2278,10 @@ it joins"). What the first measurement on chat 168's shrine left open:
 - **One name on every storey.** A stair's halls all carry its stair's name
   ("Narrow wooden staircase" below and above), as the layout lab names them,
   and a hall's `purpose` is that name. Nothing yet tells the foot of a stair
-  from its head by name.
+  from its head by name. (In GEOMETRY it is told since 2026-10-13: an
+  enclosed straight stair's well records its `foot` and `head`, its doorways
+  open there, and each hall carries its `flight` -- §1.216 item 3. A climber
+  still arrives at the middle of a hall: `entry_cell` reads no foot or head.)
 - **The solver's hall is not the same shape on every storey, and takes
   leftover space.** The shrine's basement stair is 2 by 6 below ground and
   12 by 5 on the ground floor: on the ground and below, a hall swallows the
@@ -2317,24 +2325,47 @@ a window edge as a window:
   (`_ensure_passage`) as for a door; the record is right, the route's name
   and its toasts are a door's.
 
-### 1.216 Home 11's layout -- ten findings, observed 2026-10-13
+<a id="unbuilt-1-216"></a>
+
+### 1.216 Home 11's layout -- ten findings, observed 2026-10-13; three landed the same day
 
 [`experiments/OBSERVE_2026_10_13_home11_layout.md`](experiments/OBSERVE_2026_10_13_home11_layout.md):
 the shrine the layout tier laid out at Home 11's opening (chat 174) keeps 11
 of the 30 spatial claims its own brief makes. Four-lens review, 66 findings
-merged into 10, every one replayed from the captured answers. All open:
+merged into 10, every one replayed from the captured answers. Items 3 and 4
+and the first half of 10 landed on the owner's go that evening (Design.md:
+"Code never stands two things on one floor cell", "A body on a thing stands
+on it", "A doorway between two rooms of one storey is a door", "A straight
+stair is entered at its foot and left at its head", "The opening describes a
+laid-out room's fixtures"); the rest are open:
 
 1. The solver's divider cannot stand one zone on both sides of another, and
    the tier takes the first seed that solves; the relate also flagged storey 1
    `smaller`, nothing can say "middle of the front", and the plan's diagonal
    bearings and `access` lines never reach the architect.
 2. Rooms come out 1.5-2.8x their lore's size (owner question A below).
-3. Doorways into stair halls keep the opening's `vertical`/`way` tags, so no
-   plan draws them and the far layer reads seven storeys; halls below the
-   first floor swell (§1.210); doorways sit mid-flight.
-4. Fixtures the solver moved are re-laid by code onto the genkan's doorway
-   and onto other fixtures; the establish duplicates the Roost's anchors
-   (§1.205's cause); bodies are seated inside furniture.
+3. **Landed 2026-10-13, but the swelling.** Doorways into stair halls kept
+   the opening's `vertical`/`way` tags, so no plan drew them and the far
+   layer read seven storeys; doorways sat mid-flight. A way between two rooms
+   of one storey is now a doorway (`site_plan.one_storey`), and an enclosed
+   straight stair's doorways open at its flight's foot and head, its treads
+   drawn on the flight. Open: halls below the first floor swell (§1.210); U,
+   L, spiral and ladder stairs keep the even spread.
+4. **Landed 2026-10-13, with residuals.** Fixtures the solver moved were
+   re-laid by code onto the genkan's doorway and onto other fixtures; the
+   establish duplicated the Roost's anchors (§1.205's cause); bodies were
+   seated inside furniture. A moved fixture is pinned where the solver stood
+   it and what stands on the floor holds its cells at every height (Home 11's
+   solve replayed: pairs sharing a floor cell 3 to 0, in a doorway 1 to 0);
+   the opening is handed a laid-out room's fixtures and held to them; a body
+   on a fixture stands on it, and code keeps every other body out of
+   fixtures and doorways. Open: the duplicates no spelling shows -- 11 of the
+   13 measured -- rest on the brief and the card until measured live, and a
+   token fold (12 of 13 on one family of stories, a guard reading words)
+   waits on the owner's go; lifting a resting body's eye by its support's
+   height is the owner's call. (The room designer's check counts two
+   standing things on one cell too, since the review that same evening found
+   it calling such a room clean.)
 5. The warded door to the seal cavern is a waist-high fixture with nothing
    behind it.
 6. The latrine outbuilding is absorbed into the house (building grouping).
@@ -2345,14 +2376,68 @@ merged into 10, every one replayed from the captured answers. All open:
    distances over solved ones (A6, §1.215 item 7: land its generator rules
    with the `by: <way>` and stale-rows fixes, not the floor alone).
 9. The run record hides what the solve gave up.
-10. The ground plan draws upper-storey windows; niche lamps and pillars are
-    2x2 floor blocks.
+10. **First half landed 2026-10-13**: the ground plan drew upper-storey
+    windows; a window is now drawn on its own walled room's storey. Open:
+    niche lamps and pillars are 2x2 floor blocks; the garden's room editor
+    (`grid_view`) still lists the three upper-storey windows on its rim, the
+    one surface where their ground pin can be dragged.
 
 Owner questions: **A** should a size the lore states hold the room, with what
 will not fit going back as capacity (against "size from contents",
-2026-10-10)? **B** should anything standing on the floor hold the floor at
-every height ("a cell is taken at one height", 2026-10-08)? **C** should a
-room lived or worked in by day take a window by default?
+2026-10-10)? **B**, answered 2026-10-13: yes -- anything standing on the
+floor holds it at every height, and heights separate only a thing hung, from
+the ceiling, on or in another fixture. **C** should a room lived or worked in
+by day take a window by default?
+
+What the 2026-10-13 round left:
+
+- The stair-door rule moves furniture with the doorways. Re-solved against
+  the lab's baselines, every room the same: the owner's preferred shrine
+  still places every fixture, one more off its asked wall (8 to 9); runs 1
+  and 2 one more each, Home 11 one fewer; fresh run 3's overfull main hall,
+  its stair doorway now at the flight's head in its corner, leaves 4 more
+  unplaced (6 to 10 over the building).
+- A fixture with no wall whose SEED falls in a room's last row or column is
+  drawn clipped -- a large table as two cells. Unchanged: its seed's own
+  place. A place code moves it to holds it whole first (`whole_cells`).
+- The opening's held fixtures take the describing hand's height, not the
+  solver's (Home 11's establish was right twice: a low shelf the solver made
+  full, a nest it made waist); the owner's call.
+- A townsperson cannot be put ON furniture from the map (`dropCharter` sends
+  only `at` for a fixture's cell), and a body's title could say what it is
+  on.
+- Five adversarial reviews that evening (17, 22, 17, 9 and 5 confirmed
+  findings, each fixed and pinned, or recorded here) left these, measured: a floor height hides
+  nobody and is no ground to stand on, so a body at a fixture whose whole
+  front is a rug is stood at its ends -- a floor covering is the room's
+  floor, never a fixture (the sort's own rule), and one written as a fixture
+  reads as a pond would; a body in cover whose far side is full stands in
+  the fixture's cell behind its anchor (cover kept over geometry); a host's
+  drag of a resting body leaves its pose naming the bed until the next
+  merge, so the views composed between say it lies there while the map
+  stands it on the floor (the map's Undo restores it whole); two bodies on
+  one thing see each other inside what covers all of its cells, which is
+  how the cell model tells an enclosure from a divider. The fourth and
+  fifth left these: read-time placement and the packer weigh a doorway
+  against a shared cell in opposite orders (the map gives up the cell
+  first, the packer the doorway), so a seed kept in a doorway's way is
+  drawn on another thing and the check names the pair for the designer --
+  a fixture drafted with no designer after it can be drawn so and stay;
+  a draft that pins a fixture onto a seed's place can push that seed onto
+  a third thing, and the check names the pair it made without the cause; a
+  fixture that stands clear only by moving another (a world fixture's seed
+  laid after it in id order) stays stuck, as a fixture a plan has shown is
+  never moved for a later one; a wall whose hung things crowd one height
+  beside what stands there gets two lines, one per fact; a support the
+  merge's own tidy cleared -- a standing contact deriving the station
+  elsewhere, a pin off the thing -- reads as new when a beat restates it,
+  which under today's pose card (a fixture a body is only at is its
+  station) is the body back on the thing, and under a HEAD-era lean written
+  as a support stands a leaning body on the desk (0 of 438 stored restated
+  supports were tidied first); and whether a draft echoing a fixture's
+  `dir`, `footprint` and `height` unchanged has placed it is the owner's
+  call -- today it has (8 of 11 captured re-drafts echo them, which makes
+  Home 11's futon-under-trunk the designer's to clear).
 
 
 ## 2. Roadmap
@@ -2617,7 +2702,10 @@ dropped from the draft, and Jev says when a design is finished. Left:
     clean with the shaft's lower walls still filed as an anchor. A card
     clause naming the class is the owner's call.
   - A full-height fixture and a waist-height one may share a cell: the
-    check, and so the packer, count one height at a time.
+    lint's wall count still counts one height at a time. (The packer, the
+    room designer's check and every place code chooses no longer do, since
+    2026-10-13: two things standing on the floor share no cell at any height
+    -- §1.216 item 4.)
   - A fixture laid end to end with others drafted beside it may stand at
     one end of its wall; what a fixture is for relative to a doorway (a
     doorstep at a door) is the prose's, and `offset` is the designer's lever.

@@ -129,14 +129,22 @@ direction that subtracts least.
     wall anchor   placed on the wall its bearing names, at a seeded offset
                   keyed on (room uid, anchor id) -- so a later anchor never
                   moves an earlier one; two anchors may share a cell and the
-                  cell blocks at the taller
+                  cell blocks at the taller -- but a place CODE chooses
+                  keeps two things standing on the floor off each other's
+                  cells at every height, and only a thing off the floor
+                  (`mount`: hung, ceiling, on or in) shares cells with
+                  what stands beneath it (2026-10-13)
     a THING       an anchor with a stated height, or a run/large footprint,
                   stands one pace off its wall, leaving the lane a body takes
                   cover in; a door, a window, a hearth is the wall itself
     interior      an anchor with no bearing sits at a seeded interior cell
     body          derived from its station -- `at`: one step room-side of the
-                  anchor (`cover`: one step wall-side); `near`: beside that
-                  body; nothing: unmeasured. NEVER stored.
+                  anchor (`cover`: one step wall-side), onto a cell no
+                  other fixture or doorway holds where one is; `near`:
+                  beside that body, the same way; ON a fixture (its pose's
+                  `support` and its station both name it, `resting_on`):
+                  a cell of that fixture; nothing: unmeasured. NEVER
+                  stored. The thing a body is on never hides it.
     sight         recursive shadowcasting from the observer's cell; a cell
                   cuts the line when its height is level with the eye or
                   with the target's top; an exact supercover walk (every

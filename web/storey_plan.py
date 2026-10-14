@@ -12,7 +12,11 @@ world the way every other view reads it -- the scene through its solved
 plans (`structure.apply_solved_plans`), each room's cells on its plan
 (`site_plan.site_cells`), every doorway and window where the engine places it
 (`anchor_cells`) -- so the plan cannot show a wall the cast is not judged by.
-Pure over the scene and the plans; it writes nothing.
+A window is drawn in the wall of the walled room it belongs to, on that
+room's storey: open ground's side of a window above it is where sight from
+the ground meets it and where a fall from it lands, never a window of the
+ground's own storey (the lab draws a storey's windows alone). Pure over the
+scene and the plans; it writes nothing.
 
     storey_plan(scene, plan, level=None, specs=None) -> {
         plan, level, levels: [storey, ...],
@@ -87,7 +91,11 @@ def room_look(scene, rid, spec=None) -> dict:
     room = room if isinstance(room, dict) else {}
     spec = spec if isinstance(spec, dict) else {}
     record = spec.get("layout") if isinstance(spec.get("layout"), dict) else {}
-    ground = declared_ground(scene, rid) in OPEN_GROUND
+    # open ground by its exposure, or by the solve that laid it as grounds
+    # (`layout.grounds`, the bridge's own reading): one reading for the plan,
+    # the room editor and the window rule alike (second review of 2026-10-13)
+    ground = declared_ground(scene, rid) in OPEN_GROUND \
+        or str(record.get("grounds") or "") in _GROUND_FILL     # never an outbuilding
     purpose = str(record.get("purpose") or "")
     made = bool(spec.get(LAYOUT_MADE_KEY) or room.get(LAYOUT_MADE_KEY))
     if made:
@@ -100,7 +108,25 @@ def room_look(scene, rid, spec=None) -> dict:
                 if isinstance(e, dict) and e.get("to")}
         out["stair"] = {"kind": str(spec.get("stair_kind") or ""),
                         "up": "up" in ways, "down": "down" in ways}
+        flight = _flight_of(spec)
+        if flight is not None:
+            # the flight in its hall, in the hall's own cells (`layout_bridge`)
+            out["stair"]["flight"] = flight
     return out
+
+
+def _flight_of(spec):
+    """A stair hall's flight, `{x, y, w, d}` in the hall's own cells, or
+    None: a plan solved before 2026-10-13 holds none, and is drawn as it
+    was, treads over the whole hall."""
+    flight = (spec or {}).get("flight") if isinstance(spec, dict) else None
+    if not isinstance(flight, dict):
+        return None
+    try:
+        box = {k: int(flight[k]) for k in ("x", "y", "w", "d")}
+    except (KeyError, TypeError, ValueError):
+        return None
+    return box if box["w"] > 0 and box["d"] > 0 else None
 
 
 def fixture_kinds(scene, rid, spec=None) -> dict:
@@ -222,6 +248,14 @@ def storey_plan(scene, plan, level: Optional[int] = None, specs=None,
             if barrier == "wall":
                 continue
             if barrier in ("window", "one_way_window"):
+                if ground and room_level(scene, to) != level \
+                        and declared_ground(scene, to) not in OPEN_GROUND:
+                    # A WINDOW OF ANOTHER STOREY'S WALL: drawn there, by its
+                    # own room; the ground's pin is where sight from below
+                    # meets it and a fall lands (`layout_bridge._ground_pin`).
+                    # Home 11 (2026-10-13) drew three upper-storey windows
+                    # onto the garden in the ground floor's walls.
+                    continue
                 out["windows"].append({"room": rid, "cells": cells_on, "side": wall,
                                        "name": str(edge.get("name") or "")})
                 continue
@@ -234,9 +268,14 @@ def storey_plan(scene, plan, level: Optional[int] = None, specs=None,
                                  "outside": to not in on_storey})
         # THE STAIR, by its shape, in its hall
         if look.get("stair"):
-            out["stairs"].append({"room": rid, **look["stair"],
-                                  "name": str(room.get("name") or rid),
-                                  "rects": _runs(cells)})
+            stair = {k: v for k, v in look["stair"].items() if k != "flight"}
+            flight = look["stair"].get("flight")
+            # its treads on the flight, moved onto the plan; a hall with no
+            # flight recorded is drawn as it always was
+            rects = ([{"x": flight["x"] + ox, "y": flight["y"] + oy,
+                       "w": flight["w"], "d": flight["d"]}] if flight else _runs(cells))
+            out["stairs"].append({"room": rid, **stair,
+                                  "name": str(room.get("name") or rid), "rects": rects})
         # FIXTURES by their kind where the solve recorded one
         kinds = fixture_kinds(scene, rid, spec)
         for aid, rec in placed.items():

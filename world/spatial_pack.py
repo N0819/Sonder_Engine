@@ -1,6 +1,7 @@
 # spatial_pack.py
 """Where code stands each NEW fixture of a room being designed: along the
-wall the model chose, so that no two things share a cell at one height.
+wall the model chose, so that no two things standing on the floor share a
+cell, and nothing shares one with another at its height.
 
 THE DIVISION OF LABOUR (the owner, 2026-10-08: a model decides what and why,
 code decides where and how). The model decides which fixtures a room holds,
@@ -50,17 +51,29 @@ and south of its origin whatever its wall (`_place_anchors`), and lays no
 inset: a run on an east wall pinned by its cell would be one cell, not a run.
 An offset keeps the fixture on its wall and the wall's own arithmetic.
 
-WHAT COUNTS AS TAKEN is what the room designer's check counts as two
-fixtures on one cell: same cell, same height, doorways excluded (an object in
-front of a door is a placement the world allows; the owner's ruling of
-2026-09-16). The check and the packer read one rule, so "free" here is
-"clean" there. But a place the packer CHOOSES keeps clear of every doorway's
+WHAT COUNTS AS TAKEN: a cell held at the fixture's height, or -- for a
+fixture standing on the floor -- by anything else standing there at any
+height (the owner, 2026-10-13; `spatial_fov.stands_on_floor`: only what is
+hung, from the ceiling, on or in another fixture is off the floor), doorways
+excluded (an object in front of a door is a placement the world allows; the
+owner's ruling of 2026-09-16). That is the read-time placement's own rule
+and the room designer's check's (`director_rooms._check`), so "free" here
+is "clean" there; and where no free place is left, the check says so --
+two standing things on one cell are an overlap it names, and the wall gets
+its line (`_full_lines`). But a place the packer CHOOSES keeps clear of every doorway's
 step and the pace inside it where its wall allows (the owner, reading Home 9
 on 2026-10-12: furniture placed in front of doors is an oddity;
 `spatial_fov.doorway_clearance`): a fixture whose seed stands in a way in or
 out moves to the nearest place on its wall clear of it, and stands where its
-seed put it when none is -- a doorway never makes a wall crowded. The packer
-reads the seeds it writes places over (`anchor_cells(raw=True)`).
+seed put it when none is -- a doorway never makes a wall crowded; the map
+then gives up a shared cell before the doorway, and the designer's check
+names the pair that makes. The packer reads every fixture by its seed
+(`anchor_cells(raw=True)`), since a fixture code placed gives way to a place
+written; its lines count where the map stands each thing, and a fixture it
+finds no place for is stuck only when the map, its pins written, cannot
+stand it clear without moving another (the reviews of 2026-10-13: read
+where the map stood them, world fixtures barred places they would have
+left, 30 of 4,080 drafts on the play db's rooms).
 
 Pure, total, no I/O, no model.
 """
@@ -68,8 +81,8 @@ Pure, total, no I/O, no model.
 from __future__ import annotations
 
 from world.spatial_fov import (
-    ROOM_CORNERS, _place_anchors, _seed, _wall_slot, anchor_cells, doorway_clearance,
-    room_grid,
+    ROOM_CORNERS, STANDING, _place_anchors, _seed, _wall_slot, anchor_cells,
+    doorway_clearance, room_grid, stands_on_floor, whole_cells,
 )
 from world.spatial_geometry import effective_anchors
 from world.spatial_lint import wall_loads
@@ -142,7 +155,7 @@ def _reach(room_id, grid, aid, anchor, rec) -> int:
     return len(rec["cells"])
 
 
-def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
+def pack_anchors(scene: dict, room_id, movable, *, overfull=None, pin_kept=False) -> dict:
     """Where each of `movable` -- the fixtures of `room_id` a design has
     drafted and no plan has shown yet, in the order they were drafted --
     stands, so that no two things of the room share a cell at one height
@@ -150,8 +163,10 @@ def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
     obstacle.
 
     Returns `{"pins": {anchor_id: {"offset": f} | {"cell": [x, y]}}, "kept":
-    [anchor_id], "stuck": [anchor_id], "full": [line]}`: the place written
-    for each fixture that had to move, the ones that kept their seeded place,
+    [anchor_id], "in_way": [anchor_id], "stuck": [anchor_id], "full":
+    [line]}`: the place written for each fixture that had to move, the ones
+    that kept their seeded place (`in_way`: those of them standing in a
+    doorway's way, no place clear of it and of what stands there being free),
     the ones no place on their own wall (or corner, or floor) holds at their
     height -- left where their seed put them -- and ONE line for each wall
     and height that cannot hold its fixtures, with the arithmetic and where
@@ -159,7 +174,10 @@ def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
     world; nothing in it is changed. `overfull`, when given, is the
     `(wall, height)` pairs whose count-overfull wall gets a line even with
     nothing stuck on it (the check passes the rows the draft brought); None
-    describes every one."""
+    describes every one. `pin_kept` also writes the place of each fixture
+    that kept its seeded one, along a straight wall or on the floor, so that
+    a caller with no designer after it (the opening, `structure.
+    hold_planned_fixtures`) leaves no place for the seed to choose again."""
     grid = room_grid(scene, room_id)
     anchors = effective_anchors(scene, room_id)
     placed = anchor_cells(scene, room_id, raw=True)
@@ -177,18 +195,32 @@ def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
     def take(aid, cells, height):
         for cell in cells:
             held.setdefault((tuple(cell), height), aid)
+            if stands_on_floor(anchors.get(aid)):
+                held.setdefault((tuple(cell), STANDING), aid)
 
-    def free(cells, height):
-        return all((tuple(cell), height) not in held for cell in cells)
+    def free(cells, height, aid=None):
+        standing = aid is not None and stands_on_floor(anchors.get(aid))
+        return all((tuple(cell), height) not in held
+                   and not (standing and (tuple(cell), STANDING) in held)
+                   for cell in cells)
 
     def clear(cells):
         return not any(tuple(cell) in doors for cell in cells)
 
     def nearest(aid, rec, *, keep_clear):
-        return next(((pin, cells) for pin, cells
-                     in _places(room_id, grid, aid, anchors[aid], rec)
-                     if cells and free(cells, rec["height"])
-                     and (not keep_clear or clear(cells))), None)
+        # the nearest free place that holds the fixture whole, else the
+        # nearest the room's edge clips (`spatial_fov.whole_cells`): a
+        # clipped place has fewer cells, so it is free more often, and is
+        # the fixture drawn smaller than it is
+        whole = whole_cells(anchors[aid], rec["footprint"])
+        clipped = None
+        for pin, cells in _places(room_id, grid, aid, anchors[aid], rec):
+            if cells and free(cells, rec["height"], aid) and (not keep_clear or clear(cells)):
+                if len(set(cells)) >= whole:
+                    return pin, cells
+                if clipped is None:
+                    clipped = (pin, cells)
+        return clipped
 
     for aid, rec in placed.items():
         if _doorway(aid) or rec["implicit"] or aid in mine:
@@ -197,7 +229,7 @@ def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
     pins, kept, later = {}, [], []
     for aid in order:
         rec = placed[aid]
-        if free(rec["cells"], rec["height"]):
+        if free(rec["cells"], rec["height"], aid):
             # free, but standing in a way in or out: the nearest place on
             # what the model chose that is clear of both, where one is; a
             # doorway is never crowding (the check's rule), so where none
@@ -226,8 +258,12 @@ def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
         wall, height = rec.get("dir"), rec["height"]
         if aid not in stuck or wall not in _STRAIGHT:
             continue
+        # one wall's fixtures that would share a cell: of its height, or --
+        # standing on the floor -- every other one standing there
         group = [x for x in order if placed[x].get("dir") == wall
-                 and placed[x]["height"] == height]
+                 and (placed[x]["height"] == height
+                      or (stands_on_floor(anchors.get(aid))
+                          and stands_on_floor(anchors.get(x))))]
         laid = _end_to_end(room_id, grid, anchors, placed, group, wall, height,
                            held)
         if laid is None:
@@ -243,9 +279,41 @@ def pack_anchors(scene: dict, room_id, movable, *, overfull=None) -> dict:
                     kept.remove(x)
             if x in stuck:
                 stuck.remove(x)
+    if pin_kept:
+        for aid in kept:
+            rec = placed[aid]
+            if aid in pins or rec.get("dir") in ROOM_CORNERS:
+                continue
+            first = next(iter(_places(room_id, grid, aid, anchors[aid], rec)), None)
+            if first is not None and [tuple(c) for c in first[1]] == \
+                    [tuple(c) for c in rec["cells"]]:
+                pins[aid] = first[0]
+    # STUCK IS THE MAP'S WORD: a fixture no place of the packer's reading
+    # holds may yet stand clear where read-time placement stands it, with
+    # these pins written, and moving nothing else -- a world fixture's seed
+    # the map never drew is no obstacle -- and one that does is not stuck
+    # (the fourth and fifth reviews of 2026-10-13: chat 173's shrine hall
+    # was refused for a chest the map stood clear). One that stands clear
+    # only by moving another stays stuck: a fixture a plan has shown is
+    # never moved for a later one.
+    if stuck:
+        pinned = _with_pins(scene, room_id, pins)
+        drawn_after = anchor_cells(pinned, room_id) or {}
+        for aid in list(stuck):
+            if aid not in drawn_after or not _clear_on_the_map(aid, drawn_after, anchors):
+                continue
+            alone = anchor_cells(_without(pinned, room_id, {aid}), room_id) or {}
+            if all([tuple(c) for c in drawn_after[x]["cells"]] == [tuple(c) for c in rec["cells"]]
+                   for x, rec in alone.items() if x in drawn_after):
+                stuck.remove(aid)
+                kept.append(aid)
+    # the lines count every thing where the map stands it, this call's own
+    # included: a line counting a new one by its seed read "takes 3" of a
+    # three-pace wall the map had five on (fourth review of 2026-10-13)
+    drawn = {aid: rec["cells"] for aid, rec in (anchor_cells(scene, room_id) or {}).items()}
     return {"pins": pins, "kept": kept, "stuck": stuck,
             "full": _full_lines(scene, room_id, grid, anchors, placed, stuck, free,
-                                overfull)}
+                                overfull, drawn=drawn)}
 
 
 def doorway_places(scene: dict, movable) -> dict:
@@ -334,16 +402,20 @@ def doorway_places(scene: dict, movable) -> dict:
 
 
 def _end_to_end(room_id, grid, anchors, placed, group, wall, height, held):
-    """`{anchor: (pin, cells)}` laying `group` -- fixtures of one wall and
-    height, in drafting order -- end to end around everything else the wall
-    holds, from whichever end of the wall moves them least from their seeds
-    (the nearest place, as everywhere here); None when neither end holds
-    them all. On success `held` is updated in place."""
+    """`{anchor: (pin, cells)}` laying `group` -- fixtures of one wall that
+    would share a cell, in drafting order: of one height, or all standing on
+    the floor -- end to end around everything else the wall holds, from
+    whichever end of the wall moves them least from their seeds (the nearest
+    place, as everywhere here); None when neither end holds them all. Each is
+    checked and recorded at its OWN height (a stuck fixture's height laid a
+    waist-high table over a waist-high chest hung there, review of
+    2026-10-13). On success `held` is updated in place."""
     best = None
     for reverse in (False, True):
         trial = {key: owner for key, owner in held.items() if owner not in group}
         laid, moved = {}, 0
         for aid in group:
+            own = placed[aid]["height"]
             probe = {k: v for k, v in anchors[aid].items() if k not in ("offset", "cell")}
             probe["dir"] = wall
             along, length, seeded, _source = _wall_slot(
@@ -353,11 +425,16 @@ def _end_to_end(room_id, grid, anchors, placed, group, wall, height, held):
             for offset in spots:
                 frac = _fraction(offset, room_for)
                 cells = _trial(room_id, grid, aid, probe, offset=frac)
-                if cells and all((cell, height) not in trial for cell in cells):
+                standing = stands_on_floor(anchors.get(aid))
+                if cells and all((cell, own) not in trial
+                                 and not (standing and (cell, STANDING) in trial)
+                                 for cell in cells):
                     laid[aid] = ({"offset": frac}, cells)
                     moved += abs(offset - seeded)
                     for cell in cells:
-                        trial[(cell, height)] = aid
+                        trial[(cell, own)] = aid
+                        if standing:
+                            trial[(cell, STANDING)] = aid
                     break
             else:
                 break
@@ -378,7 +455,7 @@ def _would_fit(room_id, grid, aid, anchor, rec, free) -> str:
     bearing = rec.get("dir")
     if bearing in _STRAIGHT:
         walls = [_WALL_WORDS[wall] for wall in _STRAIGHT if wall != bearing
-                 and any(cells and free(cells, height) for _pin, cells
+                 and any(cells and free(cells, height, aid) for _pin, cells
                          in _along_wall(room_id, grid, aid, anchor, wall,
                                         rec["footprint"]))]
         if not walls:
@@ -388,20 +465,64 @@ def _would_fit(room_id, grid, aid, anchor, rec, free) -> str:
         return f"on the {named} wall"
     origin = grid.corner(bearing) if bearing in ROOM_CORNERS else tuple(rec["cells"][0])
     for pin, cells in _near(room_id, grid, aid, anchor, origin, grid.cells):
-        if cells and free(cells, height):
+        if cells and free(cells, height, aid):
             return "at cell [%d, %d]" % tuple(pin["cell"])
     return ""
 
 
+def _without(scene: dict, room_id, ids) -> dict:
+    """`scene` with the anchors `ids` taken out of `room_id`, nothing else
+    copied."""
+    rooms = dict((scene or {}).get("rooms") or {})
+    room = dict(rooms.get(room_id) or {})
+    room["anchors"] = {aid: a for aid, a in (room.get("anchors") or {}).items()
+                       if aid not in ids}
+    rooms[room_id] = room
+    return {**scene, "rooms": rooms}
+
+
+def _with_pins(scene: dict, room_id, pins) -> dict:
+    """`scene` with each of `pins` written onto its anchor in `room_id`,
+    nothing else copied: the room as the map will stand it once they are."""
+    if not pins:
+        return scene
+    rooms = dict((scene or {}).get("rooms") or {})
+    room = dict(rooms.get(room_id) or {})
+    room["anchors"] = {aid: (dict(a, **pins[aid]) if aid in pins and isinstance(a, dict) else a)
+                       for aid, a in (room.get("anchors") or {}).items()}
+    rooms[room_id] = room
+    return {**scene, "rooms": rooms}
+
+
+def _clear_on_the_map(aid, drawn, anchors) -> bool:
+    """Does `aid` stand where the map (`drawn`, `anchor_cells`) stands it
+    sharing no cell with anything at its height, nor -- standing on the
+    floor -- with anything else standing there? A doorway is never one."""
+    mine = {tuple(c) for c in drawn[aid]["cells"]}
+    height, standing = drawn[aid]["height"], stands_on_floor(anchors.get(aid))
+    for other, rec in drawn.items():
+        if other == aid or _doorway(other) or not mine & {tuple(c) for c in rec["cells"]}:
+            continue
+        if rec["height"] == height:
+            return False
+        if standing and not rec["implicit"] and not str(other).startswith("window:") \
+                and stands_on_floor(anchors.get(other)):
+            return False
+    return True
+
+
 def _full_lines(scene, room_id, grid, anchors, placed, stuck, free,
-                overfull=None) -> list:
+                overfull=None, drawn=None) -> list:
     """ONE line per wall and height that cannot hold its fixtures: the
     wall's length and which side of the extent that is, what each fixture
     against it at that height takes, which found no place, and where each of
     those would fit -- "needs 7, has 5" alone had a designer widen the wrong
     side twice (the 2026-09-27 yard: its west wall runs north-south, so it
     is the extent's `d`). A wall the count calls overfull gets its line even
-    when every fixture found a cell, so the arithmetic is never missing."""
+    when every fixture found a cell, so the arithmetic is never missing. A
+    stuck fixture standing on the floor is counted with everything standing
+    on its wall, at every height (2026-10-13): counted at its own height
+    alone, the line read "2 of 4 paces taken" beside "no place holds it"."""
     loads = wall_loads(scene, room_id)
     groups = {}
     wanted = None if overfull is None else {tuple(key) for key in overfull}
@@ -409,35 +530,89 @@ def _full_lines(scene, room_id, grid, anchors, placed, stuck, free,
         if sum(paces.values()) > len(grid.rim(wall)) \
                 and (wanted is None or (wall, height) in wanted):
             groups.setdefault((wall, height), [])
+    def standing_paces(names, wall=None):
+        """What blocks `names` on the cells the wall offers them (`_places`)
+        -- every thing standing on the floor there, and anything else at a
+        height of theirs, whatever wall it names or none -- and how many of
+        those cells each holds; with no names, what stands on `wall`'s own
+        rim (second review of 2026-10-13: counted by `dir`, a thing flush
+        with two walls or with no wall at all was missing from the
+        arithmetic, and a shelf hung at the stuck thing's height went
+        unnamed)."""
+        line, heights = set(), {placed[aid]["height"] for aid in names}
+        for aid in names:
+            for _pin, cells in _places(room_id, grid, aid, anchors[aid], placed[aid]):
+                line.update(tuple(c) for c in cells)
+        if not names and wall in _STRAIGHT:
+            line = {tuple(c) for c in grid.rim(wall)}
+        # paces ALONG the wall, never the cells of a two-deep band (third
+        # review of 2026-10-13); each thing where the map stands it
+        along = 0 if wall in ("n", "s") else 1
+        out = {}
+        for x, rec in placed.items():
+            if rec["implicit"] or not (stands_on_floor(anchors.get(x))
+                                       or rec["height"] in heights):
+                continue
+            cells = (drawn or {}).get(x, rec["cells"])
+            n = len({c[along] for c in map(tuple, cells) if c in line})
+            if n:
+                out[x] = n
+        return out
+
     for aid in stuck:
         rec = placed[aid]
-        groups.setdefault((rec.get("dir") or "", rec["height"]), []).append(aid)
+        wall, key = rec.get("dir") or "", rec["height"]
+        blockers = standing_paces([aid], wall) if wall in _STRAIGHT else {}
+        if stands_on_floor(anchors.get(aid)) and (
+                len({placed[x]["height"] for x in blockers}) > 1
+                or any(placed[x].get("dir") != wall for x in blockers)):
+            # what stands where it would go is of more than one height, or
+            # names another wall or none: it is counted together, by what
+            # blocks it (third review of 2026-10-13), and the line for any
+            # one height of it is that count's
+            key = STANDING
+        groups.setdefault((wall, key), []).append(aid)
+    for key in wanted or ():
+        if key[1] == STANDING:
+            groups.setdefault(tuple(key), [])
+    for wall in [w for w, k in list(groups) if k == STANDING]:
+        for other in [g for g in list(groups) if g[0] == wall and g[1] != STANDING
+                      and not groups[g]]:
+            if all(stands_on_floor(anchors.get(x)) for x in (loads.get(other) or {})):
+                groups.pop(other)
+
     lines = []
     for (wall, height), names in sorted(groups.items()):
         listed = " and ".join(names)
+        where_held = ("standing on the floor" if height == STANDING
+                      else f"at {height} height")
         if wall in _STRAIGHT:
             holds = len(grid.rim(wall))
-            paces = loads.get((wall, height)) or {}
+            paces = (standing_paces(names, wall) if height == STANDING
+                     else loads.get((wall, height)) or {})
             side = ("the extent's w, east-west" if wall in ("n", "s")
                     else "the extent's d, north-south")
             taken = ", ".join(f"{aid} {n}" for aid, n in paces.items())
             line = (f"{room_id}: the {_WALL_WORDS[wall]} wall is {holds} paces "
-                    f"long ({side}), and at {height} height its fixtures take "
+                    f"long ({side}), and {where_held} its fixtures take "
                     f"{sum(paces.values())} ({taken})")
             if names:
-                line += f"; no place along it holds {listed} at that height"
+                line += (f"; no place along it holds {listed} clear of them"
+                         if height == STANDING
+                         else f"; no place along it holds {listed} at that height")
         elif wall in ROOM_CORNERS:
-            line = (f"{room_id}: at {height} height no place in the "
+            line = (f"{room_id}: {where_held}, no place in the "
                     f"{_WALL_WORDS[wall]} corner, or along the two walls that "
                     f"meet there, holds {listed}")
         else:
-            line = f"{room_id}: at {height} height no free cell holds {listed}"
+            line = f"{room_id}: {where_held}, no free cell holds {listed}"
         fits = []
         for aid in names:
-            where = _would_fit(room_id, grid, aid, anchors[aid], placed[aid], free)
-            fits.append(f"{aid} would fit {where}" if where
+            fit = _would_fit(room_id, grid, aid, anchors[aid], placed[aid], free)
+            fits.append(f"{aid} would fit {fit}" if fit
                         else f"no other wall and no free cell of the room holds "
-                             f"{aid} at {height} height")
+                             f"{aid} " + ("clear of what stands there"
+                                          if height == STANDING else f"at {height} height"))
         if fits:
             line += ". " + "; ".join(fits)
         lines.append(line + ". Which wall each fixture stands against, its size, "

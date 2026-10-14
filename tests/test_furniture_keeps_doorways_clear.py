@@ -76,7 +76,12 @@ def test_a_place_a_story_or_a_host_made_stands_in_the_doorway():
     assert _cells(anchor_cells(sc, "hall")["screen"]) == {cell}
 
 
-def test_two_fixtures_code_places_share_no_cell_at_one_height():
+def test_two_fixtures_code_places_on_the_floor_share_no_cell_at_any_height():
+    """What stands on the floor holds it at every height (the owner,
+    2026-10-13, after Home 11 laid a futon under a trunk and a stove in a
+    tub); only a thing off the floor -- hung, from the ceiling, on or in
+    another fixture -- shares cells with what stands beneath it, the ruling
+    of 2026-10-08 kept for those."""
     from world.spatial import anchor_cells
     sc = _scene({}, door=("closed_door", "n", 0.0))
     first = {"desc": "a bench", "dir": "s", "footprint": "point", "height": "waist"}
@@ -90,10 +95,43 @@ def test_two_fixtures_code_places_share_no_cell_at_one_height():
     sc["rooms"]["hall"]["anchors"] = {a: dict(first), b: dict(first)}
     placed = anchor_cells(sc, "hall")
     assert not _cells(placed[a]) & _cells(placed[b])
-    # at two heights they may: a bartop and the shelf above it
-    sc["rooms"]["hall"]["anchors"] = {a: dict(first), b: dict(first, height="head")}
+    # standing on the floor at two heights, still two things on one floor
+    sc["rooms"]["hall"]["anchors"] = {a: dict(first), b: dict(first, height="full")}
     placed = anchor_cells(sc, "hall")
-    assert _cells(placed[a]) & _cells(placed[b]) == raw[a] & raw[b]
+    assert not _cells(placed[a]) & _cells(placed[b])
+    # hung above it, it shares: a bench and the rack over it
+    for mount in ("hung", "ceiling", f"on {a}"):
+        sc["rooms"]["hall"]["anchors"] = {a: dict(first), b: dict(first, height="head", mount=mount)}
+        placed = anchor_cells(sc, "hall")
+        assert _cells(placed[a]) & _cells(placed[b]) == raw[a] & raw[b], mount
+
+
+def test_a_place_code_chooses_holds_the_fixture_whole_where_one_can():
+    """A place at the room's edge clips a fixture's footprint, and a
+    clipped place, with fewer cells, always crowds less: a large table moved
+    off a chest took the two cells of the last column beside it rather than
+    the whole square one pace south (2026-10-13, found while the floor rule
+    landed). Of the places that crowd nothing, one that holds the fixture
+    whole is taken first (`spatial_fov.whole_cells`)."""
+    from world.spatial import anchor_cells, room_grid
+    sc = _scene({}, door=("closed_door", "n", 0.0), extent=(6, 6))
+    grid = room_grid(sc, "hall")
+    table = {"desc": "a large table", "footprint": "large", "height": "waist"}
+    found = 0
+    for i in range(400):
+        name = f"table_{i}"
+        trial = copy.deepcopy(sc)
+        trial["rooms"]["hall"]["anchors"] = {name: dict(table)}
+        seed = anchor_cells(trial, "hall", raw=True)[name]["cells"][0]
+        if seed[0] != grid.w - 2 or seed[1] > grid.d - 3 or seed[1] < 2:
+            continue
+        found += 1
+        trial["rooms"]["hall"]["anchors"]["chest"] = {
+            "desc": "a chest", "cell": list(seed), "footprint": "point", "height": "waist"}
+        placed = anchor_cells(trial, "hall")
+        assert len(placed[name]["cells"]) == 4, (name, seed, placed[name]["cells"])
+        assert tuple(seed) not in _cells(placed[name])
+    assert found, "no seed lands there; widen the names"
 
 
 def test_nothing_is_kept_clear_beneath_a_window():

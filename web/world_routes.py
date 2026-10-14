@@ -2591,6 +2591,14 @@ def _apply_doorway_fields(scene, room_id, to, record, ea, eb, body):
                 raise HTTPException(
                     400, f"vertical must be up or down as seen from '{room_id}' "
                          f"(got {body.get('vertical')!r})")
+            from world.site_plan import one_storey, room_level as storey_of
+            if one_storey(scene, room_id, to):
+                # the merge would take it straight back off
+                # (`spatial_orientation.strip_one_storey_verticals`)
+                raise HTTPException(
+                    400, f"'{room_id}' and '{to}' stand on one storey of their plan "
+                         f"(storey {storey_of(scene, room_id)}), so the way between "
+                         f"them is a doorway: it cannot go up or down")
             # Stored as seen from `rooms[0]`; the sync writes the edges.
             record["vertical"] = vertical if str(record["rooms"][0]) == str(room_id) \
                 else (opposite_vertical(vertical) or vertical)

@@ -337,6 +337,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.209 — A floor word the sound tables do not hold reads as masonry (2026-10-12)](UNBUILT_WORLD.md#unbuilt-1-209)
 - [§1.210 — A stair is a room of its own — built 2026-10-12, residuals open](UNBUILT_WORLD.md#unbuilt-1-210)
 - [§1.211 — A window onto a room is a window — fixed 2026-10-12, residuals open](UNBUILT_WORLD.md#unbuilt-1-211)
+- [§1.216 — Home 11's layout — ten findings, three landed 2026-10-13, the rest open](UNBUILT_WORLD.md#unbuilt-1-216)
 
 **2. Roadmap**
 

@@ -150,6 +150,39 @@ def travel_bearing(
     return None
 
 
+def strip_one_storey_verticals(scene: dict) -> list:
+    """Take `vertical` and `way` off both sides of every way whose two rooms
+    stand on one storey of one plan by what was decided
+    (`site_plan.one_storey`): a stair hall's doorway into the room beside it
+    is a doorway, and only the flight between two halls climbs. Returns the
+    `(room, to)` pairs it stripped. Run first by `normalize_scene_bearings`,
+    so every merge and every World Browser write reconciles such a pair as a
+    door, and by `structure.apply_solved_plans`, so a scene stored before
+    this heals the moment it is read."""
+    from world.site_plan import one_storey
+    rooms = scene.get("rooms") if isinstance(scene, dict) else None
+    if not isinstance(rooms, dict):
+        return []
+    out = []
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not (edge.get("vertical") or edge.get("way")):
+                continue
+            to = edge.get("to")
+            if not to or to == room_id or to not in rooms or not one_storey(scene, room_id, to):
+                continue
+            edge.pop("vertical", None)
+            edge.pop("way", None)
+            back = _find_edge(rooms.get(to), room_id)
+            if isinstance(back, dict):
+                back.pop("vertical", None)
+                back.pop("way", None)
+            out.append((room_id, str(to)))
+    return out
+
+
 def normalize_scene_bearings(scene: dict) -> dict:
     """Normalize and reconcile optional bearings on room adjacency edges.
 
@@ -159,6 +192,9 @@ def normalize_scene_bearings(scene: dict) -> dict:
     if not isinstance(scene, dict):
         return scene
     rooms = scene.get("rooms") or {}
+    # A WAY BETWEEN TWO ROOMS OF ONE STOREY IS A DOORWAY (2026-10-13), and is
+    # reconciled below as one: `strip_one_storey_verticals`
+    strip_one_storey_verticals(scene)
 
     for room in rooms.values():
         if not isinstance(room, dict):

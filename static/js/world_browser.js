@@ -2010,6 +2010,12 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
     const x = Math.min(...xs), y = Math.min(...ys);
     return { x, y, w: Math.max(...xs) - x + 1, d: Math.max(...ys) - y + 1 };
   };
+  // Where a stair hall's treads go: on its flight, in the hall's own cells,
+  // where the solve recorded one (a hall takes the landing beside it too),
+  // else over the whole hall as before (`storey_plan.room_look`).
+  const treadsOf = (stair, cs, ox = 0, oy = 0) => stair.flight
+    ? { x: stair.flight.x + ox, y: stair.flight.y + oy, w: stair.flight.w, d: stair.flight.d }
+    : boxOf(cs, ox, oy);
   // A name cut to what fits a box `w` paces wide, at `size`.
   const fit = (name, w, size) => {
     const room_ = Math.max(3, Math.floor(w * S / (size * .56)));
@@ -2065,7 +2071,7 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
                                class: "wb-m-far-edge" }));
     }
     if (n.stair && n.cells.length) {
-      wbPlanStair(g, { ...n.stair, name: n.name, rects: [boxOf(n.cells, n.offset[0], n.offset[1])] }, PX, PX, S);
+      wbPlanStair(g, { ...n.stair, name: n.name, rects: [treadsOf(n.stair, n.cells, n.offset[0], n.offset[1])] }, PX, PX, S);
     }
     for (const [aid, a] of Object.entries(n.anchors || {})) {
       if (a.implicit || !a.cells.length) continue;
@@ -2117,7 +2123,7 @@ function wbRenderRoomMap(host, view, ctx, { overlay = null } = {}) {
   }
   // a stair hall's stair by its shape, under its fixtures
   if (room.stair && cells.length) {
-    wbPlanStair(gStair, { ...room.stair, name: room.name, rects: [boxOf(cells)] }, PX, PX, S);
+    wbPlanStair(gStair, { ...room.stair, name: room.name, rects: [treadsOf(room.stair, cells)] }, PX, PX, S);
   }
   const readings = overlay && view.overlays && view.overlays[overlay];
   if (readings && typeof readings === "object") {

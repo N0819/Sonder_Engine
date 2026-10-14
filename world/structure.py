@@ -99,7 +99,7 @@ GEOMETRY_FIELDS = ("extent", "shape", "parts", "exposure", "sound",
 #: alike that a solve split into one anchor each, whose group words the stub
 #: was minted with (`planned.layout.split`, `_lay_stub_on_its_plan`).
 LAYOUT_ANCHOR_FIELDS = ("dir", "cell", "extent", "footprint", "height",
-                        "opacity", "offset")
+                        "opacity", "offset", "mount")
 LAYOUT_EDGE_FIELDS = ("dir", "offset", "cell")
 #: The plans the layout tier lays a building out on are named
 #: `layout:<entrance room>` (`world.layout_bridge`). The name says which plan
@@ -365,6 +365,10 @@ def _lay_stub_on_its_plan(room, spec):
         for key in LAYOUT_ANCHOR_FIELDS:
             if key in anchor:
                 live[key] = copy.deepcopy(anchor[key])
+        if "mount" not in anchor:
+            # a stub's anchors are the plan's: a mount an earlier solve laid
+            # and this plan no longer states is gone with it
+            live.pop("mount", None)
         if aid in split and str(live.get("desc") or "") == split[aid] \
                 and str(anchor.get("desc") or "").strip():
             # The plan's words for SEVERAL alike, which the solve split into
@@ -441,6 +445,11 @@ def _take_the_solve_off(room, spec, record):
     plan_anchors = planned_anchors(spec).get("anchors") or {}
     for aid, live in ((room.get("anchors") or {}) if isinstance(room.get("anchors"), dict)
                       else {}).items():
+        if isinstance(live, dict) and "mount" in live \
+                and "mount" not in (plan_anchors.get(aid) or {}):
+            # what the solve said of where a thing hangs goes with the solve,
+            # as its pins do (a stub's anchors are the plan's)
+            live.pop("mount", None)
         if not _placed_pin(live):
             continue
         live.pop("cell", None)
@@ -512,6 +521,10 @@ def apply_solved_plans(cid, scene):
     if any(_layout_print(rooms.get(uid)) != before.get(uid) for uid in touched):
         from world.site_plan import derive_site_plans
         derive_site_plans(scene)
+    # a way between two rooms of one storey is a doorway, read so before the
+    # next merge writes it so (`spatial_orientation.strip_one_storey_verticals`)
+    from world.spatial import strip_one_storey_verticals
+    strip_one_storey_verticals(scene)
     return touched
 
 
@@ -620,6 +633,17 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
                     # the group's words go to the solve's record
                     # (`planned.layout.split`), and the copy takes its own
                     fields.pop("desc", None)
+                if _placed_pin(record) and not _placed_pin(fields):
+                    # an earlier solve's pin, on a fixture this solve could
+                    # not place: it stood in a room this solve re-measured,
+                    # so the place it names is no longer a place
+                    # (`_lay_stub_on_its_plan`'s rule, one level in)
+                    record.pop("cell", None)
+                    record.pop("extent", None)
+                if _placed_pin(fields) and "mount" not in fields:
+                    # the solver stood it on the floor: an earlier solve's
+                    # word that it hung or stood on another is no longer so
+                    record.pop("mount", None)
                 record.update(fields)
                 anchors[aid] = record
             # a record of the plan the solve laid as a window is no anchor
@@ -1848,10 +1872,19 @@ def rooms_in_view_or_ahead(scene, focus_room, *, next_leg=None, bound_for=None):
     return out
 
 
-def planned_room_brief(cid, scene, room_ids):
+def planned_room_brief(cid, scene, room_ids, *, fixtures=False):
     """The Director's development brief for the planned stubs among
     `room_ids`: {room_id: {name, purpose, access, exits, structure, floor?,
     windows?}}.
+
+    `fixtures` (the opening's, `director._opening_planned_rooms`) adds, for
+    a room a solve laid out, its storey (`level`) and the fixtures already
+    standing in it (`anchors`, `planned_fixture_brief`): the hand that
+    describes the room describes them under their own ids rather than
+    furnishing it again beside them (Home 11, 2026-10-13: the opening wrote
+    a second futon nest, closets and shelves beside the plan's, under new
+    ids, and the duplicates stood in each other). Off, the brief is what it
+    was -- so the designer's filed designs, keyed by it, stand.
 
     THE SEED, HANDED TO THE HAND THAT FURNISHES. The plan says what a room
     is FOR and what it joins; the Director says what is in it. Purpose and
@@ -1932,8 +1965,283 @@ def planned_room_brief(cid, scene, room_ids):
                 "id": normalize_region_id(skey),
                 "name": str((structure or {}).get("name") or skey),
             }
+        if fixtures:
+            brief.update(planned_fixture_brief(spec))
         out[rid] = brief
     return out
+
+
+#: What the brief tells the opening of each fixture a solve stood in a room
+#: (`planned_fixture_brief`): its words, its wall, where it stands and what
+#: it is mounted on.
+_FIXTURE_BRIEF_FIELDS = ("desc", "dir", "cell", "extent", "height", "mount")
+
+
+def planned_fixture_brief(spec) -> dict:
+    """`{level?, anchors?}` of a room a solve laid out -- its storey, and
+    each fixture the plan holds for it -- or `{}` for any other room
+    (`planned_room_brief(fixtures=True)`)."""
+    from world.site_plan import normalize_site
+    from world.spatial import normalize_level
+    if not isinstance(spec, dict) or not normalize_site(spec.get("site")):
+        return {}
+    out = {}
+    level = normalize_level(spec.get("level"))
+    if level is not None:
+        out["level"] = level
+    anchors = {}
+    for aid, anchor in (planned_anchors(spec).get("anchors") or {}).items():
+        entry = {key: copy.deepcopy(anchor[key]) for key in _FIXTURE_BRIEF_FIELDS
+                 if anchor.get(key) not in (None, "", [], {})}
+        if entry:
+            anchors[aid] = entry
+    if anchors:
+        out["anchors"] = anchors
+    return out
+
+
+#: The fields of a fixture the solve placed that the hand describing its
+#: room never moves (`hold_planned_fixtures`): where it stands, how much of
+#: the floor it takes, and the wall it stands against. Its words, its height
+#: and its opacity are the describing hand's.
+HELD_PLACE_FIELDS = ("cell", "extent", "offset", "dir", "footprint")
+#: The words an id is reduced past when two spellings are compared
+#: (`_spelling_keys`) -- the ones commit's entity fold drops
+#: (`persist.commit_common._GENERIC_ID_TOKENS`), and no more.
+_GENERIC_FIXTURE_TOKENS = frozenset({"the", "a", "an", "entity", "obj", "object"})
+
+
+def _spelling_keys(text) -> set:
+    """Every key one fixture id answers to: as written, folded, slugged
+    (`normalize_room_id`) and its sorted words less the generic ones -- the
+    keys commit folds two spellings of one entity by
+    (`persist.commit_common._canonical_token_key`). Spelling only: a
+    synonym is the sentence's job (`hold_planned_fixtures`)."""
+    from world.spatial import normalize_room_id
+    raw = str(text or "").strip()
+    slug = normalize_room_id(raw)
+    tokens = sorted(t for t in slug.split("_") if t and t not in _GENERIC_FIXTURE_TOKENS)
+    return {k for k in (raw, raw.casefold(), slug, "_".join(tokens)) if k}
+
+
+def hold_planned_fixtures(scene, diff, specs) -> list:
+    """THE PLAN'S FIXTURES ARE DESCRIBED, NEVER MADE AGAIN. For each room of
+    `diff["rooms"]` a solve laid out, against its plan (`specs`,
+    `_planned_specs`), in place: an anchor the diff writes under ANOTHER
+    SPELLING of a plan fixture's id (`_spelling_keys`) is written under the
+    plan's id, and every reference to it in the diff with it -- a station's
+    `at` and `cover`, a pose's `support` and `relative_to` (bodies in that
+    room), a contact's or substance's `actor`, `source` or `target`; a plan
+    fixture the solve placed keeps its place against the describing write
+    (`HELD_PLACE_FIELDS`: the words land, the place does not); and a fixture
+    new to the room -- or one the solve could not place -- is stood by the
+    packer clear of everything standing there, and pinned, since no designer
+    follows the opening into a room it describes (`spatial_pack.
+    pack_anchors(pin_kept=True)`). Returns a warning for each fold and for
+    each new fixture no place holds. Rooms no solve laid out are untouched.
+
+    Home 11 (2026-10-13): the opening wrote a second nest of futons beside
+    the plan's `futon_nest`, and its own closets and shelves, under new ids;
+    each was placed by its seed onto the plan's furniture, and Tamamo,
+    stationed at the copy, stood in a stack of boxes. A spelling fold
+    catches 2 of the 13 duplicates measured over five laid-out openings --
+    the rest are the same thing named differently, which no spelling
+    shows, and are the brief's and the sentence's to prevent
+    (`planned_room_brief(fixtures=True)`, the establish card)."""
+    from world.site_plan import normalize_site
+    from world.spatial import normalize_room_id, room_spellings
+    rooms = diff.get("rooms") if isinstance(diff, dict) and isinstance(diff.get("rooms"), dict) else {}
+    warnings = []
+    renames = {}
+    packed = []
+    resolved = {}                   # the diff's room key -> its planned room
+    spellings = {}                  # any folded spelling of a held room -> the diff's key
+    # A ROOM WRITTEN UNDER ANOTHER SPELLING is the planned room it folds onto
+    # at commit, found the commit's way (`commit_room_registry.
+    # dedup_minted_rooms`): the scene's rooms first -- the launch seeded
+    # every planned stub -- the first that shares a spelling; then the plan's
+    # own spellings, the one room a spelling names and never a guess between
+    # two (two reviews of 2026-10-13)
+    scene_rooms = (scene or {}).get("rooms") or {}
+    spelled = {}
+    for uid, (pname, _spec) in (specs or {}).items():
+        for key in {normalize_room_id(str(uid)), normalize_room_id(str(pname or ""))} - {""}:
+            spelled.setdefault(key, set()).add(uid)
+    for rid, room in rooms.items():
+        uid = rid if rid in (specs or {}) else None
+        if uid is None and isinstance(room, dict) and rid not in scene_rooms:
+            mine = set(room_spellings(rid, room))
+            matched = next((prev_id for prev_id, prev in scene_rooms.items()
+                            if isinstance(prev, dict)
+                            and prev.get("parent_entity") == room.get("parent_entity")
+                            and mine & set(room_spellings(prev_id, prev))), None)
+            if matched is not None:
+                uid = matched if matched in (specs or {}) else None
+            elif room.get("parent_entity") is None:
+                hits = set()
+                for key in {normalize_room_id(str(rid)),
+                            normalize_room_id(str(room.get("name") or ""))} - {""}:
+                    hits |= spelled.get(key, set())
+                if len(hits) == 1:
+                    uid = next(iter(hits))
+        _name, spec = (specs or {}).get(uid, (None, None)) if uid is not None else (None, None)
+        if not isinstance(room, dict) or not isinstance(spec, dict) \
+                or not normalize_site(spec.get("site")):
+            continue
+        resolved[rid] = uid
+    # ids first, then names, so a room's name never captures another held
+    # room's bodies by folding to its id (third review of 2026-10-13)
+    for rid, uid in resolved.items():
+        for key in (rid, uid):
+            spellings.setdefault(normalize_room_id(str(key)), rid)
+    for rid, uid in resolved.items():
+        for key in ((rooms.get(rid) or {}).get("name"), ((specs or {}).get(uid) or (None,))[0]):
+            if str(key or "").strip():
+                spellings.setdefault(normalize_room_id(str(key)), rid)
+    for rid, uid in resolved.items():
+        room = rooms[rid]
+        _name, spec = specs[uid]
+        plan = planned_anchors(spec).get("anchors") or {}
+        incoming = room.get("anchors")
+        if not isinstance(incoming, dict) or not incoming:
+            continue
+        keys = {}
+        for pid in plan:
+            for key in _spelling_keys(pid):
+                keys.setdefault(key, pid)
+        held = {}
+        for iid, fields in incoming.items():
+            match = iid if iid in plan else next(
+                (keys[k] for k in sorted(_spelling_keys(iid)) if k in keys), None)
+            if match is not None and match != iid:
+                renames.setdefault(rid, {})[iid] = match
+                warnings.append(
+                    f"opening: {rid}'s {iid!r} is the plan's {match!r}, spelled another "
+                    f"way; written under the plan's id")
+            target = match or iid
+            if isinstance(held.get(target), dict) and isinstance(fields, dict):
+                held[target] = {**fields, **held[target]}
+            else:
+                held[target] = copy.deepcopy(fields)
+        for aid, fields in held.items():
+            if aid in plan and _placed_pin(plan[aid]) and isinstance(fields, dict):
+                for key in HELD_PLACE_FIELDS:
+                    fields.pop(key, None)
+        room["anchors"] = held
+        fresh = [aid for aid, fields in held.items() if isinstance(fields, dict)
+                 and not (aid in plan and _placed_pin(plan[aid]))
+                 and fields.get("cell") is None and fields.get("offset") is None]
+        if fresh:
+            packed.append((rid, fresh))
+    _rewrite_fixture_references(scene, diff, renames, spellings)
+    if packed:
+        from world.spatial import merge_scene_with_diff, pack_anchors
+        try:
+            # every room the opening writes, each under the room it IS -- a
+            # re-spelled room is its planned room, with its plan's fixtures
+            # and doorways (second review) -- so a doorway into one declared
+            # only from the room beyond it is a doorway here too (review of
+            # 2026-10-13)
+            trial = {resolved.get(rid, rid): copy.deepcopy(room) for rid, room in rooms.items()}
+            for room in trial.values():
+                # ...and every way into it by that name, from either side
+                # (third review of 2026-10-13)
+                for edge in (room.get("adjacent") or ()) if isinstance(room, dict) else ():
+                    if isinstance(edge, dict) and edge.get("to") in resolved:
+                        edge["to"] = resolved[edge["to"]]
+            merged = merge_scene_with_diff(copy.deepcopy(scene or {}), {"rooms": trial})
+        except Exception:
+            merged = None
+        for rid, fresh in packed:
+            if merged is None:
+                break
+            try:
+                result = pack_anchors(merged, resolved.get(rid, rid), fresh, pin_kept=True)
+            except Exception:
+                continue
+            for aid, pin in result["pins"].items():
+                rooms[rid]["anchors"][aid] = dict(rooms[rid]["anchors"][aid], **pin)
+            for aid in result["stuck"]:
+                warnings.append(f"opening: no place in {rid} holds {aid!r} clear of what "
+                                f"stands there; it stands where its seed put it")
+    return warnings
+
+
+def _rewrite_fixture_references(scene, diff, renames, spellings=None):
+    """Every reference the diff makes to a fixture `hold_planned_fixtures`
+    re-spelled, re-spelled with it: `{room: {old id: plan id}}`, the rooms by
+    the diff's keys; `spellings` reads any folded spelling of a held room as
+    that key, since a body's position may name the room another way."""
+    from world.spatial import normalize_room_id
+    if not renames:
+        return
+    spellings = spellings or {}
+    # this beat's word for where a body is before the stored scene's
+    said = diff.get("positions") if isinstance(diff.get("positions"), dict) else {}
+    stored = (scene or {}).get("positions") or {}
+
+    def room_of_body(name):
+        folded = str(name).strip().casefold()
+        for positions in (said, stored):
+            room = next((str(room) for who, room in positions.items()
+                         if str(who).strip().casefold() == folded), None)
+            if room is not None:
+                return room
+        return None
+
+    # a spelling folded the same way in every room it was folded in: what an
+    # op uses, naming no room, and a body whose room this diff places it
+    # nowhere it can find (its position keyed by an id the commit folds
+    # later) -- and never a spelling another room holds as its own anchor,
+    # which that body may as well be standing at (second review)
+    flat = {}
+    for mapping in renames.values():
+        for old, new in mapping.items():
+            flat[old] = new if flat.get(old, new) == new else None
+    elsewhere = set()
+    for rooms_of in (((scene or {}).get("rooms") or {}), diff.get("rooms") or {}):
+        for rid, room in rooms_of.items():
+            if rid not in renames and isinstance(room, dict) \
+                    and isinstance(room.get("anchors"), dict):
+                elsewhere.update(room["anchors"])
+    for table, fields in (("stations", ("at", "cover")),
+                          ("poses", ("support", "relative_to"))):
+        for name, record in (diff.get(table) or {}).items() \
+                if isinstance(diff.get(table), dict) else ():
+            if not isinstance(record, dict):
+                continue
+            room = room_of_body(name)
+            held = room if room in renames else (
+                spellings.get(normalize_room_id(room)) if room is not None else None)
+            # the body's own room's folds, by any spelling of the room; the
+            # room-free map only for a body placed nowhere this can find
+            mapping = (renames.get(held) or {}) if room is not None else \
+                {old: new for old, new in flat.items() if new and old not in elsewhere}
+            for field in fields:
+                value = record.get(field)
+                if isinstance(value, str) and value in mapping:
+                    record[field] = mapping[value]
+    for table in ("contact_ops", "contact_action_ops", "substance_ops"):
+        for op in diff.get(table) or () if isinstance(diff.get(table), list) else ():
+            if not isinstance(op, dict):
+                continue
+            # an op is its body's: folded by the room the first of its names
+            # placed anywhere stands in, as a station is -- a substance's
+            # source may be the fixture and its target the body -- and by the
+            # room-free map only where none is found, never then a spelling
+            # another room holds (third and fourth reviews of 2026-10-13)
+            room = next((r for r in (room_of_body(op.get(field))
+                                     for field in ("actor", "source", "target")
+                                     if isinstance(op.get(field), str))
+                         if r is not None), None)
+            held = room if room in renames else (
+                spellings.get(normalize_room_id(room)) if room is not None else None)
+            mapping = (renames.get(held) or {}) if room is not None else \
+                {old: new for old, new in flat.items() if new and old not in elsewhere}
+            for field in ("actor", "source", "target"):
+                value = op.get(field)
+                if isinstance(value, str) and value in mapping:
+                    op[field] = mapping[value]
 
 
 def planned_room_ids(cid):
@@ -2804,6 +3112,7 @@ __all__ = [
     "PLAN_SEEDED_FIELDS", "STRUCTURES_KEY", "apply_planned_layout",
     "seed_planned_far_look",
     "apply_solved_plans", "planned_anchors", "planned_seed",
+    "HELD_PLACE_FIELDS", "hold_planned_fixtures", "planned_fixture_brief",
     "write_planned_layout",
     "apply_frontier_mutations", "claim_frontier_spaces",
     "composed_scene", "frontier_refusal", "frontier_spaces",

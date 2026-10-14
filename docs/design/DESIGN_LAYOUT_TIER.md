@@ -208,13 +208,23 @@ one cell to the designer's check.
 
 **Never a move made silently.** A fixture the solver stood off the wall the
 model named, out of the corner it named, or against a wall when it asked for
-the middle, is written on the place the model named and pinned nowhere; one
-it could not place at all, the same. The engine lays it as it lays every
-unpinned fixture, the designer dressing the room sees what it crowds, and
-settling it is the model's (the owner: "capacity goes back to the model").
-A window keeps the outside wall the solver found -- a window in an inside wall
-is none -- and its move is listed. Every move and every unplaced fixture is
-in the solve's record (`planned.layout`) and the log.
+the middle, is pinned where the solver stood it, its `dir` the wall it stands
+against, and the move is listed; a designer dressing the room re-settles it
+by its `cell`. One it could not place at all is written on the place the
+model named and pinned nowhere. (Until 2026-10-13 a moved fixture was written
+unpinned on the place the model named -- "capacity goes back to the model"
+-- and the engine laid it again by its seed on the wall that could not hold
+it: Home 11's closets on the genkan's doorway, its stove in the tub. The
+owner, reading that map: "match layout lab ... stop overlapping
+furnitures".) A window keeps the outside wall the solver found -- a window in
+an inside wall is none -- and its move is listed. Every move and every
+unplaced fixture is in the solve's record (`planned.layout`) and the log.
+
+**A stair is climbed from its foot.** An enclosed straight stair's doorways
+open off its flight or at the end their storey takes -- the foot below, the
+head above (`layout_solver._stair_doorways`) -- and each hall records its
+`flight`, which the plan draws the treads on (2026-10-13; 12 of 29 enclosed
+stair doorways had opened onto the middle of a flight).
 
 **Never a second scene writer, and never half a building.** The tier writes
 the plan (`structure.write_planned_layout`: all or nothing, only onto the rows

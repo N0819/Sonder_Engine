@@ -465,6 +465,10 @@ def director_establish(ctx, nonce):
     # body in a room of its own beside it is the defect
     # `seed_scene_from_plan` was written for, one body at a time.
     _enforce_opening_placements(ctx, out)
+    # ...AND THE PLAN'S FIXTURES ARE THE ROOM'S: described, never made again
+    # (`structure.hold_planned_fixtures`). Here, in the establish's own
+    # output, because the opening's perception merges this diff directly.
+    _hold_the_plans_fixtures(ctx, chat, out)
 
     attire = out.get("attire") or {}
     for entity, state in attire.items():
@@ -661,6 +665,23 @@ def _enforce_opening_placements(ctx, out):
         positions[key] = room
 
 
+def _hold_the_plans_fixtures(ctx, chat, out):
+    """`structure.hold_planned_fixtures` over the opening's rooms, against
+    the world before it (the launch lays the plan's rooms first); each fold
+    and each fixture no place holds is warned. Fail-open: a story with no
+    plan is left exactly as it was."""
+    try:
+        from world.structure import _planned_specs, hold_planned_fixtures
+        specs = _planned_specs(chat["id"])
+        if not specs:
+            return
+        for note in hold_planned_fixtures(get_scene(chat["id"], chat), out, specs):
+            ctx.add_warning(note)
+    except Exception as exc:
+        ctx.add_warning(f"opening: holding the plan's fixtures failed ({exc!r}); "
+                        f"the opening's rooms are as the Director wrote them")
+
+
 def _opening_planned_rooms(ctx):
     """The plan's brief for EVERY planned room (`planned_room_brief`), for
     the one beat that has no scene to scope by -- the opening. Interpret and
@@ -678,7 +699,9 @@ def _opening_planned_rooms(ctx):
         ids = sorted(planned_room_ids(ctx.chat["id"]))
         if not ids:
             return None
-        return planned_room_brief(ctx.chat["id"], {}, ids) or None
+        # with each laid-out room's storey and standing fixtures: the
+        # opening describes them, never furnishes the room again beside them
+        return planned_room_brief(ctx.chat["id"], {}, ids, fixtures=True) or None
     except Exception:
         return None
 

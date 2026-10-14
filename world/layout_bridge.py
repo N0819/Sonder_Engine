@@ -46,12 +46,19 @@ WHAT A SOLVE BECOMES (`planned_layout`):
 * each fixture the plan lists that the first call says MARKS where a stair
   or a doorway meets the room (`marks`) -- not a thing standing in it -- a
   point pinned where that way meets the room, blocking no line;
-* each fixture the solver moved off the wall the model named, or could not
-  place, an anchor on the wall the model named and pinned NOWHERE -- never a
-  move made silently: the engine lays it along that wall as it lays every
-  unpinned fixture, the designer that dresses the room sees whatever it
-  crowds, and settling it is the model's (the owner: "capacity goes back to
-  the model"). Both are listed in the solve's record;
+* each fixture the solver moved off the wall the model named, pinned where
+  the solver stood it, with the wall it stands against -- what the layout lab
+  draws (the owner, 2026-10-13: "match layout lab ... stop overlapping
+  furnitures"; it replaced "capacity goes back to the model", under which a
+  moved fixture went back unpinned to the wall that could not hold it and was
+  laid on a doorway or another fixture). Never a move made silently: it is
+  listed in the solve's record, and a designer dressing the room re-settles
+  it by its `cell`. One the solver could not place at all is written on the
+  wall the model named and pinned nowhere, listed as unplaced;
+* each fixture the plan lists that the first call says is off the floor --
+  hung on a wall, from the ceiling, on or in another fixture -- its `mount`
+  on the plan's record, so a place code chooses for it shares the floor with
+  what stands beneath (`spatial_fov.stands_on_floor`);
 * each window in its wall, the room's own and never an anchor among its
   furniture (chat 168, 2026-10-12: the owner's shrine had every window laid
   as a fixture, and no view ever looked out of one) -- in the outside wall
@@ -1622,8 +1629,11 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             report["described"].append({"room": uid, "area_m2": described,
                                         "solved": {"w": r.w, "d": r.d}})
             out[uid]["record"]["described_m2"] = described
-    # FIXTURES: pinned where they stand as asked; never pinned where the
-    # solver moved them or could not place them
+    # FIXTURES: pinned where the solver stood them, the ones it moved off the
+    # place the model named included -- the map draws what the layout lab
+    # draws (owner, 2026-10-13: "match layout lab ... stop overlapping
+    # furnitures"). A move is never silent: it is listed in the record. Only
+    # a fixture the solver could not place at all has no place to pin.
     asked = {}
     for uid, sroom in spec_rooms.items():
         for f in sroom.get("fixtures") or ():
@@ -1654,24 +1664,22 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             # pillow, a stove with its burners); never read as what it IS --
             # that is its `desc`, the plan's word
             drawn = kind or str(f.get("kind") or "").strip().casefold().replace(" ", "_")
+            flush = [s for s in _SIDES if _flush(room, rect, s)]
             if at and at != "walls" and not _stands_at(room, rect, at, kind):
-                stands = [s for s in _SIDES if _flush(room, rect, s)] or ["middle"]
-                anchor = {"desc": f.get("name") or aid,
-                          "footprint": footprint_for_extent(rect.w, rect.d), "height": f["height"]}
-                if drawn:
-                    anchor["kind"] = drawn
-                if at in _SIDES:
-                    anchor["dir"] = at
-                elif at in _CORNERS:
-                    anchor["dir"] = at[7:]
-                out[uid]["anchors"][aid] = anchor
+                # MOVED, AND PINNED WHERE THE SOLVER STOOD IT. Written back
+                # unpinned on the wall that could not hold it, the engine's
+                # read-time placement found no clear place there either, and
+                # laid it on a doorway or another fixture: Home 11's closet on
+                # the genkan's doorway, its stove in the tub, its futon under
+                # the trunk (review of 2026-10-13). Its `dir` is the wall it
+                # stands against, never the one that was asked; the record
+                # keeps both, and a designer re-settles it by its `cell`.
                 moved = {"room": uid, "anchor": aid, "name": f.get("name") or aid,
-                         "asked": at, "solver_put_it": "/".join(stands)}
+                         "asked": at, "solver_put_it": "/".join(flush or ["middle"])}
                 report["moved"].append(moved)
                 out[uid]["record"]["moved"].append(moved)
-                continue
-            flush = [s for s in _SIDES if _flush(room, rect, s)]
-            if at in _SIDES:
+                side = flush[0] if len(flush) == 1 else None
+            elif at in _SIDES:
                 side = at
             elif at in _CORNERS:
                 side = at[7:]
@@ -1690,7 +1698,16 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         for f in (spec_rooms.get(uid) or {}).get("fixtures") or ():
             mount = str(f.get("mount") or "floor")
             if mount != "floor":
-                continue                     # on a wall, from the ceiling, in a fixture
+                # on a wall, from the ceiling, in a fixture: the solver lays
+                # none of these. One the plan lists keeps its record, which
+                # read time would otherwise lay as a thing standing on the
+                # floor; its mount says it is not one
+                for fid in ([f["id"]] if int(f.get("count") or 1) == 1
+                            else [f"{f['id']}_{i + 1}" for i in range(int(f.get("count") or 1))]):
+                    aid = _written_id(uid, fid, asked, plan_ids[uid])
+                    if aid in plan_ids[uid]:
+                        out[uid]["anchors"][aid] = {"mount": mount}
+                continue
             count = int(f.get("count") or 1)
             copies = [f["id"]] if count == 1 else [f"{f['id']}_{i + 1}" for i in range(count)]
             for fid in copies:
@@ -2245,6 +2262,21 @@ def _stair_halls(building, layout, rects, levels, halls, out):
     for hall, entry in made.items():
         r, lv, well = rects[hall], levels[hall], entry["well"]
         name = _text(well.get("name"), 80) or "stair"
+        # THE FLIGHT IN ITS HALL: the stairwell's rectangle, the same cells on
+        # every storey it joins, in the hall's own cells -- a hall takes the
+        # landing beside it as well, so its treads are drawn on the flight,
+        # never over the whole hall (Home 11's basement hall was ten by five
+        # round a two-by-five flight) -- and the flight's foot and head where
+        # the solver set them (`layout_solver._stair_doorways`)
+        flight = {}
+        rect = well.get("rect")
+        if isinstance(rect, dict) and all(isinstance(rect.get(k), int) for k in ("x", "y", "w", "d")):
+            flight["flight"] = {"x": rect["x"] - r.x, "y": rect["y"] - r.y,
+                                "w": rect["w"], "d": rect["d"]}
+            for end in ("foot", "head"):
+                cells = [c for c in well.get(end) or () if isinstance(c, (list, tuple)) and len(c) == 2]
+                if cells:
+                    flight[end] = [[int(c[0]) - r.x, int(c[1]) - r.y] for c in cells]
         out[entry["uid"]].update({
             "geometry": {"extent": {"w": r.w, "d": r.d}, "shape": SOLVED_SHAPE, "level": lv,
                          "exposure": "enclosed",
@@ -2255,7 +2287,7 @@ def _stair_halls(building, layout, rects, levels, halls, out):
                      LAYOUT_MADE_KEY: True, "stair_of": sorted(entry["serves"]),
                      # its shape, which a plan of it draws: a straight flight,
                      # an L, a U, a spiral, a ladder (`layout_solver`)
-                     "stair_kind": str(well.get("kind") or "")}})
+                     "stair_kind": str(well.get("kind") or ""), **flight}})
     # THE FLIGHT: each hall to the one a storey above it in its stairwell
     way = {"ladder": "ladder"}
     for well in layout.stairwells:

@@ -120,8 +120,9 @@ def test_companions_walk_with_the_walker(temp_db, monkeypatch):
 def test_every_anchor_is_asked_for_its_height_and_footprint():
     establish = get_prompt_body("director_establish", "en")
     # `opacity` joined the establish shape on 2026-09-16 with the shared
-    # place vocabulary; the height and footprint the owner asked for stay.
-    assert "anchors:{anchor_id:{desc, dir, height, footprint, opacity OPTIONAL:'opaque'|'see_through'}}" in establish
+    # place vocabulary, `mount` on 2026-10-13 (what is off the floor); the
+    # height and footprint the owner asked for stay.
+    assert "anchors:{anchor_id:{desc, dir, height, footprint, opacity OPTIONAL:'opaque'|'see_through', mount OPTIONAL}}" in establish
     assert "EVERY anchor you write states its `height` and its `footprint`" in establish
     # A beat's rooms are written by the encoder (or the room author, from the
     # same chunk); the causal Director's spatial hand that carried this was
@@ -129,7 +130,7 @@ def test_every_anchor_is_asked_for_its_height_and_footprint():
     from llm.prompts import unified_specialist_prompt
     encoder = unified_specialist_prompt(["rooms"], "en", [])
     assert "EVERY anchor you write states its `height` and its `footprint`" in encoder
-    assert "anchors?:{anchor_id:{desc,dir,height,footprint,opacity?}}" in encoder
+    assert "anchors?:{anchor_id:{desc,dir,height,footprint,opacity?,cell?:[x,y],mount?}}" in encoder
 
 
 def test_nobody_lands_in_furniture_and_a_walk_to_a_fixture_ends_beside_it():

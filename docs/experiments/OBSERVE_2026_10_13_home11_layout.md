@@ -24,6 +24,14 @@ doorway, the stair halls drawn with no door.
 Coordinates are `(x, y, w, d)` in paces on plan `layout:genkan`; y runs
 south. "Ground" is storey 0.
 
+**Status, the evening of 2026-10-13.** On the owner's go, items 3 and 4 and
+the first half of item 10 landed, and question B was answered (anything
+standing on the floor holds it at every height). Replaying this solve from
+its captured answers through the new code: fixtures sharing a floor cell 3
+to 0, fixtures in a doorway 1 to 0, stair doorways mid-flight 2 to 0. What
+is still open, and what the round left, is in the register (`UNBUILT.md`
+§1.216); the findings below are as observed.
+
 ## The house
 
 **1. The divider cannot lay the house the architect described, and the tier

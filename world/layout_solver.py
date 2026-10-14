@@ -1546,6 +1546,99 @@ def _room_cells(layout, rid, lv):
     return cells
 
 
+def _flight_ends(rect):
+    """The two short ends of a straight flight's rectangle, `(a, b)`: each
+    the row or column of cells a body steps onto or off it from, `a` the
+    north or the west one."""
+    r = Rect(**rect)
+    if r.w >= r.d:
+        return ({(r.x, r.y + j) for j in range(r.d)},
+                {(r.x + r.w - 1, r.y + j) for j in range(r.d)})
+    return ({(r.x + i, r.y) for i in range(r.w)},
+            {(r.x + i, r.y + r.d - 1) for i in range(r.w)})
+
+
+def _stair_doorways(layout, per_wall):
+    """Where each doorway into the hall of an ENCLOSED STRAIGHT stair opens:
+    `{(level, rid, other): cell of rid}`. A flight is climbed from its foot
+    on the lowest storey it joins and left at its head on the top one, so a
+    hall's doorway opens off the flight, or onto it only at the end its
+    storey takes -- the foot below, the head above, either end on a storey
+    between -- at the allowed cell nearest that end. The foot is whichever
+    end of the flight costs the well's doorways fewer paces to reach it
+    (ties: the north or west end), and is recorded on the stairwell as
+    `foot` and `head`. Home 11 (2026-10-13): a doorway spread evenly along
+    the shared wall opened onto the middle of a flight on 12 of the 29
+    enclosed stair doorways over the lab's four baselines, Home 11 and the
+    solver's test house; Home 11's brief has its stair "arrive at the north
+    end of the Hallway". A doorway no cell
+    allows keeps its even-spread cell, with a warning: never a refusal, and
+    no room rectangle or seed depends on it. Open stairs and every other
+    shape keep their placement."""
+    out = {}
+    for well in layout.stairwells:
+        if well.get("kind") != "straight" or not well.get("enclosed"):
+            continue
+        a, b = _flight_ends(well["rect"])
+        flight = Rect(**well["rect"]).cells()
+        halls = {hall: int(lv) for lv, hall in (well.get("halls") or {}).items()}
+        if not halls:
+            continue
+        low, top = min(halls.values()), max(halls.values())
+        doors = []
+        for (lv, rid, side), items in per_wall.items():
+            for _o, other, cells, kind in items:
+                if kind == "open":
+                    continue
+                if rid in halls:
+                    doors.append(((lv, rid, other), lv, [tuple(c) for c in cells], None))
+                elif other in halls:
+                    dx, dy = _STEP[side]
+                    doors.append(((lv, rid, other), lv,
+                                  [(c[0] + dx, c[1] + dy) for c in cells], (dx, dy)))
+        if not doors:
+            continue
+
+        def end_of(lv, foot, head):
+            if lv == low and lv != top:
+                return foot
+            if lv == top and lv != low:
+                return head
+            return foot | head
+
+        def allowed(lv, cells, foot, head):
+            end = end_of(lv, foot, head)
+            return [c for c in cells if c not in flight or c in end]
+
+        def paces(c, end):
+            return min(abs(c[0] - e[0]) + abs(c[1] - e[1]) for e in end)
+
+        best = None
+        for foot, head in ((a, b), (b, a)):
+            cost = 0
+            for _key, lv, cells, _step in doors:
+                ok = allowed(lv, cells, foot, head)
+                cost += min(paces(c, end_of(lv, foot, head)) for c in ok) if ok else 10 ** 6
+            if best is None or cost < best[0]:
+                best = (cost, foot, head)
+        _cost, foot, head = best
+        well["foot"] = [list(c) for c in sorted(foot)]
+        well["head"] = [list(c) for c in sorted(head)]
+        taken = set()                   # (storey, hall cell): each storey's hall its own
+        for key, lv, cells, step in sorted(doors, key=lambda d: (d[1], str(d[0][1]), str(d[0][2]))):
+            ok = [c for c in allowed(lv, cells, foot, head) if (lv, c) not in taken]
+            if not ok:
+                layout.warnings.append(
+                    f"{layout.names.get(key[1], key[1])}: its doorway into {well.get('name') or 'the stair'} "
+                    f"could not open at the end of the flight its storey is reached by")
+                continue
+            end = end_of(lv, foot, head)
+            cell = min(ok, key=lambda c: (paces(c, end), c[1], c[0]))
+            taken.add((lv, cell))
+            out[key] = cell if step is None else (cell[0] - step[0], cell[1] - step[1])
+    return out
+
+
 def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset()):
     """One doorway per join between rooms, spread along a shared wall in
     declared order; a doorway onto every enclosed stairwell; the entrance
@@ -1569,11 +1662,23 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset()):
                     layout.warnings.append(f"{layout.names[other]} was asked on the {side} side of "
                                            f"{layout.names[rid]} and stands on the {got}")
                 per_wall.setdefault((lv, rid, got), []).append((order or 0, other, cells, kind))
-    for (lv, rid, side), items in per_wall.items():
+    for items in per_wall.values():
         items.sort(key=lambda t: t[0])
-        n = len(items)
+    # a doorway into a straight stair's hall opens at the end of the flight
+    # its storey takes (`_stair_doorways`); every other doorway of the wall
+    # is spread evenly over the cells left, as every doorway was before
+    at_stair = _stair_doorways(layout, per_wall)
+    for (lv, rid, side), items in per_wall.items():
+        fixed = {k: at_stair[(lv, rid, other)] for k, (_o, other, _c, _kind) in enumerate(items)
+                 if (lv, rid, other) in at_stair}
+        rest = [k for k in range(len(items)) if k not in fixed]
+        spread = {}
+        for j, k in enumerate(rest):
+            cells = items[k][2]
+            free = [c for c in cells if tuple(c) not in set(fixed.values())] or cells
+            spread[k] = free[min(len(free) - 1, int((j + 1) * len(free) / (len(rest) + 1)))]
         for k, (_o, other, cells, kind) in enumerate(items):
-            pos = cells[min(len(cells) - 1, int((k + 1) * len(cells) / (n + 1)))]
+            pos = fixed[k] if k in fixed else spread[k]
             door = {"a": rid, "b": other, "level": lv, "side": side, "cell": list(pos), "kind": kind}
             if kind == "open":
                 # an open stair: no wall between it and its room, the whole

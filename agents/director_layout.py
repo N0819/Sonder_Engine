@@ -486,8 +486,9 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
         _file_run(cid, job, key, entry)
         runs[key] = entry
         logger.info("layout tier: chat=%s building=%s laid out on %s in %.1fs; "
-                    "%d fixtures moved off their wall and %d unplaced, both left "
-                    "to the designer; %d the plan listed restored, %d ways marked",
+                    "%d fixtures moved off their wall and pinned where the solver "
+                    "stood them, %d unplaced and left to the designer; %d the plan "
+                    "listed restored, %d ways marked",
                     cid, key, building["plan"], entry["seconds"], entry["moved"],
                     entry["unplaced"], entry["restored"], entry["marks"])
         # the building's rooms and the ground the solve laid round it

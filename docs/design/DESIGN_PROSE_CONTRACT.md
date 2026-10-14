@@ -489,8 +489,10 @@ checks a design the job already packed (`_install_test`), and one the world
 has since moved under fails that check and stays a seed -- for the beat that
 enters the room, or for the job's next run.
 - **The packer.** After each `draft_room`, and at every check, a fixture
-  the draft places keeps its seeded cell when that cell is free at its
-  height; otherwise it takes the free place nearest its seed ALONG ITS OWN
+  the draft places keeps its seeded cell when that cell is free -- at its
+  height, and for a thing standing on the floor of every other floor-standing
+  thing at any height (2026-10-13; a `mount` of hung, ceiling, on or in says
+  a thing is off the floor) -- otherwise it takes the free place nearest its seed ALONG ITS OWN
   WALL (`offset`), or, for a corner or a fixture with no wall, the nearest
   free cell (`cell`). Every place is tried by the engine's own placement, so
   runs, large footprints, lanes, shaped rims and shared corners come out as

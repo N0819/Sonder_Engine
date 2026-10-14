@@ -35,7 +35,7 @@ from typing import Optional
 
 from llm.schemas import NON_ENTITY_FIELD_KEYS, is_derived_entity_name
 from world.spatial_orientation import (
-    TURNS, turn_bearing,
+    TURNS, turn_bearing, strip_one_storey_verticals,
     _BEARINGS,
     _LEFT_SECTORS,
     _REL_SECTORS,
@@ -88,7 +88,8 @@ from world.spatial_walk import (
     BLOCKING_HEIGHT, DEFAULT_BEAT_SECONDS, PACES, PACES_PER_SECOND,
     RUN_PACES_PER_SECOND, blocked_cells, cell_path, door_cell, entry_cell,
     held_cells, inside_the_door, paces_for, standing_cell, walk,
-    free_cell_near, beside_named, anchor_stand_cell, FLIGHT_PACES,
+    free_cell_near, beside_named, anchor_stand_cell, FLIGHT_PACES, landing_cell,
+    LANDING_REACH,
 )
 from world.spatial_levels import (  # noqa: E402
     WAYS, FLOOR_LOSS_DB, normalize_level, edge_way, declared_way, is_overlook, room_level,
@@ -288,7 +289,8 @@ from world.spatial_fov import (
     room_centre,
     room_has_geometry,
     shadowcast, sight_digest, sight_passes, _placed_neighbours,
-    wall_aperture_cells,
+    stands_on_floor, wall_aperture_cells, OFF_FLOOR_MOUNTS, resting_on,
+    support_cells, whole_cells, doorway_clearance, STANDING,
 )
 
 

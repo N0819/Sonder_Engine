@@ -232,14 +232,17 @@ def test_a_solved_building_becomes_the_plans_own_geometry():
     json.dumps(solved)
 
 
-def test_a_fixture_the_solver_moved_or_could_not_place_is_never_pinned():
-    """Never a move made silently (the owner: "capacity goes back to the
-    model"). A fixture the solver stood off the wall the model named is
-    written on that wall and pinned nowhere -- the engine lays it along that
-    wall as every unpinned fixture, and the designer dressing the room sees
-    what it crowds -- and one it could not place at all is written the same
-    way; both are listed. A window keeps the outside wall the solver found,
-    since a window in an inside wall is none, and its move is listed too."""
+def test_a_fixture_the_solver_moved_is_pinned_where_it_stands_and_listed():
+    """The owner, 2026-10-13, reading Home 11's map: "match layout lab ...
+    stop overlapping furnitures". A fixture the solver stood off the place
+    the model named is pinned where the solver stood it -- its `cell` and
+    `extent`, its `dir` the wall it stands against, never the one asked --
+    and the move is listed, never made silently. Written back unpinned on
+    the wall that could not hold it (the rule until then), the engine laid
+    it again by its seed, and Home 11's closet stood on the genkan's
+    doorway. One the solver could not place at all has no place to pin:
+    written on the wall the model named, unpinned, and listed. A window
+    keeps the outside wall the solver found, and its move is listed too."""
     from world.layout_solver import Layout, Rect
     b = _building()
     spec = lb.spec_from_answers(b, lb.hold_inventory(b, SORT), RELATE)
@@ -256,17 +259,162 @@ def test_a_fixture_the_solver_moved_or_could_not_place_is_never_pinned():
                        "level": 1, "side": "e", "cell": [5, 2]}]
     solved, report = lb.planned_layout(b, spec, layout)
     hearth = solved["hall"]["anchors"]["hearth"]
-    assert hearth["dir"] == "w" and "cell" not in hearth and "extent" not in hearth
+    assert hearth["cell"] == [5, 1] and hearth["extent"] == {"w": 1, "d": 2}
+    assert hearth["dir"] == "e", "the wall it stands against, never the west it was asked"
     table = solved["hall"]["anchors"]["long_table"]
-    assert "cell" not in table and "dir" not in table, "asked for the middle, stood at a wall"
-    moved = {(m["room"], m["anchor"]) for m in report["moved"]}
-    assert moved == {("hall", "hearth"), ("hall", "long_table"), ("loft", "gable_window")}
+    assert table["cell"] == [2, 0] and table["extent"] == {"w": 2, "d": 2}
+    assert table["dir"] == "n", "asked for the middle, stood at the north wall"
+    moved = {(m["room"], m["anchor"]): m for m in report["moved"]}
+    assert set(moved) == {("hall", "hearth"), ("hall", "long_table"), ("loft", "gable_window")}
+    assert (moved[("hall", "hearth")]["asked"], moved[("hall", "hearth")]["solver_put_it"]) == ("w", "e")
+    assert (moved[("hall", "long_table")]["asked"],
+            moved[("hall", "long_table")]["solver_put_it"]) == ("middle", "n")
     unplaced = {(u["room"], u["anchor"]) for u in report["unplaced"]}
     assert ("kitchen", "range") in unplaced and ("loft", "bed") in unplaced
     assert solved["kitchen"]["anchors"]["range"]["dir"] == "n"
     assert "cell" not in solved["kitchen"]["anchors"]["range"]
     assert solved["loft"]["geometry"]["windows"][0]["dir"] == "e"
     assert solved["hall"]["layout"]["moved"] and solved["kitchen"]["layout"]["unplaced"]
+
+
+def test_a_moved_fixture_stands_where_the_solver_drew_it_never_on_another():
+    """What the engine draws is what the solver drew. The hearth was asked
+    for the west wall and the solver stood it on the east, because benches
+    fill the west wall: written back unpinned on the west wall, the engine
+    laid it again there, on the benches (Home 11, 2026-10-13: four moved
+    fixtures re-laid on a doorway, in a tub, under a trunk). Pinned where the
+    solver stood it, it shares no cell with anything the solve placed."""
+    from world.layout_solver import Layout, Rect
+    from world.spatial import anchor_cells
+    from world.structure import apply_planned_layout
+    b = _building()
+    spec = lb.spec_from_answers(b, lb.hold_inventory(b, SORT), RELATE)
+    layout = Layout(name="hall")
+    layout.floors = {0: {"hall": [Rect(0, 0, 6, 5)], "kitchen": [Rect(6, 0, 3, 5)]},
+                     1: {"loft": [Rect(0, 0, 6, 5)]}}
+    layout.fixtures = {
+        "hall": [{"id": "hearth", "name": "the hearth", "kind": "hearth", "at": "w",
+                  "rect": Rect(5, 1, 1, 2), "height": "waist"},
+                 {"id": "long_table", "name": "the long table", "kind": "table",
+                  "rect": Rect(2, 1, 2, 2), "height": "waist"},
+                 {"id": "benches_1", "name": "a bench", "kind": "bench",
+                  "rect": Rect(0, 0, 1, 3), "height": "waist"},
+                 {"id": "benches_2", "name": "a bench", "kind": "bench",
+                  "rect": Rect(0, 3, 1, 2), "height": "waist"}],
+        "kitchen": [], "loft": []}
+    solved, report = lb.planned_layout(b, spec, layout)
+    assert {(m["room"], m["anchor"]) for m in report["moved"]} == {("hall", "hearth")}
+    specs = {}
+    for uid, (name, plan) in copy.deepcopy(SPECS).items():
+        if uid in solved:
+            for key, value in (solved[uid].get("geometry") or {}).items():
+                if value is not None:
+                    plan[key] = value
+            anchors = dict(plan.get("anchors") or {})
+            for aid, fields in (solved[uid].get("anchors") or {}).items():
+                anchors[aid] = dict(anchors.get(aid) or {}, **fields)
+            plan["anchors"] = anchors
+            plan["layout"] = solved[uid].get("layout")
+        specs[uid] = (name, plan)
+    scene = {"rooms": {"hall": {"name": "the Hall", "planned": True, "anchors": {},
+                                "adjacent": []}},
+             "positions": {}, "entities": {}}
+    apply_planned_layout(scene, specs, ["hall"])
+    placed = {aid: set(rec["cells"]) for aid, rec in anchor_cells(scene, "hall").items()
+              if not rec["implicit"]}
+    assert placed["hearth"] == {(5, 1), (5, 2)}
+    for aid, cells in placed.items():
+        for other, theirs in placed.items():
+            assert aid == other or not cells & theirs, (aid, other, cells & theirs)
+
+
+def test_a_fixture_off_the_floor_carries_its_mount_onto_the_plan():
+    """A thing the first call says is hung, from the ceiling, on or in
+    another fixture is laid by no solver -- and the plan's record of it, left
+    as it was, read as a thing standing on the floor, holding its cells from
+    everything that does (`spatial_fov.stands_on_floor`, 2026-10-13). Its
+    mount goes onto the plan's record; one the plan does not list gets no
+    record from it."""
+    from world.spatial import stands_on_floor
+    specs = copy.deepcopy(SPECS)
+    specs["hall"][1]["anchors"]["lantern"] = {"desc": "an iron lantern"}
+    sort = copy.deepcopy(SORT)
+    sort["rooms"][0]["fixtures"] += [
+        {"id": "lantern", "name": "the lantern", "mount": "ceiling"},
+        {"id": "pot_rack", "name": "a pot rack", "mount": "hung"}]
+    b, inv, spec, layout = _solve(specs=specs, sort=sort)
+    solved, _report = lb.planned_layout(b, spec, layout, inventory=inv)
+    assert solved["hall"]["anchors"]["lantern"] == {"mount": "ceiling"}
+    assert "pot_rack" not in solved["hall"]["anchors"]
+    assert not stands_on_floor({"desc": "an iron lantern", "mount": "ceiling"})
+    assert stands_on_floor(solved["hall"]["anchors"]["hearth"])
+
+
+def test_a_fixture_a_re_solve_could_not_place_loses_the_earlier_pin(temp_db):
+    """An earlier solve's pin names a place in a room this solve
+    re-measured: a fixture this solve could not place keeps its words and
+    its wall and loses that place, on the plan as on the stub
+    (`_lay_stub_on_its_plan`). A host's own `cell` is no placer's pin and is
+    never taken."""
+    from world.structure import write_planned_layout
+    cid = _chat(temp_db)
+    _plant(cid)
+    site = {"site": {"plan": "p", "x": 0, "y": 0, "elev_m": 0.0}}
+    plan = _registry(cid)
+    first = {"hall": {"geometry": site, "anchors": {
+        "hearth": {"cell": [0, 1], "extent": {"w": 1, "d": 2}, "dir": "w"},
+        "bench": {"cell": [3, 3], "dir": "s"}}}}
+    assert write_planned_layout(cid, first, expected={"hall": plan["hall"]}) is True
+    plan = _registry(cid)
+    assert plan["hall"]["anchors"]["hearth"]["cell"] == [0, 1]
+    second = {"hall": {"geometry": site, "anchors": {
+        "hearth": {"dir": "w", "footprint": "small", "height": "waist"},
+        "bench": {"dir": "s"}}}}
+    assert write_planned_layout(cid, second, expected={"hall": plan["hall"]}) is True
+    anchors = _registry(cid)["hall"]["anchors"]
+    assert "cell" not in anchors["hearth"] and "extent" not in anchors["hearth"]
+    assert anchors["hearth"]["desc"] == "a stone hearth" and anchors["hearth"]["dir"] == "w"
+    assert anchors["bench"]["cell"] == [3, 3], "a host's own cell stays"
+    # a fixture an earlier solve said hung, this one stood on the floor: on
+    # the plan's record too, its mount goes with the solve that laid it
+    plan = _registry(cid)
+    third = {"hall": {"geometry": site, "anchors": {"hearth": {"mount": "hung"}}}}
+    assert write_planned_layout(cid, third, expected={"hall": plan["hall"]}) is True
+    plan = _registry(cid)
+    assert plan["hall"]["anchors"]["hearth"]["mount"] == "hung"
+    fourth = {"hall": {"geometry": site, "anchors": {"hearth": {
+        "cell": [0, 1], "extent": {"w": 1, "d": 2}, "dir": "w"}}}}
+    assert write_planned_layout(cid, fourth, expected={"hall": plan["hall"]}) is True
+    assert "mount" not in _registry(cid)["hall"]["anchors"]["hearth"]
+
+
+def test_a_mount_goes_with_the_solve_that_laid_it():
+    """A stub's anchors are the plan's: a pot rack an earlier solve called
+    hung, solved again standing on the floor, is standing on the floor --
+    re-planned in between or not (review of 2026-10-13: the old `mount`
+    outlived every solve after it, and the rack shared cells it had no right
+    to)."""
+    from world.structure import apply_planned_layout
+    site = {"plan": "layout:hall", "x": 0, "y": 0, "elev_m": 0.0}
+    hung = {"name": "Hall", "extent": {"w": 6, "d": 5}, "shape": "rectangle", "level": 0,
+            "site": dict(site), "layout": {"plan": "layout:hall"},
+            "anchors": {"rack": {"desc": "a pot rack", "mount": "hung"}}}
+    replanned = {"name": "Hall", "anchors": {"rack": {"desc": "a pot rack"}}}
+    standing = {"name": "Hall", "extent": {"w": 6, "d": 5}, "shape": "rectangle", "level": 0,
+                "site": dict(site), "layout": {"plan": "layout:hall"},
+                "anchors": {"rack": {"desc": "a pot rack", "cell": [3, 0],
+                                     "extent": {"w": 2, "d": 1}, "footprint": "small",
+                                     "height": "full", "dir": "n"}}}
+    for between in (None, replanned):
+        scene = {"rooms": {"hall": {"name": "Hall", "planned": True,
+                                    "anchors": {"rack": {"desc": "a pot rack"}}, "adjacent": []}},
+                 "positions": {}}
+        apply_planned_layout(scene, {"hall": ("Hall", hung)}, ["hall"])
+        assert scene["rooms"]["hall"]["anchors"]["rack"]["mount"] == "hung"
+        if between:
+            apply_planned_layout(scene, {"hall": ("Hall", between)}, ["hall"])
+        apply_planned_layout(scene, {"hall": ("Hall", standing)}, ["hall"])
+        assert "mount" not in scene["rooms"]["hall"]["anchors"]["rack"], between
 
 
 def test_the_rooms_estimated_size_is_no_target_and_never_a_refusal():

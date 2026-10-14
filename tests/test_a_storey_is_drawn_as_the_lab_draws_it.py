@@ -85,6 +85,50 @@ def test_the_storey_above_has_its_window_in_its_wall_and_the_ground_as_its_ghost
     assert storey_plan(_scene(), "layout:elsewhere", 0, SPECS) is None
 
 
+def test_a_window_is_drawn_on_the_storey_of_the_wall_that_holds_it():
+    """Home 11 (2026-10-13): three windows of the upper storeys, each a
+    `window` edge onto the garden pinned on both sides -- where sight from
+    the ground crosses it, where a fall from it lands -- were drawn on the
+    ground plan, each in a ground-floor wall the garden's pin happened to
+    lie against. A window is the wall's of the walled room it belongs to,
+    and is drawn on that room's storey, as the lab draws it; the ground's
+    pin stays, since sight and falls read it."""
+    from web.storey_plan import storey_plan
+    from world.spatial import anchor_cells
+    sc = _scene()
+    sc["rooms"]["loft"]["adjacent"].append(
+        {"to": "yard", "barrier": "window", "dir": "s", "cell": [1, 2]})
+    sc["rooms"]["yard"]["adjacent"].append(
+        {"to": "loft", "barrier": "window", "dir": "n", "cell": [1, 0]})
+    assert storey_plan(sc, PLAN, 0, SPECS)["windows"] == []
+    upper = {(w["room"], w["side"]) for w in storey_plan(sc, PLAN, 1, SPECS)["windows"]}
+    assert upper == {("loft", "n"), ("loft", "s")}
+    assert anchor_cells(sc, "yard")["door:loft"]["cells"] == [(1, 0)]
+    # a window between ground and a room of its own storey is drawn from
+    # both sides as it always was: its two lines are one wall's
+    for rid in ("hall", "yard"):
+        for edge in sc["rooms"][rid]["adjacent"]:
+            if edge["to"] in ("hall", "yard"):
+                edge["barrier"] = "window"
+    ground = {(w["room"], w["side"]) for w in storey_plan(sc, PLAN, 0, SPECS)["windows"]}
+    assert ground == {("hall", "s"), ("yard", "n")}
+
+
+def test_ground_the_solve_laid_as_grounds_draws_no_window_of_another_storey():
+    """Ground is ground by its exposure or by the solve that laid it as
+    grounds (`layout.grounds`, the bridge's own reading): one whose exposure
+    nobody stated still drew the loft's window in a ground-floor wall
+    (review of 2026-10-13)."""
+    from web.storey_plan import storey_plan
+    sc = _scene()
+    sc["rooms"]["yard"].pop("exposure")
+    sc["rooms"]["loft"]["adjacent"].append(
+        {"to": "yard", "barrier": "window", "dir": "s", "cell": [1, 2]})
+    sc["rooms"]["yard"]["adjacent"].append(
+        {"to": "loft", "barrier": "window", "dir": "n", "cell": [1, 0]})
+    assert storey_plan(sc, PLAN, 0, SPECS)["windows"] == []
+
+
 # ---------------------------------------------------------------------------
 # The route, over a story's own scene and plans
 # ---------------------------------------------------------------------------

@@ -159,7 +159,11 @@ def test_juns_causal_arrival_is_not_rewound_by_the_shelfs_standing_cell():
         "stations": {name: {"at": "worktop", "near": []}
                      for name in ("Ada", "Jun", "worktop")},
     }
-    scene["stations"]["shelf"] = {"at": "shelf", "near": []}
+    # ...and so is the shelf ENTITY's station: its derived cell reached the
+    # doorway only by the step beside Ada, which since 2026-10-13 keeps out
+    # of every doorway (`spatial_fov.body_cell`); the subject is a fixture
+    # standing in the door, so the test puts it there
+    scene["stations"]["shelf"] = {"at": "shelf", "near": [], "cell": [3, 2]}
     steps = [
         {"stage": "interpret", "chrono_id": 11, "patch": {"stations": {
             "Jun": {"at": "shelf", "near": ["shelf"]},

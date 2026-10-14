@@ -661,7 +661,17 @@ each other, because the map writes them together (a drop on an anchor's
 cell writes both) and a host may well want "at the bar, this end of it".
 `near` is unchanged. A pinned body is MEASURED (`_has_measured_station`),
 so sight, cover and the light field read its cell as they read an
-anchored one.
+anchored one. ONE EXCEPTION, 2026-10-13: a body whose pose's `support` and
+station `at` both name a fixture of its room RESTS ON it
+(`spatial_fov.resting_on`) and stands on one of that fixture's cells -- its
+own pin when the pin is one of them, else one dealt from them -- so a pin
+beside the fixture is no answer for it, and the merge drops such a pin
+(`spatial_merge._seat_the_resting`, F39's reasoning: a body drawn beside
+the bed while every ledger says she lies on it is worse than a host having
+to pin again). A host's drop ON the fixture writes a cell of it and stands;
+a drop anywhere else names another anchor or none, so the body is no longer
+resting there. The owner: "a character overlapping furniture makes sense in
+some circumstances".
 
 *The anchor rule.* `_place_anchors` reads the anchor's `cell` FIRST: the
 footprint is laid from the origin eastward and, for `large`, southward --

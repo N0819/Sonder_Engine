@@ -369,9 +369,12 @@ def _grid(rid, slices, charter=()):
     # a site plan (`grid_view` names the plan and the storey of a room that
     # stands on one), so its bar offers the plan.
     on_plan = {"plan": "layout:hallway", "level": 0} if rid == "kitchen" else {}
+    # a stair hall's drawing, as `storey_plan.room_look` hands it over, where
+    # the slice carries one
+    stair = {"stair": record["stair"]} if record.get("stair") else {}
     return {"frame_id": None,
             "room": {"id": rid, "name": room["name"], "w": w, "d": d, "shape": geometry["shape"],
-                     "measured": geometry["measured"], "cells": cells, **on_plan},
+                     "measured": geometry["measured"], "cells": cells, **on_plan, **stair},
             "rims": rims, "anchors": anchors, "doorways": doorways, "bodies": bodies,
             "things": things, "walls": walls, "neighbours": neighbours,
             "lint": list(room.get("lint") or []), "overlays": overlays,
@@ -1679,6 +1682,26 @@ def test_a_storey_is_drawn_as_the_layout_lab_draws_it_and_its_rooms_open(
     expect(modal.locator(".wb-room-map")).to_be_visible()
     expect(modal.locator(".wb-map-bar")).to_contain_text("Hallway")
     assert not writes, "drawing a plan writes nothing"
+
+
+def test_a_stair_halls_treads_are_drawn_on_its_flight_in_the_room_editor(
+        page: Page, ui_base_url: str, monkeypatch) -> None:
+    """2026-10-13: a stair hall takes the landing beside its flight as well
+    (Home 11's basement hall was ten by five round a two by five flight), so
+    the room editor draws the treads on the flight the solve recorded -- in
+    the hall's own cells -- never over the whole hall."""
+    monkeypatch.setitem(SLICES["kitchen"]["record"], "stair",
+                        {"kind": "straight", "up": True, "down": False,
+                         "flight": {"x": 1, "y": 0, "w": 2, "d": 3}})
+    _, _, modal = _open_map(page, ui_base_url)
+    treads = modal.locator(".wb-room-map .wb-m-stair rect")
+    expect(treads).to_have_count(1)
+    # one pace is 24 units, and the drawing stands 3 in from the flight's edge
+    expect(treads).to_have_attribute("x", "27")
+    expect(treads).to_have_attribute("y", "3")
+    expect(treads).to_have_attribute("width", "42")
+    expect(treads).to_have_attribute("height", "66")
+    expect(modal.locator(".wb-room-map .wb-m-stair")).to_contain_text("▲")
 
 
 # ---- Townspeople on the map (2026-09-05, DESIGN_CHARTER_PLACEMENT § the map) --

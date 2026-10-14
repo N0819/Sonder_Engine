@@ -60,7 +60,7 @@ import hashlib
 import math
 from typing import Optional
 
-from world.scene_memo import scene_memo
+from world.scene_memo import scene_memo, scene_read_pass
 from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
 from world.spatial_geometry import (
     _TIER_SIDE,
@@ -261,6 +261,27 @@ def anchor_geometry(anchor: dict) -> dict:
         "opacity": normalize_opacity(anchor.get("opacity")),
         "lane": normalize_lane(anchor.get("lane")),
     }
+
+
+#: The mounts that put a thing OFF the floor (`layout_bridge._mount`'s
+#: words): hung on a wall, from the ceiling, on or in another fixture. A
+#: fixture with no mount, or any other word, stands on the floor.
+OFF_FLOOR_MOUNTS = ("hung", "ceiling", "on", "in")
+#: The key a place code chooses reads for "something stands on this floor
+#: cell", beside the per-height keys (`_place_anchors`). Never a height word:
+#: "floor" is one, and a rug of floor height is not the only thing standing.
+STANDING = "standing"
+
+
+def stands_on_floor(anchor) -> bool:
+    """Does this fixture stand on the floor, whatever its height? A mount
+    of `hung`, `ceiling`, `on <id>` or `in <id>` says it does not; nothing
+    else does, since floor, waist, head and full are where sight is cut,
+    and every one of them can stand on the floor."""
+    if not isinstance(anchor, dict):
+        return True
+    words = str(anchor.get("mount") or "").strip().casefold().split()
+    return not (words and words[0] in OFF_FLOOR_MOUNTS)
 
 
 def height_rank(height) -> float:
@@ -639,9 +660,9 @@ def anchor_cells(scene: dict, room_id, *, derive=False, raw=False) -> dict:
 
     `raw` reads every anchor where its seed alone puts it, before the
     places code chooses are kept clear of doorways and of each other
-    (`_place_anchors`): the room designer's own loop -- its map, its check
-    and the packer that writes each new fixture's place for good -- reads
-    the seeds it is writing places over.
+    (`_place_anchors`): the room designer's packer reads every fixture's
+    seed; its map and its check read where the map stands each (the reviews
+    of 2026-10-13).
     """
     placed = scene_memo(scene, ("anchor_cells", str(room_id), bool(derive), bool(raw)),
                         lambda: _anchor_cells(scene, room_id, derive=derive, raw=raw))
@@ -684,6 +705,15 @@ def _chosen_by_code(anchor) -> bool:
     return normalize_bearing(anchor.get("dir")) not in ROOM_CORNERS
 
 
+def _is_doorway(aid, anchor) -> bool:
+    """Is this effective anchor a way in or out a body can stand IN -- a
+    doorway's step, never a window's pane (nothing stands in one) or an
+    open side's (the whole side is the way)?"""
+    return isinstance(anchor, dict) and bool(anchor.get("implicit")) \
+        and str(aid).startswith("door:") and not anchor.get("window") \
+        and str(anchor.get("width") or "") != "wall"
+
+
 def doorway_clearance(grid: RoomGrid, anchors, placed) -> set:
     """The cells a placement CODE chooses keeps clear of a room's ways in
     and out: each doorway's own cells and the pace inside each -- not a
@@ -692,10 +722,7 @@ def doorway_clearance(grid: RoomGrid, anchors, placed) -> set:
     `placed` their cells (`_place_anchors`'s records for the doorways)."""
     clear = set()
     for aid, anchor in (anchors or {}).items():
-        if not (isinstance(anchor, dict) and anchor.get("implicit")
-                and str(aid).startswith("door:")):
-            continue
-        if anchor.get("window") or str(anchor.get("width") or "") == "wall":
+        if not _is_doorway(aid, anchor):
             continue
         rec = (placed or {}).get(aid) or {}
         cells = [tuple(c) for c in rec.get("cells") or ()]
@@ -725,10 +752,15 @@ def _place_anchors(room_id, grid: RoomGrid, anchors, *, clear=True) -> dict:
     chosen fixture's place therefore depends on the room's doorways and on
     the fixtures placed before it, where it depended on nothing else.
 
-    A CELL IS TAKEN AT ONE HEIGHT (the owner's ruling of 2026-10-08, which
-    the room designer's packer keeps): a bartop and the bottle shelf above it
-    share their cells. `clear=False` places every anchor by its seed alone
-    (`anchor_cells(raw=True)`)."""
+    WHAT STANDS ON THE FLOOR HOLDS IT AT EVERY HEIGHT (the owner,
+    2026-10-13, after Home 11 laid a futon under a trunk and a stove in a
+    tub): a cell one floor-standing thing holds is held against every other
+    floor-standing thing, whatever their heights. Heights separate only what
+    is off the floor (`stands_on_floor`: hung, ceiling, on or in), so a
+    bartop and a bottle shelf HUNG above it still share their cells -- the
+    ruling of 2026-10-08, "a cell is taken at one height", kept for those.
+    The room designer's packer keeps the same keys. `clear=False` places
+    every anchor by its seed alone (`anchor_cells(raw=True)`)."""
     out = {}
     later = []
     for aid, anchor in anchors.items():
@@ -740,25 +772,38 @@ def _place_anchors(room_id, grid: RoomGrid, anchors, *, clear=True) -> dict:
         out[aid] = _place_anchor(room_id, grid, aid, anchor)
     if later:
         doors = doorway_clearance(grid, anchors, out)
-        taken = {(tuple(c), rec["height"]) for aid, rec in out.items()
-                 if not rec["implicit"] for c in rec["cells"]}
+        taken = set()
+        for aid, rec in out.items():
+            if not rec["implicit"]:
+                taken |= _holds(rec, anchors.get(aid))
         for aid in sorted(later, key=str):
             rec = _place_anchor(room_id, grid, aid, anchors[aid], avoid=(doors, taken))
             out[aid] = rec
-            taken |= {(tuple(c), rec["height"]) for c in rec["cells"]}
+            taken |= _holds(rec, anchors[aid])
     return {aid: out[aid] for aid in anchors if aid in out}
 
 
-def _crowding(cells, avoid, height) -> tuple:
+def _holds(rec, anchor) -> set:
+    """The keys a placed fixture holds its cells under: its height, and the
+    floor itself when it stands on it (`_place_anchors`)."""
+    keys = {(tuple(c), rec["height"]) for c in rec["cells"]}
+    if stands_on_floor(anchor):
+        keys |= {(tuple(c), STANDING) for c in rec["cells"]}
+    return keys
+
+
+def _crowding(cells, avoid, height, standing=True) -> tuple:
     """How crowded a place a seed would choose is for a fixture of
-    `height`: `(doorway cells it stands on, cells another fixture holds at
-    its height)` -- a way in and out weighs more than a shared cell, so a
-    wall too full to hold a fixture clear of both gives up the cell before
-    the doorway."""
+    `height`: `(doorway cells it stands on, cells another fixture holds)` --
+    held at its height, or, for a fixture `standing` on the floor, by
+    anything else standing there at any height. A way in and out weighs more
+    than a shared cell, so a wall too full to hold a fixture clear of both
+    gives up the cell before the doorway."""
     doors, taken = avoid
     cells = [tuple(c) for c in cells]
     return (sum(1 for c in cells if c in doors),
-            sum(1 for c in cells if (c, height) in taken))
+            sum(1 for c in cells if (c, height) in taken
+                or (standing and (c, STANDING) in taken)))
 
 
 def _place_anchor(room_id, grid: RoomGrid, aid, anchor, *, avoid=None) -> dict:
@@ -770,6 +815,7 @@ def _place_anchor(room_id, grid: RoomGrid, aid, anchor, *, avoid=None) -> dict:
     bearing = normalize_bearing(anchor.get("dir"))
     seed = _seed(room_id, aid)
     fp = geo["footprint"]
+    standing = stands_on_floor(anchor)
     pinned = normalize_cell(anchor.get("cell"))
     source = "seed"
     if pinned is not None:
@@ -811,14 +857,14 @@ def _place_anchor(room_id, grid: RoomGrid, aid, anchor, *, avoid=None) -> dict:
                                                     fp, seed)
         cells = _wall_run(grid, bearing, offset, length, geo["lane"], fp)
         if avoid is not None and source == "seed" and bearing in _UNIT \
-                and _crowding(cells, avoid, geo["height"]) != (0, 0):
+                and _crowding(cells, avoid, geo["height"], standing) != (0, 0):
             # THE LEAST CROWDED PLACE ALONG ITS OWN WALL, nearest its seed
             # (`_place_anchors`, `_crowding`): the wall a model or a plan
             # gave it is kept
             limit = max(0, len(grid.rim(bearing)) - length)
             trials = [(alt, _wall_run(grid, bearing, alt, length, geo["lane"], fp))
                       for alt in range(limit + 1)]
-            cells = min(trials, key=lambda t: (_crowding(t[1], avoid, geo["height"]),
+            cells = min(trials, key=lambda t: (_crowding(t[1], avoid, geo["height"], standing),
                                                abs(t[0] - offset), t[0]))[1]
     else:
         # EVERY CELL OF THE ROOM, THE WALL RING INCLUDED (owner ruling
@@ -838,11 +884,15 @@ def _place_anchor(room_id, grid: RoomGrid, aid, anchor, *, avoid=None) -> dict:
         y = (seed // 7) % max(1, grid.d)
         x, y = grid.nearest((x, y))
         cells = _floor_run(grid, (x, y), fp)
-        if avoid is not None and _crowding(cells, avoid, geo["height"]) != (0, 0):
-            # THE LEAST CROWDED PLACE ON THE FLOOR, nearest its seed
+        if avoid is not None and _crowding(cells, avoid, geo["height"], standing) != (0, 0):
+            # THE LEAST CROWDED PLACE ON THE FLOOR, nearest its seed, and a
+            # place that holds it whole before one the room's edge clips
+            # (`whole_cells`): fewer cells always crowd less
             origin = (x, y)
+            whole = whole_cells(anchor, fp)
             cells = min((_floor_run(grid, tuple(c), fp) for c in grid.cells),
-                        key=lambda run: (_crowding(run, avoid, geo["height"]),
+                        key=lambda run: (_crowding(run, avoid, geo["height"], standing),
+                                         whole - len(set(run)),
                                          abs(run[0][0] - origin[0]) + abs(run[0][1] - origin[1]),
                                          run[0][1], run[0][0]))
     return {
@@ -883,6 +933,21 @@ def _wall_run(grid: RoomGrid, bearing: str, offset: int, length: int, lane, fp) 
         cells = cells + [(x + dx, y + dy) for x, y in cells
                          if grid.contains((x + dx, y + dy))]
     return cells
+
+
+def whole_cells(anchor, fp) -> int:
+    """How many cells a fixture takes laid whole -- its own rectangle when
+    it carries one (`anchor_extent`), else its footprint word's: one for a
+    point, two for a small thing or a run, four for a large one. A place at
+    the room's edge that clips it to fewer is the fixture drawn smaller than
+    it is, so code takes one only when no place holds it whole (FROZEN's
+    small room, 2026-10-13: its large table, kept off the floor another
+    thing held, took a place in the last row where its square was two
+    cells)."""
+    rect = anchor_extent(anchor)
+    if rect is not None:
+        return rect[0] * rect[1]
+    return {"small": 2, "run": 2, "large": 4}.get(fp, 1)
 
 
 def _floor_run(grid: RoomGrid, origin, fp) -> list:
@@ -947,22 +1012,192 @@ def _has_measured_station(scene: dict, name: str) -> bool:
         or normalize_cell(st.get("cell")) is not None
 
 
+def resting_on(scene: dict, name: str) -> Optional[str]:
+    """The fixture a body RESTS ON -- lies on, sits on, stands on: what
+    bears its weight -- or None. Three records the engine already keeps say
+    it, and all three must agree: the body's pose names the fixture as its
+    `support`, the fixture is a thing of the body's own room (never a doorway
+    or a window), and the body's station is AT it (`normalize_scene_poses`
+    keeps the two from naming different fixtures). No new ledger.
+
+    The owner, 2026-10-13: "being on the same tile space as something like
+    a futon or any other input that implies standing or laying atop a
+    furniture of any kind should... work but it doesn't. A character
+    overlapping furniture makes sense in some circumstances." Measured that
+    day on a copy of the play database: 57 bodies in 140 stored scenes held
+    this record -- beds, futons, chairs, benches, a massage table -- and 55
+    of them were drawn a pace off the thing they lay on, Home 11's Hinami in
+    the trunk beside her futon.
+
+    A station that stands at NOTHING on a cell off the fixture -- a host's
+    drop on open floor, a beat's `{at: null, cell}` -- ends it, whatever a
+    standing contact would derive (review of 2026-10-13: the host could not
+    drag a body off its bed). An `at` with no cell beside it is no such
+    statement: the station hygiene writes null over an `at` that names no
+    anchor exactly, and a body lying down by pose and contact stays on what
+    it lies on (second review); a beat's own cell-less step-off lets go of
+    the pose at the merge (`release_stepped_off_supports`). Memoized per read
+    pass (`scene_memo`)."""
+    return scene_memo(scene, ("resting_on", str(name)), lambda: _resting_on(scene, name))
+
+
+def _resting_on(scene: dict, name: str) -> Optional[str]:
+    room_id = room_of(scene, name)
+    if not room_id:
+        return None
+    stations = scene.get("stations")
+    stated = _ci_get(stations, name) if isinstance(stations, dict) else None
+    stepped_to = None
+    if isinstance(stated, dict) and "at" in stated and not str(stated.get("at") or "").strip():
+        stepped_to = normalize_cell(stated.get("cell"))
+    poses = scene.get("poses")
+    pose = _ci_get(poses, name) if isinstance(poses, dict) else None
+    support = str(pose.get("support") or "").strip() if isinstance(pose, dict) else ""
+    if not support:
+        return None
+    at = str(effective_station(scene, name).get("at") or "").strip()
+    if at.casefold() != support.casefold():
+        return None
+    for aid, anchor in (effective_anchors(scene, room_id) or {}).items():
+        if str(aid).strip().casefold() == support.casefold():
+            if not isinstance(anchor, dict) or anchor.get("implicit"):
+                return None
+            if stepped_to is not None:
+                cells = {tuple(c) for c in (anchor_cells(scene, room_id).get(aid) or {})
+                         .get("cells") or ()}
+                if tuple(room_grid(scene, room_id).nearest(stepped_to)) not in cells:
+                    return None
+            return aid
+    return None
+
+
+def _stand_grades(scene: dict, room_id, own=None) -> dict:
+    """`{cell: grade}` for where code may stand a body that is not resting
+    there: 1 for a cell only floor-height things stand on (a rug, a pond, a
+    low table: a floor height hides nobody, and is no promise of ground to
+    stand on), 2 for one a thing waist-high or taller stands on, 3 for a
+    doorway's own step (a body in a doorway is the door, `_hold_doorways`).
+    A cell not listed is clear. `own` is the fixture the
+    body is stationed at, whose own cells the caller handles; a thing off
+    the floor (`stands_on_floor`) is no obstacle to a body beneath it."""
+    placed = anchor_cells(scene, room_id)
+    anchors = effective_anchors(scene, room_id) or {}
+    grades = {}
+    for aid, rec in placed.items():
+        if own is not None and aid == own:
+            continue
+        if rec["implicit"]:
+            if _is_doorway(aid, anchors.get(aid)):
+                for cell in rec["cells"]:
+                    grades[tuple(cell)] = 3
+            continue
+        if not stands_on_floor(anchors.get(aid)):
+            continue
+        grade = 1 if height_rank(rec["height"]) < _HEIGHT_RANK["waist"] else 2
+        for cell in rec["cells"]:
+            grades[tuple(cell)] = max(grades.get(tuple(cell), 0), grade)
+    return grades
+
+
+def _floor_things(scene: dict, room_id) -> dict:
+    """`{cell: {fixture id}}` for every cell a fixture of floor height that
+    stands on the floor holds -- the things `_stand_grades` grades 1."""
+    placed = anchor_cells(scene, room_id)
+    anchors = effective_anchors(scene, room_id) or {}
+    out = {}
+    for aid, rec in placed.items():
+        if rec["implicit"] or not stands_on_floor(anchors.get(aid)) \
+                or height_rank(rec["height"]) >= _HEIGHT_RANK["waist"]:
+            continue
+        for cell in rec["cells"]:
+            out.setdefault(tuple(cell), set()).add(aid)
+    return out
+
+
+def _resting_cell(scene: dict, room_id, grid: RoomGrid, name: str, support,
+                  pinned) -> Optional[tuple]:
+    """A cell OF the fixture a body rests on (`resting_on`): its own pin
+    when the pin is one of them -- a host's "this end of the bed" -- else
+    one dealt from the fixture's cells no other thing standing on the floor
+    holds (all of them when none is free), from the fixture's seed, each
+    body resting on it a cell of its own in name order: two in one bed take
+    two cells."""
+    placed = anchor_cells(scene, room_id)
+    own = [tuple(c) for c in (placed.get(support) or {}).get("cells") or ()]
+    if not own:
+        return None
+    if pinned is not None:
+        cell = grid.nearest(pinned)
+        if cell in own:
+            return cell
+    anchors = effective_anchors(scene, room_id) or {}
+    held, doors = set(), set()
+    for aid, rec in placed.items():
+        if aid == support:
+            continue
+        if rec["implicit"]:
+            # a body in a doorway is the door: one laid across a doorway is
+            # never dealt its step (review of 2026-10-13)
+            if _is_doorway(aid, anchors.get(aid)):
+                doors.update(tuple(c) for c in rec["cells"])
+        elif stands_on_floor(anchors.get(aid)):
+            held.update(tuple(c) for c in rec["cells"])
+    # each other body resting here with its own pin on it keeps that cell;
+    # the rest are dealt in name order
+    key = str(name).strip().casefold()
+    pins, dealt = set(), []
+    for other in (scene.get("positions") or {}):
+        folded = str(other).strip().casefold()
+        if folded == key or room_of(scene, other) != room_id \
+                or resting_on(scene, other) != support:
+            continue
+        theirs = normalize_cell(effective_station(scene, other).get("cell"))
+        cell = grid.nearest(theirs) if theirs is not None else None
+        if cell is not None and cell in own:
+            pins.add(cell)
+        else:
+            dealt.append(folded)
+    dealt = sorted(set(dealt) | {key})
+    free = ([c for c in own if c not in held and c not in doors and c not in pins]
+            or [c for c in own if c not in doors and c not in pins])
+    if dealt.index(key) >= len(free):
+        # more bodies on it than it has cells: the rest stand beside it, as
+        # a body at it does, never on one another (third review of
+        # 2026-10-13: two drawn on a one-cell ledge of sand)
+        return None
+    return free[(_seed(room_id, support) + dealt.index(key)) % len(free)]
+
+
 def body_cell_source(scene: dict, name: str) -> str:
     """Where a body's cell comes from, for the map: `"cell"` (an authored
-    station `cell`, the owner's pin), `"anchor"` (derived from its station
-    -- `at` an anchor, or `near` a body that has a cell, which bottoms out at
-    an anchor or a pin), or `"none"` (no cell: somewhere in the room)."""
-    if not room_of(scene, name):
+    station `cell`, the owner's pin, and the cell the body is drawn on),
+    `"anchor"` (derived from its station -- `at` an anchor, ON the fixture
+    it rests on, or `near` a body that has a cell, which bottoms out at an
+    anchor or a pin), or `"none"` (no cell: somewhere in the room). A pin
+    beside the fixture a body rests on is not where it is drawn
+    (`body_cell`), so it is no pin's answer."""
+    room_id = room_of(scene, name)
+    if not room_id:
         return "none"
-    if normalize_cell(effective_station(scene, name).get("cell")) is not None:
+    cell = body_cell(scene, name)
+    if not cell:
+        return "none"
+    pinned = normalize_cell(effective_station(scene, name).get("cell"))
+    if pinned is not None and room_grid(scene, room_id).nearest(pinned) == tuple(cell):
         return "cell"
-    return "anchor" if body_cell(scene, name) else "none"
+    return "anchor"
 
 
-def _stand_cell(grid: RoomGrid, cells, x, y, bearing, cover) -> tuple:
+def _stand_cell(grid: RoomGrid, cells, x, y, bearing, cover, grades=None) -> tuple:
     """The cell a body stationed AT an anchor stands in, given which of the
     anchor's cells it takes: one step inward, then round the anchor, so a
-    body never stands IN the feature it is stationed at.
+    body never stands IN the feature it is stationed at -- nor, since
+    2026-10-13, in one it does not rest on, nor in a doorway: with `grades`
+    (`_stand_grades`), the four steps are tried in their own order and then
+    the cells round the anchor, nearest the anchor's cell first, a clear
+    cell before one only a floor-height thing stands on; where none is,
+    the first step as before. Home 11's Hinami, stationed at her futon, was
+    stood in the trunk beside it, and Home 7's in the hallway door.
 
     `cover`: the body is on the FAR side of its anchor -- between a counter
     and the wall, on the blind side of a screen -- so the anchor stands
@@ -981,12 +1216,58 @@ def _stand_cell(grid: RoomGrid, cells, x, y, bearing, cover) -> tuple:
             dx = 1
     if cover:
         dx, dy = -dx, -dy
+    own = {tuple(c) for c in cells}
+    steps = []
     for ddx, ddy in ((dx, dy), (-dx, -dy), (dy, dx), (-dy, -dx)):
-        cx = x + ddx
-        cy = y + ddy
-        if grid.contains((cx, cy)) and (cx, cy) not in cells:
-            return (cx, cy)
-    return (x, y)
+        cell = (x + ddx, y + ddy)
+        if grid.contains(cell) and cell not in own and cell not in steps:
+            steps.append(cell)
+    first = steps[0] if steps else (x, y)
+    if grades is None:
+        return first
+
+    def side(ex, ey):
+        return sorted({(cx + ex, cy + ey) for cx, cy in own
+                       if grid.contains((cx + ex, cy + ey)) and (cx + ex, cy + ey) not in own},
+                      key=lambda c: ((c[0] - x) ** 2 + (c[1] - y) ** 2, c[1], c[0]))
+    # THE SIDE THE STATION DECLARES -- never the far side, which is the
+    # other side of the fact: graded over every side, a rug in a counter's
+    # lane stood a crouching thief on the customers' side, and stools on the
+    # customers' side stood a patron in the bartender's lane (review of
+    # 2026-10-13). A body in COVER stays behind its anchor whatever lies
+    # there -- a clear cell, then a floor-height thing, then the cover step
+    # itself: cover is the station's word, and beside the counter is in full
+    # view. Any other body takes a CLEAR cell on its side or beside the
+    # anchor, nearest the cell it was dealt, before a floor-height thing --
+    # which is a rug, but as often a pond, a low table or the futon someone
+    # lies on (a floor height hides nobody; it is not ground to stand on,
+    # second review of 2026-10-13). Beside a corner thing is along its two
+    # walls. Where the declared side has no cell at all -- cover at a thing
+    # flush against its wall -- the steps go round as they always did.
+    declared = list(dict.fromkeys(
+        [c for c in [(x + dx, y + dy)] if grid.contains(c) and c not in own] + side(dx, dy)))
+    beside_dirs = [(dy, dx), (-dy, -dx)] if (dx == 0 or dy == 0) else [(dx, 0), (0, dy)]
+    beside = sorted({c for ex, ey in beside_dirs for c in side(ex, ey)} - set(declared),
+                    key=lambda c: ((c[0] - x) ** 2 + (c[1] - y) ** 2, c[1], c[0]))
+    if not declared:
+        tried = list(dict.fromkeys(steps + beside + side(-dx, -dy)))
+    elif cover:
+        # behind its anchor, on whatever stands there -- but never in a
+        # doorway, which a body would hold against every walk (third review
+        # of 2026-10-13): a declared side that is only doorways yields to
+        # beside the anchor
+        for grade in (0, 1, 2):
+            for cell in declared:
+                if grades.get(cell, 0) == grade:
+                    return cell
+        tried = beside
+    else:
+        tried = declared + beside
+    for grade in (0, 1):
+        for cell in tried:
+            if grades.get(cell, 0) == grade:
+                return cell
+    return first
 
 
 def _anchor_stand_cells(scene, room_id, grid, anchor_id, station) -> list:
@@ -996,12 +1277,20 @@ def _anchor_stand_cells(scene, room_id, grid, anchor_id, station) -> list:
     cells = placed.get("cells") or ()
     bearing = placed.get("dir")
     cover = _takes_cover(station, anchor_id)
+    grades = _stand_grades(scene, room_id, anchor_id)
     out = []
     for x, y in cells:
-        cell = _stand_cell(grid, cells, x, y, bearing, cover)
+        cell = _stand_cell(grid, cells, x, y, bearing, cover, grades)
         if cell not in out:
             out.append(cell)
     return out
+
+
+#: Where a body placed `near` another may stand, nearest first: the four
+#: steps (the seeded one is tried first), the four corners, then two paces.
+_BESIDE = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1),
+           (2, 0), (-2, 0), (0, 2), (0, -2), (2, 1), (2, -1), (-2, 1), (-2, -1),
+           (1, 2), (-1, 2), (1, -2), (-1, -2), (2, 2), (-2, 2), (2, -2), (-2, -2))
 
 
 def _names_back(scene: dict, other, name) -> bool:
@@ -1041,6 +1330,14 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
     its anchor places; the other stands beside it. Deterministic, and the
     same two cells whichever body is asked.
 
+    A BODY RESTING ON A FIXTURE STANDS ON IT (`resting_on`, the owner,
+    2026-10-13): a cell of that fixture, its own pin when the pin is one of
+    them -- and a pin beside it is no answer, since every record of the beat
+    says it lies on the thing (`merge_scene_with_diff` drops such a pin; a
+    stored scene that still carries one is drawn on its fixture anyway).
+    Every cell code chooses for a body that is not resting there keeps out
+    of the fixtures and doorways it can (`_stand_cell`).
+
     The derivation is never stored."""
     room_id = room_of(scene, name)
     if not room_id:
@@ -1048,6 +1345,11 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
     grid = room_grid(scene, room_id)
     st = effective_station(scene, name)
     pinned = normalize_cell(st.get("cell"))
+    support = resting_on(scene, name)
+    if support is not None:
+        cell = _resting_cell(scene, room_id, grid, name, support, pinned)
+        if cell is not None:
+            return cell
     if pinned is not None:
         return grid.nearest(pinned)
     at = st.get("at")
@@ -1074,8 +1376,37 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
                                                 + (c[1] - y) ** 2, c))
         k = _seed(room_id, key, okey) % 4
         dx, dy = ((1, 0), (-1, 0), (0, 1), (0, -1))[k]
-        return grid.nearest((min(max(x + dx, 0), grid.w - 1),
-                             min(max(y + dy, 0), grid.d - 1)))
+        first = grid.nearest((min(max(x + dx, 0), grid.w - 1),
+                              min(max(y + dy, 0), grid.d - 1)))
+        # BESIDE THEM, NEVER IN A THING OR A DOORWAY (2026-10-13): the
+        # seeded step first, then the nearest cell within two paces that is
+        # clear, then one only a floor-height thing stands on; the seeded
+        # step as before when none is
+        grades = _stand_grades(scene, room_id)
+        things = _floor_things(scene, room_id)
+        shared = things.get((x, y), set())
+        # nearest first, ring by ring -- within reach (a step, then a
+        # corner), then two paces -- and in each ring a clear cell, or one of
+        # the floor-height thing the other body itself stands on (beside
+        # someone on a rug is on the rug, never two paces off it); a
+        # floor-height thing of its own -- a pond, a low table -- only when no
+        # ring has either (two reviews of 2026-10-13)
+        rings = (_BESIDE[k:4] + _BESIDE[:k] + _BESIDE[4:8], _BESIDE[8:])
+        tried = []
+        for ring in rings:
+            cells = [(x + ex, y + ey) for ex, ey in ring]
+            cells = [c for c in cells if c != (x, y) and grid.contains(c)]
+            tried += cells
+            for c in cells:
+                if grades.get(c, 0) == 0:
+                    return c
+            for c in cells:
+                if grades.get(c, 0) == 1 and things.get(c, set()) <= shared:
+                    return c
+        for c in tried:
+            if grades.get(c, 0) == 1:
+                return c
+        return first
     if at:
         placed = anchor_cells(scene, room_id).get(at)
         if placed and placed["cells"]:
@@ -1086,7 +1417,8 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
             cells = placed["cells"]
             x, y = cells[_seed(room_id, at, key) % len(cells)]
             return _stand_cell(grid, cells, x, y, placed.get("dir"),
-                               _takes_cover(st, at))
+                               _takes_cover(st, at),
+                               _stand_grades(scene, room_id, at))
     return None
 
 
@@ -1576,7 +1908,46 @@ def _side_label(sector):
     return None
 
 
-def _visible_set(field, origin, eye, top):
+def support_cells(scene: dict, field, name) -> dict:
+    """`{cell: None | (height rank, anchor id)}`, in `field`'s frame: each
+    cell of the fixture `name` rests on (`resting_on`), with the tallest
+    OTHER opaque thing on it, or none. A line to or from a body never meets
+    the thing it lies on: it is ON it (2026-10-13), so a bed hides neither
+    the body on it nor, from that body, the room -- but whatever else stands
+    or hangs on its cells still does (review of 2026-10-13: drawn curtains on
+    the bed were looked through)."""
+    support = resting_on(scene, name)
+    room_id = room_of(scene, name)
+    placed = field.anchors.get(room_id) or {}
+    rec = placed.get(support) if support else None
+    if not rec:
+        return {}
+    own = {tuple(c) for c in rec["cells"]}
+    out = {field.cell_of(room_id, c): None for c in own}
+    # what the support itself stands on -- a dais, a frame -- is beneath it
+    anchors = effective_anchors(scene, room_id) or {}
+    beneath, at = set(), support
+    while True:
+        words = str((anchors.get(at) or {}).get("mount") or "").split()
+        # `on` a dais is beneath it; `in` a box bed or a tent encloses it,
+        # and hides who lies inside (third review of 2026-10-13)
+        if len(words) < 2 or words[0] != "on" or words[1] in beneath:
+            break
+        at = words[1]
+        beneath.add(at)
+    for aid, other in placed.items():
+        if aid == support or aid in beneath or other["implicit"] or other["opacity"] != "opaque":
+            continue
+        rank = height_rank(other["height"])
+        for c in other["cells"]:
+            if tuple(c) in own:
+                cell = field.cell_of(room_id, tuple(c))
+                if out[cell] is None or rank > out[cell][0]:
+                    out[cell] = (rank, aid)
+    return out
+
+
+def _visible_set(field, origin, eye, top, passable=None):
     side_max = max(max(abs(x - origin[0]), abs(y - origin[1]))
                    for x, y in field.inside) if field.inside else 0
 
@@ -1587,6 +1958,10 @@ def _visible_set(field, origin, eye, top):
             # cast through a one-cell hole in a one-cell-thick wall admits
             # a narrower cone than any real doorway does.
             return not _on_wall_line(field, (x, y))
+        if passable and (x, y) in passable:
+            # the thing a body lies on is no wall to it (`support_cells`)
+            rest = passable[(x, y)]
+            return rest is not None and _blocks(rest[0], eye, top)
         h = field.height.get((x, y))
         return h is not None and _blocks(h, eye, top)
     # THE FIELD BOUNDS THE CAST, NOT A DISC. `side_max` is the field's
@@ -1637,9 +2012,11 @@ def _wall_verdict(field, origin, target) -> bool:
     return True
 
 
-def _cell_on_line(field, cell, origin, target, eye, top, ignore):
+def _cell_on_line(field, cell, origin, target, eye, top, ignore, passable=None):
     """What one cell of a line does to it: ("wall", None), ("block", id),
-    or ("pass", (height rank, id) or None)."""
+    or ("pass", (height rank, id) or None). A cell in `passable` -- the
+    thing a body at either end lies on (`support_cells`) -- holds nothing
+    for this line."""
     if cell not in field.inside:
         if _on_wall_line(field, cell):
             return "pass", None             # the wall itself, judged above
@@ -1653,6 +2030,13 @@ def _cell_on_line(field, cell, origin, target, eye, top, ignore):
         if _blocks(held[0], eye, top):
             return "block", held[1]
         return "pass", (held[0], held[1])
+    if passable and cell in passable:
+        rest = passable[cell]
+        if rest is None:
+            return "pass", None
+        if _blocks(rest[0], eye, top):
+            return "block", rest[1]
+        return "pass", rest
     if h is None:
         return "pass", None
     if ignore and field.occluder.get(cell) in ignore:
@@ -1662,7 +2046,7 @@ def _cell_on_line(field, cell, origin, target, eye, top, ignore):
     return "pass", (h, field.occluder.get(cell))
 
 
-def _occluders_on(field, origin, target, eye, top, ignore=()):
+def _occluders_on(field, origin, target, eye, top, ignore=(), passable=None):
     """(blocking anchor id or None, tallest non-blocking anchor height rank)
     along the straight line between two cells. `__wall__` names a wall,
     whether the line struck one between two rooms (`_wall_verdict`) or ran
@@ -1681,7 +2065,7 @@ def _occluders_on(field, origin, target, eye, top, ignore=()):
             and field.inside.get(origin) == field.inside.get(target):
         return None, tallest, tallest_id
     for step in _line_steps(origin, target):
-        verdicts = [_cell_on_line(field, cell, origin, target, eye, top, ignore)
+        verdicts = [_cell_on_line(field, cell, origin, target, eye, top, ignore, passable)
                     for cell in step]
         if any(kind == "wall" for kind, _ in verdicts):
             return "__wall__", tallest, tallest_id
@@ -1823,6 +2207,7 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
     # threshold -- "the things are named and the distance is simply not
     # claimed, which is what the observer actually has".
     unbeared = _unbeared_doorways(scene, room_id)
+    passable = support_cells(scene, field, observer)
     rows = []
     for aid, rec in placed.items():
         cells = rec["cells"]
@@ -1843,7 +2228,7 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
         elif how == "measured" and dist > 1.0:
             top = height_rank(rec["height"])
             blocker, _t, _tid = _occluders_on(
-                field, origin, target, eye, max(top, 0.5))
+                field, origin, target, eye, max(top, 0.5), passable=passable)
             if blocker and blocker != aid:
                 visible = False
                 basis = "line"
@@ -1943,6 +2328,7 @@ def neighbour_feature_visibility(scene: dict, observer: str, to_room,
     facing = None if sweep else effective_facing(scene, observer)
     eye = eye_rank(scene, observer)
     ox, oy = field.offsets[to_room]
+    passable = support_cells(scene, field, observer)
     rows = []
     for aid, rec in (field.anchors.get(to_room) or {}).items():
         if rec["implicit"] or not rec["cells"]:
@@ -1955,7 +2341,8 @@ def neighbour_feature_visibility(scene: dict, observer: str, to_room,
         if facing and _sector_verdict(sector) == "rear":
             continue
         top = max(height_rank(rec["height"]), 0.5)
-        blocker, _t, _tid = _occluders_on(field, origin, target, eye, top)
+        blocker, _t, _tid = _occluders_on(field, origin, target, eye, top,
+                                          passable=passable)
         if blocker and blocker != aid:
             continue
         rows.append({
@@ -1991,12 +2378,14 @@ def neighbour_cells_in_view(scene: dict, observer: str, to_room, cells):
         return None
     origin, _how = _observer_cell(scene, observer)
     eye = eye_rank(scene, observer)
+    passable = support_cells(scene, field, observer)
     out = set()
     for cell in cells or ():
         target = field.cell_of(to_room, tuple(cell))
         if field.inside.get(target) != to_room:
             continue
-        blocker, _t, _tid = _occluders_on(field, origin, target, eye, 0.5)
+        blocker, _t, _tid = _occluders_on(field, origin, target, eye, 0.5,
+                                          passable=passable)
         if blocker is None:
             out.add(tuple(cell))
     return out
@@ -2088,8 +2477,26 @@ def body_visibility(scene: dict, observer: str, target: str) -> dict:
                     rec.get("desc") or (None if blocker in (None, "__wall__") else str(blocker))),
                 "hidden_below": None,
                 "through": t_room if t_room != o_room else None, "basis": "line"}
-    seen = _visible_set(field, origin, eye, top)
-    blocker, tallest, tallest_id = _occluders_on(field, origin, goal, eye, top)
+    # THE THING EITHER BODY LIES ON IS NOT BETWEEN THEM (`support_cells`);
+    # two on the one thing are inside whatever stands on it together -- two
+    # in one curtained bed see each other (second review of 2026-10-13)
+    o_rest, t_rest = resting_on(scene, observer), resting_on(scene, target)
+    passable = {**support_cells(scene, field, target), **support_cells(scene, field, observer)}
+    if o_rest is not None and o_rest == t_rest and o_room == t_room:
+        # ...only what ENCLOSES the whole of it (drawn curtains, a canopy):
+        # a screen or a shed standing on part of it still divides them
+        # (third review of 2026-10-13)
+        placed = field.anchors.get(o_room) or {}
+        own = {field.cell_of(o_room, tuple(c)) for c in (placed.get(o_rest) or {}).get("cells") or ()}
+
+        def encloses(aid):
+            return own <= {field.cell_of(o_room, tuple(c))
+                           for c in (placed.get(aid) or {}).get("cells") or ()}
+        passable = {cell: (None if rest is not None and encloses(rest[1]) else rest)
+                    for cell, rest in passable.items()}
+    seen = _visible_set(field, origin, eye, top, passable)
+    blocker, tallest, tallest_id = _occluders_on(field, origin, goal, eye, top,
+                                                 passable=passable)
     visible = touching or (goal in seen and blocker is None)
     if not visible and blocker is None:
         # The shadowcast closed the line at a corner the straight walk
@@ -2135,7 +2542,15 @@ def sight_digest(scene: dict, names) -> dict:
     Names only -- this is an objective-causality surface, so no identity
     gate applies, and no prose. Every answer is one the layer could stand
     on: a pair with no measured station reads as `open`, never as hidden.
-    """
+    Derived inside one read pass (`scene_read_pass`): every pair rebuilds a
+    field, and every field asks where each resting body lies
+    (`resting_on`), which the pass answers once (second review of
+    2026-10-13)."""
+    with scene_read_pass(scene):
+        return _sight_digest(scene, names)
+
+
+def _sight_digest(scene: dict, names) -> dict:
     names = [str(n) for n in (names or []) if str(n or "").strip()]
     sees = {}
     hidden = []

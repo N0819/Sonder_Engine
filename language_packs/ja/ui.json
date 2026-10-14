@@ -2518,6 +2518,7 @@
   "Variant not found on this step": "このステップでバリアントが見つかりません",
   "Variant not found on this turn's narration": "このターンのナレーションでバリアントが見つかりません",
   "vertical must be up or down as seen from '${room_id}' (got ${body.get('vertical')})": "vertical は '${room_id}' から見て up か down でなければなりません（受け取った値：${body.get('vertical')}）",
+  "'${room_id}' and '${to}' stand on one storey of their plan (storey ${storey_of(scene, room_id)}), so the way between them is a doorway: it cannot go up or down": "'${room_id}' と '${to}' は計画の同じ階（階 ${storey_of(scene, room_id)}）に立っているので、その間の通り道は戸口です。上にも下にも通じません",
   "visible when…": "表示条件…",
   "vital-fill ${tone}": "バイタルフィル${tone}",
   "vitals-grid full": "バイタルグリッド満杯",

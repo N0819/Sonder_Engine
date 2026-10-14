@@ -1577,6 +1577,13 @@ def sync_scene_passages(scene: dict, prior_scene: dict = None) -> list:
                     edge[field] = value
         vertical = normalize_vertical(record.get("vertical"))
         if vertical:
+            from world.site_plan import one_storey
+            if one_storey(scene, a, b):
+                # a doorway between two rooms of one storey climbs nowhere
+                # (`spatial_orientation.strip_one_storey_verticals`)
+                record.pop("vertical", None)
+                vertical = None
+        if vertical:
             record["vertical"] = vertical
             pair[0]["vertical"] = vertical
             pair[1]["vertical"] = opposite_vertical(vertical) or vertical
@@ -1622,8 +1629,8 @@ def _seat_arrivals(merged, positions_before, incoming_stations):
                 cell = list(beside)
         if cell is None:
             try:
-                from world.spatial_walk import free_cell_near
-                cell = list(free_cell_near(
+                from world.spatial_walk import landing_cell
+                cell = list(landing_cell(
                     merged, str(now), inside_the_door(merged, str(now), str(was)), name))
             except Exception:
                 continue
@@ -1633,6 +1640,90 @@ def _seat_arrivals(merged, positions_before, incoming_stations):
         st["cell"] = cell
         seated.append((name, str(now), cell))
     return seated
+
+
+def _station_the_laid(merged, incoming_poses, incoming_stations, positions_before=None,
+                      supports_before=None) -> list:
+    """Station AT its support every body this beat's pose newly rests on a
+    fixture of its room -- a support it was not borne by before the beat,
+    or any support for a body that arrived this beat -- unless this beat
+    stated its station (`merge_scene_with_diff`); a pin already on that
+    fixture stays. Returns the names. A restated support is no news: the
+    1,190 of 1,778 stored pose supports with no station that beat were
+    almost all one the body already had, a body leaning on a desk among
+    them, and stationing those stood it on the desk (third review of
+    2026-10-13); a body lying down by its pose alone, in the room or just
+    arrived, is put on the thing (fourth review)."""
+    from world.spatial_fov import anchor_cells
+    from world.spatial_geometry import normalize_cell
+    if not isinstance(incoming_poses, dict) or not incoming_poses:
+        return []
+    stated = {str(n).strip().casefold() for n in (incoming_stations or {})} \
+        if isinstance(incoming_stations, dict) else set()
+    stations = merged.setdefault("stations", {})
+    rooms = merged.get("rooms") or {}
+    out = []
+    for name, pose in incoming_poses.items():
+        if not isinstance(pose, dict) or str(name).strip().casefold() in stated:
+            continue
+        support = str(pose.get("support") or "").strip()
+        room_id = room_of(merged, name)
+        anchors = (rooms.get(room_id) or {}).get("anchors") if room_id else None
+        if not support or not isinstance(anchors, dict) or support not in anchors:
+            continue
+        was = _ci_get(positions_before or {}, name)
+        arrived = was is None or str(was) != str(room_id)
+        before = (supports_before or {}).get(str(name).strip().casefold(), "")
+        if not arrived and before.casefold() == support.casefold():
+            continue                    # a support it already had: no news
+        key = next((k for k in stations if str(k).strip().casefold()
+                    == str(name).strip().casefold()), name)
+        st = stations.get(key) if isinstance(stations.get(key), dict) else {}
+        if str(st.get("at") or "") == support:
+            continue
+        cell = normalize_cell(st.get("cell"))
+        on_it = {tuple(c) for c in (anchor_cells(merged, room_id).get(support) or {}).get("cells") or ()}
+        st = {k: v for k, v in st.items() if k != "cell" or (cell is not None and tuple(cell) in on_it)}
+        st["at"] = support
+        st.setdefault("near", [])
+        stations[key] = st
+        out.append(key)
+    return out
+
+
+def _seat_the_resting(merged) -> list:
+    """Drop the station `cell` of every body resting ON a fixture
+    (`spatial_fov.resting_on`) whose cell is not one of that fixture's.
+    Returns the names.
+
+    F39's own reasoning, a fourth case of it (`_station_moved_off_its_pin`):
+    a body drawn beside the bed while every ledger says she lies on it is
+    worse than a host having to pin again (the owner, 2026-10-13: "being on
+    the same tile space as something like a futon ... should work"). The
+    pins it takes down are the walk's -- an arrival lands BESIDE a fixture
+    (`spatial_walk.anchor_stand_cell`), and a walk in, or an older walk's
+    cell kept under a re-echoed `at`, then lies down on it -- and the seat
+    inside the door when a body arrives and lies down in one beat. A host's
+    drop ON the fixture is a cell of it and stands; a drop anywhere else
+    names another anchor or none (`world_browser.js` dropBody), so the body
+    is no longer resting there. With no pin, `body_cell` stands the body on
+    the fixture."""
+    from world.spatial_fov import anchor_cells, resting_on
+    from world.spatial_geometry import normalize_cell
+    stations = merged.get("stations") if isinstance(merged.get("stations"), dict) else {}
+    out = []
+    for name, st in stations.items():
+        if not isinstance(st, dict) or normalize_cell(st.get("cell")) is None:
+            continue
+        support = resting_on(merged, name)
+        if support is None:
+            continue
+        room_id = room_of(merged, name)
+        own = {tuple(c) for c in (anchor_cells(merged, room_id).get(support) or {}).get("cells") or ()}
+        if own and tuple(normalize_cell(st["cell"])) not in own:
+            st.pop("cell", None)
+            out.append(name)
+    return out
 
 
 def _station_moved_off_its_pin(current, incoming) -> bool:
@@ -1966,6 +2057,9 @@ def merge_scene_with_diff(
                     cur.pop("cell", None)
                 cur.update(st)
                 merged["stations"][name] = cur
+    # what each body was borne by before this beat (`_station_the_laid`)
+    _supports_before = {str(n).strip().casefold(): str((p or {}).get("support") or "").strip()
+                        for n, p in (merged.get("poses") or {}).items() if isinstance(p, dict)}
     apply_pose_diff(merged, incoming_poses)
 
     for removal in diff.get("remove_adjacent") or []:
@@ -2458,6 +2552,26 @@ def merge_scene_with_diff(
     # a room move), drop non-co-located `near` links, symmetrize what survives.
     # `incoming_stations`, not `diff["stations"]`: a body whose declared move
     # was refused wrote no station this beat, so it must not read as stated.
+    # ...after a body that stepped off a fixture is let go of it, so the
+    # contact that outlived the step does not stand it back at the fixture
+    # (`release_stepped_off_supports`; a pose this beat states is its own)
+    # A BODY THIS BEAT LAYS ON A FIXTURE IS STATIONED AT IT, where the beat
+    # said nothing of its station: a pose resting it on a thing of its room
+    # is the beat's word for where it is, as a contact with it is
+    # (`derive_scene_stations`) -- an arrival that lay down on the bed was
+    # seated at the door, and a body that had stepped off kept the old pin
+    # (second review of 2026-10-13)
+    _station_the_laid(merged, incoming_poses, incoming_stations, _positions_before,
+                      _supports_before)
+    from world.spatial_geometry import release_stepped_off_supports
+    release_stepped_off_supports(
+        merged,
+        stated=[name for name, pose in (incoming_poses or {}).items()
+                if isinstance(pose, dict) and pose.get("support")]
+        if isinstance(incoming_poses, dict) else (),
+        stepped=[name for name, st in (incoming_stations or {}).items()
+                 if isinstance(st, dict) and "at" in st and not st.get("at")]
+        if isinstance(incoming_stations, dict) else ())
     derive_scene_stations(merged, incoming_stations, diff.get("contact_ops"))
     merged.setdefault("stations", {})
     normalize_scene_stations(merged)
@@ -2479,6 +2593,9 @@ def merge_scene_with_diff(
     merged.pop("_sweeping", None)
     invalidate_contact_bound_poses(merged, _contacts_before_ops)
     normalize_scene_poses(merged)
+    # ...AND A BODY LYING ON A THING IS ON IT: a pin beside the fixture its
+    # pose and station both put it on is dropped (`_seat_the_resting`)
+    _seat_the_resting(merged)
 
     # Channels, after rooms have settled: a channel names rooms, so it can only
     # be pruned once this beat's room retirements are known.

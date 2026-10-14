@@ -92,6 +92,27 @@ SHAPES = {
 # oddity): the bar no longer stands on the north doorway to `q`, nor the keg
 # on the pace inside it, and a body stationed at either stands where they now
 # do. Any OTHER drift is still a failing test.
+#
+# REGENERATED AGAIN, on 2026-10-13, and this is the record. Two rules, both
+# the owner's after Home 11 ("stop overlapping furnitures"; "a character
+# overlapping furniture makes sense in some circumstances"): what stands on
+# the floor holds its cells at every height (`spatial_fov.stands_on_floor`),
+# so the small and wide rooms' table, stool and screen moved off cells a
+# fixture of another height held; and a cell code chooses for a body keeps
+# out of every fixture it does not rest on and every doorway
+# (`spatial_fov._stand_cell`, `_stand_grades`), so a body at the bar no
+# longer stands in the table, nor one near another on the hearth or the keg
+# -- every changed cell was checked, each either clear where it had been in
+# a fixture, or following a body or fixture that moved. The same day's two
+# reviews kept a body on the side of its anchor its station declares (cover
+# behind whatever stands there, a doorway excepted -- in the L room a body in
+# cover at the table stands on the bar's cell behind it rather than step into
+# view; otherwise a clear cell on its side or beside the anchor, never the far
+# side) and a body `near` another within reach,
+# never on a floor-height thing that body does not itself stand on -- a
+# floor height hides nobody, and is a keg, a pond or a low table as often as
+# a rug: every cell the round moved is clear. Any OTHER drift is still a
+# failing test.
 FROZEN = {
     "l": {
         "anchors": {
@@ -216,7 +237,7 @@ FROZEN = {
         },
         "at": {
             "bar": [
-                5,
+                3,
                 1
             ],
             "screen": [
@@ -254,7 +275,7 @@ FROZEN = {
         },
         "cover": {
             "bar": [
-                5,
+                3,
                 1
             ],
             "screen": [
@@ -275,7 +296,7 @@ FROZEN = {
             ],
             "table": [
                 5,
-                3
+                0
             ],
             "stool": [
                 6,
@@ -292,7 +313,7 @@ FROZEN = {
         },
         "near": {
             "bar": [
-                5,
+                3,
                 2
             ],
             "screen": [
@@ -301,18 +322,18 @@ FROZEN = {
             ],
             "hearth": [
                 6,
-                7
+                5
             ],
             "door": [
                 6,
-                7
+                5
             ],
             "urn": [
-                6,
-                2
+                5,
+                3
             ],
             "table": [
-                5,
+                6,
                 4
             ],
             "stool": [
@@ -320,12 +341,12 @@ FROZEN = {
                 5
             ],
             "keg": [
-                5,
+                6,
                 4
             ],
             "door:q": [
-                6,
-                2
+                5,
+                3
             ]
         }
     },
@@ -452,7 +473,7 @@ FROZEN = {
         },
         "at": {
             "bar": [
-                5,
+                3,
                 1
             ],
             "screen": [
@@ -472,7 +493,7 @@ FROZEN = {
                 1
             ],
             "table": [
-                6,
+                3,
                 2
             ],
             "stool": [
@@ -490,7 +511,7 @@ FROZEN = {
         },
         "cover": {
             "bar": [
-                5,
+                3,
                 1
             ],
             "screen": [
@@ -511,7 +532,7 @@ FROZEN = {
             ],
             "table": [
                 6,
-                2
+                1
             ],
             "stool": [
                 3,
@@ -528,7 +549,7 @@ FROZEN = {
         },
         "near": {
             "bar": [
-                5,
+                3,
                 2
             ],
             "screen": [
@@ -537,18 +558,18 @@ FROZEN = {
             ],
             "hearth": [
                 6,
-                7
+                5
             ],
             "door": [
                 1,
                 7
             ],
             "urn": [
-                6,
-                2
+                5,
+                3
             ],
             "table": [
-                6,
+                3,
                 3
             ],
             "stool": [
@@ -560,8 +581,8 @@ FROZEN = {
                 4
             ],
             "door:q": [
-                6,
-                2
+                5,
+                3
             ]
         }
     },
@@ -688,12 +709,12 @@ FROZEN = {
         },
         "at": {
             "bar": [
-                5,
+                3,
                 1
             ],
             "screen": [
                 6,
-                3
+                2
             ],
             "hearth": [
                 6,
@@ -708,7 +729,7 @@ FROZEN = {
                 1
             ],
             "table": [
-                6,
+                3,
                 2
             ],
             "stool": [
@@ -726,12 +747,12 @@ FROZEN = {
         },
         "cover": {
             "bar": [
-                5,
+                2,
                 1
             ],
             "screen": [
                 6,
-                3
+                5
             ],
             "hearth": [
                 6,
@@ -764,27 +785,27 @@ FROZEN = {
         },
         "near": {
             "bar": [
-                5,
+                3,
                 2
             ],
             "screen": [
-                6,
-                4
+                5,
+                3
             ],
             "hearth": [
-                6,
-                6
+                5,
+                5
             ],
             "door": [
                 2,
                 7
             ],
             "urn": [
-                4,
-                2
+                3,
+                1
             ],
             "table": [
-                6,
+                3,
                 3
             ],
             "stool": [
@@ -796,7 +817,7 @@ FROZEN = {
                 5
             ],
             "door:q": [
-                6,
+                5,
                 3
             ]
         }
@@ -844,25 +865,17 @@ FROZEN = {
             "table": [
                 [
                     0,
-                    1
-                ],
-                [
-                    0,
-                    2
+                    3
                 ],
                 [
                     1,
-                    1
-                ],
-                [
-                    1,
-                    2
+                    3
                 ]
             ],
             "stool": [
                 [
                     0,
-                    0
+                    1
                 ]
             ],
             "keg": [
@@ -897,7 +910,7 @@ FROZEN = {
             ],
             "screen": [
                 2,
-                2
+                1
             ],
             "hearth": [
                 2,
@@ -912,16 +925,16 @@ FROZEN = {
                 1
             ],
             "table": [
-                2,
+                1,
                 2
             ],
             "stool": [
                 1,
-                0
+                1
             ],
             "keg": [
                 1,
-                3
+                2
             ],
             "door:q": [
                 2,
@@ -935,7 +948,7 @@ FROZEN = {
             ],
             "screen": [
                 2,
-                2
+                1
             ],
             "hearth": [
                 2,
@@ -950,16 +963,16 @@ FROZEN = {
                 1
             ],
             "table": [
-                2,
+                1,
                 2
             ],
             "stool": [
                 1,
-                0
+                1
             ],
             "keg": [
-                1,
-                3
+                2,
+                1
             ],
             "door:q": [
                 2,
@@ -972,36 +985,36 @@ FROZEN = {
                 2
             ],
             "screen": [
-                2,
-                3
-            ],
-            "hearth": [
-                2,
-                3
-            ],
-            "door": [
-                1,
-                3
-            ],
-            "urn": [
-                2,
-                2
-            ],
-            "table": [
-                2,
-                3
-            ],
-            "stool": [
                 1,
                 1
             ],
+            "hearth": [
+                2,
+                1
+            ],
+            "door": [
+                1,
+                1
+            ],
+            "urn": [
+                1,
+                1
+            ],
+            "table": [
+                1,
+                1
+            ],
+            "stool": [
+                1,
+                2
+            ],
             "keg": [
                 1,
-                3
+                1
             ],
             "door:q": [
-                2,
-                2
+                1,
+                1
             ]
         }
     },
@@ -1165,7 +1178,7 @@ FROZEN = {
             ],
             "screen": [
                 10,
-                8
+                9
             ],
             "hearth": [
                 6,
@@ -1202,8 +1215,8 @@ FROZEN = {
                 1
             ],
             "screen": [
-                10,
-                8
+                11,
+                11
             ],
             "hearth": [
                 6,
@@ -1241,11 +1254,11 @@ FROZEN = {
             ],
             "screen": [
                 10,
-                9
+                10
             ],
             "hearth": [
                 6,
-                11
+                9
             ],
             "door": [
                 1,
@@ -1260,7 +1273,7 @@ FROZEN = {
                 3
             ],
             "stool": [
-                1,
+                2,
                 1
             ],
             "keg": [
@@ -1320,11 +1333,11 @@ FROZEN = {
             "screen": [
                 [
                     11,
-                    1
+                    2
                 ],
                 [
                     11,
-                    2
+                    3
                 ]
             ],
             "hearth": [
@@ -1347,19 +1360,19 @@ FROZEN = {
             ],
             "table": [
                 [
-                    0,
+                    1,
                     1
                 ],
                 [
-                    0,
+                    1,
                     2
                 ],
                 [
-                    1,
+                    2,
                     1
                 ],
                 [
-                    1,
+                    2,
                     2
                 ]
             ],
@@ -1401,27 +1414,27 @@ FROZEN = {
             ],
             "screen": [
                 10,
-                2
+                3
             ],
             "hearth": [
                 6,
                 2
             ],
             "door": [
-                1,
-                2
+                0,
+                1
             ],
             "urn": [
                 10,
                 1
             ],
             "table": [
-                2,
+                3,
                 2
             ],
             "stool": [
-                1,
-                0
+                0,
+                1
             ],
             "keg": [
                 9,
@@ -1439,27 +1452,27 @@ FROZEN = {
             ],
             "screen": [
                 10,
-                2
+                3
             ],
             "hearth": [
                 6,
                 2
             ],
             "door": [
-                1,
-                2
+                0,
+                1
             ],
             "urn": [
                 10,
                 1
             ],
             "table": [
-                2,
-                2
+                0,
+                1
             ],
             "stool": [
-                1,
-                0
+                0,
+                1
             ],
             "keg": [
                 9,
@@ -1476,28 +1489,28 @@ FROZEN = {
                 2
             ],
             "screen": [
-                10,
+                9,
                 3
             ],
             "hearth": [
                 6,
-                3
+                1
             ],
             "door": [
-                1,
+                0,
                 3
             ],
             "urn": [
-                10,
-                2
+                9,
+                1
             ],
             "table": [
-                2,
+                3,
                 3
             ],
             "stool": [
-                1,
-                1
+                0,
+                3
             ],
             "keg": [
                 9,
