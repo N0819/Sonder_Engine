@@ -2317,6 +2317,43 @@ a window edge as a window:
   (`_ensure_passage`) as for a door; the record is right, the route's name
   and its toasts are a door's.
 
+### 1.216 Home 11's layout -- ten findings, observed 2026-10-13
+
+[`experiments/OBSERVE_2026_10_13_home11_layout.md`](experiments/OBSERVE_2026_10_13_home11_layout.md):
+the shrine the layout tier laid out at Home 11's opening (chat 174) keeps 11
+of the 30 spatial claims its own brief makes. Four-lens review, 66 findings
+merged into 10, every one replayed from the captured answers. All open:
+
+1. The solver's divider cannot stand one zone on both sides of another, and
+   the tier takes the first seed that solves; the relate also flagged storey 1
+   `smaller`, nothing can say "middle of the front", and the plan's diagonal
+   bearings and `access` lines never reach the architect.
+2. Rooms come out 1.5-2.8x their lore's size (owner question A below).
+3. Doorways into stair halls keep the opening's `vertical`/`way` tags, so no
+   plan draws them and the far layer reads seven storeys; halls below the
+   first floor swell (§1.210); doorways sit mid-flight.
+4. Fixtures the solver moved are re-laid by code onto the genkan's doorway
+   and onto other fixtures; the establish duplicates the Roost's anchors
+   (§1.205's cause); bodies are seated inside furniture.
+5. The warded door to the seal cavern is a waist-high fixture with nothing
+   behind it.
+6. The latrine outbuilding is absorbed into the house (building grouping).
+7. The upper hallway is a windowless 5x3 landing; dropped windows go
+   unrecorded.
+8. The grounds do not hold together -- well across the path, torii off it,
+   the kitchen's back door far from its well, the garden cut in two, guessed
+   distances over solved ones (A6, §1.215 item 7: land its generator rules
+   with the `by: <way>` and stale-rows fixes, not the floor alone).
+9. The run record hides what the solve gave up.
+10. The ground plan draws upper-storey windows; niche lamps and pillars are
+    2x2 floor blocks.
+
+Owner questions: **A** should a size the lore states hold the room, with what
+will not fit going back as capacity (against "size from contents",
+2026-10-10)? **B** should anything standing on the floor hold the floor at
+every height ("a cell is taken at one height", 2026-10-08)? **C** should a
+room lived or worked in by day take a window by default?
+
 
 ## 2. Roadmap
 
