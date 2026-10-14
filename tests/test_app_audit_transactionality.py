@@ -230,7 +230,8 @@ class TestTurnDelAtomicity:
     def test_successful_delete_still_restores_and_removes_rows(self, temp_db):
         chat_id, turn_id = self._seed_deletable_turn(temp_db)
 
-        assert app.turn_del(turn_id) == {"ok": True}
+        # `carried`: the off-screen beats the delete took back (`persist.beat_order`)
+        assert app.turn_del(turn_id) == {"ok": True, "carried": 0}
 
         assert temp_db.q("SELECT 1 FROM turns WHERE id=?", (turn_id,), one=True) is None
         assert temp_db.q("SELECT COUNT(*) AS n FROM steps", one=True)["n"] == 0

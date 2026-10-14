@@ -6,7 +6,9 @@ import contextvars
 import json
 import logging
 import queue
+import sys
 import threading
+import time
 
 from story.character_schema import (character_name, character_name_from_text,
                               normalize_persona_data, persona_appearance)
@@ -220,7 +222,7 @@ def request_abort(chat_id, frame_id=None):
         return True
     return False
 
-def begin_pipeline(chat_id, frame_id=None):
+def begin_pipeline(chat_id, frame_id=None, offscreen_beat=False):
     """Register this (chat, frame) as having an active pipeline
     SYNCHRONOUSLY, before any streaming response is constructed or
     returned.
@@ -247,8 +249,73 @@ def begin_pipeline(chat_id, frame_id=None):
                 f"a pipeline is already running for chat {chat_id} frame {frame_id}"
             )
         abort = threading.Event()
+        # WHOSE SLOT IT IS, set before the slot is visible: a rewind stops an
+        # off-screen beat's run and never a human's (`running_frames`).
+        abort.offscreen_beat = bool(offscreen_beat)
         ABORTS[(chat_id, frame_id)] = abort
         return abort
+
+def _claim_the_rerun(turn_id):
+    """A HOST'S RERUN OF A TURN MAKES IT THEIRS (`web.app._claim_turn`'s rule,
+    here because only a run knows when its rewind has been decided): asked
+    once the restore has passed its decision, so a run refused or stopped
+    before it claims nothing. Every rerun of a turn that already has steps is
+    a host's -- the engine writes an off-screen beat once, as a fresh turn."""
+    qi("UPDATE turns SET offscreen=0 WHERE id=? AND offscreen=1", (turn_id,))
+
+
+def _mark_the_commit_stale(turn_id):
+    """The commit a restore took back, stale until it lands again.
+
+    THE COMMIT'S ALONE: it is the one step whose freshness claims the world
+    holds its result, and marking it is enough for Resume to be offered and
+    for `_require_turn_resolved` to hold the frame. Marking every step the
+    recompute might rewrite (review of 2026-10-13, round three) left a step
+    the new plan dropped stale for good whenever the run ended before its
+    plan was built -- the flags a built plan gives back were never given back,
+    and the next run could not tell its own marks from the leftovers (round
+    four). The plan marks its own steps once it is built, as it always did."""
+    qi("UPDATE steps SET stale=1 WHERE turn_id=? AND key='commit'", (turn_id,))
+
+
+def running_frames(chat_id):
+    """{frame: held by an off-screen beat} for every run slot of this chat
+    held right now. An off-screen beat tags its abort event when it claims
+    the slot (`offscreen_beat.run_offscreen_beat`), so a rewind stops only
+    those and never a human's run, whose row may not exist yet either."""
+    return {key[1]: bool(getattr(event, "offscreen_beat", False))
+            for key, event in list(ABORTS.items()) if key[0] == chat_id}
+
+
+def stop_off_screen_beats(chat_id, frame_ids, wait=5.0):
+    """Ask the off-screen beats running in `frame_ids` to stop, and wait up to
+    `wait` seconds for their slots to free. A rewind that takes a beat back
+    stops it first (`persist.beat_order`); one still finishing a model call
+    when the wait runs out dies on its next write, its turn row gone."""
+    # ONLY AN OFF-SCREEN BEAT'S OWN EVENT, read and set under the slot lock:
+    # the frames came from a read a few queries earlier, and in between the
+    # beat may have finished and a human's line claimed its slot (review of
+    # 2026-10-13). Its live sockets are closed too, so a model call blocked
+    # in a read stops where it stands (`request_abort`'s reason).
+    stopped = {}
+    with _ABORTS_LOCK:
+        for frame_id in frame_ids or ():
+            event = ABORTS.get((chat_id, frame_id))
+            if getattr(event, "offscreen_beat", False) and hasattr(event, "set"):
+                event.set()
+                stopped[frame_id] = event
+    for event in stopped.values():
+        try:
+            abort_live_requests(event)
+        except Exception:
+            pass
+    deadline = time.monotonic() + wait
+    while stopped and time.monotonic() < deadline:
+        stopped = {f: e for f, e in stopped.items() if ABORTS.get((chat_id, f)) is e}
+        if stopped:
+            time.sleep(0.1)
+    return sorted(stopped)
+
 
 STEP_HANDLERS = {
     "interaction_loop": interaction_loop,
@@ -1374,7 +1441,7 @@ def _merge_bubbles_now(ctx, chat_id, turn_row):
     return ctx.cast
 
 
-def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
+def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blocking=False):
     bus = Bus()
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True))
     turn_row = dict(q("SELECT * FROM turns WHERE id=?", (turn_id,), one=True))
@@ -1397,6 +1464,10 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         language=story_language(chat_id),
         extra_players=_load_extra_players(chat_id, turn_row["idx"], turn_row["frame_id"]),
     )
+
+    # What the last restore took back, said on the stream by the caller
+    # (`_restore_and_refresh` is not a generator; `_run_pipeline` is).
+    _restored_notice = []
 
     def _restore_and_refresh():
         """Restore durable state, drop the snapshots of the lineage being
@@ -1425,16 +1496,64 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
 
         STRICTLY GREATER, never `>=`: this turn's own checkpoint is the state
         BEFORE it ran, which a recompute does not change and which the restore
-        on the line below is about to read.
+        reads. The sweep runs inside the restore's transaction
+        (`restore_checkpoint(sweep_later=True)`).
 
         NOT `refresh_checkpoint`, which patches only the lore sections and
         deliberately leaves the rest alone -- it exists to REMOVE a whole-chat
         re-snapshot that was itself a bug.
         """
-        qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx>?",
-           (chat_id, turn_row["idx"]))
-        restore_checkpoint(chat_id, turn_row["idx"])
+        # WHAT THE REWIND TAKES BACK WITH IT (`persist.beat_order`): the unseen
+        # off-screen beats of bubbles split from this turn's frame that ran
+        # after it began, deleted inside the restore's own transaction and
+        # lived again after this turn's commit. A beat of theirs still running
+        # is stopped first, and the rewind is DECIDED under the restore's own
+        # lock (`beat_order.decide`): refused, with nothing written, while any
+        # run but this one still holds a slot. That floor holds for a direct
+        # caller too; the route's gate (`web.app._require_rewindable`) also
+        # refuses a rewind over a beat somebody played, which a direct caller
+        # is only told about.
+        from persist import beat_order
+        from persist.checkpoints import halt_off_screen_job
+        halt_off_screen_job(chat_id, turn_row["idx"])
+        stop_off_screen_beats(chat_id, beat_order.rewind_plan(
+            chat_id, turn_row, running_frames=running_frames(chat_id))["stop"])
+        # A STOP PRESSED WHILE THE BEAT WAS STOPPED stops the rewind, with
+        # nothing written: asked here and again under the lock, since nothing
+        # else between the wait and the first stage reads it (review of
+        # 2026-10-13).
+        _check_cancel()
+        decided = {}
+
+        def _decide():
+            _check_cancel()
+            plan = beat_order.decide(chat_id, turn_row, running_frames(chat_id),
+                                     own_frame=True)
+            # A route has refused a played beat at its gate; one found HERE
+            # landed while the beat was stopped, and refuses the same way. A
+            # direct caller (a replay on a copy) is only told.
+            if refuse_blocking and plan["blocking"]:
+                raise beat_order.RewindRefused(plan["reason"])
+            decided["plan"] = plan
+            # named before the restore, which may take their frames back too
+            decided["notice"] = beat_order.carried_notice(plan)
+            return plan["carried"]
+
+        # The later checkpoints go in the restore's own transaction
+        # (`sweep_later`, the `turn_idx>?` sweep): after the restore, so one
+        # that fails leaves them, and before any run can write one again.
+        restore_checkpoint(chat_id, turn_row["idx"], carried=_decide, sweep_later=True)
+        plan = decided.get("plan") or {"carried": [], "blocking": []}
+        if plan["blocking"]:
+            ctx.add_warning("this rewind also takes back another frame's progress: "
+                            + plan["reason"])
+        if plan["carried"]:
+            ctx.add_warning(
+                "took back %d off-screen beat(s) nobody saw (turns %s); they are lived "
+                "again after this turn commits" % (
+                    len(plan["carried"]), ", ".join(str(r["idx"]) for r in plan["carried"])))
         ctx.cast = active_cast(chat_id, turn_row["frame_id"])
+        _restored_notice[:] = [decided["notice"]] if decided.get("notice") else []
         # A restore rewrites `world_conditions` and the cast wholesale, and
         # this turn's disguise/transformation maps are read once and kept
         # (review 2026-09-07 C13). Every call below is still ahead of the
@@ -1507,6 +1626,10 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         restored = False
         if only_key == "commit" and has_existing_steps:
             _restore_and_refresh()
+            yield from _restored_notice
+            # the restore took this commit back: stale until it lands again,
+            # so a run that fails or is stopped leaves Resume pointing at it
+            _mark_the_commit_stale(turn_id)
             restored = True
         elif (
             only_key != "commit"
@@ -1524,7 +1647,10 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # leaving the turn in an explicit needs-resume state rather than a
             # half-committed one.
             _restore_and_refresh()
+            yield from _restored_notice
             restored = True
+        if has_existing_steps:
+            _claim_the_rerun(turn_id)
         # The restore takes back the merges this turn's run made before its
         # stages; ask them again, as the full run does, so a stage rerolled
         # alone reads the world the turn's run read (review of 2026-10-13).
@@ -1572,6 +1698,14 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
 
     if has_existing_steps:
         _restore_and_refresh()
+        yield from _restored_notice
+        # THE RESTORE TOOK THE TURN'S COMMIT BACK: stale NOW, not once the
+        # plan is built after the interpret -- a run stopped in between (a
+        # Stop, a provider error) left the turn reading complete, offering no
+        # Resume, over a world that no longer held its commit (review of
+        # 2026-10-13; older than the take-back, which widened it).
+        _mark_the_commit_stale(turn_id)
+        _claim_the_rerun(turn_id)
 
     if establishment:
         plan = establishment_plan(chat_id)
@@ -1842,7 +1976,12 @@ def run_pipeline(
     abort=None,
     frame_id=None,
     keep_slot=False,
+    refuse_blocking=False,
 ):
+    # `refuse_blocking`: a route's recompute, whose gate refused a beat
+    # somebody played in another frame, refuses one that lands while its
+    # rewind waits as well (`persist.beat_order`); a direct caller is told.
+    #
     # `keep_slot` leaves the (chat, frame) slot claimed when the run ends,
     # for a caller that runs a SECOND turn straight after this one and must
     # not let another request into the frame between them -- the scenario
@@ -1873,6 +2012,7 @@ def run_pipeline(
             turn_id,
             from_key,
             only_key,
+            refuse_blocking=refuse_blocking,
         ):
             yield event
 
@@ -1885,7 +2025,13 @@ def run_pipeline(
 
     except Exception:
         try:
-            wset(chat_id, "pending", [])
+            # ...unless a rewind took this beat back while it ran (the world is
+            # the restored one, its pending notices not this run's), or this
+            # run's own rewind was refused before it wrote anything
+            from persist.beat_order import RewindRefused
+            if (not isinstance(sys.exc_info()[1], RewindRefused)
+                    and q("SELECT 1 FROM turns WHERE id=?", (turn_id,), one=True)):
+                wset(chat_id, "pending", [])
         except Exception:
             pass
         _discard_stepless_turn(chat_id, turn_id)

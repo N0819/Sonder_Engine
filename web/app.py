@@ -721,28 +721,50 @@ import logging
 
 _pipeline_logger = logging.getLogger("fiction_engine.pipeline")
 
-def _require_chat_idle(chat_id: int):
+def _require_chat_idle(chat_id: int, allow=()):
     """Whole-chat exclusivity: no frame's pipeline may be running. Used
     for every operation that isn't safely frame-local under Stage A's
     concurrency model -- recompute (reroll/rerun/resume/step edit/step
     activate/turn delete), branch, export/import, and lorebook
-    attach/detach (which touches checkpoints spanning every frame)."""
+    attach/detach (which touches checkpoints spanning every frame).
+
+    `allow` are frames whose running beat the caller's rewind takes back and
+    stops before it restores (`persist.beat_order`). An off-screen beat is
+    named as one: "Abort it" told a host to stop a run no control on the page
+    could reach (Home 10, item 6)."""
     # list() snapshots the keys atomically -- pipeline threads insert/pop
     # ABORTS entries concurrently, and iterating the live dict can raise
     # RuntimeError("dictionary changed size during iteration").
-    if any(key[0] == chat_id for key in list(ABORTS)):
+    from agents.runtime import running_frames
+    held = {f: offscreen for f, offscreen in running_frames(chat_id).items() if f not in allow}
+    if held:
+        if all(held.values()):
+            _refuse_for_an_off_screen_beat(next(iter(held)))
         raise HTTPException(
             409,
             "This chat still has an active pipeline. Abort it and wait for "
             "the aborted response before modifying turns.",
         )
 
+
+def _refuse_for_an_off_screen_beat(frame_id):
+    """The 409 for a slot an off-screen beat holds. It names the beat as one:
+    "Abort it" told a host to stop a run no control on the page can reach
+    (Home 10, item 6), and the slot's own tag says whose it is
+    (`agents.runtime.running_frames`), never a guess from the frame."""
+    label = (get_frame(frame_id) or {}).get("label") or ""
+    raise HTTPException(
+        409, f"An off-screen beat is running ({label}); it finishes on its own -- try again in a moment.")
+
 def _require_frame_idle(chat_id: int, frame_id):
     """Frame-local exclusivity: only THIS frame's pipeline must be idle.
     Used for fresh turn creation only -- two frames each running their
     own turn concurrently is exactly the point of this feature; only a
     second overlapping attempt within the SAME frame is rejected."""
-    if (chat_id, frame_id) in ABORTS:
+    event = ABORTS.get((chat_id, frame_id))
+    if event is not None:
+        if getattr(event, "offscreen_beat", False):
+            _refuse_for_an_off_screen_beat(frame_id)
         raise HTTPException(
             409,
             "This frame still has an active pipeline. Abort it and wait "
@@ -831,6 +853,8 @@ def _begin_pipeline_or_409(chat_id: int, frame_id):
     try:
         return begin_pipeline(chat_id, frame_id)
     except PipelineBusyError:
+        if getattr(ABORTS.get((chat_id, frame_id)), "offscreen_beat", False):
+            _refuse_for_an_off_screen_beat(frame_id)
         raise HTTPException(
             409,
             "A pipeline is already running for this. Abort it and wait "
@@ -998,25 +1022,60 @@ def _latest_turn(chat_id):
     """The latest turn ACROSS EVERY FRAME (global play order)."""
     return q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1", (chat_id,), one=True)
 
+def _claim_turn(turn_id):
+    """A HOST'S WRITE TO A TURN MAKES IT THEIRS. An off-screen beat whose
+    line or steps a host has changed is no longer one "nobody saw": a rewind
+    of the page before it refuses over it rather than taking it back
+    (`persist.beat_order`; review of 2026-10-13, an edited beat was deleted
+    as unseen). Only once the write has landed -- a no-op edit, a refused
+    activate, claims nothing; a rerun claims inside its run, once its rewind
+    is decided (`runtime._claim_the_rerun`)."""
+    qi("UPDATE turns SET offscreen=0 WHERE id=? AND offscreen=1", (turn_id,))
+
+
+def _refresh_rewindable_checkpoints(cid):
+    """Carry a lorebook change into every checkpoint a rewind can restore.
+
+    Retrieval is snapshotted with the turn, so the checkpoint has to move with
+    the books or a rewind restores the old reach. That was the chat's newest
+    turn's alone while only the newest turn could be rewound; since a page is
+    rewindable with a bubble's beat after it (`persist.beat_order`), it is the
+    newest turn of every frame still live (review of 2026-10-13: attaching a
+    book after Tamamo's beat, then rerolling the page, detached it again) -- a
+    page a played beat blocks included, since deleting that beat unblocks it.
+    An older checkpoint takes the BOOK SET only (`refresh_checkpoint(
+    book_set_only=True)`): it lies under turns with lore of their own. And
+    only where one exists: a missing one would be written from the world as it
+    is now, which is the instant before the chat's newest turn and no other."""
+    last = _latest_turn(cid)
+    if not last:
+        return
+    refresh_checkpoint(cid, last["idx"])
+    for row in q("SELECT t.idx FROM turns t JOIN (SELECT frame_id, MAX(idx) AS idx FROM turns "
+                 "WHERE chat_id=? GROUP BY frame_id) newest ON newest.idx=t.idx "
+                 "LEFT JOIN frames f ON f.id=t.frame_id WHERE t.chat_id=? "
+                 "AND (t.frame_id IS NULL OR f.merged_turn_idx IS NULL)", (cid, cid)):
+        if row["idx"] != last["idx"] and q(
+                "SELECT 1 FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+                (cid, row["idx"]), one=True):
+            refresh_checkpoint(cid, row["idx"], book_set_only=True)
+
+
 def _latest_turn_in_frame(chat_id, frame_id):
     return q(
         "SELECT * FROM turns WHERE chat_id=? AND frame_id IS ? ORDER BY idx DESC LIMIT 1",
         (chat_id, frame_id), one=True,
     )
 
-def _other_frame_has_advanced_past(chat_id, frame_id, idx):
-    return bool(q(
-        "SELECT 1 FROM turns WHERE chat_id=? AND frame_id IS NOT ? AND idx>? LIMIT 1",
-        (chat_id, frame_id, idx), one=True,
-    ))
-
-def _require_latest(turn):
+def _require_latest(turn, later_only=False):
     """Recompute (reroll/rerun/resume/step edit/delete) is gated on two
     things, not one: this must be the latest turn OF ITS OWN FRAME (not
     globally latest -- Stage A already makes per-frame turn creation
     genuinely concurrent, so a different frame having advanced further
     is normal, not a problem to block on), AND no OTHER frame may have
-    advanced past this turn's play-order position.
+    advanced past this turn's play-order position -- except the unseen
+    off-screen beats of this frame's own bubbles, which the rewind takes
+    back with it and lives again (`persist.beat_order`, 2026-10-13).
 
     That second check is what keeps this safe without frame-sliced
     checkpoints (Stage B's original, much larger proposed shape):
@@ -1027,10 +1086,11 @@ def _require_latest(turn):
     frame has advanced past this point" guarantees. When it doesn't
     hold, recompute here would silently roll back another frame's
     genuinely newer, unrelated progress, so it's refused with a clear
-    reason instead. Whole-chat idle (_require_chat_idle, checked
-    separately by every caller) closes the remaining race: nothing else
-    can commit and invalidate this check between it passing and the
-    actual checkpoint restore running.
+    reason instead. Whole-chat idle (`_require_rewindable`) closes the
+    remaining race: nothing else can commit and invalidate this check
+    between it passing and the actual checkpoint restore running -- the
+    off-screen beats the rewind takes back excepted, which the restore stops
+    first.
     """
     frame_id = turn["frame_id"]
     lt = _latest_turn_in_frame(turn["chat_id"], frame_id)
@@ -1047,7 +1107,15 @@ def _require_latest(turn):
                 and int(fr["merged_turn_idx"]) < int(turn["idx"]):
             raise HTTPException(
                 409, "This thread ended while this turn ran; it cannot be recomputed.")
-    if _other_frame_has_advanced_past(turn["chat_id"], frame_id, turn["idx"]):
+    # THE OTHER FRAMES (`persist.beat_order`): a beat somebody PLAYED in
+    # another frame after this turn began still refuses, in the sentence it
+    # always has. An unseen off-screen beat of a bubble split from this frame
+    # is taken back with the rewind and lived again (owner, 2026-10-13).
+    from persist import beat_order
+    plan = beat_order.rewind_plan(turn["chat_id"], turn)
+    blocking = [r for r in plan["blocking"]
+                if not later_only or int(r["idx"]) > int(turn["idx"])]
+    if blocking:
         raise HTTPException(
             409,
             "Another frame has advanced since this turn. Recompute here "
@@ -1055,6 +1123,24 @@ def _require_latest(turn):
             "state (memories, cast, world entities) isn't sliced per frame "
             "in this version.",
         )
+    return plan
+
+
+def _require_rewindable(turn):
+    """The gate for every route that rewinds a turn to its checkpoint:
+    `_require_latest`, then whole-chat idle -- except the frames whose
+    off-screen beat the rewind takes back, which the restore stops first
+    (`runtime._restore_and_refresh`, `turn_del`). Returns the plan."""
+    from agents.runtime import running_frames
+    from persist import beat_order
+    _require_latest(turn)
+    plan = beat_order.rewind_plan(turn["chat_id"], turn,
+                                  running_frames=running_frames(turn["chat_id"]))
+    if plan["blocking"]:
+        raise HTTPException(409, plan["reason"])
+    _require_chat_idle(turn["chat_id"], allow=set(plan["stop"]))
+    return plan
+
 
 def _require_turn_resolved(chat_id, frame_id):
     """Refuse to start a new turn in this frame on top of THIS FRAME's
@@ -4338,9 +4424,7 @@ def attach_lore(cid: int, body: dict = Body(...)):
         new = duplicate_lorebook_for_chat(src, cid)
         origin = src
     qi("INSERT INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) VALUES(?,?,?,1)", (cid, new, origin))
-    last = _latest_turn(cid)
-    if last:
-        refresh_checkpoint(cid, last["idx"])
+    _refresh_rewindable_checkpoints(cid)
     return {"lorebook_id": new}
 
 @app.put("/api/chats/{cid}/lorebooks/{lid}")
@@ -4374,9 +4458,7 @@ def set_book_enabled(cid: int, lid: int, body: dict = Body(...)):
     # Retrieval is snapshotted with the turn, so the checkpoint has to move
     # with the setting or a reroll would restore the old reach -- the same
     # reason attach and detach refresh it.
-    last = _latest_turn(cid)
-    if last:
-        refresh_checkpoint(cid, last["idx"])
+    _refresh_rewindable_checkpoints(cid)
     return {"lorebook_id": lid, "enabled": bool(enabled)}
 
 @app.delete("/api/chats/{cid}/lorebooks/{lid}")
@@ -4389,9 +4471,7 @@ def detach_book(cid: int, lid: int):
         if chat and chat["lorebook_id"] == lid:
             qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (cid,))
         _delete_book(lid)
-    last = _latest_turn(cid)
-    if last:
-        refresh_checkpoint(cid, last["idx"])
+    _refresh_rewindable_checkpoints(cid)
     return {"ok": True}
 
 @app.post("/api/chats/{cid}/lorebook")
@@ -4415,18 +4495,14 @@ def bind_lore(cid: int, body: dict = Body(...)):
             400, "Canon is the story's own book; attach a library book instead")
     new = src if row["chat_id"] == cid else duplicate_lorebook_for_chat(src, cid)
     qi("UPDATE chats SET lorebook_id=? WHERE id=?", (new, cid))
-    last = _latest_turn(cid)
-    if last:
-        refresh_checkpoint(cid, last["idx"])
+    _refresh_rewindable_checkpoints(cid)
     return {"lorebook_id": new}
 
 @app.delete("/api/chats/{cid}/lorebook")
 def detach_lore(cid: int):
     _require_chat_idle(cid)
     qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (cid,))
-    last = _latest_turn(cid)
-    if last:
-        refresh_checkpoint(cid, last["idx"])
+    _refresh_rewindable_checkpoints(cid)
     return {"ok": True}
 
 @app.delete("/api/chats/{cid}")
@@ -6702,9 +6778,17 @@ def _insert_turn_row(cid, frame_id, player_input):
         idx = (last["idx"] + 1) if last else 0
         if data_version() != pre_version:
             pre_blob = snapshot_blob(cid)
-        ensure_checkpoint(cid, idx, blob=pre_blob)
-        return qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-                  (cid, idx, player_input, time.time(), frame_id))
+        # read under the lock: with `data_version` unchanged nothing landed
+        # since the blob was read, so this is the newest commit it holds
+        from persist.beat_order import latest_commit_seq
+        # No turn holds this idx or any after it, so a checkpoint there is an
+        # orphan of a turn a rewind took back -- the world as it was when that
+        # turn began, never this one's instant (review of 2026-10-13).
+        qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx>=?", (cid, idx))
+        ensure_checkpoint(cid, idx, blob=pre_blob, commit_seq=latest_commit_seq(cid))
+        # `offscreen=0`: a human sent this, an empty line included
+        return qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id,offscreen) "
+                  "VALUES(?,?,?,?,?,0)", (cid, idx, player_input, time.time(), frame_id))
 
 
 def _scenario_of(cid):
@@ -6847,6 +6931,10 @@ def turn_branch(tid: int):
         (cid, idx + 1),
         one=True
     )
+    # the newest commit a live snapshot holds: read before it, and exact,
+    # since nothing runs while a branch is taken (`_require_chat_idle`)
+    from persist.beat_order import latest_commit_seq
+    live_held = None if nxt else latest_commit_seq(cid)
     blob = json.loads(nxt["blob"]) if nxt else snapshot_state(cid)
 
     # Mirror chat_import: every insert from the new chats row through the
@@ -6984,10 +7072,21 @@ def turn_branch(tid: int):
 
         # Copy turns, steps, and variants
         idmap = {}
+        # THE BRANCH'S NUMBERS SAY WHAT ITS WORLD HOLDS. Its world is the
+        # checkpoint after the branch point, so a copied turn whose commit
+        # landed after that instant is not in it (its rows are copied, as
+        # they always were); its number goes, or every checkpoint the branch
+        # writes would claim a commit its world lacks (review of 2026-10-13).
+        branch_held = nxt["commit_seq"] if nxt else live_held
         for t in q("SELECT * FROM turns WHERE chat_id=? AND idx<=? ORDER BY idx", (cid, idx)):
+            seq = t["commit_seq"]
+            if seq is not None and branch_held is not None and seq > branch_held:
+                seq = None
             nt = qtx(
-                "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-                (ncid, t["idx"], t["player_input"], t["created"], frame_idmap.get(t["frame_id"]))
+                "INSERT INTO turns(chat_id,idx,player_input,created,frame_id,commit_seq,offscreen) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (ncid, t["idx"], t["player_input"], t["created"], frame_idmap.get(t["frame_id"]),
+                 seq, t["offscreen"])
             )
             idmap[t["id"]] = nt
 
@@ -7308,8 +7407,8 @@ def turn_branch(tid: int):
                 world_id_remap=world_id_remap, frame_idmap=frame_idmap,
             )
             qtx(
-                "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) VALUES(?,?,?,?)",
-                (ncid, cp["turn_idx"], json.dumps(b), time.time())
+                "INSERT INTO checkpoints(chat_id,turn_idx,blob,created,commit_seq) VALUES(?,?,?,?,?)",
+                (ncid, cp["turn_idx"], json.dumps(b), time.time(), cp["commit_seq"])
             )
 
         # Final checkpoint snapshot for the newly branched chat
@@ -7319,8 +7418,10 @@ def turn_branch(tid: int):
             world_id_remap=world_id_remap, frame_idmap=frame_idmap,
         )
         qtx(
-            "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) VALUES(?,?,?,?)",
-            (ncid, idx + 1, json.dumps(b), time.time())
+            "INSERT INTO checkpoints(chat_id,turn_idx,blob,created,commit_seq) VALUES(?,?,?,?,?)",
+            (ncid, idx + 1, json.dumps(b), time.time(),
+             # what the branch point's own checkpoint held, or the live one
+             nxt["commit_seq"] if nxt else live_held)
         )
 
     # `story_language` lives in the `world` table, not on the chat row, so it
@@ -7336,11 +7437,23 @@ def edit_input(tid: int, body: dict = Body(...)):
     if not turn:
         raise HTTPException(404, "Turn not found")
     # Don't flip steps stale / rewrite input while a pipeline is building
-    # those very steps for this turn.
-    _require_chat_idle(turn["chat_id"])
+    # those very steps for this turn -- an off-screen beat the recompute will
+    # take back excepted (`persist.beat_order`).
+    from agents.runtime import running_frames
+    from persist import beat_order
+    plan = beat_order.rewind_plan(turn["chat_id"], turn,
+                                  running_frames=running_frames(turn["chat_id"]))
+    _require_chat_idle(turn["chat_id"], allow=set(plan["stop"]))
+    changed = (turn["player_input"] or "") != _player_input(body)
     qi("UPDATE turns SET player_input=? WHERE id=?", (_player_input(body), tid))
-    lt = _latest_turn(turn["chat_id"])
-    latest = lt and lt["id"] == tid
+    if changed:
+        _claim_turn(tid)
+    # THE NEWEST TURN OF ITS OWN FRAME, as every recompute gate reads it: the
+    # chat's newest turn was a bubble's beat whenever one ran after the
+    # player's page, and an edit to that page skipped its recompute in
+    # silence (Home 10, item 6).
+    lt = _latest_turn_in_frame(turn["chat_id"], turn["frame_id"])
+    latest = bool(lt and lt["id"] == tid and not plan["blocking"])
     if latest:
         qi("UPDATE steps SET stale=1 WHERE turn_id=?", (tid,))
     return {"ok": True, "latest": latest}
@@ -7443,7 +7556,11 @@ def turn_narration_select(tid: int, body: dict = Body(...)):
     turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
     if not turn:
         raise HTTPException(404, "Turn not found")
-    _require_latest(turn)
+    # A CHOICE BETWEEN THIS TURN'S OWN PAGES RESTORES NOTHING, so the rewind
+    # gate's "landed after it began" does not apply: a beat another frame
+    # began earlier never read this prose. Only one later in play order, which
+    # did, refuses -- the rule this route had before 2026-10-13 (review).
+    _require_latest(turn, later_only=True)
     step = q("SELECT * FROM steps WHERE turn_id=? AND key='narrator'",
              (tid,), one=True)
     if not step:
@@ -7490,9 +7607,19 @@ def pipeline_get(tid: int):
     # other frame has advanced past this point (see that function for why
     # both are required). Surfaced separately so the UI can explain WHY
     # a frame-latest turn is still blocked, instead of just refusing.
-    blocked_by_other_frame = is_frame_latest and _other_frame_has_advanced_past(
-        turn["chat_id"], turn["frame_id"], turn["idx"])
-    editable = is_frame_latest and not blocked_by_other_frame
+    # The cross-frame half is the rewind plan's (`persist.beat_order`): a
+    # beat somebody played in another frame blocks; an unseen off-screen beat
+    # is taken back with the rewind and does not.
+    blocked_by_other_frame = False
+    outlived = False
+    if is_frame_latest:
+        from persist import beat_order
+        blocked_by_other_frame = bool(
+            beat_order.rewind_plan(turn["chat_id"], turn)["blocking"])
+        frame = get_frame(turn["frame_id"]) if turn["frame_id"] is not None else None
+        outlived = bool(frame and frame.get("merged_turn_idx") is not None
+                        and int(frame["merged_turn_idx"]) < int(turn["idx"]))
+    editable = is_frame_latest and not blocked_by_other_frame and not outlived
 
     from agents import resume_key_for_turn
 
@@ -7542,10 +7669,10 @@ def turn_reroll(tid: int):
     turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
     if not turn:
         raise HTTPException(404, "Turn not found")
-    _require_latest(turn)
-    _require_chat_idle(turn["chat_id"])
+    _require_rewindable(turn)
     abort = _begin_pipeline_or_409(turn["chat_id"], turn["frame_id"])
-    return _stream(run_pipeline(turn["chat_id"], tid, abort=abort, frame_id=turn["frame_id"]))
+    return _stream(run_pipeline(turn["chat_id"], tid, abort=abort, frame_id=turn["frame_id"],
+                                refuse_blocking=True))
 
 @app.post("/api/turns/{tid}/rerun")
 def turn_rerun(tid: int, body: dict = Body(...)):
@@ -7558,8 +7685,7 @@ def turn_rerun(tid: int, body: dict = Body(...)):
     if not turn:
         raise HTTPException(404, "Turn not found")
 
-    _require_latest(turn)
-    _require_chat_idle(turn["chat_id"])
+    _require_rewindable(turn)
 
     from_key = body.get("from_key")
 
@@ -7570,6 +7696,7 @@ def turn_rerun(tid: int, body: dict = Body(...)):
         from_key=from_key,
         abort=abort,
         frame_id=turn["frame_id"],
+        refuse_blocking=True,
     ))
 
 # ---- Pipeline resume endpoint ----
@@ -7584,8 +7711,7 @@ def turn_resume(tid: int):
     if not turn:
         raise HTTPException(404, "Turn not found")
 
-    _require_latest(turn)
-    _require_chat_idle(turn["chat_id"])
+    _require_rewindable(turn)
 
     from agents import resume_key_for_turn
 
@@ -7604,6 +7730,7 @@ def turn_resume(tid: int):
         from_key=resume_key,
         abort=abort,
         frame_id=turn["frame_id"],
+        refuse_blocking=True,
     ))
 
 @app.post("/api/steps/{sid}/reroll")
@@ -7626,8 +7753,7 @@ def step_reroll(sid: int):
     if not turn:
         raise HTTPException(404, "Turn not found")
 
-    _require_latest(turn)
-    _require_chat_idle(turn["chat_id"])
+    _require_rewindable(turn)
 
     abort = _begin_pipeline_or_409(turn["chat_id"], turn["frame_id"])
     return _stream(run_pipeline(
@@ -7636,6 +7762,7 @@ def step_reroll(sid: int):
         only_key=step["key"],
         abort=abort,
         frame_id=turn["frame_id"],
+        refuse_blocking=True,
     ))
 
 def _require_step_turn(sid: int):
@@ -7649,8 +7776,7 @@ def _require_step_turn(sid: int):
     # nothing stops it, but the edit can never be resumed/recommitted
     # since later turns' checkpoints already derive from the turn's
     # original content -- it just permanently desyncs.
-    _require_latest(turn)
-    _require_chat_idle(turn["chat_id"])
+    _require_rewindable(turn)
     return s
 
 def _mark_applied_step_stale(s):
@@ -7682,6 +7808,7 @@ def step_edit(sid: int, body: dict = Body(...)):
         qi("UPDATE variants SET active=0 WHERE step_id=?", (sid,))
         vid = qi("INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
                  (sid, json.dumps(body.get("content")), time.time()))
+        _claim_turn(s["turn_id"])
     qi("UPDATE steps SET stale=1 WHERE turn_id=? AND ord>?", (s["turn_id"], s["ord"]))
     _mark_applied_step_stale(s)
     return {"variant_id": vid}
@@ -7696,6 +7823,7 @@ def step_activate(sid: int, body: dict = Body(...)):
     with transaction():
         qi("UPDATE variants SET active=0 WHERE step_id=?", (sid,))
         qi("UPDATE variants SET active=1 WHERE id=?", (variant_id,))
+        _claim_turn(s["turn_id"])
     qi("UPDATE steps SET stale=1 WHERE turn_id=? AND ord>?", (s["turn_id"], s["ord"]))
     _mark_applied_step_stale(s)
     return {"ok": True}
@@ -7706,8 +7834,32 @@ def turn_del(tid: int):
     if not turn:
         raise HTTPException(404, "Turn not found")
 
-    _require_latest(turn)
-    _require_chat_idle(turn["chat_id"])
+    _require_rewindable(turn)
+    # The off-screen beats this delete takes back stop before it restores
+    # (`persist.beat_order`); they are lived again at this frame's next
+    # commit. The job that runs them is cancelled FIRST, so no beat starts
+    # during the stop, and what is taken back is DECIDED under the lock below:
+    # a run that started while the stop waited -- a line sent in any frame,
+    # this page's own included, since a delete holds no slot -- refuses it,
+    # with nothing written (review of 2026-10-13).
+    from agents.runtime import running_frames, stop_off_screen_beats
+    from persist import beat_order
+    from persist.checkpoints import halt_off_screen_job
+    cid = turn["chat_id"]
+    halt_off_screen_job(cid, turn["idx"])
+    stop_off_screen_beats(cid, beat_order.rewind_plan(
+        cid, turn, running_frames=running_frames(cid))["stop"])
+    decided = {}
+
+    def _decide():
+        try:
+            plan = beat_order.decide(cid, turn, running_frames(cid))
+        except beat_order.RewindRefused as refused:
+            raise HTTPException(409, str(refused))
+        if plan["blocking"]:
+            raise HTTPException(409, plan["reason"])
+        decided["plan"] = plan
+        return plan["carried"]
 
     with transaction():
         # The checkpoint restore must live in the SAME transaction as the
@@ -7716,7 +7868,7 @@ def turn_del(tid: int):
         # turn's start while the turn/steps still existed. The restore
         # runs before the deletes so it can still read the checkpoint row
         # for this idx, which the deletes below remove.
-        restore_checkpoint(turn["chat_id"], turn["idx"])
+        restore_checkpoint(cid, turn["idx"], carried=_decide)
 
         for step in q(
             "SELECT id FROM steps WHERE turn_id=?",
@@ -7730,14 +7882,19 @@ def turn_del(tid: int):
         qi("DELETE FROM steps WHERE turn_id=?", (tid,))
         delete_turn_memories(tid)
         qi("DELETE FROM events WHERE turn_id=?", (tid,))
-        qi(
-            "DELETE FROM checkpoints "
-            "WHERE chat_id=? AND turn_idx>=?",
-            (turn["chat_id"], turn["idx"]),
-        )
         qi("DELETE FROM turns WHERE id=?", (tid,))
+        # EVERY CHECKPOINT PAST THE NEWEST TURN LEFT, not only this turn's
+        # and after: a beat the restore took back that began BELOW this turn
+        # leaves its own checkpoint, and the next turn to take that idx would
+        # adopt it -- the world as it was when that beat began, not the
+        # world as the delete leaves it (review of 2026-10-13).
+        qi(
+            "DELETE FROM checkpoints WHERE chat_id=? AND turn_idx > "
+            "COALESCE((SELECT MAX(idx) FROM turns WHERE chat_id=?), -1)",
+            (cid, cid),
+        )
 
-    return {"ok": True}
+    return {"ok": True, "carried": len((decided.get("plan") or {}).get("carried") or [])}
 # ============================ SCENE BACKDROPS ============================
 # A generated image of the room the player is standing in, rendered behind the
 # transcript. Entirely out of band: nothing here is reachable from the turn

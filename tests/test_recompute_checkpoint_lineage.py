@@ -150,9 +150,15 @@ class TestTheRuleIsStatedWhereItActs:
 
         from agents import runtime
 
+        from persist import checkpoints
+
+        # Since 2026-10-13 the sweep runs inside the restore's own
+        # transaction (`persist.beat_order`): the recompute asks for it, and
+        # the restore states it where it acts.
         source = inspect.getsource(runtime._run_pipeline)
-        assert "DELETE FROM checkpoints" in source
-        assert "turn_idx>?" in source
+        assert "sweep_later=True" in source and "turn_idx>?" in source
+        body = inspect.getsource(checkpoints._restore_checkpoint_body)
+        assert "DELETE FROM checkpoints WHERE chat_id=? AND turn_idx>?" in body
 
     def test_it_is_not_refresh_checkpoint(self):
         """`refresh_checkpoint` patches only the lore sections and exists to

@@ -1394,6 +1394,7 @@ A failure in any domain aborts immediately and rolls back all earlier writes fro
 - `step`: completed structured result plus step/variant IDs.
 - `done`: the planned pipeline fully materialized.
 - `aborted`: cancellation was observed.
+- `notice` (`kind: "carried"`), on a rewind that takes back off-screen beats nobody saw (`persist/beat_order.py`): `count` and the bubbles' `labels`; the page says so once. After the code notice, before the run's own events.
 - `notice` (`kind: "code_changed"`), FIRST and only when the engine's files on disk no longer match what the server process holds (`core/code_version.py`: every engine module is imported with the app and fingerprinted; the event carries `count` and the first `changed` paths). A warning, never a refusal: the run goes on with the code the process holds.
 
 Consecutive `character:<id>` stages can run in parallel. Primary and extra-player narration may also overlap. (The third pairing, full mapping beside action-onset perception, went with the mapping model: the world context is compiled deterministically before perception, so there is no provider latency to overlap.)

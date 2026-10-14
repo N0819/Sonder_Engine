@@ -502,6 +502,35 @@ def _refuse_an_ended_frame(ctx):
             "committed" % frame_id)
 
 
+def _refuse_a_taken_back_turn(ctx):
+    """A BEAT A REWIND TOOK BACK NEVER LANDS. A rewind stops the off-screen
+    beats it takes back and deletes their turn rows inside its restore
+    (`persist.beat_order`); one still inside a call the stop could not reach
+    when the rewind went ahead would otherwise write its world into the
+    restored one, for a turn that no longer exists. Its rows fail on their
+    foreign keys, but a world write names no turn, so the commit is refused
+    whole, inside its transaction, where no restore can land between.
+
+    BY ITS CHAT AND PLACE, not by id alone: SQLite hands the highest id out
+    again once its row is gone, so the id of a row a rewind took back can be
+    another turn's by now -- another story's, or this one's at another place
+    in play order (review of 2026-10-13). Not by `created`: a context a tool
+    or a test builds carries its own. A floor: a rewind refuses while any
+    other run holds a slot (`beat_order.decide`), so no running beat's row is
+    taken back at all."""
+    turn = getattr(ctx, "turn", None)
+    turn_id = getattr(turn, "id", None)
+    if turn_id is None:
+        return
+    row = q("SELECT chat_id, idx FROM turns WHERE id=?", (turn_id,), one=True)
+    idx = getattr(turn, "idx", None)
+    if (not row or row["chat_id"] != getattr(getattr(ctx, "chat", None), "id", row["chat_id"])
+            or (idx is not None and row["idx"] != idx)):
+        raise RuntimeError(
+            "turn %s was taken back by a rewind while it ran; nothing of it is "
+            "committed" % turn_id)
+
+
 def _commit_all_locked(ctx, nonce):
     import extension_runtime as _extensions_module
 
@@ -514,6 +543,7 @@ def _commit_all_locked(ctx, nonce):
         from world.charter_runtime import (flush_registry_session,
                                            registry_session)
         with transaction(), registry_session():
+            _refuse_a_taken_back_turn(ctx)
             _refuse_an_ended_frame(ctx)
             # Transit sweep first: it mutates the prepared scene (timed
             # arrivals, engine notices) that the scene domain then persists.
@@ -637,6 +667,11 @@ def _commit_all_locked(ctx, nonce):
             # never costs a turn, "fail" is an extension saying its state being
             # wrong is worse than the beat being lost.
             _extensions_module.run_commit_domains(ctx, results)
+            # THE ORDER THIS COMMIT LANDED IN (`persist.beat_order`): the last
+            # write of the transaction, so a commit that rolls back has none.
+            from persist import beat_order
+            results["commit_seq"] = beat_order.stamp_commit(
+                ctx.chat.id, getattr(ctx.turn, "id", None))
     except Exception as exc:
         raise RuntimeError(
             f"Commit failed and was rolled back: {exc}"

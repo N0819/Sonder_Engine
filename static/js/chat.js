@@ -722,8 +722,16 @@ function renderChat() {
               btn,
               "…",
               async () => {
-                await api("DELETE", "/api/turns/" + t.id);
+                const done = await api("DELETE", "/api/turns/" + t.id);
                 await openChat(S.chatId);
+                // The off-screen beats the delete took back with it
+                // (`persist.beat_order`). `t` is the turn in this loop, so
+                // the translator is reached by its global name.
+                const carried = Number((done || {}).carried) || 0;
+                if (carried > 0) {
+                  toast(window.t("This delete took back {count} off-screen beat(s) nobody saw; they are lived again after the next page.",
+                                 { count: carried }), "ok", 8000);
+                }
               }
             );
           }
@@ -1001,6 +1009,12 @@ function liveStep(key, label, group) {
 function handleEvt(ev) {
   if (ev.type === "notice") {
     if (ev.kind === "code_changed" && typeof reportStaleCode === "function") reportStaleCode(ev);
+    // A REWIND TAKES BACK THE OFF-SCREEN BEATS NOBODY SAW (`persist.beat_order`)
+    // and lives them again after the new page: said once, as it starts.
+    else if (ev.kind === "carried") {
+      toast(t("This rewind takes back {count} off-screen beat(s) nobody saw ({labels}); they are lived again after the new page.",
+              { count: Number(ev.count) || 0, labels: (ev.labels || []).join(", ") }), "ok", 8000);
+    }
     return;
   }
   if (ev.type === "step_start") {
@@ -1038,7 +1052,11 @@ function handleEvt(ev) {
     if (h) h.textContent = "✓ " + ev.label;
     showNarrationEarly(ev);
   } else if (ev.type === "error") {
-    toast(`Pipeline error: ${ev.error}`, "err");
+    // The engine's sentence translated AS a sentence first: wrapped, a
+    // templated one (a refusal naming a thread) is a capture, and a capture
+    // is looked up only by its exact words (review of 2026-10-13).
+    const said = t(ev.error);
+    toast(`Pipeline error: ${said}`, "err");
   } else if (ev.type === "aborted") {
     toast("Generation stopped.", "warn");
   }
@@ -1351,7 +1369,7 @@ async function runStream(url, body, context = {}) {
     await streamPost(url, body, handleEvt);
   } catch (e) {
     ok = false;
-    toast(`Pipeline failed: ${e.message}`, "err");
+    toast(`Pipeline failed: ${e.message}`, "err");    // translated where it was made (`streamPost`)
   } finally {
     if (_activeRun === run) _activeRun = null;
     S.busy = false;

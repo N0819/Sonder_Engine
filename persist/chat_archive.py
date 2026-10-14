@@ -345,6 +345,8 @@ class ChatArchiveService:
                 "turn_idx": row["turn_idx"],
                 "blob": _exportable_checkpoint_blob(row["blob"]),
                 "created": row["created"],
+                # the newest commit it holds (`persist.beat_order`)
+                "commit_seq": row["commit_seq"],
             }
             for row in q(
                 "SELECT * FROM checkpoints WHERE chat_id=? ORDER BY turn_idx",
@@ -728,14 +730,16 @@ class ChatArchiveService:
             turn_idmap = {}
             for turn in data.get("turns") or []:
                 new_turn_id = qtx(
-                    "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
-                    "VALUES(?,?,?,?,?)",
+                    "INSERT INTO turns(chat_id,idx,player_input,created,frame_id,commit_seq,"
+                    "offscreen) VALUES(?,?,?,?,?,?,?)",
                     (
                         new_chat_id,
                         turn["idx"],
                         turn.get("player_input", ""),
                         turn.get("created", time.time()),
                         frame_idmap.get(turn.get("frame_id")),
+                        turn.get("commit_seq"),
+                        turn.get("offscreen"),
                     ),
                 )
                 turn_idmap[turn.get("id")] = new_turn_id
@@ -1185,13 +1189,14 @@ class ChatArchiveService:
                     frame_idmap=frame_idmap,
                 )
                 qtx(
-                    "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
-                    "VALUES(?,?,?,?)",
+                    "INSERT INTO checkpoints(chat_id,turn_idx,blob,created,commit_seq) "
+                    "VALUES(?,?,?,?,?)",
                     (
                         new_chat_id,
                         checkpoint["turn_idx"],
                         json.dumps(remapped),
                         checkpoint.get("created", time.time()),
+                        checkpoint.get("commit_seq"),
                     ),
                 )
 

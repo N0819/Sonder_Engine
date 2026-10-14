@@ -328,6 +328,9 @@ def _python_messages() -> set[str]:
     exception_names = {
         "HTTPException", "RuntimeError", "ValueError", "KeyError",
         "PermissionError", "FileNotFoundError",
+        # a rewind refused under the lock (`persist.beat_order`): its words
+        # reach the page as a 409 and as a stream error alike
+        "RewindRefused",
     }
     for path in PY_FILES:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

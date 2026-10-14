@@ -175,7 +175,11 @@ async function api(method, url, body) {
     } catch (e) {
       // keep the response body
     }
-    throw new Error(message || `HTTP ${response.status}`);
+    // The engine's sentence translated AS a sentence, here, before a caller
+    // wraps it ("Could not save: ${e.message}"): wrapped, a templated one --
+    // a refusal naming a thread -- is a capture, and a capture is looked up
+    // only by its exact words (review of 2026-10-13).
+    throw new Error(message ? t(message) : `HTTP ${response.status}`);
   }
   // Only on the way out, and only on success: a rejection has already thrown
   // above, and every failure path in this app raises its own toast.
@@ -222,7 +226,7 @@ async function streamPost(url, body, onEvt) {
     try {
       message = errorDetailText(JSON.parse(message).detail) || message;
     } catch (e) { /* keep the response body */ }
-    throw new Error(message || `HTTP ${response.status}`);
+    throw new Error(message ? t(message) : `HTTP ${response.status}`);   // as api() does
   }
   if (!response.body) throw new Error("No response stream.");
   const reader = response.body.getReader(), dec = new TextDecoder(); let buf = "";

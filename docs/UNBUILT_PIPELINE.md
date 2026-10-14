@@ -2035,18 +2035,37 @@ this is their status, the one list of it.
   version of the engine"); 5, her answer cut at its first brace ("An answer
   is never cut at its first brace"); and two pieces of 6 ("A thread that has
   ended takes no new beat, and a prose edit waits only for its own turn").
-- **Waiting on the owner's ruling -- 3 and the rest of 6.** A checkpoint is
-  an instant, and turn numbers are not commit order: every player commit
-  schedules each live bubble's beat, which takes the next idx, so while a
-  bubble lives the newest page can never be rerolled, edited or deleted
-  (`_require_latest`), and a lower-numbered bubble beat that committed after
-  a player turn's checkpoint is silently erased by rewinding that turn
-  (chats 167, 170 and 173, turn 2). The question both designs end on: when a
-  turn is rewound, are the unseen bubble beats its commit scheduled TAKEN
-  BACK and lived again after the re-commit, or does the rewind refuse? The
-  designs and their reviews are in the 2026-10-13 batch notes; a schema
-  change (a commit clock) is needed either way, and its backfill must not
-  rewrite every checkpoint blob (2.8 GB on the owner's database).
+- **Built 2026-10-13 -- 3 and 6, on the owner's ruling ("undo-and-replay"):**
+  Design.md "A rewind takes back the off-screen beats nobody saw". Left:
+  - The checkpoints written before v45 carry no commit order, so on the
+    owner's older stories an earlier-numbered beat that finished late is
+    still erased by a rewind, as before (the 32 hazard rows measured by the
+    A3 design stand as they are -- the owner's database stays as it is).
+  - A beat somebody TYPED into a bubble's frame after its unseen beats holds
+    them, so the page cannot be rewound until that typed beat is deleted.
+  - A rewind stops a running beat (its socket closed) and waits up to five
+    seconds; one still inside a stretch the stop cannot reach (a call
+    waiting for its response headers, a commit's tail) makes the rewind
+    refuse -- "A run is still live in this story ... try again in a
+    moment." -- rather than run across it. The player retries.
+  - The rows written before v45 carry no `offscreen` mark and are judged by
+    their frame, as before: on an older story an empty Send in an away party
+    that has since rejoined still reads as an unseen beat.
+  - A rewind refused AFTER its stop (a run started while it waited) has
+    already stopped the bubble's beat, which takes itself away: that bubble
+    lives at its parent's next commit, a beat later.
+  - A branch taken at a turn whose next turn began before an earlier beat
+    landed copies that beat's rows without its effects -- older than the
+    take-back. The branch now keeps its numbers truthful (the copied commit
+    loses its number), but it does not take the beat back.
+  - A rewind cancels the whole off-screen job, which runs one frame's
+    bubbles at a time: a bubble it had not reached yet lives at its parent's
+    next commit. For the rewound frame that is the re-committed beat; for
+    another frame's bubbles (an era with bubbles of its own) it is a beat
+    later than it would have been.
+  - There is still no status line or Stop for an off-screen beat on the page:
+    a route that is not a rewind (branch, export, a lorebook attach) waits
+    for it, and now says that it is an off-screen beat.
 - **Waiting on the owner's ruling -- 7.** The grounds solver split Home 10's
   court in two and stranded the storehouse. A deterministic floor that
   refuses such grounds, as designed, would also drop every ground place of

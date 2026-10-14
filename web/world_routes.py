@@ -369,8 +369,14 @@ def _require_idle(cid: int):
     by the commit. `app._require_chat_idle`'s rule over the same registry
     (`agents.runtime.ABORTS`), stated here because `web.app` imports this
     module and cannot be imported back at module load."""
-    from agents.runtime import ABORTS
-    if any(key[0] == cid for key in list(ABORTS)):
+    from agents.runtime import running_frames
+    held = running_frames(cid)
+    if held:
+        if all(held.values()):
+            # the same words as every other route (`web.app`), imported at
+            # call time: that module imports this one as it loads
+            from web.app import _refuse_for_an_off_screen_beat
+            _refuse_for_an_off_screen_beat(next(iter(held)))
         raise HTTPException(
             409,
             "This chat still has an active pipeline. Abort it and wait for "

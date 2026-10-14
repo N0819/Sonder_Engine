@@ -253,7 +253,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 44
+SCHEMA_VERSION = 45
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -665,6 +665,18 @@ CREATE TABLE IF NOT EXISTS turns(
     player_input TEXT NOT NULL DEFAULT '',
     created REAL NOT NULL,
     frame_id INTEGER REFERENCES frames(id) ON DELETE SET NULL,
+    -- The order this turn's commit LANDED in, per chat (`persist.beat_order`):
+    -- stamped as the last write of the commit's transaction, cleared when a
+    -- restore takes the commit back. A turn's idx is fixed when it begins;
+    -- beats of two frames overlap, so idx is not the order commits land in.
+    -- NULL until it commits, and on rows from before v45.
+    commit_seq INTEGER,
+    -- WHO WROTE THE ROW (`persist.beat_order`): 1 for a bubble's scheduled
+    -- off-screen beat (`agents.offscreen_beat.run_offscreen_beat`), 0 for
+    -- every other writer, a human's empty Send included. Provenance, so it
+    -- is read and never derived: a rewind takes back only the beats nobody
+    -- sent. NULL on rows from before v45, which are judged by their frame.
+    offscreen INTEGER,
     UNIQUE(chat_id, idx)
 );
 CREATE INDEX IF NOT EXISTS idx_turns_chat_idx ON turns(chat_id, idx);
@@ -1051,6 +1063,10 @@ CREATE TABLE IF NOT EXISTS checkpoints(
     turn_idx INTEGER NOT NULL,
     blob TEXT NOT NULL,
     created REAL NOT NULL,
+    -- The newest commit (`turns.commit_seq`) this saved state holds, read
+    -- with the snapshot: a commit numbered above it landed after the instant
+    -- the checkpoint is of. NULL on checkpoints from before v45.
+    commit_seq INTEGER,
     UNIQUE(chat_id, turn_idx)
 );
 CREATE INDEX IF NOT EXISTS idx_checkpoints_chat ON checkpoints(chat_id, turn_idx);
@@ -2176,6 +2192,19 @@ END""",
         # a question asked when the newer row was minted, and a migration
         # has no model to ask.
         "ALTER TABLE memories ADD COLUMN supersedes TEXT NOT NULL DEFAULT ''",
+    ],
+    # v44 -> v45
+    [
+        # The order commits land in (see the columns in SCHEMA). EXISTING ROWS
+        # ARE LEFT NULL: the order of a past commit is not recorded anywhere a
+        # migration could read it back from, and stamping every checkpoint
+        # would rewrite every blob (2.8 GB on the owner's database). NULL reads
+        # as it did before -- see `persist.beat_order`.
+        "ALTER TABLE turns ADD COLUMN commit_seq INTEGER",
+        "ALTER TABLE checkpoints ADD COLUMN commit_seq INTEGER",
+        # Who wrote each turn row; NULL on the rows before it, which keep the
+        # derived reading (`persist.beat_order._unseen_beat_of`).
+        "ALTER TABLE turns ADD COLUMN offscreen INTEGER",
     ],
 ]
 

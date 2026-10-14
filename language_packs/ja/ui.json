@@ -1789,7 +1789,7 @@
   "pinned to this cell": "このマスに固定",
   "Pinning one upstream without 'never fall back' still lets OpenRouter route elsewhere when that upstream is busy — tick both to guarantee it.": "「決してフォールバックしない」なしでアップストリームを1つ固定しても、そのアップストリームがビジーな場合、OpenRouter は他の場所にルーティングできます — 両方にチェックを入れると保証されます。",
   "Pipeline": "パイプライン",
-  "Pipeline error: ${ev.error}": "パイプラインエラー：${ev.error}",
+  "Pipeline error: ${said}": "パイプラインエラー：${said}",
   "Pipeline failed: ${e.message}": "パイプラインに失敗しました：${e.message}",
   "Place": "位置",
   "Placed ${name} at ${anchor[0]}": "${name} を ${anchor[0]} に置きました",
@@ -2885,5 +2885,9 @@
   "This turn is still being written; wait for it to finish before editing it.": "このターンはまだ書かれている最中です。編集するには書き終わるまでお待ちください。",
   "This thread ended while this turn ran; it cannot be recomputed.": "このターンの実行中にこの筋は終わりました。再計算はできません。",
   "This thread has ended. Switch to another thread to play on.": "この筋は終わりました。続けるには別の筋に切り替えてください。",
-  "This thread has ended; its people play on in another thread.": "この筋は終わりました。登場人物は別の筋で続きます。"
+  "This thread has ended; its people play on in another thread.": "この筋は終わりました。登場人物は別の筋で続きます。",
+  "An off-screen beat is running (${label}); it finishes on its own -- try again in a moment.": "画面外のビートが進行中です（${label}）。自然に終わりますので、少し待ってからもう一度お試しください。",
+  "This rewind takes back {count} off-screen beat(s) nobody saw ({labels}); they are lived again after the new page.": "この巻き戻しは、誰も見ていない画面外のビート {count} 件（{labels}）も取り消します。新しいページの後にもう一度進みます。",
+  "This delete took back {count} off-screen beat(s) nobody saw; they are lived again after the next page.": "この削除で、誰も見ていない画面外のビート {count} 件も取り消しました。次のページの後にもう一度進みます。",
+  "A run is still live in this story (${named}); nothing was rewound -- try again in a moment.": "この物語ではまだ処理が進行中です（${named}）。何も巻き戻していません。少し待ってからもう一度お試しください。"
 }

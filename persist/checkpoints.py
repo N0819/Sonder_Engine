@@ -365,6 +365,20 @@ def _recreate_snapshot_book(chat_id, snapshot):
        (chat_id, new_id, 1 if snapshot.get("enabled", 1) else 0))
     return new_id
 
+def _turn_still_here(chat_id, turn_id):
+    """`turn_id` when that turn is still this chat's, else None. A book's
+    retirement names the beat that destroyed its place; the lore sections of
+    a checkpoint are refreshed with the books as they are now
+    (`refresh_checkpoint`), so a snapshot can name a beat a rewind has since
+    taken back, and writing it back failed the whole restore on the foreign
+    key (review of 2026-10-13). The beat is gone, and its destruction with
+    it."""
+    if turn_id is None:
+        return None
+    return turn_id if q("SELECT 1 FROM turns WHERE id=? AND chat_id=?",
+                        (turn_id, chat_id), one=True) else None
+
+
 def _restore_books(chat_id, books, links=None):
     """Restore lorebook rows/entries from a snapshot. Returns the
     {snapshot book id: current book id} map so the caller can remap other
@@ -443,7 +457,7 @@ def _restore_books(chat_id, books, links=None):
             snapshot.get("inheritance_mode") or "inherit",
             snapshot.get("sort_order") or 0,
             snapshot.get("anchor_entity_id"),
-            snapshot.get("retired_turn_id"),
+            _turn_still_here(chat_id, snapshot.get("retired_turn_id")),
             target))
         
         current_entries = dump_lorebook(target)
@@ -514,10 +528,42 @@ def _restore_books(chat_id, books, links=None):
 
     return old_to_new
 
-def restore_checkpoint(chat_id, idx):
-    r = q("SELECT * FROM checkpoints WHERE chat_id=? AND turn_idx=?", (chat_id, idx), one=True)
-    if not r:
-        return
+def halt_off_screen_job(chat_id, idx):
+    """No new off-screen beat starts after this. The job running this chat's
+    bubble beats is cancelled, and a beat that claims its slot after the
+    cancel backs out (`agents.offscreen_beat.run_offscreen_beat`). A rewind
+    calls it BEFORE it asks which beats are running, so every beat that will
+    run is one it sees and stops (`persist.beat_order`); the re-committed beat
+    schedules the job again. Beside the restore's other cancels, never on a
+    turn's start.
+
+    WHOLE, NOT FROM `idx` (`core.jobs.cancel_from`): a job's read horizon is
+    the beat that queued it, so one queued before the rewound beat would be
+    spared, and would start its next bubble's beat under the restore. A
+    bubble it had not reached yet lives at its parent's next commit -- this
+    frame's at the re-committed beat; another frame's a beat later than it
+    would have. `idx` is the beat rewound, named when the cancel fails."""
+    try:
+        from agents.offscreen_beat import OFFSCREEN_BEAT_JOB_KEY
+        from core import jobs
+        jobs.cancel(chat_id, OFFSCREEN_BEAT_JOB_KEY)
+    except Exception:
+        logger.info("off-screen beat job not cancelled (rewind to %s)", idx, exc_info=True)
+
+
+def _cancel_jobs_the_restore_discards(chat_id, idx):
+    """Stop the out-of-band jobs whose result a restore to `idx` discards.
+
+    BEFORE THE RESTORE PREPARES, as it always was: consolidation asks only at
+    the boundary between members and writes its summary without asking again,
+    so a cancel that waited for the lock let a member start from the rows
+    being discarded and land after the restore (review of 2026-10-13). And
+    AFTER the rewind's decision, asked once without the lock
+    (`restore_checkpoint`): a rewind refused there has cancelled nothing of
+    the standing beat's. Only one refused in the moment between that and the
+    decision under the lock has cancelled them for nothing; the next commit
+    offers them again.
+    """
     # Consolidation moved out of band (commit.schedule_memory_consolidation),
     # so an in-flight job can now overlap a restore -- and a summary computed
     # from rows this restore is about to roll back must not land afterward.
@@ -580,6 +626,29 @@ def restore_checkpoint(chat_id, idx):
             jobs.cancel_from(chat_id, key, idx)
     except Exception:
         pass
+
+
+def restore_checkpoint(chat_id, idx, carried=(), sweep_later=False):
+    """Put the chat back to the instant before turn `idx` began.
+
+    `carried` are the turns the rewind takes back with it -- the unseen
+    off-screen beats `persist.beat_order` names -- deleted inside this
+    restore's own transaction, so a restore that fails keeps them and the
+    rows and the world roll back together; the numbers of every commit the
+    checkpoint does not hold are cleared with them. A CALLABLE is asked
+    there, under the lock, before anything is written (`beat_order.decide`):
+    it returns the rows to take back, or raises to refuse the restore whole.
+    `sweep_later` drops the checkpoints of the turns after this one in the
+    same transaction -- the snapshots of the lineage a recompute discards."""
+    r = q("SELECT * FROM checkpoints WHERE chat_id=? AND turn_idx=?", (chat_id, idx), one=True)
+    if not r:
+        return
+    # THE DECISION, ASKED FIRST WITHOUT THE LOCK: a refusal here has
+    # prepared, cancelled and written nothing. It is asked again, and holds,
+    # under the lock below.
+    if callable(carried):
+        carried()
+    _cancel_jobs_the_restore_discards(chat_id, idx)
     # Checkpoint blobs store fully-resolved storage keys already (see
     # snapshot_state, which dumps the `world` table's own key column
     # verbatim, suffix and all). Restoring them through wget/wset while
@@ -592,9 +661,14 @@ def restore_checkpoint(chat_id, idx):
     # the present's state on every reroll of a framed turn. Force the
     # raw, unscoped view for the whole restore regardless of which
     # frame's pipeline triggered it.
+    # THE BUBBLE BEATS THE DISCARDED COMMIT SCHEDULED are not lived from the
+    # restored world: the re-committed beat schedules them again
+    # (`persist.beat_order`). A rewind has stopped their job already; this is
+    # the floor for a caller that restores directly.
+    halt_off_screen_job(chat_id, idx)
     token = active_frame_id.set(None)
     try:
-        _restore_checkpoint_body(chat_id, r)
+        _restore_checkpoint_body(chat_id, r, carried, sweep_later)
     finally:
         active_frame_id.reset(token)
 
@@ -1040,7 +1114,7 @@ def _discard_orphaned_mint(chat_id, char_id):
     qi("DELETE FROM characters WHERE id=?", (char_id,))
 
 
-def _restore_checkpoint_body(chat_id, r):
+def _restore_checkpoint_body(chat_id, r, carried=(), sweep_later=False):
     b = json.loads(r["blob"])
     # Any embedding work (only needed for legacy blobs that predate
     # vectors traveling inside the dump) happens here, BEFORE the write
@@ -1068,6 +1142,9 @@ def _restore_checkpoint_body(chat_id, r):
     # restore spared wrote after the snapshot roll back with the beat it never
     # read (`_keep_spared_room_work`, review R3-2).
     with transaction():
+        from persist.beat_order import take_back
+        rows = carried() if callable(carried) else carried
+        take_back(chat_id, rows, r["turn_idx"], r["commit_seq"])
         briefs = _held_room_briefs(chat_id)
         room_rows = _held_room_rows(chat_id)
         qi("DELETE FROM world WHERE chat_id=?", (chat_id,))
@@ -1142,8 +1219,14 @@ def _restore_checkpoint_body(chat_id, r):
             book_map = _restore_books(
                 chat_id, b.get("lorebooks") or [], b.get("lorebook_links") or [])
         if "lore_overlays" in b:
-            # Same chat, same frame ids: the overlays go back as dumped.
-            restore_lore_overlays(chat_id, b.get("lore_overlays") or [])
+            # Same chat, same frame ids: the overlays go back as dumped -- but
+            # never one for a thread this restore does not hold, which failed
+            # the whole restore on the foreign key (review of 2026-10-13).
+            held_frames = {r["id"] for r in q("SELECT id FROM frames WHERE chat_id=?", (chat_id,))}
+            restore_lore_overlays(chat_id, [
+                o for o in (b.get("lore_overlays") or [])
+                if not isinstance(o, dict) or o.get("frame_id") is None
+                or o.get("frame_id") in held_frames])
 
         # room_registry rows embed book ids; a same-chat restore usually
         # maps books onto their original ids, but _restore_books can match
@@ -1177,6 +1260,13 @@ def _restore_checkpoint_body(chat_id, r):
             seen.add(key)
             deduplicated.append(entry)
         wset(chat_id, "lore_cache", deduplicated[:24])
+        if sweep_later:
+            # The snapshots of the lineage the recompute discards
+            # (`runtime._restore_and_refresh` says why), in the restore's
+            # own transaction: a checkpoint a run writes for a later turn
+            # cannot land between the two and be swept with them.
+            qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx>?",
+               (chat_id, r["turn_idx"]))
 
     # A restore puts stored vectors back BYTE-IDENTICALLY -- deliberately, so
     # a reroll never re-embeds a whole memory bank and never risks a provider
@@ -1548,7 +1638,7 @@ def start_compaction(chat_id=None):
     return {"started": True, **status}
 
 
-def ensure_checkpoint(chat_id, turn_idx, blob=None):
+def ensure_checkpoint(chat_id, turn_idx, blob=None, commit_seq=None):
     """Ensure a checkpoint exists for the given turn index.
 
     Captures the current world/character/lore state so it can be
@@ -1560,6 +1650,12 @@ def ensure_checkpoint(chat_id, turn_idx, blob=None):
     the staleness question: pass a blob only when nothing that belongs in the
     checkpoint can have changed since it was built (app.py re-checks the
     latest turn id under the lock and rebuilds on a race).
+
+    `commit_seq` is the newest commit the blob holds (`persist.beat_order`),
+    which a caller handing in a blob reads with it. Built here, both are
+    settled under the lock (`beat_order.settled`): anything another
+    connection committed since they were read has them read again, so the
+    snapshot is the world as it is and the number is exact.
     """
     # Cheap existence check FIRST. This runs twice for the same turn -- once
     # from the route (app.py) and once from the pipeline (agents/runtime.py) --
@@ -1583,7 +1679,12 @@ def ensure_checkpoint(chat_id, turn_idx, blob=None):
     # read-only q() calls and does no writes, so it needs no lock.
     # Holding the write lock for the duration of a snapshot would
     # needlessly block other writers.
-    if blob is None:
+    built_here = blob is None
+    if built_here:
+        from core.db import data_version
+        from persist.beat_order import latest_commit_seq
+        version = data_version()
+        commit_seq = latest_commit_seq(chat_id)
         blob = snapshot_blob(chat_id)
     # Check-then-insert inside a transaction so two concurrent calls
     # for the same (chat_id, turn_idx) can't both pass the existence
@@ -1596,10 +1697,13 @@ def ensure_checkpoint(chat_id, turn_idx, blob=None):
         )
         if existing:
             return existing["id"]
+        if built_here:
+            from persist.beat_order import settled
+            commit_seq, blob = settled(chat_id, commit_seq, blob, snapshot_blob, version)
         return qi(
-            "INSERT INTO checkpoints(chat_id, turn_idx, blob, created) "
-            "VALUES(?,?,?,?)",
-            (chat_id, turn_idx, blob, time.time()),
+            "INSERT INTO checkpoints(chat_id, turn_idx, blob, created, commit_seq) "
+            "VALUES(?,?,?,?,?)",
+            (chat_id, turn_idx, blob, time.time(), commit_seq),
         )
 
 
@@ -1657,7 +1761,60 @@ def propagate_memory_summaries_to_checkpoints(chat_id, char_id=None):
                 changed += 1
     return changed
 
-def refresh_checkpoint(chat_id, turn_idx):
+def _carry_the_book_set(blob, fresh):
+    """Carry the BOOK SET of `fresh` (the lore as it is now) into an older
+    checkpoint's `blob`: which books the story reads, which are enabled, which
+    is canon. What the checkpoint holds of a book it already had -- entries,
+    retirement, anchor, the links between such books, the story's overlays on
+    them -- stays as it was taken; a book attached since comes as it is now,
+    with what it brings; one detached since goes.
+
+    Why not the whole of `fresh`: an older checkpoint lies under turns that
+    wrote lore of their own -- a carried bubble beat ratifying a claim into
+    canon, a destruction retiring a book, an overlay filed for a thread the
+    rewind removes -- and copying the lore as it is now put those into the
+    world before them, so the rewind that takes the beat back kept its lore,
+    or failed on a foreign key (review of 2026-10-13)."""
+    old = {b.get("lorebook_id"): b for b in (blob.get("lorebooks") or []) if isinstance(b, dict)}
+    now = [b for b in (fresh.get("lorebooks") or []) if isinstance(b, dict)]
+    now_ids = {b.get("lorebook_id") for b in now}
+    added = now_ids - set(old)
+    books = []
+    for book in now:
+        held = old.get(book.get("lorebook_id"))
+        if held is None:
+            books.append(book)
+            continue
+        held = dict(held)
+        held["enabled"] = book.get("enabled", held.get("enabled", 1))
+        held["canon"] = book.get("canon", held.get("canon", False))
+        books.append(held)
+    blob["lorebooks"] = books
+    canon_now = (fresh.get("lore") or {}).get("lorebook_id")
+    if canon_now != (blob.get("lore") or {}).get("lorebook_id"):
+        held = old.get(canon_now)
+        blob["lore"] = ({"lorebook_id": canon_now, "entries": held.get("entries")}
+                        if held is not None and "entries" in held else fresh.get("lore"))
+    both = now_ids & set(old)
+    blob["lorebook_links"] = [
+        link for link in (blob.get("lorebook_links") or []) if isinstance(link, dict)
+        and link.get("source_book_id") in both and link.get("target_book_id") in both
+    ] + [
+        link for link in (fresh.get("lorebook_links") or []) if isinstance(link, dict)
+        and (link.get("source_book_id") in added or link.get("target_book_id") in added)
+    ]
+    kept_uids = {old[lid].get("resource_uid") for lid in both}
+    blob["lore_overlays"] = [
+        overlay for overlay in (blob.get("lore_overlays") or []) if isinstance(overlay, dict)
+        and overlay.get("book_uid") in kept_uids
+    ] + [
+        overlay for overlay in (fresh.get("lore_overlays") or []) if isinstance(overlay, dict)
+        and overlay.get("book_uid") not in kept_uids
+    ]
+    return blob
+
+
+def refresh_checkpoint(chat_id, turn_idx, book_set_only=False):
     """Patch ONLY the lorebook-related sections of the checkpoint at
     turn_idx to reflect a lorebook attach/detach.
 
@@ -1687,8 +1844,13 @@ def refresh_checkpoint(chat_id, turn_idx):
     # bench copies), one held-lock build rather than an unconditional one on
     # every attach.
     full = None
+    held = version = None
     if not q("SELECT id FROM checkpoints WHERE chat_id=? AND turn_idx=?",
              (chat_id, turn_idx), one=True):
+        from core.db import data_version
+        from persist.beat_order import latest_commit_seq
+        version = data_version()
+        held = latest_commit_seq(chat_id)         # before the snapshot
         full = snapshot_blob(chat_id)
     # Read-modify-write inside a transaction so a concurrent
     # ensure_checkpoint or refresh_checkpoint can't interleave.
@@ -1704,16 +1866,26 @@ def refresh_checkpoint(chat_id, turn_idx):
             # inside this transaction; delegate to ensure_checkpoint
             # would nest a second transaction (savepoint) and re-snapshot,
             # so do the insert directly here instead.
+            from persist.beat_order import latest_commit_seq, settled
+            if full is None:
+                held = latest_commit_seq(chat_id)  # under the lock: nothing lands
+            else:
+                held, full = settled(chat_id, held, full, snapshot_blob, version)
             return qi(
-                "INSERT INTO checkpoints(chat_id, turn_idx, blob, created) "
-                "VALUES(?,?,?,?)",
+                "INSERT INTO checkpoints(chat_id, turn_idx, blob, created, commit_seq) "
+                "VALUES(?,?,?,?,?)",
                 (chat_id, turn_idx,
                  full if full is not None else snapshot_blob(chat_id),
-                 time.time()),
+                 time.time(), held),
             )
         blob = json.loads(row["blob"])
-        for key in ("lore", "lorebooks", "lorebook_links", "lore_overlays"):
-            blob[key] = fresh.get(key)
+        if book_set_only:
+            # an older checkpoint, under turns with lore of their own
+            # (`_carry_the_book_set`, `web.app._refresh_rewindable_checkpoints`)
+            _carry_the_book_set(blob, fresh)
+        else:
+            for key in ("lore", "lorebooks", "lorebook_links", "lore_overlays"):
+                blob[key] = fresh.get(key)
         qi(
             "UPDATE checkpoints SET blob=?, created=? WHERE chat_id=? AND turn_idx=?",
             (json.dumps(blob), time.time(), chat_id, turn_idx),

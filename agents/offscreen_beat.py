@@ -192,7 +192,7 @@ def schedule_offscreen_beats(ctx):
             if job.cancelled.is_set():
                 break
             try:
-                ran.append(run_offscreen_beat(chat_id, frame_id))
+                ran.append(run_offscreen_beat(chat_id, frame_id, cancelled=job.cancelled))
             except Exception as exc:            # noqa: BLE001 - reported
                 logger.info("offscreen beat failed: chat=%s frame=%s error=%s",
                             chat_id, frame_id, str(exc)[:300])
@@ -203,7 +203,7 @@ def schedule_offscreen_beats(ctx):
                        base_turn=turn_idx)
 
 
-def run_offscreen_beat(chat_id, frame_id):
+def run_offscreen_beat(chat_id, frame_id, cancelled=None):
     """One beat in one bubble. Blocking; called from the job above.
 
     The turn row is created the way `turn_new` creates one -- chat-global idx
@@ -237,30 +237,76 @@ def run_offscreen_beat(chat_id, frame_id):
     # `_require_turn_idle` reads (review of 2026-10-13). The next commit of
     # the parent offers a skipped bubble again.
     try:
-        abort = begin_pipeline(chat_id, frame_id)
+        # THE SLOT SAYS WHOSE IT IS, from the moment it exists: a rewind stops
+        # an off-screen beat and never a human's run, whose row may not exist
+        # yet either (`runtime.running_frames`, `persist.beat_order`).
+        abort = begin_pipeline(chat_id, frame_id, offscreen_beat=True)
     except PipelineBusyError:
         return {"frame_id": frame_id, "skipped": "its frame is busy"}
-    try:
-        blob = snapshot_blob(chat_id)
-        with transaction():
-            last = q("SELECT idx FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
-                     (chat_id,), one=True)
-            idx = (last["idx"] + 1) if last else 0
-            ensure_checkpoint(chat_id, idx, blob=blob)
-            turn_id = qi(
-                "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
-                "VALUES(?,?,?,?,?)", (chat_id, idx, "", time.time(), frame_id))
-    except BaseException:
+
+    def _give_back_the_slot():
         with _ABORTS_LOCK:
             if ABORTS.get((chat_id, frame_id)) is abort:
                 ABORTS.pop((chat_id, frame_id), None)
+
+    # A REWIND CANCELS THIS JOB BEFORE IT ASKS WHICH BEATS ARE RUNNING
+    # (`persist.checkpoints.halt_off_screen_job`): a beat that claimed its
+    # slot before the cancel is one the rewind sees and stops, and one that
+    # claims it after backs out here, so no beat starts under a restore.
+    if cancelled is not None and cancelled.is_set():
+        _give_back_the_slot()
+        return {"frame_id": frame_id, "skipped": "its job was cancelled"}
+    try:
+        from core.db import data_version
+        from persist.beat_order import latest_commit_seq, settled
+        version = data_version()
+        held = latest_commit_seq(chat_id)          # before the snapshot
+        blob = snapshot_blob(chat_id)
+        with transaction():
+            # ...and one the rewind stopped, or whose job it cancelled, while
+            # the snapshot was read writes no row: under the lock, either the
+            # rewind has not decided yet and sees this slot, or it has landed
+            # and this beat was asked to stop (review of 2026-10-13)
+            if abort.is_set() or (cancelled is not None and cancelled.is_set()):
+                turn_id = None
+            else:
+                held, blob = settled(chat_id, held, blob, snapshot_blob, version)
+                last = q("SELECT idx FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
+                         (chat_id,), one=True)
+                idx = (last["idx"] + 1) if last else 0
+                # No turn holds this idx or any after it, so a checkpoint
+                # there is an orphan of a turn a rewind took back -- never
+                # this beat's own instant (review of 2026-10-13).
+                qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx>=?", (chat_id, idx))
+                ensure_checkpoint(chat_id, idx, blob=blob, commit_seq=held)
+                born = time.time()
+                turn_id = qi(
+                    "INSERT INTO turns(chat_id,idx,player_input,created,frame_id,offscreen) "
+                    "VALUES(?,?,?,?,?,1)", (chat_id, idx, "", born, frame_id))
+    except BaseException:
+        _give_back_the_slot()
         raise
+    if turn_id is None:
+        _give_back_the_slot()
+        return {"frame_id": frame_id, "skipped": "stopped by a rewind before it began"}
+
+    def _still_ours():
+        # By identity, not by id alone: SQLite hands the highest id out again
+        # once its row is gone, so a row a rewind took back can be another
+        # turn's by the time this asks (review of 2026-10-13).
+        return bool(q("SELECT 1 FROM turns WHERE id=? AND chat_id=? AND created=?",
+                      (turn_id, chat_id, born), one=True))
 
     started = time.time()
     try:
         for _ in run_pipeline(chat_id, turn_id, abort=abort, frame_id=frame_id):
             pass
     except Exception:
+        # TAKEN BACK BY A REWIND WHILE IT RAN (`persist.beat_order`): the row
+        # is gone with the steps it had, and the world is the restored one
+        if not _still_ours():
+            return {"frame_id": frame_id, "turn_id": turn_id, "idx": idx,
+                    "skipped": "taken back by a rewind while it ran"}
         # HER FRAME ENDED WHILE THE BEAT RAN -- the player's beat rejoined her
         # -- and its commit was refused whole (`persist.commit.
         # _refuse_an_ended_frame`). Nothing of it landed, so nothing of it is
@@ -271,10 +317,56 @@ def run_offscreen_beat(chat_id, frame_id):
             raise
         return {"frame_id": frame_id, "turn_id": turn_id, "idx": idx,
                 "skipped": "its frame rejoined while the beat ran"}
+    if abort.is_set() or not _still_ours():
+        # STOPPED BY A REWIND (nothing on the page can stop an off-screen
+        # beat): a beat stopped before its commit takes itself away, so its
+        # fate never hangs on what the rewind decides once its slot is free --
+        # one the rewind then refused, or no longer counted as running, stayed
+        # behind as a dead part-beat for good (review of 2026-10-13). One
+        # whose commit landed is the rewind's to take back.
+        _discard_stopped_beat(chat_id, turn_id, idx, born)
+        return {"frame_id": frame_id, "turn_id": turn_id, "idx": idx,
+                "skipped": "stopped by a rewind while it ran"}
     after = _rooms()
     stalled = note_beat_movement(chat_id, frame_id, idx, before, after)
     return {"frame_id": frame_id, "turn_id": turn_id, "idx": idx,
             "seconds": round(time.time() - started, 1), "stalled": stalled}
+
+
+def _discard_stopped_beat(chat_id, turn_id, idx, born):
+    """Remove a beat a rewind stopped before it committed -- its steps, its
+    row and the checkpoint taken for it -- by identity, since SQLite hands a
+    freed id out again. True when it removed one."""
+    from core.db import q, transaction
+
+    with transaction():
+        if not q("SELECT 1 FROM turns WHERE id=? AND chat_id=? AND created=?",
+                 (turn_id, chat_id, born), one=True):
+            return False
+        return _discard_uncommitted_beat(chat_id, turn_id, idx)
+
+
+def _discard_uncommitted_beat(chat_id, turn_id, idx):
+    """The removal itself, inside the caller's transaction: nothing of a beat
+    with no commit is the story's."""
+    from core.db import q, qi
+
+    if q("SELECT 1 FROM steps s JOIN variants v ON v.step_id=s.id AND v.active=1 "
+         "WHERE s.turn_id=? AND s.key='commit' LIMIT 1", (turn_id,), one=True):
+        return False
+    for step in q("SELECT id FROM steps WHERE turn_id=?", (turn_id,)):
+        qi("DELETE FROM variants WHERE step_id=?", (step["id"],))
+    qi("DELETE FROM steps WHERE turn_id=?", (turn_id,))
+    qi("DELETE FROM turns WHERE id=? AND chat_id=?", (turn_id, chat_id))
+    # The checkpoint goes only when no turn at or after this idx remains:
+    # a later turn's readers take checkpoint idx as "the world after the
+    # turn before" (`turn_branch`, `backdrops.scene_after_turn`), and that
+    # is what it still is -- the beat committed nothing (review of
+    # 2026-10-13). Taken from the end, the next turn writes a fresh one.
+    if not q("SELECT 1 FROM turns WHERE chat_id=? AND idx>=? LIMIT 1",
+             (chat_id, idx), one=True):
+        qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx=?", (chat_id, idx))
+    return True
 
 
 def _discard_refused_beat(chat_id, frame_id, turn_id, idx):
@@ -287,23 +379,8 @@ def _discard_refused_beat(chat_id, frame_id, turn_id, idx):
     frame = get_frame(frame_id)
     if not frame or frame.get("merged_turn_idx") is None:
         return False
-    if q("SELECT 1 FROM steps s JOIN variants v ON v.step_id=s.id AND v.active=1 "
-         "WHERE s.turn_id=? AND s.key='commit' LIMIT 1", (turn_id,), one=True):
-        return False
     with transaction():
-        for step in q("SELECT id FROM steps WHERE turn_id=?", (turn_id,)):
-            qi("DELETE FROM variants WHERE step_id=?", (step["id"],))
-        qi("DELETE FROM steps WHERE turn_id=?", (turn_id,))
-        qi("DELETE FROM turns WHERE id=?", (turn_id,))
-        # The checkpoint goes only when no turn at or after this idx remains:
-        # a later turn's readers take checkpoint idx as "the world after the
-        # turn before" (`turn_branch`, `backdrops.scene_after_turn`), and that
-        # is what it still is -- the beat committed nothing (review of
-        # 2026-10-13). Taken from the end, the next turn writes a fresh one.
-        if not q("SELECT 1 FROM turns WHERE chat_id=? AND idx>=? LIMIT 1",
-                 (chat_id, idx), one=True):
-            qi("DELETE FROM checkpoints WHERE chat_id=? AND turn_idx=?", (chat_id, idx))
-    return True
+        return _discard_uncommitted_beat(chat_id, turn_id, idx)
 
 
 def stalling_bodies(scene):

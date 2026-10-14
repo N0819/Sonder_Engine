@@ -44,7 +44,24 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   per-frame station, and each extra player's per-beat declaration — the primary
   player's declaration lives on `turns`, everyone else's lives here.
 - `turns`: the primary player's declaration in sequence, plus the beat's
-  `frame_id`.
+  `frame_id`. Since **v45**, `commit_seq`: the order the turn's commit LANDED
+  in, per chat -- stamped as the last write of the commit's transaction and
+  cleared when a restore takes the commit back (`persist/beat_order.py`). A
+  turn's `idx` is fixed when it begins, and two frames' beats overlap, so
+  `idx` is not commit order. NULL until it commits and on older rows (no
+  backfill); branch and archive carry it verbatim. Also since **v45**,
+  `offscreen`: WHO WROTE THE ROW -- 1 for a bubble's scheduled off-screen
+  beat (`agents/offscreen_beat.run_offscreen_beat`), 0 for every other
+  writer (`turn_new`, the quick-start greeting), a human's empty Send
+  included. Provenance, read and never derived: a rewind takes back only the
+  beats nobody sent. NULL on older rows, judged by their frame's lineage;
+  branch and archive carry it verbatim. Two more rules hold the table: SQLite
+  hands the highest `turns.id` out again once its row is gone (the table has
+  no AUTOINCREMENT, and cannot gain one without a rebuild that the foreign
+  keys referencing it would cascade through), so a delete names a row by its
+  chat as well as its id; and a new turn or beat clears any checkpoint at its
+  own index before writing its own -- one there is an orphan of a turn a
+  rewind took back.
 - `llm_blobs`, `llm_capture`: the debug capture (`persist/llm_capture.py`),
   off by default. One `llm_capture` row per PROVIDER CALL of a turn -- the
   Director's own sub-calls (its prose, the encoder, the room author) and the Writers' Room's calls included --
@@ -211,6 +228,12 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   scene blob, checkpoints, branches, and portable archives carry it without a
   normalized-table migration.
 - `checkpoints`: whole-state restoration blobs keyed by chat and turn index.
+  Since **v45**, `commit_seq`: the newest commit the blob holds, read with the
+  snapshot (before it when the snapshot is built outside the write lock), so a
+  commit numbered above it landed after the instant the checkpoint is of -- the
+  fact a rewind needs to take back an off-screen beat that finished late
+  (`persist/beat_order.rewind_plan`). NULL on older checkpoints, which read as
+  before: no backfill rewrote the blobs.
 
 Sequence causality adds no world table and no persistent scene ledger.
 `inventory_ops` is consumed as a complete typed physical placement. A

@@ -1215,8 +1215,8 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             tid = int(existing["id"])
             logger.info("quick start: reusing turn 0 (%s) for chat %s", tid, cid)
         else:
-            tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-                        (cid, 0, "", time.time(), None))
+            tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id,offscreen) "
+                        "VALUES(?,?,?,?,?,0)", (cid, 0, "", time.time(), None))
         # `_run_pipeline` is called directly here rather than through
         # `run_pipeline`, which is the ONLY place the story language was ever set.
         # The opening beat is the first prose a reader sees, and it was always
