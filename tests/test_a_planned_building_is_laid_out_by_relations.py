@@ -1848,11 +1848,14 @@ def test_the_plans_own_sides_reach_the_solver_as_asked_sides():
 
 
 def test_a_building_the_search_missed_on_one_seed_is_tried_on_the_next(monkeypatch):
-    """`solve_for` takes the solver's own seed first and the next ones only
-    where it fell short: a solve with every stair landed at once, else the
-    first the bridge does not refuse, else the first seed's refusal. On the
-    owner's shrine (chat 164, 2026-10-10) one answer set stood on 13 of 20
-    seeds, the solver's own among the failures."""
+    """`solve_for` solves every seed, the solver's own first: of those the
+    bridge does not refuse, one with every stair landed is taken -- the one
+    that turned the fewest sides asked of its joins, the earlier seed on a
+    tie -- else the first the bridge does not refuse, else the first seed's
+    refusal. On the owner's shrine (chat 164, 2026-10-10) one answer set
+    stood on 13 of 20 seeds, the solver's own among the failures; and the
+    first seed that stood was taken whatever it turned, where a later one
+    kept more of what was asked (2026-10-15)."""
     from world.layout_solver import SEED
     seen, plans = [], {}
 
@@ -1863,23 +1866,59 @@ def test_a_building_the_search_missed_on_one_seed_is_tried_on_the_next(monkeypat
     monkeypatch.setattr(lb, "solve", fake_solve)
     monkeypatch.setattr(lb, "refusals", lambda building, spec, layout, **_kw: plans[layout][0])
     monkeypatch.setattr(lb, "unlanded", lambda spec, layout: plans[layout][1])
+    monkeypatch.setattr(lb, "turned_sides", lambda spec, layout: plans[layout][2])
 
-    def run(*table):
+    def run(*table, attempts=None):
         plans.clear()
         seen.clear()
         for k, outcome in enumerate(table):
             plans[f"layout{SEED + k}"] = outcome
-        return lb.solve_for({}, {})
+        return lb.solve_for({}, {}, attempts=attempts)
 
-    clean, standing, refused = ([], []), ([], [("stair", "hall")]), (["no doorway"], [])
+    def clean(turned=0):
+        return [], [], turned
+
+    standing, refused = ([], [("stair", "hall")], 0), (["no doorway"], [], 0)
     assert lb.LAYOUT_SOLVE_SEEDS == 4
-    assert run(clean, refused, refused, refused) == (f"layout{SEED}", [])
-    assert seen == [SEED], "a seed after the first only where it fell short"
-    assert run(refused, standing, clean, refused) == (f"layout{SEED + 2}", [])
-    assert seen == [SEED, SEED + 1, SEED + 2]
+    every = [SEED + k for k in range(4)]
+    assert run(clean(), refused, refused, refused) == (f"layout{SEED}", [])
+    assert seen == every, "every seed is solved: the first that stands is not the best"
+    assert run(refused, standing, clean(), refused) == (f"layout{SEED + 2}", [])
+    # of the seeds that stand with every stair landed, the fewest sides turned
+    assert run(clean(3), refused, clean(1), clean(2)) == (f"layout{SEED + 2}", [])
+    # the earlier seed on a tie
+    assert run(clean(2), clean(1), refused, clean(1)) == (f"layout{SEED + 1}", [])
+    # a stair landed before any side kept
+    assert run(standing, clean(5), refused, refused) == (f"layout{SEED + 1}", [])
+    # no seed lands every stair: the first that stands
     assert run(refused, standing, refused, standing) == (f"layout{SEED + 1}", [])
-    assert len(seen) == 4
-    assert run(refused, (["other"], []), refused, refused) == (f"layout{SEED}", ["no doorway"])
+    # refused on every seed: the first seed's refusal, every seed in the
+    # attempts with the floor's findings (`places_to_drop` reads them)
+    attempts = []
+    assert run(refused, (["other"], [], 0), refused, refused, attempts=attempts) == \
+        (f"layout{SEED}", ["no doorway"])
+    assert [a[0] for a in attempts] == [f"layout{s}" for s in every]
+    assert [a[1] for a in attempts] == [["no doorway"], ["other"], ["no doorway"], ["no doorway"]]
+
+
+def test_a_side_the_solve_turned_is_read_off_its_doors():
+    """`turned_sides` reads the doorway between a join's two rooms against
+    the side the spec asks of the join, from the room it is written on, off
+    the layout's doors and never its warnings; a join asked no side turns
+    nothing."""
+    _b, _inv, spec, layout = _solve()
+    hall = next(r for r in spec["rooms"] if r["id"] == "hall")
+    join = next(j for j in hall["joins"] if j["to"] == "kitchen")
+    assert join["side"] == "e"
+    door = next(d for d in layout.doors
+                if not d.get("outside") and {d["a"], d["b"]} == {"hall", "kitchen"})
+    layout.warnings = []
+    door["side"] = "e" if door["a"] == "hall" else "w"
+    assert lb.turned_sides(spec, layout) == 0
+    door["side"] = "n" if door["a"] == "hall" else "s"
+    assert lb.turned_sides(spec, layout) == 1
+    del join["side"]
+    assert lb.turned_sides(spec, layout) == 0
 
 
 def test_a_stair_whose_hall_opens_on_no_room_it_joins_is_unlanded():

@@ -1255,7 +1255,8 @@ def _shaft_spots(shaft, outlines, rng):
 
 def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, level, sheer=False):
     """Lower is better: a room missing, a join with no wall to open in, a
-    join on the wrong side, a room too thin or too long, a room far from its
+    join on the wrong side, doorways asked in an order along one wall
+    standing out of it, a room too thin or too long, a room far from its
     size, a room that opens outdoors with no outside wall, a private room on
     the front, a store with no room beside it to open from."""
     s = 0.0
@@ -1303,6 +1304,9 @@ def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, 
             s += 3 * abs(math.log((r.w * r.d) / max(1.0, weights.get(rid, r.w * r.d))))
             if level == 0 and _ZONE.get(key) == _PRIVATE and _on_edge(r, outline, outward.get("_front", "s")):
                 s += 5
+        if rid in rooms:
+            # doorways asked in an order along one wall stand in it
+            s += _order_cost(rid, r, rooms, every)
         for other, (side, _o, _k) in _joins(rid, rooms).items():
             if other not in every or (other in parts and other < rid):
                 continue
@@ -1319,6 +1323,40 @@ def _score(parts, ids, rooms, weights, outline, fixed, outward, outward_weight, 
             if not any(on_edge(r, sd) for sd in sides):
                 s += outward_weight.get(rid, 15)
     return s
+
+
+#: What one pair of a wall's ordered doorways standing the wrong way round
+#: costs (`_order_cost`): a join on the wrong side costs the same. Named per
+#: ask-before-limiting.
+ORDER_COST = 20
+
+
+def _order_cost(rid, r, rooms, every):
+    """What a room's ordered joins cost where they stand out of order along
+    the wall they share: `order` counts the joins of one wall from its north
+    or west end (the relate card), so a doorway asked before another stands
+    nearer that end. Only the joins the room itself wrote, and only rooms
+    that stand on the side asked -- one on another side already costs a
+    wrong side."""
+    by_side = {}
+    for j in rooms[rid].get("joins") or ():
+        to, sd, od = j.get("to"), str(j.get("side") or "")[:1], j.get("order")
+        if to in every and to != rid and sd in _SIDES and isinstance(od, (int, float)) and not isinstance(od, bool):
+            by_side.setdefault(sd, []).append((od, to))
+    cost = 0.0
+    for sd, lst in by_side.items():
+        if len(lst) < 2:
+            continue
+        lst.sort(key=lambda t: t[0])
+        pos = []
+        for od, to in lst:
+            got, cells = _door_cells(r, every[to])
+            if cells and got == sd:
+                pos.append((od, sum(c[1] if sd in "ew" else c[0] for c in cells) / len(cells)))
+        for (o1, p1), (o2, p2) in zip(pos, pos[1:]):
+            if o1 < o2 and p1 >= p2:
+                cost += ORDER_COST
+    return cost
 
 
 def _roof_cells(parts, outline, level):

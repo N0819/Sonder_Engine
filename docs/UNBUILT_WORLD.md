@@ -3395,9 +3395,12 @@ Left, each with what it needs:
   sets. Needs a ruling on where that floor goes -- a room's alcove, a store
   the plan carries, or a smaller outline.
 - **The opening waits for the solve.** A story that opens inside a planned
-  building has it laid out before turn 0 (`lay_out_opening_ground`): the two
-  calls and up to `LAYOUT_SOLVE_SEEDS` solves of 7 to 9 s each on the
-  shrine, added to the launch.
+  building has it laid out before turn 0 (`lay_out_opening_ground`): the
+  three calls and `LAYOUT_SOLVE_SEEDS` solves of 7 to 9 s each on the
+  shrine, added to the launch -- every seed solved since 2026-10-15, where
+  the first that stood ended the search before (the best seed standing is
+  kept: two of nine recorded answer sets improved, none fell; about +4 to
+  +23 s a building).
 - **One building to a plan, so one to a street.** A building is laid out on a
   plan of its own (`layout:<entrance room>`), only while none of its stubs
   stands on a plan and no other room stands on that one. The engine's
@@ -3581,6 +3584,104 @@ Left, each with what it needs:
   since, so whether answers follow is unmeasured (replayed, the second live
   run's answer named its three box beds in the plural, and each bed carries
   that name). The Japanese cards pass protocol parity and have never run.
+- **The lab's look, measured live (2026-10-15): what is left.** The round
+  that matched the engine's shrines to the lab's liked one
+  (`design/DESIGN_LAYOUT_TIER.md`, "The lab's look, measured live") left,
+  from six live runs read stage by stage and nine answer sets relayed with
+  no model:
+  - *The solver's stair search* places one shaft at a time from the middle
+    spot, so two flights asked into one wall block each other's moves; in
+    four of five specs its own objective ranks a back-wall pick first that
+    the descent never reaches (forced, +0.16 to +0.38 similarity). Needs a
+    search that moves the shafts of a storey together, fast enough for four
+    seeds a building, and keeps the lab cell for cell.
+  - *Asked sides the division cannot meet*: the outline's proportions come
+    from total area at one aspect, so the washroom the lore puts west of the
+    hall has no division that also keeps the genkan south (none of 600 on
+    the lab's own spec). Needs the outline sized from the widest row the
+    joins set side by side -- a solver change that moves every building.
+  - *A size the lore states is a floor the furniture lifts* (the twelve-mat
+    hall laid at 16 to 25 mats); capping it alone moved the lab and laid no
+    hall nearer (the division's size cost is too weak, the outline is sized
+    from furniture). Needs the outline and the division reworked together.
+  - *A straight flight end-on to its asked wall*: a cost of 4 per asked wall
+    is measured and held for the owner -- it turns the lab's fresh run 2 to
+    the liked shrine's stairs (a change to the lab) and stands one engine
+    front door in the back wall.
+  - *Every seed solved* costs about +4 to +23 s a building, at launch where
+    the opening stands in it; the first-seed rule it replaced is one line
+    back, should the owner want the time more than the two improved houses.
+  - *The Room re-plans the grounds away from the lore's relations*: a court
+    the lore never names between the front door and the path, the camphor
+    planned as the ground round it, the garden narrowed to one side, the
+    roofed walkway a place in one plan of six. One Room clause would state
+    the class (what a door opens onto is that door's neighbour; a thing is
+    planned as the thing) -- the Room's card is every story's, so the
+    owner's call.
+  - *Things standing on the grounds have no carrier*: the guardians flanking
+    the path and the lanterns lining it live only in a purpose; the sort may
+    only classify planned places. Needs the sort to list a ground place's
+    things as it lists a room's fixtures, and the bridge to hand them to the
+    solver, which already lays `flank` and `along`.
+  - *A size the relate leaves out* though the lore states it (one run): the
+    sort could carry each stated size with its quote and the bridge copy it.
+  - *No carrier for a place along a wall or within the house*: which of two
+    stair doors in one wall comes first, the entrance in the middle of its
+    front, a cellar under one half of the house.
+  - *The tier's lore matcher takes whole labels only*: an entry keyed
+    `roost` never reaches a room the Room ids `tamamo_roost` (two runs of
+    six lost the roost's own entry). Matching a key's words among a room's
+    would admit it -- and the seal's lore by its key `seal` against
+    `seal_cavern`, the over-match the whole-label rule was written against.
+    The owner's call.
+  - *Furnishing, the corridor, the roof storey*: a fixture pushed off its
+    wall takes the wall another was asked for (placed largest first); a
+    corridor's axis follows the outline, not its joins; a roof storey is
+    inset on every side, so a bed and its strip may not fit under it.
+  - *The walk between two doors* is laid door to door and never reaches open
+    ground the plan also joins it to on another side of the house (a strict
+    xfail in `tests/test_a_walk_runs_between_its_doors.py`); on synthetic
+    plans the rule gained 82 places and lost 28, mostly where a walk's door
+    stands in an inside wall.
+  - `layout_solver._spine_h` names every leftover `spare:0:`; fixing the name
+    changes the lab's fresh run 2.
+- **Buildings other than the shrine, asked of the Room live (2026-10-15).**
+  The owner asked for "actual engine tests on ... other structures that we
+  just ask the room to make, like ... hospital buildings, lighthouse". Three
+  stories launched from scratch through the harness (the Room planning from
+  the scenario and one line, the owner's routing): none was laid out, each
+  for a different reason, and each is the owner's call.
+  - **A building the Room asks for as an institution is planned flat.** The
+    four-storey hospital went through `request_location`: the Charter
+    Planner's request gives each room a name, a purpose and `connect_to`,
+    the location designer's `draft_location` gives a room `{name, purpose,
+    exposure, far_look, adjacent:[{to, barrier}], frontier, anchors}`, and
+    neither can state a storey or a vertical way. The plan held 36 rooms, no
+    `level` on any, no vertical edge: its three stairwells were rooms with a
+    door onto every floor's corridor, the floors living only in the
+    request's prose ("Upper floors: ward corridors radiate from the
+    stairwells"). So no building exists for the tier -- nor any storey for a
+    reader of storeys (a tread heard below, sight down a stair, `over`).
+    Needs `level` and a vertical way in the location path's request and its
+    rooms, the closure reading them -- a change to the generator, not to the
+    tier.
+  - **A room planned round refuses its building unless it stands in a block
+    of its own off one doorway.** The lighthouse's lamp room is reached by
+    its stair alone. Solved as its box in a scratch tree, the lighthouse
+    laid in 6.9 s -- as a cottage with a room upstairs: the tower stair and
+    the lamp room boxed into one footprint with the kitchen, the bedroom and
+    the store, and the lamp moved off the room's middle to a wall. A tower is
+    a part that rises on its own from a lower one, which the solver does not
+    lay; lifting the refusal alone makes a worse building, not a lighthouse.
+    The same class refused a fresh Home 11 plan whose round Seal Cavern
+    opened onto a round hot spring beyond it (two doorways, so no block of
+    its own).
+  - **More rooms than `LAYOUT_TIER_MAX_ROOMS` (24).** The manor was planned
+    with 32 (four storeys, seven places of ground). With the cap at 40 in a
+    scratch tree, both seeds tried left eight joins with no doorway between
+    them (the back passage and the entrance hall, the dining room and the
+    kitchen, ...) and the tier laid nothing, after 285 s. Raising the cap is
+    not enough: the solver does not yet hold a house that size.
 - **OR-Tools and Codex's plan lab** stay unread beyond the survey and unmerged
   (the owner's hands-off ruling); the solver stays pure Python.
 

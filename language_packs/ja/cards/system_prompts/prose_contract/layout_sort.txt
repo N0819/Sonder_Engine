@@ -6,6 +6,7 @@
 
 各 room について次を挙げてください。
 - `fixtures`: その中にある、床を占めるもの、または身体が使うものすべて。`purpose` が名指すもの、そして計画が挙げている fixture のすべてを、それぞれ挙げられている `id` のまま挙げます。床・壁・天井が何でできているか、あるいは壁から壁まで何で覆われているかは room 自身のものであって、決して fixture ではありません――床のそれはその `floor` です。床の一部に置かれているものは fixture です。それぞれがどう立っているか（`mount`）を述べます。壁際かどうかにかかわらず床に立つものは `floor`。壁に作り付けたものは壁沿いの床を占めるので、これも `floor` です。壁面に固定されて床を占めないものは `hung`、上から吊るされるものは `ceiling`、別の fixture の中や上にあるものは `in <fixture id>` か `on <fixture id>` です。計画が挙げる fixture のうち、room の中に立つものではなく、階段や出入口がその room に接する場所そのものであるものは、その道が通じる room の `id` を `marks` に添えて挙げます。エンジンがそれを、その道が room に接するところに置きます。計画が挙げていない出入口や、階段の上り口・下り口は、そもそも fixture ではありません：その通り道は計画自身のものであり、すでに room に接するところに立っています。その room が目的を果たすのに欠かせないのに計画が名指していないものは、`implied` を true にして挙げます。
+- `stands`: `beyond`。purpose か description がその room を建物自身の壁の外に置いているときだけ――外壁の一つを通って入る、それ自身の空間で、建物のどの屋根の下にもないもの――で、エンジンはそれをその壁の向こうに別の棟として置きます。壁の内にある room には書きません。
 - `floor`: room の床が何でできているか、あるいは壁から壁まで何で覆われているかを一語で――description がそれを言っているときは、description 自身の言葉で。
 - `zones`: それ自身の壁を持たない room の床の一部で、何かが起きる、あるいは決まりが始まるところ。purpose がそれを与えている場合だけです。
 - `windows`: purpose か挙げられた fixture が与える外への開口それぞれ。何に面しているか（`faces`）を計画自身の言葉で、そして `count` を添えます。挙げられた fixture のうち窓そのものであるものは、ここで自分の `id` を保ち、fixture としては挙げません。窓は、それが何であるか、何を見渡すかで名づけ、どの壁にあるかでは名づけません：engine は窓を外壁に置き、それは記述が思い描いていた壁ではないかもしれないからです。
@@ -14,13 +15,14 @@
 
 建物が `grounds` を持つときは、それが計画がこの建物に与える外の場所です。建物が建つ地面、その地面を通る道、その上に立つもの、離れて建つ小さな建物。それぞれ自身の `id` のまま、何であるか（`is`）を述べてください。身体が歩き回る地面は `open`、ある場所から別の場所へ通じる地面は `way`、地面の上に立ち、身体がその前に立つ一つのものは `feature`、建物から離れて立つ、それ自身の壁を持つ場所は `outbuilding` です。拠り所となる言葉を引いてください（`why`）。
 
-新しい項目にはすべて snake_case の `id` と、計画が書かれている言語での `name` を与えてください。同じものが複数あれば、fixture でも window でも、`count` を付けた一つの項目にし、その `name` はそのうちの一つを名指します。エンジンはそれぞれを一つのものとして置き、そのように名付けます。どの項目も、それが何であるかで名付け、誰のものかでは名付けないでください。項目の名前に入った人の名前は、そのものを見るすべての心に届きます。その人の名前を知ったことのない心にもです。どの項目も、それが拠って立つ言葉を引用します（`why`）。計画のどこにも支えのないものは挙げません。ただし `implied` のものは別です。JSON 文字列の中では二重引用符ではなく必ず一重引用符を使ってください。
+新しい項目にはすべて snake_case の `id` と、計画が書かれている言語での `name` を与えてください。同じものが複数あれば、fixture でも window でも、`count` を付けた一つの項目にし、その `name` はそのうちの一つを名指します。エンジンはそれぞれを一つのものとして置き、そのように名付けます。言葉が数を言わずに複数で述べているものも複数です。その `count` は、述べられている並びに収まるだけの数で、一つではありません。どの項目も、それが何であるかで名付け、誰のものかでは名付けないでください。項目の名前に入った人の名前は、そのものを見るすべての心に届きます。その人の名前を知ったことのない心にもです。どの項目も、それが拠って立つ言葉を引用します（`why`）。計画のどこにも支えのないものは挙げません。ただし `implied` のものは別です。JSON 文字列の中では二重引用符ではなく必ず一重引用符を使ってください。
 
-JSON オブジェクトを一つだけ答えてください。
+JSON オブジェクトを一つだけ答えてください。その中の `<...>` と `a|b` は、その項目をいつ与え、何を入れてよいかを述べるもので、写すための値ではありません。
 {"rooms": [{"id": "<room id>",
+            "stands": "beyond -- only for a room the purpose or the description puts beyond the building's own walls",
             "floor": "<one word, where the description gives one>",
-            "fixtures": [{"id": "<snake_case>", "name": "...", "mount": "floor|hung|ceiling|in <fixture id>|on <fixture id>", "count": 1, "implied": false, "marks": "<room id, only for a fixture that marks where a way meets this room>", "why": "..."}],
+            "fixtures": [{"id": "<snake_case>", "name": "...", "mount": "floor|hung|ceiling|in <fixture id>|on <fixture id>", "count": <how many there are>, "implied": <true only for a thing the purpose needs that nothing names>, "marks": "<room id, only for a fixture that marks where a way meets this room>", "why": "..."}],
             "zones": [{"id": "<snake_case>", "name": "...", "why": "..."}],
-            "windows": [{"id": "<snake_case>", "name": "...", "faces": "...", "count": 1, "why": "..."}]}],
- "stairs": [{"from": "<room id>", "to": "<room id>", "enclosed": false, "door": "<the door, when enclosed>", "why": "..."}],
+            "windows": [{"id": "<snake_case>", "name": "...", "faces": "...", "count": <how many there are>, "why": "..."}]}],
+ "stairs": [{"from": "<room id>", "to": "<room id>", "enclosed": <true behind a door in a stairwell of its own, false rising in the room>, "door": "<the door, when enclosed>", "why": "..."}],
  "grounds": [{"id": "<place id>", "is": "open|way|feature|outbuilding", "why": "..."}]}

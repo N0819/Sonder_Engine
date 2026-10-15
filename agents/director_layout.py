@@ -288,6 +288,9 @@ def lay_out(building, call, language_id):
     sort_answer = call(SORT_STEP, layout_prompt("sort", language_id),
                        layout_bridge.sort_payload(building))
     inventory = layout_bridge.hold_inventory(building, sort_answer)
+    # a room the first call says stands beyond the walls gets its own block
+    # before the second call reads the building
+    building = layout_bridge.stand_beyond(building, inventory)
     relate_answer = call(RELATE_STEP, layout_prompt("relate", language_id),
                          layout_bridge.relate_payload(building, inventory))
     spec = layout_bridge.spec_from_answers(building, inventory, copy.deepcopy(relate_answer))
@@ -397,7 +400,9 @@ def building_description(cid, building, frame_id=None):
     name ("seal cavern divine side") names somewhere else, and a word the
     building's name merely contains ("shrine") names no building -- never by
     reading the entries' prose. On the owner's lorebook this is exactly the
-    seven entries the layout lab was laid out from, less the grounds."""
+    seven entries the layout lab was laid out from; the ground the building
+    stands in is laid out with it, so its places' labels match too, after
+    the building's own entries."""
     from language_runtime import compositor_value
     from mind.memory import chat_lorebook_ids, lore_rows
     articles = {str(a).casefold() for a in compositor_value("articles") or ()}
@@ -407,6 +412,12 @@ def building_description(cid, building, frame_id=None):
     for uid in building.get("rooms") or ():
         building_labels.add(_label(uid, articles))
         building_labels.add(_label((building.get("names") or {}).get(uid), articles))
+    # AND THE GROUND IT STANDS IN, which the tier lays out with it: the lore
+    # of the garden, the path and what stands on them reached none of the
+    # three calls, though they lay those places out too (2026-10-15)
+    for place in building.get("grounds") or ():
+        building_labels.add(_label(place.get("id"), articles))
+        building_labels.add(_label(place.get("name"), articles))
     building_labels.discard("")
     own.discard("")
     ids = chat_lorebook_ids(cid)

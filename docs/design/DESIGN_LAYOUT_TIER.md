@@ -4,8 +4,8 @@ Status: first slice built 2026-10-08; ON by default since 2026-10-10 -- the
 host's `layout_solver_tier` setting, or the same switch on one story, turns
 it off. The bridge lane (below) laid the owner's shrine plan with no
 refusal but not yet cleanly; with the shrine's lore refined for placement
-and the Room's sides weighed as wishes, two of three answer sets laid it out
-room for room as the lab did, and the owner: "It's ok enough now". What is
+and the Room's sides weighed as wishes, two of three answer sets laid its
+ground floor out room for room as the lab did, and the owner: "It's ok enough now". What is
 left is `UNBUILT_WORLD.md` §2.43.
 
 ## Why
@@ -336,9 +336,12 @@ every solver change re-solved the lab's liked shrine cell for cell
 6. **A room joined to another block stands on the wall facing it at 60, not
    15**: on one answer set the basement stood off the cavern's wall in all
    20 seeds; after, 15 of 20 stood with no refusal.
-7. **Up to `LAYOUT_SOLVE_SEEDS` seeds (4)**, each tried only where the one
-   before fell short: one with every stair landed wins at once, else the
-   first the bridge does not refuse. A solve of the shrine takes 7 to 9 s.
+7. **`LAYOUT_SOLVE_SEEDS` seeds (4)**: until 2026-10-15 each tried only
+   where the one before fell short, one with every stair landed winning at
+   once; since then every seed is solved and, of those standing with every
+   stair landed, the one that turned the fewest asked sides is kept (`The
+   lab's look, measured live`), else the first the bridge does not refuse. A
+   solve of the shrine takes 7 to 9 s.
 
 Measured at the end, three answer sets through the tier's own path: all three
 stand with no refusal; one with every stair landed in each room it joins (14.4
@@ -392,10 +395,11 @@ were refused for a room planned `composite` with no parts (now its box) and
 then for sides the solve turned -- two for the washroom east of the main
 hall, as the lab's liked shrine had it too -- and the owner ruled that the
 Room's sides, like its sizes, are wishes. All three then stand, two of them
-room for room as the lab laid it out: both stairs in a band along the back,
-the main hall, the washroom and the kitchen in a grid, and upstairs the
-staircase arriving at one end of a central hallway, the rooms off it, the
-roof stair at its other end. The owner's lorebook carries the refined
+with the ground floor room for room as the lab laid it out: both stairs in a
+band along the back, the main hall, the washroom and the kitchen in a grid;
+upstairs the staircase arrives at one end of a central hallway with the rooms
+off it and the roof stair at its other end, the rooms in the other order from
+the lab's (measured 2026-10-15; "The lab's look, measured live"). The owner's lorebook carries the refined
 entries (2026-10-10, their prior text kept outside the repository).
 
 ## The grounds (2026-10-11)
@@ -873,6 +877,131 @@ named "box beds" -- the second call's name for the group, in the plural; the
 card now asks for the name of one of them, which a replay cannot show -- and
 the plan's "three box beds along the wall" stands in the solve's record.
 
+## The lab's look, measured live (2026-10-15)
+
+The owner asked whether the engine's shrines now came out like the layout
+lab's liked one, and then: "Can we adjust it so it produces mostly similar
+examples and then do actual engine tests on it and other structures that we
+just ask the room to make." Measured first, on the three shrines the owner
+had played (Homes 6, 9 and 11) against the lab's liked shrine: no house came
+out comparable as a whole -- a similarity of 0.44 to 0.51, where the lab's
+own fresh run scores 0.82 -- and the causes sat in every stage but the
+solver's core.
+
+**The cards offered values to copy.** The relate card's template read
+`"storeys": [{"level": 1, "smaller": true}]`, and two of three answers made
+the full second floor "under the roof", which moved the stairs and the
+corridor; `"count": 1` left no fixture or window of 249 with more than one;
+`"order": 1` stood on 30 of 33 joins. Every `<...>` and `a|b` in both cards
+now says when to give a field and what may go in it, and the cards say so.
+Live, six shrine answers of six marked the roof storey smaller and no
+other; the copied order is gone.
+
+**What the plan or the lore puts outside the walls is laid outside them.**
+Every shrine laid its latrine in the house, though each plan had joined it
+to the washroom across an authored distance (`near`) no other join of the
+house carried. A walled room whose every join on its storey the plan states
+apart (`_stated_apart`) stands apart from the building -- unless the word is
+the plan's habit, written on more than half the joins between its walled
+rooms (`_apart_habit`, `APART_HABIT_SHARE`; the outdoors and a solve's own
+stair rooms aside). The habit was first read as "one word on every join of
+the structure", and the final live round showed why not: a plan wrote
+`near` on every join between its rooms and `far` on one way out of doors,
+so `near` was not its only word, and the rule took the kitchen, the store,
+two halls and both bedrooms out of the house. Read over the rooms' joins,
+it holds as one ten-room building; nothing changes on the owner's
+database or on the six other live plans. A room so stated apart is, on the
+ground, a building apart in the grounds, an enclosed place the first call
+says nothing of read as one (`hold_grounds`); below the ground, where no
+yard lies between, a block of its own past the wall it is entered through,
+as the lab's shrine has its cavern. The first call can say the same where only the lore does
+(`stands: beyond`, `stand_beyond`, before the second call reads the
+building); a room joined twice keeps its place and the building names it
+(`stands_within`).
+
+**A yard filed as a part of the map of its own is still the building's
+ground.** Two live shrines of two filed the torii, the path, the well, the
+garden, the tree and the latrine as `shrine_grounds` beside the house's
+structure -- the owner's three plans had filed them with the house -- and
+the grounds walk, reading the house's structure alone, laid none of them.
+The walk now also reads a part of the map the building's own rooms open
+onto, which no walled room of another part of the map opens onto and which
+holds no building of its own (`_ground_parts`). It changes nothing on the
+owner's database (nine buildings) or on two hundred generated plans (903 of
+1,053 places laid, as before).
+
+**What the answers say reaches the spec.** A join's `order` is written from
+the room whose wall it counts (it was dropped when the other room's id
+sorted first); the solver now weighs doorways asked in an order along one
+wall (`_order_cost`, `ORDER_COST` 20, a wrong side's cost); a window's
+count is the first call's; and the lore of the ground the building stands
+in reaches all three calls.
+
+**Live.** Through the harness on the owner's routing (the Room re-planning
+each shrine from the cloned setup): one run of Home 11's setup came out
+comparable to the lab -- similarity 0.869, 35 of 53 claims, every one of
+the fifteen structural checks -- and the rest at 0.40 to 0.54. Six read
+stage by stage, every stage against the others, found the spread in the
+solver more than the calls: asked sides traded away (the washroom asked
+west of the hall laid east in most runs, as the lab's liked shrine also has
+it), stated sizes read as a floor the furniture lifts (the twelve-mat hall
+laid at 16 to 25 mats), straight flights laid end-on to the wall they were
+asked along, and the first seed that stands kept over a better one. The
+calls' share: a plural with no number counted one, a wall's door order and
+a thing by a window left out where the lore gave them, and "behind the west
+end" read as the west side -- each now a clause in its card.
+
+**Levers, trialled offline.** Every live run keeps its brief, sort and
+relate answers, so each can be relayed through `lay_out` on a changed tree
+with no model -- the relay reproduces the live solve exactly -- and a lever
+was kept only where the lab's liked shrine and its three fresh runs still
+re-solve cell for cell. Nine answer sets (the six live runs and the owner's
+three recorded launches), baseline mean similarity 0.503 and 24.2 claims:
+
+- *Kept: the best seed that stands, not the first* (`solve_for`,
+  `turned_sides`). Every seed is solved, and of those standing with every
+  stair landed the one that turned the fewest asked sides is taken. The
+  chosen seed changed on two of nine and both improved (0.418 to 0.582, 23
+  to 31 claims; 0.409 to 0.464); none fell. Its price: every building now
+  pays what only the worst case did, four solves, about +4 to +23 s a
+  building.
+- *Kept: a thing joined to a room across ground keeps the answer's
+  relation* (`_joined_apart`): the well the plan put `near` the kitchen
+  stood at the kitchen's door, touched no path, and was dropped; it now
+  stands by the path east of the front door, as the lore and the answers
+  have it, the kitchen's door opening onto the ground it stands in.
+- *Kept: a way with a door at each end is the walk between them*: a walkway
+  the plan joins to the washroom and the latrine was sent out of the garden
+  past its far edge, and the latrine, the walkway and the torii were
+  dropped; it is now laid door to door, ten paces, nothing dropped.
+- *Dropped: a stated size as the target and the ceiling.* It moved the lab
+  and laid no hall nearer its stated twelve mats (1 of 7 in band before
+  and after): the division's size cost (3·|ln ratio|) is too weak against
+  side costs of 20 to 60, and the outline is still sized from furniture, so
+  a cap only moves floor elsewhere.
+- *Dropped: a heavier asked side.* It moved the lab's liked shrine and
+  still could not put the washroom west: of 600 divisions the search tries
+  on the lab's own spec, none holds the washroom west and the genkan south
+  together. The limit is the division generator, not the weight.
+- *Held for the owner: a straight flight runs along the wall it is asked
+  against.* A cost of 4 keeps the liked shrine and fresh runs 1 and 3 and
+  turns fresh run 2's three stairs to exactly the liked shrine's (0.38 to
+  0.77 against it); on the engine's answers it gains one claim on average
+  and stands one front door in the back wall. A cost of 20 gained five
+  claims on average and left two buildings refused on every seed.
+
+Read with the six attributions, the spread is the solver's more than the
+calls': its stair search places one shaft at a time from the middle spot,
+so two flights asked into one wall block each other's moves, and in four
+of five specs its own objective ranks a back-wall pick first that the
+descent never reaches.
+
+**Other buildings.** A hospital, a lighthouse and a manor, launched from
+scratch and planned by the Room: none was laid out. The hospital went
+through the location path, which cannot say a storey; the lighthouse's
+lamp room is planned round off its stair alone; the manor holds 32 rooms.
+Each is the owner's call (`UNBUILT_WORLD.md` §2.43).
+
 ## Tests
 
 `tests/test_a_planned_building_is_laid_out_by_relations.py` (the tier, the
@@ -884,4 +1013,12 @@ re-plan and the derived neighbour, the story switch across a restore),
 `tests/test_site_plan.py` (the converter), `tests/test_room_lint.py` (a pinned
 anchor's wall share), `tests/test_a_building_stands_in_its_grounds.py` (the grounds: which
 places, what each is, one place a cell as the world reads it, every doorway's
-other side, a side by something, the re-plan, the fallback, the switch).
+other side, a side by something, the re-plan, the fallback, the switch),
+`tests/test_what_stands_apart_is_laid_apart.py` (a room across ground stands
+apart, below ground a block of its own, `stands: beyond`),
+`tests/test_a_yard_filed_apart_is_still_the_buildings_ground.py` (a yard filed as
+a part of the map of its own), `tests/test_the_layout_cards_offer_nothing_to_copy.py`
+(no example value in a template, the clauses, the order's writer, a window's
+count, the ground's lore), `tests/test_a_thing_across_ground_keeps_its_place.py`
+(a thing joined across ground keeps the answer's relation) and
+`tests/test_a_walk_runs_between_its_doors.py` (a way with a door at each end).
