@@ -541,6 +541,112 @@ def _layout_print(room) -> str:
                       sort_keys=True, default=str)
 
 
+def solved_plan_row(planned, solved):
+    """The plan row a solved room becomes -- `planned` (left as it was) with
+    the solve merged on: its geometry, a field given as None taken off; each
+    anchor's fields onto the plan's record of it, its `desc` kept; each
+    edge's position fields onto the plan's edge to that neighbour; the
+    solve's own ways; and the record under `layout`. ONE RULE, TWO READERS:
+    `write_planned_layout` writes exactly this, and the grounds floor reads
+    exactly this before anything is written (`solved_scene`,
+    `layout_bridge.ground_refusals`), so the floor never judges a building
+    other than the one the plan will hold."""
+    planned = copy.deepcopy(planned)
+    for key, value in (solved.get("geometry") or {}).items():
+        # None is the solve saying there is none -- a place laid as
+        # one rectangle has no parts an earlier solve gave it
+        if value is None:
+            planned.pop(key, None)
+        else:
+            planned[key] = copy.deepcopy(value)
+    earlier = planned.get("layout") if isinstance(planned.get("layout"), dict) else {}
+    anchors = planned.get("anchors") if isinstance(planned.get("anchors"), dict) else {}
+    split = set(_split_records(solved))
+    for aid, fields in (solved.get("anchors") or {}).items():
+        record = dict(anchors.get(aid) or {}) if isinstance(anchors.get(aid), dict) else {}
+        fields = copy.deepcopy(fields)
+        if str(record.get("desc") or "").strip() and aid not in split:
+            # what a thing IS stays the plan's word for it; the solve
+            # says only where it stands -- except on a record the
+            # plan wrote for SEVERAL alike, now the first of them:
+            # the group's words go to the solve's record
+            # (`planned.layout.split`), and the copy takes its own
+            fields.pop("desc", None)
+        if _placed_pin(record) and not _placed_pin(fields):
+            # an earlier solve's pin, on a fixture this solve could
+            # not place: it stood in a room this solve re-measured,
+            # so the place it names is no longer a place
+            # (`_lay_stub_on_its_plan`'s rule, one level in)
+            record.pop("cell", None)
+            record.pop("extent", None)
+        if _placed_pin(fields) and "mount" not in fields:
+            # the solver stood it on the floor: an earlier solve's
+            # word that it hung or stood on another is no longer so
+            record.pop("mount", None)
+        record.update(fields)
+        anchors[aid] = record
+    # a record of the plan the solve laid as a window is no anchor
+    # (`layout_bridge.planned_layout`, `windows_from`)
+    for aid in (solved.get("layout") or {}).get("windows_from") or ():
+        anchors.pop(aid, None)
+    if anchors:
+        planned["anchors"] = anchors
+    moves = solved.get("edges") or {}
+    for edge in planned.get("adjacent") or ():
+        if isinstance(edge, dict) and str(edge.get("to") or "") in moves:
+            # a pin field given as None is written None, never taken off: a
+            # beat's stub takes only the fields the plan's edge holds
+            # (`_lay_stub_on_its_plan`), so one taken off the row stayed on
+            # the stub (a review of 2026-10-14)
+            edge.update(copy.deepcopy(moves[str(edge["to"])]))
+    # THE SOLVE'S OWN WAYS: a stair hall's, a window's onto the ground
+    # beyond it (`layout_bridge`). Added where the plan holds no way
+    # to that room; one an earlier solve made is this solve's to move
+    # or take back, and nothing else is ever touched -- save the
+    # plan's own stair between two rooms, which the halls replace
+    # (`replaced`).
+    ways = solved.get("made_edges") or {}
+    made = {str(t) for t in earlier.get("made_edges") or ()}
+    replaced = {str(t) for t in (solved.get("layout") or {}).get("replaced") or ()}
+    if ways or made or replaced:
+        adjacent = [e for e in planned.get("adjacent") or ()
+                    if not (isinstance(e, dict) and (
+                        str(e.get("to") or "") in made - set(ways)
+                        or str(e.get("to") or "") in replaced))]
+        for to, fields in ways.items():
+            edge = next((e for e in adjacent if isinstance(e, dict)
+                         and str(e.get("to") or "") == str(to)), None)
+            if edge is None:
+                adjacent.append(dict({"to": str(to)}, **copy.deepcopy(fields)))
+            elif str(to) in made:
+                edge.update(copy.deepcopy(fields))
+        planned["adjacent"] = adjacent
+    if solved.get("layout"):
+        planned["layout"] = copy.deepcopy(solved["layout"])
+    elif "layout" in solved and solved["layout"] is None:
+        # the solve taken back off a place it no longer lays
+        # (`agents.director_layout.lay_out_buildings`, a place dropped)
+        planned.pop("layout", None)
+    return planned
+
+
+def made_plan_row(solved):
+    """The plan row of a room the solve makes (`_plant_made_room`): its name,
+    what it is for, its structure, its ways (every one of them the
+    solve's), its geometry and the solve's record."""
+    room = solved["room"]
+    planned = {key: copy.deepcopy(value) for key, value in room.items()}
+    planned.update({"access": "", "frontier": [],
+                    "adjacent": [dict({"to": str(to)}, **copy.deepcopy(fields))
+                                 for to, fields in sorted((solved.get("made_edges") or {}).items())]})
+    for key, value in (solved.get("geometry") or {}).items():
+        if value is not None:
+            planned[key] = copy.deepcopy(value)
+    if solved.get("layout"):
+        planned["layout"] = copy.deepcopy(solved["layout"])
+    return planned
+
+
 def write_planned_layout(cid, rooms, *, expected, job=None):
     """Write a solved building into the plan rows of its rooms, and say
     whether it was written. The layout tier's ONE write
@@ -612,74 +718,7 @@ def write_planned_layout(cid, rooms, *, expected, job=None):
                 _plant_made_room(cid, uid, solved, current[uid])
                 continue
             payload = current[uid]
-            planned = payload["planned"]
-            for key, value in (solved.get("geometry") or {}).items():
-                # None is the solve saying there is none -- a place laid as
-                # one rectangle has no parts an earlier solve gave it
-                if value is None:
-                    planned.pop(key, None)
-                else:
-                    planned[key] = copy.deepcopy(value)
-            earlier = planned.get("layout") if isinstance(planned.get("layout"), dict) else {}
-            anchors = planned.get("anchors") if isinstance(planned.get("anchors"), dict) else {}
-            split = set(_split_records(solved))
-            for aid, fields in (solved.get("anchors") or {}).items():
-                record = dict(anchors.get(aid) or {}) if isinstance(anchors.get(aid), dict) else {}
-                fields = copy.deepcopy(fields)
-                if str(record.get("desc") or "").strip() and aid not in split:
-                    # what a thing IS stays the plan's word for it; the solve
-                    # says only where it stands -- except on a record the
-                    # plan wrote for SEVERAL alike, now the first of them:
-                    # the group's words go to the solve's record
-                    # (`planned.layout.split`), and the copy takes its own
-                    fields.pop("desc", None)
-                if _placed_pin(record) and not _placed_pin(fields):
-                    # an earlier solve's pin, on a fixture this solve could
-                    # not place: it stood in a room this solve re-measured,
-                    # so the place it names is no longer a place
-                    # (`_lay_stub_on_its_plan`'s rule, one level in)
-                    record.pop("cell", None)
-                    record.pop("extent", None)
-                if _placed_pin(fields) and "mount" not in fields:
-                    # the solver stood it on the floor: an earlier solve's
-                    # word that it hung or stood on another is no longer so
-                    record.pop("mount", None)
-                record.update(fields)
-                anchors[aid] = record
-            # a record of the plan the solve laid as a window is no anchor
-            # (`layout_bridge.planned_layout`, `windows_from`)
-            for aid in (solved.get("layout") or {}).get("windows_from") or ():
-                anchors.pop(aid, None)
-            if anchors:
-                planned["anchors"] = anchors
-            moves = solved.get("edges") or {}
-            for edge in planned.get("adjacent") or ():
-                if isinstance(edge, dict) and str(edge.get("to") or "") in moves:
-                    edge.update(copy.deepcopy(moves[str(edge["to"])]))
-            # THE SOLVE'S OWN WAYS: a stair hall's, a window's onto the ground
-            # beyond it (`layout_bridge`). Added where the plan holds no way
-            # to that room; one an earlier solve made is this solve's to move
-            # or take back, and nothing else is ever touched -- save the
-            # plan's own stair between two rooms, which the halls replace
-            # (`replaced`).
-            ways = solved.get("made_edges") or {}
-            made = {str(t) for t in earlier.get("made_edges") or ()}
-            replaced = {str(t) for t in (solved.get("layout") or {}).get("replaced") or ()}
-            if ways or made or replaced:
-                adjacent = [e for e in planned.get("adjacent") or ()
-                            if not (isinstance(e, dict) and (
-                                str(e.get("to") or "") in made - set(ways)
-                                or str(e.get("to") or "") in replaced))]
-                for to, fields in ways.items():
-                    edge = next((e for e in adjacent if isinstance(e, dict)
-                                 and str(e.get("to") or "") == str(to)), None)
-                    if edge is None:
-                        adjacent.append(dict({"to": str(to)}, **copy.deepcopy(fields)))
-                    elif str(to) in made:
-                        edge.update(copy.deepcopy(fields))
-                planned["adjacent"] = adjacent
-            if solved.get("layout"):
-                planned["layout"] = copy.deepcopy(solved["layout"])
+            payload["planned"] = solved_plan_row(payload["planned"], solved)
             qi("UPDATE room_registry SET payload=? WHERE chat_id=? AND room_uid=? "
                "AND retired_turn_id IS NULL",
                (json.dumps(payload, ensure_ascii=False), cid, uid))
@@ -693,15 +732,7 @@ def _plant_made_room(cid, uid, solved, payload):
     them the solve's), its geometry and the solve's record."""
     from core.db import qi
     room = solved["room"]
-    planned = {key: copy.deepcopy(value) for key, value in room.items()}
-    planned.update({"access": "", "frontier": [],
-                    "adjacent": [dict({"to": str(to)}, **copy.deepcopy(fields))
-                                 for to, fields in sorted((solved.get("made_edges") or {}).items())]})
-    for key, value in (solved.get("geometry") or {}).items():
-        if value is not None:
-            planned[key] = copy.deepcopy(value)
-    if solved.get("layout"):
-        planned["layout"] = copy.deepcopy(solved["layout"])
+    planned = made_plan_row(solved)
     held = payload if isinstance(payload, dict) else {}
     held["planned"] = planned
     name = str(room.get("name") or derived_room_name(uid))
@@ -1547,18 +1578,9 @@ def materialize_planned_fringe(cid, scene):
         # many sides declare it, so a planned room whose spec names the
         # occupied room is that room's planned neighbour too, and the
         # occupied room receives the reciprocal exit it did not declare.
-        for other_uid, (_name, other_spec) in planned.items():
-            if other_uid == uid or other_uid in rooms:
-                continue
-            for e in other_spec.get("adjacent") or ():
-                if isinstance(e, dict) and str(e.get("to") or "") == uid \
-                        and not any(str(pe.get("to")) == other_uid
-                                    for pe in planned_edges):
-                    planned_edges.append({
-                        "to": other_uid,
-                        **{k: v for k, v in (("barrier", e.get("barrier")),
-                                             ("material", e.get("material")))
-                           if v}})
+        planned_edges += _edges_declared_to(
+            uid, {o: p for o, p in planned.items() if o not in rooms},
+            {str(pe.get("to")) for pe in planned_edges})
         targets.update(str(e.get("to")) for e in planned_edges)
         if uid in rooms and planned_edges:
             supply.setdefault(uid, []).extend(planned_edges)
@@ -1584,20 +1606,7 @@ def materialize_planned_fringe(cid, scene):
         if uid in rooms or uid not in planned:
             continue
         name, spec = planned[uid]
-        rooms[uid] = {
-            "name": name, "adjacent": [],
-            "planned": True, "purpose": str(spec.get("purpose") or ""),
-            # A stub is measured the beat it is minted, not once some hand
-            # describes it: a planned room reaching the live scene by the
-            # fringe is the same room `skeleton_rooms` lays out at the
-            # opening, and a measurement the plan stated is not the
-            # Director's to invent a second time.
-            **planned_geometry(spec),
-            **planned_seed(spec),
-            **planned_anchors(spec),
-        }
-        if spec.get("structure"):
-            rooms[uid]["region"] = normalize_region_id(spec["structure"])
+        rooms[uid] = _planned_stub(name, spec)
         supply[uid] = [dict(e) for e in spec.get("adjacent") or ()
                        if isinstance(e, dict) and e.get("to")]
         added += 1
@@ -1688,6 +1697,77 @@ def materialize_planned_fringe(cid, scene):
     from world.site_plan import derive_site_plans
     derive_site_plans(scene)
     return scene, added
+
+
+def _planned_stub(name, spec):
+    """A planned room as the fringe mints it into the scene: its name, what
+    it is for, its region, and what the plan measured and furnished, with no
+    way yet (`materialize_planned_fringe` supplies those once every stub of
+    its pass exists). A stub is measured the beat it is minted, not once
+    some hand describes it: a planned room reaching the live scene by the
+    fringe is the same room `skeleton_rooms` lays out at the opening, and a
+    measurement the plan stated is not the Director's to invent a second
+    time."""
+    stub = {
+        "name": name, "adjacent": [],
+        "planned": True, "purpose": str(spec.get("purpose") or ""),
+        **planned_geometry(spec),
+        **planned_seed(spec),
+        **planned_anchors(spec),
+    }
+    if spec.get("structure"):
+        stub["region"] = normalize_region_id(spec["structure"])
+    return stub
+
+
+def _edges_declared_to(uid, planned, held=()):
+    """The ways other plans declare INTO `uid` that `uid` holds none of
+    (`held`, the neighbours it already has an edge to): each a bare edge
+    back, its barrier and material, no place on the wall. An edge is one
+    doorway however many sides declare it (`materialize_planned_fringe`)."""
+    out, seen = [], set(held)
+    for other_uid, (_name, other_spec) in planned.items():
+        if other_uid == uid or other_uid in seen:
+            continue
+        for e in other_spec.get("adjacent") or ():
+            if isinstance(e, dict) and str(e.get("to") or "") == uid:
+                out.append({"to": other_uid,
+                            **{k: v for k, v in (("barrier", e.get("barrier")),
+                                                 ("material", e.get("material")))
+                               if v}})
+                seen.add(other_uid)
+                break
+    return out
+
+
+def solved_scene(rows):
+    """The scene the plan rows `rows` (`{uid: (name, planned)}`) lay, read
+    the way a beat reads planned rooms -- each the fringe's stub
+    (`_planned_stub`), its ways its own plan's and those other plans declare
+    into it (`_edges_declared_to`), every solved plan laid on its stub
+    (`apply_planned_layout`) and its stub barriers settled. Pure: nothing
+    read, nothing written. The grounds floor's preview of a solve
+    (`layout_bridge.ground_refusals`) -- over the rows `solved_plan_row` and
+    `made_plan_row` make, which `write_planned_layout` writes."""
+    rooms = {uid: _planned_stub(name, spec) for uid, (name, spec) in rows.items()}
+    for uid, (_name, spec) in rows.items():
+        edges = {}
+        for e in spec.get("adjacent") or ():
+            if isinstance(e, dict) and e.get("to"):
+                edges.setdefault(str(e["to"]), dict(e))
+        for e in _edges_declared_to(uid, rows, set(edges)):
+            edges.setdefault(str(e["to"]), e)
+        rooms[uid]["adjacent"] = [e for to, e in edges.items()
+                                  if to in rooms and not crosses_an_interior(rooms, uid, to)]
+    scene = {"rooms": rooms, "positions": {}}
+    apply_planned_layout(scene, rows)
+    _settle_stub_barriers(rooms)
+    # and the fringe's own tail: frontages, then the derived plan read again
+    from world.frontage import lay_frontages
+    lay_frontages(scene, {uid: spec for uid, (_name, spec) in rows.items()})
+    from world.site_plan import derive_site_plans
+    derive_site_plans(scene)
+    return scene
 
 
 def _settle_stub_barriers(rooms):

@@ -2371,10 +2371,13 @@ laid-out room's fixtures"); the rest are open:
 6. The latrine outbuilding is absorbed into the house (building grouping).
 7. The upper hallway is a windowless 5x3 landing; dropped windows go
    unrecorded.
-8. The grounds do not hold together -- well across the path, torii off it,
-   the kitchen's back door far from its well, the garden cut in two, guessed
-   distances over solved ones (A6, §1.215 item 7: land its generator rules
-   with the `by: <way>` and stale-rows fixes, not the floor alone).
+8. **Landed 2026-10-14 but for two parts** (A6, §1.215 item 7): the grounds
+   floor, the generator rules and the `by: <way>` and stale-rows fixes --
+   replayed from Home 11's recorded answers, 2 breaches to 0, every place
+   laid, the well at the kitchen's back door within reach of the path, the
+   torii across the path's real end. Open: the path through the garden meets
+   it on one side only (§2.43's grounds bullet), and the opening's guessed
+   distances over solved ones.
 9. The run record hides what the solve gave up.
 10. **First half landed 2026-10-13**: the ground plan drew upper-storey
     windows; a window is now drawn on its own walled room's storey. Open:
@@ -3434,18 +3437,98 @@ Left, each with what it needs:
     both need a pass that lays ground onto a plan its house already stands on;
   - switched off after it was on, the old ground keeps a re-planned house off
     its plan, which fails open;
-  - a pair or a row planned as one place (`flank`, `along`) is one room of
-    separate parts;
-  - the way to an outbuilding is no place, so its cells are the open ground's;
   - a one-pace sliver between two places is no place's, because the world
-    reads no part narrower than two paces.
-- **A moved fixture goes back to the model unpinned, not as a question.** It
-  is written on the wall the model named and laid along it, and the
-  designer's check shows what it crowds (live: the taproom's hearth laid
-  along its asked wall shares a cell with the pinned bar; the commit's
-  layout lint has no row for it); nothing asks the model to choose between
-  moving, shrinking and dropping it. Needs a designer step that reads the
-  solve's record (`planned.layout.moved`).
+    reads no part narrower than two paces: the ground at a door's step and a
+    leaving way's mouth is kept from things, things are laid two paces each
+    way, outbuildings never stand a pace apart, and walks and branch ways are
+    laid two wide where they fit (2026-10-14), but a walk with no two-pace
+    route is still laid a pace wide, and the floor refuses that seed;
+  - **held together since 2026-10-14** (design A6; `design/DESIGN_LAYOUT_TIER.md`,
+    "Holding together"): a floor refuses a solve whose ground does not hold,
+    only the failing places are dropped, and the generator rules let
+    Homes 9, 10 and 11 hold with every place laid. Three reviews the same
+    day (29, 28 and 26 findings confirmed) gave a thing at a door a door of
+    its own, kept the ground at every door's step and every leaving way's
+    mouth for them, laid things and walks two paces each way where the world
+    asks it, stood an outbuilding on the side the plan's way to it faces,
+    toward its room's end and never before the entrance, took a dropped
+    place's way through a door the room already has, taught the floor which
+    place to charge -- never open ground as standing between, a cutter the
+    cut place hangs on, or a thing on a way's line for the way's cut --
+    stopped a re-solve reading an earlier solve's own ways as the plan's or
+    keeping its pins, held the entrance to the one the second call is shown,
+    laid a way from the one door that opens onto it, and kept an answer's
+    relation for a thing joined to open ground alone, which stands in it.
+    Left:
+    - a way through open ground meets it on one wall only, so the ground on
+      its far side reaches it round the building (Home 11's lantern path
+      through the garden: three paces east of it an 85-pace walk) -- a
+      doorway on more than one wall, or the lab's one grounds room with the
+      ways and things standing in it, is the owner's call;
+    - the lab draws walks and branch ways a pace wide and things as small as
+      they are, the world two (`narrowest`, the bridge's); whether the lab
+      should draw what the world holds is the owner's call, since its liked
+      shrine would change;
+    - an outbuilding apart on a side another band holds (bands are measured
+      from the building the entrance is in) opens into that band; one
+      joined to open ground that the plan bears no way, or a diagonal way,
+      stands centred on its side, for the front before the entrance -- stood
+      past a corner, a byre at the court band's far end lost its doorway
+      (one a room opens onto stands past a corner there);
+    - the plan's entrance is its entrance room's first outside place by id,
+      so the second call can be shown a front on a garden while the path the
+      lore calls the approach leaves by a door of its own; the first call
+      could name the place the front door opens onto (a card change, the
+      owner's call). An answer that then lays the entrance's own ground on
+      another side than that front loses the ground (two generated plans of
+      two hundred, answers written without the payload);
+    - a thing across a way's near end stands between the way and the ground
+      it leaves and is dropped (every near-end gate in sixty generated
+      plans) -- the world reads a thing as a place, never as passable;
+    - the strip of the ground round the house that a door's ground takes can
+      hold another room's step onto that ground -- the entrance's among them
+      -- which then opens into the band, and where two doors share the face
+      toward the band the grounds would have to cross;
+    - a building apart charged in place of the band on its doorstep can
+      spend a round where its own place is a band whose going gives the strip
+      back elsewhere (unmeasured);
+    - ground the plan reaches only by a way one side alone declared keeps
+      the earlier solve's site once the Room re-plans that side without the
+      way: no join reaches it, and its building is refused for good ("already
+      stands on ... placed beside an earlier solve"), as before the floor --
+      taking it off needs the write to take back the solve's made way with
+      it;
+    - a way down from an upper room to a thing of the ground -- an outside
+      ladder -- is laid nowhere and judged by nothing, so the seed stands with
+      no doorway for it (before 2026-10-14 the house was refused for it and
+      the whole ground laid aside);
+    - ground beside the house no area holds goes to the area a door opens
+      onto, however large that makes it; and open ground answered on the far
+      side of the house from every door onto it is dropped (the plan's
+      bearing of it is the room's, which the solve may turn, so neither the
+      plan nor the answer can say before the solve which side its doors will
+      face -- a band chosen after the doors are laid would hold it);
+    - a place dropped for failing stays an unsited stub the band rule lays
+      over its neighbours (the lint names it);
+    - cost: a building whose ground never holds takes at most
+      `GROUND_DROP_ROUNDS + 1` rounds of `LAYOUT_SOLVE_SEEDS` solves and
+      `LAYOUT_SOLVE_SEEDS` more for the house alone, sixteen, the floor run
+      once on each (Home 6: 56 s where it was 38 s) -- an early
+      stop where two seeds fail on the same places would shorten a dropping
+      launch, a limit the owner has not been asked for;
+    - a thing joined to a room and to a way it cannot reach within
+      `REACH_MAX` is dropped (Home 6's well needs five paces); a thing whose
+      room has no wall left for its door is dropped, and so is an outbuilding
+      whose room has none left for its walk's door, which shares no wall the
+      way a thing's door may;
+    - the house's own rooms and halls are not held to the floor's meeting
+      rule (Home 10's ladder hall, item 12).
+- **A moved fixture is pinned where the solver stood it, not asked about.**
+  Since 2026-10-13 (the owner: "match layout lab") it is written against the
+  wall the solver stood it on, so it crowds nothing; nothing yet asks the
+  model whether a fixture moved off its asked wall should stay there, shrink
+  or go -- the designer may re-settle it. Needs a designer step that reads
+  the solve's record (`planned.layout.moved`).
 - **A fixture the plan lists, given a new id, is two.** An answer that leaves
   a listed fixture out has it kept as the plan holds it, unpinned; an answer
   that gives it a new id as well leaves the plan's and the new one, because

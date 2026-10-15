@@ -1606,7 +1606,8 @@ def test_a_re_plan_the_answers_cannot_solve_costs_one_attempt_then_waits(temp_db
     for room in rooms.values():
         room.pop("structure", None)
     plant_structure(cid, {"key": "town", "name": "Town"}, rooms)
-    monkeypatch.setattr(lb, "refusals", lambda building, spec, layout: ["a refusal the test forces"])
+    monkeypatch.setattr(lb, "refusals",
+                        lambda building, spec, layout, **_kw: ["a refusal the test forces"])
     job_copy = copy.deepcopy(sc)
     apply_solved_plans(cid, job_copy)
     (b,) = lb.plan_buildings(_planned_specs(cid), job_copy,
@@ -1860,7 +1861,7 @@ def test_a_building_the_search_missed_on_one_seed_is_tried_on_the_next(monkeypat
         return f"layout{seed}"
 
     monkeypatch.setattr(lb, "solve", fake_solve)
-    monkeypatch.setattr(lb, "refusals", lambda building, spec, layout: plans[layout][0])
+    monkeypatch.setattr(lb, "refusals", lambda building, spec, layout, **_kw: plans[layout][0])
     monkeypatch.setattr(lb, "unlanded", lambda spec, layout: plans[layout][1])
 
     def run(*table):

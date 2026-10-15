@@ -60,11 +60,14 @@ THE SPEC (what the model writes; `tools/layout_lab/run.py` holds the prompt):
      "stairs": [{"id", "name", "from", "to", "enclosed": bool, "door"?: str,
                  "from_at"?, "to_at"?, "kind"?: "straight|spiral|ladder"}],
      "grounds": {"areas": [{"id", "name", "kind", "where": "around|n|e|s|w"}],
-                 "ways": [{"id", "name", "from": "entrance" | way_id, "to"?: feature_id}],
+                 "ways": [{"id", "name", "from"?: "entrance" | "door" | way_id | area_id,
+                           "side"?: "n|e|s|w", "to"?: feature_id}],
                  "features": [{"id", "name", "kind", "size"?, "count"?,
                                "across"?: way_id, "flank"?: way_id, "along"?: way_id,
                                "end"?: "far|near", "by"?: id | "entrance",
-                               "side"?: "n|e|s|w"}]},
+                               "side"?: "n|e|s|w", "in"?: area_id, "round"?: bool,
+                               "at_door"?: {"room", "onto"}, "reach"?: [way_id]}],
+                 "narrowest"?: paces},
      "elsewhere": [{"name", "why", "via"?}]}
 
 Units are paces (0.75 m), the engine's own.
@@ -154,6 +157,29 @@ TRIES = 600
 WAY_WIDTH = 3
 FRONT_REACH = 10
 SIDE_MARGIN = 5
+#: How far a way that leaves the grounds -- one the plan joins to open
+#: ground and not to the house -- is laid past their edge: the approach's
+#: own reach (`FRONT_REACH`). Named per ask-before-limiting.
+WAY_BEYOND = 10
+#: How far a thing standing at a door may reach over open ground to the way
+#: the plan also joins it to, its door turning to bring it within (Home 9's
+#: well, from the kitchen's back door to the path). Named per
+#: ask-before-limiting.
+REACH_MAX = 2
+#: How far apart, in paces along a room's outside wall, a thing's own door
+#: stands from the room's other outside doors (`_place_doors`): at two the
+#: thing's step lies outside the other door's ground (`_grounds`' aprons).
+#: Named per ask-before-limiting.
+THING_DOOR_GAP = 2
+#: Paces between two outbuildings the plan bears the same way
+#: (`_place_blocks`): one pace between them is ground no place is read to
+#: hold, and a door opening into it opened onto nothing (a review of
+#: 2026-10-14). Named per ask-before-limiting.
+BLOCK_GAP = 2
+#: How far round a way that leaves the grounds the ground is opened, for
+#: what stands across it, by it or at its end -- the room a pair of posts or
+#: a lantern needs beside a three-pace way. Named per ask-before-limiting.
+LEAVING_GROUND = 3
 #: A storey above or below the ground that needs less than PART_SHARE of its
 #: block's outline (its need taken at PART_SLACK, room to move) covers only
 #: part of the building.
@@ -237,6 +263,57 @@ def _connected(free, required):
         x, y = c
         stack.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
     return all(c in seen for c in required)
+
+
+def _block(o):
+    """The two-by-two block whose top-left cell is `o`."""
+    return {(o[0], o[1]), (o[0] + 1, o[1]), (o[0], o[1] + 1), (o[0] + 1, o[1] + 1)}
+
+
+def _round_cells(w, d):
+    """The cells of a round thing `w` by `d` paces, as the world reads it --
+    the world's own reader (`spatial_fov.room_grid`, the round shape: the
+    inscribed ellipse), asked of a box with no site. Read only for a thing
+    the bridge marks round; the lab marks none."""
+    key = (int(w), int(d))
+    if key not in _ROUND_CELLS:
+        from world.spatial import room_grid
+        stub = {"name": "_", "shape": "round", "extent": {"w": key[0], "d": key[1]}}
+        _ROUND_CELLS[key] = frozenset(room_grid({"rooms": {"_": stub}}, "_").cells)
+    return _ROUND_CELLS[key]
+
+
+_ROUND_CELLS = {}
+
+
+def _wide_route(walk, starts, goal):
+    """The shortest route two paces wide through `walk`: a chain of
+    two-by-two blocks, each a pace on from the last, from one whose origin
+    is in `starts` to one `goal` accepts (it is handed the origin) -- the
+    union of those blocks, or an empty set. The world reads no part of a
+    place narrower than two paces (`layout_bridge._cover`), so a way laid a
+    pace wide was written as nothing: every branch way, and a walk wherever
+    it ran between a wall and a thing (a review of 2026-10-14)."""
+    starts = sorted(o for o in set(starts) if _block(o) <= walk)
+    prev = {o: None for o in starts}
+    frontier, hit = starts, None
+    while frontier and hit is None:
+        nxt = []
+        for o in frontier:
+            if goal(o):
+                hit = o
+                break
+            for dx, dy in _STEP.values():
+                n = (o[0] + dx, o[1] + dy)
+                if n not in prev and _block(n) <= walk:
+                    prev[n] = o
+                    nxt.append(n)
+        frontier = nxt
+    cells = set()
+    while hit is not None:
+        cells |= _block(hit)
+        hit = prev[hit]
+    return cells
 
 
 def _shared_wall(a: Rect, b: Rect):
@@ -645,6 +722,47 @@ def _place_blocks(spec, rooms, shafts, front, layout):
                 r = Rect(a.x + a.w + gap, a.y + (a.d - d) // 2, w, d)
             else:
                 r = Rect(a.x - w - gap, a.y + (a.d - d) // 2, w, d)
+            # TOWARD ONE END OF THAT SIDE: an outbuilding the plan joins to
+            # open ground on this side stands toward the end the plan bears
+            # it to, past the anchor's corner, never across its front
+            toward = str(decl.get("toward") or "")[:1]
+            if toward in _SIDES and toward not in (side, _OPP[side]):
+                if toward == "w":
+                    r = Rect(a.x - w, r.y, w, d)
+                elif toward == "e":
+                    r = Rect(a.x + a.w, r.y, w, d)
+                elif toward == "n":
+                    r = Rect(r.x, a.y - d, w, d)
+                else:
+                    r = Rect(r.x, a.y + a.d, w, d)
+            # TWO BLOCKS NEVER STAND ON ONE RECTANGLE: one the plan bears the
+            # same way as another stands on past it (a review of 2026-10-14:
+            # two outbuildings on one bearing were laid on one rectangle and
+            # one was always dropped)
+            if decl.get("apart"):
+                way = toward if toward in _SIDES and toward not in (side, _OPP[side]) \
+                    else {"n": "e", "s": "e", "e": "s", "w": "s"}[side]
+                sx, sy = _STEP[way]
+
+                def crowds(p, r):
+                    # on it, or one pace off it face to face: ground no place
+                    # is read to hold, and a door into it opened onto nothing
+                    if r.cells() & p.cells():
+                        return True
+                    gx = max(p.x - (r.x + r.w), r.x - (p.x + p.w))
+                    gy = max(p.y - (r.y + r.d), r.y - (p.y + p.d))
+                    return (gx == 1 and gy < 0) or (gy == 1 and gx < 0)
+
+                # a block standing only below ground crowds nothing on it:
+                # an outbuilding over a cavern's footprint was moved off it,
+                # and the lab's shrine with it, by the order its rooms came
+                # in (a review of 2026-10-14)
+                standing = [p for pb, p in placed.items()
+                            if any(lv >= 0 for lv in blocks.get(pb) or (0,))]
+                for _step in range(len(placed) + 1):
+                    if not any(crowds(p, r) for p in standing):
+                        break
+                    r = Rect(r.x + sx * (w + BLOCK_GAP), r.y + sy * (d + BLOCK_GAP), w, d)
             # a block attached on the front or back keeps the building's front line
             placed[b] = r
             pending.remove(b)
@@ -1301,8 +1419,11 @@ def solve(spec, seed=SEED) -> Layout:
     every = dict(rooms)
     every.update(halls)
     grounds = spec.get("grounds") or {}
+    # a thing at a door (`at_door`) is opened onto by a door of its own
+    things = {str(f.get("id")) for f in grounds.get("features") or ()
+              if isinstance(f, dict) and isinstance(f.get("at_door"), dict)}
     outdoor_ids = {str(x.get("id")) for key in ("areas", "ways") for x in grounds.get(key) or ()
-                   if isinstance(x, dict)}
+                   if isinstance(x, dict)} | things
 
     # rooms that open outdoors, and on which side: the entrance on the front
     outward, outward_weight = {"_front": front}, {}
@@ -1522,8 +1643,8 @@ def solve(spec, seed=SEED) -> Layout:
             "halls": {str(lv): f"{sh.id}@{lv}" for lv in sh.levels}})
 
     approaches = {str(w.get("id")) for w in grounds.get("ways") or ()
-                  if isinstance(w, dict) and str(w.get("from") or "entrance") == "entrance"}
-    _place_doors(layout, every, outdoor_ids, approaches)
+                  if isinstance(w, dict) and str(w.get("from") or "") == "entrance"}
+    _place_doors(layout, every, outdoor_ids, approaches, things)
     _place_windows(layout, every)
     _place_zones(layout, every)
     _furnish(layout, every)
@@ -1639,10 +1760,13 @@ def _stair_doorways(layout, per_wall):
     return out
 
 
-def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset()):
+def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=frozenset()):
     """One doorway per join between rooms, spread along a shared wall in
     declared order; a doorway onto every enclosed stairwell; the entrance
-    and every other outside door on the outside wall asked."""
+    and every other outside door on the outside wall asked, one a wall --
+    save a door onto a thing at a door (`things`), laid after the rest on the
+    wall asked where a cell of it stands `THING_DOOR_GAP` paces clear of the
+    room's other outside doors, else on another wall."""
     per_wall = {}
     done = set()
     for lv, parts in layout.floors.items():
@@ -1710,22 +1834,36 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset()):
             continue
         r = room[0]
         house = outside.get(lv, set())
-        seen_sides = set()
-        for target, side, kind in items:
+        seen_sides, used = set(), []
+        for target, side, kind in sorted(items, key=lambda t: t[0] in things):
             for sd in ([side] if side else []) + [x for x in _SIDES if x != side]:
                 dx, dy = _STEP[sd]
                 cells = [c for c in sorted(r.cells()) if (c[0] + dx, c[1] + dy) not in house
                          and (c[0] + dx, c[1] + dy) not in r.cells()]
                 cells = [c for c in cells if c not in _solid(layout, lv)]
-                if sd in seen_sides or not cells:
+                if target in things:
+                    # A THING AT A DOOR HAS A DOOR OF ITS OWN, clear of the
+                    # room's other doors' ground: one door carrying two of the
+                    # plan's ways met only one of them (a review of 2026-10-14)
+                    def gap(c):
+                        return min((abs(c[0] - u[0]) + abs(c[1] - u[1]) for u in used),
+                                   default=THING_DOOR_GAP)
+                    clear = [c for c in cells if gap(c) >= THING_DOOR_GAP]
+                    if not clear:
+                        continue
+                    mid = len(cells) // 2
+                    pos = min(clear, key=lambda c: abs(cells.index(c) - mid))
+                elif sd in seen_sides or not cells:
                     continue
-                pos = cells[len(cells) // 2]
+                else:
+                    pos = cells[len(cells) // 2]
                 if side and sd != side:
                     layout.warnings.append(f"{layout.names[rid]} opens to {target} on its {sd} side, "
                                            f"not the {side} asked")
                 layout.doors.append({"a": rid, "b": target, "level": lv, "side": sd,
                                      "cell": list(pos), "kind": kind, "outside": True})
                 seen_sides.add(sd)
+                used.append(tuple(pos))
                 break
             else:
                 layout.warnings.append(f"{layout.names[rid]} has no outside wall to open to {target}")
@@ -2134,6 +2272,294 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
 
 # ------------------------------------------------------------ the grounds
 
+def _things_at_doors(layout, rooms, feats, free, place, foot=fixture_footprint):
+    """THINGS AT DOORS: each feature the plan joins to a room of the building
+    (`at_door`, the bridge's) stands across that room's door onto it -- a
+    door of its own (`_place_doors`), the cell outside it one of its cells --
+    clear of every other door's step and ground. Where the plan also joins it to a way (`reach`), the
+    door may move along its room's outside walls, or turn to another wall
+    no fixture, window or other doorway holds, so the thing stands within
+    `REACH_MAX` paces of the way, its own ground laid over the gap (Home 9's
+    well, from the kitchen's back door to the path). A turned wall is a
+    wish the solve answered (`layout_bridge.planned_layout`'s `sides`).
+    Returns the ids it placed, or found no room for."""
+    done = set()
+    steps = {}
+    for door in layout.doors:
+        if door.get("outside") and door["side"] in _STEP:
+            sx, sy = _STEP[door["side"]]
+            steps[id(door)] = (door["cell"][0] + sx, door["cell"][1] + sy)
+    house = set()
+    for _block, levels in layout.outlines.items():
+        if 0 in levels:
+            house |= levels[0].cells()
+    for f in feats:
+        at = f.get("at_door") if isinstance(f.get("at_door"), dict) else None
+        if not at:
+            continue
+        done.add(f["id"])
+        door = next((x for x in layout.doors if x.get("outside") and x["a"] == at.get("room")
+                     and x["b"] == f["id"]), None)
+        floor = (layout.floors.get((rooms.get(at.get("room")) or {}).get("level", 0)) or {}) \
+            .get(at.get("room"))
+        if door is None or not floor or door["side"] not in _STEP:
+            layout.warnings.append(f"{layout.names[f['id']]}: no door of {at.get('room')} opens onto it")
+            continue
+        room = floor[0]
+        w, d, _h = foot(f)
+        reach = [layout.ways[k]["cells"] for k in (f.get("reach") or ())
+                 if k in layout.ways and layout.ways[k].get("cells")]
+        held = set()
+        for fx in layout.fixtures.get(at["room"]) or ():
+            held |= fx["rect"].cells()
+        lit = {tuple(wn["cell"]) for wn in layout.windows if wn["room"] == at["room"]}
+        # each other doorway of the room by the cell on THIS room's side of it
+        # (a doorway the neighbour wrote stands in the neighbour's cell)
+        others = set()
+        for x in layout.doors:
+            if x is door or at["room"] not in (x["a"], x["b"]) or x["side"] not in _STEP:
+                continue
+            if x["a"] == at["room"]:
+                others.add(tuple(x["cell"]))
+            else:
+                ox, oy = _STEP[x["side"]]
+                others.add((x["cell"][0] + ox, x["cell"][1] + oy))
+        other_steps = {s for k, s in steps.items() if k != id(door)}
+        floor_left = set(room.cells()) - held
+
+        def gap(cells):
+            if not reach:
+                return 0
+            return min(min(abs(a - c) + abs(b - e) for a, b in cells for c, e in way) - 1
+                       for way in reach)
+
+        def run(rect):
+            """The straight run of the thing's own ground from its nearest
+            cell toward the way's nearest -- what bridges the gap."""
+            (x0, y0), goal = min(((a, b) for a in rect.cells() for way in reach for b in way),
+                                 key=lambda q: (abs(q[0][0] - q[1][0]) + abs(q[0][1] - q[1][1]), q))
+            cells = []
+            while abs(x0 - goal[0]) + abs(y0 - goal[1]) > 1:
+                if x0 != goal[0]:
+                    x0 += 1 if goal[0] > x0 else -1
+                else:
+                    y0 += 1 if goal[1] > y0 else -1
+                cells.append((x0, y0))
+            return cells
+
+        def search(sides):
+            best = None
+            for side in sides:
+                turned = side != door["side"]
+                sx, sy = _STEP[side]
+                for c in sorted(room.cells()):
+                    if (c[0] + sx, c[1] + sy) in house:
+                        continue            # no outside wall there
+                    mine = side == door["side"] and tuple(c) == tuple(door["cell"])
+                    if not mine and (c in held or (c[0] - sx, c[1] - sy) in held
+                                     or c in lit or c in others
+                                     or not _connected(floor_left, [c] + sorted(others))):
+                        # a door moved never opens into a pocket the room's
+                        # furniture walls off from its other doorways
+                        continue
+                    t = (c[0] + sx, c[1] + sy)
+                    for ww, dd in sorted({(w, d), (d, w)}):
+                        for x in range(t[0] - ww + 1, t[0] + 1):
+                            for y in range(t[1] - dd + 1, t[1] + 1):
+                                rect = Rect(x, y, ww, dd)
+                                cells = rect.cells()
+                                if not free(rect, door) or cells & other_steps:
+                                    continue
+                                if f.get("round") and (t[0] - x, t[1] - y) not in _round_cells(ww, dd):
+                                    # A ROUND THING'S STEP IS A CELL ITS CIRCLE
+                                    # HOLDS: a corner of its box is no part of
+                                    # it as the world reads it, and a door
+                                    # onto one opened onto nothing (a review
+                                    # of 2026-10-14)
+                                    continue
+                                g = gap(cells)
+                                if 0 < g <= REACH_MAX and not all(
+                                        free(Rect(a, b, 1, 1), door) for a, b in run(rect)):
+                                    g += REACH_MAX      # a run through the house bridges nothing
+                                along = abs(x + ww / 2 - (t[0] + 0.5)) if side in "ns" \
+                                    else abs(y + dd / 2 - (t[1] + 0.5))
+                                score = (g > REACH_MAX, g, turned, 0 if mine else 1, along)
+                                if best is None or score < best[0]:
+                                    best = (score, rect, c, side, g)
+            return best
+
+        best = search([door["side"]] + [s for s in _SIDES if s != door["side"]]
+                      if reach else [door["side"]])
+        if best is None:
+            # NOTHING FITS AT THE DOOR ON ITS WALL: the door turns to another
+            # wall of its room, as a door for reach does -- with its own door
+            # beside another on one wall, a large round thing found no place
+            # its step was its own (a review of 2026-10-14)
+            best = search([s for s in _SIDES if s != door["side"]])
+        if best is None:
+            layout.warnings.append(f"{layout.names[f['id']]} found no room at the door of "
+                                   f"{layout.names.get(at['room'], at['room'])}")
+            continue
+        _score, rect, c, side, g = best
+        if (side, tuple(c)) != (door["side"], tuple(door["cell"])):
+            door["cell"], door["side"] = list(c), side
+            steps[id(door)] = (c[0] + _STEP[side][0], c[1] + _STEP[side][1])
+        place(f, rect)
+        if reach and 0 < g <= REACH_MAX:
+            # its own ground over the gap: a straight run of it from its
+            # nearest cell toward the way's
+            for a, b in run(rect):
+                cell = Rect(a, b, 1, 1)
+                if free(cell, door):
+                    place(dict(f), cell)
+    return done
+
+
+def _parts(cells):
+    """How many pieces `cells` falls into, side by side."""
+    left, n = set(cells), 0
+    while left:
+        n += 1
+        stack = [left.pop()]
+        while stack:
+            c = stack.pop()
+            for nb in ((c[0] + 1, c[1]), (c[0] - 1, c[1]), (c[0], c[1] + 1), (c[0], c[1] - 1)):
+                if nb in left:
+                    left.discard(nb)
+                    stack.append(nb)
+    return n
+
+
+def _doors_onto_their_ground(layout, rooms, open_cells, around=None):
+    """A DOOR ONTO OPEN GROUND OPENS ONTO IT. A room whose wall facing its
+    ground is another room's -- a stair hall along the whole back of the
+    house -- had its door turned to a wall that faces some other ground, or
+    none: the hall's door onto the yard behind it opened beside the house
+    onto ground no area held, and the floor dropped the yard (a review of
+    2026-10-14). Where the step is ground no area holds, that ground beside
+    the house is the area's, reaching it round the corner; where it is
+    another area's, the door moves to a wall cell of its room whose step is
+    its own ground -- no fixture's, window's or other doorway's, joined to
+    the room's other doorways through its floor -- nearest where it stood.
+    And where no wall of its room faces its ground and the step is the ground
+    round the house (`around`), the strip of that ground beside the house on
+    the door's side is its ground, reaching its band round the corner --
+    where the ground round the house stays one floor without it (a garden
+    behind a hall whose back wall is a stair hall was dropped, the hall's
+    door onto it opening into the court; a review of 2026-10-14)."""
+    held_by = {}
+    for aid, cells in layout.areas.items():
+        for c in cells:
+            held_by[c] = aid
+    house = set()
+    for _block, levels in layout.outlines.items():
+        if 0 in levels:
+            house |= levels[0].cells()
+    for door in layout.doors:
+        aid = door.get("b")
+        if not door.get("outside") or aid not in layout.areas or door["side"] not in _STEP \
+                or door.get("level", 0) != 0:
+            continue
+        sx, sy = _STEP[door["side"]]
+        t = (door["cell"][0] + sx, door["cell"][1] + sy)
+        if held_by.get(t) == aid:
+            continue
+        if t not in held_by and t in open_cells:
+            # the ground beside the house no area holds, as far as it runs
+            part, stack = set(), [t]
+            while stack:
+                c = stack.pop()
+                if c in part or c not in open_cells or c in held_by:
+                    continue
+                part.add(c)
+                stack.extend((c[0] + dx, c[1] + dy) for dx, dy in _STEP.values())
+            if any((c[0] + dx, c[1] + dy) in layout.areas[aid] for c in part
+                   for dx, dy in _STEP.values()):
+                layout.areas[aid] |= part
+                for c in part:
+                    held_by[c] = aid
+                continue
+        room_id = door["a"]
+        floor = (layout.floors.get(0) or {}).get(room_id)
+        if not floor:
+            continue
+        room = floor[0]
+        held = set()
+        for fx in layout.fixtures.get(room_id) or ():
+            held |= fx["rect"].cells()
+        lit = {tuple(wn["cell"]) for wn in layout.windows if wn["room"] == room_id}
+        others = set()
+        for x in layout.doors:
+            if x is door or room_id not in (x["a"], x["b"]) or x["side"] not in _STEP:
+                continue
+            if x["a"] == room_id:
+                others.add(tuple(x["cell"]))
+            else:
+                ox, oy = _STEP[x["side"]]
+                others.add((x["cell"][0] + ox, x["cell"][1] + oy))
+        steps = set()
+        for x in layout.doors:
+            if x is not door and x.get("outside") and x["side"] in _STEP:
+                steps.add((x["cell"][0] + _STEP[x["side"]][0], x["cell"][1] + _STEP[x["side"]][1]))
+        floor_left = set(room.cells()) - held
+        outside_doors = {tuple(x["cell"]) for x in layout.doors
+                         if x is not door and x.get("outside") and x["a"] == room_id}
+        best = None
+        for side in _SIDES:
+            dx, dy = _STEP[side]
+            for c in sorted(room.cells()):
+                step = (c[0] + dx, c[1] + dy)
+                if held_by.get(step) != aid or step in house or step in steps:
+                    continue
+                if c in held or (c[0] - dx, c[1] - dy) in held or c in lit or c in others \
+                        or not _connected(floor_left, [c] + sorted(others)):
+                    continue
+                # never beside the room's other outside doors where a cell
+                # further off will do: moved a pace from a thing's own door,
+                # its step fell in this door's ground (a review of 2026-10-14)
+                near = any(abs(c[0] - u[0]) + abs(c[1] - u[1]) < THING_DOOR_GAP
+                           for u in outside_doors)
+                score = (near, side != door["side"],
+                         abs(c[0] - door["cell"][0]) + abs(c[1] - door["cell"][1]))
+                if best is None or score < best[0]:
+                    best = (score, c, side)
+        if best is not None:
+            _score, c, side = best
+            if side != door["side"]:
+                layout.warnings.append(f"{layout.names.get(room_id, room_id)} opens to "
+                                       f"{layout.names.get(aid, aid)} on its {side} side, "
+                                       f"the side its ground lies")
+            door["cell"], door["side"] = list(c), side
+            continue
+        block = (layout.outlines.get((rooms.get(room_id) or {}).get("block")) or {}).get(0)
+        if around and held_by.get(t) == around and around in layout.areas and block is not None:
+            hb = block          # beside the door's own building, never an outbuilding's
+            side = door["side"]
+
+            def beside(c):
+                if side in ("w", "e"):
+                    out = c[0] < hb.x if side == "w" else c[0] >= hb.x + hb.w
+                    return out and hb.y <= c[1] < hb.y + hb.d
+                out = c[1] < hb.y if side == "n" else c[1] >= hb.y + hb.d
+                return out and hb.x <= c[0] < hb.x + hb.w
+
+            strip, stack = set(), [t]
+            while stack:
+                c = stack.pop()
+                if c in strip or held_by.get(c) != around or not beside(c):
+                    continue
+                strip.add(c)
+                stack.extend((c[0] + dx, c[1] + dy) for dx, dy in _STEP.values())
+            rest = layout.areas[around] - strip
+            if strip and rest and _parts(rest) <= _parts(layout.areas[around]) and any(
+                    (c[0] + dx, c[1] + dy) in layout.areas[aid] for c in strip
+                    for dx, dy in _STEP.values()):
+                layout.areas[around] = rest
+                layout.areas[aid] |= strip
+                for c in strip:
+                    held_by[c] = aid
+
+
 def _grounds(layout, rooms, grounds):
     """The building stands in a plot. The approach runs from the entrance
     out of the front; features stand in the open by their relation; areas
@@ -2147,13 +2573,45 @@ def _grounds(layout, rooms, grounds):
         return
     hb = _bbox(house)
     front = layout.front
+    # THE NARROWEST A PLACE IS LAID: the world reads no place narrower than
+    # two paces, and asks for every thing and walk and branch way at least
+    # that wide (`narrowest`, the bridge's) -- a thing laid a pace deep was
+    # widened on writing onto the ground the solver kept at a door, and the
+    # thing was dropped (a review of 2026-10-14); the lab lays them as it
+    # always has
+    narrowest = max(1, int(grounds.get("narrowest") or 1))
+    wide = narrowest >= 2
+
+    def foot(f):
+        w, d, h = fixture_footprint(f)
+        return max(w, narrowest), max(d, narrowest), h
+
     margin = {s: SIDE_MARGIN for s in _SIDES}
     margin[front] = FRONT_REACH + 2
     for f in grounds.get("features") or ():
         if isinstance(f, dict) and str(f.get("side") or "")[:1] in _SIDES:
-            w, d, _h = fixture_footprint(f)
+            w, d, _h = foot(f)
             sd = str(f["side"])[:1]
             margin[sd] = max(margin[sd], max(w, d) + 4)
+        at = f.get("at_door") if isinstance(f, dict) and isinstance(f.get("at_door"), dict) else None
+        if at:
+            # room on the door's side for the thing that stands at it, and
+            # two paces past it -- and on every outside wall of its room,
+            # which its door may turn to (`_things_at_doors`): turned to a
+            # wall the plot reached five paces past, a round yew six across
+            # found no room (a review of 2026-10-14)
+            dr = next((x for x in layout.doors if x.get("outside") and x["a"] == at.get("room")
+                       and x["b"] == f.get("id")), None)
+            if dr is not None:
+                w, d, _h = foot(f)
+                walls = {dr["side"]}
+                fl = (layout.floors.get((rooms.get(at.get("room")) or {}).get("level", 0)) or {}) \
+                    .get(at.get("room"))
+                if fl:
+                    walls |= {sd for sd in _SIDES if any(
+                        (c[0] + _STEP[sd][0], c[1] + _STEP[sd][1]) not in house for c in fl[0].cells())}
+                for sd in walls:
+                    margin[sd] = max(margin[sd], max(w, d) + 2)
     site = Rect(hb.x - margin["w"], hb.y - margin["n"], hb.w + margin["w"] + margin["e"],
                 hb.d + margin["n"] + margin["s"])
     layout.site = site
@@ -2169,49 +2627,213 @@ def _grounds(layout, rooms, grounds):
     feats = [f for f in grounds.get("features") or () if isinstance(f, dict) and f.get("id")]
     for f in feats:
         layout.names[f["id"]] = f.get("name") or f["id"]
+    area_ids = {str(a.get("id")) for a in grounds.get("areas") or () if isinstance(a, dict)}
+    def out_of(dr, clear=frozenset()):
+        """A way three wide straight out of a door, to the plot's edge."""
+        side = dr["side"]
+        dx, dy = _STEP[side]
+        x, y = dr["cell"]
+        out = (x + dx, y + dy)
+        if side in "ns":
+            row = [(out[0] + k, out[1]) for k in (-1, 0, 1)]
+        else:
+            row = [(out[0], out[1] + k) for k in (-1, 0, 1)]
+        cells, rows = set(), []
+        while True:
+            row = [c for c in row if c in open_ground and c not in clear]
+            if not row:
+                break
+            cells.update(row)
+            rows.append(row)
+            row = [(a + dx, b + dy) for a, b in row]
+        return {"cells": cells, "side": side, "rows": rows}
+
+    from_doors = []
     for w in ways:
         joined_by = [d for d in layout.doors if d.get("outside") and d["b"] == w["id"]]
-        start = str(w.get("from") or ("" if joined_by else "entrance"))
+        # a way with no start is no approach: one the plan joins only to
+        # open ground leaves it (below, once the ground is laid)
+        start = str(w.get("from") or "")
         if start == "entrance" and joined_by and any(v.get("rows") for v in layout.ways.values()):
             # the entrance has its approach already; a way rooms open onto
             # runs between their doors
             start = ""
         if start == "entrance" and door is not None:
-            side = door["side"]
-            dx, dy = _STEP[side]
-            x, y = door["cell"]
-            out = (x + dx, y + dy)
-            if side in "ns":
-                row = [(out[0] + k, out[1]) for k in (-1, 0, 1)]
-            else:
-                row = [(out[0], out[1] + k) for k in (-1, 0, 1)]
-            cells, rows = set(), []
-            while True:
-                row = [c for c in row if c in open_ground]
-                if not row:
-                    break
-                cells.update(row)
-                rows.append(row)
-                row = [(a + dx, b + dy) for a, b in row]
-            layout.ways[w["id"]] = {"cells": cells, "side": side, "rows": rows}
-            taken |= cells
-        elif start in layout.ways or joined_by:
-            pass   # a branch, or a way between doors: laid below
+            layout.ways[w["id"]] = out_of(door)
+            taken |= layout.ways[w["id"]]["cells"]
+        elif start == "door" and len(joined_by) == 1 and joined_by[0]["side"] in _STEP:
+            from_doors.append((w, joined_by[0]))
+        elif start in layout.ways or joined_by or start in area_ids:
+            pass   # a branch, a way between doors, or one leaving open ground: laid below
         else:
             layout.warnings.append(f"{layout.names[w['id']]} has nothing to run from")
+    # A WAY ONE DOOR OPENS ONTO, AND NO OTHER (`from: door`, the bridge's):
+    # out of that door as the approach runs out of the entrance's, after it
+    # and clear of it
+    for w, dr in from_doors:
+        laid = out_of(dr, clear=taken | house)
+        if not laid["rows"]:
+            layout.warnings.append(f"{layout.names[w['id']]} has no ground to run out of its door")
+            continue
+        layout.ways[w["id"]] = laid
+        taken |= laid["cells"]
+
+    # AREAS: open ground. One on a named side takes the plot beyond the
+    # building on that side; the one it stands `around` takes the rest.
+    areas = [a for a in grounds.get("areas") or () if isinstance(a, dict) and a.get("id")]
+    for a in areas:
+        layout.names[a["id"]] = a.get("name") or a["id"]
+    rest = set(open_ground)
+    around = next((a for a in areas if str(a.get("where") or "") == "around"), None)
+    # A BAND IS MEASURED FROM THE BUILDING THE ENTRANCE IS IN: an outbuilding
+    # standing apart on that side stands in it, never past it (Home 10's
+    # storehouse, at the court's west end)
+    entrance_block = layout.blocks.get((layout.entrance or {}).get("room"))
+    mb = (layout.outlines.get(entrance_block) or {}).get(0) or hb
+    for a in areas:
+        sd = str(a.get("where") or "")[:1]
+        if a is around or sd not in _SIDES:
+            continue
+        band = {c for c in rest if (sd == "n" and c[1] < mb.y) or (sd == "s" and c[1] >= mb.y + mb.d)
+                or (sd == "w" and c[0] < mb.x) or (sd == "e" and c[0] >= mb.x + mb.w)}
+        layout.areas[a["id"]] = band
+        rest -= band
+    if around is None and areas:
+        around = next((a for a in areas if a["id"] not in layout.areas), None)
+    if around is not None:
+        layout.areas[around["id"]] = rest
+    _doors_onto_their_ground(layout, rooms, open_ground - taken,
+                             around=around["id"] if around is not None else None)
+
+    # A WAY THAT LEAVES OPEN GROUND -- one the plan joins to open ground and
+    # not to the house -- runs on from that ground's far edge on its side,
+    # WAY_BEYOND paces past the plot, never through the ground it leaves, in
+    # line with the entrance where the entrance opens onto that ground (Home
+    # 10's path, south of its court in line with the great doors)
+    mouths = set()
+    for w in ways:
+        area = str(w.get("from") or "")
+        if area not in layout.areas or w["id"] in layout.ways or not layout.areas[area]:
+            continue
+        cells_a = layout.areas[area]
+        asked = str(w.get("side") or "")[:1]
+        if asked not in _SIDES:
+            # unsaid, it leaves on the side its ground lies, the front only
+            # for ground round the building (a review of 2026-10-14: a band
+            # behind the house was left toward the front, through the house)
+            asked = str(next((a.get("where") for a in areas if a["id"] == area), "") or "")[:1]
+        if asked not in _SIDES:
+            asked = front
+        # NEVER OVER A BUILDING, ANOTHER WAY OR ANOTHER GROUND: from the place
+        # on its ground's far edge nearest the one asked whose rows run clear,
+        # on the side asked where one does, else on another side of its ground
+        # -- run straight on, a lane went through a storehouse standing in the
+        # band beyond its ground, and one through the court beyond the garden
+        # it left (two reviews of 2026-10-14)
+        elsewhere = set().union(*(c for a, c in layout.areas.items() if a != area)) \
+            if len(layout.areas) > 1 else set()
+        chosen = None
+        for side in [asked] + [x for x in _SIDES if x not in (asked, _OPP[asked])] + [_OPP[asked]]:
+            dx, dy = _STEP[side]
+            key = {"s": lambda c: c[1], "n": lambda c: -c[1], "e": lambda c: c[0],
+                   "w": lambda c: -c[0]}[side]
+            far = max(key(c) for c in cells_a)
+            edge = sorted(c for c in cells_a if key(c) == far)
+            along = 0 if side in "ns" else 1
+            mid = None
+            if door is not None and side == asked:
+                t = (door["cell"][0] + _STEP[door["side"]][0], door["cell"][1] + _STEP[door["side"]][1])
+                # in line with an entrance whose step is this ground -- never
+                # one whose step is a way across it, which the lane then ran on
+                # from (a review of 2026-10-14)
+                if t in cells_a and t not in taken:
+                    mid = t[along]
+            if mid is None:
+                mid = edge[len(edge) // 2][along]
+            for m in [mid] + sorted({c[along] for c in edge} - {mid}, key=lambda v: (abs(v - mid), v)):
+                span = [c for c in edge if abs(c[along] - m) <= WAY_WIDTH // 2]
+                if len(span) < 2:
+                    continue
+                rows = [[(c[0] + dx * k, c[1] + dy * k) for c in span]
+                        for k in range(1, WAY_BEYOND + 1)]
+                cells = {c for row in rows for c in row}
+                if not cells & (house | taken | elsewhere):
+                    chosen = (side, span, rows, cells)
+                    break
+            if chosen:
+                break
+        if chosen is None:
+            layout.warnings.append(f"{layout.names[w['id']]} has no edge of "
+                                   f"{layout.names[area]} to leave from clear of the buildings")
+            continue
+        side, span, rows, cells = chosen
+        dx, dy = _STEP[side]
+        if side != asked:
+            layout.warnings.append(f"{layout.names[w['id']]} leaves {layout.names[area]} on its "
+                                   f"{side} side, not the {asked} asked")
+        layout.ways[w["id"]] = {"cells": cells, "side": side, "rows": rows}
+        taken |= cells
+        # ITS MOUTH -- the edge it leaves from and the pace inside it -- is
+        # no thing's: a lantern by the way stood on it, the ground and the
+        # way no longer touched, and the way was dropped (a review of
+        # 2026-10-14)
+        mouths |= set(span) | {(c[0] - dx, c[1] - dy) for c in span}
+        # and ground round it, for what stands across it, by it or at its
+        # end: laid before every thing, so what the answers relate to it has
+        # it to stand by (a review of 2026-10-14: laid last, a gate across
+        # its end and a lantern by it stood with nothing to stand by, and
+        # the floor dropped them)
+        beside = {(c[0] + i, c[1] + j) for c in cells
+                  for i in range(-LEAVING_GROUND, LEAVING_GROUND + 1)
+                  for j in range(-LEAVING_GROUND, LEAVING_GROUND + 1)} - house
+        open_ground |= beside
+        xs = [c[0] for c in beside] + [layout.site.x, layout.site.x + layout.site.w - 1]
+        ys = [c[1] for c in beside] + [layout.site.y, layout.site.y + layout.site.d - 1]
+        layout.site = Rect(min(xs), min(ys), max(xs) - min(xs) + 1, max(ys) - min(ys) + 1)
+
+    # THE GROUND AT A DOOR: the threshold of every door onto open ground,
+    # and the cells that keep it in a two-pace block of that ground (the
+    # world reads no part narrower), are no thing's -- save the thing that
+    # stands at that very door (a review of 2026-10-14: a lantern below the
+    # entrance's threshold left it a sliver no block held, and the court
+    # lost its doorway, and with it every place reached through it)
+    # -- every door whose step is open ground, the entrance's among them; a
+    # step on a way is the way's
+    area_cells = set().union(*layout.areas.values()) if layout.areas else set()
+    way_cells = set().union(*(w["cells"] for w in layout.ways.values())) if layout.ways else set()
+
+    def aprons(but=None, keep=()):
+        """The ground kept at the doors -- every door's but `but` and those in
+        `keep` (ids) -- and at the mouths of the ways that leave the ground."""
+        out = set(mouths)
+        for dr in layout.doors:
+            if dr is but or id(dr) in keep or not dr.get("outside") or dr["side"] not in _STEP:
+                continue
+            sx, sy = _STEP[dr["side"]]
+            t = (dr["cell"][0] + sx, dr["cell"][1] + sy)
+            if dr["b"] not in layout.areas and (t not in area_cells or t in way_cells):
+                continue
+            lx, ly = (1, 0) if dr["side"] in "ns" else (0, 1)
+            out |= {(t[0] + sx * k + lx * m, t[1] + sy * k + ly * m)
+                    for k in (0, 1) for m in (-1, 0, 1)}
+        return out
 
     # FEATURES: objects in the open, by plain relations
-    def free(rc):
+    def free(rc, door=None):
         rcs = rc.cells()
-        return rcs <= open_ground and not (rcs & taken)
+        return rcs <= open_ground and not (rcs & taken) and not (rcs & aprons(door))
 
     def place(f, rect):
         layout.features.append({"id": f["id"], "name": f.get("name") or f["id"], "kind": f.get("kind"),
                                 "rect": rect, "height": fixture_footprint(f)[2]})
         taken.update(rect.cells())
 
+    at_door = _things_at_doors(layout, rooms, feats, free, place, foot=foot)
+
     for f in feats:
-        w, d, _h = fixture_footprint(f)
+        if f["id"] in at_door:
+            continue
+        w, d, _h = foot(f)
         count = max(1, int(f.get("count") or 1))
         end = str(f.get("end") or "far")
         way = next((layout.ways[k] for k in (f.get("across"), f.get("flank"), f.get("along"))
@@ -2269,16 +2891,19 @@ def _grounds(layout, rooms, grounds):
                 if free(rect):
                     place(dict(f, id=f"{f['id']}_{i + 1}"), rect)
             continue
+        # WHERE A WAY LEADS: the thing it leads `to`. A thing `by` a way is
+        # beside it, on the side the answer gives (below) -- read as the way's
+        # far end, Home 11's well stood across the path's foot with its side
+        # dropped
         led_to = next((wid for wid, w in ((x["id"], x) for x in ways)
                        if w.get("to") == f["id"] and wid in layout.ways and layout.ways[wid].get("rows")), None)
-        if led_to is None and str(f.get("by") or "") in layout.ways and layout.ways[f["by"]].get("rows"):
-            led_to = f["by"]
         if led_to is not None:
             # where a way leads: just past its far end, across its line
             way = layout.ways[led_to]
             row, side = way["rows"][-1], way["side"]
             dx, dy = _STEP[side]
             spot = None
+            given = []
             for back in range(0, len(way["rows"])):
                 row = way["rows"][-1 - back]
                 cx = sum(c[0] for c in row) / len(row)
@@ -2295,6 +2920,11 @@ def _grounds(layout, rooms, grounds):
                 # the plot ends there: the way gives up its last row to it
                 layout.ways[led_to]["cells"] -= set(row)
                 taken.difference_update(row)
+                given.append(row)
+            # ...and its rows with it: left in `rows`, a thing laid across the
+            # way's far end stood on a row that was no longer the way (Home
+            # 11's torii, off the path's line and half outside the plot)
+            way["rows"] = [r for r in way["rows"] if not any(r is g for g in given)]
             if spot is None:
                 layout.warnings.append(f"{layout.names[f['id']]} found no room at the end of {layout.names[led_to]}")
             else:
@@ -2308,15 +2938,48 @@ def _grounds(layout, rooms, grounds):
             anchor = layout.floors[rooms[target]["level"]][target][0].cells()
         elif target in layout.ways:
             anchor = layout.ways[target]["cells"]
+            rows = layout.ways[target].get("rows") or []
+            end = str(f.get("end") or "")
+            if end in ("far", "near") and rows:
+                # by the way at one end of it: those rows are where it stands
+                ends = rows[-3:] if end == "far" else rows[:3]
+                anchor = {c for row in ends for c in row} or anchor
         elif any(x["id"] == target for x in layout.features):
             anchor = next(x["rect"] for x in layout.features if x["id"] == target).cells()
         side = str(f.get("side") or "")[:1]
+        # BY OPEN GROUND: in it, placed as a thing by nothing is -- as far
+        # from everything as that ground allows; anywhere, where no room in
+        # it is free (a lantern joined to a garden alone stood where no garden
+        # was; a review of 2026-10-14). A thing the plan joins to open ground
+        # alone stands IN it (`in`, the bridge's), by whatever it stands by,
+        # on the side asked where that ground lies there and anywhere in it
+        # where it does not
+        inside = layout.areas.get(str(f.get("in") or "")) or (
+            layout.areas.get(target) if anchor is None and target in layout.areas else None)
+        tries = [(inside, side)] + ([(inside, "")] if inside and side in _SIDES else []) + \
+            ([(None, side)] if inside else [])
         best = None
-        for ww, dd in {(w, d), (d, w)}:
-            for x in range(site.x, site.x + site.w - ww + 1):
-                for y in range(site.y, site.y + site.d - dd + 1):
+        # a thing by something may stand on the ground a way leaving the plot
+        # opened round it (`LEAVING_GROUND`); one by nothing keeps to the plot
+        scan = layout.site if anchor is not None else site
+        run = str((layout.ways.get(target) or {}).get("side") or "")[:1]
+
+        def beside(sd):
+            """Whether standing on side `sd` of the anchor means beside it,
+            within its length: across a way's line (along it is past an
+            end), by a room or a thing -- never by a doorstep, which stands
+            against the wall"""
+            if target in layout.ways:
+                return run in _SIDES and sd not in (run, _OPP[run])
+            return target != "entrance"
+        for ww, dd, within, side in [(ww, dd, within, sd) for within, sd in tries
+                                     for ww, dd in {(w, d), (d, w)}]:
+            if best is not None and (within, side) != best[2]:
+                break
+            for x in range(scan.x, scan.x + scan.w - ww + 1):
+                for y in range(scan.y, scan.y + scan.d - dd + 1):
                     rect = Rect(x, y, ww, dd)
-                    if not free(rect):
+                    if not free(rect) or (within is not None and not rect.cells() <= within):
                         continue
                     # keep a pace of open ground round it from the walls
                     halo = {(a + dx, b + dy) for a, b in rect.cells() for dx, dy in _STEP.values()}
@@ -2328,11 +2991,20 @@ def _grounds(layout, rooms, grounds):
                         if side in _SIDES:
                             # BY SOMETHING, ON A SIDE OF IT -- a well by the
                             # entryway east of the path: ground on the other
-                            # side is taken only where that side has none
+                            # side is taken only where that side has none --
+                            # and BESIDE IT where it can, never past its end:
+                            # a lantern by a lane's far end, east of it, stood
+                            # beyond the lane half a pace east of its line,
+                            # and the gate across that end was dropped (a
+                            # review of 2026-10-14)
                             ax = sum(a for a, _ in anchor) / len(anchor) + 0.5
                             ay = sum(b for _, b in anchor) / len(anchor) + 0.5
                             ahead = {"e": cx - ax, "w": ax - cx, "s": cy - ay, "n": ay - cy}[side]
+                            along = [b for _, b in anchor] if side in "ew" else [a for a, _ in anchor]
+                            lo, hi = (y, y + dd) if side in "ew" else (x, x + ww)
                             if ahead <= 0:
+                                sc += site.w + site.d
+                            if beside(side) and not (lo <= max(along) and hi > min(along)):
                                 sc += site.w + site.d
                     elif side in _SIDES:
                         # on that side of the building, centred on it
@@ -2350,7 +3022,7 @@ def _grounds(layout, rooms, grounds):
                     else:
                         sc = -min((abs(cx - t[0]) + abs(cy - t[1]) for t in taken | house), default=0)
                     if best is None or sc < best[0]:
-                        best = (sc, rect)
+                        best = (sc, rect, (within, side))
         if best is None:
             layout.warnings.append(f"{layout.names[f['id']]} found no open ground")
             continue
@@ -2360,8 +3032,21 @@ def _grounds(layout, rooms, grounds):
     # start of its own: the shortest walk through open ground from the first
     # such door to the others (a roofed walkway from a back door to an
     # outbuilding's door)
-    def walk_between(src, goals):
-        walk = open_ground - {c for f in layout.features for c in f["rect"].cells()}
+    # WALKS AND BRANCH WAYS are laid two paces wide where the world asks
+    # (`narrowest`); the lab draws them a pace wide, as it always has
+    def walk_between(src, goals, keep_off=frozenset()):
+        things = {c for f in layout.features for c in f["rect"].cells()}
+        # two paces wide where it fits, clear of the other ways first, and
+        # of the ground at every other door's step (a review of 2026-10-14:
+        # two wide, a walk past the entrance left its step a one-pace sliver
+        # no place held, and the court lost its doorway)
+        for walk in ((open_ground - taken - keep_off, open_ground - things - keep_off)
+                     if wide else ()):
+            starts = [(s[0] - i, s[1] - j) for s in src for i in (0, 1) for j in (0, 1)]
+            cells = _wide_route(walk, starts, lambda o: bool(_block(o) & goals))
+            if cells:
+                return cells
+        walk = open_ground - things
         prev = {c: None for c in src}
         frontier, hit = list(src), None
         while frontier and hit is None:
@@ -2393,8 +3078,9 @@ def _grounds(layout, rooms, grounds):
         outs = [c for c in outs if c in open_ground]
         if len(outs) >= 2:
             cells = set()
+            own = {id(d) for d in layout.doors if d.get("outside") and d["b"] == w["id"]}
             for goal in outs[1:]:
-                cells |= walk_between({outs[0]}, {goal})
+                cells |= walk_between({outs[0]}, {goal}, keep_off=aprons(keep=own))
             layout.ways[w["id"]] = {"cells": cells, "side": None, "rows": []}
             taken.update(cells)
         elif outs:
@@ -2412,6 +3098,20 @@ def _grounds(layout, rooms, grounds):
         goal_cells = {(a + dx, b + dy) for a, b in goal.cells() for dx, dy in _STEP.values()} - goal.cells()
         src = layout.ways[start]["cells"]
         walk = open_ground - {c for f in layout.features for c in f["rect"].cells()}
+        # two paces wide where it fits, clear of the other ways first, off
+        # the way it leaves -- and none where the thing stands beside that
+        # way already, as a pace-wide one lays none
+        ring = {(a + dx, b + dy) for a, b in src for dx, dy in _STEP.values()} - src
+        starts = [(c[0] - i, c[1] - j) for c in ring for i in (0, 1) for j in (0, 1)]
+        cells = set()
+        for room_for in ((walk - taken, walk - src) if wide and not src & goal_cells else ()):
+            cells = _wide_route(room_for, starts, lambda o: bool(_block(o) & goal_cells))
+            if cells:
+                break
+        if cells:
+            layout.ways[w["id"]] = {"cells": cells, "side": None, "rows": []}
+            taken.update(cells)
+            continue
         prev = {c: None for c in src}
         frontier, hit = list(src), None
         while frontier and hit is None:
@@ -2431,26 +3131,6 @@ def _grounds(layout, rooms, grounds):
             cells.add(hit)
             hit = prev[hit]
         layout.ways[w["id"]] = {"cells": cells, "side": None, "rows": []}
-
-    # AREAS: open ground. One on a named side takes the plot beyond the
-    # building on that side; the one it stands `around` takes the rest.
-    areas = [a for a in grounds.get("areas") or () if isinstance(a, dict) and a.get("id")]
-    for a in areas:
-        layout.names[a["id"]] = a.get("name") or a["id"]
-    rest = set(open_ground)
-    around = next((a for a in areas if str(a.get("where") or "") == "around"), None)
-    for a in areas:
-        sd = str(a.get("where") or "")[:1]
-        if a is around or sd not in _SIDES:
-            continue
-        band = {c for c in rest if (sd == "n" and c[1] < hb.y) or (sd == "s" and c[1] >= hb.y + hb.d)
-                or (sd == "w" and c[0] < hb.x) or (sd == "e" and c[0] >= hb.x + hb.w)}
-        layout.areas[a["id"]] = band
-        rest -= band
-    if around is None and areas:
-        around = next((a for a in areas if a["id"] not in layout.areas), None)
-    if around is not None:
-        layout.areas[around["id"]] = rest
 
 
 # ------------------------------------------------------------ checks

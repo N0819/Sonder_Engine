@@ -223,16 +223,65 @@ def _waiting(entry, signature, turn_idx):
     return int(turn_idx) - int(at) < predevelop_retry_beats(entry.get("failed"))
 
 
+def _take_off_what_is_not_laid(whole, building, solved, expected):
+    """A PLACE AN EARLIER SOLVE OF THE BUILDING LAID, LEFT OUT OF THIS ONE,
+    COMES OFF THE PLAN in the same write -- dropped for failing, or with the
+    whole ground where the house is laid alone. Left on its old site, the
+    re-solve laid the rest of the ground, or the house itself, over it (two
+    reviews of 2026-10-14). It goes back to what the Room planned: no site,
+    the Room's own estimate of its size where the solve's record kept one
+    (else none), and no doorway pin the solve gave it -- on its own edges or,
+    where this solve writes the neighbour, on the neighbour's edge to it.
+    Writes into `solved` and `expected` (`write_planned_layout`'s)."""
+    held_specs = whole.get("ground_specs") or {}
+    gone = {g["id"] for g in whole.get("grounds") or ()} - \
+        {g["id"] for g in building.get("grounds") or ()}
+    for pid in sorted(gone):
+        held = held_specs.get(pid)
+        if not isinstance(held, dict):
+            continue
+        record = held.get("layout") if isinstance(held.get("layout"), dict) else {}
+        site = held.get("site")
+        if not (record.get("grounds") and isinstance(site, dict)
+                and site.get("plan") == building["plan"]):
+            continue
+        stated = record.get("stated") if isinstance(record.get("stated"), dict) else None
+        unpin = {"cell": None, "offset": None}
+        solved[pid] = {"geometry": {"site": None, "level": None, "parts": None,
+                                    "extent": dict(stated) if stated else None},
+                       "anchors": {},
+                       "edges": {str(e["to"]): dict(unpin) for e in held.get("adjacent") or ()
+                                 if isinstance(e, dict) and e.get("to")
+                                 and (e.get("cell") is not None or e.get("offset") is not None)},
+                       "layout": None}
+        expected[pid] = held
+        plans = {**(whole.get("specs") or {}), **held_specs}
+        for uid, solve in solved.items():
+            if uid == pid or solve.get("room") is not None or pid in (solve.get("edges") or {}):
+                continue
+            edge = next((e for e in (plans.get(uid) or {}).get("adjacent") or ()
+                         if isinstance(e, dict) and str(e.get("to") or "") == pid), None)
+            if edge and (edge.get("cell") is not None or edge.get("offset") is not None):
+                solve.setdefault("edges", {})[pid] = dict(unpin)
+
+
 def lay_out(building, call, language_id):
     """One building, solved: `(spec, layout, inventory, refusals)`. Raises
     when an answer cannot be read; refusals are the bridge's. The spec
     carries the brief the two calls followed (`brief`), for the record.
 
     THE GROUNDS NEVER COST THE HOUSE ITS LAYOUT. Where the ground laid round
-    a building leaves every seed refused, the building is solved again from
-    the same two answers as the tier laid it before the grounds
-    (`layout_bridge.without_grounds`) -- no further call -- and the spec says
-    why the ground was left where the plan had it (`grounds_dropped`)."""
+    a building leaves every seed refused and only the ground is at fault
+    (`layout_bridge.ground_breaches`), the places that failed on the seed
+    failing fewest are taken out (`places_to_drop`; a seed refused for the
+    house is never read for them) and the building is solved again with the
+    rest (`without_places`, up to `GROUND_DROP_ROUNDS` times: the owner's
+    ruling of 2026-10-13, drop only the failing places); failing that, or
+    where the house itself is refused, it is solved as the tier laid it
+    before the grounds (`without_grounds`). No further call either way, and
+    the spec says why each place was left where the plan had it
+    (`grounds_dropped`, and `places_dropped`, which names the places that
+    went with them as well)."""
     from llm.prompts import layout_prompt
     from world import layout_bridge
     building = _briefed(building, call, language_id)
@@ -244,7 +293,34 @@ def lay_out(building, call, language_id):
     spec = layout_bridge.spec_from_answers(building, inventory, copy.deepcopy(relate_answer))
     if building.get("brief"):
         spec["brief"] = building["brief"]
-    layout, refused = layout_bridge.solve_for(building, spec)
+    attempts = []
+    layout, refused = layout_bridge.solve_for(building, spec, attempts=attempts)
+    first = (spec, layout, refused)
+    whole, dropped, why = building, [], []
+    for _round in range(layout_bridge.GROUND_DROP_ROUNDS):
+        if not refused or not building.get("grounds"):
+            break
+        failing, words = layout_bridge.places_to_drop(building, spec, attempts)
+        grounds = {g["id"] for g in building.get("grounds") or ()}
+        if not failing or set(failing) >= grounds:
+            break                   # the house is refused on every seed, or nothing would be left
+        why += words
+        building = layout_bridge.without_places(building, failing)
+        # the places a place taken out leaves joined to nothing go too, and
+        # are named with it
+        dropped += sorted(grounds - {g["id"] for g in building.get("grounds") or ()})
+        if not building.get("grounds"):
+            break
+        spec = layout_bridge.spec_from_answers(building, inventory, copy.deepcopy(relate_answer))
+        if whole.get("brief"):
+            spec["brief"] = whole["brief"]
+        attempts = []
+        layout, refused = layout_bridge.solve_for(building, spec, attempts=attempts)
+    if not refused and dropped:
+        spec["grounds_dropped"] = list(why[:12])
+        spec["places_dropped"] = dropped
+        return spec, layout, inventory, refused
+    building, (spec, layout, refused) = whole, first
     if refused and building.get("grounds"):
         house = layout_bridge.without_grounds(building)
         bare = layout_bridge.spec_from_answers(house, inventory, copy.deepcopy(relate_answer))
@@ -459,15 +535,22 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
             logger.info("layout tier: chat=%s building=%s refused (%d in a row): %s",
                         cid, key, failed, "; ".join(refused[:6]))
             continue
-        if spec.get("grounds_dropped"):
+        whole = building
+        if spec.get("places_dropped"):
+            # only the places that failed: the rest of the ground is written
+            building = layout_bridge.without_places(building, spec["places_dropped"])
+            logger.warning("layout tier: chat=%s building=%s laid out without %s: %s",
+                           cid, key, ", ".join(spec["places_dropped"]),
+                           "; ".join(spec["grounds_dropped"][:6]))
+        elif spec.get("grounds_dropped"):
             building = layout_bridge.without_grounds(building)
             logger.info("layout tier: chat=%s building=%s laid out without its grounds: %s",
                         cid, key, "; ".join(spec["grounds_dropped"][:6]))
         solved, report = layout_bridge.planned_layout(building, spec, layout, turn=turn_idx,
                                                       inventory=inventory)
-        written = structure.write_planned_layout(
-            cid, solved, expected={**building["specs"], **(building.get("ground_specs") or {})},
-            job=job)
+        expected = {**building["specs"], **(building.get("ground_specs") or {})}
+        _take_off_what_is_not_laid(whole, building, solved, expected)
+        written = structure.write_planned_layout(cid, solved, expected=expected, job=job)
         if not written:
             logger.info("layout tier: chat=%s building=%s not written: the plan "
                         "changed, or the job was stopped", cid, key)
@@ -481,6 +564,8 @@ def lay_out_buildings(job, cid, scene, room_ids, language_id, *, call=None):
             entry["grounds_unplaced"] = list(report["grounds_unplaced"])
         if spec.get("grounds_dropped"):
             entry["grounds_dropped"] = list(spec["grounds_dropped"])
+        if spec.get("places_dropped"):
+            entry["places_dropped"] = list(spec["places_dropped"])
         if spec.get("brief"):
             entry["brief"] = spec["brief"]
         _file_run(cid, job, key, entry)

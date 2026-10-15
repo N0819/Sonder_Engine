@@ -153,13 +153,15 @@ def test_the_grounds_are_laid_round_the_house_and_written_onto_its_plan():
     assert "washroom" in solved["privy"]["edges"]
 
 
-def test_a_door_onto_a_feature_is_still_the_doorway_to_the_place_the_plan_names():
-    """The kitchen's back door opens onto the ground the well stands in, and
-    is written as the kitchen's doorway to the well, on the wall the solve
-    found."""
+def test_a_thing_at_a_door_is_opened_onto_by_a_door_of_its_own():
+    """The kitchen's back door opens onto the well the plan joins to it -- a
+    door of its own, never the door onto the ground the well stands in, which
+    carried two of the plan's ways and met only one (a review of 2026-10-14)
+    -- and is written as the kitchen's doorway to the well, on the wall the
+    solve found."""
     b, spec, layout, _refused, solved, _report = _laid()
-    assert spec["door_to"]["well"] == "garden"
-    assert any(d.get("outside") and d["a"] == "kitchen" and d["b"] == "garden"
+    assert "well" not in spec["door_to"]
+    assert any(d.get("outside") and d["a"] == "kitchen" and d["b"] == "well"
                for d in layout.doors)
     assert set(solved["kitchen"]["edges"]["well"]) == {"dir", "offset"}
     assert "garden" not in solved["kitchen"]["edges"]
@@ -265,11 +267,12 @@ def test_a_thing_a_pace_across_is_a_place_two_paces_across():
 
 
 def test_every_doorway_onto_the_ground_meets_its_other_side():
-    """The lab converter's measure of a plan that holds together: a house
-    door's other side is the cell across its threshold on the place it
-    opens onto, or the nearest cell of the thing standing by it; two places
-    of the ground the plan joins meet where they touch, on opposite sides of
-    one line."""
+    """The lab converter's measure of a plan that holds together: a door's
+    other side is the cell across its threshold on whatever place it opens
+    onto -- never "the nearest cell of the thing standing by it", which put
+    the well a pace off the kitchen's threshold and the privy's doorway on
+    its own block, north against north (design A6); two places of the ground
+    the plan joins meet where they touch, on opposite sides of one line."""
     from world.layout_bridge import _UNIT
     b, _spec, layout, _refused, solved, _report = _laid()
 
@@ -289,12 +292,20 @@ def test_every_doorway_onto_the_ground_meets_its_other_side():
     ux, uy = _UNIT[solved["hall"]["edges"]["path"]["dir"]]
     assert path_door == (hall_door[0] + ux, hall_door[1] + uy)
     assert solved["path"]["edges"]["hall"]["dir"] == "n"
-    # the well stands by the kitchen door: its doorway faces the threshold
+    opposite = {"n": "s", "s": "n", "e": "w", "w": "e"}
+    # the well stands at the kitchen door: its doorway is across the threshold
     kitchen_door = at("kitchen", solved["kitchen"]["edges"]["well"])
     kx, ky = _UNIT[solved["kitchen"]["edges"]["well"]["dir"]]
     threshold = (kitchen_door[0] + kx, kitchen_door[1] + ky)
-    well_door = at("well", solved["well"]["edges"]["kitchen"])
-    assert abs(well_door[0] - threshold[0]) + abs(well_door[1] - threshold[1]) == 1
+    assert at("well", solved["well"]["edges"]["kitchen"]) == threshold
+    assert solved["well"]["edges"]["kitchen"]["dir"] == \
+        opposite[solved["kitchen"]["edges"]["well"]["dir"]]
+    # and the privy owns its walk: the washroom's door opens onto it
+    wash_door = at("washroom", solved["washroom"]["edges"]["privy"])
+    wx, wy = _UNIT[solved["washroom"]["edges"]["privy"]["dir"]]
+    assert at("privy", solved["privy"]["edges"]["washroom"]) == (wash_door[0] + wx, wash_door[1] + wy)
+    assert solved["privy"]["edges"]["washroom"]["dir"] == \
+        opposite[solved["washroom"]["edges"]["privy"]["dir"]]
     # two places of the ground meet across one line, facing each other
     for a, other in (("garden", "path"), ("path", "gate"), ("garden", "tree")):
         ea, eb = solved[a]["edges"][other], solved[other]["edges"][a]
@@ -307,12 +318,12 @@ def test_every_doorway_onto_the_ground_meets_its_other_side():
 
 
 def test_a_side_asked_toward_the_ground_is_read_off_the_door_onto_it():
-    """A door onto a feature opens onto the ground it stands in; the side
-    the plan asked for that door is still checked against the wall the
-    solve put it on, under the place the plan names."""
+    """A door onto a thing at it is the thing's own; the side the plan asked
+    for that door is checked against the wall the solve put it on, under the
+    place the plan names."""
     b, spec, layout, _refused, _solved, report = _laid()
     asked = {(r["id"], j["to"]): j.get("side") for r in spec["rooms"] for j in r.get("joins") or ()}
-    assert asked[("kitchen", "garden")] == "s"
+    assert asked[("kitchen", "well")] == "s"
     assert all(entry["to"] in {o["to"] for o in b["outside"]} | set(b["rooms"])
                for entry in report["sides"])
 
@@ -338,10 +349,13 @@ def test_the_grounds_never_cost_the_house_its_layout(monkeypatch):
     from agents import director_layout as dl
     real = lb.solve_for
 
-    def solve_for(building, spec):
+    def solve_for(building, spec, attempts=None):
         layout, refused = real(building, spec)
-        return (layout, ["the ground would not stand"]) if spec.get("ground_is") \
-            else (layout, refused)
+        if spec.get("ground_is"):
+            refused = ["the ground would not stand"]
+        if attempts is not None:
+            attempts.append((layout, refused))
+        return layout, refused
 
     monkeypatch.setattr(lb, "solve_for", solve_for)
     calls = []
@@ -479,16 +493,31 @@ def test_a_thing_by_something_on_a_side_of_it_stands_on_that_side():
     the path in three runs of three (replicas of Home 5, 2026-10-11); it now
     takes ground on the side of the thing it stands by wherever that side
     has any. The layout lab's liked shrine and its three fresh runs, none of
-    which asks for both, re-solve cell for cell."""
+    which asks for both, re-solve cell for cell. The plan joins the well to
+    the path here: joined to the kitchen, the plan's join puts it at the
+    kitchen's door, whatever the answer says (design A6)."""
+    specs = copy.deepcopy(SPECS)
+    specs["kitchen"][1]["adjacent"] = [e for e in specs["kitchen"][1]["adjacent"]
+                                       if e["to"] != "well"]
+    specs["well"][1]["adjacent"] = [{"to": "path", "dir": "e"}]
+    specs["path"][1]["adjacent"].append({"to": "well", "dir": "w"})
+    found = lb.plan_buildings(specs, copy.deepcopy(SCENE), held_open=HELD_OPEN, grounds=True)
+    b = max(found, key=lambda x: len(x["rooms"]))
     for side, west in (("w", True), ("e", False)):
         relate = copy.deepcopy(RELATE)
         for g in relate["grounds"]:
             if g["id"] == "well":
                 g.clear()
                 g.update({"id": "well", "kind": "well", "by": "entrance", "side": side})
-        _b, spec, layout, _refused, solved, _report = _laid(relate=relate)
+        inv = lb.hold_inventory(b, copy.deepcopy(SORT))
+        spec = lb.spec_from_answers(b, inv, copy.deepcopy(relate))
+        layout, _refused = lb.solve_for(b, spec)
+        solved, _report = lb.planned_layout(b, spec, layout)
         well = next(f for f in spec["grounds"]["features"] if f["id"] == "well")
-        assert (well["by"], well["side"]) == ("entrance", side)
+        # by the entrance, and joined to the path it opens onto: by the path,
+        # at its near end, on the side the answer gives (a review of
+        # 2026-10-14: the plan's join is what it stands by)
+        assert (well["by"], well.get("end"), well["side"]) == ("path", "near", side)
         door = next(d for d in layout.doors if d["b"] == "entrance")
         xs = [x for x, _y in _cells(solved["well"]["geometry"])]
         assert (max(xs) < door["cell"][0]) if west else (min(xs) > door["cell"][0]), side
@@ -519,8 +548,10 @@ def test_a_place_left_unsaid_never_takes_the_ground_round_the_house():
 def test_a_door_of_the_house_always_opens_onto_something():
     """An outbuilding the answers give no side to stand apart on, and the
     plan none either, is open ground on its doorway's side -- never a door
-    onto nothing, which would refuse every seed and cost the house its
-    grounds."""
+    onto nothing. That ground is no longer quietly empty: the floor names
+    it, and only it is dropped -- a missing doorway costs that place, never
+    the house nor the rest of the grounds (design A6; the owner's ruling of
+    2026-10-13)."""
     specs = copy.deepcopy(SPECS)
     for uid, to in (("washroom", "privy"), ("privy", "washroom")):
         for edge in specs[uid][1]["adjacent"]:
@@ -537,7 +568,27 @@ def test_a_door_of_the_house_always_opens_onto_something():
     assert spec["ground_is"]["privy"] == "open"
     assert "privy" in {a["id"] for a in spec["grounds"]["areas"]}
     _layout, refused = lb.solve_for(b, spec)
+    assert any("privy" in r for r in refused), refused
+    from agents import director_layout as dl
+    calls = []
+
+    def call(step, system, payload):
+        calls.append(step)
+        if step.endswith("_brief"):
+            return {"brief": ""}
+        return copy.deepcopy(SORT if step.endswith("_sort") else relate)
+
+    spec, _layout, _inventory, refused = dl.lay_out(b, call, "en")
     assert refused == []
+    assert spec["places_dropped"] == ["privy"]
+    assert any("privy" in w for w in spec["grounds_dropped"])
+    assert {"path", "garden", "well"} <= set(spec["ground_is"])
+    # the place taken out takes no ground from the rest: the washroom's door
+    # onto it opens onto the garden the house stands in (Home 6's dropped well
+    # took the garden's whole south side, and the path failed with it)
+    assert spec["door_to"]["privy"] == "garden"
+    assert "privy" not in {a["id"] for a in spec["grounds"]["areas"]}
+    assert len(calls) == 3
 
 
 def test_a_window_with_ground_beyond_it_is_a_window_onto_that_ground():

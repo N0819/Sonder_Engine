@@ -440,16 +440,21 @@ to those sets (`hold_grounds`, `_ground_plan`). A place the first call left
 unsaid is laid as the tier always laid it: open ground on its doorway's side
 where the house opens straight onto it, and not at all further out.
 
-**The doorways.** An outbuilding is a block of its own standing apart,
-reached by a way between its door and the house's -- solver geometry, never
-written. A door of the house onto a feature opens onto the ground the
-feature stands in (`door_to`), and is written back as the doorway to the
-place the plan names, on the wall the solve found. Every doorway onto the
-ground meets its other side across the wall, the lab converter's own measure
-(`_ground_doorways`): on the place a door opens straight onto, the cell
-across its threshold; on a thing standing by the door, its nearest cell,
-facing it; where two places of the ground the plan joins touch, the middle
-of the side the plan states, else of the side they share most.
+**The doorways.** An outbuilding the plan joins to a room of the building is
+a block of its own standing apart, reached by a walk between its door and
+the house's -- and the walk is its own floor (2026-10-14), so the house door
+opens onto it. One the plan joins only to open ground stands in that ground,
+toward the end the plan bears it to, and opens onto it. A door of the house
+onto a feature opens onto the ground the feature stands in (`door_to`), and
+is written back as the doorway to the place the plan names, on the wall the
+solve found. Every doorway onto the ground meets its other side across the
+wall, the lab converter's own measure (`_ground_doorways`): on whatever
+place a door opens onto, the cell across its threshold, on the wall facing
+it -- and no pin at all where the place does not hold that cell, which the
+floor then refuses; where two places of the ground the plan joins touch, the
+middle of the side the plan states, else of the side they share most. Every
+place's cells are read as the world reads them (`_world_cells`): a round
+tree's circle, never its box's corner.
 
 **As the world reads it** (`_ground_geometry`). The solver lays its ways and
 features ON its open ground; as rooms of their own each cell is one place's
@@ -470,10 +475,11 @@ building laid (`_own_grounds`, read off the solve's own record) is laid again
 with the house, never keeping it off its own plan. With the switch off it
 does keep it off -- a new solve beside the old ground would read two frames
 as one -- and the house is left as planned. Where the ground leaves every
-seed refused, the house is solved again from the same two answers, with no
-further call, as the tier laid it before the grounds (`lay_out`,
-`grounds_dropped` on the run's record): the grounds never cost a house its
-layout.
+seed refused, the places that fail are taken out and the rest solved again
+(below, "Holding together"), and failing that the house is solved again from
+the same two answers, with no further call, as the tier laid it before the
+grounds (`lay_out`, `grounds_dropped` and `places_dropped` on the run's
+record): the grounds never cost a house its layout.
 
 **One solver change, by the lab's rule.** The lore puts the shrine's well
 "east of the path near the entryway", and every answer said so -- by the
@@ -510,9 +516,329 @@ beside the lab's liked shrine and Home 5 as the engine holds it, is
 **Not yet.** A ground place the Room re-plans alone is not laid again, and a
 place planned after the building was laid out is never laid: the house still
 stands on its solve, so the building is refused as laid, and either needs a
-pass that lays ground onto a plan its house already stands on. A pair or a
-row planned as one place is one room of separate parts. The way to an
-outbuilding is no place; its cells are the open ground's.
+pass that lays ground onto a plan its house already stands on. A way through
+open ground meets it on one side only (below).
+
+## Holding together (2026-10-13 and 14)
+
+Home 10 (chat 173, the owner's fourth shrine): the mountain path was laid out
+of the hall's front door THROUGH the court the hall opens onto, cutting the
+court into two floors, and the storehouse stood apart, joined to a walk the
+solver never lays ("only one door opens onto it"), so it was written with no
+doorway at all. Replayed from its recorded answers, no answer the closed
+vocabulary allows laid that plan: the fault was in code. And the class was
+wider -- replayed the same way, every story with recorded answers wrote
+grounds that did not hold together (Home 6 six breaches, Home 9 one, Home 11
+two), and the tier's own farm fixture broke the contract its test claimed:
+the well a pace off the kitchen's threshold, the privy's doorway on its own
+block, north against north. Three adversarial reviews the next day (29
+findings confirmed of 31, 28 of 29, then 26 of 26 -- nine of the third
+round's in the second round's own fixes) reshaped what follows. Each finding
+fixed has a test that fails with that fix alone reverted, checked by building
+the tree so (the second round's 37 single-fix variants and the third's 31,
+every one caught); one, a stranded ground's building refused for
+good, is registered below rather than fixed.
+
+**The floor** (`layout_bridge.ground_breaches`, from `refusals`). It reads the
+scene the solve WOULD write -- the very plan rows `write_planned_layout`
+writes (`structure.solved_plan_row`, `made_plan_row`), laid on the fringe's
+own stubs (`solved_scene`; one rule, two readers, guarded by
+`tests/test_the_grounds_floor_reads_what_is_written.py`, on the stair
+fixture and on the farm's ground rows: a composite garden, a round oak's
+cell pins, a window onto the ground, a way one side alone declares) --
+through the world's own readers, and refuses a solve unless every place
+handed to the solver is laid, each is one floor, and every level way between
+two laid places with a ground place on either side has its doorways on
+opposite walls, the cell beyond one a doorway cell of the other -- and every
+laid place is reached from a room of the building through doorways that
+meet. A window onto the ground is a sightline. The building's own rooms and
+halls are the solver's to join and are not judged here; a room's doorway
+onto a place of the ground is the floor's to judge (`refusals` leaves it to
+the floor, which charges the place, never the house), and the floor is never
+asked of a seed refused for the house. A refused solve is skipped like any
+other, so the search takes the next seed. Where every seed is refused and
+only the ground is at fault, the places that fail are taken out and the rest
+solved again (`without_places`, up to `GROUND_DROP_ROUNDS`, 2, the owner's
+ruling of 2026-10-13: "drop only the failing places"), the house alone
+failing that. The places taken out are those of the seed whose refusals are
+the ground's alone and that fails on the fewest places (`places_to_drop`),
+read off the floor's own findings on each seed as the search made them.
+
+**Which place is charged.** Where two places fail to meet, the more
+particular gives way -- a thing, then a building apart, then a way, then open
+ground (`_GIVES_WAY`) -- and of two as particular, the one less of the ground
+hangs on, the ground the entrance opens onto weighing most of all (by id, the
+court the entrance opens onto was charged for an orchard behind the house it
+could not meet, and taken out with the lane and the shed). A room's door onto a place keeps the ground at its step for that
+place -- the step, the pace past it, the paces either side of both, the
+solver's aprons -- and a place standing on it that gives way before the
+door's own place is charged instead (a lantern a pace below the entrance's
+step left it a sliver no block held, and the court was charged and dropped
+with every place reached through it; a band of open ground on the step was
+never charged, and the whole ground was laid aside). Two places of the
+ground that do not touch, with a thing, a way or a building between them
+that touches both: what stands between them is charged -- never open
+ground, which stands between nothing (a band beside the house touches the
+ground before and behind it at the corners, and was charged round after
+round while its going joined nothing). A place cut in two is charged to the
+place whose own cells, given back, join its parts up -- most of them, then
+the one the solver laid last (a building's block first, then the ways the
+ground is laid round, the things, and last the walks and the ways that
+branch), then the most particular; against a way, a building it was laid
+over gives back nothing (a gate at the path's foot was charged for a walk
+that cut the garden round the back of the house, and a storehouse for a lane
+laid through it). Never a place the cut place hangs on: its going takes the
+place too, and everything hung on that (a path cutting a pocket off the
+garden it alone reaches was charged, and the garden and the oak went with
+it). A thing on a way's line -- across it, or where it leads -- gets no
+credit for the cells on the way's lanes, which carry on the way's own cut (a
+gate at the path's foot was charged before the path, a round spent). A
+charge to a third place -- the one on a door's ground, between two
+places, or cutting one -- is void where a place the breach is about is charged
+for a breach of its own: it goes, and the breach with it (a court not one
+floor and its step taken by a garden band: both were dropped, though the
+court's going answered both); the breach still refuses the seed. A
+building apart charged for its own doorway goes with the place standing on
+its step where another breach of the seed charges that place already (a
+yard band held the court's step and the byre's doorstep, and the yard and
+the byre were both dropped, where the yard's going answered both) -- never
+where nothing else charges it, which cost places a building alone would not
+have. A place
+reached from no room is charged to itself only where nothing else explains
+it: one that would be reached once the places
+charged for a pair it does not belong to are taken out refuses the seed and
+is taken out by nobody. A place no chain of joins from a room of the
+building reaches once the others are out goes with them, and is named with
+them (`places_dropped`, the run record, the log).
+
+**What a place taken out keeps.** It takes no ground from the rest and asks
+no door of its own: the room's way onto it opens through a door the room has
+already -- the entrance, or its door onto another place -- and only a room
+with none opens onto the ground the building stands in, or the first ground
+left (`_door_already`; given a band of its own, Home 6's dropped well took
+the garden's whole south side, and the path through it failed too; given a
+door of its own, a thing dropped for want of a wall asked the house for one
+more, and the whole building was refused). It goes back to what the Room
+planned: no site, its own estimate of its size where the solve's record kept
+one, and no doorway pin the solve gave it -- and this holds for every place
+an earlier solve of the building laid that this write leaves out, dropped or
+set aside with the whole ground when the house is laid alone (left on its
+old site, the rest of the ground, or the house itself, was laid over it;
+`lay_out_buildings`). An unsited stub is laid by the band rule over its
+neighbours' cells, and the lint reports it.
+
+**What an earlier solve wrote.** A way the solve made -- a stair hall's, a
+window's onto the ground, a way one side alone declares -- is the solve's to
+make again or take back, never the plan's: read as declared, a window the
+first solve made had the re-solve lay a door for it, and the room was
+written two windows on one wall; and a one-sided way was taken back by every
+other solve, and its place dropped (`_edges_of`, `planned_layout`'s
+`made_edges`). A ground's own estimate of its size is the solve's record of
+it once a solve stands, or none -- read off the row, every re-solve filed the
+last solve's size as the Room's. A doorway pin the solve gives as None is
+written None, never taken off the row: a beat's stub takes only the fields
+the row's edge holds, so a cell taken off the row stayed on the stub, where a
+cell outranks an offset (laid round the house and then as a band, the
+court's doorway stood on its far row, eleven paces from the hall's); a way
+one side alone declares, made again, replaces its old pin the same way.
+
+**The rules that let common plans hold**, each the class, never Home 10:
+
+- The approach is the way the entrance opens onto, whatever an answer says.
+  The entrance is chosen before the second call is asked, and the call is
+  told it with its front: it opens onto a way or open ground before a thing,
+  which stands at a door, or a building apart, reached by a walk of its own
+  (`entrance_of`: a lantern joined to the hall, its id sorting before the
+  path's, took the entrance, and the building was refused; a barn did, and
+  was dropped on every seed). No answer moves it -- the relate card states
+  the entrance as fact -- and neither does a drop: re-pointed after the call
+  had answered against another front, the entrance turned into the wall the
+  answer had given the ladder, and the lane and the shed were dropped;
+  re-pointed off a place taken out, onto the garden beside it, it faced a
+  band the garden lay on the far side of, and the whole ground went. A place
+  taken out keeps it, its way opening through the entrance door.
+- A way one room of the house opens onto, and nothing else, leaves from that
+  door as the approach leaves the entrance's -- three wide, out to the plot's
+  edge, clear of the approach (`from: door`): a path the plan joins to the
+  hall's south wall, the entrance opening onto the garden whose id sorted
+  first, had nothing to run from or between, and was dropped.
+- Open ground whose room has no wall facing it is reached round the corner:
+  where the door onto it steps into the ground round the house, the strip of
+  that ground beside the house on the door's side is its, where it reaches its
+  band and the ground round the house stays one floor without it (a garden
+  behind a hall whose back wall is a stair hall was dropped with the shed and
+  the oak hung on it). A side the plan's way does not face at all -- the far
+  side of the house -- is not reached, and that ground gives way.
+- A way the plan joins only to open ground leaves it past its far edge on the
+  side the plan states -- the side its ground lies where it states none, the
+  front only for ground round the building -- (`layout_solver.WAY_BEYOND`, 10
+  paces), in line with the entrance where the entrance's step is that ground
+  and no way across it, never over a building, another way or another
+  ground, leaving on another side of its ground where it would run through
+  one; it is laid before every thing, with ground round it (`LEAVING_GROUND`,
+  3 paces), so what the answers relate to it has it to stand by, and its
+  mouth -- the edge it leaves from and the pace inside it -- is no thing's.
+- An outbuilding joined to open ground stands in it, toward the end the plan
+  bears it to (a block's `toward`), and opens onto it; the bands open ground
+  takes are measured from the building the entrance is in. One a room opens
+  onto stands on the side the plan's way to it faces -- the answer's side
+  only where the plan states none -- toward its room's end of that side, as
+  the plan's bearings lay the rooms out from the entrance's, the answer's
+  join sides read where the plan states none (stood on the answer's other
+  side, a privy's walk ran round the house and cut the ground). Where neither
+  names an end, on the entrance's side it never stands centred before the
+  entrance: it stands toward the end the answer names across that side, else
+  the end of the house its room stands at, else past a corner (centred
+  there, a privy the hall opens onto stood three paces before the door, and
+  the floor dropped it). Elsewhere it stands centred, as it always has: at
+  the end an answer named, a privy crowded the byre at the garden's corner.
+  Outbuildings stand `BLOCK_GAP` (2)
+  paces apart where they would crowd -- never on one rectangle nor one pace
+  apart, where a door opens onto ground the world reads as no place; a block
+  standing below ground alone crowds nothing (moved off a cavern's
+  footprint, the lab's latrine moved with the order its rooms were listed
+  in).
+- A thing the plan joins to a room of the building stands across a door of
+  its own in that room (`at_door`; the plan's join wins over the answer's
+  relation). `_place_doors` lays it after the room's other outside doors, on
+  the wall asked where a cell stands `THING_DOOR_GAP` (2) paces clear of them,
+  else on another wall: one door carrying two of the plan's ways met only one
+  of them. Where the plan also joins the thing to a way, the door may move
+  along its room's outside walls, or turn to another, so the thing stands
+  within `REACH_MAX` (2) paces of the way, its own ground laid over the gap
+  (`_things_at_doors`; the turn is filed under `sides`, "sides are wishes");
+  and where nothing fits at the door on its wall, the door turns -- the plot
+  reaching past every outside wall of its room for it (turned to a wall the
+  plot reached five paces past, a round yew six across was dropped). Never into a
+  pocket the room's furniture walls off from its other doorways, never onto
+  a cell another doorway arrives at, never scored as reaching the way where
+  its run would cross the house -- and a round thing's step is a cell its
+  circle holds, as the world reads it (`spatial_fov`'s round shape: a large
+  yew stood with its step on a corner its circle leaves out).
+- The ground at a door is no thing's: the step of every door onto open
+  ground, the entrance's among them, the pace past it and the paces either
+  side of both are kept from every thing but the one at that very door, and
+  from every walk but the one the door opens onto.
+- A door onto open ground opens onto it (`_doors_onto_their_ground`): where a
+  room's wall facing its ground is another room's -- a stair hall along the
+  whole back of the house -- and the door turned to a wall whose step is
+  ground beside the house no area holds, that ground is the area's, reaching
+  it round the corner; where the step is another area's, the door moves to a
+  wall cell of its room whose step is its own ground, clear of the room's
+  other outside doors.
+- Where the world asks it (`narrowest`, the bridge's), every thing is laid at
+  least two paces each way -- save a thing across a way, laid a pace thick on
+  the way's last row and written two (`_widened`) -- and every walk and
+  branch way two paces wide where it fits (`_wide_route`): the world reads
+  no place narrower, so a way
+  laid a pace wide was written as nothing -- every branch way, and a covered
+  walkway between two doors -- and a thing a pace deep was widened on writing
+  onto the ground kept at a door, and dropped. The lab lays them as it always
+  has, so its liked shrine re-solves cell for cell; whether it should draw
+  what the world now holds is the owner's call.
+- An outbuilding reached from a room owns its walk.
+- A place is one thing: `flank` and `along` are read as `by`.
+- A thing `by` a way stands beside it on the side the answer gives, at its
+  `end` if one is given -- read as the way's far end, Home 11's well stood
+  across the path's foot and the lab's fresh runs 2 and 3 stood their wells
+  in their torii -- along the way, never past its end (a lantern by a lane's
+  far end stood just beyond it, half a pace east of its line, and the gate
+  across that end was dropped); a side along a way's own line, and any side
+  of a doorstep, which stands against the wall, is only a side. A way that
+  gives up its end to what it leads to gives up the rows too, so a thing
+  laid across its far end stands on the way (Home 11's torii stood on a row
+  the path had given up). What a thing stands by is what the plan joins it
+  to: an answer's relation to something the plan does not join it to gives
+  way to the plan's join -- by the entrance, of a thing joined to the way the
+  entrance opens onto, is by that way at its near end -- and a side of the
+  building answered of a thing joined to a way or a thing is that side of it
+  (a lantern the plan joins to the path, answered by the entrance, stood
+  touching no path). By the entrance onto open ground stays by the entrance,
+  whose step's ground is kept clear (read as by the ground, a lantern went
+  nineteen paces off). A thing the plan joins to open ground alone stands IN
+  it (`in`): by what the answer names, since standing there keeps the plan's
+  join -- by the entrance only where its step can lie in that ground, the
+  entrance opening onto it or onto a way, never onto other open ground (kept,
+  it pulled a lantern to the corner of a garden nearest a door onto the
+  court, and the lantern was dropped); on a side answered only where its
+  ground lies there; and as far from everything as that ground allows only
+  where nothing was answered (a bench answered by the kitchen went to the
+  plot's far corner, a lantern answered north of the house stood where no
+  court was). `across` stays held to the
+  plan's joins: across a way stands on the way's line, out of the ground.
+- Open ground lies round the building where a thing at a door stands in it,
+  never unwritten solver ground.
+- Every doorway pin reads a place's cells as the world reads them.
+
+**Measured**, replaying each story's recorded answers on a copy of its
+database (the harness reproduces each live solve on the previous HEAD first:
+Home 10 8 of 8 sites, Home 9 22 of 22, Home 11 21 of 21):
+
+| Story | Breaches at HEAD | Breaches now | Sites laid | Seconds at HEAD | Seconds now |
+|---|---|---|---|---|---|
+| Home 10 (chat 173) | 3 | 0 | 8 of 8 | 1.7 | 1.1 |
+| Home 9 (chat 172) | 1 | 0 | 22 of 22 | 9.8 | 7.1 |
+| Home 11 (chat 174) | 2 | 0 | 21 of 21 | 29.7 | 21.3 |
+| Home 6 (chat 168) | 6 | 0 | 21 of 22, the well dropped | 37.9 | 55.6 |
+
+Home 6's plan joins the well to the kitchen and to the lantern path, which
+its solved house puts five paces apart -- past `REACH_MAX` -- so the well gives
+way, and the garden, the path, the torii and the camphor tree are laid
+without it. The cost of a ground that does not hold is time: at most
+`GROUND_DROP_ROUNDS + 1` times `LAYOUT_SOLVE_SEEDS` solves, and
+`LAYOUT_SOLVE_SEEDS` more for the house alone where that fails too --
+sixteen, the floor run once on each seed (its findings kept for
+`places_to_drop`, which never runs it again). On two hundred random plans
+shaped like the suite's fixtures (the second review's own generator):
+they now lay 903 of 1,053 places, where the tree before this design laid 425
+and the tree the third review read 882; they refuse no building whole (47
+before) and lay every place of 119 plans (44). Two plans lay fewer places
+than the reviewed tree -- both answered against a front they were never
+shown -- and twenty-five more; the third round's own fixes were fuzzed and
+bisected the same way before they stood. The third round changed none of the
+four stories' written rows. The lab's liked shrine and fresh run 1 re-solve cell for cell
+(`tests/test_the_grounds_hold_together.py` pins the shrine); fresh runs 2
+and 3 now stand their wells beside the path.
+
+**Not held yet.** A way through open ground -- an approach out of the front
+door across the garden round the house -- meets the ground on one side only:
+a way's doorway onto a place is one wall, so the garden on the far side of
+the path reaches it only round the house (Home 11: three paces east of the
+path, an 85-pace walk). Opening both sides needs either a doorway on more
+than one wall or the lab's own model, the ways and things standing in one
+grounds room; the owner's call. A walk with no two-pace route is laid a pace
+wide, and the floor refuses the seed. An outbuilding standing apart on a side
+another band holds -- the bands are measured from the building the entrance
+is in -- opens into that band; and one joined to open ground that the plan
+bears no way, or a diagonal way, stands centred on its side, for the front
+before the entrance (stood past a corner instead, a byre at the court's far
+end lost its doorway; one a room opens onto does stand past a corner there). A way down from an upper room to a thing of the ground
+-- an outside ladder -- is laid nowhere and judged by nothing: the seed stands
+with no doorway for it. Ground beside the house no area holds is given to
+the area a door opens onto, however large that makes it. And the lab draws
+walks and branch ways a pace wide where the world now holds them two.
+
+From the third review, left: the plan's entrance is its entrance room's
+first outside place by id, so where that is a garden beside the path the
+lore calls the approach, the call is shown a front on the garden and the
+path leaves by a door of its own -- the first call could say which place
+the front door opens onto, a card change and the owner's call; an answer
+that puts the entrance's own ground on another side than the front it was
+shown then loses that ground (two generated plans of two hundred, whose
+answers were written without the payload). A thing across a way's near end stands between
+the way and the ground it leaves, and is dropped -- the world reads a thing
+as a place, never as passable. The strip of the ground round the house that
+a door's ground takes can hold another room's step onto the ground round the
+house, which then opens into the band, and where two doors share the face
+toward the band the grounds would have to cross. A building apart charged
+in place of a band on its doorstep can spend a round where its own place is
+a band whose going gives the strip back elsewhere. An outbuilding's walk
+asks its room for a wall no other outside door holds, and a room with none
+left drops the outbuilding. And ground the plan reaches only by a way one
+side alone declared keeps the earlier solve's site on the building's plan
+once the Room re-plans that side without the way: no join reaches it, and
+the building is refused for good -- as it was before the floor; taking it off
+needs the write to take back the solve's made way with it.
 
 ## The live runs
 

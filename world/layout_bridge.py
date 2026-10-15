@@ -151,6 +151,12 @@ LAYOUT_TIER_MAX_ROOMS = 24
 #: building (`director_layout.lay_out_opening_ground`). Named per
 #: ask-before-limiting.
 LAYOUT_SOLVE_SEEDS = 4
+#: How many times a building whose grounds do not hold is solved again with
+#: only the places that failed taken out (`agents.director_layout.lay_out`,
+#: the owner's ruling of 2026-10-13: drop only the failing places), before
+#: the house is laid alone. Each round is up to `LAYOUT_SOLVE_SEEDS` solves.
+#: Named per ask-before-limiting.
+GROUND_DROP_ROUNDS = 2
 #: The one shape the solver lays. A room the plan states another shape of
 #: (`spatial_fov.SHAPES`: round, l, composite) refuses its building before
 #: any call is made: written back, its rectangle would square a round tower
@@ -233,15 +239,24 @@ def _canon(value):
 def _edges_of(specs):
     """Every planned edge, both directions: `{(a, b): {"vertical": 'up'|
     'down'|None, "barrier", "dir", "way"}}` read from the side that declares
-    it, and reversed onto the other side when only one does."""
+    it, and reversed onto the other side when only one does -- never one an
+    earlier solve made (`made_edges`)."""
     from world.spatial import normalize_bearing, normalize_vertical, opposite_bearing
     out = {}
     for uid, (_name, spec) in specs.items():
+        # NOT A WAY AN EARLIER SOLVE MADE (`planned_layout`'s `made_edges`):
+        # that is the solve's own, to make again or take back -- read as the
+        # plan's, a window the first solve made onto the ground had the
+        # re-solve lay a door for it, and the room was written two windows on
+        # one wall (a review of 2026-10-14)
+        record = (spec or {}).get("layout")
+        made = {str(t) for t in (record.get("made_edges") or ())} \
+            if isinstance(record, dict) else set()
         for edge in (spec or {}).get("adjacent") or ():
             if not isinstance(edge, dict) or not edge.get("to"):
                 continue
             to = str(edge["to"])
-            if to == uid:
+            if to == uid or to in made:
                 continue
             out[(uid, to)] = {
                 "vertical": normalize_vertical(edge.get("vertical")),
@@ -915,6 +930,16 @@ def relate_payload(building, inventory):
     is the engine's to place where its way meets the room, so the second
     call is not handed one to relate."""
     fixed = _fixed(building)
+    entrance = entrance_of(building, inventory=inventory)
+    if entrance:
+        # the entrance and the front the solve will lay, one compass: told
+        # the plan's first front beside another entrance, the call answered
+        # against a front the spec then turned (a review of 2026-10-14)
+        fixed["entrance"] = {"room": entrance.get("room"), "opens_onto": entrance.get("to")}
+        if entrance.get("side"):
+            fixed["front"] = entrance["side"]
+        else:
+            fixed.pop("front", None)
     shown = {"rooms": [{"id": r["id"],
                         "fixtures": list(r.get("fixtures") or ()),
                         "zones": list(r.get("zones") or ()),
@@ -967,7 +992,7 @@ def spec_from_answers(building, inventory, answer):
     stair_kinds = set(vocab["stair_kinds"])
     said = {str(r.get("id")): r for r in answer.get("rooms") or () if isinstance(r, dict)}
     held = {r["id"]: r for r in inventory.get("rooms") or ()}
-    entrance = building["entrance"] or {}
+    entrance = entrance_of(building, inventory=inventory)
     front = entrance.get("side") or _side(answer.get("front")) or "s"
     ground = _ground_plan(building, inventory, answer, entrance) \
         if building.get("grounds") else None
@@ -1041,8 +1066,9 @@ def spec_from_answers(building, inventory, answer):
             # a door onto the ground opens onto what the place stands in or
             # the way to it (`_ground_plan`), once for each such target
             target = door_to.get(o["to"], o["to"])
-            if any(x["to"] == target for x in joins):
-                continue
+            if target == "entrance" or any(x["to"] == target for x in joins) or (
+                    entrance and uid == entrance.get("room") and target == entrance.get("to")):
+                continue            # through a door the room has already
             entry = {"to": target, "kind": _door_kind(o["barrier"])}
             if side:
                 entry["side"] = side
@@ -1164,7 +1190,12 @@ def spec_from_answers(building, inventory, answer):
                               "where": o["side"] or "around"}
                              for o in _unique_outside(building)]}
     else:
+        from world.spatial import EXTENT_MIN_PACES
         grounds = {key: ground[key] for key in ("areas", "ways", "features")}
+        # every way is written to the world, which reads no place narrower
+        # than this: a walk or a branch way laid a pace wide was written as
+        # nothing (the solver's `narrowest`)
+        grounds["narrowest"] = EXTENT_MIN_PACES
         rooms.extend(ground["rooms"])
         blocks.extend(ground["blocks"])
     out = {"name": building["names"].get(entrance.get("room")) or building["names"][building["rooms"][0]],
@@ -1177,6 +1208,8 @@ def spec_from_answers(building, inventory, answer):
         # what each outdoor place is, and what a door onto it opens onto:
         # read back by `refusals` and `planned_layout`, never by the solver
         out["ground_is"], out["door_to"] = ground["is"], door_to
+    if entrance and entrance.get("to") != (building.get("entrance") or {}).get("to"):
+        out["entrance_to"] = entrance.get("to")
     return out
 
 
@@ -1189,14 +1222,19 @@ def _ground_plan(building, inventory, answer, entrance):
     OPEN GROUND is an area on the side the answer gives it, else the side
     the plan's doorway onto it states, else the ground the building stands
     `around` -- one only; a second takes its side or nothing. A WAY runs from
-    the entrance when the entrance opens onto it or the answer says so --
-    the one approach -- else from the way the answer names, toward the
-    feature it names. A FEATURE stands by one relation: across, flanking or
-    along a way (at its `end`), by a place or the entrance -- on the side of
-    it the answer gives -- or on a side of the building; else by the place
-    the plan joins it to. An OUTBUILDING is
-    a block of its own standing apart on its side, reached by a way between
-    its door and the house's (`<id>__way`, solver geometry only).
+    the entrance when the entrance opens onto it -- the one approach -- else
+    from the way the answer names, else out past the open ground the plan
+    joins it to, else out of the one door of the house that opens onto it;
+    toward the feature the answer names. A FEATURE stands by one relation:
+    across, flanking or along a way (at its `end`), by a place or the
+    entrance -- on the side of it the answer gives -- or on a side of the
+    building; else by the place the plan joins it to. The relation is held
+    to the plan's joins: one naming a place the plan does not join it to
+    gives way to the join, save where it is joined to open ground alone,
+    which it then stands IN (`in`), by what the answer names. An OUTBUILDING
+    is a block of its own standing apart on its side, toward the end of it
+    its room lies, never centred before the entrance, reached by a way
+    between its door and the house's (`<id>__way`, solver geometry only).
 
     A door of the house onto a feature opens onto the ground the feature
     stands in -- the area the building stands around, else `GROUND_ID` --
@@ -1205,7 +1243,10 @@ def _ground_plan(building, inventory, answer, entrance):
     house opens straight onto it -- open ground on the side its doorway
     states -- and not at all when it lies further out."""
     answer = answer if isinstance(answer, dict) else {}
-    held = {g["id"]: g for g in inventory.get("grounds") or ()}
+    # the building's places alone: one taken out of it (`without_places`)
+    # is no place of this ground, whatever the first call said it was
+    present = {g["id"] for g in building.get("grounds") or ()}
+    held = {g["id"]: g for g in inventory.get("grounds") or () if g["id"] in present}
     said = {}
     for raw in answer.get("grounds") or ():
         if isinstance(raw, dict) and str(raw.get("id") or "") in held:
@@ -1215,6 +1256,7 @@ def _ground_plan(building, inventory, answer, entrance):
     way_ids = {pid for pid, what in is_of.items() if what == "way"}
     feature_ids = {pid for pid, what in is_of.items() if what == "feature"}
     entrance_to = entrance.get("to")
+    front = entrance.get("side") or _side(answer.get("front")) or "s"
     plan_side = {}
     for o in building["outside"]:
         if o["side"] and o["to"] not in plan_side:
@@ -1223,9 +1265,30 @@ def _ground_plan(building, inventory, answer, entrance):
     areas, ways, features, rooms, blocks, door_to = [], [], [], [], [], {}
     around = None
     approach = False
-    # what the answers said first: a place left unsaid never takes the
-    # ground round the house from one said to lie there
-    for place in sorted(building.get("grounds") or (), key=lambda g: g["id"] not in is_of):
+    # WHAT IS OPEN GROUND, before anything is laid on it (Home 10, chat 173):
+    # what the first call said is open, and a place it left unsaid that the
+    # house opens straight onto, which is laid as open ground below
+    ground_ids = {g["id"] for g in building.get("grounds") or ()}
+    open_ids = {pid for pid, what in is_of.items() if what == "open"} | \
+        {pid for pid in direct & ground_ids if pid not in is_of}
+    planned = building.get("ground_specs") or {}
+
+    def bearing(a, b):
+        """The side of `a` that `b` lies on, as the plan states it on either
+        side; None where it states none."""
+        for one, other, flip in ((a, b, False), (b, a, True)):
+            for edge in (planned.get(one) or {}).get("adjacent") or ():
+                if isinstance(edge, dict) and str(edge.get("to") or "") == other:
+                    side = _side(edge.get("dir"))
+                    if side and len(str(edge.get("dir") or "").strip()) == 1:
+                        return _OPP[side] if flip else side
+        return None
+
+    # what the answers said first, open ground before what stands on it: a
+    # place left unsaid never takes the ground round the house from one said
+    # to lie there
+    for place in sorted(building.get("grounds") or (),
+                        key=lambda g: (g["id"] not in is_of, is_of.get(g["id"]) != "open")):
         pid, mine = place["id"], said.get(place["id"]) or {}
         what = is_of.get(pid)
         if what is None:
@@ -1253,15 +1316,40 @@ def _ground_plan(building, inventory, answer, entrance):
         elif what == "way":
             way = {"id": pid, "name": place["name"]}
             frm = str(mine.get("from") or "").strip()
-            if not approach and (pid == entrance_to or frm == "entrance"):
+            opens = [o for o in place["joins"] if o in open_ids]
+            # THE APPROACH IS THE WAY THE ENTRANCE OPENS ONTO: never one the
+            # plan joins only to other ground, whatever an answer says --
+            # laid out of the front door, Home 10's path ran through the
+            # court the entrance opens onto and cut it in two
+            if not approach and pid == entrance_to:
                 way["from"], approach = "entrance", True
             elif frm in way_ids and frm != pid:
                 way["from"] = frm
+            elif opens:
+                # A WAY THE PLAN JOINS TO OPEN GROUND LEAVES IT, on the side
+                # the plan states, past its far edge (the solver's
+                # `WAY_BEYOND`)
+                way["from"] = opens[0]
+                side = bearing(opens[0], pid)
+                if side:
+                    way["side"] = side
+            elif len([o for o in place["joins"] if o in building["rooms"]]) == 1:
+                # A WAY ONE ROOM OF THE HOUSE OPENS ONTO, AND NO OTHER, LEAVES
+                # FROM THAT DOOR, as the approach leaves the entrance's: a
+                # path the plan joins to the hall's south wall, the entrance
+                # opening onto the garden, had nothing to run from or between
+                # and was dropped (a review of 2026-10-14)
+                way["from"] = "door"
             if str(mine.get("to") or "") in feature_ids:
                 way["to"] = str(mine["to"])
             ways.append(way)
         elif what == "feature":
             feature = {"id": pid, "name": place["name"]}
+            if place.get("shape") == "round":
+                # read as the world reads it: its box's corners are no part
+                # of it (`spatial_fov`'s round shape), so a door's step on one
+                # opened onto nothing (a review of 2026-10-14)
+                feature["round"] = True
             kind = held[pid].get("kind") or str(mine.get("kind") or "").strip().casefold()
             size = str(mine.get("size") or "").strip().casefold()
             if kind in kinds:
@@ -1270,31 +1358,119 @@ def _ground_plan(building, inventory, answer, entrance):
                     feature["size"] = size
             else:
                 feature["kind"], feature["size"] = "", size if size in sizes else "medium"
+            # WHAT IT STANDS BY IS WHAT THE PLAN JOINS IT TO: an answer's
+            # relation to something the plan does not join it to gives way
+            # to the plan's join -- a lantern the plan joins to the path,
+            # answered by the entrance, stood where it touched no path, and
+            # was dropped (a review of 2026-10-14); one the plan joins to
+            # nothing it could stand by keeps the answer's
+            usable = [o for o in place["joins"]
+                      if o in way_ids or o in feature_ids or o in building["rooms"]] + \
+                [o for o in place["joins"] if o in open_ids]
+            # JOINED TO OPEN GROUND ALONE, IT STANDS IN THAT GROUND (`in`), by
+            # whatever the answer relates it to: standing by the kitchen or
+            # the lane's mouth keeps a join to the garden or the court it
+            # stands in, where a relation thrown away for the join sent a
+            # bench to the plot's far corner, and a side of the building
+            # answered stood a lantern outside its court (a review of
+            # 2026-10-14)
+            ground_in = usable[0] if usable and all(o in open_ids for o in usable) else None
+
+            def tied(target, across=False):
+                return target in place["joins"] or not usable or (ground_in is not None and not across)
+
             placed = False
             for rel in ("across", "flank", "along"):
-                if str(mine.get(rel) or "") in way_ids:
-                    feature[rel], placed = str(mine[rel]), True
+                if str(mine.get(rel) or "") in way_ids and tied(str(mine[rel]), rel == "across"):
+                    # A PLACE IS ONE THING: the pair or the row the solver
+                    # lays for `flank` and `along` would be one place of
+                    # floors that do not touch (Home 6's torii, two posts
+                    # apart); the thing stands by the way, at its end
+                    feature[rel if rel == "across" else "by"], placed = str(mine[rel]), True
                     end = str(mine.get("end") or "").strip().casefold()
                     if end in ("far", "near"):
                         feature["end"] = end
+                    if rel != "across" and _side(mine.get("side")):
+                        feature["side"] = _side(mine.get("side"))
                     break
             by = str(mine.get("by") or "")
-            if not placed and (by == "entrance" or by in way_ids or by in feature_ids
-                               or by in building["rooms"]) and by != pid:
+            if not placed and by == "entrance" and entrance_to in place["joins"] \
+                    and entrance_to in way_ids and entrance_to != pid:
+                # by the entrance, and joined to the way it opens onto: by
+                # that way, at its near end. By the entrance where it opens
+                # onto open ground: the ground at its step is kept clear
+                # (`layout_solver._grounds`' aprons), and stood by the ground
+                # instead a lantern went nineteen paces off (a review of
+                # 2026-10-14)
+                feature["by"], placed = entrance_to, True
+                feature["end"] = "near"
+            if not placed and by != pid and (
+                    # by the entrance where its step can lie in the thing's
+                    # ground: the entrance opens onto that ground, or onto a
+                    # way -- never where it opens onto other open ground, which
+                    # pulled a lantern to the garden's corner nearest a door
+                    # onto the court, and it was dropped (the fuzz's seed 135)
+                    (by == "entrance" and (not usable or entrance_to in place["joins"]
+                                           or (ground_in is not None
+                                               and entrance_to not in open_ids)))
+                    or ((by in way_ids or by in feature_ids or by in building["rooms"]) and tied(by))):
                 feature["by"], placed = by, True
-                if _side(mine.get("side")):
-                    # and on that side of it, where the answer says
-                    feature["side"] = _side(mine.get("side"))
+            if placed and _side(mine.get("side")) and "by" in feature:
+                # and on that side of it, where the answer says
+                feature["side"] = _side(mine.get("side"))
             if not placed and _side(mine.get("side")):
-                feature["side"], placed = _side(mine.get("side")), True
-            if not placed:
-                joined = next((o for o in place["joins"]
-                               if o in way_ids or o in feature_ids or o in building["rooms"]), None)
+                joined = next((o for o in usable if o in way_ids or o in feature_ids), None)
                 if joined:
+                    # a side of the building, answered of a thing the plan
+                    # joins to a way or a thing: on that side of what it is
+                    # joined to
                     feature["by"] = joined
+                feature["side"], placed = _side(mine.get("side")), True
+            if not placed and usable:
+                # by what the plan joins it to -- open ground last, which it
+                # then stands in: with no relation, a lantern joined to the
+                # garden alone stood as far from everything as the plot
+                # allowed, touching no garden (a review of 2026-10-14)
+                feature["by"] = usable[0]
+            if ground_in is not None:
+                feature["in"] = ground_in
             features.append(feature)
         elif what == "outbuilding":
-            side = _side(mine.get("side")) or plan_side.get(pid)
+            # THE PLAN'S WAY TO IT IS THE FACT: an outbuilding a room opens
+            # onto stands on the side the plan's way faces, the answer's side
+            # only where the plan states none -- stood on the answer's other
+            # side, its walk ran round the house and cut the ground in two (a
+            # review of 2026-10-14)
+            side = plan_side.get(pid) or _side(mine.get("side"))
+            joined_rooms = [o for o in place["joins"] if o in building["rooms"]]
+            opens = [o for o in place["joins"] if o in open_ids]
+            if opens and not joined_rooms:
+                # AN OUTBUILDING STANDS ON THE OPEN GROUND THE PLAN JOINS IT
+                # TO, on the side of the building that ground lies, toward
+                # the end the plan bears it to, and opens onto it -- joined
+                # to a walk the solver never laid, Home 10's storehouse stood
+                # apart with no doorway at all
+                area = opens[0]
+                where = next((a["where"] for a in areas if a["id"] == area), None) \
+                    or _side((said.get(area) or {}).get("where")) or plan_side.get(area)
+                if where in _SIDES:
+                    side = where
+                if side is None:
+                    del is_of[pid]
+                    continue
+                toward = bearing(area, pid)
+                door_side = bearing(pid, area) or (_OPP[toward] if toward else None)
+                join = {"to": area, "kind": "door"}
+                if door_side:
+                    join["side"] = door_side
+                rooms.append({"id": pid, "name": place["name"], "level": 0, "block": pid,
+                              "purpose": "other", "joins": [join],
+                              "zones": [], "windows": [], "fixtures": []})
+                block = {"id": pid, "apart": True, "beside": {"block": "main", "side": side}}
+                if toward and toward not in (side, _OPP[side]):
+                    block["toward"] = toward
+                blocks.append(block)
+                continue
             if side is None:
                 del is_of[pid]
                 continue
@@ -1302,31 +1478,104 @@ def _ground_plan(building, inventory, answer, entrance):
             rooms.append({"id": pid, "name": place["name"], "level": 0, "block": pid,
                           "purpose": "other", "joins": [{"to": walk, "kind": "door"}],
                           "zones": [], "windows": [], "fixtures": []})
-            blocks.append({"id": pid, "apart": True, "beside": {"block": "main", "side": side}})
+            block = {"id": pid, "apart": True, "beside": {"block": "main", "side": side}}
+            # TOWARD ITS ROOM'S END OF THAT SIDE, as the plan lays the rooms
+            # out from the entrance's: centred on its side, a privy south of
+            # the washroom stood before the entrance, across the path, and
+            # the gate at the path's foot was dropped (a review of 2026-10-14)
+            toward = _toward_room(building, joined_rooms[0] if joined_rooms else None, side, answer)
+            asked = _side(mine.get("side"))
+            if not toward and side == front:
+                # NEVER BEFORE THE ENTRANCE: with no end either way, one on
+                # the entrance's side stands toward the end the answer names
+                # across that side, else the end of the house its room stands
+                # at, else past a corner -- centred there, a privy the plan
+                # joins to the hall stood three paces before the entrance
+                # door, and the floor dropped it (a review of 2026-10-14).
+                # Elsewhere it stands centred, as before: at the end an
+                # answer named, a privy crowded the byre at the corner, and
+                # one of them was dropped (the fuzz's seeds 45 and 125)
+                toward = (asked if asked and asked not in (side, _OPP[side]) else None) \
+                    or _toward_room(building, joined_rooms[0] if joined_rooms else None, side,
+                                    answer, middle=True) or _PAST_THE_CORNER[side]
+            if toward:
+                block["toward"] = toward
+            blocks.append(block)
             ways.append({"id": walk, "name": place["name"]})
             door_to[pid] = walk
     stands_in = around
+    if stands_in is None and feature_ids & direct and areas:
+        # NO GROUND NO PLACE HOLDS: a thing at a door stands in the open
+        # ground the plan joins to the most places, which then lies round
+        # the building, never in solver ground no row is written for
+        joins_of = {g["id"]: len(g["joins"]) for g in building.get("grounds") or ()}
+        ranked = sorted(areas, key=lambda a: (-joins_of.get(a["id"], 0), a["id"]))
+        ranked[0]["where"] = "around"
+        stands_in = around = ranked[0]["id"]
     for pid in sorted(feature_ids & direct):
         if stands_in is None:
             areas.append({"id": GROUND_ID, "name": GROUND_ID, "kind": GROUND_AREA_KIND,
                           "where": "around"})
             stands_in = GROUND_ID
-        door_to[pid] = stands_in
+        # A THING THE PLAN JOINS TO A ROOM OF THE BUILDING STANDS AT A DOOR
+        # OF THAT ROOM -- the plan's join is the fact, and wins over the
+        # answer's relation: a well the plan joins to the kitchen stood a
+        # pace off its threshold (the farm) or eighteen paces from it (Home
+        # 11). THE DOOR IS ITS OWN: one door carrying two of the plan's ways
+        # meets only one of them, so a second thing joined to the room, or
+        # the room's own way onto the ground the thing stands in, cost the
+        # other its doorway (a review of 2026-10-14)
+        room = next((o["room"] for o in sorted(building["outside"], key=lambda o: o["room"])
+                     if o["to"] == pid and not o.get("vertical")), None)
+        feature = next((f for f in features if f["id"] == pid), None)
+        if not room or feature is None:
+            door_to[pid] = stands_in
+            continue
+        for rel in ("across", "flank", "along", "by", "side", "end", "in"):
+            feature.pop(rel, None)
+        feature["at_door"] = {"room": room, "onto": stands_in}
+        place = next(g for g in building.get("grounds") or () if g["id"] == pid)
+        reach = [o for o in place["joins"] if o in way_ids]
+        if reach:
+            # and its door may turn so it reaches the way the plan also
+            # joins it to (the solver's `REACH_MAX`)
+            feature["reach"] = reach
     # A DOOR OF THE HOUSE ALWAYS OPENS ONTO SOMETHING. A place it opens
     # straight onto that the answers left nowhere -- open ground with no side
     # to lie on, an outbuilding with none to stand apart on -- is open ground
     # on its doorway's side, as the tier laid it before the grounds; a door
     # onto nothing would refuse every seed.
     held_ids = {x["id"] for x in areas + ways + features + rooms} | set(door_to)
-    ground_ids = {g["id"] for g in building.get("grounds") or ()}
+    dropped = set(building.get("dropped_places") or ())
     for o in building["outside"]:
         pid = o["to"]
-        if o.get("vertical") or pid not in ground_ids or pid in held_ids:
+        if o.get("vertical") or pid in held_ids:
             continue
         held_ids.add(pid)
+        if pid in dropped:
+            # A PLACE TAKEN OUT OF THE GROUND (`without_places`) takes no
+            # ground from the places left and asks no door of its own: the
+            # room's way onto it is a door the room has already -- the
+            # entrance, or its door onto another place -- and only a room
+            # with none opens onto the ground the building stands in, or the
+            # first ground left. Given a band of its own, Home 6's dropped
+            # well took the garden's whole south side, and the path it ran
+            # through then failed too; given a door of its own, a thing
+            # dropped for want of a wall asked for one more, and the house was
+            # refused (a review of 2026-10-14)
+            target = _door_already(building, pid, dropped, door_to, entrance)
+            target = target or stands_in or next((a["id"] for a in areas), None)
+            if target:
+                door_to[pid] = target
+                continue
         areas.append({"id": pid, "name": o["name"], "kind": GROUND_AREA_KIND,
                       "where": o["side"] or "around"})
-        is_of[pid] = "open"
+        if pid in ground_ids:
+            is_of[pid] = "open"
+        # a place that is no ground of this building, with no open ground the
+        # building stands in, is ground in the solve alone, as every place was
+        # before the grounds (`without_grounds`): its door opens onto
+        # something, and nothing of it is written
     return {"areas": areas, "ways": ways, "features": features, "rooms": rooms,
             "blocks": blocks, "is": is_of, "door_to": door_to}
 
@@ -1357,7 +1606,7 @@ def solve_spec(spec):
     return solve(spec)
 
 
-def solve_for(building, spec):
+def solve_for(building, spec, attempts=None):
     """`(layout, refusals)`: the solve that stands for the plan, over
     `LAYOUT_SOLVE_SEEDS` seeds of the solver's search taken in order from its
     own (`layout_solver.SEED`). One whose every stair lands in each room it
@@ -1377,7 +1626,12 @@ def solve_for(building, spec):
     first = standing = None
     for k in range(LAYOUT_SOLVE_SEEDS):
         layout = solve(spec, seed=SEED + k)
-        refused = refusals(building, spec, layout)
+        found = []
+        refused = refusals(building, spec, layout, breaches=found)
+        if attempts is not None:
+            # every seed tried, with the floor's findings on it, for a caller
+            # that chooses among the refused (`places_to_drop`)
+            attempts.append((layout, refused, found))
         first = first or (layout, refused)
         if refused:
             continue
@@ -1401,9 +1655,12 @@ def unlanded(spec, layout):
             if not any(frozenset((hall, room)) in pairs for hall in halls_of.get(st["id"], ()))]
 
 
-def refusals(building, spec, layout):
+def refusals(building, spec, layout, breaches=None):
     """Why this solve cannot stand for the plan, in words; empty when it can.
-    Read off the layout's structure, never its warning sentences."""
+    Read off the layout's structure, never its warning sentences. The
+    grounds floor's own findings, `(words, place)`, are added to `breaches`
+    where a list is handed in, so a caller choosing places to take out
+    never runs the floor twice on one seed (`places_to_drop`)."""
     out = list(check(layout))
     placed = {}
     for lv, floor in layout.floors.items():
@@ -1426,12 +1683,20 @@ def refusals(building, spec, layout):
         if building["levels"].get(j["a"]) == building["levels"].get(j["b"]) \
                 and frozenset((j["a"], j["b"])) not in pairs:
             out.append(f"{j['a']} and {j['b']} were to join and share no doorway")
-    entrance = building["entrance"] or {}
+    entrance = entrance_of(building, spec=spec)
     outs = {(d["a"], d["b"]) for d in layout.doors if d.get("outside")}
     door_to = spec.get("door_to") or {}
+    judged = set(spec.get("ground_is") or ()) if building.get("grounds") else set()
     for o in building["outside"]:
-        target = "entrance" if (o["room"] == entrance.get("room") and o["to"] == entrance.get("to")) \
-            else door_to.get(o["to"], o["to"])
+        target = door_to.get(o["to"], o["to"])
+        if o["room"] == entrance.get("room") and entrance.get("to") in (o["to"], target):
+            target = "entrance"
+        if target != "entrance" and o["to"] in judged:
+            # a doorway onto a place of the ground is the grounds floor's to
+            # judge, which charges the place that fails, never the house
+            # (`ground_breaches`): a thing whose own door found no wall
+            # refused every seed for the house, and cost the whole ground
+            continue
         if (o["room"], target) not in outs:
             out.append(f"{o['room']} has no doorway onto {o['to']}")
     # A ROOM'S SIZE IS NEVER A REFUSAL: the plan's `extent` is the Writers'
@@ -1447,6 +1712,489 @@ def refusals(building, spec, layout):
     # chose (`structure.write_planned_layout`). Held as a fact, it refused all
     # three of the owner's refined shrine's answer sets, two for a washroom
     # the lab's own liked shrine had turned too.
+    # AND THE GROUND HOLDS TOGETHER (`ground_breaches`): a solve whose ground
+    # does not is refused like any other, so the search takes the next seed --
+    # asked only of a house that stands, since the plan the floor reads needs
+    # every room laid, and a solve it cannot read is refused, never raised
+    # (a review of 2026-10-14: a floorless room aborted the seed search)
+    if building.get("grounds") and not out:
+        try:
+            found = ground_breaches(building, spec, layout)
+        except Exception as exc:
+            out.append(f"the ground could not be read: {' '.join(str(exc).split())[:200]}")
+        else:
+            out += [words for words, _place in found]
+            if breaches is not None:
+                breaches.extend(found)
+    return out
+
+
+#: Which of two places of the ground that fail to meet gives way, where only
+#: the failing places are dropped (`ground_breaches`): the thing, then the
+#: building apart, then the way, then the open ground the rest stand on.
+_GIVES_WAY = ("feature", "outbuilding", "way", "open")
+
+
+def ground_breaches(building, spec, layout):
+    """`[(words, place)]`: why the ground this solve would write does not
+    hold together, each with the place of the ground that gives way for it
+    (`_GIVES_WAY`); empty when it holds (design A6, Home 10's court cut in two
+    and its storehouse standing apart with no doorway, chat 173).
+
+    Read off the scene the solve WOULD write -- the very plan rows
+    `structure.write_planned_layout` writes (`solved_plan_row`,
+    `made_plan_row`), laid on the fringe's own stubs (`solved_scene`) -- through
+    the world's own readers, never the solver's geometry: every ground place
+    handed to the solver is laid; each is one floor; and every level way
+    between two places laid on the plan with a ground place on either side
+    has its two doorways on opposite walls, the cell beyond one being a
+    doorway cell of the other. A window onto the ground is a sightline, no
+    doorway. The building's own rooms and halls are the solver's to join and
+    are not judged here."""
+    from world.site_plan import room_level, room_site
+    from world.spatial import _cells_connected, _door_cells, opposite_bearing, room_grid
+    from world.structure import made_plan_row, solved_plan_row, solved_scene
+    solved, report = planned_layout(building, spec, layout)
+    is_of = spec.get("ground_is") or {}
+    out = [(f"{pid} was given no ground", pid) for pid in report.get("grounds_unplaced") or ()]
+    plan = dict(building.get("ground_specs") or {})
+    plan.update(building.get("specs") or {})
+    names = {g["id"]: g["name"] for g in building.get("grounds") or ()}
+    names.update(building.get("names") or {})
+    rows = {}
+    for uid, solve in solved.items():
+        if solve.get("room") is not None:
+            row = made_plan_row(solve)
+            rows[uid] = (str(row.get("name") or uid), row)
+        elif uid in plan:
+            rows[uid] = (names.get(uid, uid), solved_plan_row(plan[uid], solve))
+    scene = solved_scene(rows)
+    rooms = scene["rooms"]
+    ground = {g["id"] for g in building.get("grounds") or ()} & set(rows) & set(is_of)
+    laid = {uid for uid in rooms
+            if (room_site(scene, uid) or {}).get("plan") == building["plan"]}
+    on_plan = {}
+    for uid in laid:
+        site = room_site(scene, uid)
+        on_plan[uid] = {(site["x"] + x, site["y"] + y) for x, y in room_grid(scene, uid).cells}
+
+    def rank(p):
+        return _GIVES_WAY.index(is_of[p]) if is_of.get(p) in _GIVES_WAY else len(_GIVES_WAY)
+
+    # WHAT HANGS ON A PLACE: the places of the ground no chain of joins from
+    # a room of the building would reach without it. Of two equally
+    # particular places the one less hangs on gives way -- by id, the court
+    # the entrance opens onto was charged for an orchard behind the house,
+    # and taken out with everything reached through it (a review of
+    # 2026-10-14)
+    joins_of = {g["id"]: set(g.get("joins") or ()) for g in building.get("grounds") or ()}
+    hung = {}
+
+    def hung_on(p):
+        """The places of the ground no chain of joins from a room reaches
+        without `p`."""
+        if p not in hung:
+            got = set(building.get("rooms") or ())
+            grew = True
+            while grew:
+                grew = False
+                for q, js in joins_of.items():
+                    if q != p and q not in got and js & got:
+                        got.add(q)
+                        grew = True
+            hung[p] = {q for q in joins_of if q != p and q not in got}
+        return hung[p]
+
+    def hanging(p):
+        return len(hung_on(p))
+
+    # and the ground the entrance opens onto weighs most of all: by what hung
+    # on them alone, the court the entrance opens onto was charged for a
+    # yard's door it held (a review of 2026-10-14)
+    entrance_to = entrance_of(building, spec=spec).get("to")
+
+    def key(p):
+        return (rank(p), hanging(p) + (len(joins_of) + 1 if p == entrance_to else 0), p)
+
+    def particular(places):
+        return min(places, key=key)
+
+    def touches(p, q):
+        return any((x + dx, y + dy) in on_plan.get(q, ()) for x, y in on_plan.get(p, ())
+                   for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+
+    # A CHARGE TO A THIRD PLACE -- the one standing on a door's ground,
+    # between two places, or cutting one -- is void where a place the breach
+    # is about is charged for a breach of its own: it goes, and the breach
+    # with it (a court not one floor, and its step taken by a garden band:
+    # both were dropped, though the court's going answered both; a review of
+    # 2026-10-14). The breach still refuses the seed.
+    third = {}
+    apart = {}      # breaches a building apart is charged for, with its own place
+
+    def charge(words, place, about):
+        if place is not None and place not in about:
+            third[len(out)] = tuple(about)
+        elif place is not None and is_of.get(place) == "outbuilding" and len(about) == 2:
+            apart[len(out)] = (place, next(x for x in about if x != place))
+        out.append((words, place))
+
+    def occupiers(room, there):
+        """The places of the ground standing on the ground at the room's
+        doorway onto `there` -- its step, the pace past it, and the paces
+        either side of both, the ground the solver keeps for a door
+        (`layout_solver._grounds`' aprons) -- that give way before `there`:
+        more particular, or as particular with no more hanging on them (a
+        band of open ground on the entrance's step was never charged, and
+        the court the entrance opens onto was, with everything reached
+        through it; a review of 2026-10-14)."""
+        cells, wall = _door_cells(scene, room, there)
+        site = room_site(scene, room)
+        if not cells or wall not in _UNIT or not site:
+            return []
+        ux, uy = _UNIT[wall]
+        lx, ly = (1, 0) if wall in "ns" else (0, 1)
+        apron = {(site["x"] + x + ux * (1 + k) + lx * m, site["y"] + y + uy * (1 + k) + ly * m)
+                 for x, y in cells for k in (0, 1) for m in (-1, 0, 1)}
+        return [q for q in sorted(ground & laid) if q not in (room, there)
+                and key(q)[:2] <= key(there)[:2] and on_plan.get(q, set()) & apron]
+
+    area_ids = {a.get("id") for a in (spec.get("grounds") or {}).get("areas") or ()}
+    on_line = {}        # a thing: the ways it stands across, or that lead to it
+    for f in (spec.get("grounds") or {}).get("features") or ():
+        if isinstance(f, dict) and f.get("across"):
+            on_line.setdefault(f["id"], []).append(f["across"])
+    for w in (spec.get("grounds") or {}).get("ways") or ():
+        if isinstance(w, dict) and w.get("to"):
+            on_line.setdefault(w["to"], []).append(w["id"])
+    # the ways the ground is laid round: the approach, and a way leaving it
+    first = {w["id"] for w in (spec.get("grounds") or {}).get("ways") or ()
+             if isinstance(w, dict) and (w.get("from") in ("entrance", "door")
+                                         or w.get("from") in area_ids)}
+    for pid in sorted(ground & laid):
+        cells = room_grid(scene, pid).cells
+        if _cells_connected(cells):
+            continue
+        # A PLACE CUT IN TWO is charged to what cut it: a way, a walk, a
+        # thing whose cells touch two of its parts (a review of 2026-10-14:
+        # a privy's walk fenced off a pocket of garden, and the garden was
+        # dropped with everything reached through it)
+        parts = []
+        left = set(on_plan[pid])
+        while left:
+            stack, part = [left.pop()], set()
+            while stack:
+                c = stack.pop()
+                part.add(c)
+                for n in ((c[0] + 1, c[1]), (c[0] - 1, c[1]), (c[0], c[1] + 1), (c[0], c[1] - 1)):
+                    if n in left:
+                        left.discard(n)
+                        stack.append(n)
+            parts.append(part)
+        # WHAT CUT IT is the place whose own cells, given back, join its
+        # parts up -- most of them, then the one laid last, then the most
+        # particular; against a way, a building it was laid over gives back
+        # nothing. A gate at the path's foot was charged for a walk that cut
+        # the garden round the back of the house, and a storehouse for a lane
+        # laid through it (a review of 2026-10-14).
+        def block_of(q):
+            cells = set()
+            for rect in (layout.floors.get(0) or {}).get(q) or ():
+                cells |= rect.cells()
+            return cells
+
+        def cells_of(q):
+            if is_of.get(pid) == "way" and is_of.get(q) == "outbuilding":
+                return on_plan[q] - block_of(q)
+            if is_of.get(q) == "feature":
+                # A THING ON A WAY'S LINE -- across it, or where it leads --
+                # gets no credit for the cells on its lanes: they carry on
+                # the way's own cut, and a gate at the path's foot was
+                # charged for it before the path, spending a round (a review
+                # of 2026-10-14)
+                got = set(on_plan[q])
+                for wid in on_line.get(q) or ():
+                    w = layout.ways.get(wid)
+                    if w and str(w.get("side") or "") in _UNIT:
+                        k = 0 if w["side"] in ("n", "s") else 1
+                        lanes = {c[k] for c in w["cells"]}
+                        got = {c for c in got if c[k] not in lanes}
+                return got
+            return on_plan[q]
+
+        def laid_late(q):
+            # the solver's order: a building's block first, then the ways the
+            # ground is laid round, the things, and last the walks and the
+            # ways that branch: of two whose cells would join it up, the one
+            # laid later cut it
+            what = is_of.get(q)
+            if what == "outbuilding":
+                return 3 if components(on_plan[pid] | (on_plan[q] - block_of(q))) < len(parts) else 0
+            if what == "way":
+                return 1 if q in first else 3
+            return 2
+
+        def components(cells):
+            left, n = set(cells), 0
+            while left:
+                n += 1
+                stack = [left.pop()]
+                while stack:
+                    c = stack.pop()
+                    for nb in ((c[0] + 1, c[1]), (c[0] - 1, c[1]), (c[0], c[1] + 1), (c[0], c[1] - 1)):
+                        if nb in left:
+                            left.discard(nb)
+                            stack.append(nb)
+            return n
+
+        # never a cutter the cut place hangs on: taking it out takes the
+        # place too, with everything hung on it -- a path cutting off a
+        # pocket of the garden it alone reaches was charged, and the garden
+        # and the oak went with it (a review of 2026-10-14)
+        cutters = [q for q in sorted(ground & laid) if q != pid
+                   and is_of.get(q) != "open" and pid not in hung_on(q)
+                   and components(on_plan[pid] | cells_of(q)) < len(parts)]
+        cutter = min(cutters, key=lambda q: (components(on_plan[pid] | cells_of(q)), -laid_late(q),
+                                             key(q))) if cutters else pid
+        charge(f"{pid} is not one floor", cutter, (pid,))
+
+    def giving_way(a, b):
+        return particular([p for p in (a, b) if p in ground])
+
+    pairs, met = set(), []
+    for uid in sorted(rooms):
+        for edge in rooms[uid].get("adjacent") or ():
+            if not isinstance(edge, dict) or edge.get("vertical"):
+                continue
+            to = str(edge.get("to") or "")
+            if to in rooms and {uid, to} & ground and uid in laid and to in laid \
+                    and str(edge.get("barrier") or "") != "window":
+                pairs.add(tuple(sorted((uid, to))))
+    for a, b in sorted(pairs):
+        place = giving_way(a, b)
+        if not ({a, b} <= ground):
+            # A ROOM'S DOOR ONTO A PLACE OF THE GROUND keeps the ground at
+            # its step for that place, and a more particular place standing on
+            # it is charged -- the thing that took the open ground's step
+            # gives way, never the open ground round the house (a review of
+            # 2026-10-14: a lantern a pace below the entrance's step left it a
+            # sliver no block held, and the court was charged)
+            room, there = (a, b) if b in ground else (b, a)
+            holders = occupiers(room, there)
+            if holders:
+                place = particular(holders)
+        elif not touches(a, b):
+            # TWO PLACES OF THE GROUND THAT DO NOT TOUCH, with a thing, a way
+            # or a building between them that touches both: it gives way -- a
+            # lantern on a way's mouth cost the way its meeting, and the way
+            # was charged. Never open ground: a band beside the house touches
+            # the ground before and behind it at the corners, stands between
+            # nothing, and was charged round after round (two reviews of
+            # 2026-10-14)
+            between = [q for q in sorted(ground & laid) if q not in (a, b)
+                       and is_of.get(q) != "open"
+                       and key(q) < key(place) and touches(q, a) and touches(q, b)]
+            if between:
+                place = particular(between)
+        if room_level(scene, a) != room_level(scene, b):
+            charge(f"{a} and {b} are joined and do not stand on one storey", place, (a, b))
+            continue
+        da, wa = _door_cells(scene, a, b)
+        db, wb = _door_cells(scene, b, a)
+        if not da or wa not in _UNIT or not db or wb not in _UNIT:
+            charge(f"{a} and {b} are joined and one has no placed doorway", place, (a, b))
+            continue
+        if wb != opposite_bearing(wa):
+            charge(f"{a}'s doorway onto {b} is in its {wa} wall and {b}'s in its "
+                   f"{wb} wall", place, (a, b))
+            continue
+        sa, sb = room_site(scene, a), room_site(scene, b)
+        ux, uy = _UNIT[wa]
+        front = {(x + ux, y + uy) for x, y in da}
+        rel = (sb["x"] - sa["x"], sb["y"] - sa["y"])
+        if not front & {(x + rel[0], y + rel[1]) for x, y in db}:
+            charge(f"{a}'s doorway onto {b} does not meet {b}'s across the wall", place, (a, b))
+            continue
+        met.append((a, b))
+    # A BUILDING APART CHARGED FOR ITS OWN DOORWAY goes with the place
+    # standing on its step, where another breach of the seed charges that
+    # place already: the yard band holding the court's step was charged, and
+    # the byre whose door stepped into it was dropped beside it, though the
+    # yard's going answered both. Never where nothing else charges it: a
+    # band charged for every building whose door it held cost places a
+    # building alone would not have (a review of 2026-10-14)
+    charged = {p for _w, p in out if p is not None}
+    for i, (p, there) in sorted(apart.items()):
+        holders = (set(occupiers(p, there)) & charged) - {p} if there in ground else set()
+        if holders:
+            out[i] = (out[i][0], particular(holders))
+            third[i] = (p, there)
+    own = {p for i, (_w, p) in enumerate(out) if p is not None and i not in third}
+    charged_away = []       # pairs that failed for a place neither of them is
+    for i, about in third.items():
+        if own & set(about):
+            out[i] = (out[i][0], None)
+        elif len(about) == 2:
+            charged_away.append(about)
+    # AND EVERY PLACE IS REACHED from a room of the building through doorways
+    # that meet: a place whose ways all failed, or lead only to places that
+    # are not laid, stands where nothing reaches it. Charged to itself only
+    # where nothing else explains it: a place reached once the places
+    # charged for a failing pair it does not belong to are taken out is
+    # refused here, and taken out by nobody (place None) -- the court whose
+    # step a lantern took left the lane and the shed reached from no room,
+    # and both were dropped beside the lantern (a review of 2026-10-14)
+    def reach(ways):
+        got = set(building.get("rooms") or ()) & laid
+        grew = True
+        while grew:
+            grew = False
+            for a, b in ways:
+                if (a in got) != (b in got):
+                    got |= {a, b}
+                    grew = True
+        return got
+
+    reached, assumed = reach(met), reach(met + charged_away)
+    failed = {place for _words, place in out}
+    for pid in sorted((ground & laid) - reached - failed):
+        out.append((f"{pid} is reached from no room of the building",
+                    None if pid in assumed else pid))
+    return out
+
+
+def places_to_drop(building, spec, attempts):
+    """`(places, words)`: the places of the ground to take out after every
+    seed in `attempts` (`solve_for`'s) was refused -- those of the seed whose
+    refusals are the ground's alone and that fails on the fewest places, the
+    earliest such seed on a tie; nothing where every seed is refused for the
+    house itself. A first seed refused for the house cost the whole ground,
+    and one failing more places than another dropped places another lays (a
+    review of 2026-10-14)."""
+    best = None
+    for k, attempt in enumerate(attempts or ()):
+        layout, refused = attempt[0], attempt[1]
+        if len(attempt) > 2:
+            breaches = attempt[2]       # the floor's findings `solve_for` kept
+        else:
+            try:
+                breaches = ground_breaches(building, spec, layout)
+            except Exception:
+                continue
+        words = [w for w, _p in breaches]
+        places = sorted({p for _w, p in breaches if p})
+        if not places or any(r not in words for r in refused):
+            continue
+        key = (len(places), len(breaches), k)
+        if best is None or key < best[0]:
+            best = (key, places, words)
+    return (best[1], best[2]) if best else ([], [])
+
+
+# the end of a side of the house an outbuilding stands toward where nothing
+# names one: the solver's own order for blocks that would crowd
+# (`layout_solver`'s apart blocks)
+_PAST_THE_CORNER = {"n": "e", "s": "e", "e": "s", "w": "s"}
+
+
+def _toward_room(building, room, side, answer=None, middle=False):
+    """The end of the house's `side` that `room` lies toward, as the plan's
+    own bearings lay the rooms out from the entrance's room -- each join a
+    pace on its stated side, the answer's where the plan states none, as the
+    spec reads it (`spec_from_answers`) -- or None where neither says either
+    way. With `middle`, a room in line with the entrance's lies toward the
+    end of the house it stands at, measured from the middle of the rooms."""
+    start = (building.get("entrance") or {}).get("room")
+    if not room or not start or side not in _SIDES:
+        return None
+    asked = {}
+    for raw in (answer or {}).get("rooms") or ():
+        if isinstance(raw, dict):
+            for j in raw.get("joins") or ():
+                if isinstance(j, dict) and _side(j.get("side")):
+                    asked.setdefault((str(raw.get("id") or ""), str(j.get("to") or "")),
+                                     _side(j.get("side")))
+    at, queue = {start: (0, 0)}, [start]
+    while queue:
+        a = queue.pop(0)
+        for j in building.get("joins") or ():
+            if a not in (j["a"], j["b"]):
+                continue
+            stated = j.get("side") if j.get("side") in _UNIT else None
+            if stated is None:
+                back = asked.get((j["b"], j["a"]))
+                stated = asked.get((j["a"], j["b"])) or (_OPP[back] if back else None)
+            if stated is None:
+                continue
+            b = j["b"] if j["a"] == a else j["a"]
+            if b in at:
+                continue
+            ux, uy = _UNIT[stated] if j["a"] == a else _UNIT[_OPP[stated]]
+            at[b] = (at[a][0] + ux, at[a][1] + uy)
+            queue.append(b)
+    axis = 0 if side in ("n", "s") else 1
+    off = at.get(room, (0, 0))[axis]
+    if off == 0 and middle and room in at:
+        # in line with the entrance's room -- most often the entrance's room
+        # itself: the end of the house it lies at, from the middle of the
+        # rooms laid out: a privy the hall opens onto, stood past the far
+        # corner, had its walk run round the whole front from the hall's
+        # other wall and cut the court off from the door (a review of
+        # 2026-10-14)
+        off = at[room][axis] - sum(p[axis] for p in at.values()) / len(at)
+    if axis == 0:
+        return "e" if off > 0 else ("w" if off < 0 else None)
+    return "s" if off > 0 else ("n" if off < 0 else None)
+
+
+def _door_already(building, pid, dropped, door_to, entrance):
+    """The door a room already has that its way onto `pid`, a place taken out
+    of the ground, opens through: the entrance, for the entrance's own room;
+    else its door onto another place it is joined to. None where `pid` is
+    joined to more rooms than one, or its room has no other door."""
+    rooms = sorted({o["room"] for o in building["outside"]
+                    if o["to"] == pid and not o.get("vertical")})
+    if len(rooms) != 1:
+        return None
+    room = rooms[0]
+    if entrance and room == entrance.get("room"):
+        return "entrance"
+    for o in sorted(building["outside"], key=lambda x: x["to"]):
+        if o["room"] == room and o["to"] != pid and o["to"] not in dropped \
+                and not o.get("vertical"):
+            return door_to.get(o["to"], o["to"])
+    return None
+
+
+def without_places(building, places):
+    """The building with the places `places` taken out of its grounds -- and
+    out of every other place's joins -- and every door of the house onto one
+    kept: each such place stays as the plan had it, as every place did before
+    the grounds (`without_grounds`, for all of them at once). A place of the
+    ground no chain of joins from a room of the building reaches any more
+    goes with them: nothing would reach it (Home 6's torii, joined to the
+    lantern path alone, was laid in the plot's far corner once the path was
+    taken out)."""
+    gone = set(places)
+    # what no chain of joins from a room of the building reaches any more:
+    # a pair of places joined only to each other stood stranded together
+    joins = {g["id"]: set(g.get("joins") or ()) for g in building.get("grounds") or ()}
+    reached = set(building.get("rooms") or ())
+    grew = True
+    while grew:
+        grew = False
+        for pid in set(joins) - gone - reached:
+            if joins[pid] & reached:
+                reached.add(pid)
+                grew = True
+    gone |= set(joins) - reached
+    out = dict(building)
+    # what was taken out, for the door onto it (`_ground_plan`)
+    out["dropped_places"] = sorted(set(building.get("dropped_places") or ()) | gone)
+    out["grounds"] = [dict(g, joins=[o for o in g.get("joins") or () if o not in gone])
+                      for g in building.get("grounds") or () if g["id"] not in gone]
+    out["ground_specs"] = {pid: spec for pid, spec in (building.get("ground_specs") or {}).items()
+                           if pid not in gone}
     return out
 
 
@@ -1472,13 +2220,14 @@ def _door_side(layout, a, b):
     return None
 
 
-def _outside_side(layout, building, o, door_to=None):
+def _outside_side(layout, building, o, door_to=None, entrance=None):
     """The wall a building room opens onto the ground outside through --
     onto what the place stands in, or the way to it, where the grounds were
     laid out with the building (`_ground_plan`)."""
-    entrance = building["entrance"] or {}
-    target = "entrance" if (o["room"] == entrance.get("room") and o["to"] == entrance.get("to")) \
-        else (door_to or {}).get(o["to"], o["to"])
+    entrance = entrance if entrance is not None else (building["entrance"] or {})
+    target = (door_to or {}).get(o["to"], o["to"])
+    if o["room"] == entrance.get("room") and entrance.get("to") in (o["to"], target):
+        target = "entrance"
     for d in layout.doors:
         if d.get("outside") and d["a"] == o["room"] and d["b"] == target:
             return d["side"]
@@ -1789,7 +2538,7 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
         report["split"].append(dict(entry, room=uid))
         out[uid]["record"].setdefault("split", []).append(entry)
     # DOORWAYS: between two of the building's rooms, and onto the ground
-    entrance = building["entrance"] or {}
+    entrance = entrance_of(building, spec=spec)
     door_to = spec.get("door_to") or {}
     for door in layout.doors:
         a, b, side, cell = door["a"], door["b"], door["side"], door["cell"]
@@ -1801,7 +2550,12 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
                                   "offset": _offset(rects[b], opposite_bearing(side), there)}
         elif a in out and door.get("outside"):
             if b == "entrance":
-                tos = [entrance.get("to")]
+                # and to a place taken out whose way opens through it
+                # (`_door_already`)
+                tos = [entrance.get("to")] + [
+                    o["to"] for o in building["outside"]
+                    if o["room"] == a and o["to"] != entrance.get("to")
+                    and door_to.get(o["to"]) in ("entrance", entrance.get("to"))]
             else:
                 # a door onto the ground the place stands in, or the way to
                 # it (`_ground_plan`), is the doorway to the place the plan
@@ -1920,7 +2674,7 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             to = plan_to.get((room_id, to), to)
             if to not in plan_outside:
                 continue
-            got = _outside_side(layout, building, {"room": room_id, "to": to}, door_to)
+            got = _outside_side(layout, building, {"room": room_id, "to": to}, door_to, entrance)
         if got and asked_side and got != asked_side:
             entry = {"room": room_id, "to": to, "asked": asked_side, "solved": got}
             if planned_sides.get((room_id, to)) == asked_side:
@@ -1941,31 +2695,37 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
             # is -- and carried from the record an earlier solve of this
             # ground filed, since the row it reads now holds that solve
             planned = (building.get("ground_specs") or {}).get(pid) or {}
-            earlier = (planned.get("layout") or {}).get("stated") \
-                if isinstance(planned.get("layout"), dict) else None
-            stated = (earlier["w"], earlier["d"]) if isinstance(earlier, dict) \
-                and earlier.get("w") and earlier.get("d") else _stated_sides(planned)
+            record = planned.get("layout") if isinstance(planned.get("layout"), dict) else None
+            if record is not None:
+                # a row an earlier solve wrote holds that solve's extent: the
+                # Room's estimate is the record's, or none was stated -- read
+                # off the row, every re-solve filed the last solve's extent as
+                # the Room's (a review of 2026-10-14)
+                earlier = record.get("stated")
+                stated = (earlier["w"], earlier["d"]) if isinstance(earlier, dict) \
+                    and earlier.get("w") and earlier.get("d") else None
+            else:
+                stated = _stated_sides(planned)
             if stated is not None:
                 out[pid]["record"]["stated"] = {"w": stated[0], "d": stated[1]}
                 report["stated"].append({"room": pid, "stated": {"w": stated[0], "d": stated[1]},
                                          "solved": dict(geometry["extent"])})
         for door in layout.doors:
-            # an outbuilding's own doorway, onto the way to the house: its
-            # doorway to the rooms the plan joins it to
+            # AN OUTBUILDING'S OWN DOOR ONTO THE OPEN GROUND IT STANDS ON is
+            # its doorway to that ground. Its door onto its walk to the house
+            # is no doorway: the walk is its own floor (`_ground_geometry`),
+            # and its doorway to the house room is that room's door, across
+            # its threshold (`_ground_doorways`)
             a = door["a"]
-            if a in laid and door.get("outside") and door["b"] == door_to.get(a):
-                for o in building["outside"]:
-                    if o["to"] == a and o["room"] in rects:
-                        out[a]["edges"][o["room"]] = {
-                            "dir": door["side"], "cell": None,
-                            "offset": _offset(layout.floors[0][a][0], door["side"], door["cell"])}
+            if a in laid and door.get("outside") and door["b"] in laid and door["side"] in _UNIT:
+                out[a]["edges"][door["b"]] = _ground_pin(laid[a], tuple(door["cell"]), door["side"])
         _ground_doorways(building, spec, layout, laid, out)
     # ONTO THE GROUND: a window with open ground the solve laid beyond it is
     # that ground's window edge; every other window a record in its room's
     # `windows` (module docstring). ONE EDGE A PAIR OF ROOMS: a room with a
     # way to that ground already -- a door out, in the plan or the solve --
     # or a window onto it laid first keeps this one in its wall.
-    beyond = _ground_cells(spec, laid) if building.get("grounds") else {}
+    beyond = _ground_cells(building, spec, laid) if building.get("grounds") else {}
     joined = _plan_joins(building)
     report["windows"] = []
     for window in laid_windows:
@@ -1980,8 +2740,7 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
                           "offset": _offset(rects[uid], side, cell), "name": window["name"]}
             pin = _ground_pin(laid[onto], hit[1], _OPP[side])
             out[onto].setdefault("made_edges", {})[uid] = dict(
-                {"barrier": "window", "name": window["name"]},
-                **{k: v for k, v in pin.items() if v is not None})
+                {"barrier": "window", "name": window["name"]}, **pin)
             report["windows"].append({"room": uid, "window": window["id"], "onto": onto})
             continue
         room = rects[uid]
@@ -1992,6 +2751,38 @@ def planned_layout(building, spec, layout, *, turn=None, inventory=None):
     for uid in building["rooms"]:
         # none laid is none held: an earlier solve's go with it
         out[uid]["geometry"].setdefault("windows", None)
+    # A WAY ONE SIDE ALONE DECLARES is one doorway however many sides declare
+    # it: the solve's place for it on the side that declares nothing is a way
+    # of the solve's own, written beside the plan's (`made_edges`, so a
+    # re-solve takes it back) with the declaring side's barrier -- written as
+    # a move onto an edge the row lacks, it was thrown away, and the place
+    # stood with a bare doorway that met nothing (a review of 2026-10-14)
+    plans = dict(building.get("ground_specs") or {})
+    plans.update(building.get("specs") or {})
+    def made_before(uid):
+        record = (plans.get(uid) or {}).get("layout")
+        return {str(t) for t in (record.get("made_edges") or ())} \
+            if isinstance(record, dict) else set()
+
+    for uid in out:
+        if out[uid].get("room") is not None or not isinstance(plans.get(uid), dict):
+            continue
+        # an edge an earlier solve made declares nothing: read as declared,
+        # the re-solve wrote its pin as a move, the merge took the earlier
+        # way back, and the place was dropped on every other solve
+        mine = made_before(uid)
+        declared = {str(e.get("to") or "") for e in plans[uid].get("adjacent") or ()
+                    if isinstance(e, dict) and str(e.get("to") or "") not in mine}
+        for to in [t for t in out[uid]["edges"] if t not in declared]:
+            fields = out[uid]["edges"].pop(to)
+            back = next((e for e in (plans.get(to) or {}).get("adjacent") or ()
+                         if isinstance(e, dict) and str(e.get("to") or "") == uid
+                         and uid not in made_before(to)), {})
+            # its pin as the solve gives it, a field None included: a way
+            # made again over an earlier solve's pin replaces it (a review of
+            # 2026-10-14: the old cell stayed beside the new offset)
+            out[uid].setdefault("made_edges", {})[to] = dict(
+                {k: back[k] for k in ("barrier", "material") if back.get(k)}, **fields)
     for uid in out:
         record = out[uid]["record"]
         out[uid]["layout"] = {"plan": building["plan"], "turn": turn,
@@ -2132,6 +2923,11 @@ def _ground_geometry(building, spec, layout):
                                            and re.fullmatch(re.escape(pid) + r"_\d+", str(f["id"])))]
         elif what == "outbuilding":
             rects = [r.as_dict() for r in (layout.floors.get(0) or {}).get(pid) or ()]
+            # ITS WALK TO THE HOUSE IS ITS OWN FLOOR: the roofed way from a
+            # back door to a privy apart, which no row was ever written for,
+            # so the house door opened onto ground and the privy's own
+            # doorway faced away from it (the farm's privy, n against n)
+            rects += (drawn["ways"].get(f"{pid}__way") or {}).get("rects") or []
         else:
             continue
         raw[pid] = [(int(r["x"]), int(r["y"]), int(r["w"]), int(r["d"])) for r in rects
@@ -2184,12 +2980,19 @@ def _ground_geometry(building, spec, layout):
 _UNIT = {"n": (0, -1), "s": (0, 1), "e": (1, 0), "w": (-1, 0)}
 
 
-def _geometry_cells(geometry):
-    """A laid place's cells on its plan: its parts, else its whole box."""
-    site, extent = geometry["site"], geometry["extent"]
-    parts = geometry.get("parts") or [{"w": extent["w"], "d": extent["d"], "at": [0, 0]}]
-    return {(site["x"] + p["at"][0] + i, site["y"] + p["at"][1] + j)
-            for p in parts for i in range(p["w"]) for j in range(p["d"])}
+def _world_cells(building, pid, geometry):
+    """A laid place's cells on its plan AS THE WORLD READS THEM
+    (`spatial_fov.room_grid` over the stub the plan lays): a round thing's
+    circle in its solved box, never the box's corners -- Home 6's camphor
+    tree had its doorway pinned on a corner its circle does not hold."""
+    from world.spatial import room_grid
+    planned = (building.get("ground_specs") or {}).get(pid) or {}
+    stub = {"name": pid, **{k: v for k, v in geometry.items() if v is not None}}
+    if "shape" not in stub:
+        stub["shape"] = str(planned.get("shape") or SOLVED_SHAPE)
+    site = geometry["site"]
+    grid = room_grid({"rooms": {pid: stub}}, pid)
+    return {(site["x"] + x, site["y"] + y) for x, y in grid.cells}
 
 
 def _ground_pin(geometry, cell, side):
@@ -2306,7 +3109,7 @@ def _stair_halls(building, layout, rects, levels, halls, out):
     return made
 
 
-def _ground_cells(spec, laid):
+def _ground_cells(building, spec, laid):
     """`{plan cell: place id}` for every cell of open ground, a way or a
     feature the solve laid (`_ground_geometry`) -- the ground a window can
     look out onto. An outbuilding is a roofed room, never ground."""
@@ -2315,13 +3118,8 @@ def _ground_cells(spec, laid):
     for pid, geometry in sorted(laid.items()):
         if is_of.get(pid) not in ("open", "way", "feature"):
             continue
-        site, extent = geometry["site"], geometry["extent"]
-        parts = geometry.get("parts") or [{"at": [0, 0], "w": extent["w"], "d": extent["d"]}]
-        for part in parts:
-            ax, ay = part["at"]
-            for dx in range(int(part["w"])):
-                for dy in range(int(part["d"])):
-                    out.setdefault((site["x"] + ax + dx, site["y"] + ay + dy), pid)
+        for cell in sorted(_world_cells(building, pid, geometry)):
+            out.setdefault(cell, pid)
     return out
 
 
@@ -2350,6 +3148,42 @@ def _ground_beyond(window, rects, levels, ground):
             return ground[(x, y)], (x, y)
 
 
+def entrance_of(building, inventory=None, spec=None):
+    """The way the building's entrance opens onto, as the solve lays it.
+    Chosen with the plan (`plan_buildings`: the first outside way by storey,
+    room and place); once the first answer says what each place of the
+    ground is, a door opens onto a way or open ground before a thing, which
+    stands AT a door, or a building apart, reached by its own walk: a
+    lantern joined to the hall, whose id sorted before the path's, took the
+    entrance, and the whole building was refused (two reviews of
+    2026-10-14). Decided before the second call is asked, which is told it,
+    so the call and the solve read one front; a place taken out of the
+    ground keeps it, its way opening through the entrance door
+    (`_door_already`) -- moved onto the garden beside it, the entrance faced
+    a band the garden lay on the far side of, and the whole ground went
+    (the fuzz's seed 66, 2026-10-14). Read back off the spec (`entrance_to`)
+    wherever the spec is in hand."""
+    entrance = building.get("entrance") or {}
+    if not entrance:
+        return entrance
+    want = None
+    if spec is not None:
+        want = spec.get("entrance_to")
+    elif inventory is not None:
+        is_of = {g["id"]: g.get("is") for g in inventory.get("grounds") or ()}
+        if is_of.get(entrance.get("to")) in ("feature", "outbuilding"):
+            for kind in ("way", "open"):
+                want = next((o["to"] for o in sorted(building["outside"], key=lambda x: x["to"])
+                             if o["room"] == entrance["room"] and not o.get("vertical")
+                             and is_of.get(o["to"]) == kind), None)
+                if want:
+                    break
+    if not want or want == entrance.get("to"):
+        return entrance
+    return next((o for o in building["outside"] if o["room"] == entrance["room"]
+                 and o["to"] == want and not o.get("vertical")), entrance)
+
+
 def _plan_joins(building):
     """Every pair of rooms the plan joins by a way, either side declaring
     it, as frozensets -- save a way an earlier solve made, which is this
@@ -2367,48 +3201,42 @@ def _plan_joins(building):
     return out
 
 
-def _facing(cells, target):
-    """`(cell, side)`: the cell of `cells` nearest `target`, and the side of
-    it `target` lies on."""
-    cell = min(cells, key=lambda c: (abs(c[0] - target[0]) + abs(c[1] - target[1]), c))
-    dx, dy = target[0] - cell[0], target[1] - cell[1]
-    if abs(dx) >= abs(dy) and dx:
-        return cell, ("e" if dx > 0 else "w")
-    return cell, ("s" if dy > 0 else "n")
-
-
 def _ground_doorways(building, spec, layout, laid, out):
     """EVERY DOORWAY ONTO THE GROUND MEETS ITS OTHER SIDE ACROSS THE WALL --
     the layout lab converter's measure of a plan that holds together
     (`tools/site_plan_from_layout.py`), written onto each laid place's
     joins in `out`.
 
-    A door of the house: on the place it opens straight onto, the cell
-    across its threshold; on a place standing by the ground it opens onto
-    -- a well by the kitchen door -- the cell of that place nearest the
-    threshold, on its side facing it. Two places of the ground the plan
-    joins: where they touch, on the side the plan states where they touch
-    there, else the side they share most, at the middle of it. Places that
-    do not touch keep the doorway the plan gave them."""
+    A door of the house, or of an outbuilding onto the ground it stands on:
+    on whatever place it opens onto, the cell across its threshold, on the
+    wall facing it -- a place whose cells do not hold the threshold gets no
+    pin, and the grounds floor refuses the pair (`ground_refusals`): a pin
+    "on its nearest cell, facing it" put a doorway a pace off its other side
+    (the farm's well) or across a gap (Home 9's, e against e). Two places of
+    the ground the plan joins: where they touch, on the side the plan
+    states where they touch there, else the side they share most, at the
+    middle of it. Every place's cells are the world's (`_world_cells`)."""
     door_to = spec.get("door_to") or {}
-    entrance = building["entrance"] or {}
-    cells = {pid: _geometry_cells(g) for pid, g in laid.items()}
+    entrance = entrance_of(building, spec=spec)
+    cells = {pid: _world_cells(building, pid, g) for pid, g in laid.items()}
     for door in layout.doors:
         a, b, side, cell = door["a"], door["b"], door["side"], door["cell"]
-        if not door.get("outside") or a not in building["rooms"] or side not in _UNIT:
+        if not door.get("outside") or side not in _UNIT:
             continue
         threshold = (cell[0] + _UNIT[side][0], cell[1] + _UNIT[side][1])
-        places = [entrance.get("to")] if b == "entrance" else [
-            o["to"] for o in building["outside"]
-            if o["room"] == a and door_to.get(o["to"], o["to"]) == b]
+        if a in building["rooms"]:
+            places = [entrance.get("to")] if b == "entrance" else [
+                o["to"] for o in building["outside"]
+                if o["room"] == a and door_to.get(o["to"], o["to"]) == b]
+        elif a in laid and b in laid:
+            places = [b]        # an outbuilding's door onto the ground it stands on
+        else:
+            continue
         for pid in places:
             if pid not in laid or a in out[pid]["edges"]:
                 continue
             if threshold in cells[pid]:
-                at, facing = threshold, _OPP[side]
-            else:
-                at, facing = _facing(cells[pid], threshold)
-            out[pid]["edges"][a] = _ground_pin(laid[pid], at, facing)
+                out[pid]["edges"][a] = _ground_pin(laid[pid], threshold, _OPP[side])
     stated = {}
     for pid, planned in (building.get("ground_specs") or {}).items():
         for edge in planned.get("adjacent") or ():

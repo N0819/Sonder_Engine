@@ -2066,11 +2066,24 @@ this is their status, the one list of it.
   - There is still no status line or Stop for an off-screen beat on the page:
     a route that is not a rewind (branch, export, a lorebook attach) waits
     for it, and now says that it is an off-screen beat.
-- **Waiting on the owner's ruling -- 7.** The grounds solver split Home 10's
-  court in two and stranded the storehouse. A deterministic floor that
-  refuses such grounds, as designed, would also drop every ground place of
-  Home 6 -- the owner's own shrine and the layout lab's twin -- so it does
-  not ship before the owner compares Home 6's plan before and after.
+- **Built 2026-10-14 -- 7**, on the owner's go of 2026-10-13 ("drop only the
+  failing places"): the grounds solver split Home 10's court in two and
+  stranded the storehouse. A floor now refuses ground that does not hold,
+  generator rules let common plans hold, and where ground still fails only
+  the failing places are dropped (`UNBUILT_WORLD.md` §2.43;
+  `design/DESIGN_LAYOUT_TIER.md`, "Holding together"). Replayed: Homes 9, 10
+  and 11 hold with every place laid; Home 6 -- the owner's own shrine and the
+  lab's twin -- keeps its garden, lantern path, torii and camphor tree, its
+  well alone dropped, at 56 s where it was 38 s. Its before and
+  after plans were put to the owner. Three reviews of the build the same day
+  (29, 28 and 26 findings confirmed) are folded in: a thing at a door has a
+  door of its own, the ground at a door's step is kept for it, things and
+  walks are laid two paces wide where the world asks it, an outbuilding
+  stands where the plan's way to it faces and never before the entrance, a
+  dropped place opens through a door its room already has, the floor charges
+  the place that caused a failure, the entrance is the one the second call
+  is shown, a way one door opens onto leaves from it, and a thing joined to
+  open ground alone stands in it by what the answer names.
 - **Batch B, ruled 2026-10-13, not built:** 9, a resident who does not know
   her own home (residents get their home's room graph at placement), and 11,
   travel clothes worn to bed (authored alternative outfits; code never strips
