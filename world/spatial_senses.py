@@ -1290,22 +1290,64 @@ def _material_shifted_barrier(barrier, material):
 #:   whisper within reach          35                   +8   full
 #:   whisper across the room       a hiss in the room's own ring, at its floor:
 #:                                 none
+#:   a breath into an ear, at it   25 + 26 (lips at it)  +24  full
+#:   ... anyone else, a pace off   25                   -2   none, and by
+#:                                 identity rather than distance (below)
 #:   mutter a pace or two off      38 - 6               +5   fragment
 #:   mutter across the room        38 - (6..10)    +1..-3   none
 #:
 #: Rooms away, the far field's own loss is the budget, against the listening
 #: room's quiet floor (`spatial_sound_field.far_speech_level`).
 
+#: THE BREATH LADDER, quietest first (the owner, 2026-10-20: "Whisper
+#: should probably have levels, whispering into someone's ears is clearly a
+#: lot quieter than a normal whisper"). Each rung is kept for fewer
+#: listeners than the one above it, and that is the whole of what the three
+#: are for:
+#:
+#:   ear      the lips AT one ear: that ear and no other -- the line's
+#:            addressee, and nobody else, even beside them
+#:   whisper  breath made for the body within reach: arm's reach
+#:            (`WHISPER_REACH_PACES`)
+#:   mutter   speech under the breath: a few paces (`MUTTER_REACH_PACES`)
+#:
+#: and then a voice -- normal, loud, shout -- which a room carries whole.
+#: The real-world levels, dB(A) at a metre (`SPEECH_ONE_PACE_DB`): a
+#: whisper into an ear 20-30 (25), an ordinary whisper 30-40 (35), speech
+#: under the breath 35-45 (38).
+#:
+#: WHO, NOT HOW FAR, DECIDES THE EAR. Lips at an ear put that ear some 26 dB
+#: nearer than a metre -- about 50 dB there, plainly -- while a body a pace
+#: off meets the breath at a quiet room's own floor, and one half a metre
+#: off a few decibels over it, where breath, with no voicing to follow,
+#: carries no words. So the rung is an identity: to its addressee it is
+#: graded as a whisper is (whole within reach, lost beyond it or through a
+#: door), and to anybody else it is nothing, by any path -- the air, an
+#: opening, a body's mass, a live channel, a contact with the speaker
+#: elsewhere. A reader that cannot say whether its listener IS the
+#: addressee (`hear_level(addressed=)`) gives the line to nobody: a missed
+#: delivery costs one line, a leak costs the firewall.
+#:
+#: WRITTEN, NOT DERIVED. The rung is the volume whoever writes the line
+#: gives it (the encoder's `volume`, the read-back's "how loudly"); a
+#: whisper whose speaker stands in contact with the addressee's head stays a
+#: whisper. The scene holds no typed fact that a mouth is at an ear: a
+#: contact's parts are the Director's own words, and reading one as "a
+#: mouth" or "an ear" needs a body-part vocabulary, which
+#: `spatial_contacts.canonical_region` refuses for a measured reason. The
+#: one clause in the encoder's speech card states the class instead.
+EAR_VOLUME = "ear"
+
 #: The volumes spoken on the breath. A whisper is breath with no voicing,
 #: and a mutter nearly that: they are made for the body within reach, and
-#: they are what stays private beyond it. The one definition; the sound
-#: field imports it.
-UNVOICED_VOLUMES = ("whisper", "mutter")
+#: they are what stays private beyond it; a breath into an ear is the
+#: quietest of them. The one definition; the sound field imports it.
+UNVOICED_VOLUMES = (EAR_VOLUME, "whisper", "mutter")
 
 #: The voice words a line can carry (`schemas.SpeechVolume`); anything else
 #: -- `pitched` with no level solved for it, a word the encoder invented --
 #: is graded as an ordinary voice, as the sound field always graded it.
-_VOICE_WORDS = ("mutter", "whisper", "normal", "loud", "shout")
+_VOICE_WORDS = (EAR_VOLUME, "mutter", "whisper", "normal", "loud", "shout")
 
 #: The reach tiers, nearest first (`spatial_geometry.proximity_rel`).
 REACH_TIERS = ("within_reach", "near", "across")
@@ -1325,6 +1367,27 @@ def _volume_word(volume, level_db=None) -> str:
         return word_for_level(level_db)
     word = str(volume or "normal").strip().casefold()
     return word if word in _VOICE_WORDS else "normal"
+
+
+def _graded_word(volume, level_db=None, addressed=False) -> Optional[str]:
+    """The word a line is graded at for ONE listener, or None where no path
+    carries it to them at all: a breath into an ear that is not theirs. To
+    its own ear the ear rung is graded as a whisper is (`EAR_VOLUME`)."""
+    word = _volume_word(volume, level_db)
+    if word == EAR_VOLUME:
+        return "whisper" if addressed else None
+    return word
+
+
+def into_another_ear(volume, addressed=False, level_db=None) -> bool:
+    """Is this line breathed into an ear that is not this listener's?
+
+    No path carries it to them -- not the air, not a live channel, not a
+    name called across a barrier -- so a reader that can deliver a line by
+    anything other than `hear_level` asks this first
+    (`composer.line_hear_level`). `addressed` is whether the listener is
+    the one the line is spoken to; unknown is False."""
+    return _graded_word(volume, level_db, addressed) is None
 
 
 def _reach(rel: dict, proximity=None) -> Optional[str]:
@@ -1361,7 +1424,13 @@ def _breath_level(volume: str, reach: Optional[str], paces=None) -> str:
     the field placed both bodies, by the reach tier where it did not.
     Unmeasured -- nothing places the two apart -- it is whole, as it always
     was: the story put a whisper in someone's ear, and nothing says the ear
-    was elsewhere."""
+    was elsewhere.
+
+    The ear rung arrives here as a whisper, and only for its addressee
+    (`_graded_word`): lips cannot be at an ear the scene puts out of a
+    whisper's reach, so the one ear it was breathed into is given exactly
+    what a whisper gives it, and every other body was refused before the
+    table was read."""
     if reach == "within_reach":
         return "full"
     if paces is not None:
@@ -1386,6 +1455,7 @@ def hear_level(
     level_db=None,
     *,
     seen: bool = False,
+    addressed: bool = False,
 ) -> str:
     """How much of a line at `volume` this relation delivers: none |
     fragment | full -- the hearing rule (§ 11 of the note, the block above).
@@ -1397,8 +1467,15 @@ def hear_level(
     masked_level`). `seen` is whether the listener sees the speaker's face,
     which is worth several decibels in that noise and nowhere else.
 
+    `addressed` is whether this listener is the body the line is spoken TO.
+    Only the ear rung reads it (`EAR_VOLUME`): a line breathed into an ear
+    reaches its addressee as a whisper does and nobody else, so a caller
+    that does not pass it gives such a line to nobody.
+
     A `vouched` channel is not this room's air and nothing in it masks."""
-    word = _volume_word(volume, level_db)
+    word = _graded_word(volume, level_db, addressed)
+    if word is None:
+        return "none"
     level = _hear_level(rel, word, vouched, proximity, level_db)
     if vouched or level == "none" or not isinstance(rel, dict) \
             or rel.get("masking_db") is None:
@@ -1565,17 +1642,20 @@ def _hear_level(
 
 
 def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
-                   level_db=None, *, seen: bool = False) -> str:
+                   level_db=None, *, seen: bool = False,
+                   addressed: bool = False) -> str:
     """WHY a line is short of `full`, in the rule's own words -- "" when it
-    is heard whole. One of: `breath_beyond_reach`, `open_air_distance`,
-    `breath_through_a_door`, `shut_door_from_farther_off`,
-    `heavy_door_or_glass`, `wall`, `rooms_away`, `rooms_away_muffled`,
-    `deafening`, `no_air`, `conducted`. Read by the speech replay and by perception's decision
-    notes, so a hearing complaint is answered with the clause that decided
-    it."""
+    is heard whole. One of: `into_another_ear`, `breath_beyond_reach`,
+    `open_air_distance`, `breath_through_a_door`,
+    `shut_door_from_farther_off`, `heavy_door_or_glass`, `wall`,
+    `rooms_away`, `rooms_away_muffled`, `deafening`, `no_air`, `conducted`.
+    Read by the speech replay and by perception's decision notes, so a
+    hearing complaint is answered with the clause that decided it."""
     if not isinstance(rel, dict):
         return ""
-    word = _volume_word(volume, level_db)
+    word = _graded_word(volume, level_db, addressed)
+    if word is None:
+        return "into_another_ear"
     level = hear_level(rel, word, proximity=proximity, level_db=level_db,
                        seen=seen)
     if level == "full":

@@ -66,21 +66,34 @@ def _key(name, frame):
     return name if not frame else f"{name}{SEP}fr{frame}"
 
 
-def grade(scene, listener, speaker, volume, tier, idx, crowds):
+#: The two notes perception files for a line breathed into an ear that is
+#: not the listener's (`composer.speech_percept`). Every other note on such
+#: a line was filed for its addressee, which is how a replay that has only
+#: the note knows whose ear it was.
+NOT_THEIR_EAR = ("into_another_ear", "ear_names_no_one")
+
+
+def addressed_in(note):
+    """Was the listener of a recorded decision the line's addressee, as far
+    as the ear rung asks? Only an `ear` line's refusal says it was not."""
+    return not str(note or "").endswith(NOT_THEIR_EAR)
+
+
+def grade(scene, listener, speaker, volume, tier, idx, crowds, addressed=False):
     """(word, relation) for one line, the way perception builds them."""
     field = sound_field(scene, listener, room=room_of(scene, listener), turn_idx=idx, crowds=crowds)
     rel = spatial_rel_between(scene, listener, speaker, sound=field)
     word = line_hear_level({"volume": volume, "text": "x", "speaker": speaker}, rel, listener,
-                           proximity=tier if tier in TIERS else None)
+                           proximity=tier if tier in TIERS else None, addressed=addressed)
     return word, rel
 
 
-def cause(volume, tier, word, rel):
+def cause(volume, tier, word, rel, addressed=False):
     """Why a line is short of `full`, in the hearing rule's own words."""
     if word == "full":
         return ""
-    return hearing_reason(rel, volume, proximity=tier if tier in TIERS else None) \
-        or "other"
+    return hearing_reason(rel, volume, proximity=tier if tier in TIERS else None,
+                          addressed=addressed) or "other"
 
 
 def replay(db, chat=1, show=False):
@@ -116,10 +129,12 @@ def replay(db, chat=1, show=False):
                 continue
             level, _how, volume, barrier, tier = m.groups()
             speaker, _, listener = str(d.get("subject") or "").partition(" -> ")
-            word, rel = grade(scene, listener, speaker, volume, tier, idx, crowds)
+            addressed = addressed_in(d.get("reason"))
+            word, rel = grade(scene, listener, speaker, volume, tier, idx, crowds,
+                              addressed=addressed)
             agree[word == level] += 1
             now[word] += 1
-            why = cause(volume, tier, word, rel)
+            why = cause(volume, tier, word, rel, addressed=addressed)
             if why:
                 causes[(word, why)] += 1
             if show and word != "full":

@@ -136,6 +136,7 @@ comp.update({
     "join": {"two": "{first}と{last}", "many": "、そして{last}"},
     "dialogue_verbs": {
         "shout": ["叫ぶ", "叫ぶ"],
+        "ear": ["耳元でささやく", "耳元でささやく"],
         "whisper": ["小声で言う", "小声で言う"],
         "mutter": ["つぶやく", "つぶやく"],
         "default": ["言う", "言う"],
@@ -199,6 +200,7 @@ comp["templates"].update({
     "narrator_immediate": "すぐ周囲の様子が目に入る。",
     "narrator_nothing": "この瞬間、特に何も感じ取れない。",
     "loop_speech": "{label}：「{body}」",
+    "loop_speech_ear": "{label}が耳元で：「{body}」",
     "loop_faint_sound": "{where}からかすかな音がするが、内容までは聞き取れない。",
     "loop_muffled": "{label}の方から、くぐもった断片が聞こえる。「……{fragment}……」",
     "loop_self_said": "あなたはこう言った。「{quote}」",

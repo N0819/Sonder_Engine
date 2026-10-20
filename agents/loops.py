@@ -24,8 +24,9 @@ from story.scene import (
     persona_of,
     reaction_config,
 )
-from world.spatial import (apply_contact_ops, hear_level, pitched_level_db,
-                     measured_proximity_rel, room_of, sense_adjusted, sound_bearing,
+from world.spatial import (apply_contact_ops, EAR_VOLUME, hear_level,
+                     pitched_level_db, measured_proximity_rel, room_of,
+                     sense_adjusted, sound_bearing,
                      spatial_rel, spatial_rel_between, visual_level_between,
                      word_for_level)
 
@@ -356,7 +357,8 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
     # a disguised actor to anyone who knew the name, and described an unseen
     # stranger by a face nobody saw (review 2026-10-04).
     from .perception import (_addressee_name, _appearance_as_prose,
-                             _sight_detail, _subject_disguise_context)
+                             _line_is_to, _sight_detail,
+                             _subject_disguise_context)
     _visible, _active, _known_to, _conceals = _subject_disguise_context(
         ctx, actor_name, _appearance_as_prose(
             appearance_of(actor_name, actor_appearance, scene)), known)
@@ -448,16 +450,27 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                     continue
                 volume, level_db = pitched.get(
                     event_index, (event.get("volume", "normal"), None))
+                # WHOSE EAR: a line breathed into one reaches its addressee
+                # and nobody else in the round (`spatial_senses.EAR_VOLUME`),
+                # read off the span's own targets and every name the
+                # observer answers to -- perception's reading, not a third.
+                try:
+                    _answers_to = character_scene_keys(observer_sheet)
+                except Exception:
+                    _answers_to = ()    # fails toward no: nobody's ear
+                addressed = _line_is_to(ctx, scene, observer_name, event,
+                                        aliases=_answers_to)
                 if not _delivery_ok(relation, scene, observer_name, actor_name,
                                     "hearing", volume=volume,
                                     proximity=proximity,
                                     awareness=observer_awareness,
                                     senses=observer_senses,
-                                    level_db=level_db):
+                                    level_db=level_db,
+                                    addressed=addressed):
                     continue
                 level = sense_adjusted(
                     hear_level(relation, volume, proximity=proximity,
-                               level_db=level_db),
+                               level_db=level_db, addressed=addressed),
                     "hearing", observer_senses)
                 quote = str(event.get("text") or "")
                 if level == "full":
@@ -467,8 +480,12 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
                             additions.append(
                                 _observable_predicate(display, surface))
                     else:
+                        # Said INTO this observer's ear, and so said so: a
+                        # line nobody else in the round was given.
                         additions.append(compositor_text(
-                            "loop_speech", label=display, body=quote))
+                            "loop_speech_ear"
+                            if str(volume or "").strip().casefold() == EAR_VOLUME
+                            else "loop_speech", label=display, body=quote))
                 elif level == "trace":
                     # Contentless by contract (G4): detection and direction at
                     # best -- no words, no identity, not even the gated

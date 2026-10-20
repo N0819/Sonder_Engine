@@ -82,7 +82,8 @@ from world.spatial_geometry import door_anchor_id
 from world.spatial_identity import PositionsIndex, room_of, room_of_record
 from world.spatial_light_field import (
     _beat_hash, FAIL_RATE, FLICKER_RATE, normalize_steadiness, STEADINESS)
-from world.spatial_senses import _material_shifted_barrier, _SOUND_WALK_BARRIERS
+from world.spatial_senses import (EAR_VOLUME, _material_shifted_barrier,
+                                  _SOUND_WALK_BARRIERS)
 
 
 # ---------------------------------------------------------------------------
@@ -116,8 +117,9 @@ SOUND_LEVELS = ("faint", "audible", "loud", "deafening", "thunderous",
 #: two senses (`DESIGN_SOUND_FIELD.md` § 5).
 
 #: The speech volumes the social hand writes on a spoken line
-#: (`schemas.SpeechVolume`). Read here, declared there.
-SPEECH_VOLUMES = ("mutter", "whisper", "normal", "loud", "shout")
+#: (`schemas.SpeechVolume`). Read here, declared there. `ear` -- a breath
+#: with the lips at one ear -- since 2026-10-20 (`spatial_senses.EAR_VOLUME`).
+SPEECH_VOLUMES = ("ear", "mutter", "whisper", "normal", "loud", "shout")
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +303,18 @@ def one_pace_power(db) -> float:
 #:                 because the engine's `whisper` is speech MADE for a
 #:                 listener and the lower one is a breath. Five under a
 #:                 mutter: the difference between breath and voice
+#:   ear      25   a whisper INTO an ear, the lips at it: 20-30 dB(A) at a
+#:                 metre-equivalent (the owner, 2026-10-20: "whispering into
+#:                 someone's ears is clearly a lot quieter than a normal
+#:                 whisper"). It is heard at all only because the lips are
+#:                 a few centimetres from that ear -- some 26 dB nearer than
+#:                 a metre, so about 50 dB there, plainly -- while a body a
+#:                 pace off meets it at a quiet room's own 27 dB, and half
+#:                 a metre off a few decibels over it: breath, with no
+#:                 voicing to follow. The hearing rule gives it to its
+#:                 addressee as a whisper within reach is given, and to
+#:                 nobody else by any path (`spatial_senses.EAR_VOLUME`);
+#:                 this level is what a reader asking for a number is told
 #:   normal   60   conversational speech at a metre, the textbook 60 dB(A)
 #:   loud     70   a raised voice, addressing a room: 65-75
 #:   shout    82   shouting, 80-88 dB(A) at a metre; the middle of the
@@ -311,8 +325,8 @@ def one_pace_power(db) -> float:
 #: 40 | 120`) are in `DESIGN_SOUND_FIELD.md` § 6a; the second gave the
 #: ladder the ORDER a real voice has and not its span, which is the defect
 #: the header of this section records.
-SPEECH_ONE_PACE_DB = {"mutter": 38.0, "whisper": 35.0, "normal": 60.0,
-                      "loud": 70.0, "shout": 82.0}
+SPEECH_ONE_PACE_DB = {"ear": 25.0, "mutter": 38.0, "whisper": 35.0,
+                      "normal": 60.0, "loud": 70.0, "shout": 82.0}
 
 #: The same, as the power at the speaker's own cell -- what the flood
 #: spreads. Derived, so it cannot drift from the table above.
@@ -320,9 +334,9 @@ SPEECH_POWER = {volume: one_pace_power(db)
                 for volume, db in SPEECH_ONE_PACE_DB.items()}
 
 #: The speech ladder as a level AT THE CELL -- the one-pace table plus the
-#: one-pace loss: mutter 41.0 | whisper 38.0 | normal 63.0 | loud 73.0 |
-#: shout 85.0. This is the number `sound_field_hear_level` adds a path's
-#: gain to; `SPEECH_ONE_PACE_DB` is the number a reader compares to the
+#: one-pace loss: ear 28.0 | mutter 41.0 | whisper 38.0 | normal 63.0 |
+#: loud 73.0 | shout 85.0. This is the number a budget subtracts a path's
+#: loss from; `SPEECH_ONE_PACE_DB` is the number a reader compares to the
 #: world.
 SPEECH_DB = {volume: db_of_power(power)
              for volume, power in SPEECH_POWER.items()}
@@ -338,14 +352,32 @@ SPEECH_DB = {volume: db_of_power(power)
 #:   audible       50   a hearth fire, a kettle coming up, a refrigerator:
 #:                      45-55 dB(A) at a metre. Ten under a voice, so a
 #:                      normal line beside it is `full`
-#:   loud          80   an engine at idle, a mill, a busy workshop, a
-#:                      vacuum cleaner: 75-85 dB(A) at a metre. The bottom
-#:                      of the owner's stated 80-85, taken because the
-#:                      composer's noise words are derived from the fragment
-#:                      margin and 80 is where a raised voice one pace off
-#:                      is still caught in pieces beside the machine
-#:   deafening    100   a klaxon, a siren, a jackhammer, a chainsaw: 95-110
-#:                      dB(A); a room you cannot use
+#:   loud          65   THE LOUDEST EVERYDAY LIFE GETS, in a home, a shop or
+#:                      a street: a vacuum cleaner or a television turned up
+#:                      is 65-75 dB(A) at a metre, and a kettle's whistle, a
+#:                      radio turned up or a busy street sit in the same
+#:                      band -- a noise people raise their voices over and
+#:                      go on talking. The bottom of the band, for the two
+#:                      readers a standing source still has: the noise words
+#:                      read a source at its OWN cell, three decibels over a
+#:                      pace, which is where a body standing at the thing is
+#:                      placed, and a household thing must read a `din`
+#:                      there at most (the owner, 2026-10-20: "Ordinary
+#:                      household objects should probably be scaled back")
+#:                      -- 68 at the cell, and 71 with a second such thing
+#:                      beside it, under the 72 `drowned` begins at; and the
+#:                      far field's entry (`FAR_FIELD_ENTRY_DB`, 70 at the
+#:                      cell) keeps it a thing heard in its own room and the
+#:                      next. It was 80 until 2026-10-20 ("an engine at
+#:                      idle, a mill, a busy workshop, a vacuum cleaner:
+#:                      75-85"), which put a kettle written `loud` at 83 by
+#:                      the stove, `drowned` there and heard rooms away
+#:                      (chat 176 turn 2). What stops conversation is the
+#:                      next rung
+#:   deafening    100   a klaxon, a siren, a jackhammer, a chainsaw, a bell
+#:                      close up, machinery a voice cannot be raised over:
+#:                      95-110 dB(A) -- the class that STOPS conversation (the
+#:                      owner, 2026-10-20), and a room you cannot use
 #:   thunderous   120   thunder overhead, an artillery piece some way off,
 #:                      the foot of a waterfall, a jet passing low: 115-125
 #:   catastrophic 140   an explosion, a structure coming down, a jet engine
@@ -364,7 +396,7 @@ SPEECH_DB = {volume: db_of_power(power)
 #: 300-room chain of medium rooms and open doorways: 91 and 128 rooms
 #: against the 29 and 51 the old levels reached); an explosion heard across
 #: a whole scene is what an explosion is.
-SOUND_ONE_PACE_DB = {"faint": 40.0, "audible": 50.0, "loud": 80.0,
+SOUND_ONE_PACE_DB = {"faint": 40.0, "audible": 50.0, "loud": 65.0,
                      "deafening": 100.0, "thunderous": 120.0,
                      "catastrophic": 140.0}
 
@@ -394,19 +426,21 @@ SOUND_POWER = {level: one_pace_power(db)
 #: room's floor across any barrier at all, so a creature two rooms off could
 #: never hear anything a player did whatever the geometry said.
 #:
-#:   emission (cell)  faint 43.0 | audible 53.0 | loud 83.0 | deafening 103.0
+#:   emission (cell)  faint 43.0 | audible 53.0 | loud 68.0 | deafening 103.0
 #:   impact   (cell)  faint 45.0 | audible 58.0 | loud 72.0 | deafening 80.0
 #:
 #: The impact ladder is UNTOUCHED by the 2026-09-14 recalibration: its four
 #: lower rungs were authored in dB on 2026-09-06 at the source cell, not at
-#: one pace, and are kept byte for byte. Two consequences are stated rather
-#: than hidden. The emission ladder now sits ABOVE the impact ladder at
-#: `loud` and `deafening` (an engine at 83 against a hammer blow at 72),
-#: where on 2026-09-06 the relation was the reverse; nothing in the model
-#: compares the two ladders to each other, so no verdict turns on it, and a
-#: real impact ladder (a slammed door is 80-90 at a metre, a hammer on steel
-#: over 100) is a separate recalibration registered in `docs/UNBUILT.md`.
-#: And the two far rungs are shared, so they moved with `SOUND_POWER`.
+#: one pace, and are kept byte for byte -- and untouched again on 2026-10-20,
+#: when the emission `loud` came down to a household level (68 at the cell;
+#: it was 83). Two consequences are stated rather than hidden. The emission
+#: ladder sits ABOVE the impact ladder at `deafening` (103 against 80) and,
+#: since 2026-10-20, under it at `loud` (a television turned up against a
+#: hammer blow at 72); nothing in the model compares the two ladders to each
+#: other, so no verdict turns on it, and a real impact ladder (a slammed
+#: door is 80-90 at a metre, a hammer on steel over 100) is a separate
+#: recalibration registered in `docs/UNBUILT.md`. And the two far rungs are
+#: shared, so they moved with `SOUND_POWER`.
 #:
 #: `loud` at 72 clears `FAR_FIELD_ENTRY_DB` (70), which is the point: a
 #: hammer on a bulkhead walks the room graph and is heard across a level,
@@ -424,7 +458,7 @@ EVENT_POWER = {"faint": power_of_db(45.0),
 EVENT_DB = {level: db_of_power(power) for level, power in EVENT_POWER.items()}
 
 #: The source ladder as a level AT THE CELL -- the one-pace table plus the
-#: one-pace loss: faint 43.0 | audible 53.0 | loud 83.0 | deafening 103.0 |
+#: one-pace loss: faint 43.0 | audible 53.0 | loud 68.0 | deafening 103.0 |
 #: thunderous 123.0 | catastrophic 143.0. Compared against
 #: `FAR_FIELD_ENTRY_DB` at the cell, like the impact ladder.
 SOUND_DB = {level: db_of_power(power) for level, power in SOUND_POWER.items()}
@@ -665,7 +699,10 @@ WIND_NOISE_DB = {word: db_of_power(power)
 #: failing in whichever direction its missing word points. The band is a
 #: closed set the engine already grades density by, so a throng is loud and
 #: a handful is faint without anyone enumerating English. Whether mood should
-#: ALSO raise the level is the note's open question, unchanged.
+#: ALSO raise the level is the note's open question, unchanged. A throng is
+#: `loud` at the household level since 2026-10-20 (65 at a pace from the
+#: room's centre): a crowd's roar is talked over, raised, and is heard in
+#: its own room and the next, no longer rooms away (`FAR_FIELD_ENTRY_DB`).
 CROWD_SOUND = {"a handful": "faint", "a dozen or so": "audible",
                "a few dozen": "audible", "a throng": "loud"}
 
@@ -750,8 +787,11 @@ HEAR_FLOOR_DB = db_of_power(HEAR_FLOOR)
 #:   drowned  ... not at all unless it is shouted                above that
 #:
 #: where 60 is `SPEECH_ONE_PACE_DB["normal"]`. In the world: a hearth fire
-#: (50 at a pace) leaves the hearth `quiet`; an engine (80) is `drowned`
-#: at the machine and a `din` within a few paces of it. Move FULL_SNR or
+#: (50 at a pace) leaves the hearth `quiet`; a household `loud` (65 at a
+#: pace, 68 at its own cell: a television turned up, a kettle's whistle)
+#: is a `din` at the thing and a few paces round it and never `drowned` --
+#: the owner's 2026-10-20 ruling, which the `loud` rung is set to keep; a
+#: `deafening` machine (100) is `drowned` across a room. Move FULL_SNR or
 #: FRAGMENT_SNR and the words move with them.
 #:
 #: DESCRIPTION SINCE 2026-10-20, NEVER A VERDICT. The words say how far a
@@ -790,8 +830,10 @@ def noise_word_db(noise_db: float) -> str:
 #: `deafening` or louder, and a one-beat event the story says drowns
 #: everything out (`sensory_events[].drowns`). The owner, 2026-10-20:
 #: "NOISE NEVER MASKS SPEECH" but for these. Below them the classes are a
-#: model's judgement of an everyday thing -- `loud` is a whistling kettle,
-#: a PA horn and an engine at idle alike, 65-85 dB(A) in the world -- and
+#: model's judgement of an everyday thing -- `loud` is the loudest of a
+#: home, a shop or a street, a television turned up or a kettle's whistle,
+#: 65-75 dB(A) in the world (re-anchored there 2026-10-20; it had been an
+#: engine at idle as well) -- and
 #: across that span a voice that shares the noise rises with it (Lombard,
 #: +3 to +10 dB and up to a shout) while a sentence is still followed at 0 dB
 #: and caught to -12: so in the world people talk in kitchens, workshops and
@@ -923,12 +965,18 @@ def _power_of_level(level, beat) -> float:
 def word_for_level(level_db) -> str:
     """The volume word nearest a level AT THE CELL (`SPEECH_DB`'s terms):
     what a pitched line counts as wherever a reader wants the word --
-    the edge ladder, a view, a memory."""
+    the edge ladder, a view, a memory.
+
+    Never `ear`, however low the level: a breath with the lips at one ear
+    is an act, not a loudness a level rounds to, and it reaches one body
+    only (`spatial_senses.EAR_VOLUME`). A level under a whisper is a
+    whisper."""
     try:
         level = float(level_db)
     except (TypeError, ValueError):
         return "normal"
-    return min(SPEECH_DB, key=lambda w: (abs(SPEECH_DB[w] - level), w))
+    return min((w for w in SPEECH_DB if w != EAR_VOLUME),
+               key=lambda w: (abs(SPEECH_DB[w] - level), w))
 
 
 def _body_key(scene, name):
@@ -963,6 +1011,15 @@ def pitched_level_db(scene, speaker, addressee) -> float:
     within reach, a whisper; anywhere else the room or an opening carries a
     voice, an ordinary one; through a shut door, raised -- returned as that
     word's level so every caller keeps reading a level.
+
+    NEVER THE EAR (2026-10-20). A breath with the lips at one ear
+    (`spatial_senses.EAR_VOLUME`) is quieter than a whisper, but it is not
+    a level a voice is pitched at from where it stands: the speaker has to
+    put their mouth to that ear, which is an act the prose states and the
+    line's own volume says. And a pitched line is graded for every other
+    listener at the level it comes to, which the ear rung -- the addressee
+    and nobody else -- is not. So the quietest pitch is a whisper, and "low,
+    so that only his table would hear" still reaches the table.
     """
     who = _body_key(scene, addressee)
     said = _body_key(scene, speaker)
@@ -2749,9 +2806,10 @@ def beat_sensory_events(scene: dict, turn_idx) -> list:
 # AND IT COSTS NOTHING ON A QUIET BEAT. Nothing under `FAR_FIELD_ENTRY_DB`
 # enters it and no voice ever does (`far_field_sources` drops speech by
 # kind), so a beat of conversation beside a hearth walks no graph at all:
-# `distant_sounds` returns before it builds anything. A beat with a running
-# engine or a klaxon in it (`loud` and up on the real ladder, since
-# 2026-09-14) walks the room graph once per such source, which is a
+# `distant_sounds` returns before it builds anything. A beat with a
+# running machine or a klaxon in it (`deafening` and up on the emission
+# ladder since 2026-10-20, when `loud` came down to a household level; any
+# `loud` impact) walks the room graph once per such source, which is a
 # Dijkstra over a few dozen rooms on a cached graph.
 
 #: What a solid partition passes. THE ONE GENUINELY NEW NUMBER
@@ -2812,10 +2870,14 @@ _UNKNOWN_BARRIER_LOSS_DB = WALL_LOSS_DB
 #: The level a source must hold at its cell before the far field is built
 #: at all. Set 2026-09-05 above the old `deafening` (61.8) so that only the
 #: two far rungs reached it; on the real ladder (2026-09-14) it admits a
-#: standing `loud` source (83 at the cell: an engine, a mill), `deafening`
-#: and the two far rungs, and on the impact ladder `loud` (72) and up -- a
-#: hearth fire (53) and a kettle stay near-field things you meet at the
-#: door. A voice never enters, at any volume, and not because of this number
+#: standing `deafening` source and the two far rungs, and on the impact
+#: ladder `loud` (72) and up -- a hearth fire (53) and a household `loud`
+#: (68 at the cell since 2026-10-20: a television turned up, a kettle's
+#: whistle) stay near-field things you meet at the door. Until 2026-10-20 a
+#: standing `loud` was 83 at its cell and entered, so a kettle the opening
+#: wrote `loud` was heard rooms away (chat 176 turn 2). A bare room's ring
+#: can still lift a `loud` over the entry (`ring_boost_db`): a ringing hall
+#: hands its doorways more than a furnished one, which is the physics. A voice never enters, at any volume, and not because of this number
 #: (a shout is 85 at its cell): `far_field_sources` refuses speech by kind.
 #: That is not a performance guard bolted on: it is the same sentence as
 #: "incredibly loud noises travel very far", read from the other end.

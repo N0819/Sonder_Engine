@@ -1180,7 +1180,8 @@
     },
     "options": {
       "volume": {
-        "whisper": "In a whisper, for one listener.",
+        "ear": "Into one person's ear, your lips at it.",
+        "whisper": "In a whisper, for whoever is within arm's reach.",
         "mutter": "Under your breath.",
         "normal": "In an ordinary voice.",
         "loud": "Loudly.",

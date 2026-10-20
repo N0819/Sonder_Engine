@@ -6141,7 +6141,8 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
 
 def _delivery_ok(relation, scene, observer_name, source_name, channel,
                  volume="normal", proximity=None, behind_sources=None,
-                 awareness=None, senses=None, level_db=None):
+                 awareness=None, senses=None, level_db=None,
+                 addressed=False):
     """Can this observer receive this source through this channel?
 
     Cross-seam pattern 3: the deterministic delivery paths each grew their own
@@ -6176,7 +6177,10 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
     - **hearing** -- `hear_level` including the `proximity` downgrade, so a
       muttered aside does not carry to an arbitrarily large room. A pitched
       line passes the `level_db` its addressee's cell solved, as the
-      composer's hearing does (`hear_level(..., level_db=...)`).
+      composer's hearing does (`hear_level(..., level_db=...)`). A line
+      breathed into an ear reaches only its addressee: `addressed` says
+      this observer is that body, and its default delivers it to nobody
+      (`spatial_senses.EAR_VOLUME`).
     - **sight/action** -- `has_visual` plus the rear-arc blind spot. An action
       is visible or it is nothing.
     - **senses** (optional) -- the observer's card senses (G4). When passed,
@@ -6207,7 +6211,7 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
 
     if channel == "hearing":
         level = hear_level(relation, volume, proximity=proximity,
-                           level_db=level_db)
+                           level_db=level_db, addressed=addressed)
         if senses is not None:
             level = sense_adjusted(level, "hearing", senses)
         return level != "none"
@@ -7424,12 +7428,17 @@ def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
     volume = str(interp.get("speech_volume") or "normal")
     widened = list(reactors)
     here = room_of(scene, p_name)
+    # WHOM THE LINE IS SPOKEN TO, as the interpret booked it: the one body
+    # a line breathed into an ear reaches (`spatial_senses.EAR_VOLUME`).
+    flow = interp.get("flow") if isinstance(interp.get("flow"), dict) else {}
+    aimed = {str(i) for i in (flow.get("addressed_to") or ())}
     for body in _present_cast_bodies(scene, cast_rows):
         if body["id"] in widened or body.get("room") == here:
             continue
         try:
             rel = spatial_rel_between(scene, body["name"], p_name)
-            heard = hear_level(rel, volume)
+            heard = hear_level(rel, volume,
+                               addressed=str(body["id"]) in aimed)
         except Exception:
             continue
         if heard and heard != "none":

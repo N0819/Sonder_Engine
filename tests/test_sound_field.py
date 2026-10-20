@@ -1101,9 +1101,15 @@ def test_the_decibel_tables_are_exact_conversions_of_the_powers():
         assert SOUND_POWER[word] == one_pace_power(level)
         assert SOUND_DB[word] == pytest.approx(level + one_pace)
     assert VOICE_ONE_PACE_DB == pytest.approx(SPEECH_ONE_PACE_DB["normal"])
-    assert SPEECH_ONE_PACE_DB == {"mutter": 38.0, "whisper": 35.0,
-                                  "normal": 60.0, "loud": 70.0, "shout": 82.0}
-    assert SOUND_ONE_PACE_DB == {"faint": 40.0, "audible": 50.0, "loud": 80.0,
+    # `ear` (2026-10-20): a whisper into an ear, 20-30 dB(A) at a
+    # metre-equivalent -- the breath ladder's new bottom rung.
+    assert SPEECH_ONE_PACE_DB == {"ear": 25.0, "mutter": 38.0,
+                                  "whisper": 35.0, "normal": 60.0,
+                                  "loud": 70.0, "shout": 82.0}
+    # `loud` RE-ANCHORED 2026-10-20 at a household level (the owner:
+    # "Ordinary household objects should probably be scaled back"): 65, a
+    # television turned up -- it was 80, an engine at idle.
+    assert SOUND_ONE_PACE_DB == {"faint": 40.0, "audible": 50.0, "loud": 65.0,
                                  "deafening": 100.0, "thunderous": 120.0,
                                  "catastrophic": 140.0}
     # The ladder is monotone, which is what lets `_one_level_down` step a
@@ -1120,12 +1126,14 @@ def test_the_decibel_tables_are_exact_conversions_of_the_powers():
     # the louder of the two -- the order the world has, and the reverse of
     # the compressed ladder's (0.6 against 1.0), which put the quietest
     # word on the louder voice.
-    assert SPEECH_DB["whisper"] < SPEECH_DB["mutter"] < SPEECH_DB["normal"] \
-        < SPEECH_DB["loud"] < SPEECH_DB["shout"]
-    # The far field admits a standing `loud` source and up: an engine, a
-    # mill, a klaxon are heard across a level, a hearth fire is not.
+    assert SPEECH_DB["ear"] < SPEECH_DB["whisper"] < SPEECH_DB["mutter"] \
+        < SPEECH_DB["normal"] < SPEECH_DB["loud"] < SPEECH_DB["shout"]
+    # The far field admits a standing `deafening` source and up: a klaxon or
+    # machinery that stops conversation is heard across a level; a hearth
+    # fire, and since 2026-10-20 a household `loud` (68 at its cell), is
+    # heard in its own room and the next. (`loud` entered at 83 until then.)
     assert [w for w in SOUND_LEVELS if SOUND_DB[w] >= FAR_FIELD_ENTRY_DB] \
-        == ["loud", "deafening", "thunderous", "catastrophic"]
+        == ["deafening", "thunderous", "catastrophic"]
 
 
 def test_the_two_quantisers_agree_over_randomised_levels():
@@ -1288,9 +1296,12 @@ def test_an_event_reads_its_level_word_its_number_and_its_old_intensity():
     assert EVENT_DB["deafening"] == pytest.approx(80.0)
     assert EVENT_DB["thunderous"] == SOUND_DB["thunderous"]
     assert EVENT_DB["catastrophic"] == SOUND_DB["catastrophic"]
-    # A running `loud` thing is a real engine at a pace: 80 dB(A), 83 at
-    # its own cell.
-    assert SOUND_DB["loud"] == pytest.approx(83.01, abs=0.01)
+    # A running `loud` thing is a household one since 2026-10-20 -- a
+    # television turned up: 65 dB(A) at a pace, 68 at its own cell (it was
+    # an engine, 80 and 83) -- and so, unlike a `loud` impact, it stays
+    # under the far field's entry.
+    assert SOUND_DB["loud"] == pytest.approx(68.01, abs=0.01)
+    assert SOUND_DB["loud"] < FAR_FIELD_ENTRY_DB <= EVENT_DB["loud"]
 
 
 # ---------------------------------------------------------------------------
@@ -1422,7 +1433,9 @@ def test_the_far_field_terminates_on_audibility_and_has_no_hop_cap():
         > reach["loud"] > reach["audible"] >= reach["faint"]
     # Real losses (2026-09-14): open doorways at 2 dB rather than 0.46, so
     # every rung's reach shortens; the ordering is what the test is for.
-    assert reach == {"faint": 1, "audible": 2, "loud": 10, "deafening": 18,
+    # `loud` 10 -> 5 rooms on 2026-10-20, when it came down to a household
+    # level (65 at a pace, it was 80); the other rungs are unmoved.
+    assert reach == {"faint": 1, "audible": 2, "loud": 5, "deafening": 18,
                      "thunderous": 26, "catastrophic": 35}
     assert reach["catastrophic"] < 300, (
         "the flood must stop of its own arithmetic, not run out of rooms")
@@ -1582,7 +1595,11 @@ def test_an_ordinary_beat_walks_no_graph_at_all(monkeypatch):
     RECALIBRATED 2026-09-14: a running `loud` source is a real engine (83
     at its cell) and clears the entry, so a beat with an engine in it walks
     the graph -- once, on a cached graph -- which is the cost of an engine
-    being heard across a level. Before, only the two far rungs entered."""
+    being heard across a level. Before, only the two far rungs entered.
+
+    RE-ANCHORED 2026-10-20: `loud` is a household level (68 at its cell), an
+    ordinary beat's sound like a fire's, and walks no graph; machinery heard
+    across a level is `deafening`, which still does."""
     from world.spatial import distant_sounds
     import world.spatial_sound_field as field_module
 
@@ -1597,14 +1614,14 @@ def test_an_ordinary_beat_walks_no_graph_at_all(monkeypatch):
         return real(*a, **k)
 
     monkeypatch.setattr(field_module, "far_field_graph", counted)
-    for level in ("faint", "audible"):
+    for level in ("faint", "audible", "loud"):
         sc["entities"]["gen"]["sound_source"] = level
         assert distant_sounds(sc, "L", room="r9",
                               events=crash("r0", "audible")) == []
     assert calls == [], "the far field built a graph on an ordinary beat"
-    sc["entities"]["gen"]["sound_source"] = "loud"
+    sc["entities"]["gen"]["sound_source"] = "deafening"
     assert distant_sounds(sc, "L", room="r9")
-    assert calls, "the far field did not run when something was loud"
+    assert calls, "the far field did not run when something was deafening"
 
 
 def test_a_distant_sound_is_graded_by_the_room_it_arrives_in():

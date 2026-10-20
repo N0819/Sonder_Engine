@@ -123,6 +123,10 @@
       "叫ぶ",
       "叫ぶ"
     ],
+    "ear": [
+      "耳元でささやく",
+      "耳元でささやく"
+    ],
     "whisper": [
       "ささやく",
       "ささやく"
@@ -268,6 +272,7 @@
     "loop_self_said": "あなたはこう言った。「{quote}」",
     "loop_self_did": "あなたは{surface}",
     "loop_speech": "「{body}」と{label}が言う。",
+    "loop_speech_ear": "「{body}」と{label}が耳元でささやく。",
     "muffled": "くぐもった声がする。{fragment}",
     "muffled_attributed": "{label}が何か言っているが、聞き取れない。{fragment}",
     "muffled_indistinct": "……聞き取れない何か……",

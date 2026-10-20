@@ -683,9 +683,10 @@ shout) while a sentence is still followed at 0 dB and caught to -12 -- in
 the world people talk in kitchens, workshops and on launches, raising their
 voices. `deafening` (a klaxon, a siren, a jackhammer: 95-110) is the first
 class whose every member stands above the ceiling a voice can be raised to,
-which is what masking noise is. `loud` keeps its 80 dB for what it still
-decides -- how far a sound reaches and what the room's noise words say -- and
-whether a household `loud` should sit nearer 70 is § 11.8's question 1.
+which is what masking noise is. `loud` kept its 80 dB for what it still
+decides -- how far a sound reaches and what the room's noise words say --
+until the owner ruled § 11.8's question 1 the same day: it is a household
+level now, 65 dB at a pace (§ 11.9).
 
 ### 11.5 Within the source's reach: the masking budget
 
@@ -753,7 +754,7 @@ BEFORE turn N, so the onset pass reads idx and the outcome pass idx+1.
 | 2. Intelligibility tolerates noise | full at +3 dB, pieces to -12 | full at 0 dB for speech (`SPEECH_FULL_SNR`), pieces to -12; in-building entries sit 8-33 dB from either line |
 | 3. Lombard | a normal or raised line rose over the speaker's whole noise inside the SNR grade -- rescuing some lines, and on the rival story turning a stale "soprano" room sound into a voice carried through a shut door | the rise is why everyday noise takes nothing; computed only in a deafening source's reach, raising the voice to its ceiling before masking is judged |
 | 4. Noise is not all alike | every running thing, the weather, the crowd and any second voice counted as broadband masking at its class level; one-beat events already excluded (2026-09-25) | only `deafening` and above, or an event the story says drowns everything, masks; narrowband, fluctuating and everyday noise never does. Spatial release is not modelled: it would move the edge of a deafening source's reach by 3-6 dB in the open and little in a ringing room |
-| 5. Everyday levels are modest | `loud` = 80 dB at a pace for whatever the model called loud; a kettle masked a shout | `loud` decides no line; its 80 dB stands for reach and description, and a household re-anchoring is registered (§ 11.8) |
+| 5. Everyday levels are modest | `loud` = 80 dB at a pace for whatever the model called loud; a kettle masked a shout | `loud` decides no line, and since the owner's ruling it is a household level, 65 dB at a pace: a `din` at most, heard in its room and the next (§ 11.9) |
 | 6. Barriers | real losses on the field, but the verdict also charged per-cell spreading on both sides and every noise | the table's barrier rows, each a budget with margin; one body at a shut door carries a normal voice; a heavy door a rung more; a wall a shout's murmur; rooms away the far field's loss, muffled past a light door |
 | 7. A seen face | nothing (a line lost in noise could still be seen spoken: "seen speaking, unheard") | +6 dB (`AV_BENEFIT_DB`) in a deafening source's reach where the listener sees the speaker |
 
@@ -815,7 +816,9 @@ beyond reach has no band of pieces any more.
 | a shut door from farther off | 1 fragment | yes: the opera's stage to the rehearsal room, nobody at the door |
 | another building, a wall, a heavy door | 0 | none in the corpus |
 
-The owner's questions, each a constant or a reading this build had to take:
+The owner's questions, each a constant or a reading this build had to take
+(the owner answered 1, 2 and part of 4 the same day; § 11.9 is what that
+built):
 
 1. **`loud` = 80 dB at a pace.** It no longer decides a line, but it still
    decides reach: a kettle written `loud` (83 at its cell) clears
@@ -823,21 +826,35 @@ The owner's questions, each a constant or a reading this build had to take:
    or `drowned` near it. Re-anchoring `loud` at 70 ("a loud household or
    street sound") would keep it a near-field thing; a real engine would then
    be written `deafening` or under-reach by 10 dB.
+   **RULED 2026-10-20, CLOSED:** "Ordinary household objects should probably
+   be scaled back." `loud` is the loudest everyday life gets -- 65 dB(A) at a
+   pace, the household band's floor -- and what stops conversation is
+   `deafening` (§ 11.9).
 2. **One body at a shut door suffices** (the reciprocal reading of "a normal
    voice from someone AT the door is full"). It overturns the 2026-10-20
    door_reach lane's far-wall pin and makes an ear pressed to a door follow a
    normal conversation inside, as an eavesdropper does.
+   **RULED 2026-10-20, AS BUILT, CLOSED:** "Ear to the door to eavesdrop makes
+   sense as it's a more direct transfer of sounds." Nothing changed.
 3. **A heavy door or glass from across the room** passes a raised voice and
    a shout in pieces (was: a shout only, on the edge rule; a raised voice
    whole on the field in tiny rooms).
 4. **Breath radii** 2 / 3 / 4 paces, kept from the field's still room; the
    whisper's band of pieces at three removed.
+   **RULED IN PART 2026-10-20:** "Whisper should probably have levels,
+   whispering into someone's ears is clearly a lot quieter than a normal
+   whisper." The breath ladder gains a rung under the whisper, a breath
+   INTO AN EAR, which reaches its addressee and nobody else (§ 11.9). The
+   radii themselves stand, still the owner's numbers.
 5. **The open-air reach**: 45 paces for a normal voice (well past 12 m), from
    the free-field law and the open floor; a still night doubles it.
 6. **The ring no longer smears speech**; a cavernous bare hall carries a
    line whole at any range.
 7. **Unmeasured breath is whole**, as before: two unstationed bodies and a
    third in a room -- the third hears the whisper. Unchanged; registered.
+   A line breathed INTO AN EAR is not distance's to decide (§ 11.9): with
+   nothing measured, its addressee hears it whole and the third body
+   nothing.
 8. **`drowns`** is a new encoder field (one clause, en + ja); what it does on
    the page needs a live run.
 9. **A voice leaving a building** is charged nothing for the open air it
@@ -845,3 +862,142 @@ The owner's questions, each a constant or a reading this build had to take:
    normal voice reaches the parlour across a 16-pace street in pieces (42.6
    dB of loss), today and before. A doorway radiating into the sky loses
    some 20 dB more than a room would hold; an envelope term is proposed.
+
+### 11.9 The rulings of 2026-10-20, built
+
+**A HOUSEHOLD `loud`** (§ 11.8 question 1). `SOUND_ONE_PACE_DB["loud"]` 80
+-> 65 dB(A) at a pace, 68 at its cell. A vacuum cleaner or a television
+turned up is 65-75 dB(A) at a metre, and a kettle's whistle, a radio turned
+up and a busy street sit in the same band. The band's floor is taken for the
+two readers a standing source still has: the noise words read a source at
+its OWN cell, three decibels over a pace, which is where a body standing at
+the thing is placed, and a household thing reads `din` there at most (68,
+and 71 with a second such thing beside it, under the 72 at which a room is
+`drowned`); and the far field's entry (70 at the cell) keeps it a thing heard
+in its own room and the next. At 70 a pace, the band's middle, it would read
+`drowned` at its own cell (73) and enter the far field again.
+
+The class is stated once, by what a sound does to talk beside it: anything
+ordinary life goes on beside, in a home, a shop or a street, is `loud` at
+most; `deafening` and above are only for what stops conversation outright.
+It is in the encoder's `entities__emits` part and the room vocabulary
+(which the opening and the encoder's `rooms` part carry), en + ja, and in
+the Writers' Room's planned-thing and planned-room levels
+(`plot_packages`). The planned-room text also lost a stale claim that a
+room's own sound "drowns the voices in the room". A beat that writes rooms
+and an emission together carries the clause twice, once in each part.
+
+What reads a `loud` emission, and what changed:
+
+| reader | after |
+|---|---|
+| speech (`hear_level`) | nothing: only `deafening` and above mask (§ 11.4); re-graded, 2,408 of 2,408 recorded decisions identical in every field |
+| the noise words (`sound_shape`, `room_noise_word`, the `ceased` percept) | a household `loud` reads `din` at most at every cell, its own included (was `drowned` at its cell and round it) |
+| the far field (`far_field_sources`, `distant_sounds`) | does not enter (68 < 70) unless a bare room's ring lifts it (`ring_boost_db`); a `deafening` one still does |
+| sounds heard over it (`level_of`: events, other sources, `heard_events`, a source `sound_shape` names) | 15 dB less noise beside a household thing |
+| a crowd's band (`CROWD_SOUND`: a throng is `loud`) | moves with it, 65 at a pace from the room's centre; no crowd in any checkpoint of the corpus |
+| a flickering `deafening` source's dropped beat (`_power_of_level`) | drops to 65 rather than 80 |
+| unchanged | the impact ladder (`EVENT_POWER`: a `loud` event is 72 at its cell and still enters the far field), a room's own `sound` (the impact ladder), `sound_walk_level` and `is_alarming` (they read the SPEECH word `loud`, a raised voice), `MASKING_LEVELS` |
+
+Measured on every checkpoint of the owner's database that holds a running
+`loud` source (77; nine sources: the kettle of chats 176-178, the TARDIS
+console of 153/157/158 and the TARDIS itself in the vortex of 154, the Site-17
+PA of 160/161), read-only, no network:
+
+| source | cells of its room, before | after |
+|---|---|---|
+| the kettle, 176-178 (33 checkpoints) | `drowned` 25 | `din` 25 |
+| the console, 153/157/158 (7) | `drowned` 26, `din` 6 | `din` 26, `quiet` 6 |
+| the TARDIS in the vortex, 154 (2) | `din` 115, `drowned` 29 | `quiet` 107, `din` 37 |
+| the PA, 160/161 (35) | `drowned` 144 | `drowned` 144 (the `deafening` klaxon in the same bare hallway) |
+
+Fourteen body-checkpoints in the console room read "the noise drowns
+everything" where they stood and now read the din. Far-field entries fell
+from 199 source-checkpoints to 157: the kettle's 33 and the console's nine
+gone, the PA still entering on its bare stone hallway's ring. Distant sounds
+delivered fell from 241 to 226, all fifteen in chat 154, where the console
+room had heard the ship in the vortex as `plain`.
+
+**THE EAR RUNG** (§ 11.8 question 4, in part). `SpeechVolume.ear`: a whisper
+INTO an ear, the lips at it, 20-30 dB(A) at a metre-equivalent
+(`SPEECH_ONE_PACE_DB["ear"]` 25). Lips at an ear put that ear some 26 dB
+nearer than a metre -- about 50 dB there, plainly -- while a body a pace off
+meets the breath at a quiet room's own floor, and one half a metre off a few
+decibels over it, where breath, with no voicing to follow, carries no words.
+So the rung is an IDENTITY, not a distance: to its addressee it is graded as
+a whisper is (`_graded_word`: whole within reach, lost beyond it and through
+a door), and to anybody else it is `none` by every path -- an opening, a
+body's mass, a live channel (`composer.line_hear_level` refuses it before
+the channel), a name called across a barrier, a contact with the speaker
+elsewhere. `hear_level(addressed=)` is the switch, and its default is the
+refusal: a reader that cannot say whether its listener is the addressee
+gives the line to nobody (a missed delivery costs a line; a leak costs the
+firewall). `hearing_reason` names it `into_another_ear`.
+
+The readers that grade a line for a listener ask whose ear:
+`composer.speech_percept` / `communication_percept` / `line_hear_level`
+(`line_addressed` reads the line's targets by name or cast handle; perception
+passes its own scene-aware answer, `_line_is_to`, at onset and at outcome);
+the interaction round
+(`common._delivery_ok(addressed=)`); the unanswered address (the body is the
+line's target); background presences (the whole-name match,
+`_background_name_named_exactly`); a charter's public evidence (the one body
+`resolve_target_body` gives, uncached, as a comm's endpoint is);
+`address_reaches` (a flow ref); the follow rule (`_voice_reaches`, the row's
+targets through `_source_bodies`); `widen_reactors_to_hearers` (the flow's
+addressees). Every other caller (`can_perceive`, the frame split, the
+unaddressed-line debt, the World Browser) reads the default and so gives an
+`ear` line to nobody.
+
+A pitched line never solves to it (`pitched_level_db` starts at a whisper:
+lips put to an ear are an act the prose states, never a level a voice is
+pitched at from where it stands) and no level rounds to it
+(`word_for_level`). The views say it: the addressee is told it was said
+into their ear (`dialogue_verbs.ear`, en + ja); a bystander who sees it sees
+speech and no words (the "seen speaking, unheard" percept). The schema owns
+the word and its plainest spellings (`normalize_speech_volume`); the
+encoder's volume clause states the ladder by who each rung reaches and that
+`ear` names its listener in targets; the read-back's "how loudly" offers it
+(`options.volume.ear`), its whisper option now "for whoever is within arm's
+reach" (en + ja).
+
+NOT DERIVED FROM THE SCENE. A `whisper` whose speaker stands in contact with
+the addressee's head stays a whisper: the scene holds no typed fact that a
+mouth is at an ear -- a contact's parts are the Director's own words, and
+reading one as a mouth or an ear needs the body-part vocabulary
+`spatial_contacts.canonical_region` refuses -- so the clause in the encoder's
+card states the class instead.
+
+Measured: no recorded line is `ear`, so the re-grade moves nothing (2,408 of
+2,408). Of the 357 breath-level decisions on distinct beats (whisper and
+mutter), read against the beat's own lines: 85 reached the body they were
+spoken to (8 did not); 149 reached a listener from a line whose record names
+no target, or whose line the record does not give (91 did not); and 12
+reached a body the line was not spoken to -- a mutter "to" a massage table
+(chats 135/137/155 turn 15) and a whisper across a group at arm's reach (the
+betrayal story's turns 6 and 15, the lie story's turn 13). The prose put
+none of those twelve at an ear, so no recorded whisper is one the new rung
+would treat differently. One of them is the case the rung is for: in the lie
+story's turn 13 the boy whispers to the schoolmistress with the magistrate
+within a whisper's reach, the rule hands it to him, and the page kept it
+from him ("the only sound is the nib on the page") -- written `ear`, it
+would have been kept from him by the engine too. The prose put lips at an ear in 4 of the 512 beats
+with speech (chats 135/137 turns 35-36: Mirelle to Hinami, nobody else
+present), and all four lines name no addressee.
+
+Owner questions left:
+
+1. **`loud` at 65, the band's floor.** Chosen for the two readers above; at
+   70 a household thing reads `drowned` at its own cell and enters the far
+   field.
+2. **An `ear` line that names no addressee reaches nobody.** Measured, 4 of
+   27 whisper decisions in chats 161-178 came from lines naming no target,
+   and the four ear-prose lines of chats 135/137 named none. Demoting such a
+   line to a whisper would hand it to every body within reach; the encoder's
+   clause asks for the listener instead.
+3. **The read-back's two options** (`ear` "Into one person's ear, your lips
+   at it."; `whisper` "In a whisper, for whoever is within arm's reach.")
+   need a Jev probe in each pack; an unresolved addressee there (the
+   speaker's own description of a stranger, UNBUILT_CHARACTERS § 6.19) loses
+   an `ear` line the same way.
+4. **Derivation from contacts**, declined above, is the owner's to reopen.

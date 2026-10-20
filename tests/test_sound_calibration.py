@@ -91,8 +91,9 @@ def test_the_fire_is_quiet_even_at_the_hearth():
 # ---------------------------------------------------------------------------
 
 def deck(engine_cell=(3, 0), a_cell=(0, 2), b_cell=(0, 1), length=4):
-    """A 4x3 open deck (`length` paces long) with a `loud` engine (80 dB(A)
-    at a pace, 83 at its cell) at `engine_cell`; A and B at the two named
+    """A 4x3 open deck (`length` paces long) with a `loud` engine (65 dB(A)
+    at a pace, 68 at its cell, since the household re-anchoring of
+    2026-10-20; it was 80 and 83) at `engine_cell`; A and B at the two named
     cells; W in the bow beside the engine."""
     r = room("the Deck", light="lit", anchors={
         "engine": {"desc": "the engine", "dir": "n", "cell": list(engine_cell)},
@@ -146,8 +147,14 @@ def test_a_conversation_at_arms_reach_carries_over_the_deck():
 def test_a_whisper_across_the_deck_is_gone():
     """A whisper from the stern to the bow is gone from every layout -- a
     whisper is speech for a listener at touching distance, and the bow is
-    not that. The deck is `drowned` everywhere, which is DESCRIPTION: what
+    not that. The deck is a `din` at the stern, which is DESCRIPTION: what
     a voice has to rise over (`noise_word`).
+
+    `drowned` until 2026-10-20, when the owner re-anchored `loud` at a
+    household level ("Ordinary household objects should probably be scaled
+    back"): an engine written `loud` is a din a voice is raised over -- this
+    section's own heading -- and one that stops conversation is written
+    `deafening` (`tests/test_a_household_loud_is_a_din.py`).
 
     RESTATED 2026-10-20: the whisper is lost to the distance between the two
     bodies (the hearing rule's privacy beyond reach), not to the engine, so
@@ -161,7 +168,7 @@ def test_a_whisper_across_the_deck_is_gone():
     stern = deck((11, 0), (0, 2), (0, 1), length=12)
     assert _levels(stern, "A", "B")["whisper"] == "full"
     for engine, a, b in (((3, 0), (0, 2), (0, 1)), ((2, 0), (0, 2), (1, 2))):
-        assert _noise_word_at(deck(engine, a, b), "A") == "drowned", engine
+        assert _noise_word_at(deck(engine, a, b), "A") == "din", engine
 
 
 # ---------------------------------------------------------------------------

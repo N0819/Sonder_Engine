@@ -85,6 +85,7 @@ from world.spatial import (
     hear_level,
     hearing_reason,
     held_beam_falls_on,
+    into_another_ear,
     _sense_channel,
     sense_adjusted,
     proximity_rel,
@@ -640,11 +641,47 @@ def concealed_from_observer(entry, observer_name, observer_id=None):
     )
 
 
+def _line_refs(entry):
+    """Every handle a line names its addressee by: its `intended_target`
+    (one, or a list) and its `targets`."""
+    refs = entry.get("intended_target")
+    refs = list(refs) if isinstance(refs, (list, tuple)) else [refs]
+    refs.extend(entry.get("targets") or [])
+    return [str(ref).strip() for ref in refs
+            if ref is not None and not isinstance(ref, bool)
+            and str(ref).strip()]
+
+
+def line_addressed(entry, observer_name, observer_id=None):
+    """Is this observer the body a line is spoken TO -- its
+    `intended_target`, or one of its `targets` -- by name, or by the
+    engine's own handle for them (`character:<id>`)? Typed data only, like
+    every admission here; a caller that resolves identity against the scene
+    (aliases, entity ids) passes its own answer as `addressed`.
+
+    What the ear rung is decided by (`spatial_senses.EAR_VOLUME`), and it
+    fails toward no: a line breathed into an ear goes to nobody this cannot
+    show is that ear's owner."""
+    forms = {str(observer_name or "").strip().casefold()}
+    if observer_id is not None and str(observer_id).strip():
+        forms |= {str(observer_id).strip().casefold(),
+                  f"character:{str(observer_id).strip()}".casefold()}
+    forms.discard("")
+    return any(ref.casefold() in forms for ref in _line_refs(entry))
+
+
 def line_hear_level(entry, rel, observer_name, proximity=None,
-                    senses=None, seen=False):
+                    senses=None, seen=False, *, addressed=None):
     """Audibility of one dialogue entry to an observer.
 
-    Ordinary spatial hearing (`hear_level`) decides first -- including the
+    A LINE BREATHED INTO ANOTHER BODY'S EAR decides first, and it decides
+    `none` (`spatial_senses.into_another_ear`): no path carries the ear
+    rung to anybody but its addressee -- not the air, not the live channel
+    below, not the rescue of a line named across a barrier. `addressed` is
+    whether this observer is the line's addressee; None reads the line's
+    own targets (`line_addressed`).
+
+    Ordinary spatial hearing (`hear_level`) decides next -- including the
     `proximity` downgrade. Pass only a MEASURED tier
     (`spatial.measured_proximity_rel`): "near" is mostly a default, and a
     default must not silence a conversation.
@@ -659,6 +696,11 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
 
     `seen`: the observer sees the speaker's face, which is worth several
     decibels where a deafening noise is what decides (`hear_level`)."""
+    if addressed is None:
+        addressed = line_addressed(entry, observer_name)
+    if into_another_ear(entry.get("volume", "normal"), addressed,
+                        entry.get("level_db")):
+        return "none"
     # A live channel between speaker and observer -- a PA, an intercom, a
     # radio, a phone -- decides FIRST, before the wall gets a say.
     #
@@ -687,7 +729,8 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
         return "full"
     _unimpaired = hear_level(rel, entry.get("volume", "normal"),
                              proximity=proximity,
-                             level_db=entry.get("level_db"), seen=seen)
+                             level_db=entry.get("level_db"), seen=seen,
+                             addressed=addressed)
     base = _sense_graded(_unimpaired, "hearing", senses)
     # AN IMPAIRED EAR IS NOT AN UNREACHABLE ONE. `full` is the top of the
     # hearing ladder, so a -1 acuity took every `full` to `fragment`
@@ -3840,7 +3883,8 @@ def _one_voice_each(percepts):
 
 def speech_percept(entry, rel, observer_name, *, display, can_see,
                    proximity=None, order_key=0, observer_id=None,
-                   senses=None, voice="", prev_standing=None, bearing=""):
+                   senses=None, voice="", prev_standing=None, bearing="",
+                   addressed=None):
     """Admit one spoken line for one observer, or None.
 
     A VOICE IS ESTABLISHED ONCE (D2; Wood -- theatre gives a vocal quality
@@ -3857,7 +3901,9 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     compared: the ledger decides, not the wording.
 
     Gates, in order: concealment (absolute exclusion, never a volume),
-    audibility (`line_hear_level`, including the comm/addressed rescue).
+    audibility (`line_hear_level`, including the comm/addressed rescue, and
+    the ear rung, which reaches only the line's addressee: `addressed`, or
+    the line's own targets when None -- `line_addressed`).
     The data carries the FIDELITY-DEGRADED surface: a fragment percept holds
     only the muffled fragment the renderer may emit, never the full body --
     so downstream consumers (memory included) structurally cannot outrun the
@@ -3879,15 +3925,19 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     # say which one. Same shape as `act_percept`: no-op when debug capture is
     # off, one ContextVar read.
     _who = "%s -> %s" % (str(entry.get("speaker") or "?"), observer_name)
+    if addressed is None:
+        addressed = line_addressed(entry, observer_name, observer_id)
     _spatial = line_hear_level(entry, rel, observer_name, proximity=proximity,
-                               senses=senses, seen=bool(can_see))
+                               senses=senses, seen=bool(can_see),
+                               addressed=addressed)
     level = _spatial
     _how = "spatial"
-    if isinstance(rel.get("comm_channel"), dict):
+    if isinstance(rel.get("comm_channel"), dict) and level != "none":
         _how = "comm channel"
     elif level == "full" and _sense_graded(
             hear_level(rel, volume, proximity=proximity,
-                       level_db=entry.get("level_db"), seen=bool(can_see)),
+                       level_db=entry.get("level_db"), seen=bool(can_see),
+                       addressed=addressed),
             "hearing", senses) == "none":
         # `line_hear_level` already applied the addressed rescue; naming it
         # here is a report of what happened inside it, not a second copy of
@@ -3907,7 +3957,13 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     # notes -- `tools/speech_replay.py` parses the prefix -- reads them alike.
     _why = hearing_reason(rel, volume, proximity=proximity,
                           level_db=entry.get("level_db"),
-                          seen=bool(can_see)) if level != "full" else ""
+                          seen=bool(can_see),
+                          addressed=addressed) if level != "full" else ""
+    if _why == "into_another_ear" and not _line_refs(entry):
+        # A line breathed into an ear that names NO ear reaches nobody at
+        # all -- its own listener included -- and says so here, so the
+        # missing target is found where the line went missing.
+        _why = "ear_names_no_one"
     note_step_decision(
         "speech_percept", _who,
         "refused" if level == "none" else "delivered",
@@ -4075,8 +4131,9 @@ def silence_percept(display, *, order_key=0):
 
 def communication_percept(entry, rel, observer_name, *, display, can_see,
                            proximity=None, order_key=0, observer_id=None,
-                           senses=None):
-    """Admit described communication without manufacturing a quotation."""
+                           senses=None, addressed=None):
+    """Admit described communication without manufacturing a quotation.
+    The ear rung reaches only its addressee here too (`line_hear_level`)."""
     if concealed_from_observer(entry, observer_name, observer_id):
         return None
     from .common import communication_surface
@@ -4084,8 +4141,11 @@ def communication_percept(entry, rel, observer_name, *, display, can_see,
     if not surface:
         return None
     volume = str(entry.get("volume") or "normal")
+    if addressed is None:
+        addressed = line_addressed(entry, observer_name, observer_id)
     level = line_hear_level(entry, rel, observer_name, proximity=proximity,
-                            senses=senses, seen=bool(can_see))
+                            senses=senses, seen=bool(can_see),
+                            addressed=addressed)
     if level == "none":
         return None
     # Partial hearing cannot deliver a proposition whose words were never

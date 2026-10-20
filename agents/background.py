@@ -52,7 +52,7 @@ from story.character_schema import (
 from core.db import wget
 from llm.schemas import validate_llm_output
 from llm.prompts import get_prompt
-from world.spatial import hear_level, spatial_rel_between
+from world.spatial import hear_level, into_another_ear, spatial_rel_between
 
 from persist.commit import (
     address_reaches,
@@ -61,6 +61,7 @@ from persist.commit import (
     pick_background_reactors,
     pick_voice_demand,
     _background_name_mentioned,
+    _background_name_named_exactly,
     _character_address_of,
     _room_address_of,
     _fold_duplicate_presences,
@@ -150,22 +151,30 @@ def _filtered_player_declaration(ctx, sc, name, here):
     # function adds only the channel to each presence.
     elements, raw = overt_declaration(ctx)
 
-    def _hearing(volume):
+    def _hearing(volume, element=None):
         """This presence's hearing of the player, or "none". An unnameable
         speaker has no body to build a relation from, so co-location is all
-        that can be established and anything else fails closed."""
+        that can be established and anything else fails closed. A line
+        breathed into an ear is this presence's only where the element
+        names it by its whole name (`_background_name_named_exactly`, the
+        precise grade -- never a shared word; `EAR_VOLUME`)."""
+        aimed = any(_background_name_named_exactly(name, ref)
+                    for ref in ((element or {}).get("targets") or ())
+                    if str(ref or "").strip())
         if not p_name:
+            if into_another_ear(volume or "normal", aimed):
+                return "none"
             return "full" if here == p_room else "none"
         return hear_level(
             spatial_rel_between(sc, name, p_name,
                                 observer_room=here, target_room=p_room),
-            volume or "normal")
+            volume or "normal", addressed=aimed)
 
     if elements:
         parts = []
         for e in elements:
             if e.get("type") == "speech" and e.get("text"):
-                level = _hearing(e.get("volume"))
+                level = _hearing(e.get("volume"), e)
                 if level == "none":
                     continue
                 if level != "full":
@@ -173,7 +182,7 @@ def _filtered_player_declaration(ctx, sc, name, here):
                     continue
                 parts.append('"%s"' % e["text"])
             elif e.get("type") == "communication":
-                level = _hearing(e.get("volume"))
+                level = _hearing(e.get("volume"), e)
                 if level == "none":
                     continue
                 parts.append(
@@ -242,6 +251,8 @@ def _beat_for_presence(dr, sc, station_room, name, beat_room=None,
                                 observer_room=station_room,
                                 target_room=sp_room),
             d.get("volume") or "normal",
+            addressed=bool(str(d.get("intended_target") or "").strip())
+            and _background_name_named_exactly(name, d.get("intended_target")),
         )
         if level == "none":
             continue
@@ -1159,7 +1170,7 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         if spoken_at and not exempt:
             if not address_reaches(sc, name, room, _pname,
                                    {_p_room} if _p_room else authored_rooms,
-                                   volumes):
+                                   volumes, addressed=bool(flow_hit)):
                 flow_hit = named_exactly = False
                 mentioned = place_hit = False
                 precise = bool(aimed)
@@ -1231,7 +1242,10 @@ def _audience_map(sc, entry, managed, level):
             lvl = hear_level(
                 spatial_rel_between(sc, name, speaker,
                                     observer_room=room, target_room=sp_room),
-                volume)
+                volume, addressed=bool(
+                    str(entry.get("intended_target") or "").strip())
+                and _background_name_named_exactly(
+                    name, entry.get("intended_target")))
         else:
             # FAIL CLOSED. This used to be `"full"` with a comment claiming it
             # matched `_beat_for_presence` -- which does the opposite: X1

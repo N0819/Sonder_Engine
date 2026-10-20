@@ -220,6 +220,10 @@
       "shouts",
       "shout"
     ],
+    "ear": [
+      "says into your ear",
+      "say into your ear"
+    ],
     "whisper": [
       "says under their breath",
       "say under their breath"
@@ -356,6 +360,7 @@
     "loop_self_said": "You said: \"{quote}\"",
     "loop_self_did": "You did: {surface}",
     "loop_speech": "{label} says: \"{body}\"",
+    "loop_speech_ear": "{label} says into your ear: \"{body}\"",
     "muffled": "A muffled voice: {fragment}",
     "muffled_attributed": "{label} says something you cannot make out: {fragment}",
     "muffled_indistinct": "...something indistinct...",

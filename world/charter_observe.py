@@ -20,8 +20,8 @@ import re
 from world.charter_figure import figure_claim
 from world.charter_identity import display_name, identity_aliases
 from world.charter_mind import cap_minds
-from world.spatial import (hear_level, room_of, spatial_rel_between,
-                           visual_level_between)
+from world.spatial import (EAR_VOLUME, hear_level, room_of,
+                           spatial_rel_between, visual_level_between)
 
 
 PUBLIC_EVIDENCE_CAP = 12
@@ -88,7 +88,8 @@ def observer_view(charter, scene):
 
 
 def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
-                           *, observer=None, senses=None, comm_endpoint=None):
+                           *, observer=None, senses=None, comm_endpoint=None,
+                           ear_endpoint=None):
     """Whether this body receives the exact public source.
 
     ``observer`` is the key the body stands under in ``scene`` when the
@@ -115,6 +116,11 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
     conversation. A mind acquiring a fact through a channel it does not have
     is the one thing the firewall is for, and this is that: not a model
     saying too much, an engine handing it something nothing carried.
+
+    ``ear_endpoint`` is the one body a line breathed INTO AN EAR was
+    breathed to (`resolve_target_body`, run once per line, as for a comm):
+    that line reaches it as a whisper reaches a body within reach, and no
+    other body here at all (`spatial_senses.EAR_VOLUME`).
     """
     place = str((body or {}).get("place") or "")
     actor = str((evidence or {}).get("actor") or "")
@@ -152,7 +158,9 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
         rel = spatial_rel_between(
             scene or {}, str(observer) if placed else str(body_key), actor,
             observer_room=place, target_room=actor_room)
-        return hear_level(rel, evidence.get("volume") or "normal") == "full"
+        return hear_level(rel, evidence.get("volume") or "normal",
+                          addressed=bool(ear_endpoint)
+                          and str(ear_endpoint) == str(body_key)) == "full"
 
     if evidence.get("kind") == "action":
         if placed:
@@ -499,6 +507,15 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
                 and evidence.get("target"):
             comm_endpoint = resolve_target_body(
                 charter, evidence.get("target"), scene=scene)
+        # A LINE BREATHED INTO AN EAR is that ear's alone: the one body its
+        # address resolves to, the same resolution a comm takes, and nobody
+        # if it resolves to none (`EAR_VOLUME`). An answer that depends on
+        # who the body is cannot be shared by place, so it is not cached.
+        ear_line = str(evidence.get("volume") or "").strip().casefold() \
+            == EAR_VOLUME
+        ear_endpoint = resolve_target_body(
+            charter, evidence.get("target"), scene=scene) \
+            if ear_line and evidence.get("target") else None
         if actor and not room_of(scene or {}, actor):
             if actor not in unplaced:
                 unplaced.append(actor)
@@ -511,7 +528,7 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
             roles = role_map.get(body_key) or ()
             cacheable = (str(evidence.get("visibility") or "overt").casefold()
                          != "concealed" and not evidence.get("conceal_from")
-                         and not comm_endpoint)
+                         and not comm_endpoint and not ear_endpoint)
             observer = observer_keys.get(str(body_key))
             stood = (viewed.get("stations") or {}).get(observer) or {} \
                 if observer else {}
@@ -527,7 +544,7 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
                 receives = body_receives_evidence(
                     viewed, body_key, body, roles, naming, evidence,
                     observer=observer, senses=_declared_senses,
-                    comm_endpoint=comm_endpoint)
+                    comm_endpoint=comm_endpoint, ear_endpoint=ear_endpoint)
                 if cacheable:
                     sensory_cache[cache_key] = receives
             if not receives:

@@ -1266,7 +1266,10 @@ def _character_address_of(dr_output, presence_name, roster, scene=None,
             sp_room = _room_of(scene, speaker)
             if sp_room:
                 rel = spatial_rel(scene, sp_room, station_room)
-                if hear_level(rel, d.get("volume") or "normal") != "full":
+                # `addressed`: the target matched this presence above, so a
+                # line breathed into its ear is its own (`EAR_VOLUME`).
+                if hear_level(rel, d.get("volume") or "normal",
+                              addressed=True) != "full":
                     continue
         found = d  # last hearable address wins
     return found
@@ -1521,7 +1524,7 @@ def spoken_volumes(ctx, dr_output=None):
 
 
 def address_reaches(scene, listener, listener_room, speaker, speaker_rooms,
-                    volumes=("normal",)):
+                    volumes=("normal",), *, addressed=False):
     """Did the ADDRESSING LINE arrive where this body stands?
 
     BEING ADDRESSED CHANGES WHETHER A BODY IS PICKED TO ANSWER, NEVER
@@ -1554,6 +1557,11 @@ def address_reaches(scene, listener, listener_room, speaker, speaker_rooms,
     travelling back are one channel seen from two ends, and `hear_level` is
     deliberately asymmetric about containment.
 
+    `addressed` is whether this body is the line's own target (a flow
+    ref): a line breathed into an ear reaches its addressee and nobody else
+    (`spatial_senses.EAR_VOLUME`), so a body picked on a looser match is
+    never reached by one.
+
     `speaker_rooms` is where the addressing mind stands -- the player's own
     room where the scene places them, else every authored mind's room, which
     is the aperture `demand_reaches` has always used. A speaker with no body
@@ -1583,7 +1591,8 @@ def address_reaches(scene, listener, listener_room, speaker, speaker_rooms,
                         spatial_rel(scene, room, listener_room))
                 near = None
             for rel in rels:
-                if any(hear_level(rel, volume, proximity=near) == "full"
+                if any(hear_level(rel, volume, proximity=near,
+                                  addressed=addressed) == "full"
                        for volume in volumes):
                     return True
     except Exception:
@@ -4500,7 +4509,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         if spoken_at and not exempt:
             if not address_reaches(sc, name, here, _pname,
                                    {player_room} if player_room
-                                   else authored_rooms, volumes):
+                                   else authored_rooms, volumes,
+                                   addressed=bool(flow_addressed)):
                 # The words did not arrive, so every trigger that claimed
                 # they did falls with them. A carried debt is a different
                 # claim and is judged below on its own channel.

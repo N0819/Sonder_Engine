@@ -125,18 +125,24 @@ P_LIGHT = "The light from the lamp falls on the table. You are in the light."
 #: at a pace, 83 at its cell) and the table across a medium hall from it
 #: reads 71.8 dB -- a `din`, where a normal voice one pace off is caught in
 #: pieces -- rather than the `quiet` the compressed ladder gave it.
+#: RE-ANCHORED 2026-10-20 by the owner's ruling ("Ordinary household objects
+#: should probably be scaled back"): `loud` is the loudest of everyday life,
+#: 65 dB(A) at a pace (a television turned up), and a machine that stops
+#: conversation is written `deafening`. So a generator written `loud` is a
+#: din at the shelf it stands at and the hearth beside it -- a voice raised
+#: over it -- and faint across the hall at the table; it no longer drowns
+#: anything (`tests/test_a_household_loud_is_a_din.py`). The shape still
+#: groups by anchor, loud to quiet, which is what this pins.
 #: Nearest first: Q stands beside the hearth since 2026-10-13, where until
 #: then a body at the hearth was stood inside the waist-high shelf beside it
 #: (`spatial_fov._stand_cell`), so the shelf came first.
-Q_SOUND = ("The noise from the generator drowns everything at the hearth and "
-           "the shelf and is a din at the table. Where you are, the noise "
-           "drowns everything.")
+Q_SOUND = ("The noise from the generator is a din at the hearth and the shelf "
+           "and is faint at the table. Where you are, you are in the din.")
 Q_LIGHT_JA = ("光はthe lampから来ている。the tableは明るく照らされている。"
               "the shelfは薄明かりの中にある。the hearthは闇の中にある。"
               "あなたは薄明かりの中に立っている。")
-Q_SOUND_JA = ("騒音はthe generatorから来ている。the hearthとthe shelfでは騒音が"
-              "何もかもをかき消している。the tableでは騒がしい。"
-              "あなたのいる場所では騒音が何もかもをかき消している。")
+Q_SOUND_JA = ("騒音はthe generatorから来ている。the hearthとthe shelfでは騒がしい。"
+              "the tableでは静かだ。あなたのいる場所は騒がしい。")
 
 
 # ---------------------------------------------------------------------------
@@ -196,9 +202,9 @@ def test_sound_groups_the_visible_anchors_by_noise_word_loud_to_quiet():
     sc = lamp_hall(generator=True)
     shape = sound_shape(sc, "Q")
     assert shape == {
-        "groups": [{"level": "drowned", "items": ["the hearth", "the shelf"]},
-                   {"level": "din", "items": ["the table"]}],
-        "sources": ["the generator"], "openings": [], "self": "drowned"}
+        "groups": [{"level": "din", "items": ["the hearth", "the shelf"]},
+                   {"level": "quiet", "items": ["the table"]}],
+        "sources": ["the generator"], "openings": [], "self": "din"}
     for group in shape["groups"]:
         assert group["level"] in NOISE_WORDS
     assert composer.render_sound_shape(shape) == Q_SOUND

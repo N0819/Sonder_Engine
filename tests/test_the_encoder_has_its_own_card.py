@@ -195,10 +195,19 @@ def test_the_owners_sheet_is_half_what_it_was():
     never only as an observable or a sound (a walk back upstairs with no
     position, 178 turn 23; a latch checked as a click, 177 turn 20); and a
     doorway of a held place is the encoder's, `rooms` granted or not (177
-    turn 19's door, opened with the channel stripped)."""
+    turn 19's door, opened with the channel stripped).
+
+    0.64 since 2026-10-20 (later the same day), from 0.63: the volume
+    ladder's `ear` rung, the owner's "whisper should probably have levels,
+    whispering into someone's ears is clearly a lot quieter than a normal
+    whisper". The clause names who each breath rung reaches -- a mutter a few
+    paces, a whisper arm's reach, ear its one named listener -- in the
+    sentence the old "(said to oneself, under the breath, into one ear ...)"
+    stood in; tightened with the pitched clause beside it, it put the sheet at
+    20,535 of the 20,502 ceiling."""
     sheet = prompts.unified_specialist_prompt(
         ["obligations", "entities", "sensory_events", "poses"], parts=[])
-    assert len(sheet) < 32543 * 0.63, len(sheet)
+    assert len(sheet) < 32543 * 0.64, len(sheet)
 
 
 def _scores(scores):

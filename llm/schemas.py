@@ -349,6 +349,11 @@ def dict_shaped_fields(model_cls):
 # ---- Enums ----
 
 class SpeechVolume(str, Enum):
+    # THE LIPS AT ONE EAR (the owner, 2026-10-20): quieter than a whisper,
+    # and heard by the line's addressee alone -- nobody else, even beside
+    # them (`spatial_senses.EAR_VOLUME`). The quietest rung of the breath
+    # ladder: ear, whisper (arm's reach), mutter (a few paces).
+    ear = "ear"
     whisper = "whisper"
     mutter = "mutter"
     normal = "normal"
@@ -413,6 +418,14 @@ class BehaviorController(str, Enum):
   
 _VOLUME_ALIASES = {
     "": "normal",
+    # The ear rung's own spellings, and nothing that could also mean a
+    # whisper: a word outside the set reads as an ORDINARY voice, which for
+    # a line breathed into one ear is the whole room hearing it.
+    "in ear": "ear",
+    "in_ear": "ear",
+    "into ear": "ear",
+    "into_ear": "ear",
+    "ear_whisper": "ear",
     "quiet": "mutter",
     "quietly": "mutter",
     "soft": "mutter",
@@ -445,6 +458,7 @@ def normalize_speech_volume(value: Any) -> str:
     volume = _VOLUME_ALIASES.get(volume, volume)
 
     if volume not in {
+        "ear",
         "whisper",
         "mutter",
         "normal",

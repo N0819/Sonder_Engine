@@ -1337,7 +1337,10 @@ def _unanswered_addresses(scene, sequences, stream, res):
                 if key in seen:
                     continue
                 rel = spatial_rel_between(scene, body, actor)
-                if hear_level(rel, event.get("volume", "normal")) == "none":
+                # `addressed`: this body is the line's own target, so a line
+                # breathed into its ear reaches it (`EAR_VOLUME`).
+                if hear_level(rel, event.get("volume", "normal"),
+                              addressed=True) == "none":
                     continue            # they never heard it: not an answer
                 seen.add(key)
                 out.append({"kind": "silence", "actor": body,
@@ -3199,6 +3202,28 @@ def _addressee_name(ctx, ref):
             except (KeyError, TypeError, ValueError):
                 continue
     return ref
+
+
+def _line_is_to(ctx, sc, observer, line, *, names=None, aliases=()):
+    """Is `observer` the body a spoken line is aimed at -- its
+    `intended_target`, or one of its `targets` -- each read as the speaker
+    named it: a handle `names` knows (a cast or persona id) to the name its
+    body stands under, a cast id through the roster, then every spelling of
+    the observer (`_is_the_observer`).
+
+    What the ear rung is decided by (`spatial_senses.EAR_VOLUME`): a line
+    breathed into an ear reaches this body only if this answers yes, so it
+    fails toward no -- a target nothing resolves gives the line to nobody,
+    and the composer's own reading of the line (`composer.line_addressed`)
+    is what a caller without a scene falls back to."""
+    if not isinstance(line, dict):
+        return False
+    for text in composer._line_refs(line):
+        named = ((names or {}).get(text) or (names or {}).get(text.casefold())
+                 or _addressee_name(ctx, text))
+        if _is_the_observer(sc, named, observer, aliases):
+            return True
+    return False
 
 
 def perception_act(ctx, nonce):
@@ -6804,6 +6829,9 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         "tone": event.get("tone", ""),
                         "visibility": event.get("visibility", "overt"),
                         "conceal_from": event.get("conceal_from") or [],
+                        # Whom it is spoken to, for the ear rung's own
+                        # reading of the line (`addressed` below decides).
+                        "targets": list(event.get("targets") or []),
                     }
                     percept = composer.speech_percept(
                         entry, speech_rel, name, display=event_display,
@@ -6814,7 +6842,11 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         voice=_voice_register_for(ctx, event_actor),
                         prev_standing=prev_standing,
                         bearing=_speech_bearing(event_scene, name, event_actor,
-                                                said_seen, speech_rel))
+                                                said_seen, speech_rel),
+                        # WHOSE EAR (`EAR_VOLUME`), read against the scene
+                        # and this beat's own handles for each body.
+                        addressed=_line_is_to(ctx, event_scene, name, event,
+                                              names=actor_names))
                     if percept:
                         percepts.append(percept)
                 elif event.get("type") == "communication":
@@ -6830,7 +6862,9 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         name, display=event_display, can_see=said_seen,
                         proximity=event_proximity,
                         order_key=idx, observer_id=pid,
-                        senses=p.get("sense_card"))
+                        senses=p.get("sense_card"),
+                        addressed=_line_is_to(ctx, event_scene, name, event,
+                                              names=actor_names))
                     if percept:
                         percepts.append(percept)
                 elif event.get("type") == "action":
@@ -7918,7 +7952,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         voice=_voice_register_for(ctx, speaker),
                         prev_standing=prev_standing,
                         bearing=_speech_bearing(event_scene, name, speaker,
-                                                can_see, rel))
+                                                can_see, rel),
+                        addressed=_line_is_to(
+                            ctx, event_scene, name, d,
+                            aliases=cast_aliases.get(name) or ()))
                     if percept:
                         percepts.append(percept)
                         unheard.discard(
@@ -7980,7 +8017,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         name, display=display, can_see=can_see,
                         proximity=_prox,
                         order_key=order, observer_id=pid,
-                        senses=p.get("sense_card"))
+                        senses=p.get("sense_card"),
+                        addressed=_line_is_to(
+                            ctx, event_scene, name, entry,
+                            aliases=cast_aliases.get(name) or ()))
                     if percept:
                         percepts.append(percept)
                     order += 1

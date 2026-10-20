@@ -1524,10 +1524,12 @@ voice from rooms away is graded against. The weather half is answered by
 the owner's 2026-09-26 ruling, now by construction: weather never masks
 speech. What stays open, and is the owner's:
 
-- **`loud` at 80 dB at a pace** decides no line but still decides REACH and
-  the room's noise words: a kettle the opening writes `loud` clears the far
-  field's entry and is heard rooms away. Re-anchoring it at 70 (a loud
-  household or street sound) is § 11.8's question 1.
+- ~~**`loud` at 80 dB at a pace**~~ RULED AND BUILT 2026-10-20 (the owner:
+  "Ordinary household objects should probably be scaled back";
+  `DESIGN_SOUND_FIELD.md` § 11.9): `loud` is a household level, 65 dB(A) at a
+  pace -- a `din` at most at every cell of its room, heard in its room and
+  the next -- and what stops conversation is `deafening`. Open within it:
+  the band's floor (65 rather than 70) as the owner's number.
 - **A voice leaving a building** is charged nothing for the open air it
   spreads into: with both front doors open, a normal voice in one parlour
   reaches the parlour across a 16-pace street in pieces (42.6 dB of far-field

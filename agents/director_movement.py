@@ -910,7 +910,7 @@ def _follower_id(ctx, follower):
     return None
 
 
-def _voice_reaches(ctx, world, listener, speaker, row, senses):
+def _voice_reaches(ctx, world, listener, speaker, row, senses, names=None):
     """Whether the line ledger `row` records `speaker` saying, in `world`,
     reaches `listener` THROUGH THE AIR -- at the line's own volume, through
     the field and the barriers between their rooms (`spatial_rel_between`,
@@ -923,14 +923,26 @@ def _voice_reaches(ctx, world, listener, speaker, row, senses):
     channel and no addressed rescue: a voice on a radio, or one named across
     a wall a device must be carrying, says nothing about where its speaker
     stands. The same grading the outcome's speech percepts make (`composer.
-    speech_percept`), less the two channels that do not place a body."""
-    from world.spatial import (hear_level, measured_proximity_rel,
+    speech_percept`), less the two channels that do not place a body.
+
+    A line breathed INTO AN EAR reaches only the body it was breathed to
+    (`spatial_senses.EAR_VOLUME`): the row's own targets, each read through
+    `names` (`_source_bodies`, a cast or persona handle to its body's
+    name) and every spelling of the listener (`same_subject`)."""
+    from world.spatial import (hear_level, measured_proximity_rel, same_subject,
                                sense_adjusted, sound_field, spatial_rel_between)
     from agents.composer import concealed_from_observer
     if not room_of(world, listener) or not room_of(world, speaker):
         return False
     if concealed_from_observer(row, listener, _follower_id(ctx, listener)):
         return False
+    refs = [ref for ref in list(row.get("targets") or ())
+            + [row.get("intended_target")]
+            if isinstance(ref, str) and ref.strip()]
+    addressed = any(
+        same_subject(world, listener,
+                     (names or {}).get(ref.strip().casefold()) or ref.strip())
+        for ref in refs)
     try:
         field = sound_field(world, listener,
                             turn_idx=getattr(getattr(ctx, "turn", None), "idx", None),
@@ -938,7 +950,7 @@ def _voice_reaches(ctx, world, listener, speaker, row, senses):
         rel = spatial_rel_between(world, listener, speaker, sound=field)
         level = hear_level(rel, str(row.get("volume") or "normal"),
                            proximity=measured_proximity_rel(world, listener, speaker),
-                           level_db=row.get("level_db"))
+                           level_db=row.get("level_db"), addressed=addressed)
     except Exception:
         return False
     if senses:
@@ -1100,7 +1112,8 @@ def _heard_this_beat(ctx, scene, state_diff, interp, out, follower, target,
             # moment, so a line counts only where the speaker never changed
             # room: then where it spoke is where it stands.
             if stayed and any(
-                    _voice_reaches(ctx, scene, follower, target, line, senses)
+                    _voice_reaches(ctx, scene, follower, target, line, senses,
+                                   names=sources)
                     for line in _unplaced_lines(record, stage, scene, target,
                                                 player_name)):
                 heard.append((0, room_of(scene, target)))
@@ -1113,7 +1126,8 @@ def _heard_this_beat(ctx, scene, state_diff, interp, out, follower, target,
                 continue
             world = (worlds[moment].get("before") if moment < len(worlds)
                      else end) or {}
-            if _voice_reaches(ctx, world, follower, target, row, senses):
+            if _voice_reaches(ctx, world, follower, target, row, senses,
+                              names=sources):
                 heard.append((moment, room_of(world, target)))
     pace = _walked_at((out or {}).get("travel") if isinstance(out, dict) else None,
                       target)
@@ -1195,7 +1209,8 @@ def _heard_last_beat(ctx, scene, follower, target, senses, player_name):
             moment = _moment_of(steps, stage, row.get("chrono_id"))
             if moment is not None and moment > still \
                     and _spoken_by(row, sources, scene, target) \
-                    and _voice_reaches(ctx, scene, follower, target, row, senses):
+                    and _voice_reaches(ctx, scene, follower, target, row,
+                                       senses, names=sources):
                 return room_of(scene, target)
     pace = _walked_at(resolved.get("travel"), target)
     walked = [i for i in range(len(steps)) if moved(i, target)]
