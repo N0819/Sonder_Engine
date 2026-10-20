@@ -510,6 +510,14 @@ unmeasured, and is the next thing to watch.
 `commit_scene_state._report_started_sources` continues to tell the Director
 on the next beat about every `running` switch a beat threw.
 
+**2026-10-20, the hearing rule:** an event may carry `drowns: true` (a
+literal true; `normalize_sensory_event` keeps nothing else) where the prose
+says nothing said could be heard over it while it lasted -- the one beat
+sound that takes a voice away, priced no quieter than `deafening`
+(`spatial_sound_field.sound_sources`, `masked_level`). The encoder's
+`sensory_events` part says so in one clause, en and ja; what it does on the
+page needs a live run.
+
 <a id="unbuilt-1-118"></a>
 
 ### 1.118 Residuals from the addressed-hearing repair (PB1/PB6)
@@ -1501,7 +1509,35 @@ about a barrier and not about who is sniffing at it.
 
 <a id="unbuilt-1-159"></a>
 
-### 1.159 The sound model is half real: the ladders are decibels and the losses are still compressed
+### 1.159 The sound model is half real: the ladders are decibels and the losses are still compressed — SETTLED FOR SPEECH 2026-10-20, residuals open
+
+**Settled for speech 2026-10-20** by the hearing rule
+(`docs/design/DESIGN_SOUND_FIELD.md` § 11, `spatial_senses.hear_level`;
+`tests/test_voices_carry_unless_the_story_stops_them.py`). The owner: "the
+sound system repeatedly wars with both reality and fiction". A line is no
+longer graded by signal against noise on the cell grid, so what this entry
+weighed -- whether the ambient floors, the weather and the impact ladder
+should move to real levels -- no longer decides any line: noise takes a
+voice only from what the story makes `deafening` or an event it says
+drowns everything out, and the floors that remain are the quiet ones a
+voice from rooms away is graded against. The weather half is answered by
+the owner's 2026-09-26 ruling, now by construction: weather never masks
+speech. What stays open, and is the owner's:
+
+- **`loud` at 80 dB at a pace** decides no line but still decides REACH and
+  the room's noise words: a kettle the opening writes `loud` clears the far
+  field's entry and is heard rooms away. Re-anchoring it at 70 (a loud
+  household or street sound) is § 11.8's question 1.
+- **A voice leaving a building** is charged nothing for the open air it
+  spreads into: with both front doors open, a normal voice in one parlour
+  reaches the parlour across a 16-pace street in pieces (42.6 dB of far-field
+  loss; the same before the restatement). A doorway radiating into the sky
+  keeps some 20 dB less than a room would -- an envelope term on the far
+  field is the proposal, and it would move every sound's reach across a
+  street, so it is the owner's.
+- **The impact ladder** (`EVENT_POWER`) is still the 2026-09-06 one, under
+  the emission ladder at `loud` and `deafening`; it decides reach only.
+- The composer symptom below stands.
 
 **Built 2026-09-14** (`DESIGN_SOUND_DECIBELS.md` § 5c,
 `DESIGN_SOUND_FIELD.md` § 6c, `tests/test_sound_calibration.py`): the
@@ -1549,7 +1585,20 @@ line became a fragment; a false alarm, and the warning is only a warning.
 
 <a id="unbuilt-1-167"></a>
 
-### 1.167 Ordinary speech was gated four ways too hard — FIXED 2026-09-26, residuals open
+### 1.167 Ordinary speech was gated four ways too hard — FIXED 2026-09-26; CLOSED FOR SPEECH 2026-10-20
+
+**Closed for speech 2026-10-20** by the hearing rule
+(`docs/design/DESIGN_SOUND_FIELD.md` § 11): a voice is no longer graded by
+signal against noise, so none of the four mechanisms below can take a line
+again -- a ring no longer smears one (retired: `REVERB_SMEAR_DB`,
+`C50_SMEAR_DB`), the absolute floor holds only breath and only rooms away,
+a room's own `sound` and the weather mask nothing, and a stale room sound
+raises no voice through a shut door (on the rival story's turn 19 that
+Lombard rise carried a normal line through the rehearsal room's door
+whole; it is now muffled, as a voice through a shut door with nobody at it
+is). Replayed on the four stories this entry measured, and on every chat in
+the owner's database: § 11.8 of the note. The residuals below are kept, and
+re-read against the rule:
 
 The owner, 2026-09-26: "Sound gatings is entirely overzealous. Rain is not
 even that loud you could still call to someone across a street in rain and
@@ -1604,9 +1653,15 @@ it (the Lombard rule), and his listener still stands under the other.
   `rooms[rid].sound`, so a stale one a plan wrote stands for the whole story
   -- the opera house's soprano is still singing. Prevention is in; a way to
   clear one (the spatial hand writing `sound: null`) is the owner's call.
+  Since 2026-10-20 a stale sound takes no line (it is not `deafening`); it
+  still describes a din nothing is making, and reaches rooms away.
 - **Two distances for one pair.** Stations say two bodies are within reach
   and the field's cells put them 2.6 paces apart, so a normal line at arm's
-  length in a small stone room smears (the infirmary, 6 lines). **The
+  length in a small stone room smears (the infirmary, 6 lines). **For a
+  voiced line, closed 2026-10-20**: distance inside an enclosed room takes
+  nothing from it and no ring smears it. For BREATH the field's paces still
+  decide where they exist (a whisper is whole to two, a mutter to three),
+  with a station's `within_reach` or a standing contact overriding them. **The
   arrival half is fixed (2026-09-26):** a body that walks into a room TO
   someone -- the hand's station names them `near` -- now ends beside them
   (`spatial_walk.beside_named`, in `walk_declared` and the merge's
@@ -1623,6 +1678,9 @@ it (the Lombard rule), and his listener still stands under the other.
 - **A small hard room is priced as an empty one.** Sabine's rule here counts
   no absorption from the room's open doorways or the bodies standing in it,
   and a drip is steady noise where a real one is glimpsed between drops.
+  Since 2026-10-20 neither touches a line (no ring smears one, no drip
+  masks one); both still shape how far a sound carries and the room's
+  noise words.
 
 **Found on the way, not a hearing defect:** "Tomas finds Miss Varga alone in
 the practice room" moved the player to the rehearsal room while she was on
@@ -2081,6 +2139,16 @@ D3, `design/DESIGN_LIGHT_FIELD.md` § 10).** Left:
 <a id="unbuilt-2-36"></a>
 
 ### 2.36 The sound field — PROTOTYPE, what is left
+
+**Speech left the field 2026-10-20** (`design/DESIGN_SOUND_FIELD.md` § 11,
+the hearing rule): a line is graded by `spatial_senses.hear_level`'s table
+and its budgets, never by signal against noise on the grid. Of the open
+questions below, **which lines of a beat are simultaneous** is answered --
+no voice masks another, and the `speakers` parameter that placed
+simultaneous voices on the field (which no reader ever passed) is gone --
+and **whether a fragment should thin with the ratio** now applies only to
+lines graded by a level (rooms away, under the open sky, in a deafening
+source's reach). The rest concern sounds, and stand.
 
 Designed and built 2026-09-04 on `writers-room` (not yet on `main`;
 [`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),

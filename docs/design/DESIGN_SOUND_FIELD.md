@@ -23,6 +23,18 @@ once, in one block with the light field's (§ 5, § 10.5); the steadiness
 words, hash and rates are the light field's (§ 10.8); and a listener whose
 station lands on an occluder's cell hears (§ 4.2). The rest of § 10 stands.
 
+**SPEECH LEFT THE FIELD 2026-10-20** (§ 11, the owner's "voices carry unless
+something in the story stops them"). Whether the words of a line arrive is
+no longer signal against noise on this grid: it is the hearing rule in
+`spatial_senses.hear_level`, a table over what stands between two bodies
+whose every entry is a real-world decibel budget, with noise entering only
+from what the story makes deafening. What this note describes still holds
+for SOUNDS -- a thing running, a crowd, a one-beat event, the room's own
+voice: where they reach, how loud they are at a cell, what the composer says
+of a room's noise, and the far field. §§ 1, 2, 4.4-4.5, 4b's first reader,
+§ 6a's speech sentences and § 10.3 describe the speech grade that § 11
+replaces; they are kept as the record.
+
 ---
 
 ## 1. What exists, and where it stops
@@ -534,3 +546,302 @@ crowd's level should follow its `mood` as well as its band (§ 10.2); which
 lines of a beat count as simultaneous (§ 10.3); whether a one-beat sound
 should have a channel on a normal beat (§ 10.9); which gate hearing should
 take (§ 10.10); and the constants (§ 6a).
+
+## 11. The hearing rule, restated (2026-10-20)
+
+**VOICES CARRY UNLESS SOMETHING IN THE STORY STOPS THEM.** The owner,
+2026-10-20: "the sound system repeatedly wars with both reality and fiction,
+it's not very good in it's current state", after "Kettles are not that loud
+... I think the design principles behind it might be incredibly flawed" --
+and, mid-build, "I just think the system is failing to meet several real
+world principles". Earlier, 2026-09-26: "Sound gatings is entirely
+overzealous. Rain is not even that loud you could still call to someone
+across a street in rain and not really strain your voice."
+
+### 11.1 What the rule replaced, and why it failed
+
+Every line was graded by signal against noise on the cell grid (§§ 2, 4):
+the speaker's level at their cell, faded per cell along the flood as in
+open air, against every noise at the listener's cell -- the room's floor,
+the weather, every running thing, the crowd -- with +3 dB asked for a line
+to be followed. Measured in play:
+
+* chat 176 turn 2: the opening wrote a kettle `sound_source: loud`, read as
+  80 dB at a pace; a SHOUT three paces off arrived as "Thank..." (on HEAD
+  the same scene grades a normal line `none`, a raised one and a shout
+  `fragment`);
+* rain broke dialogue into "...word... word..." until 2026-09-26 (§ 1.167);
+* chat 177 turn 21: a shut door turned a question at arm's reach into a
+  fragment ("What was that?") -- and the cells the verdict hung on drew the
+  listener at the far wall while her pose said she was by the door.
+
+Every error ran one way: it took away speech everyone in the story would
+have heard, which produces the most visible kind of broken scene.
+
+### 11.2 The model chosen: a table whose entries are real-world budgets
+
+Two shapes were possible -- a corrected acoustic model on the cell grid, or
+a table over the path between two bodies with every entry justified by real
+hearing. **The table**, because the budget's inputs are the engine's least
+reliable facts: cell positions that are often wrong (177 t21), and emission
+words that are a model's judgement (`loud` is a whistling kettle, a PA horn
+and an engine at idle alike, 65-85 dB(A) in the world). For voiced speech
+the entries sit 8-33 dB from either threshold, so no plausible error in
+those inputs moves them; at the three edges where the budget is marginal
+the physics itself names the answer -- a far shut door muffles (transmission
+loss rises about 6 dB an octave, so what crosses is a voice's low half), a
+whisper beyond reach is a hiss in the room's own ring, a wall passes only a
+shout's low half. Where a level genuinely varies -- rooms away, under the
+open sky, inside a deafening noise -- a small dB budget runs with the same
+real numbers. ONE speech model: `spatial_senses.hear_level` is the table and
+calls the budgets; nothing else grades a line.
+
+The real-world numbers every entry is checked against, dB(A):
+
+| quantity | value | basis |
+|---|---|---|
+| a voice at a pace | whisper 30-35, under the breath 35-45, conversation 60, raised 70, shouting 80-88 | `SPEECH_ONE_PACE_DB` 35 / 38 / 60 / 70 / 82, unchanged since 2026-09-14 |
+| a quiet lived-in room | 25-35 | `AMBIENT_DB` 27 enclosed, 30 open, unchanged |
+| across a room | beyond the critical distance (1-3 m) the reverberant field holds a voice 0-10 dB under its level at a pace, by the room's size | Sabine's room constant; `VOICE_ROOM_DROP_DB` 6 where a level is needed |
+| into the next room | what an opening or a door radiates spreads over the receiving room's absorption, 10 log10(S/A), about -10 dB | `ROOM_COUPLING_DB` 10 |
+| barriers | open doorway ~2, curtain ~5, closed interior door 15-25, closed glass or a heavy door 28-40, interior wall 35-45 | `APERTURE_DB` 2 / 5 / 25 / 28, `WALL_LOSS_DB` 45, unchanged |
+| intelligibility | a sentence is followed at 0 dB SNR, half of it near -5, words caught to about -12; whispered speech has no voicing to follow | `SPEECH_FULL_SNR` 0 dB (new), `FRAGMENT_SNR` -12 (unchanged) |
+
+### 11.3 The rule
+
+`spatial_senses.hear_level(rel, volume, proximity=None, level_db=None, *,
+seen=False)` -> `none | fragment | full`; `_hear_level` is the table:
+
+| path (after the material shift) | normal | raised | shout | whisper | mutter | budget, a normal voice into a quiet room |
+|---|---|---|---|---|---|---|
+| a body's mass (conducted) | unchanged | | | | | the medium is a body, not air |
+| one enclosed room | full | full | full | by reach | by reach | 60 - (0..10) vs 27: +23..+33 |
+| one room under the sky | by distance | by distance | by distance | by reach | by reach | free field, 6 dB a doubling |
+| an opening (open, open door, grille) | full | full | full | by reach | by reach | 60 - 6 - 2 - 10 = 42: +15 |
+| a shut door or curtain, a body at it | full | full | full | none | none | 60 - 25 = 35: +8 |
+| ... nobody at it | fragment | full | full | none | none | 60 - 41 = 19: -8 (muffled) |
+| a heavy door or glass, a body at it | fragment | full | full | none | none | 60 - 35 = 25: -2 |
+| ... nobody at it | none | fragment | fragment | none | none | 60 - 51: -18; 82 - 51: +4, its low half |
+| a wall | none | none | fragment | none | none | 82 - 61 = 21: -6, a murmur |
+| rooms away | by the far field | | | | | the room graph's loss vs the quiet floor |
+| no air (another locale, a body unplaced) | none | none | none | none | none | |
+
+Then, only where the relation carries `masking_db`, the masking cap (§ 11.5).
+
+**One room.** Distance inside an enclosed room takes nothing from a voiced
+line: the reverberant field carries it across any room the engine lays out.
+Under the sky there is no ring: a voice falls 6 dB a doubling over the
+field's own path (`spatial_sound_field.open_air_loss_db`), against the open
+place's quiet floor -- a normal voice is followed to 45 paces (about 34 m,
+nearly three times a 12 m street) and caught in pieces to 180; a raised one
+to 140; on a still night every reach doubles. Applied only where the scene
+places both bodies (a body with no station stands at the room's centre on
+the field, a guess, and a guess must not take a voice away).
+
+**Breath** (`UNVOICED_VOLUMES`: whisper, mutter) is private beyond reach.
+Where the field places both bodies, by the paces of its own path between
+them (`rel["paces"]`): a whisper is whole to `WHISPER_REACH_PACES` 2 and
+lost beyond; a mutter whole to `MUTTER_REACH_PACES` 3, in pieces to
+`MUTTER_PIECES_PACES` 4, lost beyond -- the distances the field gave a still
+room before, kept as the privacy they were, less the whisper's band of
+pieces at three (the owner: lost beyond reach). Elsewhere by the reach tier
+(`rel["reach"]`, `spatial_rel_between`: a standing contact is within reach,
+then the measured tier -- `measured_proximity_rel`, never the default --
+and across an opening the doorway: both at it within reach, one near).
+Unmeasured -- nothing places the two apart -- breath is whole, as it always
+was. Noise no longer shortens any of it.
+
+**A shut door** is spoken through when ONE body stands at it, either side
+(`door_reach`): a path has no direction, and the man at a cottage door and
+the woman stepped back two paces into the tiny room beyond it (177 t21)
+are the same path both ways. With nobody at it a normal voice is muffled.
+A heavy door or a pane keeps its stronger loss, a rung past a light door
+everywhere.
+
+**Rooms away** (`far_loss_db`, stamped for rooms the room graph joins
+beyond the next one): the speaker's level at their cell less the far field's
+loss, against the listening room's QUIET floor (`quiet_floor`: the
+place's own level, never its weather or what runs in it), at the speech
+margins; a way that crossed anything heavier than a shut ordinary door
+(`FAR_CLEAR_EDGE_DB` 25) leaves the voice its low half -- in pieces at best.
+A normal voice down a run of open doorways is whole three rooms on, in
+pieces from four, gone at eight.
+
+### 11.4 Noise never masks speech -- but for what the story makes deafening
+
+`MASKING_LEVELS` = `deafening`, `thunderous`, `catastrophic`, and a one-beat
+event the story says DROWNS everything out (`sensory_events[].drowns`,
+literally `true`; priced no quieter than `deafening`). Nothing else -- a
+kettle, a fire, rain, a gale, a crowd's murmur, a clock, an engine written
+`loud`, another voice -- ever reaches a line.
+
+The decision the brief asked for: **masking is simply gone below
+`deafening`; `loud` is not capped.** The class word is a model's judgement
+of an everyday thing, and across what it names (65-85 dB at a pace) a voice
+that shares the noise rises with it (Lombard, +3 to +10 dB and up to a
+shout) while a sentence is still followed at 0 dB and caught to -12 -- in
+the world people talk in kitchens, workshops and on launches, raising their
+voices. `deafening` (a klaxon, a siren, a jackhammer: 95-110) is the first
+class whose every member stands above the ceiling a voice can be raised to,
+which is what masking noise is. `loud` keeps its 80 dB for what it still
+decides -- how far a sound reaches and what the room's noise words say -- and
+whether a household `loud` should sit nearer 70 is § 11.8's question 1.
+
+### 11.5 Within the source's reach: the masking budget
+
+`spatial_sound_field.masked_level`, read only where `stamp_sound_relation`
+found masking noise at the listener's ear (`SoundField.masking_db_at`): the
+field's own intensity from each masking source -- held, in the source's own
+enclosed room, to the room's diffuse level (`VOICE_ROOM_DROP_DB` under its
+level at a pace), because a klaxon fills the room it sounds in -- plus the
+quiet floor. The voice: its level at a pace, raised over the masking noise
+where the SPEAKER stands (`lombard_level_db`, to a shout at most), less the
+rule's own path (`_voice_path_loss_db`: nothing within reach, the room's
+drop across it, the opening or door and `ROOM_COUPLING_DB` into the next
+room, the far field's loss rooms away), plus `AV_BENEFIT_DB` 6 where the
+listener sees the speaker's face (`seen`, which the composer passes from
+the view's own sight grade). Graded at the speech margins. In a klaxon
+hall: a voice at arm's length is caught in pieces, one across the hall
+lost, a watched one across it in pieces; breath lost everywhere; two people
+talking in the yard outside the hall's shut door untouched.
+
+### 11.6 What was retired, and what stays for whom
+
+Retired with the speech grade: `sound_field_hear_level`, `open_edge_floor`
+and `one_opening_away` (a raised voice through an opening is simply whole
+now), the `door_gain` ceiling and `SoundField.door_gain` (masking is the
+deafening source's own), `SoundField.gain_between` / `gain_parts` /
+`speech_level` / `speaker_noise`, `WITHIN_REACH_SIGNAL_GAIN`, the `signal` /
+`noise` / `source_noise` / `open_edge` / `reverberant` / `echo` relation
+stamps, the `speakers` parameter of `sound_field` and `sound_sources` and
+its `speech` source kind (no reader in the engine ever passed it; one voice
+never masks another), and the ring's smear of speech (`REVERB_SMEAR_DB`,
+`EARLY_WINDOW_S`, `C50_SMEAR_DB`, `clarity_db`: it put the cell path back
+into a voice in one room, and fired on none of the 2,408 lines replayed).
+
+Kept, each for a reader that is not speech: the flood and its constants
+(every sound's reach on the near field, `heard_events`, `level_of`,
+`sound_shape`, the map editor's hearing overlay), `FULL_SNR` +3 dB (a SOUND
+heard plainly; `distant_level_word`'s `plain` rung needs it -- moved to 0 dB
+it emptied the `faint` rung), `noise_at` (what a sound is heard over), the
+Lombard function (now the masking budget's), the ring (`ring_boost_db`, the
+echo of an event, the bearing that "comes from everywhere"), the noise words
+`quiet | din | drowned` byte for byte -- DESCRIPTION of how far a voice must
+rise, never a verdict -- and the far field entire.
+
+`pitched_level_db` is restated: the quietest WORD the rule carries to the
+addressee whole (a whisper within reach, a mutter at three paces, an
+ordinary voice across a room, a raised one through a shut door from farther
+off), returned as that word's level so every caller keeps reading a level.
+A pitched line can be private only within breath's reach; beyond it, the
+room hears an ordinary voice.
+
+`hearing_reason(rel, volume, ...)` names the clause that decided a line
+short of whole (`breath_beyond_reach`, `open_air_distance`,
+`breath_through_a_door`, `shut_door_from_farther_off`, `heavy_door_or_glass`,
+`wall`, `rooms_away`, `rooms_away_muffled`, `deafening`, `no_air`,
+`conducted`); perception's speech decision note carries it, and
+`tools/speech_replay.py` reports by it. The replay tool also read the wrong
+checkpoints (idx-1 and idx, one beat early); checkpoint N is the world
+BEFORE turn N, so the onset pass reads idx and the outcome pass idx+1.
+
+### 11.7 Per principle: before, and now
+
+| principle | before (HEAD 56b5d633) | now |
+|---|---|---|
+| 1. Indoors the reverberant field holds a voice across a room | a voice faded 10 log10(1 + L^2) per cell as in open air, then met every noise in the room | in an enclosed room distance takes nothing from a voiced line; the masking budget holds voice and noise to one diffuse drop; under the sky the free field is the law (45 paces for a normal voice) |
+| 2. Intelligibility tolerates noise | full at +3 dB, pieces to -12 | full at 0 dB for speech (`SPEECH_FULL_SNR`), pieces to -12; in-building entries sit 8-33 dB from either line |
+| 3. Lombard | a normal or raised line rose over the speaker's whole noise inside the SNR grade -- rescuing some lines, and on the rival story turning a stale "soprano" room sound into a voice carried through a shut door | the rise is why everyday noise takes nothing; computed only in a deafening source's reach, raising the voice to its ceiling before masking is judged |
+| 4. Noise is not all alike | every running thing, the weather, the crowd and any second voice counted as broadband masking at its class level; one-beat events already excluded (2026-09-25) | only `deafening` and above, or an event the story says drowns everything, masks; narrowband, fluctuating and everyday noise never does. Spatial release is not modelled: it would move the edge of a deafening source's reach by 3-6 dB in the open and little in a ringing room |
+| 5. Everyday levels are modest | `loud` = 80 dB at a pace for whatever the model called loud; a kettle masked a shout | `loud` decides no line; its 80 dB stands for reach and description, and a household re-anchoring is registered (§ 11.8) |
+| 6. Barriers | real losses on the field, but the verdict also charged per-cell spreading on both sides and every noise | the table's barrier rows, each a budget with margin; one body at a shut door carries a normal voice; a heavy door a rung more; a wall a shout's murmur; rooms away the far field's loss, muffled past a light door |
+| 7. A seen face | nothing (a line lost in noise could still be seen spoken: "seen speaking, unheard") | +6 dB (`AV_BENEFIT_DB`) in a deafening source's reach where the listener sees the speaker |
+
+### 11.8 Measured, and the owner's questions
+
+Offline, no model call and no network (every socket refused), every
+recorded `speech_percept` decision re-graded through the engine's own
+`composer.line_hear_level` on its beat's checkpoint -- onset on checkpoint
+idx, outcome on idx+1 -- at HEAD 56b5d633 and with the rule: the owner's
+`engine.db` read `mode=ro` (every chat that recorded decisions, 118-178) and
+copies of the four 2026-09-26 test stories (opera/rival, harbour/homecoming,
+fort/betrayal, schoolhouse/lie). 2,408 decisions; 2,296 on distinct beats
+(177 and 178 repeat 176's opening turns). HEAD's replay reproduces the grade
+the live play recorded on 2,204 (91.5%; the replay had read idx-1 and idx,
+and reproduced 69-79% on 2026-09-26).
+
+| distinct beats | before (HEAD) | after | raised | lowered |
+|---|---|---|---|---|
+| all | full 1,932, fragment 198, none 166 | full 2,088, fragment 36, none 172 | 176 (172 to full) | 19 |
+| chats 175-178 (52 turns, 153 lines) | full 144, fragment 6, none 3 | full 150, none 3 | 6 | 0 |
+| owner's chats 118-178 (1,782 lines) | full 1,619, fragment 148, none 15 | full 1,737, fragment 31, none 14 | 118 | 0 |
+| opera (rival) | full 100, fragment 20, none 24 | full 106, fragment 3, none 35 | 24 | 18 |
+| harbour (homecoming) | full 59, fragment 7, none 62 | full 69, none 59 | 10 | 0 |
+| fort (betrayal) | full 74, fragment 17, none 38 | full 91, fragment 2, none 36 | 19 | 0 |
+| schoolhouse (lie) | full 80, fragment 6, none 27 | full 85, none 28 | 5 | 1 |
+
+In 175-178 the six raised are the kettle kitchen (176 t1-2, four normal
+lines HEAD broke) and the shut door (177 t20-21, both directions). The
+three still `none` are 177 t19, an artifact of the replay: Mellisande went
+upstairs during that beat and the replay grades the outcome on the world
+after it, while perception graded each line where it was spoken and
+delivered it.
+
+**Every line lowered (19), read as fiction.** Sixteen are one story's
+player lines the 2026-09-26 interpret filed as `whisper` or `mutter` while
+the prose speaks aloud ("Tell me honestly, Miss Varga -- are you entering
+the commission yourself?", called from mid-stage down to the pit); HEAD
+carried them across 11.8 paces of bare stage on the stage's ring, and the
+rule keeps a whisper private beyond reach. The fault is the volume word
+upstream -- filed `normal`, the rule hears every one whole through the
+opening -- and it does not reproduce on today's engine: chats 170-178
+recorded 79 of 79 player lines `normal`. Two are a normal voice from the
+rehearsal room to the pit two rooms off, a fragment on HEAD only because
+the speaker's voice was raised (Lombard) over the stale "soprano" room
+sound § 1.167 registered; now `none`, which is what two rooms of stone do.
+One is a whisper across the schoolhouse, `fragment` -> `none`: a whisper
+beyond reach has no band of pieces any more.
+
+**Every line still short of whole, by reason (distinct beats, 208):**
+
+| reason | lines | right as fiction? |
+|---|---|---|
+| replay: a body the checkpoint does not place (no air) | 79 none, 3 fragment | an artifact of grading on the wrong moment's world, not a verdict |
+| breath beyond reach | 62 none, 11 fragment | a whisper or mutter across a quay, a room, a stage: private, as the owner ruled. All 62 are the 2026-09-26 stories' (none in the owner's chats), and 54 are the player's own lines the 2026-09-26 interpret filed `whisper` or `mutter` -- the upstream label above |
+| breath through a shut door | 23 none | yes: a door keeps a whisper and a mutter |
+| conducted (a body inside another) | 21 fragment | yes, unchanged: chat 135's voice through Mirelle's mass |
+| rooms away | 6 none | yes for the opera's two rooms of stone; 177 t19's three are the replay artifact above |
+| deafening | 2 none | yes: chat 160/161's Site-17 klaxon, 102.6 dB at the listener |
+| a shut door from farther off | 1 fragment | yes: the opera's stage to the rehearsal room, nobody at the door |
+| another building, a wall, a heavy door | 0 | none in the corpus |
+
+The owner's questions, each a constant or a reading this build had to take:
+
+1. **`loud` = 80 dB at a pace.** It no longer decides a line, but it still
+   decides reach: a kettle written `loud` (83 at its cell) clears
+   `FAR_FIELD_ENTRY_DB` 70 and is heard rooms away, and its room reads `din`
+   or `drowned` near it. Re-anchoring `loud` at 70 ("a loud household or
+   street sound") would keep it a near-field thing; a real engine would then
+   be written `deafening` or under-reach by 10 dB.
+2. **One body at a shut door suffices** (the reciprocal reading of "a normal
+   voice from someone AT the door is full"). It overturns the 2026-10-20
+   door_reach lane's far-wall pin and makes an ear pressed to a door follow a
+   normal conversation inside, as an eavesdropper does.
+3. **A heavy door or glass from across the room** passes a raised voice and
+   a shout in pieces (was: a shout only, on the edge rule; a raised voice
+   whole on the field in tiny rooms).
+4. **Breath radii** 2 / 3 / 4 paces, kept from the field's still room; the
+   whisper's band of pieces at three removed.
+5. **The open-air reach**: 45 paces for a normal voice (well past 12 m), from
+   the free-field law and the open floor; a still night doubles it.
+6. **The ring no longer smears speech**; a cavernous bare hall carries a
+   line whole at any range.
+7. **Unmeasured breath is whole**, as before: two unstationed bodies and a
+   third in a room -- the third hears the whisper. Unchanged; registered.
+8. **`drowns`** is a new encoder field (one clause, en + ja); what it does on
+   the page needs a live run.
+9. **A voice leaving a building** is charged nothing for the open air it
+   spreads into (the far field's room lengths): with both front doors open a
+   normal voice reaches the parlour across a 16-pace street in pieces (42.6
+   dB of loss), today and before. A doorway radiating into the sky loses
+   some 20 dB more than a room would hold; an envelope term is proposed.

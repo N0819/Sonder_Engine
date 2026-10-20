@@ -41,6 +41,16 @@ occupied, by 2 bodies, one of whom has spoken. 10,093 spoken lines across 91
 chats: normal 84.8%, mutter 11.0%, loud 2.0%, whisper 1.8%, shout 0.4%. So
 the field bites on almost nothing in the existing corpus and everything the
 spatial hand writes geometry for from here.
+
+SPEECH LEFT THE FIELD 2026-10-20 (`DESIGN_SOUND_FIELD.md` § 11, the hearing
+rule in `spatial_senses.hear_level`): whether the words of a line arrive is a
+table over what stands between two bodies, not signal against noise here.
+This module still answers for SOUNDS -- where they reach, how loud at a cell,
+what a room's noise is called -- and lends the rule four things: the far
+field's loss for a voice rooms away (`far_path`, `far_speech_level`), the
+open air's for one across open ground (`open_air_loss_db`), the paces breath
+is private by (`_pair_paces`), and the one place noise decides a line, a
+deafening source's reach (`masking_db_at`, `masked_level`).
 """
 
 from __future__ import annotations
@@ -502,6 +512,11 @@ OCCLUDER_LOSS_DB = -db_ratio(OCCLUDER_PASS)
 #: the floor. Two people at opposite walls of a medium room could not have
 #: heard each other. The floor is set so a quiet enclosed room asks 0.1 for
 #: `full`, which a normal voice clears to ten paces and a whisper to two.
+#:
+#: Since 2026-10-20 a voice in one room is not graded against this at all
+#: (the hearing rule); it is the QUIET FLOOR a voice from rooms away or
+#: across open ground is graded against (`quiet_floor`), and what a sound
+#: is heard over, with the weather and the running things on top.
 AMBIENT = {"enclosed": 0.05, "sheltered": 0.1, "open": 0.1}
 
 #: HOW MUCH QUIETER THAN ORDINARY A PLACE IS, when the room says so. The
@@ -624,6 +639,13 @@ AMBIENT_DB = {exposure: db_of_power(power)
 #: speech to 3.3 paces. `WIND_NOISE` is deliberately NOT moved -- wind you
 #: have to raise your voice over is what wind is, and the run that found
 #: this measured rain.
+#:
+#: SINCE 2026-10-20 NO WEATHER MASKS A LINE (the hearing rule,
+#: `spatial_senses.hear_level`): rain and wind are everyday noise a voice
+#: rises over. These levels now shape only how a SOUND is heard (`noise_at`,
+#: `level_of`), a distant sound's margin (`distant_level_word`) and the
+#: room's noise words; a voice from rooms away is graded against the quiet
+#: floor without them (`quiet_floor`).
 WEATHER_NOISE = {"light": 0.1, "moderate": 0.25, "heavy": 0.5}
 WIND_NOISE = {"wind": 0.3, "gale": 1.0}
 
@@ -660,11 +682,30 @@ CROWD_SOUND = {"a handful": "faint", "a dozen or so": "audible",
 #: absolute limit the model needs is the quietest room it prices, and a
 #: room declared quieter (`QUIET_SCALE`) lowers it with the room.
 HEAR_FLOOR = 0.05
-#: `full` when signal >= FULL_SNR * noise. Kept as § 6 proposed: +3 dB over
-#: the noise. Real speech-in-noise data puts near-complete sentence
-#: intelligibility for a familiar voice at a signal-to-noise ratio of 0 to
-#: +5 dB in steady noise; +3 is the middle of that band.
+#: `full` when signal >= FULL_SNR * noise, for a SOUND -- a thing running, a
+#: crowd, a one-beat event, a distant noise: heard plainly at +3 dB over the
+#: room. Kept as § 6 proposed. Real speech-in-noise data puts near-complete
+#: sentence intelligibility for a familiar voice at a signal-to-noise ratio
+#: of 0 to +5 dB in steady noise; +3 is the middle of that band.
+#:
+#: A VOICE'S OWN MARGIN IS `SPEECH_FULL_SNR` (2026-10-20), and this one
+#: stays the sounds': `level_of`, `heard_events`, `distant_level_word`'s
+#: `plain` and the noise words all read it, and moving it took the `faint`
+#: rung out of the distant-sound ladder (a sound must stand over the room's
+#: floor to be heard at all, and `plain` began at the floor itself).
 FULL_SNR = 2.0
+#: `full` for a SPOKEN LINE, wherever the hearing rule grades one by its
+#: level -- rooms away against the listening room's quiet floor
+#: (`far_speech_level`), under the open sky over distance (`open_air_loss_db`),
+#: in a deafening source's reach (`masked_level`): 0 dB, a sentence followed
+#: whole when it stands level with the noise it is heard in.
+#:
+#: 2026-10-20, with the hearing rule. Speech intelligibility is high at 0 dB
+#: signal to noise in steady noise, half the sentences go near -5 dB, and
+#: words are still caught to about -12 (`FRAGMENT_SNR`, shared): the +3 dB
+#: the line had been held to asked a voice to be twice the room before a
+#: sentence of it was followed, which no listener asks.
+SPEECH_FULL_SNR = 1.0
 #: `fragment` when signal >= FRAGMENT_SNR * noise (and >= HEAR_FLOOR).
 #:
 #: MOVED 2026-09-14 from 0.8 (-0.97 dB) to 1/16 (-12.04 dB), WITH THE
@@ -685,30 +726,42 @@ FULL_SNR = 2.0
 #: distance at which people on a launch stop talking and start shouting.
 FRAGMENT_SNR = 0.0625
 
-#: The three in dB. The two ratios become MARGINS over the noise -- `full`
-#: at +3.01 dB, `fragment` at -12.04 dB -- which is the form they were
-#: always in and the form that says what they mean: a voice is followed when
-#: it is twice the room, and caught in pieces when it is a sixteenth of it.
+#: The four in dB. The ratios become MARGINS over the noise -- a sound
+#: `full` at +3.01 dB, a spoken line `full` at 0 dB, either `fragment` at
+#: -12.04 dB -- which is the form they were always in and the form that
+#: says what they mean: a sound is plain when it is twice the room, a line
+#: is followed when it stands level with it, and both are caught in pieces
+#: down to a sixteenth of it.
 #: The absolute floor is a LEVEL and so is the one number the reference does
 #: not cancel out of.
 FULL_SNR_DB = db_ratio(FULL_SNR)
+SPEECH_FULL_SNR_DB = db_ratio(SPEECH_FULL_SNR)
 FRAGMENT_SNR_DB = db_ratio(FRAGMENT_SNR)
 HEAR_FLOOR_DB = db_of_power(HEAR_FLOOR)
 
 #: THE NOISE LADDER the composer speaks (2026-09-04, the owner's rule b: the
-#: sentence grades by a closed set, never a number). Three words for what
-#: the noise at a cell does to a NORMAL VOICE ONE PACE OFF -- the yardstick
-#: a body has for a room's loudness, "could I hear someone beside me" --
-#: derived from the two SNR thresholds above, not set beside them:
+#: sentence grades by a closed set, never a number). Three words for how hard
+#: the noise at a cell makes a NORMAL VOICE ONE PACE OFF work -- the
+#: yardstick a body has for a room's loudness, "could I hear someone beside
+#: me" -- derived from the two SNR thresholds above, not set beside them:
 #:
-#:   quiet    a normal voice one pace off is `full`      noise <= 60 - FULL_SNR_DB      (57.0 dB)
-#:   din      ... is a `fragment`                        noise <= 60 - FRAGMENT_SNR_DB  (72.0 dB)
-#:   drowned  ... is `none`                              above that
+#:   quiet    a normal voice one pace off is followed as it is   noise <= 60 - FULL_SNR_DB      (57.0 dB)
+#:   din      ... only in pieces unless it is raised             noise <= 60 - FRAGMENT_SNR_DB  (72.0 dB)
+#:   drowned  ... not at all unless it is shouted                above that
 #:
 #: where 60 is `SPEECH_ONE_PACE_DB["normal"]`. In the world: a hearth fire
 #: (50 at a pace) leaves the hearth `quiet`; an engine (80) is `drowned`
-#: at the machine and a `din` within three paces of it. Move FULL_SNR or
+#: at the machine and a `din` within a few paces of it. Move FULL_SNR or
 #: FRAGMENT_SNR and the words move with them.
+#:
+#: DESCRIPTION SINCE 2026-10-20, NEVER A VERDICT. The words say how far a
+#: voice has to rise, and a voice does rise, without deciding to (the
+#: Lombard effect, `lombard_level_db`): two people at an engine talk over
+#: it, and the page says they are in its din. Whether the WORDS of a line
+#: arrive is the hearing rule's (`spatial_senses.hear_level`), where noise
+#: decides only in the reach of what the story made deafening
+#: (`MASKING_LEVELS`). The thresholds are the sounds' (`FULL_SNR`), so the
+#: words are byte for byte what they were.
 NOISE_WORDS = ("quiet", "din", "drowned")
 #: A normal voice ONE PACE OFF as a power: the cell power over the one-pace
 #: loss, which is exactly `one_pace_power(60)` unwound.
@@ -731,6 +784,46 @@ def noise_word_db(noise_db: float) -> str:
     if _at_least(VOICE_ONE_PACE_DB, noise_db + FRAGMENT_SNR_DB):
         return "din"
     return "drowned"
+
+
+#: WHAT NOISE MAY TAKE A VOICE AWAY: a source the story itself makes
+#: `deafening` or louder, and a one-beat event the story says drowns
+#: everything out (`sensory_events[].drowns`). The owner, 2026-10-20:
+#: "NOISE NEVER MASKS SPEECH" but for these. Below them the classes are a
+#: model's judgement of an everyday thing -- `loud` is a whistling kettle,
+#: a PA horn and an engine at idle alike, 65-85 dB(A) in the world -- and
+#: across that span a voice that shares the noise rises with it (Lombard,
+#: +3 to +10 dB and up to a shout) while a sentence is still followed at 0 dB
+#: and caught to -12: so in the world people talk in kitchens, workshops and
+#: on launches, raising their voices. `deafening` (100 dB(A) at a pace: a
+#: klaxon, a siren, a jackhammer) is the first class whose every member
+#: stands above the ceiling a voice can be raised to -- a shout, 80-88 dB(A)
+#: at a pace (`SPEECH_ONE_PACE_DB`; Pearsons, Bennett & Fidell 1977 found
+#: speech levels climbing about 0.6 dB per dB of noise and levelling off
+#: there) -- which is what noise that masks speech whatever the speaker
+#: does is.
+MASKING_LEVELS = ("deafening", "thunderous", "catastrophic")
+
+#: WHAT A ROOM DOES TO A VOICE ACROSS IT, for the one budget that needs a
+#: voice's level rather than its word (`masked_level`): the reverberant
+#: field beyond the critical distance holds a voice 0-10 dB under its level
+#: at a pace by the room's size (Sabine's room constant; furnished rooms
+#: from a parlour to a hall). The middle of that, 6 dB. The masking noise
+#: from a source in the same enclosed room is held to the same floor
+#: (`_masking_noise_db`), since its sound fills the room the same way.
+VOICE_ROOM_DROP_DB = 6.0
+#: What an opening or a door radiates into the next room spreads over that
+#: room's absorption: 10 log10(S / A), about -10 dB for a doorway of 2 m2
+#: into a room with 20 m2 of absorption. The masking budget's coupling term.
+ROOM_COUPLING_DB = 10.0
+#: SEEING THE SPEAKER'S FACE is worth several decibels of signal to noise:
+#: lips, jaw and face follow the voice, and a listener who watches recovers
+#: words the noise took (Sumby & Pollack 1954; MacLeod & Summerfield 1987
+#: measured about 11 dB for sentences, smaller at the easier end). Applied
+#: where noise is what decides, in a deafening source's reach; the low end
+#: of the measured range, because a story's light and angle are rarely the
+#: laboratory's.
+AV_BENEFIT_DB = 6.0
 
 #: Steadiness rates: see the light field's FLICKER_RATE / FAIL_RATE, imported
 #: above -- one hash, two senses, one pair of rates.
@@ -856,26 +949,31 @@ def _body_key(scene, name):
 
 def pitched_level_db(scene, speaker, addressee) -> float:
     """The level AT THE CELL a line pitched to `addressee` is spoken at: the
-    lowest that arrives `full` at the addressee's cell -- their noise floor
-    plus `FULL_SNR_DB`, less the path's gain -- clamped to the ladder's
-    span (a whisper at the least, a shout at the most: nobody pitches a
-    line across a hall by wanting to). The owner's ask (2026-09-15): a
-    line's loudness follows its intent, "low, so that only his table would
-    hear" reaching the table and nobody at the far wall. Where the pair has
-    no field, or the addressee cannot be placed, the line is a normal one.
+    quietest voice the hearing rule carries to them whole
+    (`spatial_senses.hear_level`), a whisper at the least and a shout at the
+    most -- nobody pitches a line across a hall by wanting to. The owner's
+    ask (2026-09-15): a line's loudness follows its intent, "low, so that
+    only his table would hear" reaching the table and nobody at the far
+    wall. Where no voice reaches them whole, or the pair cannot be placed,
+    the line is a normal one.
+
+    RESTATED 2026-10-20 with the rule. It solved a level against the noise
+    and the cell path; the rule has no noise in it below a deafening source
+    and no distance inside a room, so the answer is a WORD of the ladder --
+    within reach, a whisper; anywhere else the room or an opening carries a
+    voice, an ordinary one; through a shut door, raised -- returned as that
+    word's level so every caller keeps reading a level.
     """
-    lo, hi = SPEECH_DB["whisper"], SPEECH_DB["shout"]
     who = _body_key(scene, addressee)
     said = _body_key(scene, speaker)
     if not who or not said:
         return SPEECH_DB["normal"]
-    from world.spatial_senses import spatial_rel_between
+    from world.spatial_senses import hear_level, spatial_rel_between
     rel = spatial_rel_between(scene, who, said)
-    signal, noise = rel.get("signal"), rel.get("noise")
-    if signal is None or noise is None or float(signal) <= 0.0:
-        return SPEECH_DB["normal"]
-    level = db_of_power(noise) + FULL_SNR_DB - db_ratio(signal)
-    return max(lo, min(hi, level))
+    for word in ("whisper", "mutter", "normal", "loud", "shout"):
+        if hear_level(rel, word) == "full":
+            return SPEECH_DB[word]
+    return SPEECH_DB["normal"]
 
 
 #: THE LOMBARD EFFECT. A speaker raises their voice with the noise around
@@ -888,6 +986,11 @@ def pitched_level_db(scene, speaker, addressee) -> float:
 #: adapted a voice to its room, so a smith answering at arm's length over a
 #: working forge was graded as if he had spoken into a quiet room (owner,
 #: 2026-09-23: "doesn't make particular sense").
+#:
+#: Since 2026-10-20 it is read where noise decides, in a deafening source's
+#: reach (`masked_level`); below that the rise is the reason everyday noise
+#: takes nothing from a voice, and the declared volume is the speaker's
+#: intent, never their level in the room.
 LOMBARD_ONSET_DB = 45.0
 LOMBARD_SLOPE = 0.6
 LOMBARD_VOLUMES = ("normal", "loud")
@@ -906,101 +1009,85 @@ def lombard_level_db(volume, source_noise) -> Optional[float]:
     return base + min(raise_db, SPEECH_DB["shout"] - base)
 
 
-def sound_field_hear_level(volume, signal_gain, noise, level_db=None,
-                           source_noise=None) -> str:
-    """Quantise, LAST (§ 4.5): `full` at FULL_SNR, `fragment` at
-    FRAGMENT_SNR and above HEAR_FLOOR, else `none`. `signal_gain` is the
-    fraction of the speaker's power arriving at the listener's cell (what
-    `spatial_rel_between` stamps as `rel["signal"]`); the volume word turns
-    it into a signal here, because the relation is built before the line is
-    read.
-
-    In dB the two terms are ADDED rather than multiplied: the speaker's
-    level at one pace, plus the path's gain -- a negative number, the
-    aperture losses and the spreading loss the flood accumulated. That is
-    the whole of what "an aperture factor becomes a subtraction" means.
-
-    `source_noise` is the noise where the SPEAKER stands; a conversational
-    line is spoken over it (`lombard_level_db`)."""
-    volume = str(volume or "normal").strip().casefold()
-    if level_db is None:
-        level_db = lombard_level_db(volume, source_noise)
-    if level_db is None:
-        level_db = SPEECH_DB.get(volume, SPEECH_DB["normal"])
-    return quantise_hearing_db(float(level_db) + db_ratio(signal_gain),
-                               db_of_power(noise),
-                               voiced=volume not in UNVOICED_VOLUMES)
+def far_speech_level(volume, loss_db, floor_db=None, *, muffled=False,
+                     level_db=None) -> str:
+    """A line from ROOMS AWAY: the speaker's level at their cell, less the
+    room graph's loss to the listener's room (`stamp_sound_relation` stamps
+    it), against the listening room's QUIET floor -- the place's own level,
+    never its weather or the things running in it, which mask nothing. A
+    voice that crossed a pane, a heavy door, a wall or a floor on the way
+    (`muffled`, `FAR_CLEAR_EDGE_DB`) arrives as its low half, in pieces at
+    best. Breath is held to the room's own level (`quantise_speech_db`)."""
+    from world.spatial_senses import UNVOICED_VOLUMES
+    word = str(volume or "normal").strip().casefold()
+    level = float(level_db) if level_db is not None else \
+        SPEECH_DB.get(word, SPEECH_DB["normal"])
+    floor = AMBIENT_DB["enclosed"] if floor_db is None else float(floor_db)
+    heard = quantise_speech_db(level - float(loss_db), floor,
+                               voiced=word not in UNVOICED_VOLUMES)
+    if muffled and heard == "full":
+        return "fragment"
+    return heard
 
 
-#: The volumes a voice is RAISED at -- the two the bounded loudness walk
-#: already treats as carrying past the room they are made in
-#: (`spatial_senses.sound_walk_level`). Read here, declared there.
-RAISED_VOLUMES = ("loud", "shout")
+def _voice_path_loss_db(rel: dict, reach) -> float:
+    """The masking budget's path: how far under its level at a pace a voice
+    arrives, by what stands between the two bodies (the hearing rule's own
+    classes; `spatial_senses.hear_level`). Within reach, nothing; across a
+    room, its reverberant drop; into the next room, the opening or door it
+    crosses and the spread on the far side; rooms away, the far field's own
+    measured loss."""
+    from world.spatial_senses import (DOOR_REACH_BARRIERS,
+                                      _material_shifted_barrier)
+    if rel.get("far_loss_db") is not None:
+        return float(rel["far_loss_db"]) - _ONE_PACE_LOSS_DB
+    if rel.get("open_air_loss_db") is not None:
+        return max(0.0, float(rel["open_air_loss_db"]) - _ONE_PACE_LOSS_DB)
+    if rel.get("same_room"):
+        return 0.0 if reach == "within_reach" else VOICE_ROOM_DROP_DB
+    barrier = _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
+                                        rel.get("material"))
+    if barrier in DOOR_REACH_BARRIERS and rel.get("door_reach"):
+        return APERTURE_LOSS_DB[barrier]
+    if reach == "within_reach" and barrier in APERTURE_LOSS_DB:
+        return APERTURE_LOSS_DB[barrier]
+    if barrier in APERTURE_LOSS_DB:
+        return VOICE_ROOM_DROP_DB + APERTURE_LOSS_DB[barrier] + ROOM_COUPLING_DB
+    return VOICE_ROOM_DROP_DB + WALL_LOSS_DB + ROOM_COUPLING_DB
 
 
-def one_opening_away(scene: dict, a_room, b_room) -> bool:
-    """Are these two rooms joined by ONE passable opening -- an edge sound
-    walks through (`_SOUND_WALK_BARRIERS`, after the material shift, so a
-    paper door is the opening it acoustically is)?
+def masked_level(rel: dict, volume, *, reach=None, level_db=None,
+                 seen=False) -> str:
+    """WHAT A DEAFENING NOISE LEAVES OF A LINE: the cap the hearing rule
+    applies where the relation carries `masking_db` -- noise the story made
+    deafening, or an event it says drowns everything, at the listener's ear
+    (`stamp_sound_relation`). The one place noise decides speech.
 
-    Undirected, because a doorway is one object and may be declared from
-    either side: an edge from either room counts. That is also what keeps
-    the floor below reciprocal.
-    """
-    from world.spatial_barriers import effective_adjacent
-    a_room, b_room = str(a_room or ""), str(b_room or "")
-    if not a_room or not b_room or a_room == b_room:
-        return False
-    for here, there in ((a_room, b_room), (b_room, a_room)):
-        for edge in effective_adjacent(scene, here) or ():
-            if not isinstance(edge, dict) or str(edge.get("to") or "") != there:
-                continue
-            shifted = _material_shifted_barrier(
-                normalize_barrier(edge.get("barrier")), edge.get("material"))
-            if shifted in _SOUND_WALK_BARRIERS:
-                return True
-    return False
-
-
-def open_edge_floor(volume, rel: dict) -> Optional[str]:
-    """`fragment` where a RAISED VOICE CARRIES THROUGH AN OPENING, else None.
-
-    One passable edge away, a loud voice or a shout is at worst a fragment.
-    The edge model always said so -- `open`/`open_door`/`bars` deliver a
-    shout `full` -- and the field, which knows the path and the noise, can
-    say `none` for the same shout across the same archway once the walk is
-    long enough. That is a real loss of REACH rather than a stricter
-    hearing model: when both perception passes came to read the field
-    (2026-09-05, § PC3), a shout across one open archway could reach nobody
-    at all. The floor is the half of that repair the field owes.
-
-    Capped by the masking rule everything else is capped by (§ PA5): where
-    the noise at the listener's own cell would refuse the same voice ONE
-    PACE OFF, nothing from the next room survives either -- an opening
-    carries a voice into a room, not through the bell ringing in it. The
-    yardstick is the one `NOISE_WORDS` already uses, `P / 2` at a path of
-    one cell.
-    """
-    if not isinstance(rel, dict) or not rel.get("open_edge"):
-        return None
-    volume = str(volume or "").strip().casefold()
-    if volume not in RAISED_VOLUMES:
-        return None
-    noise = rel.get("noise")
-    if noise is not None and quantise_hearing_db(
-            SPEECH_DB[volume] - _ONE_PACE_LOSS_DB,
-            db_of_power(noise), voiced=True) == "none":
-        return None
-    return "fragment"
-
-
-#: The volumes spoken ON THE BREATH: the two the absolute floor still holds
-#: (`quantise_hearing_db`). A voiced line carries its harmonics, and an ear
-#: picks those out of broadband noise several decibels under the noise's own
-#: level -- which is the whole premise of `FRAGMENT_SNR` at -12 dB. A
-#: whisper is breath with no harmonics to pick out, and a mutter is nearly
-#: that, so under the room's own level they are simply gone.
-UNVOICED_VOLUMES = ("whisper", "mutter")
+    The voice is spoken over the noise where its SPEAKER stands -- raised
+    without deciding to, up to a shout (`lombard_level_db`) -- reaches the
+    listener by the rule's own path (`_voice_path_loss_db`), and is graded
+    against the listener's noise at the ordinary margins. A listener who
+    sees the speaker's face gains `AV_BENEFIT_DB`. Within reach of a klaxon
+    a voice at arm's length is caught in pieces and one across the room is
+    lost; a whisper is lost everywhere in it."""
+    from world.spatial_senses import UNVOICED_VOLUMES
+    noise_db = rel.get("masking_db")
+    if noise_db is None:
+        return "full"
+    word = str(volume or "normal").strip().casefold()
+    if word not in SPEECH_DB:
+        word = "normal"
+    speaker_noise = rel.get("speaker_masking_db")
+    raised = lombard_level_db(word, power_of_db(speaker_noise)
+                              if speaker_noise is not None else None)
+    level = level_db if level_db is not None else SPEECH_DB[word]
+    if raised is not None and level_db is None:
+        level = raised
+    voice = float(level) - _ONE_PACE_LOSS_DB - _voice_path_loss_db(rel, reach)
+    if seen:
+        voice += AV_BENEFIT_DB
+    return quantise_speech_db(voice, float(noise_db),
+                              voiced=word not in UNVOICED_VOLUMES)
 
 
 def quantise_hearing(signal: float, noise: float, *, voiced: bool = False) -> str:
@@ -1013,6 +1100,24 @@ def quantise_hearing(signal: float, noise: float, *, voiced: bool = False) -> st
         return "full"
     if signal >= FRAGMENT_SNR * noise and (
             voiced or signal >= min(HEAR_FLOOR, noise)):
+        return "fragment"
+    return "none"
+
+
+def quantise_speech_db(signal_db: float, noise_db: float, *,
+                       voiced: bool = True) -> str:
+    """A SPOKEN LINE's word from two levels: `full` at `SPEECH_FULL_SNR_DB`
+    over the noise, `fragment` at `FRAGMENT_SNR_DB` -- for breath, only at or
+    above the room's own level, which a whisper cannot be heard under
+    (`quantise_hearing_db` says why) -- else `none`. The one quantiser every
+    speech budget reads: rooms away, under the open sky, in a deafening
+    source's reach."""
+    if noise_db == float("-inf"):
+        return "full" if _at_least(signal_db, HEAR_FLOOR_DB) else "none"
+    if _at_least(signal_db, noise_db + SPEECH_FULL_SNR_DB):
+        return "full"
+    if _at_least(signal_db, noise_db + FRAGMENT_SNR_DB) and (
+            voiced or _at_least(signal_db, min(HEAR_FLOOR_DB, noise_db))):
         return "fragment"
     return "none"
 
@@ -1049,11 +1154,12 @@ def quantise_hearing_db(signal_db: float, noise_db: float, *,
     limit. A room that declares no quiet has a floor at or above
     `HEAR_FLOOR` and takes `HEAR_FLOOR`, byte for byte as before.
 
-    A VOICED LINE IS NOT HELD TO THE FLOOR (`voiced`, which
-    `sound_field_hear_level` sets for every volume outside
-    `UNVOICED_VOLUMES`). The sentence above is true of a breath and false
-    of a voice: `FRAGMENT_SNR` puts the words of a voice in pieces down to
-    12 dB UNDER the noise, and in any room whose noise sits near the floor
+    A VOICED LINE IS NOT HELD TO THE FLOOR (`voiced`; the speech budgets
+    read `quantise_speech_db`, which keeps the same rule for every volume
+    outside `spatial_senses.UNVOICED_VOLUMES`). The sentence above is true
+    of a breath and false of a voice: `FRAGMENT_SNR` puts the words of a
+    voice in pieces down to 12 dB UNDER the noise, and in any room whose
+    noise sits near the floor
     this gate cancelled that whole band, so a normal line had to reach the
     room's own level before a single word of it arrived. The two numbers
     stopped agreeing on 2026-09-14, when the fragment margin moved from
@@ -1347,55 +1453,18 @@ REVERBERANT_SURFACES = frozenset({"bare"})
 #: The height a room is assumed to have, in metres, and a pace in metres.
 ROOM_HEIGHT_M = 3.0
 PACE_M = 0.75
-#: When the ring is this much louder than the voice at the listener's cell,
-#: the words smear: a `full` line grades `fragment`. Fifteen, not six: the
-#: reverberant field of Sabine's rule is early reflections and late tail
-#: together, and the early part HELPS a listener, so a bare room's ring
-#: beats the direct voice by six decibels two paces off and every word
-#: said across a stone room came out in pieces (Hollin Mill turn 11,
-#: 2026-09-15: "Derbyshire grit" eight paces off, at normal volume, as
-#: "...Derbyshire... Bedstone... underneath..."). At fifteen a voice
-#: carries whole across a hall and still smears down a shaft or from the
-#: far end of a nave. The owner's number.
-REVERB_SMEAR_DB = 15.0
-#: WHAT ACTUALLY SMEARS SPEECH IS THE LATE PART OF THE RING (the owner,
-#: 2026-10-02: "fix it to what makes sense to real reality"). Reflections
-#: arriving within `EARLY_WINDOW_S` of the direct sound fuse with it and help
-#: a listener; only what arrives after blurs the words. The measure is
-#: clarity, C50 (ISO 3382-1): early energy -- direct plus the early part of
-#: the ring -- over late, in dB. The ring decays 60 dB in its room's
-#: reverberation time, so the share of it arriving late is
-#: 10^(-6 * window / rt60): a short-lived ring is mostly early, a long one
-#: mostly late. Words smear below `C50_SMEAR_DB`, -5 dB, the conventional
-#: line where speech clarity goes from fair to poor -- and what the old rule
-#: (`REVERB_SMEAR_DB` of total ring over the direct voice) came to in the
-#: long-ringing stone hall it was calibrated on, so a nave or a shaft still
-#: smears. Measured on chat 161 turn 14: in a 6 x 5 pace bare steel lift
-#: car the whole ring stood ~17.6 dB over a voice three paces off and the
-#: old rule turned a normal line into "something you cannot make out"; its
-#: ring is short, most of it early, C50 about -3 dB -- boomy, and understood.
-EARLY_WINDOW_S = 0.05
-C50_SMEAR_DB = -5.0
-
-
-def clarity_db(direct, reverberant, rt60):
-    """C50 in dB for a voice whose direct and reverberant gains at the
-    listener are `direct` and `reverberant`, in a room ringing for `rt60`
-    seconds; +inf where nothing arrives late."""
-    try:
-        rt60 = float(rt60)
-    except (TypeError, ValueError):
-        rt60 = 0.0
-    if reverberant <= 0.0 or rt60 <= 0.0:
-        return float("inf")
-    late_share = 10.0 ** (-6.0 * EARLY_WINDOW_S / rt60)
-    late = reverberant * late_share
-    early = direct + reverberant * (1.0 - late_share)
-    if late <= 0.0:
-        return float("inf")
-    if early <= 0.0:
-        return float("-inf")
-    return 10.0 * math.log10(early / late)
+#: THE RING NO LONGER SMEARS A LINE (2026-10-20, the hearing rule). From
+#: 2026-09-15 a voice whose reverberant part outran its direct part at the
+#: listener's cell -- by 15 dB of ring, then (2026-10-02) by its clarity
+#: C50 under -5 dB -- was graded a fragment, which put the CELL PATH back
+#: into whether a voice in the same room was heard, against the rule that
+#: distance inside a room takes nothing from it. The reverberant field is
+#: what CARRIES a voice across a room (`spatial_senses.hear_level`), and in
+#: the world people follow one another in stone halls, with effort. The
+#: smear fired on none of the 2,408 lines the owner's chats replayed. What a
+#: room's ring still does is real and kept: it carries a sound further
+#: (`ring_boost_db`), gives a sharp one back (`echo`) and takes away where a
+#: sound came from (`spatial_senses._bearing_through`).
 #: A bare room this long (its longer side, in paces) gives a sharp sound
 #: back as a second, separate sound -- about seventeen metres of extra
 #: path, the fifty milliseconds an ear needs to hear two.
@@ -1479,16 +1548,17 @@ def room_reverberation(scene: dict, room_id) -> Optional[dict]:
             "echo": float(longest) >= ECHO_SPAN_PACES}
 
 
-def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
-                  speakers=None) -> tuple:
+def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None) -> tuple:
     """(sources, notices). Each source: {id, kind, room, cell, power, level,
     holder}, `cell` room-local. Kinds: `entity` (a running `sound_source`,
     at its cell -- its holder's cell when a body carries it, so a machine in
     your hands is heard at your own cell before anything else, § 4.7),
     `crowd` (at its room's centre, level by band), `event` (a one-beat sound
-    event with a `source_room`, at that room's centre), `speech` (a body in
-    `speakers` {name: volume}, at its cell -- for genuinely simultaneous
-    voices; the reader path grades one line at a time).
+    event with a `source_room`, at its maker's cell or its room's centre).
+    There is no `speech` kind since 2026-10-20: a voice is graded by the
+    hearing rule (`spatial_senses.hear_level`), and one voice never masks
+    another -- the `speakers` parameter that placed simultaneous voices here
+    had no caller in the engine.
 
     `notices` are the engine notices a `failing` source that went quiet this
     beat files (§ 5). WHO HEARS THEM IS THE DIRECTOR (E16): the notice reaches
@@ -1635,20 +1705,18 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
             cells, _bearing = _door_cells(scene, room, source[len(DOOR_SOURCE_PREFIX):])
             if cells:
                 cell = tuple(cells[len(cells) // 2])
+        power = _event_power(event)
+        drowns = event.get("drowns") is True
+        if drowns:
+            # A NOISE THE STORY SAYS DROWNS EVERYTHING is priced as a thing
+            # that does: no quieter than `deafening` on the emission ladder,
+            # whatever word the event carries. Its level still decides how
+            # far it reaches (`SoundField.masking_db_at`).
+            power = max(power, SOUND_POWER["deafening"])
         out.append({"id": "event:%d" % idx, "kind": "event", "room": room,
                     "cell": cell or room_centre(scene, room),
-                    "power": _event_power(event), "level": None,
+                    "power": power, "level": None, "drowns": drowns,
                     "holder": None, "beat": "steady"})
-    for name, volume in sorted((speakers or {}).items()):
-        room = room_of(scene, name)
-        if not room or room not in rooms:
-            continue
-        cell = body_cell(scene, name) or room_centre(scene, room)
-        vol = str(volume or "normal").strip().casefold()
-        out.append({"id": "speech:%s" % name, "kind": "speech",
-                    "room": str(room), "cell": cell,
-                    "power": SPEECH_POWER.get(vol, SPEECH_POWER["normal"]),
-                    "level": vol, "holder": None, "beat": "steady"})
     return out, notices
 
 
@@ -1788,7 +1856,7 @@ def _ambient_floor(scene, room_id) -> float:
 class SoundField:
     """One listener's sound field: the composite grid, every source placed
     on it with its spread, and the ambient floor per room. Built by
-    `sound_field`; read by `gain_between`, `noise_at`, `level_of`."""
+    `sound_field`; read by `noise_at`, `level_of` and `masking_db_at`."""
 
     def __init__(self, scene, room_id, grid, sources, notices, turn_idx):
         self.scene = scene
@@ -1863,49 +1931,6 @@ class SoundField:
         self._siblings[room_id] = field
         return field
 
-    def gain_between(self, speaker, listener, *, speaker_room=None,
-                     listener_room=None) -> Optional[float]:
-        """The fraction of a unit source at the speaker's cell that arrives
-        at the listener's cell, or None when the pair is on no field.
-
-        A PATH BETWEEN TWO CELLS HAS NO DIRECTION: the gain one way is the
-        gain the other, so a pair gets ONE number and it is computed on ONE
-        field. Which field is decided by the PAIR and not by whoever is
-        asking -- the two rooms sorted, first that can place both bodies --
-        because every composite is laid from one room outward
-        (`room_field`), and two composites of the same two rooms are two
-        different layouts: different offsets, different aperture spans,
-        different path lengths through them. Read per listener, that made
-        hearing one-way. Measured live: a courtyard and a gate across one
-        open arch, one beat, one pair -- the warden's own field answered
-        0.0309 for the shout and the shouter's answered 0.0, so the warden
-        heard and replied while the player's view carried no hearing
-        observation at all and the narrator wrote "no reply comes" over a
-        reply the world had already produced
-        (`PLAY_2026_09_05_caravanserai.md` § PB2).
-
-        The NOISE stays the listener's own (`noise_at`, on the listener's
-        field): a noise floor is a property of where a body stands, which is
-        the one thing about the pair that is not shared.
-        """
-        s_room = speaker_room or room_of(self.scene, speaker)
-        l_room = listener_room or room_of(self.scene, listener)
-        if not s_room or not l_room:
-            return None
-        for room_id in sorted({str(s_room), str(l_room)}):
-            field = self._field_for(room_id)
-            if field is None:
-                continue
-            s = field.locate(speaker, s_room)
-            l = field.locate(listener, l_room)
-            if s is None or l is None:
-                continue
-            # THE LOUDER OF THE TWO WAYS THE SOUND ARRIVES: straight, or off
-            # the walls of a room that rings (`rev_gain`).
-            return max(gain_at(field.spread_from(s), l),
-                       field.rev_gain(str(s_room), l))
-        return None
-
     # -- reverberation ------------------------------------------------------
 
     def rev_gain(self, source_room, cell) -> float:
@@ -1944,24 +1969,6 @@ class SoundField:
             best = max(best, gain_at(spread_map, cell))
         return ring * best
 
-    def gain_parts(self, speaker, listener, *, speaker_room=None,
-                   listener_room=None):
-        """(direct, reverberant) gains between two bodies, or None."""
-        s_room = speaker_room or room_of(self.scene, speaker)
-        l_room = listener_room or room_of(self.scene, listener)
-        if not s_room or not l_room:
-            return None
-        for room_id in sorted({str(s_room), str(l_room)}):
-            field = self._field_for(room_id)
-            if field is None:
-                continue
-            s = field.locate(speaker, s_room)
-            l = field.locate(listener, l_room)
-            if s is None or l is None:
-                continue
-            return gain_at(field.spread_from(s), l), field.rev_gain(str(s_room), l)
-        return None
-
     # -- intensity ----------------------------------------------------------
 
     def intensity_at(self, source, cell) -> float:
@@ -1970,9 +1977,12 @@ class SoundField:
 
     def noise_at(self, listener, *, exclude=(), room=None) -> Optional[float]:
         """The listener's NOISE (§ 4.4): every placed source's intensity at
-        the listener's cell except those in `exclude` (ids, or the name of a
-        body whose speech is the signal) AND except any source standing
-        where an excluded one stands, plus the room's ambient floor.
+        the listener's cell except those in `exclude` (source ids) AND except
+        any source standing where an excluded one stands, plus the room's
+        ambient floor. What a SOUND -- a thing, a crowd, an event -- is heard
+        over (`level_of`); since 2026-10-20 never what a voice is graded
+        against, which is `masking_db_at`'s, and only for what the story made
+        deafening.
 
         A SOUND IS NOT MASKED BY A SOUND ARRIVING FROM ITS OWN PLACE. Two
         noises made at one spot reach an ear as one louder noise from that
@@ -2016,14 +2026,13 @@ class SoundField:
         skip = {str(x).strip().casefold() for x in exclude if x}
         at_hand = {(source["room"], tuple(source["cell"]))
                    for source in self.sources
-                   if source["id"].casefold() in skip
-                   or source["id"].casefold().removeprefix("speech:") in skip}
+                   if source["id"].casefold() in skip}
         total = self.ambient.get(self.grid.inside[cell], AMBIENT["enclosed"])
         for source in self.sources:
             if source.get("kind") == "event":
                 continue
             sid = source["id"].casefold()
-            if sid in skip or sid.removeprefix("speech:") in skip:
+            if sid in skip:
                 continue
             if (source["room"], tuple(source["cell"])) in at_hand:
                 continue
@@ -2048,76 +2057,131 @@ class SoundField:
             return "none"
         return quantise_hearing_db(db_of_power(signal), db_of_power(noise))
 
-    def door_gain(self, listener, *, room=None) -> Optional[float]:
-        """The largest gain from any of the listener's own room's doorways
-        to the listener's cell -- what a unit source standing in the best
-        opening of this room would deliver to their ear. None when the
-        listener is off the field or the room has no opening placed.
+    def masking_db_at(self, listener, *, room=None) -> Optional[float]:
+        """The noise that may take a voice away at this listener's ear, in dB
+        -- the place's quiet floor and every source the story makes
+        deafening or louder (`MASKING_LEVELS`) or says drowns everything (a
+        `drowns` event) -- or None when nothing of that kind reaches them, so
+        an ordinary room carries no masking at all. Off the field, None.
 
-        This is the SIGNAL half of the masking rule for a voice the field
-        cannot place: wherever it came from, it entered this room through
-        one of these openings and crossed the rest of the room as any other
-        sound does, so no path from beyond can deliver more than a voice
-        standing in the doorway. The barrier and the hops on the far side
-        are the edge model's business and only ever subtract further.
-        """
+        A SOURCE FILLS THE ROOM IT STANDS IN: indoors, beyond a pace or two,
+        its reverberant field holds it within a few decibels of its level at
+        a pace (`VOICE_ROOM_DROP_DB`), so a listener in the same enclosed
+        room is held to that level at least, wherever the cell flood puts
+        them -- the same drop the voice it masks is held to."""
+        from world import weather as _weather
         cell = self.locate(listener, room)
         if cell is None:
             return None
-        room = room or room_of(self.scene, listener)
-        best = None
-        for other in sorted(self.grid.offsets):
-            if other == room:
+        here = self.grid.inside[cell]
+        total = 0.0
+        for source in self.sources:
+            if not _masks(source):
                 continue
-            cells, _bearing = _door_cells(self.scene, room, other)
-            for door in cells or ():
-                at = self.grid.cell_of(room, door)
-                if at not in self.grid.inside:
-                    continue
-                gain = gain_at(self.spread_from(at), cell)
-                if best is None or gain > best:
-                    best = gain
-        return best
-
-    def speaker_noise(self, speaker, *, speaker_room=None) -> Optional[float]:
-        """The noise power where `speaker` stands, their own voice excluded,
-        off the field laid on their room; None where that room has no field
-        or the speaker is not on it. What a voice is raised over
-        (`lombard_level_db`)."""
-        room = speaker_room or room_of(self.scene, speaker)
-        field = self._field_for(room) if room else None
-        if field is None:
+            power = self.intensity_at(source, cell)
+            if source["room"] == here and \
+                    _weather.room_exposure(self.scene, here) == "enclosed":
+                diffuse = power_of_db(db_of_power(source["power"])
+                                      - _ONE_PACE_LOSS_DB - VOICE_ROOM_DROP_DB)
+                power = max(power, diffuse)
+            total += power
+        if total <= 0.0:
             return None
-        return field.noise_at(speaker, exclude=(speaker,), room=room)
+        return db_of_power(total + quiet_floor(self.scene, here))
 
-    def speech_level(self, speaker, volume, listener, *, speaker_room=None,
-                     listener_room=None) -> Optional[str]:
-        """One line's level for one listener, the speaker not otherwise a
-        placed source. None when the pair is not on the field."""
-        gain = self.gain_between(speaker, listener, speaker_room=speaker_room,
-                                 listener_room=listener_room)
-        if gain is None:
+
+def open_air_loss_db(scene, sound, listener, speaker, room) -> Optional[float]:
+    """What the open air takes from a voice between two bodies in one room
+    under the sky, or None where the rule has no distance to read: an
+    enclosed room (its reverberant field holds a voice across it), or a
+    body the scene does not place.
+
+    UNDER THE SKY A VOICE FALLS 6 dB EVERY TIME THE DISTANCE DOUBLES: no
+    ceiling and walls give it back, so the free-field law the cell flood
+    already charges (`spreading_loss_db` over the path) is the physics
+    rather than an approximation of it. Against an open place's quiet floor
+    (`quiet_floor`, 30 dB) a normal voice is followed to 45 paces -- some
+    34 m, nearly three times a street's width, so a call across a street
+    carries in any weather -- and caught in pieces to 180; a raised voice
+    is followed to 140, and on a still night every reach doubles.
+
+    Both bodies must stand where the scene put them (`body_cell`): a body
+    with no station stands at the room's centre on the field, which is a
+    guess, and a guess must not take a voice away."""
+    from world import weather as _weather
+    if not room or _weather.room_exposure(scene, room) == "enclosed":
+        return None
+    if body_cell(scene, listener) is None or body_cell(scene, speaker) is None:
+        return None
+    here = sound.locate(listener, room)
+    there = sound.locate(speaker, room)
+    if here is None or there is None:
+        return None
+    return loss_db_at(sound.spread_from(there), here)
+
+
+def _pair_paces(scene, sound, listener, speaker, l_room, s_room, rel):
+    """How many paces of the field's own path stand between two bodies in
+    one room or two rooms one opening apart, or None where the field does
+    not place them both from what the scene says (`body_cell`: a body with
+    no station stands at the room's centre on the field, a guess). The
+    measure breath is private by (`spatial_senses.WHISPER_REACH_PACES`).
+
+    The path, not a straight line, because a voice goes round what parts a
+    room and through the opening between two -- the stage and the pit below
+    it, whose wide opening no doorway cell stands for (the rival test story,
+    2026-09-26: a whisper from the stage's lip to the conductor's stand a
+    pace and a half below)."""
+    from world.spatial_senses import OPEN_BARRIERS, _material_shifted_barrier
+    if l_room != s_room:
+        barrier = _material_shifted_barrier(
+            normalize_barrier(rel.get("barrier")), rel.get("material"))
+        if barrier not in OPEN_BARRIERS:
             return None
-        noise = self.noise_at(listener, exclude=(speaker,), room=listener_room)
-        if noise is None:
-            # The pair's gain came off the pair's own field (`gain_between`);
-            # the noise can only come off the LISTENER's, and without it
-            # there is nothing to quantise against.
-            return None
-        level = sound_field_hear_level(
-            volume, gain, noise,
-            source_noise=self.speaker_noise(speaker, speaker_room=speaker_room))
-        if level == "none" and one_opening_away(
-                self.scene, listener_room or room_of(self.scene, listener),
-                speaker_room or room_of(self.scene, speaker)):
-            # A raised voice carries through an opening (§ PC3), the same
-            # floor `hear_level` applies to a stamped relation.
-            level = open_edge_floor(
-                volume, {"open_edge": True, "noise": noise}) or level
-        return level
+    if body_cell(scene, listener) is None or body_cell(scene, speaker) is None:
+        return None
+    here = sound.locate(listener, l_room)
+    there = sound.locate(speaker, s_room)
+    if here is None or there is None:
+        return None
+    rec = sound.spread_from(there).get(here)
+    return None if rec is None else float(rec[0])
 
 
-def _cache_key(scene, room_id, turn_idx, crowds, events, speakers) -> str:
+def _masks(source) -> bool:
+    """Is this placed source one the hearing rule lets mask a voice: a
+    standing thing at a `MASKING_LEVELS` word, or a beat's event that says
+    it drowns everything."""
+    if source.get("kind") == "event":
+        return bool(source.get("drowns")) and float(source.get("power") or 0.0) > 0.0
+    return source.get("level") in MASKING_LEVELS and \
+        float(source.get("power") or 0.0) > 0.0
+
+
+def quiet_floor(scene, room_id) -> float:
+    """A room's QUIET FLOOR as a power: its exposure's ambient level, scaled
+    by a declared quiet and a still night -- the place's own level, without
+    the weather or anything running in it (`_ambient_floor` adds those for
+    the field's description). What a voice from rooms away is graded
+    against: rain and a fire do not mask speech, the room's own stillness
+    is simply how low a sound can be and still be there."""
+    from world import weather as _weather
+    exposure = _weather.room_exposure(scene, room_id)
+    floor = AMBIENT.get(exposure, AMBIENT["enclosed"])
+    quiet = room_quiet(scene, room_id)
+    if quiet:
+        return floor * QUIET_SCALE[quiet]
+    if exposure != "enclosed":
+        try:
+            scoped = _weather.weather_for_room(scene, room_id)
+        except Exception:
+            scoped = {}
+        if _still_night(scene, scoped):
+            floor *= QUIET_SCALE["hushed"]
+    return floor
+
+
+def _cache_key(scene, room_id, turn_idx, crowds, events) -> str:
     """The key is the WHOLE READ SET (review B10). Two of these were guesses
     at what a sound field depends on rather than a record of it, and both
     were short:
@@ -2151,8 +2215,7 @@ def _cache_key(scene, room_id, turn_idx, crowds, events, speakers) -> str:
     same class: 1 pace against 8 moved the pair gain 0.02117 -> 0.02703
     and the door gain 0.06477 -> 0.1.
     """
-    parts = [room_id, turn_idx, crowds, events, speakers,
-             *scene_read_parts(scene)]
+    parts = [room_id, turn_idx, crowds, events, *scene_read_parts(scene)]
     blob = json.dumps(parts, sort_keys=True, default=str)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()
 
@@ -2166,7 +2229,7 @@ def _room_grid_exists(scene, room):
 
 
 def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
-                crowds=None, events=None, speakers=None) -> Optional[SoundField]:
+                crowds=None, events=None) -> Optional[SoundField]:
     """The sound field one listener hears the scene through, or None when
     the listener's room carries no geometry (§ 7's fail-open: no field, and
     every reader falls back to today's functions unchanged).
@@ -2204,16 +2267,16 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
     # room estimated from its size tier is an acceptable estimate.
     if not room or not _room_grid_exists(scene, room):
         return None
-    extras = json.dumps([turn_idx, crowds, events, speakers],
+    extras = json.dumps([turn_idx, crowds, events],
                         sort_keys=True, default=str)
     return scene_memo(
         scene, ("sound_field", str(room), extras),
-        lambda: _sound_field(scene, room, turn_idx, crowds, events, speakers))
+        lambda: _sound_field(scene, room, turn_idx, crowds, events))
 
 
-def _sound_field(scene, room, turn_idx, crowds, events, speakers):
+def _sound_field(scene, room, turn_idx, crowds, events):
     """The field itself, content-cached across scene objects."""
-    key = _cache_key(scene, room, turn_idx, crowds, events, speakers)
+    key = _cache_key(scene, room, turn_idx, crowds, events)
     cached = _SOUND_FIELD_CACHE.get(key)
     if cached is not None:
         return cached
@@ -2221,7 +2284,7 @@ def _sound_field(scene, room, turn_idx, crowds, events, speakers):
     if grid is None:
         return None
     sources, notices = sound_sources(scene, turn_idx=turn_idx, crowds=crowds,
-                                     events=events, speakers=speakers)
+                                     events=events)
     field = SoundField(scene, room, grid, sources, notices, turn_idx)
     if len(_SOUND_FIELD_CACHE) >= _FIELD_CACHE_MAX:
         _SOUND_FIELD_CACHE.clear()
@@ -2288,19 +2351,54 @@ def far_path_gain(scene, listener_room, source_room):
     from world.spatial_senses import rooms_adjacent
     if rooms_adjacent(scene, listener_room, source_room):
         return None
+    path = far_path(scene, listener_room, source_room)
+    if path is None:
+        return None
+    return ratio_of_db(-path["loss_db"])
+
+
+#: The heaviest single edge a far path may cross and still carry a voice's
+#: consonants: a shut ordinary door (`APERTURE_DB["closed_door"]`, 25), the
+#: partition a raised voice and a shout cross whole in the next room
+#: (`spatial_senses.hear_level`). A pane, a heavy door, a wall or a floor on
+#: the way leaves a voice its low half -- a partition's loss rises about
+#: 6 dB an octave -- so the line arrives in pieces at best
+#: (`far_speech_level`), as one through the same pane next door does.
+FAR_CLEAR_EDGE_DB = APERTURE_DB["closed_door"]
+
+
+def far_path(scene, listener_room, source_room) -> Optional[dict]:
+    """`{loss_db, muffled}` for a voice from `source_room` heard in
+    `listener_room` over the room graph, or None where the question does not
+    apply (same room, neighbours -- the hearing rule's own classes -- or rooms
+    no chain of edges joins). `loss_db` is measured from the speaker's level
+    at their cell; `inf` is an ANSWER: the rooms are joined and nothing a
+    voice can do arrives."""
+    rooms = (scene or {}).get("rooms") or {}
+    listener_room, source_room = str(listener_room or ""), str(source_room or "")
+    if not listener_room or not source_room or listener_room == source_room:
+        return None
+    if listener_room not in rooms or source_room not in rooms:
+        return None
+    from world.spatial_senses import rooms_adjacent
+    if rooms_adjacent(scene, listener_room, source_room):
+        return None
     probe = SPEECH_DB["shout"]
     rec = room_sound_flood(scene, source_room, probe).get(listener_room)
     if rec is None:
         # The flood terminates on audibility, so "no record" is two
         # different facts: the rooms are joined and a shout dies before it
-        # arrives (0.0, an answer), or NO chain of edges joins them at all
-        # -- another world, a ship in orbit -- and the question does not
-        # apply (None). Answering 0.0 for the second stamped `signal` on a
-        # pair the air has no relationship to, and the composer's device
-        # rescue, which is gated on the air having no answer, was withdrawn
-        # for exactly the hail it exists for.
-        return 0.0 if _rooms_joined(scene, listener_room, source_room) else None
-    return ratio_of_db(float(rec["db"]) - probe)
+        # arrives (an answer), or NO chain of edges joins them at all --
+        # another world, a ship in orbit -- and the question does not apply
+        # (None). Answering for the second stamped the air on a pair it has
+        # no relationship to, and the composer's device rescue, which is
+        # gated on the air having no answer, was withdrawn for exactly the
+        # hail it exists for.
+        if not _rooms_joined(scene, listener_room, source_room):
+            return None
+        return {"loss_db": math.inf, "muffled": True}
+    return {"loss_db": probe - float(rec["db"]),
+            "muffled": float(rec.get("max_edge_db") or 0.0) > FAR_CLEAR_EDGE_DB}
 
 
 def _rooms_joined(scene, a, b) -> bool:
@@ -2327,12 +2425,29 @@ def _rooms_joined(scene, a, b) -> bool:
 def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
                          *, sound=None, observer_room=None,
                          target_room=None) -> dict:
-    """Add `signal` (the path gain from the target's cell to the observer's,
-    per unit of the target's power) and `noise` (the observer's noise floor
-    with the target excluded) to a body-to-body relation, when the observer's
-    field exists and both bodies stand on it. Otherwise the relation is
-    returned exactly as given -- not a key added, not a value changed -- which
-    is what keeps every scene without geometry byte-identical.
+    """What the hearing rule reads off the field, stamped on a body-to-body
+    relation -- the observer listening, the target speaking -- when the
+    observer's field exists and places them (`spatial_senses.hear_level`):
+
+      * `air` -- the two rooms are one, neighbours, or joined by any chain
+        of edges: the air has an answer for this pair, so being addressed by
+        name is not a second channel (`composer.line_hear_level`);
+      * `far_loss_db`, `far_muffled`, `floor_db` -- for rooms beyond the next
+        one, what the room graph takes from the voice, whether a shut thing
+        stood on the way, and the listening room's quiet floor
+        (`far_speech_level`);
+      * `masking_db`, `speaker_masking_db` -- only where something the story
+        made deafening, or an event it says drowns everything, reaches the
+        listener's ear (and the speaker's, for the rise of their voice):
+        the one place noise decides speech (`masked_level`).
+
+    RESTATED 2026-10-20. It stamped the cell path's gain and the listener's
+    whole noise floor -- a kettle, rain, a crowd -- and the verdict was their
+    ratio, so the cells decided whether a voice in the same room was heard.
+    A relation the field cannot speak for is returned exactly as given,
+    which keeps every scene without geometry byte-identical, and the
+    enclosure cases are never stamped: a voice through a body's mass is not
+    on any grid.
 
     `sound` is a precomputed `SoundField` for the observer (a perception
     stage builds one per perceiver with the beat's crowds, events and turn
@@ -2341,100 +2456,40 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
         return rel
     if sound is None:
         sound = sound_field(scene, observer, room=observer_room)
-    if sound is None:
+    if sound is None or sound.locate(observer, observer_room) is None:
         return rel
-    noise = sound.noise_at(observer, exclude=(target,), room=observer_room)
-    if noise is None:
+    from world.spatial_senses import rooms_adjacent
+    o_room = str(observer_room or room_of(scene, observer) or "")
+    t_room = str(target_room or room_of(scene, target) or "")
+    if not o_room or not t_room:
         return rel
-    o_room = observer_room or room_of(scene, observer)
-    t_room = target_room or room_of(scene, target)
-    if one_opening_away(scene, o_room, t_room):
-        # A RAISED VOICE CARRIES THROUGH AN OPENING (`open_edge_floor`): the
-        # rooms, not the path, decide that this pair has one, so it is
-        # recorded here where the rooms are known.
-        rel["open_edge"] = True
-    # WHAT THE SPEAKER IS SPEAKING OVER (`lombard_level_db`): the noise at
-    # their own cell, read once for either branch below.
-    source_noise = sound.speaker_noise(target, speaker_room=t_room)
-    gain = sound.gain_between(target, observer, speaker_room=target_room,
-                              listener_room=observer_room)
-    if gain is not None and rel.get("door_reach"):
-        # A VOICE SPOKEN AT A SHUT DOOR IS HEARD AT ITS OTHER FACE. Two bodies
-        # at one doorway, one each side (`spatial_rel_between` stamps
-        # `door_reach`), are at the field's arm's reach -- a path of 0, gain
-        # 1, the convention a pair sharing a cell already has -- less the
-        # door's own loss (`APERTURE_PASS`, after the material shift), and
-        # nothing else. The flood charges the whole mouth-to-ear walk as
-        # open-air spreading on top of the door, which for two bodies pressed
-        # to its two faces counts the door's thickness and the step each
-        # stands back from it as paces of air. Never lowers a gain the flood
-        # found: it is a floor for the pair, not a second path.
-        shifted = _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
-                                            rel.get("material"))
-        gain = max(gain, APERTURE_PASS.get(shifted, 0.0))
-    if gain is not None:
-        rel["signal"] = gain
-        rel["noise"] = noise
-        if source_noise is not None:
-            rel["source_noise"] = source_noise
-        # THE RING OVER THE VOICE. When the reverberant part arrives
-        # `REVERB_SMEAR_DB` above the direct part, the words smear and the
-        # direction is gone (`hear_level` grades it, `_bearing_through`
-        # says where it seems to come from). An echo is the room's own:
-        # a bare room long enough gives a sharp sound back.
-        parts = sound.gain_parts(target, observer, speaker_room=target_room,
-                                 listener_room=observer_room)
-        if parts is not None:
-            direct, rev = parts
-            # Graded by clarity (`clarity_db`), in the ring of the room the
-            # voice is spoken in -- its reverberation time decides how much
-            # of that ring arrives too late to help.
-            _ring = room_reverberation(scene, t_room) or room_reverberation(scene, o_room) or {}
-            if rev > 0.0 and clarity_db(direct, rev, _ring.get("rt60")) < C50_SMEAR_DB:
-                rel["reverberant"] = True
-        ring = room_reverberation(scene, o_room)
-        if ring and ring.get("echo") and str(o_room) == str(t_room):
-            rel["echo"] = True
-        return rel
-    # NOISE MASKS A VOICE BY WHAT REACHES THE LISTENER, WHEREVER THE VOICE
-    # CAME FROM. One masking rule, on every path: a listener's noise floor
-    # is a property of where the LISTENER stands, not of how far away the
-    # speaker is, so it must grade a voice from beyond the field exactly as
-    # it grades one from across the room. Where the field cannot place the
-    # speaker at all -- another room's room, more hops than a composite
-    # covers -- it can still say what a voice entering by this room's own
-    # best opening would deliver to this ear (`door_gain`), and that is a
-    # CEILING the edge model's answer may not exceed. Measured live: a fog
-    # bell in the watch room graded an ordinary voice IN the room to `none`
-    # (signal 0.34, noise 20.5) while a shout from three rooms away arrived
-    # whole, because the edge model had no idea there was a bell
-    # (`PLAY_2026_09_05_lighthouse.md` § PA5).
-    door = sound.door_gain(observer, room=observer_room)
-    # THE ROOM GRAPH, BEFORE THE CEILING. `door_gain` is what this room's
-    # best opening could deliver and says nothing about how far away the
-    # speaker is; the flood says exactly that (`far_path_gain`). Stamped as
-    # the signal so the FIELD branch of `hear_level` grades the pair -- the
-    # masking rule, the door ceiling below and `_weaker_hearing` all keep
-    # working unchanged, and the edge model's distance-blind `separated`
-    # word stops being reached for a pair whose rooms the scene holds.
-    #
-    # It only ever SUBTRACTS at the boundary: at one hop, where both
-    # readings exist, the composite field measured 0.0191 and the flood
-    # 0.0062, because the flood charges whole room spans where the field
-    # walks cells. The conservative one is the one that arrives late.
-    far = far_path_gain(scene, o_room, t_room)
+    far = far_path(scene, o_room, t_room)
     if far is not None:
-        rel["signal"] = far
-        rel["noise"] = noise
-        if source_noise is not None:
-            rel["source_noise"] = source_noise
-        if door is not None and door > 0.0:
-            rel["door_gain"] = door
-        return rel
-    if door is None or door <= 0.0:
-        return rel
-    rel["door_gain"] = door
-    rel["noise"] = noise
+        rel["air"] = True
+        rel["far_loss_db"] = far["loss_db"]
+        rel["far_muffled"] = far["muffled"]
+        rel["floor_db"] = db_of_power(quiet_floor(scene, o_room))
+    elif o_room == t_room or rooms_adjacent(scene, o_room, t_room) \
+            or _rooms_joined(scene, o_room, t_room):
+        rel["air"] = True
+    if o_room == t_room:
+        loss = open_air_loss_db(scene, sound, observer, target, o_room)
+        if loss is not None:
+            rel["open_air_loss_db"] = loss
+            rel["floor_db"] = db_of_power(quiet_floor(scene, o_room))
+    paces = _pair_paces(scene, sound, observer, target, o_room, t_room, rel)
+    if paces is not None:
+        rel["paces"] = paces
+    if any(_masks(source) for source in sound.sources) or \
+            any(_masks(source) for source in sound._raw_sources):
+        masking = sound.masking_db_at(observer, room=o_room)
+        if masking is not None:
+            rel["masking_db"] = masking
+            own = sound._field_for(t_room)
+            spoken_over = own.masking_db_at(target, room=t_room) \
+                if own is not None else None
+            if spoken_over is not None:
+                rel["speaker_masking_db"] = spoken_over
     return rel
 
 
@@ -2600,8 +2655,8 @@ def normalize_sensory_event(event, rooms=None) -> Optional[dict]:
     """One `state_diff.sensory_events` entry as the engine holds it, or None
     where it names no room the scene has.
 
-    `{kind, room, level | db, source, detail}` -- the note's shape, and a
-    closed set of keys. `kind` is the SENSE the event arrives on and defaults
+    `{kind, room, level | db, source, detail, drowns}` -- the note's shape,
+    and a closed set of keys. `kind` is the SENSE the event arrives on and defaults
     to hearing, which is what the channel is for; `level` is a word off
     `SOUND_LEVELS` and `db` the number for anything the words do not reach;
     `source` is what made it and `detail` what it was like. Nothing else
@@ -2632,6 +2687,12 @@ def normalize_sensory_event(event, rooms=None) -> Optional[dict]:
             out["intensity"] = raw
     if event.get("tread"):
         out["tread"] = True             # a footfall: its maker does not hear it as news
+    if event.get("drowns") is True:
+        # THE STORY SAYS IT DROWNS EVERYTHING OUT, for as long as it lasts:
+        # the one beat sound that may take a voice away (`MASKING_LEVELS`'
+        # sibling, `masked_level`). Only a literal true: a word here is not
+        # an instruction the engine can price.
+        out["drowns"] = True
     # A BARE ROOM LONG ENOUGH GIVES A SHARP SOUND BACK (`room_reverberation`).
     if rooms is not None:
         ring = room_reverberation({"rooms": rooms}, room)
@@ -2800,11 +2861,11 @@ def far_field_graph(scene: dict) -> dict:
     """`{room: {other: loss_db}}` -- the room graph a loud sound crosses,
     UNDIRECTED and with every edge on it.
 
-    Undirected for the reason `one_opening_away` is: a doorway is one object
-    and may be declared from either side, and a path has no direction. Where
-    both sides declare it and disagree, the SMALLER loss wins -- the same
-    permissive reading the opening floor takes, and the one that cannot
-    silence a sound because of which room's author was more careful.
+    Undirected because a doorway is one object and may be declared from
+    either side, and a path has no direction. Where both sides declare it
+    and disagree, the SMALLER loss wins -- the permissive reading, and the
+    one that cannot silence a sound because of which room's author was more
+    careful.
 
     Every edge, not only the ones sound walks: a wall is on this graph, at
     `WALL_LOSS_DB`, which is the whole point of the far field. The number
@@ -2948,7 +3009,7 @@ def ring_boost_db(scene: dict, room_id) -> float:
 
 
 def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
-    """`{room_id: {"db", "length", "barrier_db", "via"}}` for every room a
+    """`{room_id: {"db", "length", "barrier_db", "via", "max_edge_db"}}` for every room a
     sound of `source_db` at one pace can still be heard in, `via` being the
     room it arrives FROM (the last hop, which is the direction a listener
     there would turn).
@@ -2998,7 +3059,8 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
     # starts from that. `source_db` is raised by the difference, once.
     source_db += ring_boost_db(scene, source_room)
     best = {source_room: {"db": source_db - spreading_loss_db(span0),
-                          "length": span0, "barrier_db": 0.0, "via": None}}
+                          "length": span0, "barrier_db": 0.0, "via": None,
+                          "max_edge_db": 0.0}}
     heap = [(-best[source_room]["db"], source_room)]
     while heap:
         neg_db, room = heapq.heappop(heap)
@@ -3017,7 +3079,12 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
             if known is not None and known["db"] >= level - _DB_EPS:
                 continue
             best[other] = {"db": level, "length": length,
-                           "barrier_db": barrier, "via": room}
+                           "barrier_db": barrier, "via": room,
+                           # The heaviest single edge on the way: what a
+                           # voice that came by it lost its consonants to
+                           # (`far_path`).
+                           "max_edge_db": max(rec["max_edge_db"],
+                                              graph[room][other])}
             heapq.heappush(heap, (-level, other))
     return best
 

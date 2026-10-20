@@ -69,7 +69,9 @@ def _heard(sc, listener="Mellisande", speaker="Hinami"):
 
 def test_a_question_asked_through_the_door_at_arms_reach_is_heard_whole():
     heard, rel = _heard(_upstairs())
-    assert rel.get("signal") is not None, "the field must grade the pair"
+    # The field places the pair and the air relates them; the verdict is
+    # the hearing rule's (2026-10-20), which reads `door_reach`.
+    assert rel.get("air") is True, "the field must place the pair"
     assert heard["normal"] == "full"
     assert heard["loud"] == "full" and heard["shout"] == "full"
     assert rel.get("door_reach") is True
@@ -89,10 +91,24 @@ def test_it_is_the_same_both_ways_through_the_door():
 
 def test_from_across_the_next_room_a_normal_voice_still_comes_in_pieces():
     """The woman at the far wall of the second room, three paces from the
-    door: overheard, not spoken to -- the field's own answer, unchanged."""
+    door.
+
+    OVERTURNED 2026-10-20 by the owner's ruling (the hearing rule: "a
+    normal voice from someone AT the door is full"): the player speaks AT
+    the door, so she is spoken to, not overheard -- the voice crosses the
+    door's 25 dB and the tiny room beyond holds it within a few decibels,
+    and a path has no direction, so her answer from the far wall comes back
+    to him the same way. This pinned `fragment` when the rule asked for
+    both bodies at the door, which is the live 177 turn 21 shape (she had
+    stepped back from the doorway) and kept its "What was that?". A normal
+    voice is muffled through a shut door only when nobody stands at it
+    (`tests/test_voices_carry_unless_the_story_stops_them.py`)."""
     heard, rel = _heard(_upstairs(listener_cell=(0, 0)))
-    assert "door_reach" not in rel
-    assert heard["normal"] == "fragment"
+    assert rel.get("door_reach") is True
+    assert heard["normal"] == "full"
+    back, _rel = _heard(_upstairs(listener_cell=(0, 0)),
+                        listener="Hinami", speaker="Mellisande")
+    assert back["normal"] == "full"
     assert heard["whisper"] == "none"
 
 

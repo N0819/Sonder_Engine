@@ -83,6 +83,7 @@ from world.spatial import (
     entity_arc,
     entity_side,
     hear_level,
+    hearing_reason,
     held_beam_falls_on,
     _sense_channel,
     sense_adjusted,
@@ -640,7 +641,7 @@ def concealed_from_observer(entry, observer_name, observer_id=None):
 
 
 def line_hear_level(entry, rel, observer_name, proximity=None,
-                    senses=None):
+                    senses=None, seen=False):
     """Audibility of one dialogue entry to an observer.
 
     Ordinary spatial hearing (`hear_level`) decides first -- including the
@@ -654,7 +655,10 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
     exchange across a barrier). An enclosure is never shape-rescued: being
     named by a voice beyond the mass around you creates no channel through
     it. The comm path carries only the VOICE; the caller sets can_see
-    separately."""
+    separately.
+
+    `seen`: the observer sees the speaker's face, which is worth several
+    decibels where a deafening noise is what decides (`hear_level`)."""
     # A live channel between speaker and observer -- a PA, an intercom, a
     # radio, a phone -- decides FIRST, before the wall gets a say.
     #
@@ -683,7 +687,7 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
         return "full"
     _unimpaired = hear_level(rel, entry.get("volume", "normal"),
                              proximity=proximity,
-                             level_db=entry.get("level_db"))
+                             level_db=entry.get("level_db"), seen=seen)
     base = _sense_graded(_unimpaired, "hearing", senses)
     # AN IMPAIRED EAR IS NOT AN UNREACHABLE ONE. `full` is the top of the
     # hearing ladder, so a -1 acuity took every `full` to `fragment`
@@ -729,16 +733,15 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
     # named is not a second, better path through the same doors.
     #
     # The two are told apart by whether the AIR HAS AN ANSWER for this pair.
-    # `stamp_sound_relation` puts `signal` on a relation whose bodies the
-    # field could place, and `door_gain` where it could at least say what
-    # this room's best opening admits; a pair with no acoustic relationship
-    # at all -- another world, a ship in orbit -- carries neither. Where the
-    # field spoke, its answer is the answer. Where it could not speak, a line
-    # that arrives by name arrives by a device.
+    # `stamp_sound_relation` stamps `air` where the two rooms are one,
+    # neighbours, or joined by any chain of edges; a pair with no acoustic
+    # relationship at all -- another world, a ship in orbit -- carries none.
+    # Where the air has an answer, it is the answer. Where it has none, a
+    # line that arrives by name arrives by a device.
     #
     # A scene with no geometry stamps nothing and is unchanged, which is the
     # same fail-open direction this rescue has always had.
-    if rel.get("signal") is not None or rel.get("door_gain") is not None:
+    if rel.get("air"):
         return base
     if str(entry.get("volume", "normal")).lower() in ("normal", "loud", "shout"):
         # ...and it is not the one grade a sense card cannot dull. It ran
@@ -3877,14 +3880,14 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     # off, one ContextVar read.
     _who = "%s -> %s" % (str(entry.get("speaker") or "?"), observer_name)
     _spatial = line_hear_level(entry, rel, observer_name, proximity=proximity,
-                               senses=senses)
+                               senses=senses, seen=bool(can_see))
     level = _spatial
     _how = "spatial"
     if isinstance(rel.get("comm_channel"), dict):
         _how = "comm channel"
     elif level == "full" and _sense_graded(
             hear_level(rel, volume, proximity=proximity,
-                       level_db=entry.get("level_db")),
+                       level_db=entry.get("level_db"), seen=bool(can_see)),
             "hearing", senses) == "none":
         # `line_hear_level` already applied the addressed rescue; naming it
         # here is a report of what happened inside it, not a second copy of
@@ -3899,13 +3902,20 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         # deleted, so this is the only copy.)
         level = "full"
         _how = "open-group continuity floor (pre-repair checkpoint)"
+    # WHY, in the hearing rule's own words, where a line is short of whole
+    # (`spatial_senses.hearing_reason`): appended, so a reader of the older
+    # notes -- `tools/speech_replay.py` parses the prefix -- reads them alike.
+    _why = hearing_reason(rel, volume, proximity=proximity,
+                          level_db=entry.get("level_db"),
+                          seen=bool(can_see)) if level != "full" else ""
     note_step_decision(
         "speech_percept", _who,
         "refused" if level == "none" else "delivered",
-        "%s via %s; volume %s, barrier %s, tier %s" % (
+        "%s via %s; volume %s, barrier %s, tier %s%s" % (
             level, _how, volume,
             str(rel.get("barrier") or "none"),
-            str(proximity or rel.get("tier") or "unmeasured")))
+            str(proximity or rel.get("tier") or "unmeasured"),
+            ("; " + _why) if _why else ""))
     if level == "none":
         # SEEN SPEAKING, UNHEARD. A line the noise takes whole is still an
         # act the eyes have: a body within reach turns its head to yours
@@ -4075,7 +4085,7 @@ def communication_percept(entry, rel, observer_name, *, display, can_see,
         return None
     volume = str(entry.get("volume") or "normal")
     level = line_hear_level(entry, rel, observer_name, proximity=proximity,
-                            senses=senses)
+                            senses=senses, seen=bool(can_see))
     if level == "none":
         return None
     # Partial hearing cannot deliver a proposition whose words were never

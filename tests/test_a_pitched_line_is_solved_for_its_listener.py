@@ -37,7 +37,7 @@ from agents import character_bare
 from mind import character_jev as jev
 from story.character_schema import default_character_data
 from world.spatial import (SPEECH_DB, hear_level, pitched_level_db,
-                           spatial_rel_between)
+                           spatial_rel_between, word_for_level)
 
 
 def _holding():
@@ -174,8 +174,14 @@ def test_a_pitched_line_reaches_its_addressee_in_a_micro_round(temp_db):
     to_crane = spatial_rel_between(sc, "Crane", "Clara")
     to_matron = spatial_rel_between(sc, "Matron", "Clara")
     level = pitched_level_db(sc, "Clara", "Crane")
-    assert hear_level(to_crane, "whisper") == "none", \
-        "the fixture must put the addressee out of a whisper's reach"
+    # RESTATED 2026-10-20 (the hearing rule): the two stand at the card-room
+    # doorway's two sides, within reach through it, so the quietest voice
+    # that reaches him whole is a whisper -- and that is the pitch. The
+    # bystander at the far wall is inside an ordinary voice's reach and
+    # outside a whisper's.
+    assert hear_level(to_crane, "whisper") == "full", \
+        "the fixture puts the addressee within reach through the doorway"
+    assert word_for_level(level) == "whisper"
     assert hear_level(to_matron, "normal") == "full", \
         "and the bystander inside an ordinary voice's"
     assert hear_level(to_crane, "pitched", level_db=level) == "full"
@@ -199,7 +205,9 @@ def test_a_pitched_line_reaches_its_addressee_in_a_micro_round(temp_db):
     pitched = _delivered("pitched")
     assert words in pitched["Crane"], pitched
     assert words not in pitched["Matron"], pitched
-    assert words not in _delivered("whisper")["Crane"]
+    # Read by its word as an ordinary voice, it would have reached the far
+    # wall whole: that is the defect this pins.
+    assert words in _delivered("normal")["Matron"]
     assert SPEECH_DB["whisper"] <= level <= SPEECH_DB["shout"]
 
 

@@ -53,13 +53,21 @@ def _strand(doctor_at):
     invented: a 40m x 25m open rectangle, the shelf south and the dune foot
     east, and the surf standing at the west edge as a running audible source.
     The distance and the noise floor are the whole point -- an invented room
-    grades both stations alike and proves nothing."""
+    grades both stations alike and proves nothing.
+
+    RE-DRAWN 2026-10-20, ONE NUMBER: the strand's length. Under the hearing
+    rule a normal voice carries forty-five paces of open air whole and the
+    surf masks nothing, so on the live strand's forty both of his lines
+    reach her and the ordering this file pins would have nothing to tell
+    apart. Drawn at the grid's 96-pace cap, the dune foot stands past that
+    reach and the line spoken from it arrives in pieces -- by the distance
+    alone, which is what a beach does to a voice."""
     return {
         "location": "Okinawa", "time": "night",
         "rooms": {STRAND: {
             "name": "Moonlit Strand", "adjacent": [], "light": "dim",
             "size": "large", "exposure": "open", "shape": "rectangle",
-            "extent": {"w": 40.0, "d": 25.0}, "sound": {"level": "faint"},
+            "extent": {"w": 96.0, "d": 25.0}, "sound": {"level": "faint"},
             "anchors": {
                 SHELF: {"desc": "A flat stretch of packed sand.",
                         "dir": "s", "offset": 0.30434782608695654},
@@ -73,7 +81,9 @@ def _strand(doctor_at):
                       "Ocean Surf": STRAND},
         # Chat 122 pinned her at [7, 22] in the grid the 24-pace clamp
         # made of this strand; at its authored 40 x 25 (the cap is 96 since
-        # 2026-10-03) the shelf stands at [12, 24], and she beside it.
+        # 2026-10-03) the shelf stood at [12, 24], and she beside it. Drawn
+        # at 96 (see above) the shelf stands at [29, 24], within an ordinary
+        # voice's reach of her.
         "stations": {"Hinami": {"at": SHELF, "near": [], "cell": [12, 23]},
                      "The Doctor": {"at": doctor_at, "near": []},
                      "Ocean Surf": {"at": "surf_line", "near": []}},
@@ -186,15 +196,13 @@ def test_the_two_positions_really_do_grade_differently():
     beside = spatial_rel_between(BEFORE, "Hinami", "The Doctor")
     away = spatial_rel_between(AFTER, "Hinami", "The Doctor")
     assert hear_level(beside, "normal") == "full"
-    # RECALIBRATED 2026-09-14: on the real ladder the committed scene's
-    # `audible` surf is a kettle's worth of noise (50 dB(A) at a pace, 36
-    # at Hinami's cell) and a real normal voice thirty paces off arrives at
-    # 37.6 -- under the `full` margin and inside the fragment one. The line
-    # is not delivered; it is caught in pieces. Before, on the compressed
-    # ladder, the surf and the voice shared a rung and it was `none`.
+    # RESTATED 2026-10-20 (the hearing rule): the surf masks nothing; what
+    # takes the words is the open air -- a voice falls 6 dB a doubling under
+    # the sky, and from the dune foot, past forty-five paces, it is caught
+    # in pieces against the beach's quiet floor.
+    assert away.get("open_air_loss_db") is not None
     assert hear_level(away, "normal") == "fragment", (
-        "chat 122's committed relation: same room, open barrier, and the "
-        "surf's noise floor over a signal measured from the dune")
+        "same room, open air, and a voice from beyond its full reach")
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +330,7 @@ def test_onset_also_reads_the_world_between_two_moves(temp_db):
          "event_id": "player:move:3", "commitment": "asserted"},
     ]
     diff, history, _ = compile_transforms([
-        {"chrono_id": 1, "item_id": 7, "patch": {"stations": {"Hinami": {"at": DUNE, "cell": [37, 10]}}}},
+        {"chrono_id": 1, "item_id": 7, "patch": {"stations": {"Hinami": {"at": DUNE, "cell": [93, 10]}}}},
         {"chrono_id": 3, "item_id": 7, "patch": {"stations": {"Hinami": {"at": SHELF, "cell": [7, 22]}}}},
     ], allowed_channels=["stations"])
     diff["causal_steps"] = program_from_history(history, [
@@ -423,8 +431,8 @@ def test_the_line_he_spoke_from_up_the_beach_does_not(temp_db):
     surf really does take it. A fix that delivered both would have bought
     the first line by throwing away the geometry.
 
-    RECALIBRATED 2026-09-14: on the real ladder the surf takes the WORDS
-    and leaves the pieces (`test_the_two_positions_really_do_grade_
+    RECALIBRATED 2026-09-14 and RESTATED 2026-10-20: the open air takes
+    the WORDS and leaves the pieces (`test_the_two_positions_really_do_grade_
     differently`), so the line arrives as something she cannot make out
     and never verbatim."""
     out = perception_outcome(_beat(temp_db), "n0")

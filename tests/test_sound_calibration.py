@@ -16,6 +16,13 @@ verdict a reader would accept and the compressed ladder refused:
 Every level is `SPEECH_ONE_PACE_DB` / `SOUND_ONE_PACE_DB`, a sound pressure
 level at one pace a reader can check against any decibel chart; the numbers
 in the docstrings are what the field measured on these scenes.
+
+RESTATED 2026-10-20 by the owner's ruling (the hearing rule,
+`spatial_senses.hear_level`): noise never masks speech but for what the
+story makes deafening, so a voice in one room is heard whole by every
+listener in it and the quiet volumes are private beyond reach. What these
+scenes still pin is the description -- the noise words a room carries -- and
+the verdicts the rule gives them.
 """
 
 from __future__ import annotations
@@ -27,7 +34,7 @@ from world.spatial import (body_cell, hear_level, noise_word, sound_field,
 
 def _levels(sc, speaker, listener):
     rel = spatial_rel_between(sc, listener, speaker)
-    assert rel.get("signal") is not None, "the field must place the pair"
+    assert rel.get("air"), "the field must place the pair"
     return {v: hear_level(rel, v) for v in SPEECH_VOLUMES}
 
 
@@ -80,20 +87,20 @@ def test_the_fire_is_quiet_even_at_the_hearth():
 
 
 # ---------------------------------------------------------------------------
-# b. A launch engine masks ordinary speech and not a raised voice
+# b. A launch engine is a din a voice is raised over, and masks none of it
 # ---------------------------------------------------------------------------
 
-def deck(engine_cell=(3, 0), a_cell=(0, 2), b_cell=(0, 1)):
-    """A 4x3 open deck with a `loud` engine (80 dB(A) at a pace, 83 at its
-    cell) at `engine_cell`; A and B at the two named cells; W in the bow
-    beside the engine."""
+def deck(engine_cell=(3, 0), a_cell=(0, 2), b_cell=(0, 1), length=4):
+    """A 4x3 open deck (`length` paces long) with a `loud` engine (80 dB(A)
+    at a pace, 83 at its cell) at `engine_cell`; A and B at the two named
+    cells; W in the bow beside the engine."""
     r = room("the Deck", light="lit", anchors={
         "engine": {"desc": "the engine", "dir": "n", "cell": list(engine_cell)},
         "stern_bench": {"desc": "the stern bench", "cell": list(a_cell)},
         "stern_rail": {"desc": "the stern rail", "cell": list(b_cell)},
         "bow": {"desc": "the bow", "cell": [max(0, engine_cell[0] - 1),
                                             engine_cell[1]]}})
-    r["extent"] = {"w": 4, "d": 3}
+    r["extent"] = {"w": length, "d": 3}
     r["exposure"] = "open"
     return scene({"d": r}, {"A": "d", "B": "d", "W": "d", "eng": "d"},
                  entities={"eng": {"name": "the engine", "kind": "machine",
@@ -117,37 +124,44 @@ def test_a_raised_line_one_pace_off_survives_the_engine_in_pieces():
 
 
 def test_a_conversation_at_arms_reach_carries_over_the_deck():
-    """Sharing a cell (the field's arm's reach, a path of 0), three paces from
-    the engine: the floor there is 74.7, and a speaker talking to someone at
-    arm's length raises their voice over it without deciding to (the Lombard
-    effect, `lombard_level_db`) -- heard whole. Two paces from the machine the
-    floor is 78-80: even raised, the line is caught in pieces. A whisper is a
-    choice to be quiet and stays gone (below).
+    """Sharing a cell (arm's reach), three paces from the engine and two:
+    a normal line is heard whole at both.
 
-    RECALIBRATED 2026-09-23. This test used to pin a normal line at arm's
-    reach three paces off as a fragment and two paces off as nothing, on the
-    judgment that "a loud diesel at two paces" was physically right -- a
-    judgment of a model in which no voice ever rose over its room. The owner,
-    of arm's-reach replies arriving in pieces in a working room: "doesn't
-    make particular sense"."""
+    RECALIBRATED 2026-09-23 for the Lombard effect, and OVERTURNED
+    2026-10-20 by the owner's ruling for what it still kept: two paces from
+    the machine a normal and a raised line at arm's length were pinned in
+    pieces. A `loud` engine is an everyday thing on the class ladder -- the
+    same word is a whistling kettle -- and nothing short of deafening takes
+    a voice away: people on a launch talk over its engine, raising their
+    voices (the owner, of arm's-reach replies arriving in pieces in a
+    working room, 2026-09-23: "doesn't make particular sense")."""
     far = deck((3, 0), (0, 2), (0, 2))
     assert _levels(far, "A", "B")["normal"] == "full"
     near = deck((2, 0), (2, 2), (2, 2))
-    assert _levels(near, "A", "B")["normal"] == "fragment"
-    assert _levels(near, "A", "B")["loud"] == "fragment"
+    assert _levels(near, "A", "B")["normal"] == "full"
+    assert _levels(near, "A", "B")["loud"] == "full"
+    assert _levels(near, "A", "B")["whisper"] == "full"
 
 
 def test_a_whisper_across_the_deck_is_gone():
-    """A whisper (38 at the cell) from the stern to the bow arrives under
-    30 against an engine at the listener's shoulder: `none` from every
-    layout, and `none` between the pair at the stern too -- a whisper is
-    speech for a listener at touching distance, and the deck is `drowned`
-    everywhere."""
-    for engine, a, b in (((3, 0), (0, 2), (0, 1)), ((2, 0), (0, 2), (1, 2))):
-        sc = deck(engine, a, b)
+    """A whisper from the stern to the bow is gone from every layout -- a
+    whisper is speech for a listener at touching distance, and the bow is
+    not that. The deck is `drowned` everywhere, which is DESCRIPTION: what
+    a voice has to rise over (`noise_word`).
+
+    RESTATED 2026-10-20: the whisper is lost to the distance between the two
+    bodies (the hearing rule's privacy beyond reach), not to the engine, so
+    the deck is a launch's twelve paces: on the original 4x3 the stern bench
+    and the bow stand a diagonal pace apart, which is arm's reach. Between
+    the two at the stern, a pace apart at the bench and the rail, it is
+    whole."""
+    for engine, a, b in (((11, 0), (0, 2), (0, 1)), ((10, 0), (0, 2), (1, 2))):
+        sc = deck(engine, a, b, length=12)
         assert _levels(sc, "A", "W")["whisper"] == "none", engine
-        assert _levels(sc, "A", "B")["whisper"] == "none", engine
-        assert _noise_word_at(sc, "A") == "drowned"
+    stern = deck((11, 0), (0, 2), (0, 1), length=12)
+    assert _levels(stern, "A", "B")["whisper"] == "full"
+    for engine, a, b in (((3, 0), (0, 2), (0, 1)), ((2, 0), (0, 2), (1, 2))):
+        assert _noise_word_at(deck(engine, a, b), "A") == "drowned", engine
 
 
 # ---------------------------------------------------------------------------
@@ -190,10 +204,15 @@ def test_a_whisper_at_one_pace_is_whole_and_across_a_hall_is_gone():
 
 
 def test_the_quiet_volumes_fall_off_by_the_pace():
-    """The reach of each quiet volume in a still room, pace by pace: a
-    whisper is whole to two paces and in pieces at three; a mutter whole to
-    three and in pieces at four; both are gone by five. On the compressed
-    ladder the two sat 2.2 dB apart and a mutter died at 2.4 paces."""
+    """The reach of each quiet volume in a still room, pace by pace.
+
+    RESTATED 2026-10-20 by the owner's ruling: breath-level speech is
+    private beyond reach. Measured in paces of the field's own path, the
+    distances this still hall gave them before stand as the privacy they
+    were -- a whisper whole to two paces, a mutter to three and in pieces
+    at four -- with the one change the owner made: a whisper beyond its
+    reach is lost, never caught in pieces (it was a fragment at three).
+    And no noise moves them any more (`spatial_senses.WHISPER_REACH_PACES`)."""
     sc = still_hall()
     ax, ay = body_cell(sc, "A")
     words = {}
@@ -207,7 +226,6 @@ def test_the_quiet_volumes_fall_off_by_the_pace():
         words[paces] = (hear_level(rel, "whisper"), hear_level(rel, "mutter"))
     assert words[1] == ("full", "full")
     assert words[2] == ("full", "full")
-    assert words[3] == ("fragment", "full")
+    assert words[3] == ("none", "full")
     assert words[4] == ("none", "fragment")
     assert words[5] == ("none", "none")
-

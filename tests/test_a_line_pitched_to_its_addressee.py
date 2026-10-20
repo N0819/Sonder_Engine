@@ -4,8 +4,9 @@ Five volume words fixed a line's level before anyone knew who it was for.
 "Low, so that only his table would hear" was filed as a whisper and died
 four paces off (scratch play 2026-09-14, chat 9 turn 16). The owner's ask
 (2026-09-15): decibels scale on intent. A pitched line's level is solved
-from the addressee's cell -- their noise floor plus the full margin, less
-the path's gain -- clamped to the ladder, and everyone else is graded at
+from the addressee -- since 2026-10-20 the quietest voice the hearing rule
+carries to them whole (a whisper within reach, an ordinary voice across a
+room, a raised one through a shut door) -- and everyone else is graded at
 that level.
 """
 from llm.schemas import normalize_speech_volume
@@ -52,12 +53,14 @@ def test_a_pitched_line_reaches_its_addressee_whole_and_the_far_wall_less():
     to_crane = spatial_rel_between(sc, "Crane", "Clara")
     to_matron = spatial_rel_between(sc, "Matron", "Clara")
     assert hear_level(to_crane, "pitched", level_db=level) == "full"
-    # A whisper by the word would have died at the table.
-    assert hear_level(to_crane, "whisper") == "none"
-    # The far wall gets no more than the table does, and the level is the
-    # least that reaches the table, so the far wall is graded lower or equal.
-    order = {"none": 0, "fragment": 1, "full": 2}
-    assert order[hear_level(to_matron, "pitched", level_db=level)] <= order["full"]
+    # RESTATED 2026-10-20 (the hearing rule): the speaker stands at the
+    # card-room door and the addressee at the table nearest it, within reach
+    # through the doorway -- so the least voice that reaches him whole is a
+    # whisper, and the far wall gets nothing of it.
+    assert word_for_level(level) == "whisper"
+    assert hear_level(to_matron, "pitched", level_db=level) == "none"
+    # Read by its word as an ordinary voice, the far wall would have it.
+    assert hear_level(to_matron, "normal") == "full"
     assert level < SPEECH_DB["shout"]
 
 
@@ -69,22 +72,26 @@ def test_no_addressee_or_no_field_is_a_normal_line():
     assert pitched_level_db(bare, "X", "Y") in (SPEECH_DB["normal"],) or isinstance(pitched_level_db(bare, "X", "Y"), float)
 
 
-def _tower(w=6, d=6):
-    names = ["store", "keepers", "watch", "lamp"]
+def _tower(w=6, d=6, *, storeys=("store", "keepers", "watch", "lamp"),
+           hatch="open", clara_cell=(3, 1)):
+    names = list(storeys)
     rooms = {}
     for i, rid in enumerate(names):
         adj = []
         if i > 0:
-            adj.append({"to": names[i - 1], "barrier": "open", "dir": "n", "vertical": "down"})
-        if i < 3:
-            adj.append({"to": names[i + 1], "barrier": "open", "dir": "n", "vertical": "up"})
+            adj.append({"to": names[i - 1], "barrier": hatch, "dir": "n", "vertical": "down"})
+        if i < len(names) - 1:
+            adj.append({"to": names[i + 1], "barrier": hatch, "dir": "n", "vertical": "up"})
         rooms[rid] = {"name": rid, "extent": {"w": w, "d": d}, "adjacent": adj,
                       "anchors": {}, "exposure": "enclosed"}
-    # The burner roars at the top: the noise floor is what makes a normal
-    # line break up on the way down and a pitched one carry.
+    # RESTATED 2026-10-20 (the hearing rule): the burner and the winch are
+    # everyday noise and break nothing up; an open stair carries a normal
+    # line three storeys down whole. What a pitched line is raised over is
+    # a shut hatch (`hatch`), through which a normal line from across the
+    # room comes in pieces and a raised one whole.
     return {"rooms": rooms, "positions": {"Clara": "lamp", "Crane": "store", "burner": "lamp",
                                           "winch": "store"},
-            "stations": {"Clara": {"cell": [3, 1]}, "Crane": {"cell": [3, 3]},
+            "stations": {"Clara": {"cell": list(clara_cell)}, "Crane": {"cell": [3, 3]},
                          "burner": {"cell": [1, 3]}, "winch": {"cell": [5, 5]}},
             "entities": {"burner": {"name": "the burner", "kind": "fixture",
                                     "sound_source": "audible", "portable": False,
@@ -113,7 +120,8 @@ def test_a_pitched_line_reaches_its_addressee_at_onset(temp_db):
                          ("Crane", json.dumps(default_character_data("Crane")), "{}", time.time(), "char_crane"))
     temp_db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
                (chat_id, char_id, "active", "{}"))
-    temp_db.wset(chat_id, "scene", _tower())
+    temp_db.wset(chat_id, "scene", _tower(storeys=("store", "lamp"), hatch="closed_door",
+                                          clara_cell=(1, 5)))
     cast = temp_db.q("SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
                      "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (chat_id,))
     line = "Then come up. Slow. Keep your hands where I can see them."
@@ -140,8 +148,8 @@ def test_a_pitched_line_reaches_its_addressee_at_onset(temp_db):
         out = perception_act(ctx, "n0")
         return (out.get("views") or {}).get(str(char_id)) or ""
 
-    sc = _tower()
+    sc = _tower(storeys=("store", "lamp"), hatch="closed_door", clara_cell=(1, 5))
     assert hear_level(spatial_rel_between(sc, "Crane", "Clara"), "normal") != "full", \
-        "the tower must be tall enough that a normal line breaks up"
+        "the hatch must be shut, and she away from it, so a normal line breaks up"
     assert "hands where I can see them" in _act("pitched"), _act("pitched")
     assert "hands where I can see them" not in _act("normal")

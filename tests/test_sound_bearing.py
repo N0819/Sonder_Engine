@@ -273,20 +273,20 @@ def test_an_unreachable_shout_snaps_nothing():
 def test_a_whisper_within_reach_is_graded_closer_than_one_pace():
     """Measured (scratch play 2026-09-14, chat 2 turn 6): two bodies on one
     cabin bench, an engine beyond the open door, the field placing neither
-    (`tier` None, signal at the one-pace default 1.0, noise 5.4 on the
-    compressed ladder of the day) -- whisper and mutter both `none`. Within
-    reach is closer than a pace.
+    -- whisper and mutter both `none`. Within reach is closer than a pace.
 
-    RECALIBRATED 2026-09-14: the same cabin on the real ladder. A whisper is
-    38 dB at its cell, the floor an engine leaves through an open door is
-    about 53 (noise 20.0), and the fragment margin is -12: at one pace the
-    whisper is 15 dB under and refused; at half a pace (+7.8) it is caught.
-    The old 5.4 (47.3 dB) is under the new whisper's own reach."""
+    OVERTURNED 2026-10-20 by the owner's ruling for what the noise did: the
+    whisper was pinned `none` at the one-pace default under the engine's
+    floor and `none` again for a pair the field placed within reach. Noise
+    never masks speech but for what the story makes deafening, and a
+    whisper is whole within reach -- it is made for the ear beside it --
+    whatever runs beyond the door, and whole where nothing measures the two
+    apart. Beyond reach it is lost to the distance, never to the engine."""
     from world.spatial import hear_level
-    rel = {"same_room": True, "barrier": "open", "signal": 1.0, "noise": 20.0,
-           "tier": None, "distance": "same"}
-    assert hear_level(rel, "whisper") == "none"
-    assert hear_level(rel, "whisper", proximity="within_reach") != "none"
-    # A pair the field DID place keeps the field's own distance.
-    placed = dict(rel, tier="within_reach")
-    assert hear_level(placed, "whisper", proximity="within_reach") == "none"
+    rel = {"same_room": True, "barrier": "open", "tier": None,
+           "distance": "same"}
+    assert hear_level(rel, "whisper") == "full"
+    assert hear_level(rel, "whisper", proximity="within_reach") == "full"
+    assert hear_level(rel, "whisper", proximity="across") == "none"
+    placed = dict(rel, tier="within_reach", reach="within_reach")
+    assert hear_level(placed, "whisper", proximity="within_reach") == "full"

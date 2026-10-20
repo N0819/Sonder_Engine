@@ -83,7 +83,7 @@ from world.spatial_barriers import (
 )
 
 
-from world.spatial_sound_field import C50_SMEAR_DB, clarity_db, pitched_level_db, word_for_level
+from world.spatial_sound_field import pitched_level_db, word_for_level
 from world.spatial_walk import (
     BLOCKING_HEIGHT, DEFAULT_BEAT_SECONDS, PACES, PACES_PER_SECOND,
     RUN_PACES_PER_SECOND, blocked_cells, cell_path, door_cell, entry_cell,
@@ -96,7 +96,7 @@ from world.spatial_levels import (  # noqa: E402
     infer_room_levels, rooms_over, rooms_under, stack_of, level_span, floor_edges,
 )
 from world.spatial_sound_field import (  # noqa: E402
-    ABSORPTION, REVERB_SMEAR_DB, ECHO_SPAN_PACES, TREAD_LEVEL, FLOOR_IMPACT_DB, TREAD_RUN_DB,
+    ABSORPTION, ECHO_SPAN_PACES, TREAD_LEVEL, FLOOR_IMPACT_DB, TREAD_RUN_DB,
     room_surface, room_reverberation, normalize_surface, tread_events,
     door_events, DOOR_SOURCE_PREFIX,
 )
@@ -260,6 +260,7 @@ from world.spatial_senses import (
     can_perceive_onset, comms_between, comms_link, COMMS_MODES, comms_reach,
     COMMS_ATTENDED_ROOMS, comms_reachable_rooms,
     crossing_visible_from, has_visual, hear_level, HEARING_LEVELS,
+    hearing_reason, OPEN_BARRIERS, REACH_TIERS, UNVOICED_VOLUMES,
     is_alarming, normalize_scene_comms, scent_level, SCENT_LEVELS,
     sense_acuity_offset, sense_adjusted, sense_entry, sense_needs_light,
     sense_range_class,
@@ -331,9 +332,9 @@ from world.spatial_sound_field import (
     OCCLUDER_PASS,
     failing_sound_sources_out, FRAGMENT_SNR, FULL_SNR, gain_at, HEAR_FLOOR,
     heard_events, noise_word, NOISE_WORDS, normalize_sound_level,
-    one_opening_away, open_edge_floor, RAISED_VOLUMES, room_noise_word,
+    room_noise_word,
     room_holds_a_standing_source, room_still_sounding, STANDING_SOURCE_KINDS,
-    quantise_hearing, sound_field, sound_field_hear_level, sound_notices,
+    quantise_hearing, sound_field, sound_notices,
     sound_passes, sound_shape, sound_sources, SOUND_LEVELS, SOUND_POWER,
     # An impact is not a voice and is not a machine (2026-09-06).
     EVENT_DB, EVENT_POWER,
@@ -345,8 +346,13 @@ from world.spatial_sound_field import (
     normalize_quiet, QUIET_SCALE, room_quiet,
     # A voice rises over the noise where its speaker stands (2026-09-23).
     LOMBARD_ONSET_DB, LOMBARD_SLOPE, LOMBARD_VOLUMES, lombard_level_db,
-    # The floor holds a breath and not a voice (2026-09-26, UNBUILT 1.167).
-    UNVOICED_VOLUMES,
+    # The hearing rule, restated (2026-10-20): noise decides speech only
+    # in the reach of what the story made deafening; rooms away, the room
+    # graph's loss against the quiet floor.
+    AV_BENEFIT_DB, FAR_CLEAR_EDGE_DB, far_path, far_speech_level,
+    masked_level, MASKING_LEVELS, open_air_loss_db, quantise_speech_db,
+    quiet_floor, ROOM_COUPLING_DB, SPEECH_FULL_SNR, SPEECH_FULL_SNR_DB,
+    VOICE_ROOM_DROP_DB,
     SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation,
     steadiness_this_beat, VOICE_ONE_PACE, WEATHER_NOISE, WIND_NOISE,
     # Decibels: the denomination (DESIGN_SOUND_DECIBELS.md, 2026-09-05).

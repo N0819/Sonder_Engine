@@ -25,7 +25,7 @@ from story.scene import (
     reaction_config,
 )
 from world.spatial import (apply_contact_ops, hear_level, pitched_level_db,
-                     proximity_rel, room_of, sense_adjusted, sound_bearing,
+                     measured_proximity_rel, room_of, sense_adjusted, sound_bearing,
                      spatial_rel, spatial_rel_between, visual_level_between,
                      word_for_level)
 
@@ -416,7 +416,12 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
         observer_awareness = awareness_of(amap, observer_name)
         # F4: the micro-loop used to read bare hear_level with no proximity, so
         # a muttered aside landed full-volume on an arbitrarily large room.
-        proximity = proximity_rel(scene, observer_name, actor_name)
+        # MEASURED, as every other reader passes it (2026-10-20): `near` is
+        # also `proximity_rel`'s answer for a pair nobody stationed, and the
+        # hearing rule keeps a whisper private beyond reach -- read as a
+        # distance, that default would refuse every unstationed whisper in a
+        # round that perception delivers whole.
+        proximity = measured_proximity_rel(scene, observer_name, actor_name)
         additions = []
         observations = []
         for event_index, event in enumerate(actor_result.get("sequence") or []):

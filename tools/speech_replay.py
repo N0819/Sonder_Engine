@@ -3,19 +3,25 @@
 Every `speech_percept` decision perception records (`_engine_notes.decisions`,
 "<level> via <how>; volume <v>, barrier <b>, tier <t>") is graded again by the
 engine's own `composer.line_hear_level`, on the scene of its turn as the
-checkpoint holds it: the scene BEFORE the beat for the onset pass
-(`perception_act`), after it for the outcome pass. What comes back:
+checkpoints hold it. CHECKPOINT N IS THE WORLD BEFORE TURN N (written with the
+turn row, `web/app.py:_insert_turn_row`; settled 2026-10-11), so the onset pass
+(`perception_act`) is graded on checkpoint idx and the outcome pass on idx+1 --
+the chat's live world for its last turn. Until 2026-10-20 this read idx-1 and
+idx, one beat early. What comes back:
 
   * how often the replay reproduces the recorded grade (not always: a scene
     moves inside a beat, and the act pass's reach tier is the pass's own);
   * the grades the current code gives;
-  * the CAUSE of every grade short of `full` -- the ring, a standing room
-    sound, no known path between the two rooms, a shut door, a quiet voice --
-    which is the question a hearing complaint needs answered first.
+  * the REASON for every grade short of `full`, in the hearing rule's own
+    words (`spatial.hearing_reason`: breath beyond reach, a shut door from
+    farther off, a heavy door or glass, a wall, rooms away, a deafening
+    source, no air between the two) -- the question a hearing complaint
+    needs answered first.
 
 Built for the owner's "Sound gatings is entirely overzealous" (2026-09-26,
 `docs/UNBUILT_PERCEPTION.md` § 1.167), where it measured 508 decisions in four
-test stories before and after the change. Read-only: the database is opened
+test stories before and after the change; used again for the hearing rule's
+restatement (2026-10-20, § 1.159). Read-only: the database is opened
 `mode=ro` and nothing is written.
 
 Run from the repository root:
@@ -25,9 +31,7 @@ Run from the repository root:
 from __future__ import annotations
 
 import argparse
-import copy
 import json
-import math
 import re
 import sqlite3
 import sys
@@ -38,9 +42,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agents.common import CROWDS_KEY  # noqa: E402
 from agents.composer import line_hear_level  # noqa: E402
-from world.spatial import (db_of_power, room_of, sound_field,  # noqa: E402
+from world.spatial import (hearing_reason, room_of, sound_field,  # noqa: E402
                            spatial_rel_between)
-from world.weather import room_exposure  # noqa: E402
 
 #: The frame separator world rows are keyed with (`key` + SEP + "fr<id>").
 SEP = "\x1e"
@@ -49,21 +52,18 @@ TIERS = ("within_reach", "near", "across")
 
 
 def _world_at(con, chat, idx):
+    """The world BEFORE turn `idx` (its checkpoint), or the chat's live world
+    when no such checkpoint exists -- the world after its last turn."""
     row = con.execute("SELECT blob FROM checkpoints WHERE chat_id = ? AND turn_idx = ?",
                       (chat, idx)).fetchone()
-    return (json.loads(row[0]) or {}).get("world") or {} if row else {}
+    if row:
+        return (json.loads(row[0]) or {}).get("world") or {}
+    return {key: json.loads(value) for key, value in
+            con.execute("SELECT key, value FROM world WHERE chat_id = ?", (chat,))}
 
 
 def _key(name, frame):
     return name if not frame else f"{name}{SEP}fr{frame}"
-
-
-def _without_room_sounds(scene):
-    out = copy.deepcopy(scene)
-    for room in (out.get("rooms") or {}).values():
-        if isinstance(room, dict):
-            room.pop("sound", None)
-    return out
 
 
 def grade(scene, listener, speaker, volume, tier, idx, crowds):
@@ -75,26 +75,12 @@ def grade(scene, listener, speaker, volume, tier, idx, crowds):
     return word, rel
 
 
-def cause(scene, listener, speaker, volume, tier, idx, crowds, word, rel):
-    """Why a line is short of `full`, first cause first."""
+def cause(volume, tier, word, rel):
+    """Why a line is short of `full`, in the hearing rule's own words."""
     if word == "full":
         return ""
-    if rel.get("reverberant"):
-        return f"ring ({room_exposure(scene, room_of(scene, listener))} room)"
-    if any(isinstance(r, dict) and r.get("sound") for r in (scene.get("rooms") or {}).values()):
-        quiet, _ = grade(_without_room_sounds(scene), listener, speaker, volume, tier, idx, crowds)
-        if quiet != word:
-            return "standing room sound"
-    barrier = str(rel.get("barrier") or "")
-    if barrier in ("unknown", "separated"):
-        return f"no known path ({barrier})"
-    if barrier == "closed_door":
-        return "closed door"
-    if volume in ("whisper", "mutter"):
-        return f"quiet voice ({volume})"
-    noise = rel.get("noise")
-    return (f"distance or noise ({barrier}, noise {db_of_power(noise):.0f} dB)" if noise
-            else f"other ({barrier})")
+    return hearing_reason(rel, volume, proximity=tier if tier in TIERS else None) \
+        or "other"
 
 
 def replay(db, chat=1, show=False):
@@ -103,17 +89,25 @@ def replay(db, chat=1, show=False):
         "SELECT t.idx, t.frame_id, s.key, v.content FROM turns t JOIN steps s ON s.turn_id = t.id "
         "JOIN variants v ON v.step_id = s.id AND v.active = 1 WHERE t.chat_id = ? AND "
         "s.key IN ('perception_act', 'perception_outcome') ORDER BY t.idx", (chat,)).fetchall()
-    agree, now, causes, lines, worlds = Counter(), Counter(), Counter(), [], {}
+    agree, now, causes, lines = Counter(), Counter(), Counter(), []
+    # Only the two blobs a step reads are kept, never every checkpoint: a
+    # world holds the story's charters, which run to megabytes.
+    parsed = {}
     for idx, frame, step, content in rows:
         notes = (json.loads(content) or {}).get("_engine_notes") or {}
         decisions = [d for d in notes.get("decisions") or [] if d.get("kind") == "speech_percept"]
         if not decisions:
             continue
-        at = idx if step == "perception_outcome" else idx - 1
-        if at not in worlds:
-            worlds[at] = _world_at(con, chat, at)
-        scene = worlds[at].get(_key("scene", frame)) or {}
-        crowds = worlds[at].get(_key(CROWDS_KEY, frame)) or []
+        at = idx if step == "perception_act" else idx + 1
+        if (at, frame) not in parsed:
+            world = _world_at(con, chat, at)
+            parsed = {(at, frame): (world.get(_key("scene", frame)) or {},
+                                    world.get(_key(CROWDS_KEY, frame)) or [])}
+        scene, crowds = parsed[(at, frame)]
+        if isinstance(scene, str):
+            scene = json.loads(scene)
+        if isinstance(crowds, str):
+            crowds = json.loads(crowds)
         if not scene:
             continue
         for d in decisions:
@@ -125,15 +119,12 @@ def replay(db, chat=1, show=False):
             word, rel = grade(scene, listener, speaker, volume, tier, idx, crowds)
             agree[word == level] += 1
             now[word] += 1
-            why = cause(scene, listener, speaker, volume, tier, idx, crowds, word, rel)
+            why = cause(volume, tier, word, rel)
             if why:
                 causes[(word, why)] += 1
             if show and word != "full":
-                sig, noise = rel.get("signal"), rel.get("noise")
-                detail = (f" [path {10 * math.log10(sig):.1f} dB, noise {db_of_power(noise):.1f} dB]"
-                          if sig and noise else "")
                 lines.append(f"   t{idx} {step[11:]:7s} {speaker} -> {listener} ({volume}, {barrier}, "
-                             f"{tier}): recorded {level}, now {word}: {why}{detail}")
+                             f"{tier}): recorded {level}, now {word}: {why}")
     total = sum(agree.values())
     print(f"== {db}: {total} decisions; the replay reproduces the recorded grade on "
           f"{agree[True]} ({100 * agree[True] / max(1, total):.0f}%); grades now "

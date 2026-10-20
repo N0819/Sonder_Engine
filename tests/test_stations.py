@@ -414,18 +414,17 @@ def test_whisper_is_attenuated_in_room_like_mutter():
     (deterministic_micro_perception), so whispered content was delivered
     verbatim across a great hall: an information-boundary leak.
 
-    Whisper is held to mutter's tiers and deliberately NO TIGHTER yet. The
-    spec ('whisper: ONLY same-room perceivers in close proximity') would
-    justify silence beyond reach, but 'near' is overwhelmingly the DEFAULT
-    proximity_rel returns when no station data exists -- measured live, only
-    6.7% of bodies carry an anchored station and 8.6% of multi-occupant rooms
-    have two -- so reading it as a measured distance would silence ~91% of
-    whispers entirely. Tighten when station coverage makes the tier evidence.
-    """
+    TIGHTENED 2026-10-20 by the owner's ruling (the hearing rule): a whisper
+    is private beyond arm's reach -- `near` is no longer caught in pieces, it
+    is lost. The worry that held it back is answered where the tier is made:
+    callers pass a MEASURED tier (`measured_proximity_rel`) or none, so
+    `near` here is two stations a few steps apart and never the default.
+    Only the mutter keeps its band of pieces a pace or two off."""
     same = {"same_room": True}
     assert hear_level(same, "whisper", proximity="within_reach") == "full"
-    assert hear_level(same, "whisper", proximity="near") == "fragment"
+    assert hear_level(same, "whisper", proximity="near") == "none"
     assert hear_level(same, "whisper", proximity="across") == "none"
+    assert hear_level(same, "mutter", proximity="near") == "fragment"
     # Back-compat: unknown proximity keeps same-room -> full, as mutter does.
     assert hear_level(same, "whisper") == "full"
     # The invariant that must survive any future tightening: the quietest

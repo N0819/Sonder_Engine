@@ -213,18 +213,26 @@ def test_light_field_sees_a_doorway_widen():
 def test_sound_field_sees_a_doorway_walled_up_on_its_passage_record():
     """The sibling: a shout across the same doorway went on arriving at
     `full` through a wall, pair gain 0.02117, and a door shut on the
-    passage record left the gain at its open value instead of 0.00529."""
-    _clear()
-    sound_field(_passage_scene("open"), "Ann", turn_idx=1)
-    walled = sound_field(_passage_scene("wall"), "Ann", turn_idx=1)
-    assert walled.speech_level("Bo", "shout", "Ann") is None
+    passage record left the gain at its open value instead of 0.00529.
+
+    RESTATED 2026-10-20: a voice reads no field gain any more (the hearing
+    rule), so the reader asked is a SOUND -- a one-beat crash at Bo's side of
+    the doorway, graded at Ann's ear -- which reads the same composite the
+    cache key has to name the passage record for."""
+    def crash_gain(barrier):
+        sc = _passage_scene(barrier)
+        events = [{"kind": "sound", "source_room": "lamp_room",
+                   "level": "loud", "detail": "a crash"}]
+        field = sound_field(sc, "Ann", turn_idx=1, events=events)
+        return field.signal_at("Ann", "event:0") if field else None
 
     _clear()
-    through_open = sound_field(_passage_scene("open"), "Ann",
-                               turn_idx=1).gain_between("Bo", "Ann")
-    shut = sound_field(_passage_scene("closed_door"), "Ann",
-                       turn_idx=1).gain_between("Bo", "Ann")
-    assert shut < through_open
+    crash_gain("open")
+    assert not crash_gain("wall")          # a wall places no neighbour
+    _clear()
+    through_open = crash_gain("open")
+    shut = crash_gain("closed_door")
+    assert through_open and shut and shut < through_open
 
 
 def _probed(scene, name):

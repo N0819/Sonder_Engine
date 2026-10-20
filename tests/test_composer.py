@@ -651,27 +651,26 @@ def test_attention_does_not_beat_air_that_is_working():
     delivered verbatim on four beats (lighthouse, PA4), and a line from two
     closed doors and a room away delivered complete in a view whose two
     UNADDRESSED voices were correctly fragments (the Cold Season Ball, PX6).
-    Sound reached both places -- that is the point. Where the sound field
-    could place the pair it stamps `signal`, and where it could at least say
-    what this room's best opening admits it stamps `door_gain`; either way the
-    air has an answer and the address does not overrule it.
+    Sound reached both places -- that is the point. Where the field relates
+    the two rooms -- one room, neighbours, or any chain of edges -- it stamps
+    `air`, and the air's answer stands; the address does not overrule it.
 
     The case the shape floor was earned for is the complement, and
     `test_shape_floor_rescues_an_untagged_named_remote_line` pins it: a party
-    with no acoustic relationship at all carries neither key, and a line that
+    with no acoustic relationship at all carries no `air`, and a line that
     arrives by name there arrives by a device.
-    """
+
+    RESTATED 2026-10-20 (the hearing rule): the stamp was `signal` or
+    `door_gain`, and both are gone with the signal-to-noise grading. A wall
+    passes a normal voice not at all and a shut door from across the room in
+    pieces, and the address changes neither."""
     entry = {"volume": "normal", "text": "Get down here.",
              "intended_target": "Alice", "speaker": "Bram"}
-    # RECALIBRATED 2026-09-14: the noise that refuses a normal voice at
-    # these gains is 1000.0 (70 dB, a machine in the room) on the real
-    # ladder, where 18.0 (52.6 dB) did it on the compressed one; a real
-    # voice at -14 dB is 49 and is caught in pieces against 52.6.
-    for answered in ({"barrier": "wall", "signal": 0.04, "noise": 1000.0},
-                     {"barrier": "closed_door", "door_gain": 0.2,
-                      "noise": 1000.0}):
-        assert composer.hear_level(answered, "normal") == "none"
-        assert composer.line_hear_level(entry, answered, "Alice") == "none"
+    for answered, word in (({"barrier": "wall", "air": True}, "none"),
+                           ({"barrier": "closed_door", "air": True},
+                            "fragment")):
+        assert composer.hear_level(answered, "normal") == word
+        assert composer.line_hear_level(entry, answered, "Alice") == word
     # Nothing placed the pair: the device is the only explanation.
     assert composer.line_hear_level(
         entry, {"barrier": "separated", "distance": "remote"},

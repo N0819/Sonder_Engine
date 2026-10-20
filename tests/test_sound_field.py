@@ -235,14 +235,18 @@ def test_a_whisper_across_a_large_room_dies_and_beside_the_speaker_lives():
 
 
 def test_a_shout_through_a_closed_door_and_a_normal_voice_through_it():
-    """Far walls of two medium rooms through a shut door: path 6.8, pass
-    0.25, gain 0.005 -> normal fragment (the edge rule's own answer), loud
-    and shout full, mutter and whisper none. Door to door (path 3): normal
-    full."""
+    """Far walls of two medium rooms through a shut door: normal fragment
+    (the edge rule's own answer), loud and shout full, mutter and whisper
+    none. Door to door: normal full.
+
+    RESTATED 2026-10-20 (the hearing rule): the table is the answer and the
+    field stamps no gain on the pair -- what it stamps is whether the air
+    relates them (`air`), which a shut door does."""
     sc = scene(two_rooms("closed_door"), {"S": "a", "L": "b"},
                {"S": {"at": "c"}, "L": {"at": "w"}})
     rel = spatial_rel_between(sc, "L", "S")
-    assert "signal" in rel and "noise" in rel
+    assert rel.get("air") is True and not rel.get("door_reach")
+    assert "signal" not in rel and "noise" not in rel
     heard = levels(sc, "S", "L")
     assert {v: heard[v] for v in ("mutter", "whisper", "loud", "shout")} == {
         "mutter": "none", "whisper": "none", "loud": "full", "shout": "full"}
@@ -296,7 +300,11 @@ def test_a_counter_is_crossed_and_a_partition_is_gone_round():
     signal 0.0067 against noise 0.32, `none`, because the flood walked 12
     cells round the end of the counter for a four-cell straight line, and
     neither of the two people standing in the room received either the lie
-    or its correction (`PLAY_2026_09_05_flat.md` § PE1)."""
+    or its correction (`PLAY_2026_09_05_flat.md` § PE1).
+
+    RESTATED 2026-10-20: a voice in one room is heard whole whatever the
+    flood walks (the hearing rule), and the flood is what a SOUND crosses
+    the room by -- a source at the speaker's cell, read with `gain_at`."""
     behind = scene(hall(), {"S": "hall", "L": "hall"},
                    {"S": {"at": "south"}, "L": {"at": "counter", "cover": True}})
     f_behind = sound_field(behind, "L")
@@ -333,7 +341,7 @@ def test_a_counter_is_crossed_and_a_partition_is_gone_round():
                {"S": {"cell": [5, 1]}, "L": {"cell": [1, 2]}})
     assert levels(sc, "S", "L")["normal"] == "full"
     # The same room with a FULL-height partition standing between them: the
-    # flood goes round it, and the voice pays the whole detour.
+    # flood goes round it, and a sound pays the whole detour.
     partitioned = scene(copy.deepcopy(kitchen), {"S": "kitchen", "L": "kitchen"},
                         {"S": {"cell": [5, 1]}, "L": {"cell": [1, 2]}})
     for y in range(6):
@@ -341,25 +349,30 @@ def test_a_counter_is_crossed_and_a_partition_is_gone_round():
             "desc": "a full-height screen", "cell": [3, y], "height": "full"}
     f_open = sound_field(sc, "L")
     f_shut = sound_field(partitioned, "L")
-    assert (f_shut.gain_between("S", "L")
-            < f_open.gain_between("S", "L") * 0.5)
+
+    def pair_gain(field):
+        return gain_at(field.spread_from(field.locate("S")), field.locate("L"))
+
+    assert pair_gain(f_shut) < pair_gain(f_open) * 0.5
     # And a body whose station lands ON an occluder's cell is not deaf: a
-    # listener standing where another anchor's seeded cell fell hears the
-    # speaker beside them in full (until 2026-09-04 the flood never entered
-    # the cell and stamped a signal of 0 -- a shout beside them was `none`).
+    # listener standing where another anchor's seeded cell fell is reached
+    # by the flood (until 2026-09-04 the flood never entered the cell and a
+    # shout beside them was `none`).
     at_counter = scene(hall(), {"S": "hall", "L": "hall"},
                        {"S": {"at": "south"}, "L": {"at": "counter"}})
     f = sound_field(at_counter, "L")
     f.grid.height[f.locate("L")] = 1.0        # force the case whatever the seed did
     f._spreads.clear()
-    assert f.gain_between("S", "L") > 0
-    assert f.speech_level("S", "shout", "L") == "full"
+    assert pair_gain(f) > 0
+    assert levels(at_counter, "S", "L")["shout"] == "full"
 
 
 def _gain_through(barrier, material=None):
+    """What a sound at S's cell keeps at L's, through the barrier."""
     sc = scene(two_rooms(barrier, material), {"S": "a", "L": "b"},
                {"S": {"at": "c"}, "L": {"at": "w"}})
-    return spatial_rel_between(sc, "L", "S")["signal"]
+    field = sound_field(sc, "L")
+    return gain_at(field.spread_from(field.locate("S")), field.locate("L"))
 
 
 def test_aperture_attenuation_per_barrier_and_material():
@@ -383,91 +396,85 @@ GENERATOR = {"gen": {"name": "generator", "kind": "machine",
 
 
 def test_a_loud_generator_masks_a_normal_voice():
-    """Listener at the hearth, speaker beside them, a loud generator at the
-    east window three paces off. RECALIBRATED 2026-09-14: the generator is
-    a real engine, 80 dB(A) at a pace, and reads 73.5 dB at the hearth.
-    On the compressed ladder the same engine read 44.6 dB and a normal
-    voice beside the listener was a fragment; that engine was as loud as a
-    loud voice, which is the defect the recalibration retired.
+    """OVERTURNED 2026-10-20 by the owner's ruling: NOISE NEVER MASKS SPEECH
+    but for what the story makes deafening. The name is kept so the history
+    reads; what it pins now is the complement.
 
-    RECALIBRATED AGAIN 2026-09-23 for the Lombard effect
-    (`lombard_level_db`): a speaker raises a conversational voice over the
-    noise where THEY stand, 0.6 dB for every dB above 45. Beside the
-    listener a normal line now rises to about 80 and is caught in pieces,
-    a raised voice clears the engine, and a whisper or a mutter -- a choice
-    to be quiet -- is still gone. Speaker at the west wall (path 5.2) with
-    the generator on: every effort arrives in pieces. The same pair with no
-    generator is `full`.
-
-    The speaker beside the listener is PINNED one pace west of them, on the
-    side away from the engine: until 2026-10-13 a body placed beside the
-    listener was stood on the hearth's own cell, as far from the generator,
-    and the step beside a body now keeps out of every fixture
-    (`spatial_fov.body_cell`), which stood it two paces nearer the engine --
-    where it raises its voice clear of it."""
+    Pinned 2026-09-14 and 2026-09-23 on this fixture: a `loud` generator (80
+    dB(A) at a pace) three paces off made a normal line beside the listener
+    a fragment and every effort from the far wall a fragment. In play the
+    same rule turned a kettle the opening wrote `loud` into a wall a shout
+    three paces off arrived through as "Thank..." (chat 176 turn 2). A voice
+    rises with the noise it shares (the Lombard effect) and is followed at 0
+    dB: so beside the engine every line is whole, and from the far wall of
+    the large hall every voiced one is, while the breath-level ones are lost
+    for the reason they always are -- the two are across the hall, beyond
+    reach -- and not because of the engine."""
     quiet = scene(hall(), {"S": "hall", "L": "hall"},
                   {"L": {"at": "south"}, "S": {"near": ["L"]}})
     noisy = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
                   {"gen": {"at": "east"}, "L": {"at": "south"},
                    "S": {"near": ["L"], "cell": [3, 6]}}, GENERATOR)
-    assert levels(quiet, "S", "L")["normal"] == "full"
-    assert levels(noisy, "S", "L") == {"mutter": "none", "whisper": "none",
-                                       "normal": "fragment", "loud": "full",
-                                       "shout": "full"}
+    assert levels(quiet, "S", "L") == {v: "full" for v in VOLUMES}
+    assert levels(noisy, "S", "L") == {v: "full" for v in VOLUMES}
+    assert "masking_db" not in spatial_rel_between(noisy, "L", "S")
     far = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
                 {"gen": {"at": "east"}, "L": {"at": "south"},
-                 "S": {"at": "west"}}, GENERATOR)
-    assert levels(far, "S", "L")["normal"] == "fragment"
-    assert levels(far, "S", "L")["loud"] == "fragment"
-    assert levels(far, "S", "L")["shout"] == "fragment"
+                 "S": {"at": "west"}}, copy.deepcopy(GENERATOR))
+    assert levels(far, "S", "L") == {"mutter": "none", "whisper": "none",
+                                     "normal": "full", "loud": "full",
+                                     "shout": "full"}
+    # The same far pair with the engine switched off answers the same: the
+    # breath was never the engine's to take.
+    far["entities"]["gen"]["state"] = {"running": False}
+    assert levels(far, "S", "L")["whisper"] == "none"
 
 
 def test_the_listener_hears_their_own_running_machine_first():
     """A held running generator is at the listener's own cell (the carried
-    entity derives to its holder): a voice beside them, raised over the
-    engine at every conversational effort (`lombard_level_db`, 2026-09-23),
-    is caught in pieces, and a whisper or a mutter is gone. Switched off
-    (`state.running` false) the same pair is `full` at every volume."""
+    entity derives to its holder), and it is the field's source there.
+
+    OVERTURNED 2026-10-20 by the owner's ruling, for what it did to speech:
+    the voice beside them, raised over the engine at every conversational
+    effort, was pinned in pieces and a whisper gone. A `loud` thing is an
+    everyday one -- the same word is a whistling kettle -- and nothing short
+    of deafening takes a voice away, so every line from beside them is
+    whole, running or switched off."""
     sc = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
-               {"L": {"at": "south"}, "S": {"near": ["L"]}}, GENERATOR,
+               {"L": {"at": "south"}, "S": {"near": ["L"]}},
+               copy.deepcopy(GENERATOR),
                contained={"gen": {"in": "L", "mode": "held"}})
     field = sound_field(sc, "L")
     [source] = field.sources
     assert source["holder"] == "L" and source["at"] == field.locate("L")
-    assert levels(sc, "S", "L") == {"mutter": "none", "whisper": "none",
-                                    "normal": "fragment", "loud": "fragment",
-                                    "shout": "fragment"}
+    assert levels(sc, "S", "L") == {v: "full" for v in VOLUMES}
     sc["entities"]["gen"]["state"] = {"running": False}
     assert sound_field(sc, "L").sources == []
     assert levels(sc, "S", "L") == {v: "full" for v in VOLUMES}
 
 
 def test_two_normal_voices_at_once_mask_each_other():
-    """Speakers at opposite walls of a medium room. A listener at the south
-    wall, roughly equidistant, gets a fragment of one and nothing of the
-    other where either voice alone would be `full`; a listener beside A
-    hears A in full and B not at all."""
+    """OVERTURNED 2026-10-20 by the owner's ruling: noise never masks speech
+    but for what the story makes deafening, and another voice is not that.
+    The name is kept so the history reads.
+
+    Pinned 2026-09-04 through `sound_field(..., speakers=...)`, the one way
+    to place two voices on the field at once -- which no reader in the
+    engine ever called: lines were always graded one at a time. The
+    parameter is gone with the speech kind it placed, and a listener at the
+    south wall follows either speaker across a medium room, as a listener
+    at a party follows the conversation they turn to."""
+    import inspect
     rooms = {"m": room("medium", {
         "t": {"desc": "a table", "dir": "n", "height": "waist"},
         "w": {"desc": "west", "dir": "w"}, "e": {"desc": "east", "dir": "e"},
         "s": {"desc": "south", "dir": "s"}})}
     sc = scene(rooms, {"A": "m", "B": "m", "L": "m"},
                {"A": {"at": "w"}, "B": {"at": "e"}, "L": {"at": "s"}})
-    both = sound_field(sc, "L", speakers={"A": "normal", "B": "normal"})
-    alone = sound_field(sc, "L", speakers={"A": "normal"})
-    assert alone.level_of("L", "speech:A") == "full"
-    assert both.level_of("L", "speech:A") != "full"
-    assert both.level_of("L", "speech:B") != "full"
-    sc = scene(rooms, {"A": "m", "B": "m", "L": "m"},
-               {"A": {"at": "w"}, "B": {"at": "e"}, "L": {"near": ["A"]}})
-    both = sound_field(sc, "L", speakers={"A": "normal", "B": "normal"})
-    assert both.level_of("L", "speech:A") == "full"
-    # RECALIBRATED 2026-09-14: B's voice across the room arrives 8 dB under
-    # A's beside the listener (52 against 60), and pieces of a second voice
-    # are caught down to a sixteenth of the room (`FRAGMENT_SNR` -12 dB) --
-    # which is what a listener at a party does with the conversation behind
-    # them. It was `none` at the old -1 dB margin.
-    assert both.level_of("L", "speech:B") == "fragment"
+    assert "speakers" not in inspect.signature(sound_field).parameters
+    assert "speakers" not in inspect.signature(sound_sources).parameters
+    assert levels(sc, "A", "L")["normal"] == "full"
+    assert levels(sc, "B", "L")["normal"] == "full"
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +482,16 @@ def test_two_normal_voices_at_once_mask_each_other():
 # ---------------------------------------------------------------------------
 
 def test_outdoors_and_weather_raise_the_floor():
+    """The floor a SOUND is heard over rises outdoors and in weather
+    (`SoundField.noise_at`, which the field's description and its sounds
+    read).
+
+    OVERTURNED 2026-10-20 by the owner's ruling for what it did to speech:
+    a whisper beside the listener, `full` indoors, was pinned in pieces in
+    a gale. Weather is everyday noise and never masks speech (the owner,
+    2026-09-26: "Rain is not even that loud you could still call to someone
+    across a street in rain"), so the whisper at arm's reach is whole in
+    the storm too."""
     inside = scene(hall(), {"S": "hall", "L": "hall"},
                    {"S": {"at": "west"}, "L": {"at": "east"}})
     outside = scene(hall(), {"S": "hall", "L": "hall"},
@@ -485,18 +502,11 @@ def test_outdoors_and_weather_raise_the_floor():
                   weather={"sky": "storm", "precipitation": "rain",
                            "intensity": "heavy", "wind": "gale"})
     storm["rooms"]["hall"]["exposure"] = "open"
-    n_in = spatial_rel_between(inside, "L", "S")["noise"]
-    n_out = spatial_rel_between(outside, "L", "S")["noise"]
-    n_storm = spatial_rel_between(storm, "L", "S")["noise"]
+    n_in = sound_field(inside, "L").noise_at("L")
+    n_out = sound_field(outside, "L").noise_at("L")
+    n_storm = sound_field(storm, "L").noise_at("L")
     assert n_in < n_out < n_storm
     assert levels(inside, "S", "L")["normal"] == "full"
-    # RECALIBRATED 2026-09-14: the storm's floor is 42.0 dB on the weather
-    # table, which is still the compressed one (a real gale with heavy rain
-    # is 60-70 dB(A)), so a real normal voice (63 at the cell, 47.6 across
-    # the hall) is still `full` in it; what the storm costs is the quiet
-    # end of the ladder -- a whisper beside you, `full` indoors, is caught
-    # in pieces in the gale. The weather table is registered with the
-    # aperture table in `docs/UNBUILT.md`.
     assert levels(storm, "S", "L")["normal"] == "full"
     beside_in = scene(hall(), {"S": "hall", "L": "hall"},
                       {"S": {"at": "west"}, "L": {"near": ["S"]}})
@@ -505,7 +515,7 @@ def test_outdoors_and_weather_raise_the_floor():
                          weather=storm["weather"])
     beside_storm["rooms"]["hall"]["exposure"] = "open"
     assert levels(beside_in, "S", "L")["whisper"] == "full"
-    assert levels(beside_storm, "S", "L")["whisper"] == "fragment"
+    assert levels(beside_storm, "S", "L")["whisper"] == "full"
 
 
 def test_a_road_is_a_road_you_can_walk_and_talk_down():
@@ -516,12 +526,13 @@ def test_a_road_is_a_road_you_can_walk_and_talk_down():
     and the weather is counted separately. Before the move an ordinary voice
     outdoors was `full` only inside about five paces and 3.3 in light rain,
     so two people walking together on an open road could not converse
-    (`PLAY_2026_09_05_road.md` § PD2). The rule the constants must satisfy,
-    stated by the run that found it: the road takes their voices at the
-    distance you would have to raise your voice in life.
+    (`PLAY_2026_09_05_road.md` § PD2).
 
     The test § 1.120 asked to land with: an empty open room, fair weather,
-    two bodies four paces apart, a normal voice."""
+    two bodies four paces apart, a normal voice. OVERTURNED IN PART
+    2026-10-20 by the owner's ruling: a downpour took a whisper at one pace
+    from whole to pieces, and weather never masks speech -- the rain still
+    raises the floor a SOUND is heard over, which is what is left to pin."""
     from world.spatial import AMBIENT, WEATHER_NOISE
     assert AMBIENT["open"] == 0.1 and AMBIENT["open"] == AMBIENT["sheltered"]
     assert WEATHER_NOISE == {"light": 0.1, "moderate": 0.25, "heavy": 0.5}
@@ -538,39 +549,27 @@ def test_a_road_is_a_road_you_can_walk_and_talk_down():
 
     fair = road()
     assert levels(fair, "A", "B")["normal"] == "full"
-    # Rain you can talk through until it is heavy. RECALIBRATED 2026-09-14:
-    # a real normal voice at four paces (63 - 12.3 = 50.7 dB) clears the
-    # downpour's 37.0 dB floor too, because the weather table is still on
-    # the compressed scale (real heavy rain is 55-65 dB(A)). So the
-    # downpour no longer cuts an ordinary voice at four paces; it cuts the
-    # quiet end of the ladder, and the table is registered with the
-    # apertures in `docs/UNBUILT.md`.
-    for intensity, expected in (("light", "full"), ("moderate", "full"),
-                                ("heavy", "full")):
+    for intensity in ("light", "moderate", "heavy"):
         wet = road({"sky": "rain", "precipitation": "rain",
                     "intensity": intensity, "wind": "calm"})
-        assert levels(wet, "A", "B")["normal"] == expected, intensity
+        assert levels(wet, "A", "B")["normal"] == "full", intensity
     downpour = road({"sky": "rain", "precipitation": "rain",
                      "intensity": "heavy", "wind": "calm"})
-    assert spatial_rel_between(downpour, "B", "A")["noise"] \
-        > spatial_rel_between(fair, "B", "A")["noise"]
-    # What four paces of downpour DOES cost on this table: the quiet end.
-    # A mutter (38 at a pace) at four paces is a fragment either way and a
-    # whisper is gone either way, so the cost shows at one pace, where the
-    # whisper beside you goes from whole to pieces.
+    assert sound_field(downpour, "B").noise_at("B") \
+        > sound_field(fair, "B").noise_at("B")
     near_fair = road()
     near_fair["stations"]["B"] = {"cell": [2, 4]}
     near_wet = road({"sky": "rain", "precipitation": "rain",
                      "intensity": "heavy", "wind": "calm"})
     near_wet["stations"]["B"] = {"cell": [2, 4]}
     assert levels(near_fair, "A", "B")["whisper"] == "full"
-    assert levels(near_wet, "A", "B")["whisper"] == "fragment"
-    # And a still yard is now no noisier than a porch, which is the claim:
-    # the difference between them is what the sky can reach them with.
+    assert levels(near_wet, "A", "B")["whisper"] == "full"
+    # And a still yard is no noisier than a porch, which is the claim: the
+    # difference between them is what the sky can reach them with.
     porch = road()
     porch["rooms"]["road"]["exposure"] = "sheltered"
-    assert spatial_rel_between(porch, "B", "A")["noise"] \
-        == spatial_rel_between(fair, "B", "A")["noise"]
+    assert sound_field(porch, "B").noise_at("B") \
+        == sound_field(fair, "B").noise_at("B")
 
 
 def test_a_crowd_is_a_source_at_its_rooms_centre_by_band():
@@ -824,49 +823,39 @@ def _pair_rooms():
 
 def test_the_gain_between_two_bodies_is_the_same_in_both_directions():
     """PB2, brute-forced over EVERY pair of cells of a two-room fixture, as
-    `tests/test_wall_is_a_line.py` does for a sight line: the same pair
-    asked from either body's own field, and from either end, is one number.
+    `tests/test_wall_is_a_line.py` does for a sight line: the flood's gain
+    from one cell to another is the gain back, on either body's field.
 
     The live case: a courtyard and a gate across one open arch, one beat,
     one pair -- the warden's field answered 0.0309 for the shout and the
     shouter's answered 0.0, so the warden heard and replied while the
     narrator wrote "no reply comes" over the reply
-    (`PLAY_2026_09_05_caravanserai.md` § PB2)."""
+    (`PLAY_2026_09_05_caravanserai.md` § PB2).
+
+    RESTATED 2026-10-20: a voice no longer reads the flood (the hearing rule
+    grades the pair by what stands between them, which has no direction), so
+    what this pins is the flood itself -- the path every SOUND crosses a
+    room by -- reciprocal on each composite."""
     sc = scene(_pair_rooms(), {"S": "yard", "L": "gate"},
                {"S": {"cell": [0, 0]}, "L": {"cell": [0, 0]}})
     fields = {r: sound_field(sc, name, room=r)
               for r, name in (("yard", "S"), ("gate", "L"))}
     assert all(f is not None for f in fields.values())
-    cells = {r: sorted(c for c, rid in fields[r].grid.inside.items()
-                       if rid == r) for r in ("yard", "gate")}
-    seen = set()
     pairs = 0
-    for s_room in ("yard", "gate"):
-        for l_room in ("yard", "gate"):
-            for s_cell in cells[s_room]:
-                for l_cell in cells[l_room]:
-                    sc["positions"] = {"S": s_room, "L": l_room}
-                    sc["stations"] = {"S": {"cell": list(s_cell)},
-                                      "L": {"cell": list(l_cell)}}
-                    answers = {
-                        f.gain_between("S", "L", speaker_room=s_room,
-                                       listener_room=l_room)
-                        for f in fields.values()}
-                    answers |= {
-                        f.gain_between("L", "S", speaker_room=l_room,
-                                       listener_room=s_room)
-                        for f in fields.values()}
-                    assert None not in answers or answers == {None}, (
-                        s_room, s_cell, l_room, l_cell, answers)
-                    if answers != {None}:
-                        # One number, to within the order the products
-                        # happened to be multiplied in.
-                        assert max(answers) - min(answers) <= 1e-9, (
-                            s_room, s_cell, l_room, l_cell, answers)
-                    seen |= answers
-                    pairs += 1
+    carried = False
+    for field in fields.values():
+        cells = sorted(field.grid.inside)
+        for a in cells:
+            from_a = field.spread_from(a)
+            for b in cells:
+                there = gain_at(from_a, b)
+                back = gain_at(field.spread_from(b), a)
+                assert abs(there - back) <= 1e-9, (a, b, there, back)
+                carried |= there > 0.0 and field.grid.inside[a] \
+                    != field.grid.inside[b]
+                pairs += 1
     assert pairs >= 100
-    assert any(g and g > 0.0 for g in seen)        # the arch does carry
+    assert carried                      # the arch does carry
 
 
 def test_a_shout_across_the_arch_is_heard_from_either_side():
@@ -911,23 +900,25 @@ def _three_rooms(bell=None):
 
 
 def test_noise_beside_the_listener_masks_a_voice_from_beyond_the_field():
-    """PA5. A listener's noise floor is a property of where the LISTENER
-    stands, so it grades a voice from two rooms off exactly as it grades one
-    in the room. Live: the fog bell drowned an ordinary voice IN the watch
-    room (signal 0.34, noise 20.5) while a shout from three rooms away
-    arrived whole, because the edge model had no idea there was a bell
-    (`PLAY_2026_09_05_lighthouse.md` § PA5)."""
+    """PA5. A listener's noise is a property of where the LISTENER stands,
+    so it grades a voice from two rooms off exactly as it grades one in the
+    room. Live: the fog bell drowned an ordinary voice IN the watch room
+    (signal 0.34, noise 20.5) while a shout from three rooms away arrived
+    whole, because the edge model had no idea there was a bell
+    (`PLAY_2026_09_05_lighthouse.md` § PA5).
+
+    KEPT 2026-10-20 under the hearing rule: the bell is `deafening`, the one
+    class of standing noise that may take a voice away, so the voice from
+    the kitchen is graded against it (`masking_db`) as the one in the room
+    is. The pair two rooms apart is the room graph's (`far_loss_db`)."""
     quiet = _three_rooms()
-    # The ROOM GRAPH answers this pair now (`far_path_gain`, 2026-09-06):
-    # two hops is a distance, and `separated` was one word for every
-    # distance. The masking rule below is what this test is really about
-    # and is unchanged by that -- it is the same `noise`, read at the same
-    # ear, grading whatever signal arrives.
-    assert spatial_rel_between(quiet, "L", "S").get("signal") is not None
+    rel = spatial_rel_between(quiet, "L", "S")
+    assert rel.get("far_loss_db") is not None
+    assert "masking_db" not in rel
     assert levels(quiet, "S", "L")["shout"] != "none"
     loud = _three_rooms(bell="deafening")
     rel = spatial_rel_between(loud, "L", "S")
-    assert rel.get("door_gain") and rel.get("noise")
+    assert rel.get("masking_db") is not None
     assert levels(loud, "S", "L")["shout"] == "none"
     # And the same bell drowns a voice IN the room, which it always did:
     # one rule, both paths.
@@ -938,21 +929,18 @@ def test_noise_beside_the_listener_masks_a_voice_from_beyond_the_field():
 
 
 def test_a_quiet_room_masks_nothing_and_a_vouched_channel_is_exempt():
-    """The ceiling only ever SUBTRACTS: a quiet listener's `door_gain` takes
-    nothing away from what the air delivered.
-
-    Stated against the door ceiling itself rather than against the edge
-    model, which is what it used to compare to and which no longer answers
-    this pair (`far_path_gain`). The invariant is the one that matters and
-    the one the name claims: a cap may lower a grade and may never raise
-    one."""
-    rel = spatial_rel_between(_three_rooms(), "L", "S")
-    uncapped = {k: v for k, v in rel.items() if k != "door_gain"}
+    """The masking cap only ever SUBTRACTS: a relation read with its
+    masking stamp never grades a voice above the same relation without one.
+    And a vouched channel is not this room's air: the noise says nothing."""
+    rel = spatial_rel_between(_three_rooms(bell="deafening"), "L", "S")
+    unmasked = {k: v for k, v in rel.items()
+                if k not in ("masking_db", "speaker_masking_db")}
     order = {"none": 0, "fragment": 1, "full": 2}
     for volume in VOLUMES:
         assert order[hear_level(rel, volume)] <= order[
-            hear_level(uncapped, volume)], volume
-    # A vouched channel is not this room's air: the doorway says nothing.
+            hear_level(unmasked, volume)], volume
+    quiet = spatial_rel_between(_three_rooms(), "L", "S")
+    assert "masking_db" not in quiet
     loud = spatial_rel_between(_three_rooms(bell="deafening"), "L", "S")
     loud["barrier"] = "unknown"
     assert hear_level(loud, "shout", vouched=True) == "fragment"
@@ -979,66 +967,61 @@ def _across_one_edge(barrier="open", *, machine=None, at_the_ear=False):
 
 
 def test_a_raised_voice_across_one_opening_is_at_worst_a_fragment():
-    """PC3's second half. The edge model always delivered a shout through an
-    archway; the field, which knows the path and the noise, can refuse the
-    same shout -- so when both perception passes came to read the field a
-    shout across one open archway could reach nobody at all. One passable
-    edge away, a raised voice floors at `fragment`."""
-    from world.spatial import sound_field_hear_level
+    """PC3, restated. One passable opening away a voice is heard: the edge
+    model always delivered a shout through an archway, and when both
+    perception passes came to read the field, a shout across one open arch
+    could reach nobody at all.
+
+    OVERTURNED IN PART 2026-10-20 by the owner's ruling: with a `loud`
+    machine running in the listener's room the field refused a `loud` call
+    across the arch and floored the shout at a fragment. A `loud` machine
+    masks no voice, and through an opening every voiced line is whole (the
+    hearing rule): normal, raised and shouted alike, from either end."""
     sc = _across_one_edge("open", machine="loud")
     rel = spatial_rel_between(sc, "L", "S")
-    assert rel.get("open_edge") is True
-    assert rel.get("signal") is not None          # the field DID place them
-    # RECALIBRATED 2026-09-14: against a real engine (78.3 dB at the
-    # listener) the field refuses a `loud` call across the archway (73 at
-    # the cell, 16.7 of path: 10 dB under the fragment margin) and lets a
-    # shout through in pieces; before, it refused the shout. The floor is
-    # the same sentence either way: one opening away, a raised voice is at
-    # worst a fragment.
-    assert sound_field_hear_level("loud", rel["signal"], rel["noise"]) == "none"
-    assert sound_field_hear_level("shout", rel["signal"], rel["noise"]) \
-        == "fragment"
-    assert hear_level(rel, "shout") == "fragment"
-    assert hear_level(rel, "loud") == "fragment"
-    # Only a RAISED voice: an ordinary one still follows the field.
-    assert hear_level(rel, "normal") == "none"
-    # And it is the same answer from either end (PB2): the machine is in
-    # L's room, so the two noises differ and the OPENING does not.
+    assert "masking_db" not in rel
+    for volume in ("normal", "loud", "shout"):
+        assert hear_level(rel, volume) == "full", volume
     other_way = spatial_rel_between(sc, "S", "L")
-    assert other_way.get("open_edge") is True
-    assert hear_level(other_way, "shout") != "none"
+    for volume in ("normal", "loud", "shout"):
+        assert hear_level(other_way, volume) == "full", volume
 
 
 def test_the_floor_needs_an_opening_and_yields_to_the_room_it_arrives_in():
-    """A shut door is not an opening, two edges away is not one edge, and an
-    opening carries a voice INTO a room rather than through the machine
-    running in it -- the same masking rule everything else answers to."""
+    """A shut door is not an opening, and an opening carries a voice INTO a
+    room rather than through what drowns it.
+
+    RESTATED 2026-10-20: through a shut door a shout is whole and a normal
+    voice from across the room in pieces (the hearing rule), with a `loud`
+    machine running beside the listener or not -- it masks nothing; with a
+    `deafening` one at the listener's own ear the shout through the open
+    arch is gone, as it always was."""
     shut = spatial_rel_between(_across_one_edge("closed_door",
                                                 machine="loud"), "L", "S")
-    assert not shut.get("open_edge")
-    assert hear_level(shut, "shout") == "none"
-    two_hops = spatial_rel_between(_three_rooms(), "L", "S")
-    assert not two_hops.get("open_edge")
+    assert hear_level(shut, "shout") == "full"
+    assert hear_level(shut, "normal") == "fragment"
     drowned = spatial_rel_between(
         _across_one_edge("open", machine="deafening", at_the_ear=True),
         "L", "S")
-    assert drowned.get("open_edge") is True
+    assert drowned.get("masking_db") is not None
     assert hear_level(drowned, "shout") == "none"
 
 
 def test_the_opening_is_one_doorway_however_it_was_declared():
     """A doorway is one object: an edge declared from either side is the
-    same opening, which is also what keeps the floor reciprocal."""
-    from world.spatial import one_opening_away
+    same opening, so the two bodies hear each other alike from either end.
+    A paper door is the opening it acoustically is; a steel one is not."""
     sc = _across_one_edge("open")
     sc["rooms"]["b"]["adjacent"] = []             # declared from `a` alone
-    assert one_opening_away(sc, "a", "b") is True
-    assert one_opening_away(sc, "b", "a") is True
-    assert one_opening_away(sc, "a", "a") is False
-    # A paper door is the opening it acoustically is; a steel one is not.
+    for listener, speaker in (("L", "S"), ("S", "L")):
+        rel = spatial_rel_between(sc, listener, speaker)
+        assert hear_level(rel, "normal") == "full", listener
     paper = scene(two_rooms("closed_door", material="paper"),
                   {"S": "a", "L": "b"}, {"S": {"at": "c"}, "L": {"at": "w"}})
-    assert one_opening_away(paper, "a", "b") is True
+    assert hear_level(spatial_rel_between(paper, "L", "S"), "normal") == "full"
+    steel = scene(two_rooms("closed_door", material="steel"),
+                  {"S": "a", "L": "b"}, {"S": {"at": "c"}, "L": {"at": "w"}})
+    assert hear_level(spatial_rel_between(steel, "L", "S"), "normal") == "none"
 
 
 # ---------------------------------------------------------------------------
@@ -1227,39 +1210,35 @@ def _fixture_scenes():
 @pytest.mark.parametrize("name,sc,bodies", _fixture_scenes(),
                          ids=[row[0] for row in _fixture_scenes()])
 def test_every_sound_fixture_gets_the_same_word_in_decibels(name, sc, bodies):
-    """THE CONVERSION IDENTITY. For every pair and every volume in every
-    fixture this module builds, the word the engine answers today is the
-    word the linear arithmetic it replaced would have answered from the
-    same stamped relation.
+    """THE CONVERSION IDENTITY, for what still reads it. For every fixture
+    this module builds, a SOUND heard through the field -- a one-beat crash
+    in the first body's room, graded at the second body's ear (`level_of`)
+    -- gets the word the linear arithmetic it replaced would have given from
+    the same signal and noise.
 
-    Stated over the RELATION rather than over the field, because the
-    relation is where the two models meet: `signal` is a path gain and
-    `noise` a floor, both linear, both untouched by the conversion -- so if
-    a word moved, the quantiser moved it, and this is the test that says so.
-    """
-    from world.spatial import quantise_hearing, SPEECH_POWER
-    from world.spatial import lombard_level_db, power_of_db, UNVOICED_VOLUMES
+    RESTATED 2026-10-20: this was asserted over SPEECH, every volume of
+    every pair, and a voice is no longer graded by signal against noise
+    (the hearing rule, `spatial_senses.hear_level`); the property it pins
+    belongs to the field's sounds, which still are."""
+    from world.spatial import db_of_power, quantise_hearing, quantise_hearing_db
+    from world.spatial import room_of
 
     graded = 0
     for listener, speaker in ((bodies[0], bodies[1]), (bodies[1], bodies[0])):
-        rel = spatial_rel_between(sc, listener, speaker)
-        if rel.get("signal") is None or rel.get("noise") is None:
-            continue                    # no field: the edge model, untouched
-        for volume in VOLUMES:
-            graded += 1
-            word = hear_level(rel, volume)
-            # The same speaker on both sides: a conversational voice raised
-            # over the noise where it stands (2026-09-23).
-            raised = lombard_level_db(volume, rel.get("source_noise"))
-            power = (power_of_db(raised) if raised is not None
-                     else SPEECH_POWER[volume])
-            linear = quantise_hearing(power * rel["signal"], rel["noise"],
-                                      voiced=volume not in UNVOICED_VOLUMES)
-            assert word == linear, (
-                "%s: %s hearing %s at %s is %r in decibels and %r linearly "
-                "(signal %r, noise %r)" % (name, listener, speaker, volume,
-                                           word, linear, rel["signal"],
-                                           rel["noise"]))
+        events = [{"kind": "sound", "source_room": room_of(sc, speaker),
+                   "level": "audible", "detail": "a crash"}]
+        field = sound_field(sc, listener, events=events)
+        if field is None:
+            continue                    # no geometry: no field, no sound
+        signal = field.signal_at(listener, "event:0")
+        noise = field.noise_at(listener, exclude=("event:0",))
+        if signal is None or noise is None:
+            continue
+        graded += 1
+        word = field.level_of(listener, "event:0")
+        assert word == quantise_hearing(signal, noise), (name, listener)
+        assert word == quantise_hearing_db(db_of_power(signal),
+                                           db_of_power(noise)), (name, listener)
     if name != "no geometry at all":
         assert graded, "%s graded nothing on the field" % name
 
@@ -1543,20 +1522,23 @@ def test_no_speech_crosses_the_far_field_at_any_volume_or_distance():
     by level if the kind check were removed -- which is exactly why the
     refusal is by construction and not by a constant. And the record the far
     field returns has no key for content: it is built field by field from a
-    closed set."""
+    closed set.
+
+    Since 2026-10-20 there is no speech kind on the field at all (the
+    hearing rule grades a voice; `sound_sources` lost its `speakers`), and a
+    line from rooms away is graded by `far_speech_level` into the hearing
+    ladder, never into `distant_sounds`."""
+    import inspect
     from world.spatial import (distant_sounds, FAR_FIELD_ENTRY_DB,
                                far_field_sources, SPEECH_DB)
     sc = chain(3)
     sc["positions"] = {"Ada": "r0", "Bel": "r2"}
     assert max(SPEECH_DB.values()) >= FAR_FIELD_ENTRY_DB, (
         "the level no longer holds the line; the kind check must")
-    for volume in SPEECH_DB:
-        speakers = {"Ada": volume}
-        sources, _n = sound_sources(sc, speakers=speakers)
-        assert any(s["kind"] == "speech" for s in sources)
-        # The field's own source list carries the voice; the far field's
-        # does not, and cannot be asked to.
-        assert far_field_sources(sc) == []
+    assert "speakers" not in inspect.signature(sound_sources).parameters
+    assert "speakers" not in inspect.signature(far_field_sources).parameters
+    assert not any(s["kind"] == "speech" for s in sound_sources(sc)[0])
+    assert far_field_sources(sc) == []
 
     # An event that TRIES to smuggle a line through the channel carries it
     # nowhere: the record has room for a character and no room for words.
@@ -1804,7 +1786,11 @@ def test_sounds_made_in_one_place_do_not_mask_each_other_into_silence():
     noise says which room it was in and nothing finer -- so a pair of them
     in one room shared a cell by construction: chat 117 turn 13, a pry bar
     on a door frame and a detonation overhead, both `loud`, both in the
-    spine, and the room through the open door beside it heard neither."""
+    spine, and the room through the open door beside it heard neither.
+
+    The voices half is OVERTURNED 2026-10-20 by the owner's ruling: it
+    pinned that two voices from two places still masked each other, and no
+    voice masks another -- a listener follows either speaker."""
     def crash(n):
         return [{"kind": "sound", "description": "crash %d" % i,
                  "source_room": "a", "level": "loud"} for i in range(n)]
@@ -1814,18 +1800,14 @@ def test_sounds_made_in_one_place_do_not_mask_each_other_into_silence():
             scene(two_rooms("open_door"), {"L": "b"}, {"L": {"at": "w"}}),
             "L", crash(count))
         assert [level for _e, level in heard] == ["full"] * count, count
-    # Two voices from two different places still mask each other: the rule
-    # is about a sound arriving from the signal's OWN place, not about
-    # loudness going unpunished.
     rooms = {"m": room("medium", {
         "t": {"desc": "a table", "dir": "n", "height": "waist"},
         "w": {"desc": "west", "dir": "w"}, "e": {"desc": "east", "dir": "e"},
         "s": {"desc": "south", "dir": "s"}})}
     sc = scene(rooms, {"A": "m", "B": "m", "L": "m"},
                {"A": {"at": "w"}, "B": {"at": "e"}, "L": {"at": "s"}})
-    field = sound_field(sc, "L", speakers={"A": "normal", "B": "normal"})
-    assert field.level_of("L", "speech:A") != "full"
-    assert field.level_of("L", "speech:B") != "full"
+    assert levels(sc, "A", "L")["normal"] == "full"
+    assert levels(sc, "B", "L")["normal"] == "full"
 
 
 def test_a_corridor_carries_a_sound_further_than_a_hall_of_the_same_length():
@@ -2105,21 +2087,27 @@ def test_a_voice_is_caught_in_pieces_under_a_quiet_room_and_a_breath_is_not():
     keeps its words in pieces down to `FRAGMENT_SNR` under the room, as the
     margin says; a whisper or a mutter under the room's own level is gone.
     Measured on the lie test story: a boy pressed to a shut door, listening,
-    caught nothing of a normal conversation 1.3 dB under a 27 dB room."""
-    from world.spatial import (FRAGMENT_SNR_DB, HEAR_FLOOR_DB, quantise_hearing_db,
-                               ratio_of_db, sound_field_hear_level, SPEECH_DB)
+    caught nothing of a normal conversation 1.3 dB under a 27 dB room.
+
+    Since 2026-10-20 the speech quantiser is its own (`quantise_speech_db`,
+    a line followed whole at 0 dB) and the rule reads it wherever a voice is
+    graded by its level -- rooms away, here."""
+    from world.spatial import (FRAGMENT_SNR_DB, HEAR_FLOOR_DB, SPEECH_DB,
+                               far_speech_level, quantise_speech_db)
 
     under = HEAR_FLOOR_DB - 6.0
-    assert quantise_hearing_db(under, HEAR_FLOOR_DB, voiced=True) == "fragment"
-    assert quantise_hearing_db(under, HEAR_FLOOR_DB) == "none"
+    assert quantise_speech_db(under, HEAR_FLOOR_DB, voiced=True) == "fragment"
+    assert quantise_speech_db(under, HEAR_FLOOR_DB, voiced=False) == "none"
     # The margin is still the limit for a voice.
-    assert quantise_hearing_db(HEAR_FLOOR_DB + FRAGMENT_SNR_DB - 1.0, HEAR_FLOOR_DB,
-                               voiced=True) == "none"
+    assert quantise_speech_db(HEAR_FLOOR_DB + FRAGMENT_SNR_DB - 1.0,
+                              HEAR_FLOOR_DB, voiced=True) == "none"
+    # Level with the room, a sentence is followed whole.
+    assert quantise_speech_db(HEAR_FLOOR_DB, HEAR_FLOOR_DB) == "full"
     # And the volume word decides which it is.
-    noise = 10.0 ** ((HEAR_FLOOR_DB - 40.0) / 10.0)
-    for volume, word in (("normal", "fragment"), ("mutter", "none"), ("whisper", "none")):
-        gain = ratio_of_db(under - SPEECH_DB[volume])
-        assert sound_field_hear_level(volume, gain, noise) == word, volume
+    for volume, word in (("normal", "fragment"), ("mutter", "none"),
+                         ("whisper", "none")):
+        loss = SPEECH_DB[volume] - under
+        assert far_speech_level(volume, loss, HEAR_FLOOR_DB) == word, volume
 
 
 def test_a_shout_carries_down_a_long_run_and_a_normal_voice_falls_away():
@@ -2137,29 +2125,22 @@ def test_a_shout_carries_down_a_long_run_and_a_normal_voice_falls_away():
     never delivered one."""
     for hops in (2, 3, 4):
         rel = spatial_rel_between(_run(hops), "L", "S")
-        assert rel.get("signal") is not None, hops
+        assert rel.get("far_loss_db") is not None, hops
         assert hear_level(rel, "shout") != "none", hops
-    # RECALIBRATED 2026-09-14: a real normal voice (60 dB(A) at a pace)
-    # down a straight run of open doorways in a still building (27.0 dB
-    # floor) is heard whole to four rooms and in pieces at five -- 63 at
-    # the cell less 33.4 of path and doorways is 29.6, over the floor by
-    # less than the `full` margin. Before, it was `none` from two rooms.
-    # What the test is FOR is unchanged: the answer falls with distance.
+    # A real normal voice (60 dB(A) at a pace) down a straight run of open
+    # doorways in a still building (27.0 dB floor), against the quiet floor
+    # alone and followed at 0 dB (2026-10-20, the hearing rule): whole three
+    # rooms down, in pieces from four, gone at eight. It was whole at two
+    # and in pieces at three while a line was held to +3 dB.
     words = [hear_level(spatial_rel_between(_run(h), "L", "S"), "normal")
              for h in (2, 3, 5, 7, 8)]
-    # Real doorway losses (2 dB each, 2026-09-14): whole two rooms down an
-    # open run, then in pieces. It was gone at four until 2026-09-26, and
-    # that was the absolute floor, not the distance: a voice under a still
-    # building's 27 dB floor was refused however little under it, against
-    # the 12 dB its words survive by (`quantise_hearing_db`). It now goes
-    # where the margin says, at eight.
-    assert words == ["full", "fragment", "fragment", "fragment", "none"]
+    assert words == ["full", "full", "fragment", "fragment", "none"]
 
-    # ...and the gain FALLS with distance, which is the whole complaint.
-    gains = [spatial_rel_between(_run(h), "L", "S")["signal"]
-             for h in (2, 3, 4, 5)]
-    assert gains == sorted(gains, reverse=True)
-    assert len(set(gains)) == len(gains)
+    # ...and the loss GROWS with distance, which is the whole complaint.
+    losses = [spatial_rel_between(_run(h), "L", "S")["far_loss_db"]
+              for h in (2, 3, 4, 5)]
+    assert losses == sorted(losses)
+    assert len(set(losses)) == len(losses)
 
 
 def test_a_closed_door_ends_a_shout_where_open_doorways_carry_it():
@@ -2193,7 +2174,7 @@ def test_the_room_graph_only_answers_where_the_edge_model_cannot():
     be wrong about across a single edge, and a wall between neighbours is
     something the edge rules say a deliberate thing about."""
     adjacent = spatial_rel_between(_run(1, "wall"), "L", "S")
-    assert "signal" not in adjacent
+    assert "far_loss_db" not in adjacent
     assert hear_level(adjacent, "shout") == "fragment"   # the wall rule
 
 
@@ -2203,11 +2184,12 @@ def test_a_vouched_channel_is_not_the_air_between_its_two_ends():
     accident that a stamped relation meant one composite grid."""
     far = spatial_rel_between(_run(3), "L", "S")
     far["barrier"] = "unknown"
-    assert far.get("signal") is not None
+    assert far.get("far_loss_db") is not None
     # Vouched, the stamped field answer is not consulted at all: the grade
     # is the one the relation would get with no field reading on it.
-    airless = {k: v for k, v in far.items() if k not in ("signal", "noise",
-                                                         "door_gain")}
+    airless = {k: v for k, v in far.items()
+               if k not in ("far_loss_db", "far_muffled", "floor_db",
+                            "masking_db", "speaker_masking_db")}
     for volume in VOLUMES:
         assert hear_level(far, volume, vouched=True) == hear_level(
             airless, volume, vouched=True), volume

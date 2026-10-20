@@ -4,9 +4,11 @@ The owner (2026-09-15): "quieter spaces should allow for some pretty long
 reaching echoes like an abandoned building." A room's `surface` sets its
 absorption; a bare room's reverberant field is added to the direct one
 (`spatial_sound_field.room_reverberation`), it leaks through the room's
-openings, it smears words when it dominates, it takes the direction off a
-sound from beyond, and a long bare room gives a sharp sound back. A body's
-tread is a source, and it crosses a floor as impact."""
+openings, it takes the direction off a sound from beyond, and a long bare
+room gives a sharp sound back. It smeared words when it dominated until
+2026-10-20, when the hearing rule retired that: a ring carries a voice
+across a room and takes none of its words. A body's tread is a source, and
+it crosses a floor as impact."""
 from __future__ import annotations
 
 from world.spatial import (ECHO_SPAN_PACES, FLOOR_IMPACT_DB, TREAD_LEVEL, TREAD_RUN_DB,
@@ -87,17 +89,17 @@ def test_a_small_bare_room_is_boomy_and_understood():
     """Chat 161 turn 14 (2026-10-02): in a 6 x 5 pace bare steel lift car the
     whole ring stood ~17.6 dB over a voice three paces off, the old rule
     smeared it, and a normal line arrived as "something you cannot make
-    out". The car's ring is short and mostly early: C50 about -3 dB."""
-    from world.spatial import C50_SMEAR_DB, clarity_db
+    out". The car rings; a line in it is heard whole.
+
+    The clarity rule that answered it then (C50 under -5 dB smears) is
+    RETIRED 2026-10-20 with the hearing rule: a ring is what carries a voice
+    across a room, and no ring takes the words of one."""
     car = {"rooms": {"car": {"name": "car", "extent": {"w": 6, "d": 5}, "anchors": {},
                              "adjacent": [], "surface": "bare", "exposure": "enclosed"}},
            "positions": {"A": "car", "B": "car"},
            "stations": {"A": {"cell": [4, 1]}, "B": {"cell": [1, 2]}}, "entities": {}}
     assert room_reverberation(car, "car") is not None
     assert hear_level(spatial_rel_between(car, "B", "A"), "normal") == "full"
-    # Clarity is the ring's late share, and a longer ring is more of it late.
-    assert clarity_db(1.0, 50.0, 1.0) > clarity_db(1.0, 50.0, 4.0)
-    assert clarity_db(1.0, 50.0, 6.0) < C50_SMEAR_DB < clarity_db(1.0, 0.5, 6.0)
 
 
 def test_a_voice_carries_further_through_bare_rooms():
@@ -106,6 +108,17 @@ def test_a_voice_carries_further_through_bare_rooms():
 
 
 def test_the_ring_smears_a_shout_across_a_bare_hall():
+    """OVERTURNED 2026-10-20 by the owner's ruling (the hearing rule): a
+    voice in one room is heard whole, and distance inside a room takes
+    nothing from it. The name is kept so the history reads.
+
+    Pinned 2026-09-15: a shout from one end of a 24-pace bare hall to the
+    other was smeared to a fragment by the ring (`reverberant`, then C50
+    under -5 dB). The reverberant field is what CARRIES a voice across a
+    room -- in the world people follow one another in stone halls, with
+    effort -- and the smear fired on none of the 2,408 lines the owner's
+    chats replayed. A bare hall still rings: it carries a sound further, it
+    gives a sharp one back, and it takes away where a sound came from."""
     def hall(surface):
         rooms = {"hall": {"name": "hall", "extent": {"w": 24, "d": 12}, "anchors": {}, "adjacent": [],
                           "exposure": "enclosed"}}
@@ -115,9 +128,11 @@ def test_the_ring_smears_a_shout_across_a_bare_hall():
                 "stations": {"A": {"cell": [1, 6]}, "B": {"cell": [22, 6]}}, "entities": {}}
     plain = spatial_rel_between(hall(None), "B", "A")
     bare = spatial_rel_between(hall("bare"), "B", "A")
-    assert hear_level(plain, "shout") == "full"
-    assert bare.get("reverberant") is True
-    assert hear_level(bare, "shout") == "fragment", "the words smear in the ring"
+    assert room_reverberation(hall("bare"), "hall") is not None
+    assert "reverberant" not in bare
+    for rel in (plain, bare):
+        assert hear_level(rel, "shout") == "full"
+        assert hear_level(rel, "normal") == "full"
 
 
 def test_in_a_bare_room_a_sound_from_beyond_comes_from_everywhere():

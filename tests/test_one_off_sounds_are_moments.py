@@ -10,8 +10,10 @@ full power. Measured on the owner's chat 155 turn 34: a listener's own single
 line murmured by a face inches from hers to nothing; with the moan gone, a
 faint creak of the table she lay on still held it to a fragment.
 
-Now a line -- or any sound -- is heard over what sounds THROUGHOUT it, and a
-one-off sound is heard as itself.
+Now a sound is heard over what sounds THROUGHOUT it, and a one-off sound is
+heard as itself. A LINE, since 2026-10-20 (the hearing rule), is heard over
+nothing but what the story made deafening, or an event it says drowns
+everything out (`sensory_events[].drowns`).
 """
 
 from __future__ import annotations
@@ -46,26 +48,36 @@ def _cry(source, level="loud"):
 
 
 def _grades(sc, events):
+    from world.spatial import hear_level, spatial_rel_between
     field = sound_field(sc, "Q", room="r", events=events)
-    return {vol: field.speech_level("P", vol, "Q") for vol in VOLUMES}
+    rel = spatial_rel_between(sc, "Q", "P", sound=field)
+    return {vol: hear_level(rel, vol) for vol in VOLUMES}
 
 
 def test_a_one_off_sound_does_not_drown_the_lines_of_its_beat():
-    """Her own cry at her own cell, and another body's a pace from her."""
+    """Her own cry at her own cell, and another body's a pace from her: the
+    lines of the beat are graded exactly as in a quiet room."""
     quiet = _grades(_hall(), [])
-    assert quiet["mutter"] == "full"
+    assert quiet["normal"] == "full"
     assert _grades(_hall(), [_cry("Q")]) == quiet
     assert _grades(_hall(), [_cry("R")]) == quiet
+    # Even a deafening one: a moment is a moment. Only an event the story
+    # says DROWNS everything out is noise a line is heard over.
+    assert _grades(_hall(), [_cry("R", "deafening")]) == quiet
 
 
 def test_what_sounds_throughout_the_beat_still_masks():
-    """The other type of sound is untouched: a running machine at the same
-    spot takes a mutter to nothing and a normal voice below full. (How far
-    a raised voice carries over it is the `loud` rung's calibration, which
-    this test does not pin.)"""
-    loud = _grades(_hall("loud"), [])
-    assert loud["mutter"] == "none"
-    assert loud["normal"] != "full"
+    """The other type of sound: a machine that keeps going. OVERTURNED IN
+    PART 2026-10-20 by the owner's ruling -- a `loud` machine a pace from
+    the listener took a mutter to nothing and a normal voice below full;
+    a `loud` thing is everyday and masks nothing, so the lines are graded as
+    in a quiet room. What still masks is what the story makes deafening, at
+    the same spot."""
+    quiet = _grades(_hall(), [])
+    assert _grades(_hall("loud"), []) == quiet
+    deafening = _grades(_hall("deafening"), [])
+    assert deafening["mutter"] == "none"
+    assert deafening["normal"] != "full"
 
 
 def test_a_one_off_sound_is_still_heard_as_itself():
@@ -81,11 +93,20 @@ def test_a_one_off_sound_is_still_heard_as_itself():
 
 
 def test_a_speaker_raises_their_voice_over_standing_noise_only():
-    """The Lombard term reads the same floor: a voice is raised over a
-    machine that keeps going, not over a cry that has already passed."""
+    """The Lombard term reads the same masking noise: a voice is raised over
+    a machine that keeps going, never over a cry that has already passed.
+    Since 2026-10-20 the noise a voice is raised over, for the hearing rule,
+    is only what the story made deafening (`masking_db_at`), the one noise
+    that decides speech: an everyday machine raises it in the world and
+    takes nothing from it in either."""
     quiet = sound_field(_hall(), "P", room="r", events=[])
     cry = sound_field(_hall(), "P", room="r", events=[_cry("R")])
-    machine = sound_field(_hall("loud"), "P", room="r", events=[])
-    base = quiet.speaker_noise("P", speaker_room="r")
-    assert cry.speaker_noise("P", speaker_room="r") == base
-    assert machine.speaker_noise("P", speaker_room="r") > base
+    loud = sound_field(_hall("loud"), "P", room="r", events=[])
+    deafening = sound_field(_hall("deafening"), "P", room="r", events=[])
+    assert quiet.masking_db_at("P", room="r") is None
+    assert cry.masking_db_at("P", room="r") is None
+    assert loud.masking_db_at("P", room="r") is None
+    assert deafening.masking_db_at("P", room="r") is not None
+    from world.spatial import spatial_rel_between
+    rel = spatial_rel_between(_hall("deafening"), "Q", "P")
+    assert rel.get("speaker_masking_db") is not None

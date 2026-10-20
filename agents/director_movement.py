@@ -914,9 +914,10 @@ def _voice_reaches(ctx, world, listener, speaker, row, senses):
     """Whether the line ledger `row` records `speaker` saying, in `world`,
     reaches `listener` THROUGH THE AIR -- at the line's own volume, through
     the field and the barriers between their rooms (`spatial_rel_between`,
-    `hear_level`, the measured proximity), over the standing noise the
-    outcome's field holds -- the story's crowds among it -- through the
-    listener's card senses, and not concealed from them. (A beat's one-off
+    `hear_level`, the measured proximity), against the field the outcome's
+    perception builds -- the story's crowds among it, though since
+    2026-10-20 only what the story made deafening takes a voice away --
+    through the listener's card senses, and not concealed from them. (A beat's one-off
     sounds are moments, never a floor a line is heard over:
     `tests/test_one_off_sounds_are_moments.py`.) The relation carries no live
     channel and no addressed rescue: a voice on a radio, or one named across
@@ -947,8 +948,9 @@ def _voice_reaches(ctx, world, listener, speaker, row, senses):
 
 def _sound_crowds(ctx):
     """The story's crowd ledger, as the perception stage reads it for its
-    sound fields (`perception._sound_field_for`): a crowd's murmur is noise a
-    voice is heard over."""
+    sound fields (`perception._sound_field_for`), so the follow's field is
+    the outcome's. A crowd's murmur masks no voice (the hearing rule,
+    2026-10-20); it is a sound the field carries."""
     crowds = ctx.get("_sound_crowds") if hasattr(ctx, "get") else None
     if crowds is None:
         try:

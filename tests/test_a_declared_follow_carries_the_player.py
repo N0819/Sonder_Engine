@@ -586,11 +586,15 @@ def test_a_character_follows_the_voice_of_a_hidden_player(temp_db, monkeypatch):
 
 
 def test_a_voice_drowned_where_the_follower_stands_places_nobody():
-    """The follow's ear is the outcome's: graded through the same field, a
-    throng in the taproom drowns a voice from behind the snug's curtain, so
-    that voice tells the follower nothing of where its speaker is; in a quiet
-    taproom the same line is heard. Without the story's crowds the gate would
-    hear what the page never delivers."""
+    """The follow's ear is the outcome's: graded through the same field and
+    the same rule, a voice the follower cannot hear tells them nothing of
+    where its speaker is; in a quiet taproom the same line is heard.
+
+    RESTATED 2026-10-20 by the owner's ruling: this pinned a THRONG in the
+    taproom drowning the voice from behind the snug's curtain, and a
+    crowd's murmur never masks speech. What drowns it now is what the story
+    makes deafening -- a bell rung in the taproom -- and the throng, still
+    passed in from the story's crowds, takes nothing."""
     from types import SimpleNamespace
     from agents.director import _voice_reaches
     from tests.test_field_sentences import room, scene
@@ -602,16 +606,27 @@ def test_a_voice_drowned_where_the_follower_stands_places_nobody():
             self.turn = SimpleNamespace(id=1, idx=1, frame_id=None)
             self.cast, self.extra_players = [], []
 
-    taproom = room("the Taproom", size="medium", light="lit",
-                   adjacent=[{"to": "snug", "barrier": "curtain", "distance": "near", "dir": "e"}])
-    snug = room("the Snug", size="small", light="lit",
-                adjacent=[{"to": "taproom", "barrier": "curtain", "distance": "near", "dir": "w"}])
-    world = scene({"taproom": taproom, "snug": snug}, {PLAYER: "taproom", "Mara": "snug"})
+    def taproom_world(bell=False):
+        taproom = room("the Taproom", size="medium", light="lit",
+                       adjacent=[{"to": "snug", "barrier": "curtain", "distance": "near", "dir": "e"}])
+        snug = room("the Snug", size="small", light="lit",
+                    adjacent=[{"to": "taproom", "barrier": "curtain", "distance": "near", "dir": "w"}])
+        positions = {PLAYER: "taproom", "Mara": "snug"}
+        entities = {}
+        if bell:
+            positions["bell"] = "taproom"
+            entities["bell"] = {"name": "the alarm bell", "kind": "fixture",
+                                "sound_source": "deafening"}
+        return scene({"taproom": taproom, "snug": snug}, positions,
+                     entities=entities)
+
     line = {"volume": "normal", "categories": ["speech"], "visibility": "overt",
             "conceal_from": []}
     throng = [{"room_uid": "taproom", "band": "a throng", "uid": "crowd_1"}]
-    assert _voice_reaches(_Ctx([]), world, PLAYER, "Mara", line, None)
-    assert not _voice_reaches(_Ctx(throng), world, PLAYER, "Mara", line, None)
+    assert _voice_reaches(_Ctx([]), taproom_world(), PLAYER, "Mara", line, None)
+    assert _voice_reaches(_Ctx(throng), taproom_world(), PLAYER, "Mara", line, None)
+    assert not _voice_reaches(_Ctx([]), taproom_world(bell=True), PLAYER, "Mara",
+                              line, None)
 
 
 def _beat_before(temp_db, ctx, ledger, steps, positions=None):

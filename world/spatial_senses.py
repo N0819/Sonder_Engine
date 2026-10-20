@@ -749,30 +749,80 @@ def spatial_rel_between(
         if target_holder and not _shares_enclosure(
                 scene, _mass_holder(scene, observer), target):
             rel["source_enclosed"] = True
-    # TWO BODIES AT ONE SHUT DOORWAY, ONE EACH SIDE, ARE AT ARM'S REACH
-    # THROUGH IT (`DOOR_REACH_BARRIERS`). Both hearing paths graded a shut
-    # door with no idea who stood at it: the edge rule's `closed_door` makes
-    # a normal voice a fragment at any range, and the field walked the whole
-    # mouth-to-ear path as open-air spreading on top of the door's own loss.
-    # A voice spoken at a door is heard at its other face less what the door
-    # takes, and nothing else; `hear_level` and `stamp_sound_relation` read
-    # this flag for exactly that. Measured on chat 177 turn 21: the player a
-    # pace from a plank door asked the woman beside its other face a
-    # question, the line arrived "...you're... looking... something", and
-    # she answered "What was that?".
+    # A VOICE SPOKEN AT A SHUT DOOR IS HEARD THROUGH IT (`DOOR_REACH_BARRIERS`).
+    # Both hearing paths graded a shut door with no idea who stood at it:
+    # the edge rule's `closed_door` makes a normal voice a fragment at any
+    # range, and the field walked the whole mouth-to-ear path as open-air
+    # spreading on top of the door's own loss. A voice spoken at a door is
+    # heard at its other face less what the door takes -- and in the room
+    # beyond, within the few decibels a room's ring holds it to -- so ONE
+    # body at the door is enough, the speaker or the listener: a path has no
+    # direction, and the line from the woman stepped back into a small room
+    # to the man at its door is the same path as his to her. (Since
+    # 2026-10-20, the hearing rule; it asked for both at the door until
+    # then.) `hear_level` reads this flag. Measured on chat 177 turn 21: the
+    # player a pace from a plank door asked the woman who had stepped back
+    # into the tiny room beyond it a question, the line arrived "...you're...
+    # looking... something", and she answered "What was that?".
+    shifted = _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
+                                        rel.get("material"))
     if not rel.get("same_room") and o_room and t_room and \
-            _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
-                                      rel.get("material")) in DOOR_REACH_BARRIERS:
+            shifted in DOOR_REACH_BARRIERS:
         from world.spatial_fov import at_doorway
         if at_doorway(scene, observer, o_room, t_room) \
-                and at_doorway(scene, target, t_room, o_room):
+                or at_doorway(scene, target, t_room, o_room):
             rel["door_reach"] = True
+    # HOW NEAR THE TWO ARE, for the one kind of speech that asks: breath is
+    # private beyond reach (`hear_level`, the hearing rule). Measured only --
+    # a default is not evidence of distance (`measured_proximity_rel`) --
+    # and bodies in contact are within reach whatever their stations say.
+    # Across an opening the doorway is the measure: both at it is arm's
+    # reach through it, one at it a pace or two, neither -- both placed --
+    # the width of two rooms. Absent where nothing measures the pair.
+    reach = _pair_reach(scene, observer, target, o_room, t_room, rel, shifted)
+    if reach:
+        rel["reach"] = reach
     # Deferred import: the sound field reads this module's material ladder
     # at import time, and this module reads the field only per call.
     from world.spatial_sound_field import stamp_sound_relation
     stamp_sound_relation(scene, rel, observer, target, sound=sound,
                          observer_room=o_room, target_room=t_room)
     return rel
+
+
+def _pair_reach(scene, observer, target, o_room, t_room, rel, shifted):
+    """`spatial_rel_between`'s reach stamp: `within_reach` | `near` |
+    `across`, or None where nothing measures how near the two are."""
+    if rel.get("inside_source") or rel.get("enclosed_from_source") \
+            or rel.get("source_enclosed"):
+        return None                     # a body's mass is the medium
+    from world.spatial_fov import at_doorway, body_cell, in_standing_contact
+    if in_standing_contact(scene, observer, target):
+        return "within_reach"
+    if rel.get("same_room"):
+        from world.spatial_geometry import measured_proximity_rel
+        return measured_proximity_rel(scene, observer, target)
+    if not o_room or not t_room:
+        return None
+    if shifted in ("window", "one_way_window"):
+        # A pane, or a door of dense stuff: spoken at it, or listened for at
+        # it, as a light door is -- one body at it is enough.
+        if at_doorway(scene, observer, o_room, t_room) \
+                or at_doorway(scene, target, t_room, o_room):
+            return "within_reach"
+        return None
+    if shifted not in OPEN_BARRIERS:
+        return None
+    at_here = at_doorway(scene, observer, o_room, t_room)
+    at_there = at_doorway(scene, target, t_room, o_room)
+    if at_here and at_there:
+        return "within_reach"
+    if at_here or at_there:
+        return "near"
+    if body_cell(scene, observer) is not None \
+            and body_cell(scene, target) is not None:
+        return "across"
+    return None
 
 
 _SIGHT_ORDER = {"none": 0, "shapes": 1, "conduct": 2, "full": 3}
@@ -1175,9 +1225,157 @@ def _material_shifted_barrier(barrier, material):
     return _SOUND_LADDER[max(0, min(index - step, len(_SOUND_LADDER) - 1))]
 
 
-#: Power ratio a voice gains at arm's reach over the one-pace default the
-#: field assumes for a pair it could not place (about half a pace, +8 dB).
-WITHIN_REACH_SIGNAL_GAIN = 6.0
+#: THE HEARING RULE, RESTATED (2026-10-20; `DESIGN_SOUND_FIELD.md` § 11).
+#: VOICES CARRY UNLESS SOMETHING IN THE STORY STOPS THEM.
+#:
+#: The owner, 2026-10-20: "the sound system repeatedly wars with both reality
+#: and fiction", after a kettle the opening wrote `loud` (read as 80 dB at a
+#: pace) turned even a shout three paces off into "Thank..." (chat 176 turn
+#: 2), and a shut door a pace away ate a question (chat 177 turn 21). The
+#: verdict had been signal against noise on the cell grid: a voice fading
+#: per cell as in open air, graded against every noise in the room, with
+#: +3 dB asked for a line to be followed. Every error ran one way -- it took
+#: away speech everyone in the story would have heard.
+#:
+#: The rule is a TABLE over the path between two bodies -- the room, an
+#: opening, a shut door, a heavy door or glass, a wall, rooms away, a body's
+#: mass -- and, for breath-level speech, whether the two are within reach.
+#: Every entry is the answer a decibel budget built from real hearing gives
+#: with margin, and the budget is stated beside each one below; the table
+#: is used rather than the budget itself because the budget's inputs are
+#: the engine's least reliable facts (cells drawn at the far wall while a
+#: pose says "by the door", 177 t21; an emission word that is a model's
+#: judgement, `loud` for a kettle and for an engine alike), and at the three
+#: edges where the budget is marginal the physics itself names the answer
+#: (a far shut door muffles; a whisper beyond reach is a hiss; a wall passes
+#: only a shout's low half). Noise enters in ONE place, `spatial_sound_field.
+#: masked_level`, and only from what the story makes deafening.
+#:
+#: The real-world numbers every entry is checked against, in dB(A):
+#:
+#:   a voice at a pace     whisper 30-35, under the breath 35-45, conversation
+#:                         60, raised 70, shouting 80-88 (`SPEECH_ONE_PACE_DB`)
+#:   a quiet lived-in room 25-35 (`AMBIENT_DB`: 27 enclosed, 30 open)
+#:   across a room         beyond the critical distance (1-3 m in ordinary
+#:                         rooms) the reverberant field holds a voice within
+#:                         0-10 dB of its level at a pace, by the room's size
+#:                         -- it does not fade per pace as in open air
+#:   into the next room    what an opening or a door radiates spreads over the
+#:                         receiving room's absorption, about 10 dB
+#:   barriers              an open doorway ~2, a curtain ~5, a closed interior
+#:                         door 15-25, closed glass or a heavy door 28-40, an
+#:                         interior wall 35-45 (`APERTURE_DB`, `WALL_LOSS_DB`);
+#:                         transmission loss rises about 6 dB an octave, so
+#:                         what crosses a solid partition is a voice's low
+#:                         half -- its vowels and tune, not its consonants
+#:   intelligibility       a sentence is followed at 0 dB signal to noise,
+#:                         half of it near -5, words caught to about -12; a
+#:                         whisper has no voicing to follow and is lost under
+#:                         the floor of the room it is heard in
+#:
+#: and the budget, a normal voice into a quiet room (27):
+#:
+#:   same room, within reach       60                  +33  full
+#:   same room, across it          60 - (0..10)   +23..+33  full
+#:   through an opening            60 - 6 - 2 - 10      +15  full
+#:   a shut door, both at it       60 - 25              +8   full
+#:   a shut door, farther off      60 - 6 - 25 - 10     -8   fragment
+#:   ... raised / shouted          70 / 82 - 41    +2 / +14  full
+#:   heavy door, face to face      60 - 35              -2   fragment
+#:   ... raised / shouted          70 / 82 - 35   +8 / +20  full
+#:   heavy door, farther off       60 - 6 - 35 - 10     -18  none
+#:   ... raised / shouted          70 / 82 - 51    -8 / +4  fragment (its low half)
+#:   wall, shout                   82 - 6 - 45 - 10     -6   fragment (a murmur)
+#:   wall, raised                  70 - 61              -18  none
+#:   whisper within reach          35                   +8   full
+#:   whisper across the room       a hiss in the room's own ring, at its floor:
+#:                                 none
+#:   mutter a pace or two off      38 - 6               +5   fragment
+#:   mutter across the room        38 - (6..10)    +1..-3   none
+#:
+#: Rooms away, the far field's own loss is the budget, against the listening
+#: room's quiet floor (`spatial_sound_field.far_speech_level`).
+
+#: The volumes spoken on the breath. A whisper is breath with no voicing,
+#: and a mutter nearly that: they are made for the body within reach, and
+#: they are what stays private beyond it. The one definition; the sound
+#: field imports it.
+UNVOICED_VOLUMES = ("whisper", "mutter")
+
+#: The voice words a line can carry (`schemas.SpeechVolume`); anything else
+#: -- `pitched` with no level solved for it, a word the encoder invented --
+#: is graded as an ordinary voice, as the sound field always graded it.
+_VOICE_WORDS = ("mutter", "whisper", "normal", "loud", "shout")
+
+#: The reach tiers, nearest first (`spatial_geometry.proximity_rel`).
+REACH_TIERS = ("within_reach", "near", "across")
+
+#: What a voice crosses with nothing shut in the way: a doorless opening,
+#: an open door, a grille (after the material shift, so a paper screen is
+#: the opening it acoustically is).
+OPEN_BARRIERS = ("open", "open_door", "bars")
+
+
+def _volume_word(volume, level_db=None) -> str:
+    """The voice word a line is graded at. A pitched line has a LEVEL, not a
+    word, and is graded at the word its level is nearest
+    (`spatial_sound_field.word_for_level`)."""
+    if level_db is not None:
+        from world.spatial_sound_field import word_for_level
+        return word_for_level(level_db)
+    word = str(volume or "normal").strip().casefold()
+    return word if word in _VOICE_WORDS else "normal"
+
+
+def _reach(rel: dict, proximity=None) -> Optional[str]:
+    """How near the two bodies of a relation are: `within_reach` | `near` |
+    `across`, or None where nothing measures it. Bodies in contact are
+    within reach whatever their stations say; otherwise the caller's
+    measured tier, then the one `spatial_rel_between` stamped."""
+    stamped = rel.get("reach") if isinstance(rel, dict) else None
+    if stamped == "within_reach":
+        return stamped
+    if proximity in REACH_TIERS:
+        return proximity
+    return stamped if stamped in REACH_TIERS else None
+
+
+#: HOW FAR BREATH CARRIES, in paces of the field's own path between the two
+#: bodies (`spatial_sound_field.stamp_sound_relation` stamps `paces` where it
+#: places both). The distances the sound field gave a still room before
+#: 2026-10-20 -- a whisper (35 dB(A) at a pace) followed to two paces over a
+#: quiet room's 27 dB, a mutter (38) to three and caught in pieces at four --
+#: kept as the privacy they were, with the one change the owner made: a
+#: whisper beyond its reach is lost, not caught in pieces. Noise no longer
+#: shortens them (the hearing rule), so a whisper at the ear beside a kettle
+#: is whole. Where the field places neither body the reach tier decides.
+WHISPER_REACH_PACES = 2.0
+MUTTER_REACH_PACES = 3.0
+MUTTER_PIECES_PACES = 4.0
+
+
+def _breath_level(volume: str, reach: Optional[str], paces=None) -> str:
+    """Breath-level speech by reach: whole within reach, where it is meant
+    to land; a mutter caught in pieces a pace or two further, where its
+    voice still leads the room's ring; gone beyond. Measured in paces where
+    the field placed both bodies, by the reach tier where it did not.
+    Unmeasured -- nothing places the two apart -- it is whole, as it always
+    was: the story put a whisper in someone's ear, and nothing says the ear
+    was elsewhere."""
+    if reach == "within_reach":
+        return "full"
+    if paces is not None:
+        paces = float(paces)
+        if volume == "whisper":
+            return "full" if paces <= WHISPER_REACH_PACES else "none"
+        if paces <= MUTTER_REACH_PACES:
+            return "full"
+        return "fragment" if paces <= MUTTER_PIECES_PACES else "none"
+    if reach is None:
+        return "full"
+    if reach == "near" and volume == "mutter":
+        return "fragment"
+    return "none"
 
 
 def hear_level(
@@ -1186,57 +1384,29 @@ def hear_level(
     vouched: bool = False,
     proximity: str | None = None,
     level_db=None,
+    *,
+    seen: bool = False,
 ) -> str:
     """How much of a line at `volume` this relation delivers: none |
-    fragment | full.
+    fragment | full -- the hearing rule (§ 11 of the note, the block above).
 
-    ONE MASKING RULE, ON EVERY PATH. A listener's noise floor is a property
-    of where the LISTENER stands, not of how far away the speaker is, so it
-    grades every voice that reaches them whatever path it came by. Where the
-    field placed both bodies it says so with `signal` and `noise` and the
-    quantisation below is the whole answer. Where it could not place the
-    speaker -- more rooms away than a composite covers -- it stamps
-    `door_gain` instead: what the same voice would deliver from this room's
-    own best opening, which no path from beyond it can beat. The edge rules
-    then answer as they always have and this CEILING caps them, so a bell
-    that drowns an ordinary voice in the room also drowns a shout from three
-    rooms off (`PLAY_2026_09_05_lighthouse.md` § PA5).
+    `_hear_level` is the table. Then, where the relation carries noise the
+    story made deafening (`masking_db`, stamped only for a listener within
+    a deafening source's reach or a drowning event's), that noise caps the
+    answer -- the one place noise enters (`spatial_sound_field.
+    masked_level`). `seen` is whether the listener sees the speaker's face,
+    which is worth several decibels in that noise and nowhere else.
 
-    A `vouched` channel is exempt: a voice on a live comm channel is not
-    crossing this room's air and the room's own doorways say nothing about
-    it. The enclosure cases never carry either stamp
-    (`stamp_sound_relation`), so the conducted answers below are untouched.
-    """
-    if level_db is not None:
-        # A PITCHED LINE HAS A LEVEL, NOT A WORD. The field grades the level
-        # itself; every word-keyed rule below reads the word the level is
-        # nearest to (`spatial_sound_field.word_for_level`).
-        from world.spatial_sound_field import word_for_level
-        volume = word_for_level(level_db)
-    level = _hear_level(rel, volume, vouched, proximity, level_db)
-    if level == "none" and not vouched:
-        # A RAISED VOICE CARRIES THROUGH AN OPENING: one passable edge away
-        # it is at worst a fragment, whatever the walk costs it. The edge
-        # model always delivered that and the field can refuse it, so when
-        # both perception passes came to read the field a shout across one
-        # archway could reach nobody at all (§ PC3). The floor is the field's
-        # own (`spatial_sound_field.open_edge_floor`, capped by the same
-        # noise the masking rule uses) and it is stamped on the relation
-        # only where the rooms are one opening apart.
-        from world.spatial_sound_field import open_edge_floor
-        level = open_edge_floor(volume, rel) or level
-    if vouched or level == "none":
+    A `vouched` channel is not this room's air and nothing in it masks."""
+    word = _volume_word(volume, level_db)
+    level = _hear_level(rel, word, vouched, proximity, level_db)
+    if vouched or level == "none" or not isinstance(rel, dict) \
+            or rel.get("masking_db") is None:
         return level
-    # THE RING SMEARS THE WORDS: where the reverberant part arrives well
-    # over the direct part (`stamp_sound_relation`, REVERB_SMEAR_DB), a
-    # line heard whole is heard in pieces.
-    if level == "full" and isinstance(rel, dict) and rel.get("reverberant"):
-        level = "fragment"
-    door = rel.get("door_gain") if isinstance(rel, dict) else None
-    if door is None or rel.get("noise") is None:
-        return level
-    return _weaker_hearing(level, _field_hear_level(
-        volume, door, rel["noise"], source_noise=rel.get("source_noise")))
+    from world.spatial_sound_field import masked_level
+    return _weaker_hearing(level, masked_level(
+        rel, word, reach=_reach(rel, proximity), level_db=level_db,
+        seen=seen))
 
 
 _HEARING_ORDER = {"none": 0, "fragment": 1, "full": 2}
@@ -1254,7 +1424,7 @@ def _hear_level(
     proximity: str | None = None,
     level_db=None,
 ) -> str:
-    volume = str(volume or "normal").strip().casefold()
+    volume = _volume_word(volume)
     barrier = _material_shifted_barrier(
         normalize_barrier(rel.get("barrier")), rel.get("material"))
     distance = rel.get("distance")
@@ -1270,7 +1440,7 @@ def _hear_level(
     # speaker; the reverse direction is a voice trying to get OUT through that
     # same mass, which is the muffling the barrier already models correctly.
     if rel.get("inside_source"):
-        if volume in ("mutter", "whisper"):
+        if volume in UNVOICED_VOLUMES:
             return "fragment"
         return "full"
 
@@ -1292,76 +1462,36 @@ def _hear_level(
     # body's position to its carrier's, so `same_room` below would hand the
     # room a sealed-away voice at full clarity.
     if rel.get("source_enclosed"):
-        return "none" if volume in ("mutter", "whisper") else "fragment"
+        return "none" if volume in UNVOICED_VOLUMES else "fragment"
 
-    # GEOMETRY DECIDES WHERE IT EXISTS. A relation `spatial_rel_between`
-    # stamped with `signal` and `noise` came off the observer's sound field
-    # (`world/spatial_sound_field.py`): the speaker's power arrives along the
-    # shortest acoustic path -- round the counter, through the doorway at the
-    # aperture's drop, never through the wall -- and is quantised against the
-    # noise at the listener's cell, LAST, onto the same three words. Every
-    # rule below this line is the edge model, and it runs unchanged wherever
-    # the field does not exist: no geometry, a body off the field, or the
-    # enclosure cases above, which the field defers to because a voice
-    # through a body's mass has no cell.
-    #
-    # A VOUCHED CHANNEL IS NOT THIS ROOM'S AIR, and the guard is explicit
-    # now because it used to hold by accident. This comment read "`vouched`
-    # is never reached with a field present -- a vouched channel is one with
-    # no spatial relation at all (barrier unknown, distance remote), and two
-    # bodies on one placed field always have one", which was true only while
-    # a stamp meant both bodies stood on one composite grid.
-    # `far_path_gain` stamps any pair the room GRAPH can join, which is
-    # nearly any two rooms of a scene, so the accident stopped: a voice on a
-    # comm channel began being graded by the doorways between its two ends,
-    # and a deafening bell beside the listener silenced a radio. The
-    # exemption was always the intent; only its enforcement was borrowed.
-    if not vouched and rel.get("signal") is not None \
-            and rel.get("noise") is not None:
-        signal = rel["signal"]
-        # WITHIN REACH IS CLOSER THAN ONE PACE. A pair the field could not
-        # place stands at the one-pace default, and the act tier is the only
-        # distance the beat holds for them. A whisper is speech made for a
-        # listener at touching distance; graded at one pace against a room's
-        # noise it vanished -- measured (scratch play 2026-09-14, chat 2 turn
-        # 6): signal 1.0 against noise 5.4 in a cabin with an engine beyond
-        # the door, whisper -> none, mutter -> none, for two bodies on one
-        # bench. `WITHIN_REACH_SIGNAL_GAIN` is the power ratio of roughly
-        # half a pace over one, applied only where the field placed nothing.
-        if proximity == "within_reach" and rel.get("tier") is None:
-            signal = signal * WITHIN_REACH_SIGNAL_GAIN
-        return _field_hear_level(volume, signal, rel["noise"], level_db,
-                                 source_noise=rel.get("source_noise"))
-
+    # ONE ROOM: a voice is heard in full. Distance inside a room takes
+    # nothing from it -- the room's reverberant field holds a voice within a
+    # few decibels of its level at a pace from wall to wall, which no lived-
+    # in room's floor comes near (+23 dB and up). Breath is the exception
+    # the speaker chose: private beyond reach.
     if rel.get("same_room"):
-        # The two quiet volumes are NOT one tier, and writing them as one
-        # ("A whisper (mutter)", as this comment used to read) is how the
-        # QUIETEST volume came to be the least attenuated: this branch tested
-        # only 'mutter', so 'whisper' fell through to full at any in-room
-        # distance. The deterministic floor runs this function with no model
-        # in the loop (agents/loops.py's deterministic_micro_perception), so a
-        # whispered line was delivered verbatim to a whole room.
-        #
-        # Whisper is therefore held to mutter's tiers -- and deliberately no
-        # tighter YET, though the spec ("whisper: ONLY same-room perceivers in
-        # close proximity") would justify silence beyond reach. The blocker is
-        # data, not intent: `across` needs both bodies anchored, and measured
-        # over the live corpus only 6.7% of bodies carry an anchored station
-        # and only 8.6% of multi-occupant rooms have two. So `near` is
-        # overwhelmingly a DEFAULT meaning "no station data", not a measured
-        # distance -- and reading it as a measurement would turn ~91% of
-        # whispers into silence for everyone, deleting authored dialogue to
-        # close a leak. Parity with mutter closes the leak (no verbatim
-        # content at range) without inventing a distance nobody recorded.
-        #
-        # Tighten `near` to "none" for whisper once station coverage is real
-        # -- that is the point at which the tier becomes evidence.
-        if volume in ("mutter", "whisper"):
-            if proximity == "across":
-                return "none"
-            if proximity == "near":
-                return "fragment"
+        if volume in UNVOICED_VOLUMES:
+            return _breath_level(volume, _reach(rel, proximity),
+                                 rel.get("paces"))
+        if rel.get("open_air_loss_db") is not None:
+            # UNDER THE SKY there is no ring to hold a voice up: it falls
+            # 6 dB a doubling, and a normal one is followed to 45 paces
+            # over an open place's quiet floor -- nearly three times a
+            # street's width (`spatial_sound_field.open_air_loss_db`).
+            from world.spatial_sound_field import far_speech_level
+            return far_speech_level(volume, rel["open_air_loss_db"],
+                                    rel.get("floor_db"), level_db=level_db)
         return "full"
+
+    # ROOMS AWAY: the far field measured the path (`spatial_sound_field.
+    # stamp_sound_relation` stamps `far_loss_db` for rooms the room graph
+    # joins beyond the next one), and the loss against the listening room's
+    # quiet floor is the answer. A live channel is not that air.
+    if not vouched and rel.get("far_loss_db") is not None:
+        from world.spatial_sound_field import far_speech_level
+        return far_speech_level(volume, rel["far_loss_db"], rel.get("floor_db"),
+                                muffled=bool(rel.get("far_muffled")),
+                                level_db=level_db)
 
     if barrier == "unknown" or distance == "remote":
         if not vouched:
@@ -1372,82 +1502,106 @@ def _hear_level(
 
         return "none"
 
-    if barrier in ("open", "open_door"):
-        if volume in ("normal", "loud", "shout"):
-            return "full"
+    # THROUGH AN OPENING a voice is heard in full: what an open doorway
+    # radiates into the next room arrives about 18 dB under the voice at a
+    # pace, +15 over a quiet room. Breath keeps its privacy by reach across
+    # the doorway (`spatial_rel_between` stamps it from who stands at the
+    # opening); unmeasured, the two are in different rooms and so at least
+    # a pace or two apart -- a mutter in pieces, a whisper gone, which is
+    # what this rule always said.
+    if barrier in OPEN_BARRIERS:
+        if volume in UNVOICED_VOLUMES:
+            return _breath_level(volume, _reach(rel, proximity) or "near",
+                                 rel.get("paces"))
+        return "full"
 
-        if volume == "mutter":
-            return "fragment"
-
-        return "none"
-
-    if barrier == "bars":
-        # A grate is an acoustic hole. Sound passes as it would through an
-        # open door -- which is the whole difference between a cage and a cell.
-        if volume in ("normal", "loud", "shout"):
-            return "full"
-
-        if volume == "mutter":
-            return "fragment"
-
-        return "none"
-
-    if barrier == "membrane":
-        # Soft and opaque: nothing is seen through it and a good deal is heard.
-        # It muffles rather than stops -- a raised voice carries, an ordinary
-        # one arrives as a fragment, and something said under the breath does
-        # not survive the crossing at all.
+    # A SHUT DOOR, A CURTAIN: spoken through, or overheard through. With a
+    # body at it (`door_reach`, either side) a normal voice is whole -- 60
+    # less the door's 25 is +8 over a quiet room at its other face, and the
+    # room beyond holds it within a few decibels of that. With neither at it
+    # the voice reaches the door at the room's ring, crosses it and spreads
+    # into the next room, about 8 dB under the floor with its consonants
+    # left behind in the door: muffled, caught in pieces. A raised voice and
+    # a shout carry through whole (+2, +14). Breath stays this side of it.
+    # Measured on chat 177 turn 21: the player a pace from a plank door
+    # asked the woman beside its other face a question, the line arrived
+    # "...you're... looking... something", and she answered "What was that?".
+    if barrier in DOOR_REACH_BARRIERS:
         if volume in ("loud", "shout"):
             return "full"
 
         if volume == "normal":
-            # ...unless the two stand at it, one each side: spoken through,
-            # not overheard through (`door_reach`, `spatial_rel_between`).
             return "full" if rel.get("door_reach") else "fragment"
 
         return "none"
 
     if barrier in ("window", "one_way_window"):
-        # Glass is the opposite of bars: you are seen and not heard. Sealed
-        # panes carry only real force, and never speech at conversational
-        # volume -- which is why a shout through glass is a fragment, and a
-        # normal sentence is nothing at all. A one-way window's asymmetry is
-        # a SIGHT fact (`spatial_rel` rewrites the blind side to `wall` and
-        # leaves the watcher's edge as declared); to an ear it is a pane, and
-        # with no branch here the watching side heard nothing at any volume
-        # while the aperture table already graded it as glass.
-        return "fragment" if volume == "shout" else "none"
-
-    if barrier == "closed_door":
-        if volume in ("loud", "shout"):
-            return "full"
-
-        if volume == "normal":
-            # A SHUT DOOR AT ARM'S REACH IS SPOKEN THROUGH. Overheard from
-            # across the next room an ordinary voice comes through a shut
-            # door in pieces; two bodies standing at the door, one each side,
-            # are talking through it, and a voice that reaches the door whole
-            # leaves it heard (`door_reach`). What is said under the breath
-            # stays this side of it either way -- the door still keeps a
-            # whisper and a mutter, below.
-            return "full" if rel.get("door_reach") else "fragment"
-
-        return "none"
+        # GLASS, AND A DOOR OF DENSE OR SEALED STUFF (which the material
+        # shift lands here): it keeps its stronger loss, 28-40 dB, one rung
+        # past a light door everywhere. With a body at it, the voice crosses
+        # only the pane: a normal voice comes through muffled (60 less some
+        # 35 is two under a quiet room), a raised one and a shout whole -- a
+        # light door's answers with nobody at it. With neither at it the
+        # room's ring and the next room's spread take sixteen more: a normal
+        # voice is gone (-18), and a raised one (-8) and a shout (+4, its
+        # consonants left in the pane: a partition's loss rises 6 dB an
+        # octave) cross as their low half. A one-way
+        # window's asymmetry is a SIGHT fact (`spatial_rel` rewrites the
+        # blind side to `wall` and leaves the watcher's edge as declared);
+        # to an ear it is a pane.
+        if volume in UNVOICED_VOLUMES:
+            return "none"
+        if _reach(rel, proximity) == "within_reach":
+            return "fragment" if volume == "normal" else "full"
+        return "none" if volume == "normal" else "fragment"
 
     if barrier in ("wall", "separated"):
+        # A WALL PASSES ONLY A SHOUT, AS A MURMUR: 45 dB of masonry leaves a
+        # shout about 6 dB under the next room's floor, its words in pieces,
+        # and a raised voice 18 under it.
         return "fragment" if volume == "shout" else "none"
 
     return "none"
 
-def _field_hear_level(volume, signal_gain, noise, level_db=None,
-                      source_noise=None) -> str:
-    """`hear_level`'s field branch: the sound field's quantisation, reached
-    through a deferred import (the field module imports this one's material
-    ladder at import time). `source_noise` is what the speaker is speaking
-    over (`spatial_sound_field.lombard_level_db`)."""
-    from world.spatial_sound_field import sound_field_hear_level
-    return sound_field_hear_level(volume, signal_gain, noise, level_db,
-                                  source_noise=source_noise)
+
+def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
+                   level_db=None, *, seen: bool = False) -> str:
+    """WHY a line is short of `full`, in the rule's own words -- "" when it
+    is heard whole. One of: `breath_beyond_reach`, `open_air_distance`,
+    `breath_through_a_door`, `shut_door_from_farther_off`,
+    `heavy_door_or_glass`, `wall`, `rooms_away`, `rooms_away_muffled`,
+    `deafening`, `no_air`, `conducted`. Read by the speech replay and by perception's decision
+    notes, so a hearing complaint is answered with the clause that decided
+    it."""
+    if not isinstance(rel, dict):
+        return ""
+    word = _volume_word(volume, level_db)
+    level = hear_level(rel, word, proximity=proximity, level_db=level_db,
+                       seen=seen)
+    if level == "full":
+        return ""
+    if _hear_level(rel, word, False, proximity, level_db) != level:
+        return "deafening"
+    if rel.get("inside_source") or rel.get("enclosed_from_source") \
+            or rel.get("source_enclosed"):
+        return "conducted"
+    barrier = _material_shifted_barrier(
+        normalize_barrier(rel.get("barrier")), rel.get("material"))
+    if rel.get("same_room") and word not in UNVOICED_VOLUMES:
+        return "open_air_distance"
+    if rel.get("same_room") or (barrier in OPEN_BARRIERS
+                               and rel.get("far_loss_db") is None):
+        return "breath_beyond_reach"
+    if rel.get("far_loss_db") is not None:
+        return "rooms_away_muffled" if rel.get("far_muffled") else "rooms_away"
+    if barrier == "unknown" or rel.get("distance") == "remote":
+        return "no_air"
+    if barrier in DOOR_REACH_BARRIERS:
+        return ("breath_through_a_door" if word in UNVOICED_VOLUMES
+                else "shut_door_from_farther_off")
+    if barrier in ("window", "one_way_window"):
+        return "heavy_door_or_glass"
+    return "wall"
 
 
 def can_perceive(rel: dict, volume: str = "normal") -> bool:

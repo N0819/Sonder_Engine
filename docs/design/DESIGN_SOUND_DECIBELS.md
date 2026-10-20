@@ -10,6 +10,13 @@ was registered rather than taken is in `docs/UNBUILT.md` § 1.125.
 **Recalibrated 2026-09-14** (§ 5c): the emission ladders are real sound
 pressure levels at one pace and the fragment margin a real one; what that
 left mixed is `docs/UNBUILT.md` § 1.159.
+**Speech restated 2026-10-20** (`DESIGN_SOUND_FIELD.md` § 11, the hearing
+rule): a spoken line is no longer graded by signal against noise. The
+ladders here still carry every SOUND's reach and level, and the speech
+budgets the rule keeps -- a voice rooms away against the listening room's
+quiet floor, a voice under the open sky, a voice in a deafening source's
+reach -- read the same levels at a speech margin of their own
+(`SPEECH_FULL_SNR`, 0 dB). `FULL_SNR` stays +3 dB for sounds.
 
 ## 1. What was true before, measured in the source
 
