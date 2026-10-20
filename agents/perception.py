@@ -58,6 +58,10 @@ from mind import affect
 from world.spatial import (
     tread_events,
     door_events,
+    felt_through_ground,
+    felt_vibrations,
+    seen_source_metres,
+    sound_after_sight,
     apply_contact_ops,
     room_display_name,
     hiding_holders_of,
@@ -87,6 +91,7 @@ from world.spatial import (
     sight_verdict,
     visual_level_between,
     hear_level,
+    spoken_to,
     heard_events,
     light_shape,
     measured_proximity_rel,
@@ -1526,6 +1531,42 @@ def _sound_field_for(ctx, sc, name, room, events=None):
     return sound_field(sc, name, room=room,
                        turn_idx=getattr(ctx.turn, "idx", None), crowds=crowds,
                        events=events or None)
+
+
+def _felt_percepts_for(ctx, sc, name, room, events):
+    """LOUD SOUND IS FELT (DESIGN_SOUND_FIELD.md § 14.4, wave B2): what
+    shakes the floor under `name` this beat -- the beat's own blows
+    (`events`) and the steady trembling of whatever runs at `deafening` and
+    above -- as touch percepts (`composer.felt_percepts`). Not gated by any
+    sense card: a body that cannot hear feels it all the same."""
+    turn_idx = getattr(getattr(ctx, "turn", None), "idx", None)
+    return composer.felt_percepts(
+        felt_vibrations(sc, name, room=room, events=events or None,
+                        turn_idx=turn_idx),
+        ground=felt_through_ground(sc, room), beat=turn_idx)
+
+
+def _sounds_after_sight(sc, observer, events):
+    """SOUND ARRIVES AFTER WHAT MADE IT (DESIGN_SOUND_FIELD.md § 14.3, wave
+    B2): `[(event, after, source)]` for each of the beat's sounds whose maker
+    -- a body the scene places, named as the event's `source` -- this
+    observer sees, standing far enough off that the sound comes a beat
+    after the sight of it (`sound_after_sight` over `seen_source_metres`).
+    A footfall is not one: a walker in view is seen walking, not heard."""
+    out = []
+    for event in events or ():
+        if not isinstance(event, dict) or event.get("tread"):
+            continue
+        source = str(event.get("source") or "").strip()
+        if not source or not room_of(sc, source) \
+                or same_subject(sc, source, observer):
+            continue
+        if visual_level_between(sc, observer, source) == "none":
+            continue
+        after = sound_after_sight(seen_source_metres(sc, observer, source))
+        if after:
+            out.append((event, after, source))
+    return out
 
 
 def _looked_vistas(sc, res, interp, name, player_name, ctx, senses=None):
@@ -3234,15 +3275,19 @@ def _line_is_to(ctx, sc, observer, line, *, names=None, aliases=()):
     breathed into an ear reaches this body only if this answers yes, so it
     fails toward no -- a target nothing resolves gives the line to nobody,
     and the composer's own reading of the line (`composer.line_addressed`)
-    is what a caller without a scene falls back to."""
+    is what a caller without a scene falls back to.
+
+    None where the line names NOBODY (`spatial_senses.spoken_to`): unknown,
+    which no bystander rule caps, never "spoken to somebody else"."""
     if not isinstance(line, dict):
-        return False
-    for text in composer._line_refs(line):
+        return None
+    refs = composer._line_refs(line)
+    for text in refs:
         named = ((names or {}).get(text) or (names or {}).get(text.casefold())
                  or _addressee_name(ctx, text))
         if _is_the_observer(sc, named, observer, aliases):
             return True
-    return False
+    return spoken_to(False, bool(refs))
 
 
 def perception_act(ctx, nonce):
@@ -5069,7 +5114,8 @@ def _authored_prose_gate(ctx, stage, name, known, identity_space):
 _AMBIENT_BEAT_BAND = 500_000
 
 
-def _gated_ambient_percepts(gate, sensory_events, room, *, order_key=None):
+def _gated_ambient_percepts(gate, sensory_events, room, *, order_key=None,
+                            after=None):
     """Authored ambient events, run through the observer's admission gate.
 
     Ambient prose is written for the scene, not for a mind: the establish
@@ -5077,10 +5123,11 @@ def _gated_ambient_percepts(gate, sensory_events, room, *, order_key=None):
     back at them, and naming characters to observers who had never met
     them. Gating the event text (not the rendered percept) keeps the
     dedupe key honest -- two observers who receive different gated text
-    have genuinely received different things."""
+    have genuinely received different things. `after` is
+    `composer.ambient_percepts`' (a sound heard after its seen source)."""
     if gate is None:
         return composer.ambient_percepts(sensory_events, room,
-                                         order_key=order_key)
+                                         order_key=order_key, after=after)
     gated = []
     for event in sensory_events or []:
         if not isinstance(event, dict):
@@ -5098,7 +5145,8 @@ def _gated_ambient_percepts(gate, sensory_events, room, *, order_key=None):
         # no `detail` key to begin with.
         gated.append({**event, "detail": desc, "desc": desc,
                       "description": desc, "text": desc})
-    return composer.ambient_percepts(gated, room, order_key=order_key)
+    return composer.ambient_percepts(gated, room, order_key=order_key,
+                                     after=after)
 
 
 #: Substance placements whose matter has open air around it. `interior` is
@@ -6471,6 +6519,11 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
                     gate, [{**event, "room": here, "room_id": here,
                             "source_room": here} for event, _level in afar],
                     p.get("room")))
+            # LOUD SOUND IS FELT (wave B2): what shakes the floor under this
+            # body, on the touch channel, whatever it can hear
+            # (`felt_vibrations`).
+            percepts.extend(_felt_percepts_for(ctx, sc, name, p.get("room"),
+                                               sensory_events))
             # THE OPENING'S LINES, heard as any beat's are: nothing said at an
             # opening reached anyone before 2026-09-26 -- a greeting's words
             # included -- because the establish stage kept no log.
@@ -6723,6 +6776,9 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         [{**event, "room": _here, "room_id": _here,
                           "source_room": _here} for event, _level in _afar],
                         p.get("room")))
+            # LOUD SOUND IS FELT (wave B2), whatever this body can hear.
+            percepts.extend(_felt_percepts_for(ctx, sc, name, p.get("room"),
+                                               act_sounds))
             rel = p.get("spatial_to_actor") or {}
             vis = p.get("visual_channel_to_actor", False)
             can_see = _in_plain_view(rel, vis)
@@ -7709,23 +7765,36 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 self_pronouns=p.get("pronouns"),
                 sound=field, prev_standing=prev_standing,
                 regions=regions)
+            # SOUND ARRIVES AFTER WHAT MADE IT (wave B2): a sound whose
+            # maker this observer SEES far enough off is held back here and
+            # told after the act it was seen doing, below, once the beat's
+            # events have their places (`_sounds_after_sight`).
+            _after_sight = {id(event): (after, source) for event, after, source
+                            in _sounds_after_sight(sc, name, _now_sounds)}
+            _held_sounds = []
             if beat_sounds:
                 # WHERE IT HAPPENED, and then everywhere else it reached.
                 # A signal is received whole only in its own room, so that
                 # room's observers get the authored detail through the same
                 # admission gate the establish stage uses...
+                _here_sounds = [
+                    e for e in _now_sounds
+                    # A walker's own footfalls are no news to the walker,
+                    # and a walker in plain view is seen walking, not
+                    # heard: the tread reaches whoever cannot see them.
+                    if not (e.get("tread") and (
+                        str(e.get("source") or "") == str(name)
+                        or (str(e.get("room") or "") == str(p.get("room") or "")
+                            and visual_level_between(
+                                sc, name, str(e.get("source") or "")) == "full")))]
+                _held_sounds.extend(
+                    (e, *_after_sight[id(e)]) for e in _here_sounds
+                    if id(e) in _after_sight
+                    and str(e.get("room") or "") == str(p.get("room") or ""))
                 percepts.extend(
                     _gated_ambient_percepts(
                         gate,
-                        # A walker's own footfalls are no news to the walker,
-                        # and a walker in plain view is seen walking, not
-                        # heard: the tread reaches whoever cannot see them.
-                        [e for e in _now_sounds
-                         if not (e.get("tread") and (
-                             str(e.get("source") or "") == str(name)
-                             or (str(e.get("room") or "") == str(p.get("room") or "")
-                                 and visual_level_between(
-                                     sc, name, str(e.get("source") or "")) == "full")))],
+                        [e for e in _here_sounds if id(e) not in _after_sight],
                         p.get("room")))
                 # ...THEN THE NEAR FIELD: a sound in a room the listener's
                 # own composite grid places is a one-beat source on that
@@ -7753,11 +7822,16 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         crowds=ctx.get("_sound_crowds")))
                 if afar:
                     here = str(p.get("room") or "")
+                    _kept = []
+                    for event, _level in afar:
+                        moved = {**event, "room": here, "room_id": here,
+                                 "source_room": here}
+                        if id(event) in _after_sight:
+                            _held_sounds.append((moved, *_after_sight[id(event)]))
+                        else:
+                            _kept.append(moved)
                     percepts.extend(_gated_ambient_percepts(
-                        gate, [{**event, "room": here, "room_id": here,
-                                "source_room": here}
-                               for event, _level in afar],
-                        p.get("room")))
+                        gate, _kept, p.get("room")))
                 # ...and beyond the near field it is a BEARING AND A
                 # CHARACTER, never a sentence and never a place. The rooms
                 # this listener's own composite already places are the near
@@ -7772,11 +7846,17 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         near_rooms=(field.grid.offsets if field else ()),
                         crowds=ctx.get("_sound_crowds"),
                         events=_now_sounds)))
+            # LOUD SOUND IS FELT (wave B2): the beat's blows -- a sound tied
+            # to its moment included -- and the steady trembling of what
+            # runs, on the touch channel, whatever this body can hear.
+            percepts.extend(_felt_percepts_for(ctx, sc, name, p.get("room"),
+                                               beat_sounds))
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(
                 name, known, ident_roster, bodies_by_name)
             order = 0
+            _seen_acts = {}         # actor -> the order of their last seen act
             # WHERE EACH DELIVERED TELL SHOWED, among the beat's events
             # (`_cue_slots`); what no event of its giver can hold is minted
             # after the loop with the demeanor, as before.
@@ -8159,7 +8239,19 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     order_key=order, observer_id=pid, surface=surface)
                 if percept:
                     percepts.append(percept)
+                    if percept.channel == "sight":
+                        _seen_acts[str(actor or "").strip().casefold()] = order
                 order += 1
+            # ...AND THE SOUND OF A THING SEEN FAR OFF COMES AFTER THE SIGHT
+            # OF IT (wave B2): held back above, it is told right after the
+            # last act of its maker this observer saw this beat, saying it
+            # came after; a maker seen doing nothing keeps it where it was.
+            for _event, _after, _source in _held_sounds:
+                _at = _seen_acts.get(_source.strip().casefold())
+                percepts.extend(_gated_ambient_percepts(
+                    gate, [_event], p.get("room"),
+                    **({"order_key": _at + 0.5, "after": _after}
+                       if _at is not None else {})))
             # A BODY THAT WAS THERE WHEN YOU CAME IN DID NOT COME IN. An
             # observer who came into the room this beat, in the same causal
             # step as the mover -- the two walked it side by side -- or after

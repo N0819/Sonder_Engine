@@ -453,7 +453,21 @@
     "weather_on_you": "{what}が身体に降りかかっている。",
     "weather_wind": "{wind}が身体を引っぱる。",
     "weather_air": "空気は{temperature}。",
-    "weather_falling": "{intensity}の{what}"
+    "weather_falling": "{intensity}の{what}",
+    "felt_blow_tremor": "足元の{under}を、かすかな震えが走る。",
+    "felt_blow_shudder": "足元の{under}がぶるりと震える。",
+    "felt_blow_jolt": "足元の{under}が激しく揺れる。",
+    "felt_steady_tremor": "足元の{under}から、かすかな震えが絶え間なく伝わってくる。",
+    "felt_steady_shudder": "足元の{under}が絶えず震えている。",
+    "felt_steady_jolt": "足元の{under}が、やむことなく激しく揺れ続けている。",
+    "weather_lightning": "{sky}の空に稲妻が走る。",
+    "weather_lightning_plain": "頭上で稲妻が走る。",
+    "weather_thunder_after": "稲光のたび、{after}遅れて雷鳴が届く。",
+    "weather_thunder_open": "頭上で雷鳴がとどろく。",
+    "weather_thunder_muffled": "壁の向こうで、くぐもった雷鳴がとどろく。",
+    "weather_thunder_faint": "壁のずっと向こうから、かすかな雷鳴が届く。",
+    "sound_after_sight_moment": "{desc}——見えてから一拍遅れて、その音が届く",
+    "sound_after_sight_seconds": "{desc}——見えてから数秒遅れて、その音が届く"
   },
   "count_generic": {
     "1": "",
@@ -526,6 +540,14 @@
     "behind": "あなたの背後",
     "left": "あなたの左手",
     "right": "あなたの右手"
+  },
+  "after_sight_words": {
+    "moment": "一拍",
+    "seconds": "数秒"
+  },
+  "felt_under": {
+    "floor": "床",
+    "ground": "地面"
   },
   "compass_words": {
     "n": "北",

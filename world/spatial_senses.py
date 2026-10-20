@@ -1483,6 +1483,7 @@ def hear_level(
     word = _graded_word(volume, level_db, addressed)
     if word is None:
         return "none"
+    rel = _facing_its_addressee(rel, addressed)
     return _capped_levels(rel, word, vouched, proximity, level_db, seen,
                           addressed)[-1]
 
@@ -1543,6 +1544,51 @@ def _bystander_in_a_din(rel, word, proximity, addressed) -> bool:
     return float(rel["paces"]) > CONVERSATION_REACH_PACES
 
 
+def spoken_to(names_this, names_anyone):
+    """WHOM A LINE IS SPOKEN TO, as every hearing reader asks it: True when
+    the line names this listener, False when it names somebody else, and
+    None when it names NOBODY -- unknown, which no bystander rule caps (the
+    din's, `_bystander_in_a_din`; the head's shadow, `_facing_its_addressee`)
+    and which the ear rung refuses all the same (`EAR_VOLUME` fails toward
+    no).
+
+    A line that names nobody is not a line to somebody else. Measured
+    2026-10-20: the addressee field is on nearly every recorded line and
+    EMPTY on 3,678 of the owner's 11,841 (31%), and every reader that asked
+    "does it name this listener?" read the empty field as "no" -- so a third
+    of all talk made each of its listeners a bystander, and two people
+    trading lines that named nobody lost each other's words to a turned
+    head (the harbour story's quay, turns 1-3) and would have to a din
+    beyond two paces. Wave A's rule had said an unknown addressee caps
+    nothing; no reader ever produced the unknown."""
+    if names_this:
+        return True
+    return False if names_anyone else None
+
+
+def _facing_its_addressee(rel, addressed):
+    """A LINE IS SPOKEN FACING THE ONE IT IS SPOKEN TO. The relation's
+    `speaker_turned_away` (`facing_loss_db`, wave B2) reads where the
+    speaker faces when the beat ENDS (`effective_facing`), not where the
+    head turned while the words were said -- and a speaker turns to the one
+    they talk to. So the head's shadow falls on a BYSTANDER behind the
+    speaker (`addressed` False: a line spoken to somebody else), never on
+    the line's own addressee, and never where the caller cannot say whom
+    the line was for (None). The din's own class (`_bystander_in_a_din`):
+    nothing about a speaker stops people talking TO EACH OTHER.
+
+    Measured before this (2026-10-20, the harbour story's turns 1-3):
+    seven lines between two people on a quay, naming no addressee, fell to
+    pieces because the speaker ended each beat facing the sea fourteen
+    metres in front of the man she was talking with. The owner's standing
+    lean where hearing is borderline is toward the voice carrying
+    (2026-09-26)."""
+    if addressed is not False and isinstance(rel, dict) \
+            and rel.get("speaker_turned_away"):
+        return dict(rel, speaker_turned_away=False)
+    return rel
+
+
 def voice_carries(rel: dict, volume: str, proximity: str | None = None,
                   level_db=None, *, seen: bool = False,
                   addressed=None) -> bool:
@@ -1561,6 +1607,7 @@ def voice_carries(rel: dict, volume: str, proximity: str | None = None,
     asked."""
     if not isinstance(rel, dict):
         return False
+    rel = _facing_its_addressee(rel, addressed)
     word = _volume_word(volume, level_db)
     if hear_level(rel, word, proximity=proximity, level_db=level_db,
                   seen=seen, addressed=addressed) != "none":
@@ -1638,18 +1685,28 @@ def _hear_level(
             # 6 dB a doubling, and a normal one is followed to 45 paces
             # over an open place's quiet floor -- nearly three times a
             # street's width (`spatial_sound_field.open_air_loss_db`).
-            from world.spatial_sound_field import far_speech_level
-            return far_speech_level(volume, rel["open_air_loss_db"],
-                                    rel.get("floor_db"), level_db=level_db)
+            # What reaches the listener is the DIRECT sound, so a speaker
+            # turned away from them takes the head's shade off its words
+            # (`facing_loss_db`, wave B2).
+            from world.spatial_sound_field import (facing_loss_db,
+                                                   far_speech_level)
+            return far_speech_level(
+                volume, float(rel["open_air_loss_db"]) + facing_loss_db(rel),
+                rel.get("floor_db"), level_db=level_db)
         return "full"
 
     # ROOMS AWAY: the far field measured the path (`spatial_sound_field.
     # stamp_sound_relation` stamps `far_loss_db` for rooms the room graph
     # joins beyond the next one), and the loss against the listening room's
-    # quiet floor is the answer. A live channel is not that air.
+    # quiet floor is the answer. A live channel is not that air. A speaker
+    # standing under the sky sends the direct sound out by the way toward
+    # the listener, and turned away from it takes the head's shade off the
+    # words (`facing_loss_db`; the stamp is only made for such a speaker).
     if not vouched and rel.get("far_loss_db") is not None:
-        from world.spatial_sound_field import far_speech_level
-        return far_speech_level(volume, rel["far_loss_db"], rel.get("floor_db"),
+        from world.spatial_sound_field import facing_loss_db, far_speech_level
+        return far_speech_level(volume,
+                                float(rel["far_loss_db"]) + facing_loss_db(rel),
+                                rel.get("floor_db"),
                                 muffled=bool(rel.get("far_muffled")),
                                 level_db=level_db)
 
@@ -1673,6 +1730,18 @@ def _hear_level(
         if volume in UNVOICED_VOLUMES:
             return _breath_level(volume, _reach(rel, proximity) or "near",
                                  rel.get("paces"))
+        if rel.get("open_air_loss_db") is not None:
+            # UNLESS BOTH SIDES ARE UNDER THE SKY (wave B2): a square and the
+            # street beside it are one stretch of open air, with no ring on
+            # either side for the opening's budget to stand on, so the
+            # voice falls with the distance as it does in one open place
+            # (`spatial_sound_field.open_air_loss_db`, stamped only for such
+            # a pair, placed).
+            from world.spatial_sound_field import (facing_loss_db,
+                                                   far_speech_level)
+            return far_speech_level(
+                volume, float(rel["open_air_loss_db"]) + facing_loss_db(rel),
+                rel.get("floor_db"), level_db=level_db)
         return "full"
 
     # A SHUT DOOR, A CURTAIN: spoken through, or overheard through. With a
@@ -1728,15 +1797,20 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
                    level_db=None, *, seen: bool = False,
                    addressed=None) -> str:
     """WHY a line is short of `full`, in the rule's own words -- "" when it
-    is heard whole. One of: `into_another_ear`, `breath_beyond_reach`,
-    `open_air_distance`, `breath_through_a_door`,
+    is heard whole. One of: `into_another_ear`, `speaker_turned_away`,
+    `breath_beyond_reach`, `open_air_distance`, `breath_through_a_door`,
     `shut_door_from_farther_off`, `heavy_door_or_glass`, `wall`,
     `rooms_away`, `rooms_away_muffled`, `deafening`, `din_bystander`,
     `no_air`, `conducted`. Read by the speech replay and by perception's
     decision notes, so a hearing complaint is answered with the clause
-    that decided it."""
+    that decided it.
+
+    `speaker_turned_away` (wave B2) names a line that would have arrived
+    whole had its speaker faced the listener (`facing_loss_db`), and
+    `upwind` one the wind's shadow took (`wind_bend_db`)."""
     if not isinstance(rel, dict):
         return ""
+    rel = _facing_its_addressee(rel, addressed)
     word = _graded_word(volume, level_db, addressed)
     if word is None:
         return "into_another_ear"
@@ -1744,6 +1818,14 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
                                           level_db, seen, addressed)
     if level == "full":
         return ""
+    if rel.get("speaker_turned_away") and _capped_levels(
+            dict(rel, speaker_turned_away=False), word, False, proximity,
+            level_db, seen, addressed)[-1] == "full":
+        return "speaker_turned_away"
+    if float(rel.get("wind_bend_db") or 0.0) < 0.0 and _capped_levels(
+            _without_the_wind(rel), word, False, proximity, level_db, seen,
+            addressed)[-1] == "full":
+        return "upwind"
     if table != masked:
         return "deafening"
     if masked != level:
@@ -1753,7 +1835,8 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
         return "conducted"
     barrier = _material_shifted_barrier(
         normalize_barrier(rel.get("barrier")), rel.get("material"))
-    if rel.get("same_room") and word not in UNVOICED_VOLUMES:
+    if (rel.get("same_room") or rel.get("open_air_loss_db") is not None) \
+            and word not in UNVOICED_VOLUMES:
         return "open_air_distance"
     if rel.get("same_room") or (barrier in OPEN_BARRIERS
                                and rel.get("far_loss_db") is None):
@@ -1768,6 +1851,19 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
     if barrier in ("window", "one_way_window"):
         return "heavy_door_or_glass"
     return "wall"
+
+
+def _without_the_wind(rel: dict) -> dict:
+    """The relation as it would stand with no wind on the path: the bend
+    `stamp_sound_relation` folded into the open air's loss, or the far
+    field's, given back (`spatial_sound_field.wind_bend_db`)."""
+    bend = float(rel.get("wind_bend_db") or 0.0)
+    out = {k: v for k, v in rel.items() if k != "wind_bend_db"}
+    for key in ("open_air_loss_db", "far_loss_db"):
+        if out.get(key) is not None:
+            out[key] = float(out[key]) + bend
+            break
+    return out
 
 
 def can_perceive(rel: dict, volume: str = "normal") -> bool:

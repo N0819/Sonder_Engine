@@ -2463,6 +2463,23 @@ What the 2026-10-13 round left:
   call -- today it has (8 of 11 captured re-drafts echo them, which makes
   Home 11's futon-under-trunk the designer's to clear).
 
+<a id="unbuilt-1-217"></a>
+
+### 1.217 The weather drift drops the moon -- found 2026-10-20, not fixed
+
+**Found 2026-10-20** by wave B2 (`DESIGN_SOUND_FIELD.md` § 14.2), adding the
+wind's quarter to the record the drift carries. `weather.advance_weather`
+rebuilds the record from the axes it walks and the ones it carries -- `sky`,
+`air`, `cloud`, `electrical`, the fall, `wind`, `temperature` -- and the
+`moon` is not among them, so `normalize_weather` (given no base) reads it
+from the sky's own text or falls to `none`. Measured at HEAD 47137002: a
+record declaring `moon: full` under a sky named "clear night" comes out of
+its first drift window with `moon: none`, and the night goes from `dim` to
+`dark` (`spatial_light` reads `MOONLIT`). The fix is one line beside the
+quarter wave B2 carries (`"moon": weather.get("moon")` in the drift's
+record); it changes sight on every drifted moonlit night, so it is the
+owner's to land with its own measurement.
+
 
 ## 2. Roadmap
 

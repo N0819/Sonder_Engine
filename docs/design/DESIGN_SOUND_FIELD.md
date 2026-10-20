@@ -42,6 +42,13 @@ BYSTANDER -- never from the people talking to each other (§ 11.4's
 travels farther than its words; a voice is known by its sound, and a
 stranger's is described by what it carries; footsteps come through floors.
 
+**WAVE B2, 2026-10-20** (§ 14, how sound TRAVELS; § 13 is the listener's
+state): a voice is directional, and behind its speaker the words fall
+first; outdoors the wind is noise at the ear and bends a sound's reach by
+its direction; a sound arrives after the sight of what made it; and loud
+sound is felt through what a body stands on. Found on the way: two places
+under the sky joined by an opening are one stretch of open air.
+
 ---
 
 ## 1. What exists, and where it stops
@@ -1075,7 +1082,8 @@ follows. Rain and an ordinary quiet house are not a din.
   it `din_bystander`.
 * WHO IT WAS SPOKEN TO is read by `composer.line_addressed` (a line's
   `intended_target`, or a span's `targets`; a line said to nobody in
-  particular was spoken to nobody) for both perception passes -- the onset
+  particular was spoken to nobody -- and, since § 14.8, is UNKNOWN to every
+  reader, None, where an empty field had read as "somebody else") for both perception passes -- the onset
   entry now carries its `intended_target`, which it had dropped, so every
   onset line read as addressed to nobody -- by the interaction loop's round
   (`_delivery_ok`, `loops.deterministic_micro_perception`) and by the three
@@ -1367,3 +1375,472 @@ voice, thuds through a sited building's floors, a sneak's pace, footwear and
 coverings, the round's voice rung, the callers that pass no addressee,
 `known` as recognition, the persona's voice, babble's informational
 masking) and § 1.209 of `docs/UNBUILT_WORLD.md` (floor coverings).
+
+## 14. Wave B2: how sound travels (2026-10-20)
+
+The owner, on the list of what hearing still lacked against reality: "I
+guess go ahead", and before it, "the system is failing to meet several real
+world principles". Wave B1 (§ 13) took the LISTENER's state; this wave takes
+the way between the source and the ear. Four concepts, each a class in the
+engine's own vocabulary with its real-world basis beside its constant, each
+verified against what existed first and built failing-first
+(`tests/test_which_way_the_speaker_faces.py`,
+`tests/test_the_wind_carries_and_swallows_sound.py`,
+`tests/test_sound_arrives_after_what_made_it.py`,
+`tests/test_loud_sound_is_felt.py`; every one of their twenty tests fails
+with its fix taken back).
+
+### 14.1 Which way the speaker faces
+
+**The world.** A voice is directional. The mouth radiates forward and the
+head shades what goes behind it: round talkers at a metre the overall level
+directly behind is some 6-8 dB under the level in front, 4-6 dB at the rear
+diagonals; the 2-4 kHz band the consonants carry the words in falls most,
+10-15 dB behind, while the vowels and the tune below 1 kHz lose 2-4 (Chu &
+Warnock 2002; Monson, Hunter & Story 2012).
+
+**Verified first.** The engine reads facing for hearing only from the
+LISTENER's side: `entity_arc` (an act behind you is heard, not seen) and
+`sound_bearing` (which way a sound comes from). Nothing read the SPEAKER's
+facing. The record exists: `orientation.facing`, written at commit by
+`spatial_frames.infer_facing`, and `effective_facing`, which derives a
+facing from the focus between commits -- 11,501 body-facings across the
+owner's 4,470 checkpoint scenes (a third of placed bodies).
+
+**The class.** A listener in the speaker's rear arc (behind and the two rear
+diagonals, `spatial_geometry._REAR_SECTORS`) gets the voice's DIRECT sound
+lower: its words by `FACING_AWAY_WORDS_DB` 8 (the consonant band's loss over
+that arc), its low half -- what the tone rung carries -- by
+`FACING_AWAY_VOICE_DB` 3. Never within conversational reach: the one at the
+speaker's shoulder hears a turned head whole. And only for a BYSTANDER
+(§ 14.8): the facing on the record is where the speaker ends the beat, and a
+speaker turns to the one they talk to, so a line's addressee -- and a
+listener nobody can say it was for -- is graded as faced
+(`spatial_senses._facing_its_addressee`).
+
+**Where it bites, and where the physics says it cannot.** § 11's table is
+used because its entries sit far from either threshold; facing moves a line
+only where its budget is the direct sound and marginal:
+
+| path | budget | facing |
+|---|---|---|
+| under the open sky (`open_air_loss_db`), and across an opening between two places under it (§ 14.2) | direct sound, 6 dB a doubling | words 8, voice 3 |
+| rooms away from a speaker standing under the sky (`far_loss_db`) | the direct sound leaves by the way toward the listener | words 8, voice 3 |
+| a bystander in a din (§ 12.1, `_din_voice_db`) | direct sound: the ring is under the din | words 8, voice 3 |
+| across an enclosed room, through an opening, to a shut door nobody stands at, rooms away from an enclosed room, a wall | the room's RING carries the voice | none |
+
+The brief named "through a door with nobody at it". It is not built, and
+the reason is the physics the table is written against: with nobody at a
+shut door the voice reaches it as the room's reverberant field
+(`VOICE_ROOM_DROP_DB`, the budget's -6), and the ring is set by the voice's
+total power, not its direction -- it faces nowhere. A speaker standing AT
+the door facing away still clears it (60 - 8 - 25 = 27 dB at a quiet
+room's 27, the 0 dB the table's "full" stands on). The one door case where
+facing would matter -- a speaker within a metre or so of a door, facing it,
+whose direct sound outruns the ring -- RAISES a line, and the table never
+claimed that budget.
+
+**As built.** `spatial_sound_field.stamp_sound_relation` stamps
+`speaker_turned_away` (`_speaker_turned_away`) only where a budget reads the
+direct sound and the record gives the speaker a facing: the bearing from
+speaker to listener is the observer's own composite field for one room or a
+neighbour (`bearing_between` of the two cells), else the site plan, else
+the far field's first hop out of the speaker's room (`_first_hop`, a flood
+from the listener's room). `facing_loss_db(rel, part)` is read by
+`_hear_level`'s open-air, opening-under-the-sky and rooms-away rows,
+`_voice_path_loss_db`'s two direct paths (the masking budget),
+`_din_voice_db` and `voice_margin_db`. `hearing_reason` says
+`speaker_turned_away` for a line that would have been whole facing the
+listener.
+
+| an ordinary voice, open ground | in front | behind |
+|---|---|---|
+| 2 paces | full | full (within conversational reach) |
+| 40 paces (30 m) | full (+1 dB) | fragment (-7) |
+| 90 paces, raised | full (+3.9) | fragment (-4.1) |
+| 94 paces, normal | fragment (-6.5); voice -6.5 | none; voice still carries (-9.5) |
+| a busy tavern (a few dozen), a raised voice 4 paces off, to a bystander | full (+4.7) | fragment (-3.3) |
+
+### 14.2 The wind
+
+**The world.** Outdoors the wind does two things to sound. Wind at the ear is
+itself noise -- the turbulence the moving air makes round the head and the
+outer ear, roughly 50-70 dB(A) in a strong wind. And wind bends a sound's
+reach: it blows faster a few metres up than at the ground, so a sound going
+WITH it is bent back down and carried a few decibels further, and one going
+AGAINST it is bent up into a shadow near the ground that swallows it --
+10-20 dB at long range once the path passes the shadow's edge, some 100-200
+m out for a source and a listener a metre or two up; across the wind little
+changes (Piercy, Embleton & Sutherland 1977; Embleton 1996).
+
+**Verified first.** The weather record carries the wind's STRENGTH
+(`WINDS`: still, breeze, wind, gale) and no direction anywhere in the
+engine. `WIND_NOISE` priced a strong wind at 34.8 dB and a gale at 40.0,
+under a quiet room's talk -- "wind you have to raise your voice over is what
+wind is" was the comment that kept it there on 2026-09-05, when the run that
+moved the rain levels had measured rain. Six checkpoint scenes of the
+owner's 4,470 carry a `wind` or a `gale` (chats 46, 166 and 178), none a
+quarter.
+
+**The class.** Outdoors, a strong wind is a din at the ear, and the wind
+bends a sound's reach by its direction. Never indoors. The owner's rain
+ruling is untouched: rain is never a din, and a call across a street is
+whole in any weather.
+
+**As built.**
+
+* WIND AT THE EAR: `WIND_NOISE_DB` = `wind` 60, `gale` 70 dB(A) (the
+  powers `WIND_NOISE` are derived), added to the floor of a room the wind
+  reaches (`weather_for_room`'s `wind_reaches`: under the sky or a roof open
+  at its sides). Both are over `DIN_DB`, so § 12.1's rule applies as it does
+  to any din: a bystander beyond conversational reach catches pieces of a
+  conversation a few paces off; the people talking to each other, and a
+  line spoken TO its listener at any range, are untouched. A gale is also
+  the noise every sound outdoors is heard over (`level_of`), a distant
+  sound's margin, a footfall's, and the room's noise word, `din`.
+* THE WIND'S QUARTER: `weather.WIND_FROM_KEY` = `wind_from`, the compass
+  point the wind blows FROM on the engine's own eight bearings
+  (`normalize_bearing`: `w`, `west`, `NW`; an egocentric word is none).
+  Absent unless a story names it, so an old record serializes exactly as it
+  did and bends nothing; carried by a later record that does not restate it
+  and by the drift, which walks the strength and never the quarter
+  (`advance_weather`); accepted by the causal verifier's weather receipts.
+  ONE CLAUSE, en + ja, is how a model learns it exists: the encoder's
+  `weather` part names `wind_from` among the operational axes ("the compass
+  point the wind blows from"), and `director_establish`'s weather spec adds
+  it ("the quarter the wind blows FROM; omitted in still air").
+* THE BEND: `wind_bend_db(scene, travel, metres)` -- the cosine of the angle
+  between the sound's way and the wind's scales `WIND_DOWNWIND_DB` with the
+  wind and `WIND_UPWIND_DB` against it, growing with the logarithm of the
+  path from `WIND_BEND_ONSET_M` 50 m to its full size at `WIND_BEND_FULL_M`
+  400 m. `stamp_sound_relation` folds it into `open_air_loss_db` (one place
+  under the sky, or two joined by an opening) and into `far_loss_db` when
+  both rooms are under the sky, and stamps `wind_bend_db`;
+  `distant_sounds` and the near field's `SoundField.signal_at` apply it to
+  sounds. `hearing_reason` says `upwind`.
+
+| the bend, by path length | 50 m | 75 m | 100 m | 150 m | 200 m | 300 m | 400 m+ |
+|---|---|---|---|---|---|---|---|
+| gale, downwind | 0 | +1.0 | +1.7 | +2.6 | +3.3 | +4.3 | +5.0 |
+| gale, upwind | 0 | -2.9 | -5.0 | -7.9 | -10.0 | -12.9 | -15.0 |
+| gale, quartering (45 degrees) downwind | 0 | +0.7 | +1.2 | +1.9 | +2.4 | +3.1 | +3.5 |
+
+A strong wind (`wind`) is two thirds of a gale's shadow and three fifths of
+its carry; a breeze a third and a fifth.
+
+**Found on the way: two places under the sky are one stretch of air.** The
+hearing rule graded a voice between two NEIGHBOURING rooms by the opening
+row -- whole at any distance, the budget of a room's ring radiating through
+a doorway into the next room's ring -- even where both rooms are under the
+sky. Measured: an ordinary voice 140 paces from a meadow into the pasture
+through the gap in its hedge was whole, and in pieces across one field of
+the same length. Where both rooms are under the sky and an opening joins
+them (`_open_between`), the open air's law now runs over the field's own
+path through the opening (`open_air_loss_db(..., speaker_room=)`), and the
+opening row reads it (`hearing_reason`: `open_air_distance`). A barn's
+doorway onto the pasture is still a room's opening.
+
+### 14.3 Sound arrives after what made it
+
+**The world.** Light crosses any distance a story holds at once; sound
+crosses air at some 343 m/s (dry air at 20 C). A thing seen far off is seen
+first and heard after: a gun's flash and then its bang, an axe across a
+valley and then its chock, lightning and then its thunder, three seconds a
+kilometre. Within a building the gap is a few hundredths of a second.
+
+**Verified first.** Where do a seen source and its sound share one beat's
+composition?
+
+* THE SKY: nowhere. The `electrical` axis reached the screen -- the overlay
+  draws the flash and schedules the clap 0.7-6.5 s after it
+  (`static/js/weather-fx.js`, "thunder follows lightning, never leads it")
+  -- and the ambience's sound bed (`weather_words`), and no mind's view at
+  all: `composer.weather_percepts` said nothing of a flash or of thunder.
+  No checkpoint in the owner's database holds an electrical sky.
+* THE FAR LAYERS: never. `distant_sounds` gives a bearing and a character
+  and never a source; `landscape` and `vistas` give places and never events.
+* THE NEAR FIELD: one beat's sound events and its seen acts meet in the
+  outcome pass's composition for bodies in one room or a neighbour the
+  observer's composite places -- at most two rooms' extents, under 150 m.
+  The sound events were minted with no place among the beat's events.
+
+**The class.** Where a view holds the sight of a thing and the sound it made,
+and the thing stands past the distance at which the gap reads as a beat,
+the sight is told first and the sound after it. An order within one beat,
+never a new beat.
+
+**As built.**
+
+* `SPEED_OF_SOUND_M_S` 343; `SOUND_AFTER_SIGHT_S` 0.3 -- the eye and the
+  ear bind a sight and a sound into one event across roughly a tenth to a
+  fifth of a second, and a third of a second is past that with room to
+  spare -- so `SOUND_AFTER_SIGHT_M` = 102.9 m; from `SOUND_SECONDS_AFTER_S`
+  1.5 s (about half a kilometre) the sound comes "seconds" after rather than
+  "a moment" (`sound_after_sight`, `SOUND_AFTER_WORDS`).
+* THE SKY: `composer._storm_percepts`. The flash is seen where the sky's
+  weather is in view (`weather_visible`); the thunder is heard where
+  `weather.thunder_heard` says it reaches -- one definition, which the sound
+  bed's `weather_words` now reads too. A body with both is told them in
+  order, "Lightning flickers across the storm sky. Its thunder follows each
+  flash, seconds later.": lightning comes down from a cloud base a kilometre
+  or two up (`LIGHTNING_M` 1500), so the gap is always seconds. Indoors, the
+  thunder alone, muffled as the rain is. Standing: said when the storm
+  begins and when what this body has of it changes. Both packs.
+* THE BEAT: `perception._sounds_after_sight` names the beat's sounds whose
+  maker -- a body the scene places, named as the event's `source` -- the
+  observer sees past the threshold (`seen_source_metres`: the straight line
+  between measured cells on the observer's composite, or on the site plan;
+  an unplaced body is never guessed). The outcome pass holds each back and
+  tells it right after the last act of its maker the observer saw that
+  beat, saying it came after ("A flat crack of musket fire — the sound
+  reaches you a moment after the sight of it."); a maker seen doing nothing
+  keeps it where it was. `ambient_percepts(after=)` and the packs'
+  `sound_after_sight_*` say it.
+
+Found and registered, not built: the outcome pass mints a beat's own sound
+events with no order key, so a near sound lands lowercase in the view's
+background half ("... You see a person of unremarkable appearance. a flat
+crack of musket fire.") although `ambient_percepts`' own note says a beat's
+sound is not standing state; the establish pass keys them, the outcome pass
+does not (`docs/UNBUILT_PERCEPTION.md` § 2.36).
+
+### 14.4 Loud sound is felt
+
+**The world.** A very loud low-frequency sound and a heavy impact are felt as
+well as heard -- through the floor or the ground a body stands, sits or lies
+on, and in the chest: an explosion, a falling beam, a big drum, machinery a
+voice cannot be raised over. Often before the sound and beyond it: the
+structure carries a blow where the air between rooms has lost it, and a
+body that cannot hear feels it all the same.
+
+**Verified first.** Nothing in the engine carried it. The touch channel held
+the weather on the skin, contacts and a body's own state; a sound event was
+hearing alone, so chat 160 turn 11's elevator car striking the concrete at
+the foot of its shaft (`catastrophic`) reached its riders and the floors
+above it as a noise, or as nothing.
+
+**The class.** An impact or an emission past a felt threshold reaches nearby
+bodies as touch through what they stand on, graded by distance and by the
+storeys between. Deterministic from typed data -- the beat's sound events on
+the impact ladder (`EVENT_DB`, or an authored `db`), a running thing or a
+place's own sound at `deafening` and above, the site plan's storeys -- and
+naming no source and no direction.
+
+**As built** (`spatial_sound_field.felt_vibrations`, `felt_word`,
+`felt_through_ground`; `composer.felt_percepts`;
+`perception._felt_percepts_for` in all three passes):
+
+* `FELT_DB` 100 dB(A), the level a source holds a pace from where it is
+  made: the floor of the `deafening` class. Airborne low-frequency sound
+  begins to be felt in the body about 100-110 dB, and an impact heavy
+  enough to shake a floor -- a dropped load, a heavy door slammed, a beam
+  coming down -- is 90-110 dB(A) a metre off. A household thing never
+  reaches it, nor a voice (a shout is 82).
+* `FELT_SPREAD_DB_PER_DOUBLING` 3: the waves that carry a blow through a
+  floor slab or along the ground spread over a surface (amplitude as one
+  over the square root of the distance), where airborne sound loses 6.
+  Material damping is not counted.
+* `FELT_STOREY_DB` 3 a storey: a floor is the medium, not a barrier
+  (building-vibration practice takes some 1-3 dB a floor; airborne sound
+  loses 50 through the same floor).
+* `FELT_LEVELS` tremor | shudder | jolt, ten decibels a rung
+  (`FELT_SHUDDER_DB` 10, `FELT_JOLT_DB` 20): the steps vibration perception
+  is graded by -- barely, distinctly, strongly perceptible.
+* the distance is the straight line on one room's cells or the site plan,
+  else the structure's chain of rooms (`_structure_paces`: any declared
+  way, a wall included, half-spans a hop); a body off the ground (a flier)
+  feels nothing through a floor it is not on.
+* `composer.felt_percepts`: one blow (the beat's hardest) and one steady
+  trembling at most, on the touch channel, through the floor or -- under
+  the open sky with no floor of its own -- the ground, in the story's
+  language ("The floor jolts hard beneath you." / 「足元の床が激しく揺れる。」).
+  A blow's key carries the beat, so it is news each time; a trembling is
+  standing. NOT GATED BY ANY SENSE CARD: a deaf body feels it (the act
+  pass test: a powder magazine through a wall, a deaf guard).
+
+| reach on one storey | tremor from | shudder from | jolt from |
+|---|---|---|---|
+| a `deafening` machine (100 a pace) | 1 pace | -- | -- |
+| a `thunderous` blow (120) | 100 paces (75 m) | 10 paces | 1 pace |
+| a `catastrophic` blow (140) | 10,000 paces (7.7 km) | 1,000 paces | 100 paces |
+
+An ordinary crash -- the impact ladder's own `deafening`, 80 at its cell --
+is heard and felt by nobody: the ladder's 43 dB gap to `thunderous` is the
+impact recalibration `docs/UNBUILT.md` already registers.
+
+### 14.5 Measured
+
+Offline, no model call and no network (every socket refused), through the
+engine's own readers, on the owner's `engine.db` read `mode=ro` and copies of
+the four 2026-09-26 stories (opera, harbour, fort, schoolhouse; copies deleted
+after). Scripts in the wave's lane directory: `regrade_b2.py` (wave A's
+`regrade_a.py`, recording the facing, wind and open-air stamps too),
+`compare_b2.py`, `b2_survey.py` (felt, after-sight and the wind per beat),
+`seen_far.py`.
+
+* **As merged (§ 14.8): every recorded line arrives exactly as before the
+  wave -- 2,408 of 2,408 identical in word, none raised, none lowered.** The
+  eight lines below came back whole: none of them names its addressee, and
+  a line that names nobody has no bystander. What follows is the lane's own
+  measurement, before that correction.
+* **Every recorded line, re-graded (2,408 decisions, 2,296 distinct beats):
+  2,400 identical in word, reason and voice; 8 lowered, full to fragment;
+  none raised.** The owner's 1,782 lines in chats 118-178 are all identical,
+  chats 175-178's 153 included. All eight are the harbour story's:
+  * SEVEN BY FACING, turns 1-3: Wren at the end of the harbour wall, facing
+    the sea with her focus on Jonah beside her, and Aldo at the bollards on
+    the quay, 18-19 paces (14 m) apart across the open way between quay and
+    wall; their exchange about the skiff and the tide names no addressee.
+    The open air's budget, read across that opening now (§ 14.2), gives +6
+    to +7 dB with the speaker facing the listener and -1 to -2 with their
+    back to them: pieces. Right by the physics -- on a quiet 30 dB floor; a
+    working harbour is louder and would cost more -- and borderline as
+    fiction: the beat wrote an exchange, and the page could now have one of
+    them half-hear the other (§ 14.7, question 2).
+  * ONE BY THE WIND, turn 19, in a gale: Wren raises her voice at Jonah
+    beside her, and Aldo, sixteen paces up the wall and watching her, now
+    catches pieces of it (-11 dB with her face in view; `din_bystander`).
+    Right as fiction.
+  On the distinct lines the stamps fall `speaker_turned_away` 57 times (7
+  changed), the open air across an opening 53 (none changed by it alone),
+  and a new din from the wind 11 (1 changed).
+* **The wind**: 9 body-beats stand in a wind or a gale -- the harbour's gale
+  (turns 18-19: Jonah, Wren, Aldo) and the fort story's yard in a strong
+  wind (turns 5, 7, 9) -- and the noise at their ear goes from 36.5-40.4 dB
+  to 60 and 70, a din. No body lost a distant sound to it. No record anywhere
+  names the wind's quarter, so the bend moves nothing until a model writes
+  `wind_from`.
+* **After sight**: 233 placed pairs in which an observer saw the maker of one
+  of its beat's sounds; the farthest stood 12 m off (the opera story, turn
+  2). None is past the 103 m threshold, and no checkpoint holds an
+  electrical sky: the rule changes nothing recorded. The end-to-end test is
+  its evidence (a musket across two fields, 112 m).
+* **Felt**: of 4,345 beats with a checkpoint after them, the felt percept
+  reaches a body on 6 body-beats, and they are exactly the elevator crash:
+  chat 160 turns 11 and 13, Hinami and Sarah Moon riding the car, "The
+  floor jolts hard beneath you." (27.5 and 24.3 dB over the threshold, the
+  `catastrophic` impact at the shaft's foot); chat 161 turn 11, the same
+  riders, a shudder (that replay wrote the impact `thunderous`, in the car
+  itself). Site-17's `deafening` klaxon trembles only the things fixed at
+  it -- no body stood within a pace of it. Nothing else in the corpus is
+  loud enough to be felt.
+* **Nothing else moved**: the voice rung, the reasons and every other
+  decision are byte-identical; the wave's own and the touched suites pass.
+
+### 14.6 Guards and clauses
+
+No new guard. Every rule here only subtracts or reorders what a body already
+had a channel to -- facing and the wind lower a voice's budget, the delay
+reorders two percepts the observer already had, and the felt percept names
+no source, no direction and no word -- except the felt percept and the
+thunder, which are NEW content: both are public physical facts (the floor
+moved; the sky flashed) delivered on their own channel, never the sound's
+detail, and the thunder only where `weather.thunder_heard` already let the
+ambience play it.
+
+ONE CLAUSE, en + ja: the weather's `wind_from` axis, in the encoder's
+`weather` part and in `director_establish`'s weather spec (§ 14.2). Its
+effect needs a live run.
+
+### 14.7 The owner's questions, and what is left
+
+Each a constant or a reading this wave had to take, and the owner's:
+
+1. **The facing losses, words 8 / voice 3 dB** over the rear arc: the
+   consonant band's loss averaged over 135-225 degrees, and the low half's.
+   At 6 (the overall level behind a talker) the harbour story's seven lines
+   would stay whole. Moot for the corpus since § 14.8: those seven name no
+   addressee and are whole again at 8.
+2. **Facing is the record at the end of the beat.** A speaker talking to
+   someone mostly turns to them; the record says where their focus was
+   left. Should a line spoken TO a listener be graded as faced toward them
+   (none in the corpus: the harbour lines name no addressee)? **Built as
+   yes** in the merge (§ 14.8), under the owner's standing lean where
+   hearing is borderline (toward the voice carrying, 2026-09-26) -- and for
+   a line naming nobody as well. The owner's to reverse.
+3. **The door with nobody at it is not built** (§ 14.1): the ring that
+   carries a voice to a far door faces nowhere.
+4. **Wind at the ear: `wind` 60, `gale` 70 dB(A)**; a breeze adds nothing.
+5. **A din spares an addressee at any range** (§ 12.1's rule). Under the
+   open sky in a gale an addressee a hundred metres off follows a raised
+   voice against the quiet floor. Should the wind -- or any din -- reach a
+   line spoken to someone beyond conversational reach?
+6. **The bend's sizes**: upwind 5 / 10 / 15 dB and downwind 1 / 3 / 5 by
+   breeze, wind and gale, from 50 m to full at 400 m.
+7. **`wind_from` is written by a model** (one clause, en + ja): the opening
+   names it with the weather, the encoder when the prose changes the sky.
+   Whether the drift should ever veer it. Its effect needs a live run.
+8. **Two places under the sky across an opening are one stretch of air.** A
+   voice leaving a BUILDING through an open door into the open air is still
+   charged nothing for the open air it spreads into (§ 11.8 question 9).
+9. **The after-sight threshold, 0.3 s (103 m)**; lightning's thunder always
+   "seconds later" (`LIGHTNING_M` 1500); thunder heard indoors only where
+   the rain is, the sound bed's existing rule -- a dry storm is silent
+   indoors.
+10. **The felt numbers**: `FELT_DB` 100 a pace from the source, 3 dB a
+    doubling, 3 a storey, 10 dB a rung. A `deafening` siren on a wall
+    trembles the floor at it exactly as a machine standing on it does -- the
+    class cannot tell them apart -- and the impact ladder's 43 dB gap
+    between `deafening` (80) and `thunderous` (123) means no ordinary crash
+    is ever felt.
+11. **The storm in every stormy view**: the flash and its thunder are
+    standing percepts, said when the storm begins and when what a body has
+    of it changes.
+
+What is left is registered in `docs/UNBUILT_PERCEPTION.md` § 2.36 (the
+outcome pass's keyless beat sounds, the act pass's order, a maker matched by
+its name, the felt coupling and damping, the sky's thunder felt, the heard
+thud through a floor, the head turned against the body, the near field's
+unbent noise) and `docs/UNBUILT_WORLD.md` (the weather drift drops the moon).
+
+### 14.8 Merged: whom a line is spoken to (main session, 2026-10-20)
+
+Two corrections, made when the wave was merged into the main checkout.
+
+**The head's shadow falls on a bystander only.** The lane graded a turned
+head against everyone behind the speaker beyond conversational reach, the
+line's own addressee included (its question 2). The facing record is where
+a body ENDS the beat (`effective_facing`), not where its head turned while
+it spoke, and a speaker turns to the one they talk to; so a line's
+addressee is graded as faced, and so is a listener nobody can say the line
+was for (`spatial_senses._facing_its_addressee`, read by `hear_level`,
+`voice_carries` and `hearing_reason`). The din's own class (§ 12.1): nothing
+about a speaker stops people talking TO EACH OTHER.
+
+**A line that names nobody is not a line to somebody else.** That
+correction moved none of the eight lines, and the reason was a defect in
+every reader of the flag, wave A's din included. The flag is three-valued
+-- True, the line names this listener; False, it names somebody else; None,
+it names nobody, which § 12.1 says caps nothing -- but no reader produced
+None. The addressee field is on nearly every recorded line and EMPTY on
+3,678 of the owner's 11,841 (31%); `composer.line_addressed`,
+`perception._line_is_to` and six other readers answered "does it name this
+listener?" and read the empty field as "no", so a third of all talk made
+each of its listeners a bystander. Two people trading lines that named
+nobody lost each other's words to a turned head on the quay, and would have
+to a din beyond two paces. Wave A's own pin held a line with NO addressee
+field, which no recorded line is.
+
+Built: the rule stated once, `spatial_senses.spoken_to(names_this,
+names_anyone)`, and read by every site that grades a line for a listener --
+the composer (`line_addressed`, so `line_hear_level`, `speech_percept` and
+`communication_percept`), perception and the interaction round
+(`_line_is_to`), the three background-presence readers, reactor widening
+(`common`), a charter's public evidence (`charter_observe`), the follow
+(`director_movement`), and the address gate (`commit_background.
+address_reaches`, whose body is the one being spoken to: True on a flow ref,
+else unknown, never a bystander). The ear rung is unchanged: it refuses an
+unknown addressee exactly as it refused "somebody else".
+`tests/test_a_line_to_nobody_has_no_bystander.py`: the din, the turned
+head and the empty field each fail with the reading taken back.
+
+Measured as merged: 2,408 of 2,408 recorded lines arrive as they did before
+the wave.
+
+**What it leaves, and it is the owner's.** Privacy in a din and the head's
+shadow can only bite on a line that NAMES somebody else, and 31% of lines
+name nobody: the harbour story's gale line (turn 19), which the prose aims
+at Jonah, names nobody, so Aldo sixteen paces up the wall follows it whole.
+The lever is upstream -- the encoder naming a line's addressee wherever the
+prose says whom it is to -- and is a prompt clause that needs a live run
+(UNBUILT_PERCEPTION § 2.36).

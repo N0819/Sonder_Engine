@@ -20,7 +20,7 @@ import re
 from world.charter_figure import figure_claim
 from world.charter_identity import display_name, identity_aliases
 from world.charter_mind import cap_minds
-from world.spatial import (EAR_VOLUME, hear_level, room_of,
+from world.spatial import (EAR_VOLUME, hear_level, room_of, spoken_to,
                            spatial_rel_between, visual_level_between)
 
 
@@ -159,8 +159,10 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
             scene or {}, str(observer) if placed else str(body_key), actor,
             observer_room=place, target_room=actor_room)
         return hear_level(rel, evidence.get("volume") or "normal",
-                          addressed=bool(ear_endpoint)
-                          and str(ear_endpoint) == str(body_key)) == "full"
+                          addressed=spoken_to(
+                              bool(ear_endpoint)
+                              and str(ear_endpoint) == str(body_key),
+                              bool(ear_endpoint))) == "full"
 
     if evidence.get("kind") == "action":
         if placed:

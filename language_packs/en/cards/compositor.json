@@ -535,7 +535,21 @@
     "weather_on_you": "{what} is landing on you.",
     "weather_wind": "The {wind} pulls at you.",
     "weather_air": "The air is {temperature}.",
-    "weather_falling": "{intensity} {what}"
+    "weather_falling": "{intensity} {what}",
+    "felt_blow_tremor": "A faint tremor runs through the {under} beneath you.",
+    "felt_blow_shudder": "The {under} shudders beneath you.",
+    "felt_blow_jolt": "The {under} jolts hard beneath you.",
+    "felt_steady_tremor": "A faint, steady trembling comes up through the {under} beneath you.",
+    "felt_steady_shudder": "The {under} shudders steadily beneath you.",
+    "felt_steady_jolt": "The {under} shakes hard beneath you, without letting up.",
+    "weather_lightning": "Lightning flickers across the {sky} sky.",
+    "weather_lightning_plain": "Lightning flickers overhead.",
+    "weather_thunder_after": "Its thunder follows each flash, {after} later.",
+    "weather_thunder_open": "Thunder rolls overhead.",
+    "weather_thunder_muffled": "Thunder rolls somewhere beyond the walls, muffled.",
+    "weather_thunder_faint": "A faint roll of thunder reaches you from far beyond the walls.",
+    "sound_after_sight_moment": "{desc} — the sound reaches you a moment after the sight of it",
+    "sound_after_sight_seconds": "{desc} — the sound reaches you seconds after the sight of it"
   },
   "muffle_ellipsis": "...",
   "muffle_join": "... ",
@@ -555,6 +569,14 @@
     "behind": "behind you",
     "left": "to your left",
     "right": "to your right"
+  },
+  "after_sight_words": {
+    "moment": "a moment",
+    "seconds": "seconds"
+  },
+  "felt_under": {
+    "floor": "floor",
+    "ground": "ground"
   },
   "compass_words": {
     "n": "north",

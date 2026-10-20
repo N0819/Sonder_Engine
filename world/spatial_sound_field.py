@@ -670,9 +670,10 @@ AMBIENT_DB = {exposure: db_of_power(power)
 #: recommendation (`docs/UNBUILT.md` § 1.120). RAIN YOU CAN TALK THROUGH
 #: UNTIL IT IS HEAVY: light rain is the commonest weather there is, and at
 #: 0.3 it more than doubled an open room's floor by itself and took ordinary
-#: speech to 3.3 paces. `WIND_NOISE` is deliberately NOT moved -- wind you
-#: have to raise your voice over is what wind is, and the run that found
-#: this measured rain.
+#: speech to 3.3 paces. `WIND_NOISE` was deliberately NOT moved then --
+#: wind you have to raise your voice over is what wind is, and the run that
+#: found this measured rain -- and was raised to real levels on 2026-10-20
+#: (`WIND_NOISE_DB`, below).
 #:
 #: SINCE 2026-10-20 NO WEATHER MASKS A LINE (the hearing rule,
 #: `spatial_senses.hear_level`): rain and wind are everyday noise a voice
@@ -681,7 +682,66 @@ AMBIENT_DB = {exposure: db_of_power(power)
 #: room's noise words; a voice from rooms away is graded against the quiet
 #: floor without them (`quiet_floor`).
 WEATHER_NOISE = {"light": 0.1, "moderate": 0.25, "heavy": 0.5}
-WIND_NOISE = {"wind": 0.3, "gale": 1.0}
+
+#: WIND AT THE EAR IS NOISE (2026-10-20, wave B2), in dB(A) at the ear of a
+#: body the wind reaches (`weather_for_room`'s `wind_reaches`: under the sky
+#: or a roof open at its sides, and a `wind` or a `gale`). Wind noise is the
+#: turbulence the moving air makes round the head and the outer ear, and it
+#: rises steeply with the wind's speed: roughly 50-70 dB(A) in a strong
+#: wind, more in a gale -- a wind people stand in and talk by raising their
+#: voices, and a gale they have to shout over at arm's length.
+#:
+#:   wind  60   a strong wind (the Beaufort scale's strong breeze to near
+#:              gale: wires whistle, an umbrella is hard to hold): the middle
+#:              of that range, and over `DIN_DB` -- a din at the ear, so a
+#:              bystander beyond conversational reach catches pieces of a
+#:              conversation a few paces off (§ 12.1's rule)
+#:   gale  70   a gale (walking into it is hard): the top of the range
+#:
+#: Until 2026-10-20 these were 34.8 and 40.0 dB -- "wind you have to raise
+#: your voice over is what wind is", and both sat under a quiet room's
+#: talk. A breeze is not here: it reaches no ear as noise (`wind_reaches`).
+#: The owner's rain ruling stands untouched (`WEATHER_NOISE`, 37 dB at its
+#: heaviest, is never a din), and no wind reaches a line spoken TO a
+#: listener, or within conversational reach: noise never stops people
+#: talking to each other (`spatial_senses._bystander_in_a_din`).
+WIND_NOISE_DB = {"wind": 60.0, "gale": 70.0}
+#: The same as powers, which is what `_ambient_floor` adds. Derived.
+WIND_NOISE = {word: power_of_db(level) for word, level in WIND_NOISE_DB.items()}
+
+#: WIND BENDS A SOUND'S REACH (2026-10-20, wave B2; `wind_bend_db`). The
+#: wind blows faster a few metres up than at the ground, so downwind the
+#: speed of sound grows with height and upwind it falls: a sound travelling
+#: WITH the wind is bent back down toward the ground and arrives louder at
+#: range, and one travelling AGAINST it is bent up and away, leaving a
+#: shadow near the ground that swallows it. Outdoor measurements put the
+#: upwind shadow's excess attenuation at 10-20 dB (more at high
+#: frequencies) once a path is long enough for a ray to curve off the
+#: ground -- the shadow's edge stands some 100-200 m out for a source and a
+#: listener a metre or two up in a moderate wind -- and the downwind gain at
+#: 2-5 dB; across the wind little changes (Piercy, Embleton & Sutherland
+#: 1977; Embleton 1996, "Tutorial on sound propagation outdoors").
+#:
+#: Outdoors only: a path both of whose ends are under the sky (a room's
+#: `exposure` not `enclosed`). The wind's quarter is the weather's
+#: `wind_from` (`weather.WIND_FROM_KEY`); a record that names none bends
+#: nothing.
+#:
+#: A path shorter than this is not bent at all: a call across a street, and
+#: across any one room the engine lays out (96 paces is 72 m), loses or
+#: gains next to nothing -- the owner's ruling that a call carries across a
+#: street holds by construction.
+WIND_BEND_ONSET_M = 50.0
+#: ...and by this length the bend has its full size: it grows with the
+#: logarithm of the distance from the onset to here, where the shadow's
+#: edge has been passed for any source and listener near the ground.
+WIND_BEND_FULL_M = 400.0
+#: The most the upwind shadow takes, by the wind's strength word -- the
+#: lower half of the measured 10-20 dB for a wind, its middle for a gale,
+#: and a few decibels for a breeze, whose gradient is gentle.
+WIND_UPWIND_DB = {"breeze": 5.0, "wind": 10.0, "gale": 15.0}
+#: The most the downwind side gains: 2-5 dB measured, by strength.
+WIND_DOWNWIND_DB = {"breeze": 1.0, "wind": 3.0, "gale": 5.0}
 
 #: Both as levels. They are ADDED to the exposure floor, and levels do not
 #: add -- `_ambient_floor` sums the powers and the dB view is taken of the
@@ -689,8 +749,6 @@ WIND_NOISE = {"wind": 0.3, "gale": 1.0}
 #: one place real acoustics agrees with it exactly.
 WEATHER_NOISE_DB = {word: db_of_power(power)
                     for word, power in WEATHER_NOISE.items()}
-WIND_NOISE_DB = {word: db_of_power(power)
-                 for word, power in WIND_NOISE.items()}
 
 #: A crowd's level by its BAND -- the count vocabulary `world/crowds.py`
 #: owns. § 3 asked for `audible` when open and `loud` when the crowd's `mood`
@@ -943,6 +1001,25 @@ TONE_BELOW_WORDS_DB = 10.0
 #: voice still arrives: -22.0 dB.
 VOICE_TONE_SNR_DB = FRAGMENT_SNR_DB - TONE_BELOW_WORDS_DB
 
+#: WHICH WAY THE SPEAKER FACES (2026-10-20, wave B2; `facing_loss_db`, the
+#: `speaker_turned_away` stamp in `stamp_sound_relation`). A voice is
+#: directional: the mouth radiates forward and the head shades what goes
+#: behind it. Measured round talkers at a metre (Chu & Warnock 2002, NRC
+#: "Detailed directivity of sound fields around human talkers"; Monson,
+#: Hunter & Story 2012), the overall level directly behind is some 6-8 dB
+#: under the level in front and 4-6 dB at the rear diagonals; the band the
+#: consonants carry the words in (2-4 kHz) falls most, 10-15 dB directly
+#: behind, and the vowels and the tune below 1 kHz barely 2-4.
+#:
+#: WHAT THE WORDS LOSE to a listener in the speaker's rear arc (behind and
+#: the two rear diagonals, `spatial_geometry._REAR_SECTORS`): the consonant
+#: band's loss averaged over that arc.
+FACING_AWAY_WORDS_DB = 8.0
+#: WHAT THE VOICE LOSES there -- its low half, which is what the tone rung
+#: carries (`voice_margin_db`): the vowels and the tune are nearly
+#: omnidirectional, so a voice turned away is still plainly a voice.
+FACING_AWAY_VOICE_DB = 3.0
+
 #: Steadiness rates: see the light field's FLICKER_RATE / FAIL_RATE, imported
 #: above -- one hash, two senses, one pair of rates.
 
@@ -1163,19 +1240,40 @@ def far_speech_level(volume, loss_db, floor_db=None, *, muffled=False,
     return heard
 
 
+def facing_loss_db(rel: dict, part: str = "words") -> float:
+    """WHAT A SPEAKER TURNED AWAY TAKES from the voice's DIRECT sound, in dB:
+    `FACING_AWAY_WORDS_DB` from its words (`part` "words") or
+    `FACING_AWAY_VOICE_DB` from the voice's low half (`part` "voice", the
+    tone rung's), where the relation says the listener stands in the
+    speaker's rear arc (`speaker_turned_away`); nothing elsewhere.
+
+    Read ONLY by the budgets whose voice is the direct sound -- under the
+    open sky (`open_air_loss_db`), rooms away from a speaker under the sky
+    (`far_loss_db`), and a bystander in a din (`_din_voice_db`). A room's
+    ring carries a voice across the room, through an opening and to a door
+    nobody stands at whichever way its speaker faces, so no budget built on
+    the ring reads this."""
+    if not isinstance(rel, dict) or not rel.get("speaker_turned_away"):
+        return 0.0
+    return FACING_AWAY_VOICE_DB if part == "voice" else FACING_AWAY_WORDS_DB
+
+
 def _voice_path_loss_db(rel: dict, reach) -> float:
     """The masking budget's path: how far under its level at a pace a voice
     arrives, by what stands between the two bodies (the hearing rule's own
     classes; `spatial_senses.hear_level`). Within reach, nothing; across a
     room, its reverberant drop; into the next room, the opening or door it
     crosses and the spread on the far side; rooms away, the far field's own
-    measured loss."""
+    measured loss. The two direct-sound paths, rooms away and under the
+    sky, lose what a speaker turned away takes (`facing_loss_db`)."""
     from world.spatial_senses import (DOOR_REACH_BARRIERS,
                                       _material_shifted_barrier)
     if rel.get("far_loss_db") is not None:
-        return float(rel["far_loss_db"]) - _ONE_PACE_LOSS_DB
+        return float(rel["far_loss_db"]) - _ONE_PACE_LOSS_DB \
+            + facing_loss_db(rel)
     if rel.get("open_air_loss_db") is not None:
-        return max(0.0, float(rel["open_air_loss_db"]) - _ONE_PACE_LOSS_DB)
+        return max(0.0, float(rel["open_air_loss_db"]) - _ONE_PACE_LOSS_DB) \
+            + facing_loss_db(rel)
     if rel.get("same_room"):
         return 0.0 if reach == "within_reach" else VOICE_ROOM_DROP_DB
     barrier = _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
@@ -1236,7 +1334,8 @@ def _masked_voice_db(rel, word, *, reach=None, level_db=None, seen=False):
     return voice
 
 
-def _din_voice_db(rel, word, *, level_db=None, seen=False) -> Optional[float]:
+def _din_voice_db(rel, word, *, level_db=None, seen=False,
+                  part="words") -> Optional[float]:
     """What reaches a BYSTANDER in a din of a line spoken a few paces off, in
     dB at their ear, or None where the relation carries no din or no paces.
 
@@ -1248,7 +1347,9 @@ def _din_voice_db(rel, word, *, level_db=None, seen=False) -> Optional[float]:
     apart. The ring that carries a voice across a quiet room is under the
     din, and reverberant speech is what a listener cannot use (`DIN_DB`'s
     note). A listener who watches the speaker's face gains
-    `AV_BENEFIT_DB`."""
+    `AV_BENEFIT_DB`; one behind a speaker turned away loses what the head
+    shades of the direct sound (`facing_loss_db`, its words or -- `part`
+    "voice", the tone rung's -- its low half)."""
     if rel.get("din_db") is None or rel.get("paces") is None:
         return None
     speaker_din = rel.get("speaker_din_db")
@@ -1265,7 +1366,7 @@ def _din_voice_db(rel, word, *, level_db=None, seen=False) -> Optional[float]:
         voice -= APERTURE_LOSS_DB.get(barrier, 0.0)
     if seen:
         voice += AV_BENEFIT_DB
-    return voice
+    return voice - facing_loss_db(rel, part)
 
 
 def din_level(rel: dict, volume, *, level_db=None, seen=False) -> str:
@@ -1305,7 +1406,10 @@ def voice_margin_db(rel: dict, volume, *, reach=None, level_db=None,
     (`floor_db` where stamped, a quiet room's 27 dB otherwise -- the
     table's own budget floor). Where noise the story made deafening reaches
     the listener (`masking_db`), or -- `din` -- a din reaches a bystander,
-    the weaker of that budget and the path's."""
+    the weaker of that budget and the path's. Behind a speaker turned away
+    the direct-sound paths lose the voice's low half's few decibels
+    (`facing_loss_db(rel, "voice")`), never the words' larger share: a
+    voice turned away is still plainly a voice."""
     word = _speech_word(volume)
     level = float(level_db) if level_db is not None else SPEECH_DB[word]
     floor = float(rel["floor_db"]) if rel.get("floor_db") is not None \
@@ -1314,9 +1418,10 @@ def voice_margin_db(rel: dict, volume, *, reach=None, level_db=None,
         loss = float(rel["far_loss_db"])
         if math.isinf(loss):
             return None
-        margins = [level - loss - floor]
+        margins = [level - loss - facing_loss_db(rel, "voice") - floor]
     elif rel.get("open_air_loss_db") is not None:
-        margins = [level - float(rel["open_air_loss_db"]) - floor]
+        margins = [level - float(rel["open_air_loss_db"])
+                   - facing_loss_db(rel, "voice") - floor]
     else:
         barrier = normalize_barrier(rel.get("barrier"))
         if not rel.get("same_room") and (barrier == "unknown"
@@ -1329,7 +1434,8 @@ def voice_margin_db(rel: dict, volume, *, reach=None, level_db=None,
                                         level_db=level_db, seen=seen)
                        - float(rel["masking_db"]))
     if din:
-        voice = _din_voice_db(rel, word, level_db=level_db, seen=seen)
+        voice = _din_voice_db(rel, word, level_db=level_db, seen=seen,
+                              part="voice")
         if voice is not None:
             margins.append(voice - float(rel["din_db"]))
     return min(margins)
@@ -2339,8 +2445,23 @@ class SoundField:
             return None
         for source in self.sources:
             if source["id"] == source_id:
-                return self.intensity_at(source, cell)
+                return self.intensity_at(source, cell) \
+                    * ratio_of_db(self._wind_db(source, cell))
         return 0.0
+
+    def _wind_db(self, source, cell) -> float:
+        """What the wind does to a source's sound on its way to `cell`
+        (`wind_bend_db`), where the source and the listener both stand
+        under the sky: by the field's own path and its bearing. A crowd's
+        talk fills its room and is no point to bend from."""
+        if source.get("kind") == "crowd" or not _scene_wind(self.scene)[1] \
+                or not _outdoors(self.scene, source["room"],
+                                 self.grid.inside.get(cell)):
+            return 0.0
+        metres, bearing = _field_path(self, cell, source["at"])
+        if metres is None or not bearing:
+            return 0.0
+        return wind_bend_db(self.scene, bearing, metres)
 
     def level_of(self, listener, source_id, *, room=None) -> str:
         """`none | fragment | full` for one placed source (an entity, a
@@ -2384,11 +2505,22 @@ class SoundField:
         return db_of_power(total + quiet_floor(self.scene, here))
 
 
-def open_air_loss_db(scene, sound, listener, speaker, room) -> Optional[float]:
+def open_air_loss_db(scene, sound, listener, speaker, room,
+                     speaker_room=None) -> Optional[float]:
     """What the open air takes from a voice between two bodies in one room
     under the sky, or None where the rule has no distance to read: an
     enclosed room (its reverberant field holds a voice across it), or a
     body the scene does not place.
+
+    OR IN TWO ROOMS UNDER THE SKY, one opening apart (`speaker_room`, wave
+    B2): a square and the street beside it, a meadow and the pasture past
+    its gap, are one stretch of open air with a line drawn across it, and
+    the opening row's budget -- a room's ring radiating through a doorway
+    into the next room's ring -- has nothing to stand on there. The field's
+    path runs through the opening and charges it its own small loss.
+    Measured: a normal voice 140 paces across two open fields was whole
+    through the opening and in pieces across one field of the same length.
+    The caller asks only for a pair the opening joins.
 
     UNDER THE SKY A VOICE FALLS 6 dB EVERY TIME THE DISTANCE DOUBLES: no
     ceiling and walls give it back, so the free-field law the cell flood
@@ -2402,16 +2534,99 @@ def open_air_loss_db(scene, sound, listener, speaker, room) -> Optional[float]:
     Both bodies must stand where the scene put them (`body_cell`): a body
     with no station stands at the room's centre on the field, which is a
     guess, and a guess must not take a voice away."""
-    from world import weather as _weather
-    if not room or _weather.room_exposure(scene, room) == "enclosed":
+    speaker_room = speaker_room or room
+    if not _outdoors(scene, room, speaker_room):
         return None
     if body_cell(scene, listener) is None or body_cell(scene, speaker) is None:
         return None
     here = sound.locate(listener, room)
-    there = sound.locate(speaker, room)
+    there = sound.locate(speaker, speaker_room)
     if here is None or there is None:
         return None
-    return loss_db_at(sound.spread_from(there), here)
+    loss = loss_db_at(sound.spread_from(there), here)
+    return None if math.isinf(loss) else loss
+
+
+def _scene_wind(scene) -> tuple:
+    """`(strength, quarter)` of the scene's wind -- the weather's `wind`
+    word and its `wind_from` -- or ("", "") where the weather names none."""
+    from world.weather import WIND_FROM_KEY, normalize_weather
+    raw = (scene or {}).get("weather")
+    if not isinstance(raw, dict) or not raw.get(WIND_FROM_KEY):
+        return "", ""               # no quarter named: the common case, free
+    weather = normalize_weather(raw)
+    return (str(weather.get("wind") or ""),
+            str(weather.get(WIND_FROM_KEY) or ""))
+
+
+def wind_bend_db(scene, travel, metres) -> float:
+    """WHAT THE WIND DOES TO A SOUND OUTDOORS, in dB: positive where it
+    carries the sound (travelling downwind), negative where it swallows it
+    (upwind), for a sound going `metres` with compass bearing `travel` --
+    the way the sound goes, from its source to the ear. 0.0 where the
+    weather names no wind or no quarter, the bearing is unknown, or the path
+    is under `WIND_BEND_ONSET_M`.
+
+    By the angle between the sound's way and the wind's: its cosine scales
+    `WIND_DOWNWIND_DB` with the wind and `WIND_UPWIND_DB` against it, so a
+    crosswind does nothing, and the size grows with the logarithm of the
+    distance from the onset to `WIND_BEND_FULL_M`. The caller asks only for
+    a path both of whose ends are under the sky."""
+    from world.spatial_orientation import _BEARING_DEG, opposite_bearing
+    strength, quarter = _scene_wind(scene)
+    if strength not in WIND_UPWIND_DB or not quarter \
+            or travel not in _BEARING_DEG:
+        return 0.0
+    try:
+        metres = float(metres)
+    except (TypeError, ValueError):
+        return 0.0
+    if not metres > WIND_BEND_ONSET_M:
+        return 0.0
+    ramp = min(1.0, math.log(metres / WIND_BEND_ONSET_M)
+               / math.log(WIND_BEND_FULL_M / WIND_BEND_ONSET_M))
+    downwind = opposite_bearing(quarter)
+    along = math.cos(math.radians(_BEARING_DEG[travel]
+                                  - _BEARING_DEG[downwind]))
+    if abs(along) < 1e-9:
+        return 0.0
+    top = WIND_DOWNWIND_DB[strength] if along > 0 else WIND_UPWIND_DB[strength]
+    return along * top * ramp
+
+
+def _open_between(scene, rel, a, b) -> bool:
+    """Are two NEIGHBOURING rooms both under the sky and joined by an
+    opening (a doorless way, an open door or gate, a grille -- after the
+    material shift): one stretch of open air with a line across it, which
+    the open air's law reads (`open_air_loss_db`)."""
+    from world.spatial_senses import OPEN_BARRIERS, rooms_adjacent
+    if not a or not b or a == b or not rooms_adjacent(scene, a, b):
+        return False
+    barrier = _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
+                                        rel.get("material"))
+    return barrier in OPEN_BARRIERS and _outdoors(scene, a, b)
+
+
+def _outdoors(scene, *rooms) -> bool:
+    """Is every one of these rooms under the sky -- `exposure` not
+    `enclosed`, a roof open at its sides included?"""
+    from world import weather as _weather
+    return all(room and _weather.room_exposure(scene, room) != "enclosed"
+               for room in rooms)
+
+
+def _field_path(sound, here, there):
+    """`(metres, bearing)` of the field's own path from the cell `there` to
+    the cell `here` on one composite: the flood's length, in metres, and the
+    compass bearing from one cell to the other. (None, None) off the
+    field."""
+    from world.spatial_fov import bearing_between
+    if here is None or there is None:
+        return None, None
+    rec = sound.spread_from(there).get(here)
+    if rec is None:
+        return None, None
+    return float(rec[0]) * PACE_M, bearing_between(tuple(there), tuple(here))
 
 
 def _pair_paces(scene, sound, listener, speaker, l_room, s_room, rel):
@@ -2440,6 +2655,132 @@ def _pair_paces(scene, sound, listener, speaker, l_room, s_room, rel):
         return None
     rec = sound.spread_from(there).get(here)
     return None if rec is None else float(rec[0])
+
+
+def _plan_line(scene, a, b, *, a_at=None) -> tuple:
+    """`(metres, bearing)` of the straight line from `a` to body `b` on
+    their site plan -- the ground between them and its compass bearing --
+    or (None, None) where the two do not stand on one plan
+    (`site_plan.plan_point`). `a` is a body, or, with `a_at` a
+    `(room, cell)`, a point in a room (a sound's own cell)."""
+    from world.site_plan import PACE_M as _PLAN_PACE_M, plan_point, room_site
+    if a_at is not None:
+        a_room, a_cell = a_at
+        site_a = room_site(scene, a_room)
+        pa = (site_a["x"] + a_cell[0] + 0.5, site_a["y"] + a_cell[1] + 0.5) \
+            if site_a and a_cell is not None else None
+    else:
+        site_a = room_site(scene, room_of(scene, a))
+        pa = plan_point(scene, a)
+    site_b = room_site(scene, room_of(scene, b))
+    if not site_a or not site_b or site_a["plan"] != site_b["plan"]:
+        return None, None
+    pb = plan_point(scene, b)
+    if pa is None or pb is None:
+        return None, None
+    from world.spatial_fov import bearing_between
+    metres = math.hypot(pb[0] - pa[0], pb[1] - pa[1]) * _PLAN_PACE_M
+    return metres, bearing_between((pa[0], pa[1]), (pb[0], pb[1]))
+
+
+def _plan_bearing(scene, a, b) -> Optional[str]:
+    """The compass bearing from body `a` to body `b` on their site plan, or
+    None where the two do not stand on one plan (`_plan_line`)."""
+    return _plan_line(scene, a, b)[1]
+
+
+def _wind_on_the_path(scene, sound, listener, speaker, l_room, s_room,
+                      far=None) -> float:
+    """`wind_bend_db` for the path a voice takes from `speaker` to
+    `listener`, where both ends stand under the sky (`_outdoors`): in one
+    room, the field's own path and its bearing; rooms away, the straight
+    line on the site plan where both stand on one, else the far field's
+    path (`far`) and the way it arrives by -- the bearing from the room it
+    comes through into the listener's. 0.0 indoors, or where nothing says
+    which way the sound goes."""
+    if not _scene_wind(scene)[1] or not _outdoors(scene, l_room, s_room):
+        return 0.0                  # no quarter named, or a roof on the way
+    from world.spatial_orientation import travel_bearing
+    metres, bearing = _field_path(sound, sound.locate(listener, l_room),
+                                  sound.locate(speaker, s_room))
+    if bearing is None and l_room != s_room:
+        metres, bearing = _plan_line(scene, speaker, listener)
+        if bearing is None and far and far.get("via"):
+            metres = float(far.get("length") or 0.0) * PACE_M
+            bearing = travel_bearing(scene, str(far["via"]), l_room)
+    if metres is None or not bearing:
+        return 0.0
+    return wind_bend_db(scene, bearing, metres)
+
+
+def _first_hop(scene, from_room, to_room) -> Optional[str]:
+    """The room next to `from_room` on the far field's path toward
+    `to_room`: the way a sound from one leaves for the other. The flood is
+    run from `to_room` -- the graph is undirected and a path's loss is the
+    same both ways -- so the record it leaves at `from_room` names, as the
+    room it arrived from, the first room the other way."""
+    rec = room_sound_flood(scene, to_room, SPEECH_DB["shout"]).get(
+        str(from_room))
+    return str(rec["via"]) if rec and rec.get("via") else None
+
+
+def _bearing_toward(scene, sound, listener, speaker, l_room, s_room
+                    ) -> Optional[str]:
+    """Which way, from the SPEAKER, the listener lies -- the direction the
+    voice has to go to reach them: across the observer's own composite field
+    for one room or a neighbour (`bearing_between` of the two cells); rooms
+    away, on the site plan when both stand on one, else the way out of the
+    speaker's room the far field's path leaves by (`_first_hop`). None where
+    nothing says."""
+    from world.spatial_fov import bearing_between
+    here = sound.locate(listener, l_room) if sound is not None else None
+    there = sound.locate(speaker, s_room) if sound is not None else None
+    if here is not None and there is not None:
+        return bearing_between(tuple(there), tuple(here))
+    planned = _plan_bearing(scene, speaker, listener)
+    if planned:
+        return planned
+    via = _first_hop(scene, s_room, l_room)
+    if not via:
+        return None
+    from world.spatial_orientation import travel_bearing
+    return travel_bearing(scene, s_room, via)
+
+
+def _speaker_turned_away(scene, sound, listener, speaker, l_room, s_room,
+                         rel) -> bool:
+    """Does the listener stand in the SPEAKER's rear arc, where the head
+    shades the voice's direct sound (`FACING_AWAY_WORDS_DB`) -- asked only
+    where a budget reads that direct sound, and only on the engine's own
+    record of which way the speaker faces (`effective_facing`)?
+
+    Never within conversational reach (a standing contact, or
+    `CONVERSATION_REACH_PACES` of the field's path): the one at the
+    speaker's shoulder hears a turned head whole. Only where the voice's
+    budget is its direct sound: under the open sky (`open_air_loss_db`), a
+    din at the listener's ear (the ring is under it), or rooms away from a
+    speaker standing under the sky. Everywhere else the room's ring carries
+    the voice -- across the room, through an opening, to a door nobody
+    stands at -- and the ring faces nowhere."""
+    from world import weather as _weather
+    from world.spatial_geometry import _REAR_SECTORS, effective_facing
+    from world.spatial_orientation import relative_bearing
+    if rel.get("reach") == "within_reach":
+        return False
+    paces = rel.get("paces")
+    if paces is not None and float(paces) <= CONVERSATION_REACH_PACES:
+        return False
+    direct = (rel.get("open_air_loss_db") is not None
+              or rel.get("din_db") is not None
+              or (rel.get("far_loss_db") is not None
+                  and _weather.room_exposure(scene, s_room) != "enclosed"))
+    if not direct:
+        return False
+    facing = effective_facing(scene, speaker)
+    if not facing:
+        return False
+    toward = _bearing_toward(scene, sound, listener, speaker, l_room, s_room)
+    return relative_bearing(facing, toward) in _REAR_SECTORS
 
 
 def _masks(source) -> bool:
@@ -2662,12 +3003,15 @@ FAR_CLEAR_EDGE_DB = APERTURE_DB["closed_door"]
 
 
 def far_path(scene, listener_room, source_room) -> Optional[dict]:
-    """`{loss_db, muffled}` for a voice from `source_room` heard in
-    `listener_room` over the room graph, or None where the question does not
-    apply (same room, neighbours -- the hearing rule's own classes -- or rooms
-    no chain of edges joins). `loss_db` is measured from the speaker's level
-    at their cell; `inf` is an ANSWER: the rooms are joined and nothing a
-    voice can do arrives."""
+    """`{loss_db, muffled, length, via}` for a voice from `source_room`
+    heard in `listener_room` over the room graph, or None where the question
+    does not apply (same room, neighbours -- the hearing rule's own classes
+    -- or rooms no chain of edges joins). `loss_db` is measured from the
+    speaker's level at their cell; `inf` is an ANSWER: the rooms are joined
+    and nothing a voice can do arrives. `length` is the path's paces and
+    `via` the room it arrives from (`room_sound_flood`'s), which is what the
+    wind reads the way of the sound by (`wind_bend_db`); both None for the
+    `inf` answer."""
     rooms = (scene or {}).get("rooms") or {}
     listener_room, source_room = str(listener_room or ""), str(source_room or "")
     if not listener_room or not source_room or listener_room == source_room:
@@ -2690,9 +3034,12 @@ def far_path(scene, listener_room, source_room) -> Optional[dict]:
         # hail it exists for.
         if not _rooms_joined(scene, listener_room, source_room):
             return None
-        return {"loss_db": math.inf, "muffled": True}
+        return {"loss_db": math.inf, "muffled": True, "length": None,
+                "via": None}
     return {"loss_db": probe - float(rec["db"]),
-            "muffled": float(rec.get("max_edge_db") or 0.0) > FAR_CLEAR_EDGE_DB}
+            "muffled": float(rec.get("max_edge_db") or 0.0) > FAR_CLEAR_EDGE_DB,
+            "length": float(rec.get("length") or 0.0),
+            "via": rec.get("via")}
 
 
 def _rooms_joined(scene, a, b) -> bool:
@@ -2770,11 +3117,26 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     elif o_room == t_room or rooms_adjacent(scene, o_room, t_room) \
             or _rooms_joined(scene, o_room, t_room):
         rel["air"] = True
-    if o_room == t_room:
-        loss = open_air_loss_db(scene, sound, observer, target, o_room)
+    if o_room == t_room or _open_between(scene, rel, o_room, t_room):
+        loss = open_air_loss_db(scene, sound, observer, target, o_room,
+                                speaker_room=t_room)
         if loss is not None:
             rel["open_air_loss_db"] = loss
             rel["floor_db"] = db_of_power(quiet_floor(scene, o_room))
+    # THE WIND ON THE PATH (wave B2, `wind_bend_db`): outdoors, a voice
+    # going with the wind is carried and one going against it swallowed.
+    # Folded into the open air's loss, or the far field's, so every reader
+    # of the budget has it; stamped as well, so `hearing_reason` can say so.
+    if rel.get("open_air_loss_db") is not None or (
+            rel.get("far_loss_db") is not None
+            and not math.isinf(float(rel["far_loss_db"]))):
+        bend = _wind_on_the_path(scene, sound, observer, target, o_room,
+                                 t_room, far)
+        if bend:
+            rel["wind_bend_db"] = bend
+            key = "open_air_loss_db" if rel.get("open_air_loss_db") \
+                is not None else "far_loss_db"
+            rel[key] = float(rel[key]) - bend
     paces = _pair_paces(scene, sound, observer, target, o_room, t_room, rel)
     if paces is not None:
         rel["paces"] = paces
@@ -2803,6 +3165,12 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
                 if own is not None else None
             if spoken_over is not None:
                 rel["speaker_masking_db"] = spoken_over
+    # WHICH WAY THE SPEAKER FACES (wave B2): the listener in the speaker's
+    # rear arc, where a budget reads the voice's direct sound
+    # (`_speaker_turned_away`, `facing_loss_db`).
+    if _speaker_turned_away(scene, sound, observer, target, o_room, t_room,
+                            rel):
+        rel["speaker_turned_away"] = True
     return rel
 
 
@@ -2861,6 +3229,279 @@ SENSORY_EVENTS_KEY = "sensory_events"
 #: with nine distinct noises in it is a model filling a list, not a world.
 #: Named here because every cap in this engine is named.
 MAX_SENSORY_EVENTS = 8
+
+
+# ---------------------------------------------------------------------------
+# SOUND ARRIVES AFTER WHAT MADE IT (2026-10-20, wave B2; § 14.3)
+# ---------------------------------------------------------------------------
+#
+# Light crosses any distance a story holds at once; sound crosses air at
+# some 343 m/s. So a source SEEN far off is seen first and heard after --
+# a distant gun's flash and then its bang, an axe falling across a valley
+# and then its chock, lightning and then its thunder, three seconds a
+# kilometre. Within a building the gap is a few hundredths of a second,
+# under anything a body can tell. A rendering of ORDER within one beat, never
+# a new beat: where a view holds both the sight of a thing and the sound it
+# made, and the thing stands far enough off, the sight is told first and
+# the sound after it (`perception`'s outcome pass, `composer.ambient_percepts`
+# and `weather_percepts`).
+
+#: How fast sound crosses air: 343 m/s, dry air at 20 C (331 at freezing).
+SPEED_OF_SOUND_M_S = 343.0
+#: THE GAP THAT READS AS "AND THEN": 0.3 s. The eye and the ear bind a sight
+#: and a sound into one event across a window of roughly a tenth to a fifth
+#: of a second (the audiovisual temporal binding window, about 100-200 ms
+#: for a sharp event), and a third of a second is past it with room to
+#: spare -- a gap a reader takes as a beat. At 343 m/s: about 103 m.
+SOUND_AFTER_SIGHT_S = 0.3
+SOUND_AFTER_SIGHT_M = SPEED_OF_SOUND_M_S * SOUND_AFTER_SIGHT_S
+#: From this gap on the sound comes "seconds" after the sight rather than
+#: "a moment" after it: 1.5 s, about half a kilometre.
+SOUND_SECONDS_AFTER_S = 1.5
+#: How far off the sky's flash is, for its thunder: lightning comes down
+#: from a cloud base one to two kilometres up, so even a strike close by is
+#: mostly that far away, and its thunder always comes seconds after the
+#: flash. The middle of that.
+LIGHTNING_M = 1500.0
+#: The two words the delay is said by, a closed set the packs word.
+SOUND_AFTER_WORDS = ("moment", "seconds")
+
+
+def sound_delay_s(metres) -> float:
+    """How long after a thing is seen its sound arrives, in seconds."""
+    return max(0.0, float(metres)) / SPEED_OF_SOUND_M_S
+
+
+def sound_after_sight(metres) -> Optional[str]:
+    """One of `SOUND_AFTER_WORDS` -- how long after the sight of a thing
+    `metres` off its sound arrives -- or None where the two are one moment
+    (under `SOUND_AFTER_SIGHT_M`), or the distance is not known."""
+    if metres is None:
+        return None
+    delay = sound_delay_s(metres)
+    if not _at_least(delay, SOUND_AFTER_SIGHT_S):
+        return None
+    return "seconds" if _at_least(delay, SOUND_SECONDS_AFTER_S) else "moment"
+
+
+def seen_source_metres(scene, observer, source) -> Optional[float]:
+    """How far a body the observer sees stands from them, in metres: the
+    straight line between their measured cells -- in one room, or across
+    the observer's own composite field into a room it places beyond an
+    opening, or on one site plan. None where either body is unplaced -- a
+    guess never puts a sound after its sight."""
+    o_room, s_room = room_of(scene, observer), room_of(scene, source)
+    if not o_room or not s_room:
+        return None
+    if body_cell(scene, observer) is None or body_cell(scene, source) is None:
+        return None
+    field = sound_field(scene, observer, room=o_room)
+    if field is not None:
+        here, there = field.locate(observer, o_room), field.locate(source, s_room)
+        if here is not None and there is not None:
+            return math.hypot(here[0] - there[0], here[1] - there[1]) * PACE_M
+    return _plan_line(scene, source, observer)[0]
+
+
+# ---------------------------------------------------------------------------
+# LOUD SOUND IS FELT (2026-10-20, wave B2; DESIGN_SOUND_FIELD.md § 14.4)
+# ---------------------------------------------------------------------------
+#
+# A very loud low-frequency sound, and a heavy impact, are FELT as well as
+# heard -- through the floor or the ground a body stands, sits or lies on,
+# and in the chest: an explosion, a falling tree, a big drum, machinery a
+# voice cannot be raised over. Often before the sound and beyond it: the
+# structure carries a blow where the air between rooms has long since lost
+# it, and a body that cannot hear feels it all the same. A percept on the
+# TOUCH channel, from typed data only -- the beat's sound events on the
+# impact ladder (`EVENT_DB`, or an authored `db`), a running thing or a
+# place's own sound at `deafening` and above, and where the site plan stands
+# the rooms -- naming no source and no direction: a body learns that
+# something shook the floor, and how hard.
+
+#: THE FELT THRESHOLD, as the level a sound holds ONE PACE from where it is
+#: made: what is shaking the floor under a body standing at it. 100 dB(A),
+#: the floor of the `deafening` class (machinery a voice cannot be raised
+#: over, `SOUND_ONE_PACE_DB`): airborne low-frequency sound begins to be
+#: felt in the body somewhere about 100-110 dB, and an impact heavy enough
+#: to shake a floor -- a dropped load, a heavy door slammed, a beam coming
+#: down -- is 90-110 dB(A) a metre off. So a `deafening` machine is felt by
+#: a body at it, a `thunderous` sound or impact some seventy metres round,
+#: and a `catastrophic` one across a town. A household thing never is, nor
+#: a voice: a shout is 82.
+FELT_DB = 100.0
+#: WHAT THE STRUCTURE TAKES OVER DISTANCE: 3 dB a doubling of the paces from
+#: the source, beyond its first pace -- the waves that carry a blow through
+#: a floor slab or along the ground spread over a surface, not a sphere
+#: (amplitude falling as one over the square root of the distance), where
+#: airborne sound loses 6 dB a doubling. The material's own damping, which
+#: shortens the longest reaches, is not counted.
+FELT_SPREAD_DB_PER_DOUBLING = 3.0
+#: WHAT A FLOOR TAKES between storeys: a floor is the medium vibration
+#: travels by, not a barrier to it -- building-vibration practice takes some
+#: 1-3 dB a floor -- so a blow overhead is felt in the room below nearly as
+#: hard as above. (Airborne sound loses 50 through the same floor,
+#: `FLOOR_CEILING_LOSS_DB`.)
+FELT_STOREY_DB = 3.0
+#: HOW HARD IT IS FELT, by the margin over `FELT_DB` -- a closed set the
+#: engine owns. Ten decibels a rung, the steps in which vibration
+#: perception is graded (barely perceptible, distinctly perceptible,
+#: strongly perceptible: some 10 dB apart in vibration-assessment practice).
+FELT_LEVELS = ("tremor", "shudder", "jolt")
+FELT_SHUDDER_DB = 10.0
+FELT_JOLT_DB = 20.0
+
+
+def felt_word(margin_db) -> Optional[str]:
+    """One of `FELT_LEVELS` for a vibration arriving `margin_db` over
+    `FELT_DB`, or None under it."""
+    if not _at_least(float(margin_db), 0.0):
+        return None
+    if _at_least(float(margin_db), FELT_JOLT_DB):
+        return "jolt"
+    if _at_least(float(margin_db), FELT_SHUDDER_DB):
+        return "shudder"
+    return "tremor"
+
+
+def _structure_paces(scene, a, b) -> Optional[float]:
+    """How far apart two rooms stand through the structure, in paces: the
+    shortest chain of declared ways between them -- ANY way, a wall
+    included, since a building carries a blow through its walls -- each
+    hop the half-spans of the two rooms it joins (`room_span`). None where
+    no chain joins them."""
+    a, b = str(a or ""), str(b or "")
+    if not a or not b:
+        return None
+    if a == b:
+        return 0.0
+    graph = far_field_graph(scene)
+    spans: dict = {}
+
+    def span(room_id):
+        if room_id not in spans:
+            spans[room_id] = room_span(scene, room_id)
+        return spans[room_id]
+
+    best = {a: 0.0}
+    heap = [(0.0, a)]
+    while heap:
+        dist, room = heapq.heappop(heap)
+        if room == b:
+            return dist
+        if dist > best.get(room, math.inf) + _DB_EPS:
+            continue
+        for other in sorted(graph.get(room) or ()):
+            step = dist + (span(room) + span(other)) / 2.0
+            if step < best.get(other, math.inf) - _DB_EPS:
+                best[other] = step
+                heapq.heappush(heap, (step, other))
+    return None
+
+
+def _felt_reach(scene, source, listener, l_room) -> Optional[tuple]:
+    """`(paces, storeys)` between a source and a listener's body for the
+    felt rule: in one room the straight line between the source's cell and
+    the body's; on one site plan the straight line across the plan and the
+    storeys between the two floors; else the structure's chain of rooms
+    (`_structure_paces`) and the storeys their `level`s set apart."""
+    from world.site_plan import STOREY_M, room_elevation_m, room_level
+    s_room = str(source.get("room") or "")
+    if s_room == str(l_room):
+        here = body_cell(scene, listener) or room_centre(scene, l_room)
+        there = source.get("cell") or room_centre(scene, s_room)
+        return math.hypot(here[0] - there[0], here[1] - there[1]), 0
+    metres, _bearing = _plan_line(scene, None, listener,
+                                  a_at=(s_room, source.get("cell")))
+    if metres is not None:
+        storeys = round(abs(room_elevation_m(scene, s_room)
+                            - room_elevation_m(scene, l_room)) / STOREY_M)
+        return metres / PACE_M, int(storeys)
+    paces = _structure_paces(scene, s_room, l_room)
+    if paces is None:
+        return None
+    return paces, abs(room_level(scene, s_room) - room_level(scene, l_room))
+
+
+def _felt_source_db(source, events) -> Optional[float]:
+    """The level ONE PACE from where a source is made, for the felt rule:
+    a beat's impact by its own event (the impact ladder, or its authored
+    `db`, never the `drowns` pricing, which is about masking), a running
+    thing or a place's own sound by its power at its cell. None for a
+    footfall, which has its own way through the floor (`tread_events`), and
+    for a crowd, whose talk is no blow."""
+    kind = source.get("kind")
+    if kind == "crowd":
+        return None
+    if kind == "event":
+        try:
+            event = (events or [])[int(str(source["id"]).split(":")[1])]
+        except (IndexError, ValueError, KeyError):
+            return None
+        if not isinstance(event, dict) or event.get("tread"):
+            return None
+        return event_db(event) - _ONE_PACE_LOSS_DB
+    return db_of_power(source.get("power")) - _ONE_PACE_LOSS_DB
+
+
+def felt_through_ground(scene, room_id) -> bool:
+    """Does a body in this room stand on the GROUND rather than a floor: a
+    room under the open sky that declares no `floor` of its own (a deck, a
+    boardwalk and a stage under the sky name theirs)."""
+    from world import weather as _weather
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    if not isinstance(room, dict) or str(room.get("floor") or "").strip():
+        return False
+    return _weather.room_exposure(scene, room_id) == "open"
+
+
+def felt_vibrations(scene: dict, listener: str, *, room=None, events=None,
+                    turn_idx=None) -> list:
+    """WHAT THIS BODY FEELS THROUGH WHAT IT STANDS ON: `[{felt, standing,
+    key, db}]`, hardest first -- `felt` one of `FELT_LEVELS`, `standing`
+    True for a running thing or a place's own sound (a steady trembling)
+    and False for one of the beat's events (a blow), `key` the source's id,
+    `db` the margin over `FELT_DB`.
+
+    A source is felt where its level a pace from where it is made, less the
+    structure's spreading over the paces between it and the body
+    (`FELT_SPREAD_DB_PER_DOUBLING`) and a floor's loss for every storey
+    between them (`FELT_STOREY_DB`), stands at or over `FELT_DB`. NOT GATED
+    BY HEARING: a body that cannot hear feels it all the same, and a wall
+    the air could not cross is the structure that carries it. A body off
+    the ground (`site_plan.body_altitude_m`, a flier) feels nothing through
+    a floor it is not on."""
+    from world.site_plan import REACH_ALTITUDE_M, body_altitude_m
+    l_room = str(room or room_of(scene, listener) or "")
+    rooms = (scene or {}).get("rooms") or {}
+    if not l_room or l_room not in rooms:
+        return []
+    sources, _notices = sound_sources(scene, turn_idx=turn_idx, events=events)
+    loud = []
+    for source in sources:
+        level = _felt_source_db(source, events)
+        if level is not None and _at_least(level, FELT_DB):
+            loud.append((source, level))
+    if not loud:
+        return []                      # the ordinary beat: nothing shakes
+    if body_altitude_m(scene, listener) >= REACH_ALTITUDE_M:
+        return []
+    out = []
+    for source, level in loud:
+        reach = _felt_reach(scene, source, listener, l_room)
+        if reach is None:
+            continue
+        paces, storeys = reach
+        arrived = level - FELT_SPREAD_DB_PER_DOUBLING * math.log2(
+            max(1.0, float(paces))) - FELT_STOREY_DB * storeys
+        word = felt_word(arrived - FELT_DB)
+        if word is None:
+            continue
+        out.append({"felt": word, "standing": source.get("kind") != "event",
+                    "key": str(source.get("id") or ""),
+                    "db": round(arrived - FELT_DB, 1)})
+    out.sort(key=lambda r: -r["db"])
+    return out
 
 
 def tread_gait(pace) -> str:
@@ -3597,6 +4238,26 @@ def _public_character(source, events) -> str:
     return " ".join(str(event.get("detail") or "").split())[:160]
 
 
+def _wind_on_a_sound(scene, source, listener, l_room, rec) -> float:
+    """`wind_bend_db` for a far-field sound reaching `listener`: the straight
+    line from the sound's own cell to the listener on their site plan where
+    both stand on one, else the flood's path (`rec["length"]`) and the way
+    it arrives by (from `rec["via"]` into the listener's room). 0.0 unless
+    both ends are under the sky (`_outdoors`)."""
+    s_room = str(source.get("room") or "")
+    if not _scene_wind(scene)[1] or not _outdoors(scene, s_room, l_room):
+        return 0.0
+    metres, bearing = _plan_line(scene, None, listener,
+                                 a_at=(s_room, source.get("cell")))
+    if bearing is None and rec.get("via"):
+        from world.spatial_orientation import travel_bearing
+        metres = float(rec.get("length") or 0.0) * PACE_M
+        bearing = travel_bearing(scene, str(rec["via"]), l_room)
+    if metres is None or not bearing:
+        return 0.0
+    return wind_bend_db(scene, bearing, metres)
+
+
 def distant_sounds(scene: dict, listener: str, *, room=None, turn_idx=None,
                    crowds=None, events=None, near_rooms=()) -> list:
     """Every sound from beyond the near field this listener can hear.
@@ -3646,11 +4307,16 @@ def distant_sounds(scene: dict, listener: str, *, room=None, turn_idx=None,
         rec = reached.get(listener_room)
         if rec is None:
             continue
-        word = distant_level_word(rec["db"], floor_db)
+        # THE WIND ON THE WAY (wave B2): outdoors at both ends, a bell
+        # downwind carries a few decibels further and one upwind falls into
+        # the shadow (`wind_bend_db`).
+        level = float(rec["db"]) + _wind_on_a_sound(
+            scene, source, listener, listener_room, rec)
+        word = distant_level_word(level, floor_db)
         if word is None:
             continue
         out.append({"kind": "sound", "level": word,
-                    "db": round(rec["db"], 1),
+                    "db": round(level, 1),
                     "character": _public_character(source, events),
                     "bearing": sound_bearing_via(scene, listener, rec["via"],
                                                  room=listener_room)})

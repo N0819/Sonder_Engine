@@ -83,6 +83,7 @@ from world.spatial import (
     entity_arc,
     entity_side,
     hear_level,
+    spoken_to,
     hearing_reason,
     voice_carries,
     held_beam_falls_on,
@@ -663,13 +664,19 @@ def line_addressed(entry, observer_name, observer_id=None):
 
     What the ear rung is decided by (`spatial_senses.EAR_VOLUME`), and it
     fails toward no: a line breathed into an ear goes to nobody this cannot
-    show is that ear's owner."""
+    show is that ear's owner.
+
+    Three answers, not two (`spatial_senses.spoken_to`): None where the line
+    names NOBODY -- its addressee field absent or left empty -- which is
+    unknown, never "spoken to somebody else": no bystander rule caps it,
+    and the ear rung still refuses it."""
     forms = {str(observer_name or "").strip().casefold()}
     if observer_id is not None and str(observer_id).strip():
         forms |= {str(observer_id).strip().casefold(),
                   f"character:{str(observer_id).strip()}".casefold()}
     forms.discard("")
-    return any(ref.casefold() in forms for ref in _line_refs(entry))
+    refs = _line_refs(entry)
+    return spoken_to(any(ref.casefold() in forms for ref in refs), bool(refs))
 
 
 def line_hear_level(entry, rel, observer_name, proximity=None,
@@ -701,11 +708,11 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
 
     WHO THE LINE WAS SPOKEN TO is the hearing rule's question too: in a din
     a bystander beyond conversational reach catches pieces of a far table's
-    talk, and the one it was said to follows it. A line that carries no
-    addressee field at all is unknown (None): the ear rung refuses it to
-    everyone, the din caps nothing."""
-    if addressed is None and isinstance(entry, dict) and (
-            "intended_target" in entry or "targets" in entry):
+    talk, and the one it was said to follows it. A line that names nobody
+    -- no addressee field, or one left empty, as 31% of recorded lines are
+    -- is unknown (None): the ear rung refuses it to everyone, the din caps
+    nothing (`spatial_senses.spoken_to`)."""
+    if addressed is None and isinstance(entry, dict):
         addressed = line_addressed(entry, observer_name)
     if into_another_ear(entry.get("volume", "normal"), addressed,
                         entry.get("level_db")):
@@ -2523,10 +2530,16 @@ def _ambient_channel(event):
     return "mixed"
 
 
-def ambient_percepts(sensory_events, observer_room, *, order_key=None):
+def ambient_percepts(sensory_events, observer_room, *, order_key=None,
+                     after=None):
     """Authored opening sensory events, filtered by room scope. An event
     naming a room is admitted only to observers in that room; a roomless
     event is scene ambience.
+
+    `after` (wave B2, one of `spatial_sound_field.SOUND_AFTER_WORDS`) says
+    the sound reached this observer that long after the SIGHT of what made
+    it -- a source seen far off -- and the sentence says so; the caller
+    orders it after the act it saw (`perception`'s outcome pass).
 
     `order_key` decides which HALF of the view these land in, and the
     caller decides because the two callers mean different things. The
@@ -2589,6 +2602,10 @@ def ambient_percepts(sensory_events, observer_room, *, order_key=None):
         channel = _ambient_channel(event)
         if event.get("echo") and channel != "sight":
             desc = desc.rstrip(".") + _en("sound_echo")
+        if after in ("moment", "seconds") and channel != "sight":
+            from language_runtime import compositor_text
+            desc = compositor_text("sound_after_sight_" + after,
+                                   desc=desc.rstrip(".!?。"))
         out.append(Percept(
             kind="ambient", channel=channel, data={"desc": desc},
             salience=0.4,
@@ -3346,7 +3363,9 @@ def weather_percepts(reach):
     touching this body: `falls_on_you` and `wind_reaches`, plus the temperature
     of the air a body standing in it is breathing. Hearing is NOT here --
     `spatial_sound_field` already folds rain and wind into the soundscape, and a
-    second voice for one fact could only disagree with the first.
+    second voice for one fact could only disagree with the first -- save the
+    one sound of the sky no field holds: its thunder, told after its flash
+    (`_storm_percepts`, wave B2).
 
     Names are reproduced, never interpreted: `sky`, `precipitation`, `wind` and
     `temperature` are authored free text this engine does not own, so they are
@@ -3415,6 +3434,91 @@ def weather_percepts(reach):
             salience=0.45,
             dedupe_key=standing_key("weather_touch", ("sky",), (clause,)),
         ))
+    out.extend(_storm_percepts(reach, sky))
+    return out
+
+
+def _storm_percepts(reach, sky):
+    """A SKY THAT FLASHES, AND ITS THUNDER (wave B2, DESIGN_SOUND_FIELD.md
+    § 14.3). The `electrical` axis put a flash and a clap into a room for
+    the ambience and the screen and into no mind's view at all. Sight
+    carries the flash where the sky's weather is in view
+    (`weather_visible`); hearing carries the thunder where it reaches
+    (`weather.thunder_heard`, the one rule the sound bed reads too). A body
+    that has both is told them in the order they arrive: a strike comes
+    down from a cloud base a kilometre or two up (`LIGHTNING_M`), so the
+    thunder follows the flash by seconds (`sound_after_sight`). Standing:
+    said when the storm begins, and again when what this body has of it
+    changes."""
+    from language_runtime import compositor_text, compositor_value
+    from world.spatial import LIGHTNING_M, sound_after_sight
+    from world.weather import has_lightning, thunder_heard
+    flash = has_lightning(reach) and bool(reach.get("weather_visible"))
+    thunder = thunder_heard(reach)
+    out = []
+    state = (sky, flash, thunder)
+    if flash:
+        out.append(Percept(
+            kind="ambient", channel="sight",
+            data={"desc": compositor_text("weather_lightning", sky=sky)
+                  if sky else compositor_text("weather_lightning_plain")},
+            salience=0.45,
+            dedupe_key=standing_key("weather_flash", ("sky",), state)))
+    if thunder is not None:
+        if flash:
+            after = dict(compositor_value("after_sight_words")).get(
+                sound_after_sight(LIGHTNING_M) or "seconds", "")
+            desc = compositor_text("weather_thunder_after", after=after)
+        else:
+            desc = compositor_text("weather_thunder_" + (thunder or "open"))
+        out.append(Percept(
+            kind="ambient", channel="hearing", data={"desc": desc},
+            salience=0.45,
+            dedupe_key=standing_key("weather_thunder", ("sky",), state)))
+    return out
+
+
+#: How far a felt shake stands out of a view, by how hard it is felt
+#: (`spatial_sound_field.FELT_LEVELS`): a faint tremor is under a room's own
+#: salience, a jolt over a pose's.
+_FELT_SALIENCE = {"tremor": 0.4, "shudder": 0.55, "jolt": 0.7}
+
+
+def felt_percepts(rows, *, ground=False, beat=None):
+    """WHAT SHOOK THE FLOOR UNDER THIS BODY (`spatial_sound_field.
+    felt_vibrations`), on the TOUCH channel: at most one blow -- the beat's
+    hardest -- and one steady trembling, each said by how hard it is felt
+    and through what the body stands on (`ground` under the sky with no
+    floor of its own, else the floor), in the story's own words. Nothing
+    else: no source, no direction, no sound -- a body that cannot hear is
+    told exactly this.
+
+    A blow is the beat's, so its key carries the beat (`beat`) and it is
+    news each time it happens; a steady trembling is standing, said when it
+    begins and again only when it changes."""
+    from language_runtime import compositor_text, compositor_value
+    under = dict(compositor_value("felt_under")).get(
+        "ground" if ground else "floor", "")
+    out, taken = [], set()
+    for row in rows or ():
+        if not isinstance(row, dict):
+            continue
+        word = str(row.get("felt") or "")
+        if word not in _FELT_SALIENCE:
+            continue
+        standing = bool(row.get("standing"))
+        if standing in taken:
+            continue                    # one blow, one trembling: the hardest
+        taken.add(standing)
+        clause = compositor_text(("felt_steady_" if standing else "felt_blow_")
+                                 + word, under=under)
+        out.append(Percept(
+            kind="sensation", channel="touch", source_label="you",
+            data={"clause": clause, "directed_at_self": True, "felt": word},
+            salience=_FELT_SALIENCE[word],
+            dedupe_key=standing_key(
+                "felt", (row.get("key"),) if standing
+                else (row.get("key"), beat), (word, standing))))
     return out
 
 

@@ -105,6 +105,12 @@ def test_noise_never_stops_people_talking_to_each_other():
     # The complement, the owner's rain ruling: the same room empty, and a
     # street in a downpour -- a far bystander follows every word, as the
     # hearing rule has it. Rain is never a din.
+    #
+    # RESTATED 2026-10-20 (wave B2): the downpour here also blew a gale,
+    # and a gale is wind, not rain -- 70 dB(A) at the ear, a din, which a
+    # bystander sixteen paces off in it now catches pieces through
+    # (`WIND_NOISE_DB`, `test_the_wind_carries_and_swallows_sound.py`). The
+    # rain the ruling is about falls here in still air.
     rel = _rel(_tavern(), "C")
     assert "din_db" not in rel and _heard(rel, False)["normal"] == "full"
     street = {"rooms": {"street": {"name": "the street", "exposure": "open",
@@ -113,7 +119,7 @@ def test_noise_never_stops_people_talking_to_each_other():
               "positions": {"A": "street", "B": "street"},
               "stations": {"A": {"cell": [1, 3]}, "B": {"cell": [17, 3]}},
               "weather": {"precipitation": "rain", "precipitation_kind": "liquid",
-                          "intensity": "heavy", "wind": "gale", "sky": "storm",
+                          "intensity": "heavy", "wind": "still", "sky": "storm",
                           "cloud": "covered"},
               "entities": {}, "poses": {}, "orientation": {}, "contained": {}}
     rel = spatial_rel_between(street, "B", "A", sound=sound_field(street, "B"))

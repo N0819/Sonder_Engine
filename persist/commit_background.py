@@ -1524,7 +1524,7 @@ def spoken_volumes(ctx, dr_output=None):
 
 
 def address_reaches(scene, listener, listener_room, speaker, speaker_rooms,
-                    volumes=("normal",), *, addressed=False):
+                    volumes=("normal",), *, addressed=None):
     """Did the ADDRESSING LINE arrive where this body stands?
 
     BEING ADDRESSED CHANGES WHETHER A BODY IS PICKED TO ANSWER, NEVER
@@ -1560,7 +1560,9 @@ def address_reaches(scene, listener, listener_room, speaker, speaker_rooms,
     `addressed` is whether this body is the line's own target (a flow
     ref): a line breathed into an ear reaches its addressee and nobody else
     (`spatial_senses.EAR_VOLUME`), so a body picked on a looser match is
-    never reached by one.
+    never reached by one. Such a body is passed as unknown (None), never as
+    a bystander (False): it is the one being spoken to, so no din and no
+    turned head takes the line from it (`spatial_senses.spoken_to`).
 
     `speaker_rooms` is where the addressing mind stands -- the player's own
     room where the scene places them, else every authored mind's room, which
@@ -4510,7 +4512,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             if not address_reaches(sc, name, here, _pname,
                                    {player_room} if player_room
                                    else authored_rooms, volumes,
-                                   addressed=bool(flow_addressed)):
+                                   addressed=True if flow_addressed
+                                   else None):
                 # The words did not arrive, so every trigger that claimed
                 # they did falls with them. A carried debt is a different
                 # claim and is judged below on its own channel.

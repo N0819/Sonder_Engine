@@ -110,6 +110,15 @@ FALL_KINDS = ("none", "liquid", "frozen", "particulate", "other")
 INTENSITIES = ("none", "light", "moderate", "heavy")
 WINDS = ("still", "breeze", "wind", "gale")
 TEMPERATURES = ("freezing", "cold", "mild", "warm", "hot")
+#: WHICH WAY THE WIND BLOWS (2026-10-20, wave B2): the compass point it
+#: blows FROM, on the engine's own eight bearings
+#: (`spatial_orientation.normalize_bearing`) -- a westerly is `w`. What the
+#: sound field bends a sound's reach by (`spatial_sound_field.wind_bend_db`):
+#: carried downwind, swallowed upwind. ABSENT unless a story names it, so a
+#: record that never gave the wind a quarter serializes exactly as it did
+#: and bends nothing; carried by every later record and by the drift, which
+#: walks the wind's strength and never its quarter.
+WIND_FROM_KEY = "wind_from"
 
 #: How long an authored weather name may be. It reaches an image prompt, a
 #: sound query and a cache key, none of which want a paragraph; a name longer
@@ -568,6 +577,13 @@ def normalize_weather(value, base=None):
         "moon": axis("moon", MOONS, "") or _moon_in_prose(sky)
         or _pick(base.get("moon"), MOONS, _DEFAULT["moon"], "moon"),
     }
+    # WHERE THE WIND COMES FROM, declared first, then what was blowing: the
+    # order every axis here keeps, and only where a record names one
+    # (`WIND_FROM_KEY`).
+    quarter = _wind_quarter(value.get(WIND_FROM_KEY)) \
+        or _wind_quarter(base.get(WIND_FROM_KEY))
+    if quarter:
+        out[WIND_FROM_KEY] = quarter
     # WHICH DRIFT WINDOW THIS SKY BELONGS TO. Carried from the RECORD and
     # never from the base, because a record written over is a new record: a
     # re-normalization of a stored sky keeps its window, and a beat DECLARING
@@ -584,6 +600,14 @@ def normalize_weather(value, base=None):
     if stamp is not None:
         out[DRIFT_STEP_KEY] = stamp
     return out
+
+
+def _wind_quarter(value):
+    """A compass point the wind blows from, or "" -- the engine's eight
+    bearings, spelled as a bearing is anywhere (`n`, `north`, `NW`); an
+    egocentric word ("behind") or anything else is no quarter."""
+    from world.spatial import normalize_bearing
+    return normalize_bearing(value) or ""
 
 
 def _moon_in_prose(text):
@@ -1020,6 +1044,22 @@ def has_lightning(weather):
     return bool(weather.get("electrical"))
 
 
+def thunder_heard(scoped):
+    """Where the sky's thunder reaches a room: its muffling -- "" under the
+    sky or a roof, else the muffling the room hears the weather at -- or
+    None where it does not reach at all. ONE definition, read by the sound
+    bed (`weather_words`) and by the view a mind is given
+    (`composer.weather_percepts`, wave B2), so the page and the ambience
+    cannot disagree about a storm."""
+    if not has_lightning(scoped):
+        return None
+    if scoped.get("exposure") != "enclosed":
+        return ""
+    if scoped.get("audible"):
+        return str(scoped.get("muffling") or "")
+    return None
+
+
 def weather_words(scoped, channel="sight"):
     """Short phrases describing this room's weather on ONE channel.
 
@@ -1073,9 +1113,9 @@ def weather_words(scoped, channel="sight"):
     # full-strength clap is describing two distances at once. It is graded one
     # rung SOFTER than the rain in the same room, because that is the whole
     # point of thunder: it gets in where the weather does not.
-    if has_lightning(scoped) and (
-            scoped.get("exposure") != "enclosed" or scoped.get("audible")):
-        words.append(_thunder_words(scoped.get("muffling")))
+    muffling = thunder_heard(scoped)
+    if muffling is not None:
+        words.append(_thunder_words(muffling))
     if scoped.get("wind_reaches"):
         words.append(scoped["wind"])
     return words
@@ -1232,6 +1272,9 @@ def advance_weather(weather, elapsed_seconds, seed, severity=None):
         "precipitation_kind": kind,
         "intensity": intensity,
         "wind": wind,
+        # The wind's QUARTER is carried, never walked: a strength the drift
+        # moves is still blowing from where the story said it did.
+        WIND_FROM_KEY: weather.get(WIND_FROM_KEY),
         # Temperature is authored, not drifted: a beat that says the night
         # turns bitter is the Director's to write, and guessing it here would
         # fight that.

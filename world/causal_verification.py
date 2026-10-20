@@ -540,7 +540,8 @@ def _scalar_receipts(before, after, channel, desired):
 
 def _weather_receipts(before, after, desired):
     from world.weather import (AIRS, CLOUDS, FALL_KINDS, INTENSITIES, WINDS,
-                               TEMPERATURES, DRIFT_STEP_KEY, _resolve, normalize_weather)
+                               TEMPERATURES, DRIFT_STEP_KEY, WIND_FROM_KEY,
+                               _resolve, _wind_quarter, normalize_weather)
     if not isinstance(desired, dict) or not desired:
         return [_unresolved("weather", "", "missing_desired_state", "A nonempty typed weather record is required.")]
     desired = _without_metadata(desired)
@@ -548,10 +549,14 @@ def _weather_receipts(before, after, desired):
         return [_unresolved("weather", "", "missing_desired_state", "Weather provenance alone proves no effect.")]
     axes = {"air": AIRS, "cloud": CLOUDS, "precipitation_kind": FALL_KINDS,
             "intensity": INTENSITIES, "wind": WINDS, "temperature": TEMPERATURES}
-    known = set(axes) | {"sky", "precipitation", "electrical", "thundersnow"}
+    # The wind's quarter (wave B2) is an axis on the engine's own compass.
+    known = set(axes) | {"sky", "precipitation", "electrical", "thundersnow",
+                         WIND_FROM_KEY}
     invalid = set(desired) - known
     invalid.update(key for key, choices in axes.items() if key in desired
                    and _resolve(desired[key], choices, key) is None)
+    if WIND_FROM_KEY in desired and not _wind_quarter(desired[WIND_FROM_KEY]):
+        invalid.add(WIND_FROM_KEY)
     invalid.update(key for key in ("electrical", "thundersnow") if key in desired
                    and not isinstance(desired[key], bool))
     invalid.update(key for key in ("sky", "precipitation") if key in desired

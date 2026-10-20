@@ -52,7 +52,8 @@ from story.character_schema import (
 from core.db import wget
 from llm.schemas import validate_llm_output
 from llm.prompts import get_prompt
-from world.spatial import hear_level, into_another_ear, spatial_rel_between
+from world.spatial import (hear_level, into_another_ear, spatial_rel_between,
+                           spoken_to)
 
 from persist.commit import (
     address_reaches,
@@ -158,9 +159,9 @@ def _filtered_player_declaration(ctx, sc, name, here):
         breathed into an ear is this presence's only where the element
         names it by its whole name (`_background_name_named_exactly`, the
         precise grade -- never a shared word; `EAR_VOLUME`)."""
-        aimed = any(_background_name_named_exactly(name, ref)
-                    for ref in ((element or {}).get("targets") or ())
-                    if str(ref or "").strip())
+        refs = [ref for ref in ((element or {}).get("targets") or ())
+                if str(ref or "").strip()]
+        aimed = any(_background_name_named_exactly(name, ref) for ref in refs)
         if not p_name:
             if into_another_ear(volume or "normal", aimed):
                 return "none"
@@ -168,7 +169,7 @@ def _filtered_player_declaration(ctx, sc, name, here):
         return hear_level(
             spatial_rel_between(sc, name, p_name,
                                 observer_room=here, target_room=p_room),
-            volume or "normal", addressed=aimed)
+            volume or "normal", addressed=spoken_to(aimed, bool(refs)))
 
     if elements:
         parts = []
@@ -251,8 +252,10 @@ def _beat_for_presence(dr, sc, station_room, name, beat_room=None,
                                 observer_room=station_room,
                                 target_room=sp_room),
             d.get("volume") or "normal",
-            addressed=bool(str(d.get("intended_target") or "").strip())
-            and _background_name_named_exactly(name, d.get("intended_target")),
+            addressed=spoken_to(
+                bool(str(d.get("intended_target") or "").strip())
+                and _background_name_named_exactly(name, d.get("intended_target")),
+                bool(str(d.get("intended_target") or "").strip())),
         )
         if level == "none":
             continue
@@ -1168,9 +1171,13 @@ def _demanded_presences(ctx, dr, managed, ceiling):
         exempt = bool(emerged_hit or aimed)
         spoken_at = bool(flow_hit or named_exactly or mentioned or place_hit)
         if spoken_at and not exempt:
+            # A body picked on a looser match than the flow's own refs is
+            # still the one being spoken to, never a bystander to it: unknown
+            # (None), which the ear rung refuses and no din caps.
             if not address_reaches(sc, name, room, _pname,
                                    {_p_room} if _p_room else authored_rooms,
-                                   volumes, addressed=bool(flow_hit)):
+                                   volumes,
+                                   addressed=True if flow_hit else None):
                 flow_hit = named_exactly = False
                 mentioned = place_hit = False
                 precise = bool(aimed)
@@ -1242,10 +1249,11 @@ def _audience_map(sc, entry, managed, level):
             lvl = hear_level(
                 spatial_rel_between(sc, name, speaker,
                                     observer_room=room, target_room=sp_room),
-                volume, addressed=bool(
-                    str(entry.get("intended_target") or "").strip())
-                and _background_name_named_exactly(
-                    name, entry.get("intended_target")))
+                volume, addressed=spoken_to(
+                    bool(str(entry.get("intended_target") or "").strip())
+                    and _background_name_named_exactly(
+                        name, entry.get("intended_target")),
+                    bool(str(entry.get("intended_target") or "").strip())))
         else:
             # FAIL CLOSED. This used to be `"full"` with a comment claiming it
             # matched `_beat_for_presence` -- which does the opposite: X1

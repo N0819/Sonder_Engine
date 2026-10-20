@@ -7418,7 +7418,8 @@ def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
     for the beat. Bodies in the player's own room stay the Director's call.
     """
     from story.character_schema import persona_name
-    from world.spatial import hear_level, room_of, spatial_rel_between
+    from world.spatial import (hear_level, room_of, spatial_rel_between,
+                               spoken_to)
     try:
         scene = get_scene(chat_id)
         chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
@@ -7440,7 +7441,8 @@ def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
         try:
             rel = spatial_rel_between(scene, body["name"], p_name)
             heard = hear_level(rel, volume,
-                               addressed=str(body["id"]) in aimed)
+                               addressed=spoken_to(str(body["id"]) in aimed,
+                                                   bool(aimed)))
         except Exception:
             continue
         if heard and heard != "none":

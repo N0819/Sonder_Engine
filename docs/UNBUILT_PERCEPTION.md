@@ -2182,6 +2182,9 @@ reach. What wave A leaves, each registered here rather than built:
   cell, and only through a declared `over` (`spatial_levels.floor_edges`
   reads no plan) -- and with a floor's AIRBORNE loss, where an impact made in
   the floor carries more.
+  Since wave B2 (the note's § 14.4) the FELT half is built -- a `thunderous`
+  or `catastrophic` blow is touch through the floor, by the plan's storeys
+  -- and the HEARD thud through a sited building's floor is still this.
 - **A sneak walks at a walk's pace** (`spatial_walk.paces_for`); in the world
   it covers about half the ground.
 - **Footwear and floor coverings** take nothing off a footfall: no card field
@@ -2191,8 +2194,16 @@ reach. What wave A leaves, each registered here rather than built:
   whose words are lost delivers nothing there; the outcome view of the same
   beat says the voice.
 - **Callers that do not say whom a line was for cap nothing in a din**:
-  `charter_observe`, `commit_background`'s address checks, the follow's
-  `_heard_through`, `spatial_frames`, the World Browser's hearing overlay.
+  `spatial_frames` and the World Browser's hearing overlay. (`charter_observe`,
+  `commit_background`'s address gate and the follow say it since the merge,
+  three-valued -- `spatial_senses.spoken_to`, the note's § 14.8.)
+- **A line that names nobody has no bystander** (§ 14.8): privacy in a din
+  and the head's shadow bite only on a line naming SOMEBODY ELSE, and 31% of
+  the owner's recorded lines (3,678 of 11,841) name nobody -- the harbour
+  story's gale line, aimed at Jonah by the prose, names nobody, so a
+  bystander follows it whole. The lever is the encoder naming a line's
+  addressee wherever the prose says whom it is to: a prompt clause, the
+  owner's, and it needs a live run.
 - **`known` is recognition, not having heard a voice**: a listener who
   learned a name without meeting its owner would know the voice.
 - **A persona has no voice field**, and no card carries a voice's sex, rough
@@ -2200,6 +2211,44 @@ reach. What wave A leaves, each registered here rather than built:
 - **The din's informational masking is not modelled apart**: babble masks a
   bystander some few decibels more than steady noise of the same level; the
   margins are the speech margins.
+
+**Wave B2, 2026-10-20** (`design/DESIGN_SOUND_FIELD.md` § 14, how sound
+travels): a voice behind its speaker loses its words first, where a budget
+reads the direct sound; outdoors a strong wind is a din at the ear and bends
+a sound's reach by its quarter (`wind_from`, a new weather axis); two places
+under the sky joined by an opening are one stretch of open air; a sound is
+told after the sight of a maker seen past 103 m, and the sky's thunder after
+its flash; loud sound is felt, on the touch channel, by distance and storey.
+What it leaves:
+
+- **A beat's own sound events are keyless in the outcome pass.** They land in
+  the view's background half, lowercase ("... You see a person of
+  unremarkable appearance. a flat crack of musket fire."), though
+  `composer.ambient_percepts` says a beat's sound is not standing state; the
+  establish pass keys them (`_AMBIENT_BEAT_BAND`), the outcome pass does
+  not. Found building § 14.3, which keys only a sound it holds after its
+  seen maker. Keying every one moves every sound of every outcome view into
+  the beat half: the owner's call, with a measurement.
+- **Only the outcome pass orders a sound after its seen maker**; the act
+  pass (the player's own act, seen by the cast) does not.
+- **A maker is matched by the event's `source` naming the body** that acted;
+  a sound filed under the thing (a gun, a bell rope) is not matched to the
+  body that fired or rang it.
+- **Facing is the end-of-beat record** (`effective_facing`): a speaker who
+  turned to say a line and turned back is graded as facing where the record
+  left them, and a turned head is not told from a turned body.
+- **The felt rule** counts no ground-to-building coupling loss and no
+  material damping (the longest reaches are long), cannot tell a siren on a
+  wall from a machine on the floor (one `deafening` class), and does not
+  shake a body with the sky's own thunder; the HEARD thud through a floor is
+  the bullet above.
+- **The wind bends the near field's signal, not its noise**: a running thing
+  upwind of a listener is heard over unbent; and a din from the wind spares
+  a line's addressee at any range (§ 12.1's rule, the note's § 14.7
+  question 5).
+- **Thunder indoors needs audible rain**: the sound bed's existing rule, now
+  the view's too (`weather.thunder_heard`), leaves a dry storm silent behind
+  walls.
 
 Designed and built 2026-09-04 on `writers-room` (not yet on `main`;
 [`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),

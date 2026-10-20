@@ -273,6 +273,8 @@ from world.spatial_senses import (
     sighted_level, spatial_rel_between, visual_level_between,
     # Tone travels farther than words (2026-10-20, wave A).
     voice_carries,
+    # A line that names nobody is unknown, never somebody else's (2026-10-20).
+    spoken_to,
 )
 
 
@@ -359,6 +361,19 @@ from world.spatial_sound_field import (
     # fills its room.
     CONVERSATION_REACH_PACES, CROWD_BABBLE_DB, DIN_DB, din_level,
     TONE_BELOW_WORDS_DB, VOICE_TONE_SNR_DB, voice_margin_db,
+    # Wave B2 (2026-10-20): how sound travels -- which way the speaker
+    # faces, and the wind (its noise at the ear, and its bend).
+    FACING_AWAY_VOICE_DB, FACING_AWAY_WORDS_DB, facing_loss_db,
+    WIND_BEND_FULL_M, WIND_BEND_ONSET_M, wind_bend_db, WIND_DOWNWIND_DB,
+    WIND_UPWIND_DB,
+    # ...and loud sound is felt through what a body stands on.
+    FELT_DB, FELT_JOLT_DB, FELT_LEVELS, FELT_SHUDDER_DB,
+    FELT_SPREAD_DB_PER_DOUBLING, FELT_STOREY_DB, felt_through_ground,
+    felt_vibrations, felt_word,
+    # ...and a sound arrives after the sight of what made it.
+    LIGHTNING_M, seen_source_metres, sound_after_sight, SOUND_AFTER_SIGHT_M,
+    SOUND_AFTER_SIGHT_S, SOUND_AFTER_WORDS, sound_delay_s,
+    SOUND_SECONDS_AFTER_S, SPEED_OF_SOUND_M_S,
     AV_BENEFIT_DB, FAR_CLEAR_EDGE_DB, far_path, far_speech_level,
     masked_level, MASKING_LEVELS, open_air_loss_db, quantise_speech_db,
     quiet_floor, ROOM_COUPLING_DB, SPEECH_FULL_SNR, SPEECH_FULL_SNR_DB,

@@ -930,7 +930,8 @@ def _voice_reaches(ctx, world, listener, speaker, row, senses, names=None):
     `names` (`_source_bodies`, a cast or persona handle to its body's
     name) and every spelling of the listener (`same_subject`)."""
     from world.spatial import (hear_level, measured_proximity_rel, same_subject,
-                               sense_adjusted, sound_field, spatial_rel_between)
+                               sense_adjusted, sound_field, spatial_rel_between,
+                               spoken_to)
     from agents.composer import concealed_from_observer
     if not room_of(world, listener) or not room_of(world, speaker):
         return False
@@ -939,10 +940,12 @@ def _voice_reaches(ctx, world, listener, speaker, row, senses, names=None):
     refs = [ref for ref in list(row.get("targets") or ())
             + [row.get("intended_target")]
             if isinstance(ref, str) and ref.strip()]
-    addressed = any(
+    # Three answers: a line naming nobody is unknown, never somebody else's
+    # (`spatial_senses.spoken_to`).
+    addressed = spoken_to(any(
         same_subject(world, listener,
                      (names or {}).get(ref.strip().casefold()) or ref.strip())
-        for ref in refs)
+        for ref in refs), bool(refs))
     try:
         field = sound_field(world, listener,
                             turn_idx=getattr(getattr(ctx, "turn", None), "idx", None),
