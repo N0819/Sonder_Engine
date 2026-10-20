@@ -1241,7 +1241,8 @@ SIDE_CHANNELS = {
     "_books": "memo: the chat's lorebook ids",
     "_book_weights": "memo: the chat's lorebook weights",
     "_sound_crowds": "memo: the chat's crowd ledger from world state",
-    "_beat_movers": "memo: {name: pace} read off the resolve's travel record",
+    "_beat_movers": "memo: {name: pace} read off the resolve's travel record "
+                    "and the beat's room changes",
     "_background_beats_cache": "memo: derived from the hydrated "
                                "`background_react` content",
     "_composed_beat": "memo: keyed by the stored scene's read token; the "

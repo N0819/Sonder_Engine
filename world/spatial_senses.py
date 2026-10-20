@@ -1455,7 +1455,7 @@ def hear_level(
     level_db=None,
     *,
     seen: bool = False,
-    addressed: bool = False,
+    addressed=None,
 ) -> str:
     """How much of a line at `volume` this relation delivers: none |
     fragment | full -- the hearing rule (§ 11 of the note, the block above).
@@ -1463,9 +1463,16 @@ def hear_level(
     `_hear_level` is the table. Then, where the relation carries noise the
     story made deafening (`masking_db`, stamped only for a listener within
     a deafening source's reach or a drowning event's), that noise caps the
-    answer -- the one place noise enters (`spatial_sound_field.
-    masked_level`). `seen` is whether the listener sees the speaker's face,
-    which is worth several decibels in that noise and nowhere else.
+    answer (`spatial_sound_field.masked_level`). `seen` is whether the
+    listener sees the speaker's face, which is worth several decibels where
+    noise decides.
+
+    And where a DIN reaches a BYSTANDER (`_bystander_in_a_din`, § 12 of the
+    note): `addressed` is whether the line was spoken TO this listener --
+    False for a line meant for somebody else, None where the caller does not
+    know, which caps nothing. Noise never stops people talking to each
+    other; it keeps a far table's talk from a bystander
+    (`spatial_sound_field.din_level`).
 
     `addressed` is whether this listener is the body the line is spoken TO.
     Only the ear rung reads it (`EAR_VOLUME`): a line breathed into an ear
@@ -1476,14 +1483,8 @@ def hear_level(
     word = _graded_word(volume, level_db, addressed)
     if word is None:
         return "none"
-    level = _hear_level(rel, word, vouched, proximity, level_db)
-    if vouched or level == "none" or not isinstance(rel, dict) \
-            or rel.get("masking_db") is None:
-        return level
-    from world.spatial_sound_field import masked_level
-    return _weaker_hearing(level, masked_level(
-        rel, word, reach=_reach(rel, proximity), level_db=level_db,
-        seen=seen))
+    return _capped_levels(rel, word, vouched, proximity, level_db, seen,
+                          addressed)[-1]
 
 
 _HEARING_ORDER = {"none": 0, "fragment": 1, "full": 2}
@@ -1492,6 +1493,88 @@ _HEARING_ORDER = {"none": 0, "fragment": 1, "full": 2}
 def _weaker_hearing(a: str, b: str) -> str:
     """The quieter of two hearing grades -- caps only ever subtract."""
     return a if _HEARING_ORDER.get(a, 2) <= _HEARING_ORDER.get(b, 2) else b
+
+
+def _capped_levels(rel, word, vouched, proximity, level_db, seen, addressed):
+    """`(table, after masking, after the din)`: the rule's three answers in
+    order, each the weaker of the one before and its cap -- so
+    `hearing_reason` can say which clause took a line, and `hear_level`
+    reads the last."""
+    table = _hear_level(rel, word, vouched, proximity, level_db)
+    if vouched or table == "none" or not isinstance(rel, dict):
+        return table, table, table
+    masked = table
+    if rel.get("masking_db") is not None:
+        from world.spatial_sound_field import masked_level
+        masked = _weaker_hearing(table, masked_level(
+            rel, word, reach=_reach(rel, proximity), level_db=level_db,
+            seen=seen))
+    dinned = masked
+    if masked != "none" and _bystander_in_a_din(rel, word, proximity,
+                                                addressed):
+        from world.spatial_sound_field import din_level
+        dinned = _weaker_hearing(masked, din_level(
+            rel, word, level_db=level_db, seen=seen))
+    return table, masked, dinned
+
+
+def _bystander_in_a_din(rel, word, proximity, addressed) -> bool:
+    """Is this listener a BYSTANDER IN A DIN for this line: not the one it
+    was spoken to (`addressed` is False -- None, unknown, is never a
+    bystander), standing in a din (`din_db`, stamped where the field places
+    both bodies), beyond conversational reach of the speaker
+    (`spatial_sound_field.CONVERSATION_REACH_PACES` of the field's own path,
+    or across the room by the measured tier), and the line voiced -- breath
+    is private beyond reach already, din or none.
+
+    The class (§ 12 of the note, the owner's "noise never stops people
+    talking TO EACH OTHER"): a line's addressee, and anyone within a pace or
+    two of its speaker, hear it as the table says; a din keeps the talk of
+    a far table from everyone else."""
+    if addressed is not False or not isinstance(rel, dict):
+        return False
+    if rel.get("din_db") is None or rel.get("paces") is None:
+        return False
+    if word in UNVOICED_VOLUMES:
+        return False
+    from world.spatial_sound_field import CONVERSATION_REACH_PACES
+    if rel.get("reach") == "within_reach":
+        return False                    # a standing contact is within reach
+    return float(rel["paces"]) > CONVERSATION_REACH_PACES
+
+
+def voice_carries(rel: dict, volume: str, proximity: str | None = None,
+                  level_db=None, *, seen: bool = False,
+                  addressed=None) -> bool:
+    """TONE TRAVELS FARTHER THAN WORDS (§ 12 of the note): whether the FACT
+    of this line's voice -- that someone spoke, how loudly, how it sounded --
+    reaches the listener. Always where any of its words do (`hear_level` at
+    `fragment` or better); where none do, where the voice's own budget
+    (`spatial_sound_field.voice_margin_db`) still stands within
+    `VOICE_TONE_SNR_DB` of what the listener hears it against -- ten
+    decibels under the last caught word.
+
+    Never for breath: a whisper or a mutter has no voicing to carry, and the
+    owner ruled it lost beyond reach. Never through a body's mass (the
+    conducted cases keep their own answers), and never with no air between
+    the two -- a live channel is not air, and decides before this is
+    asked."""
+    if not isinstance(rel, dict):
+        return False
+    word = _volume_word(volume, level_db)
+    if hear_level(rel, word, proximity=proximity, level_db=level_db,
+                  seen=seen, addressed=addressed) != "none":
+        return True
+    if word in UNVOICED_VOLUMES:
+        return False
+    if rel.get("inside_source") or rel.get("enclosed_from_source") \
+            or rel.get("source_enclosed"):
+        return False
+    from world.spatial_sound_field import VOICE_TONE_SNR_DB, voice_margin_db
+    margin = voice_margin_db(
+        rel, word, reach=_reach(rel, proximity), level_db=level_db,
+        seen=seen, din=_bystander_in_a_din(rel, word, proximity, addressed))
+    return margin is not None and margin >= VOICE_TONE_SNR_DB
 
 
 def _hear_level(
@@ -1643,25 +1726,28 @@ def _hear_level(
 
 def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
                    level_db=None, *, seen: bool = False,
-                   addressed: bool = False) -> str:
+                   addressed=None) -> str:
     """WHY a line is short of `full`, in the rule's own words -- "" when it
     is heard whole. One of: `into_another_ear`, `breath_beyond_reach`,
     `open_air_distance`, `breath_through_a_door`,
     `shut_door_from_farther_off`, `heavy_door_or_glass`, `wall`,
-    `rooms_away`, `rooms_away_muffled`, `deafening`, `no_air`, `conducted`.
-    Read by the speech replay and by perception's decision notes, so a
-    hearing complaint is answered with the clause that decided it."""
+    `rooms_away`, `rooms_away_muffled`, `deafening`, `din_bystander`,
+    `no_air`, `conducted`. Read by the speech replay and by perception's
+    decision notes, so a hearing complaint is answered with the clause
+    that decided it."""
     if not isinstance(rel, dict):
         return ""
     word = _graded_word(volume, level_db, addressed)
     if word is None:
         return "into_another_ear"
-    level = hear_level(rel, word, proximity=proximity, level_db=level_db,
-                       seen=seen)
+    table, masked, level = _capped_levels(rel, word, False, proximity,
+                                          level_db, seen, addressed)
     if level == "full":
         return ""
-    if _hear_level(rel, word, False, proximity, level_db) != level:
+    if table != masked:
         return "deafening"
+    if masked != level:
+        return "din_bystander"
     if rel.get("inside_source") or rel.get("enclosed_from_source") \
             or rel.get("source_enclosed"):
         return "conducted"

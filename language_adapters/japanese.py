@@ -104,6 +104,34 @@ class JapaneseRenderer:
         # pack does not get to drop it.
         if p.fidelity == "silence":
             return self._text(prefix + "speech_silence", label=label)
+        # Detected and nothing more: no words, no speaker, no tone.
+        if p.fidelity == "trace":
+            where = str(data.get("bearing") or "")
+            if where and not prefix:
+                return self._text("speech_trace_placed", where=where)
+            return self._text(prefix + "speech_trace")
+        # A voice without its words (DESIGN_SOUND_FIELD § 12): whose, how
+        # loud, from where, and the tone it carried -- Layer A's answers,
+        # spelled.
+        if p.fidelity == "voice":
+            loudness = {"loud": self._text("speech_voice_raised"),
+                        "shout": self._text("speech_voice_shouting")}.get(
+                str(data.get("volume") or "").casefold(), "")
+            where = str(data.get("bearing") or "")
+            where = self._text("speech_voice_where", where=where) \
+                if where and not prefix else ""
+            named = data.get("attributed") and label
+            if prefix:
+                line = (self._text(prefix + "speech_voice", label=label,
+                                   loudness=loudness) if named
+                        else self._text(prefix + "speech_voice_unknown",
+                                        loudness=loudness))
+            else:
+                line = (self._text("speech_voice", label=label,
+                                   loudness=loudness, where=where) if named
+                        else self._text("speech_voice_unknown",
+                                        loudness=loudness, where=where))
+            return line + self._heard_after(p, data, prefix)
         if p.fidelity == "fragment":
             # A fragment loses the WORDS, never the speaker, when the observer
             # can see who spoke (PD3). `attributed` is Layer A's answer; this
@@ -111,7 +139,8 @@ class JapaneseRenderer:
             key = (prefix + "muffled_attributed" if data.get("attributed")
                    else prefix + "muffled")
             return self._text(key, label=label,
-                              fragment=data.get("fragment", ""))
+                              fragment=data.get("fragment", "")) \
+                + (self._heard_after(p, data, prefix) if not prefix else "")
         body = data.get("body", "")
         if data.get("conducted"):
             key = (prefix + "conducted") if prefix else "dialogue_conducted"
@@ -139,6 +168,23 @@ class JapaneseRenderer:
         return self._text("dialogue_visible", label=label,
                           manner=self._tone(data.get("manner", data.get("tone"))),
                           articulation=articulation, verb=verb, body=body)
+
+    def _heard_after(self, p, data, prefix):
+        """`composer._heard_after`'s twin: the tone a voice carried where
+        its words did not all arrive, and a stranger's voice said once --
+        each its own sentence. A memory keeps the tone of a voice heard
+        alone, and never the register (as `said_apart` is never filed)."""
+        parts = []
+        tone = str(data.get("tone_heard") or "").strip()
+        if tone and p.fidelity in ("fragment", "voice"):
+            if not prefix:
+                parts.append(self._text("speech_voice_tone", tone=tone))
+            elif p.fidelity == "voice":
+                parts.append(self._text(prefix + "speech_voice_tone", tone=tone))
+        if data.get("voice_apart") and not prefix:
+            parts.append(self._text("voice_register",
+                                    register=data["voice_apart"]))
+        return "".join(_full_stop(part) for part in parts)
 
     def _tone(self, tone):
         tone = str(tone or "").strip()
@@ -461,6 +507,12 @@ class JapaneseRenderer:
                     and data.get("said_apart"):
                 line = line + self._text("voice_register",
                                          register=data["said_apart"])
+            # A stranger's voice heard and not seen, said once after the
+            # line (§ 12 of the sound note); a fragment and a voice heard
+            # alone say it inside `_speech`.
+            if line and p.fidelity == "full":
+                line = _full_stop(line) + self._heard_after(p, data, prefix) \
+                    if data.get("voice_apart") and not prefix else line
             return line
         if p.kind == "environment":
             return self._environment(data, prefix)

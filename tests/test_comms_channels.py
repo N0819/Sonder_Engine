@@ -212,8 +212,13 @@ class TestCarriedEquipment:
 class TestWhatReachesAMind:
     def test_a_voice_crosses_a_wall_that_stops_it(self):
         scene = _scene()
-        assert _percept(scene, "Sarah Moon", "Hinami") is None, \
-            "a window stops an ordinary voice"
+        # A window stops an ordinary voice's WORDS; since 2026-10-20 (tone
+        # travels farther than words, DESIGN_SOUND_FIELD § 12) the voice
+        # itself still arrives through the glass, and nothing it said.
+        stopped = _percept(scene, "Sarah Moon", "Hinami")
+        assert stopped is not None and stopped.fidelity == "voice", \
+            "a window stops an ordinary voice's words"
+        assert "body" not in stopped.data and "fragment" not in stopped.data
 
         sp.apply_comms_ops(scene, [{
             "id": "cell_intercom", "name": "the cell intercom",
@@ -308,7 +313,11 @@ class TestWhatReachesAMind:
             "id": "cell_intercom", "rooms": ["observation", "cell"]}])
         sp.apply_comms_ops(scene, [{"id": "cell_intercom", "op": "close"}])
 
-        assert _percept(scene, "Sarah Moon", "Hinami") is None
+        # Back to what the glass alone carries: her voice, never her words
+        # (DESIGN_SOUND_FIELD § 12).
+        closed = _percept(scene, "Sarah Moon", "Hinami")
+        assert closed is not None and closed.fidelity == "voice"
+        assert "body" not in closed.data
         assert _percept(scene, "Sarah Moon", "guard_1") is not None, \
             "the guard beside her still hears her"
 

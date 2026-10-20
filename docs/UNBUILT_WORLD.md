@@ -2281,6 +2281,14 @@ every card that writes it as `barrier` is, with what lies on the floor going
 to the desc. Open for the owner: what tatami, or any covering, takes off a
 tread -- it reads as the timber under it.
 
+**Wave A, 2026-10-20** (`DESIGN_SOUND_FIELD.md` § 12.4): the impact table now
+also grades the gait -- a `sneak` (the encoder's `movement.pace`) is
+`TREAD_SNEAK_DB` 15 under a walk -- and reaches the rooms beside the walker
+(`FOOTFALL_FLANKING_DB` 15 under the room below) and the storey under it by
+the plan. A floor word it does not hold still reads as masonry, and what a
+covering (tatami, a carpet, a rug) takes off a footfall is still the owner's
+number; a body's footwear has no field at all.
+
 <a id="unbuilt-1-210"></a>
 
 ### 1.210 A stair is a room of its own -- built 2026-10-12, residuals open

@@ -1040,6 +1040,11 @@ is about what is seen. A per-line or per-body voice-concealment flag is the
 shape, and it wants authoring surfaces (card, Director channel, both packs)
 rather than a guess.
 
+Since 2026-10-20 (wave A, `DESIGN_SOUND_FIELD.md` § 12.3) an unseen stranger's
+voice is described by the speaker's own register, once; a voice-only disguise
+would have to take that description with it, as an identity-concealing
+disguise already takes the name. Still open.
+
 **Also still owed: a genuinely SILENT act behind you.** What is delivered now
 is "something moved", and a gesture makes no sound. The engine cannot tell a
 footstep from a raised hand without reading the prose, which is the guard
@@ -1539,6 +1544,13 @@ speech. What stays open, and is the owner's:
   street, so it is the owner's.
 - **The impact ladder** (`EVENT_POWER`) is still the 2026-09-06 one, under
   the emission ladder at `loud` and `deafening`; it decides reach only.
+- **Since wave A (2026-10-20, the note's § 12.1) noise decides a line for one
+  more listener**: a BYSTANDER beyond conversational reach in a din -- never
+  the line's addressee, never anyone within a pace or two of its speaker, and
+  never from rain or a quiet house (`DIN_DB` is the noise words' `din` rung,
+  57 dB(A)). Replayed on every recorded line, it changes none: no corpus room
+  holds a crowd, and every recorded line spoken in a din was addressed,
+  within reach, or raised and watched.
 - The composer symptom below stands.
 
 **Built 2026-09-14** (`DESIGN_SOUND_DECIBELS.md` § 5c,
@@ -2151,6 +2163,43 @@ simultaneous voices on the field (which no reader ever passed) is gone --
 and **whether a fragment should thin with the ratio** now applies only to
 lines graded by a level (rooms away, under the open sky, in a deafening
 source's reach). The rest concern sounds, and stand.
+
+**Wave A, 2026-10-20** (`design/DESIGN_SOUND_FIELD.md` § 12): a crowd's
+level is now its band's real babble and it fills the room it stands in
+(`CROWD_BABBLE_DB`, 55 / 62 / 68 / 75 dB(A)) -- whether its `mood` should
+also raise it stays the owner's, and is still not read (free prose). A din
+(`DIN_DB`, the noise words' own `din` rung) decides a line again, for one
+listener only: a bystander the line was not spoken to, beyond conversational
+reach. What wave A leaves, each registered here rather than built:
+
+- **Breath has no voice rung.** A whisper or a mutter beyond reach or
+  through a door is lost whole, not heard as "someone whispering" -- the
+  owner's privacy ruling read strictly. Whether the FACT of whispering (no
+  words, no voice) should reach a listener a few paces off is the owner's.
+- **Thuds through a sited building's floors.** A footfall now reaches the
+  storey below by the plan (§ 12.4); a one-beat impact event (a body falling,
+  a dropped weight) reaches it only by the far field, at 70 dB and up at its
+  cell, and only through a declared `over` (`spatial_levels.floor_edges`
+  reads no plan) -- and with a floor's AIRBORNE loss, where an impact made in
+  the floor carries more.
+- **A sneak walks at a walk's pace** (`spatial_walk.paces_for`); in the world
+  it covers about half the ground.
+- **Footwear and floor coverings** take nothing off a footfall: no card field
+  says a body is barefoot or soft-shod, and a covering is a floor word the
+  impact table reads as the structure under it (UNBUILT_WORLD § 1.209).
+- **The interaction loop's round does not render the voice rung** -- a line
+  whose words are lost delivers nothing there; the outcome view of the same
+  beat says the voice.
+- **Callers that do not say whom a line was for cap nothing in a din**:
+  `charter_observe`, `commit_background`'s address checks, the follow's
+  `_heard_through`, `spatial_frames`, the World Browser's hearing overlay.
+- **`known` is recognition, not having heard a voice**: a listener who
+  learned a name without meeting its owner would know the voice.
+- **A persona has no voice field**, and no card carries a voice's sex, rough
+  age or accent as a fact about sound: `embodiment.voice` is proposed.
+- **The din's informational masking is not modelled apart**: babble masks a
+  bystander some few decibels more than steady noise of the same level; the
+  margins are the speech margins.
 
 Designed and built 2026-09-04 on `writers-room` (not yet on `main`;
 [`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),

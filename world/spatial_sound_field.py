@@ -699,12 +699,38 @@ WIND_NOISE_DB = {word: db_of_power(power)
 #: failing in whichever direction its missing word points. The band is a
 #: closed set the engine already grades density by, so a throng is loud and
 #: a handful is faint without anyone enumerating English. Whether mood should
-#: ALSO raise the level is the note's open question, unchanged. A throng is
-#: `loud` at the household level since 2026-10-20 (65 at a pace from the
-#: room's centre): a crowd's roar is talked over, raised, and is heard in
-#: its own room and the next, no longer rooms away (`FAR_FIELD_ENTRY_DB`).
+#: ALSO raise the level is the note's open question, unchanged. This word is
+#: what a crowd IS on the emission ladder -- what the noise words and the far
+#: field's character read; how loud its TALK is, and so how far it carries and
+#: whom it keeps from following a far table, is `CROWD_BABBLE_DB` below
+#: (wave A, 2026-10-20), which fills the crowd's room: a few dozen people are
+#: a din there and reach the far field, and a throng drowns its room.
 CROWD_SOUND = {"a handful": "faint", "a dozen or so": "audible",
                "a few dozen": "audible", "a throng": "loud"}
+
+#: WHAT A CROWD SOUNDS LIKE WHERE IT STANDS, in dB(A), by the same band --
+#: the babble of its talk, which FILLS the room the crowd is in rather than
+#: pouring out of its centre (2026-10-20, wave A; `SoundField.intensity_at`).
+#: The word above stays what a crowd IS on the emission ladder (what the
+#: noise words and the far field's character read); this is how loud its
+#: talk is, and it is a real measurement rather than a rung:
+#:
+#:   a handful       55   two or three quiet conversations in a room
+#:   a dozen or so   62   a full table or two; people lean in to talk
+#:   a few dozen     68   a busy tavern or dining room
+#:   a throng        75   a packed hall, a market at its height
+#:
+#: Basis: babble from N talkers sums incoherently, about 3 dB a doubling of
+#: the people talking at once, and the talkers raise their voices against
+#: one another as it climbs (the "cafeteria effect", Lombard escalation):
+#: measured restaurants and canteens sit at 60-80 dB(A), a busy one around
+#: 70, a packed bar or hall 75-85 (Lebo et al. 1994; Rindel 2012). Until
+#: this table a crowd was a point source at its room's centre on the
+#: emission ladder, so a few dozen people talking were a 50 dB hearth fire
+#: -- quieter than one voice -- and no crowd short of a throng was ever a
+#: din anywhere in the room it stood in.
+CROWD_BABBLE_DB = {"a handful": 55.0, "a dozen or so": 62.0,
+                   "a few dozen": 68.0, "a throng": 75.0}
 
 #: The absolute floor under `fragment`: a signal quieter than this is not
 #: heard however quiet the room. § 6 proposed 0.3, which sat above a normal
@@ -866,6 +892,56 @@ ROOM_COUPLING_DB = 10.0
 #: of the measured range, because a story's light and angle are rarely the
 #: laboratory's.
 AV_BENEFIT_DB = 6.0
+
+#: PRIVACY IN A DIN (2026-10-20, wave A; `din_level`, and the bystander cap
+#: in `spatial_senses.hear_level`). The hearing rule of the same day let no
+#: noise below `deafening` touch a line, so a bystander anywhere in a busy
+#: tavern followed every word at the far table. In the world a din cuts
+#: both ways: the people TALKING TO EACH OTHER raise their voices (Lombard)
+#: and, a pace or two apart, follow one another; a bystander a few paces off
+#: hears the same raised voice's DIRECT sound 10-15 dB down against the same
+#: din, and catches pieces of it or only the fact that people are talking --
+#: energetic masking plus informational masking, the cocktail-party effect
+#: working against the eavesdropper (Bronkhorst 2000). The room's ring that
+#: carries a voice across a quiet room (the rule's one-room row) is under
+#: the din here, and reverberant speech is the smeared part a listener
+#: cannot use, so what reaches a bystander is the voice falling off with
+#: distance as in open air.
+#:
+#: A DIN is noise at the listener's own ear at or above the `din` rung of
+#: the noise words (`noise_word_db`): where a normal voice one pace off is
+#: no longer followed as it is. 57 dB(A) -- babble and music at 65-75 are
+#: a din; rain (37 at its heaviest, `WEATHER_NOISE`) and a quiet house
+#: (25-35) never are, so the owner's rain ruling holds by construction.
+#: Derived from the words' own thresholds, so the view that tells a body
+#: "you are in the din" and the rule that keeps a far table's talk from it
+#: are one number.
+DIN_DB = VOICE_ONE_PACE_DB - FULL_SNR_DB
+#: WITHIN CONVERSATIONAL REACH, in paces of the field's own path between
+#: the two bodies: the people around one table, or standing together -- a
+#: pace or two apart, the distance people in a noisy room close to when they
+#: talk (social distance begins about 1.2 m; in a din groups stand closer).
+#: Noise never stops people talking TO EACH OTHER: the line's addressee, and
+#: anyone this near the speaker, hear it as the rule's table says, din or
+#: none. Beyond it, in a din, a listener is a bystander.
+CONVERSATION_REACH_PACES = 2.0
+
+#: TONE TRAVELS FARTHER THAN WORDS (2026-10-20, wave A; `voice_margin_db`,
+#: `spatial_senses.voice_carries`). A listener detects a voice -- that
+#: someone is speaking, how loudly, its pitch and its emotional colour,
+#: anger, laughter, crying, a scream -- well below the level at which any
+#: of its words come through: the speech DETECTION threshold sits some
+#: 10-15 dB under the threshold at which words are recognised (ANSI S3.6
+#: practice: SDT about 8-12 dB below SRT), and a wall or a door takes a
+#: voice's consonants and leaves its low half, the vowels and the tune
+#: (transmission loss rises about 6 dB an octave). So where a line's words
+#: are lost, the voice itself still arrives this far under the last caught
+#: word (`FRAGMENT_SNR_DB`): ten decibels, the near end of the range, so
+#: the rung is never wider than the measurement.
+TONE_BELOW_WORDS_DB = 10.0
+#: The margin over the listener's floor or noise at which the fact of a
+#: voice still arrives: -22.0 dB.
+VOICE_TONE_SNR_DB = FRAGMENT_SNR_DB - TONE_BELOW_WORDS_DB
 
 #: Steadiness rates: see the light field's FLICKER_RATE / FAIL_RATE, imported
 #: above -- one hash, two senses, one pair of rates.
@@ -1131,9 +1207,23 @@ def masked_level(rel: dict, volume, *, reach=None, level_db=None,
     noise_db = rel.get("masking_db")
     if noise_db is None:
         return "full"
+    word = _speech_word(volume)
+    voice = _masked_voice_db(rel, word, reach=reach, level_db=level_db,
+                             seen=seen)
+    return quantise_speech_db(voice, float(noise_db),
+                              voiced=word not in UNVOICED_VOLUMES)
+
+
+def _speech_word(volume) -> str:
+    """The speech ladder's word for a line's volume; anything else is an
+    ordinary voice, as the rule grades it."""
     word = str(volume or "normal").strip().casefold()
-    if word not in SPEECH_DB:
-        word = "normal"
+    return word if word in SPEECH_DB else "normal"
+
+
+def _masked_voice_db(rel, word, *, reach=None, level_db=None, seen=False):
+    """`masked_level`'s voice at the listener's ear, in dB: spoken over the
+    noise where its speaker stands, carried by the rule's own path."""
     speaker_noise = rel.get("speaker_masking_db")
     raised = lombard_level_db(word, power_of_db(speaker_noise)
                               if speaker_noise is not None else None)
@@ -1143,8 +1233,106 @@ def masked_level(rel: dict, volume, *, reach=None, level_db=None,
     voice = float(level) - _ONE_PACE_LOSS_DB - _voice_path_loss_db(rel, reach)
     if seen:
         voice += AV_BENEFIT_DB
-    return quantise_speech_db(voice, float(noise_db),
+    return voice
+
+
+def _din_voice_db(rel, word, *, level_db=None, seen=False) -> Optional[float]:
+    """What reaches a BYSTANDER in a din of a line spoken a few paces off, in
+    dB at their ear, or None where the relation carries no din or no paces.
+
+    The voice is raised over the din where its SPEAKER stands
+    (`lombard_level_db`, up to a shout), and the bystander has its DIRECT
+    sound: the speaker's level at their cell less the free-field spreading
+    over the field's own path between the two (`spreading_loss_db`, 6 dB a
+    doubling), less the opening's own loss where the two are one opening
+    apart. The ring that carries a voice across a quiet room is under the
+    din, and reverberant speech is what a listener cannot use (`DIN_DB`'s
+    note). A listener who watches the speaker's face gains
+    `AV_BENEFIT_DB`."""
+    if rel.get("din_db") is None or rel.get("paces") is None:
+        return None
+    speaker_din = rel.get("speaker_din_db")
+    raised = lombard_level_db(word, power_of_db(speaker_din)
+                              if speaker_din is not None else None)
+    level = level_db if level_db is not None else SPEECH_DB[word]
+    if raised is not None and level_db is None:
+        level = raised
+    voice = float(level) - spreading_loss_db(max(1.0, float(rel["paces"])))
+    if not rel.get("same_room"):
+        from world.spatial_senses import _material_shifted_barrier
+        barrier = _material_shifted_barrier(
+            normalize_barrier(rel.get("barrier")), rel.get("material"))
+        voice -= APERTURE_LOSS_DB.get(barrier, 0.0)
+    if seen:
+        voice += AV_BENEFIT_DB
+    return voice
+
+
+def din_level(rel: dict, volume, *, level_db=None, seen=False) -> str:
+    """WHAT A DIN LEAVES A BYSTANDER OF A LINE: `full | fragment | none`, by
+    `_din_voice_db` against the din at the bystander's ear at the speech
+    margins (`quantise_speech_db`). `full` where the relation carries no din.
+
+    Applied by `spatial_senses.hear_level` only to a listener the line was
+    not addressed to and who stands beyond `CONVERSATION_REACH_PACES` of the
+    speaker: noise never stops people talking to each other. In a tavern's
+    babble (68 dB) a raised conversational voice is followed whole a pace or
+    two off, caught in pieces from about three paces, and beyond about eight
+    a bystander has only the fact that people are talking
+    (`spatial_senses.voice_carries`)."""
+    from world.spatial_senses import UNVOICED_VOLUMES
+    word = _speech_word(volume)
+    voice = _din_voice_db(rel, word, level_db=level_db, seen=seen)
+    if voice is None:
+        return "full"
+    return quantise_speech_db(voice, float(rel["din_db"]),
                               voiced=word not in UNVOICED_VOLUMES)
+
+
+def voice_margin_db(rel: dict, volume, *, reach=None, level_db=None,
+                    seen=False, din=False) -> Optional[float]:
+    """How far over (or under) what the listener hears it against a line's
+    VOICE arrives, in dB -- the budget the tone rung reads
+    (`spatial_senses.voice_carries`), from the same numbers the hearing
+    rule's table is written against. None where no air carries a voice at
+    all: no relation between the rooms, another world, a far path that
+    nothing crosses.
+
+    The path: rooms away, the far field's measured loss; under the sky, the
+    open air's; otherwise the masking budget's own path classes
+    (`_voice_path_loss_db`: the room's drop, the opening or door, the spread
+    into the next room, a wall). Against the listening room's quiet floor
+    (`floor_db` where stamped, a quiet room's 27 dB otherwise -- the
+    table's own budget floor). Where noise the story made deafening reaches
+    the listener (`masking_db`), or -- `din` -- a din reaches a bystander,
+    the weaker of that budget and the path's."""
+    word = _speech_word(volume)
+    level = float(level_db) if level_db is not None else SPEECH_DB[word]
+    floor = float(rel["floor_db"]) if rel.get("floor_db") is not None \
+        else AMBIENT_DB["enclosed"]
+    if rel.get("far_loss_db") is not None:
+        loss = float(rel["far_loss_db"])
+        if math.isinf(loss):
+            return None
+        margins = [level - loss - floor]
+    elif rel.get("open_air_loss_db") is not None:
+        margins = [level - float(rel["open_air_loss_db"]) - floor]
+    else:
+        barrier = normalize_barrier(rel.get("barrier"))
+        if not rel.get("same_room") and (barrier == "unknown"
+                                         or rel.get("distance") == "remote"):
+            return None
+        margins = [level - _ONE_PACE_LOSS_DB
+                   - _voice_path_loss_db(rel, reach) - floor]
+    if rel.get("masking_db") is not None:
+        margins.append(_masked_voice_db(rel, word, reach=reach,
+                                        level_db=level_db, seen=seen)
+                       - float(rel["masking_db"]))
+    if din:
+        voice = _din_voice_db(rel, word, level_db=level_db, seen=seen)
+        if voice is not None:
+            margins.append(voice - float(rel["din_db"]))
+    return min(margins)
 
 
 def quantise_hearing(signal: float, noise: float, *, voiced: bool = False) -> str:
@@ -1546,6 +1734,31 @@ FLOOR_IMPACT_DB = {"timber": 55.0, "board": 55.0, "plank": 55.0, "wood": 55.0,
                    "stone": 40.0, "concrete": 40.0, "masonry": 40.0}
 TREAD_RUN_DB = 8.0
 
+#: FOOTSTEPS AND THUDS COME THROUGH FLOORS (2026-10-20, wave A;
+#: `tread_events`). Impact sound -- a footfall, a dropped weight, a slammed
+#: door, a body falling -- is made IN the structure and travels through it
+#: far better than airborne speech does: on a timber floor a footfall above
+#: is plainly heard in the room below, a stone or earth floor carries much
+#: less, and a soft step carries less again. The engine's three gaits, a
+#: closed set on the walk's `pace` (`TREAD_GAITS`): `sneak` (a body moving
+#: so as not to be heard), `walk`, `run`.
+TREAD_GAITS = ("sneak", "walk", "run")
+#: A STEP PLACED NOT TO BE HEARD -- weight eased down, heel to toe -- strikes
+#: the floor with a small fraction of a walking step's force: measured
+#: impact peaks fall by 10-20 dB between a firm walk and a slow, soft one
+#: (footfall noise studies of light-weight floors, e.g. Jeon et al. 2004's
+#: walking-vs-soft-walking LAmax). The middle of that. On a timber floor a
+#: sneak above still comes through as a creak a quiet room below can hear
+#: (40 dB); on stone it does not (25).
+TREAD_SNEAK_DB = 15.0
+#: WHAT A FLOOR CARRIES SIDEWAYS: a footfall reaches the room beside the
+#: walker's on the same storey through the shared floor and the partition
+#: -- flanking transmission -- some 10-20 dB under what reaches the room
+#: directly below (ISO 12354-2's flanking paths for impact sound). The
+#: middle of that: a walk on timber is heard next door (40 dB), a walk on
+#: stone is not (25).
+FOOTFALL_FLANKING_DB = 15.0
+
 
 def normalize_surface(value) -> str:
     word = str(value or "").strip().casefold()
@@ -1722,11 +1935,17 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None) -> tu
         if not room or room not in rooms:
             continue
         from world.crowds import normalize_band
-        level = CROWD_SOUND.get(normalize_band(crowd.get("band")), "audible")
+        band = normalize_band(crowd.get("band"))
+        level = CROWD_SOUND.get(band, "audible")
+        # ITS TALK, AT ITS REAL LEVEL (`CROWD_BABBLE_DB`): the band's babble
+        # at one pace, which `SoundField.intensity_at` also holds through the
+        # whole room the crowd stands in. `level` stays the band's word.
+        babble = CROWD_BABBLE_DB.get(band, CROWD_BABBLE_DB["a dozen or so"])
         out.append({"id": "crowd:%s" % (crowd.get("uid") or room),
                     "kind": "crowd", "room": room,
                     "cell": room_centre(scene, room),
-                    "power": SOUND_POWER[level], "level": level,
+                    "power": one_pace_power(babble), "level": level,
+                    "babble_db": babble,
                     "holder": None, "beat": "steady"})
     for idx, event in enumerate(events or []):
         if not isinstance(event, dict) or not _is_sound_event(event):
@@ -2010,6 +2229,12 @@ class SoundField:
         ring = float(rev["gain"]) * ratio_of_db(-_ONE_PACE_LOSS_DB)
         if self.grid.inside.get(cell) == str(source_room):
             return ring
+        return ring * self._door_gain(source_room, cell)
+
+    def _door_gain(self, source_room, cell) -> float:
+        """The best gain to `cell` from any doorway of `source_room` on this
+        field: what a sound that fills that room carries on, beyond it, from
+        the openings it leaves by."""
         if source_room not in self._rev_spreads:
             spreads = []
             for other in sorted(self.grid.offsets):
@@ -2024,11 +2249,23 @@ class SoundField:
         best = 0.0
         for spread_map in self._rev_spreads[source_room]:
             best = max(best, gain_at(spread_map, cell))
-        return ring * best
+        return best
 
     # -- intensity ----------------------------------------------------------
 
     def intensity_at(self, source, cell) -> float:
+        babble = source.get("babble_db")
+        if source.get("kind") == "crowd" and babble is not None:
+            # A CROWD FILLS THE ROOM IT STANDS IN (`CROWD_BABBLE_DB`): its
+            # talk comes from every part of it, so anywhere in that room the
+            # babble is its level there, and beyond the room it carries on
+            # from the openings it leaves by. Priced as a point at the
+            # room's centre, the far end of a tavern full of talk was as
+            # quiet as an empty room and its middle a machine shop.
+            fill = power_of_db(float(babble))
+            if self.grid.inside.get(cell) == str(source["room"]):
+                return fill
+            return fill * self._door_gain(str(source["room"]), cell)
         direct = gain_at(self.spread_from(source["at"]), cell)
         return source["power"] * max(direct, self.rev_gain(source["room"], cell))
 
@@ -2496,7 +2733,11 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
       * `masking_db`, `speaker_masking_db` -- only where something the story
         made deafening, or an event it says drowns everything, reaches the
         listener's ear (and the speaker's, for the rise of their voice):
-        the one place noise decides speech (`masked_level`).
+        noise that decides speech for everyone (`masked_level`);
+      * `din_db`, `speaker_din_db` -- where the field places both bodies
+        and the noise at the listener's ear is a din (`DIN_DB`): what a
+        BYSTANDER beyond conversational reach follows of the line
+        (`din_level`, 2026-10-20 wave A) -- never its addressee.
 
     RESTATED 2026-10-20. It stamped the cell path's gain and the listener's
     whole noise floor -- a kettle, rain, a crowd -- and the verdict was their
@@ -2537,6 +2778,21 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     paces = _pair_paces(scene, sound, observer, target, o_room, t_room, rel)
     if paces is not None:
         rel["paces"] = paces
+        # A DIN AT THE LISTENER'S EAR (`DIN_DB`): what a bystander in it
+        # follows of a conversation a few paces off is the din's to decide
+        # (`din_level`, applied by `spatial_senses.hear_level` only to a
+        # listener the line was not addressed to, beyond conversational
+        # reach). Stamped only where the field places both bodies -- the
+        # paces are the budget's distance -- and with the noise where the
+        # SPEAKER stands, which their voice rises over.
+        din = sound.noise_at(observer, room=o_room)
+        if din is not None and _at_least(db_of_power(din), DIN_DB):
+            rel["din_db"] = db_of_power(din)
+            own = sound._field_for(t_room)
+            spoken_over = own.noise_at(target, room=t_room) \
+                if own is not None else None
+            if spoken_over is not None:
+                rel["speaker_din_db"] = db_of_power(spoken_over)
     if any(_masks(source) for source in sound.sources) or \
             any(_masks(source) for source in sound._raw_sources):
         masking = sound.masking_db_at(observer, room=o_room)
@@ -2607,17 +2863,114 @@ SENSORY_EVENTS_KEY = "sensory_events"
 MAX_SENSORY_EVENTS = 8
 
 
+def tread_gait(pace) -> str:
+    """One of `TREAD_GAITS` for a walk's `pace`; anything else is a walk."""
+    word = str(pace or "walk").strip().casefold()
+    return word if word in TREAD_GAITS else "walk"
+
+
+def footfall_db(scene, room_id, gait) -> float:
+    """What a footfall in `room_id` puts into the room under it, in dB: the
+    room's own floor word (`FLOOR_IMPACT_DB`, masonry for a word it does not
+    hold -- UNBUILT_WORLD § 1.209), a run's `TREAD_RUN_DB` over a walk, a
+    sneak's `TREAD_SNEAK_DB` under it."""
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    material = str((room or {}).get("floor") or "").strip().casefold() \
+        if isinstance(room, dict) else ""
+    level = FLOOR_IMPACT_DB.get(material, FLOOR_IMPACT_DB["stone"])
+    gait = tread_gait(gait)
+    if gait == "run":
+        level += TREAD_RUN_DB
+    elif gait == "sneak":
+        level -= TREAD_SNEAK_DB
+    return float(level)
+
+
+def _footfall_heard(scene, room_id, level_db) -> bool:
+    """Is a footfall arriving at `level_db` heard at all in `room_id`: over
+    the room's own floor -- the place and the weather it hears
+    (`_ambient_floor`) -- at a sound's margins (`quantise_hearing_db`). A
+    sound under the room it is heard in is not heard."""
+    return quantise_hearing_db(
+        level_db, db_of_power(_ambient_floor(scene, room_id))) != "none"
+
+
+def _rooms_beside(scene, room_id, exclude=()) -> list:
+    """The rooms on `room_id`'s storey a footfall in it reaches through the
+    structure rather than the air: those its plan sets wall to wall with it
+    (`site_plan.plan_rooms_beside`), and those a declared way that is not an
+    opening joins it to on the same storey -- a shut door, a curtain, a
+    wall, a pane. A room an opening joins hears the walker's own tread
+    through the opening (the near field), so it is not one of these."""
+    from world.site_plan import plan_rooms_beside
+    from world.spatial_levels import room_level
+    from world.spatial_orientation import normalize_vertical
+    from world.spatial_routing import spatial_rel
+    from world.spatial_senses import OPEN_BARRIERS
+    rooms = (scene or {}).get("rooms") or {}
+    here_level = room_level(scene, room_id)
+    found = list(plan_rooms_beside(scene, room_id))
+    for rid in sorted(rooms, key=str):
+        edge = _declared_edge(scene, room_id, rid)
+        if str(rid) == str(room_id) or str(rid) in found or edge is None:
+            continue
+        if normalize_vertical(edge.get("vertical")) \
+                or room_level(scene, rid) != here_level:
+            continue
+        found.append(str(rid))
+    out = []
+    for rid in found:
+        if rid in exclude or rid not in rooms:
+            continue
+        edge = _declared_edge(scene, room_id, rid)
+        if edge is not None and normalize_vertical(edge.get("vertical")):
+            continue
+        rel = spatial_rel(scene, rid, room_id)
+        barrier = _material_shifted_barrier(
+            normalize_barrier(rel.get("barrier")), rel.get("material"))
+        if barrier in OPEN_BARRIERS:
+            continue
+        out.append(rid)
+    return out
+
+
+def _declared_edge(scene, a, b) -> Optional[dict]:
+    """The edge either room declares toward the other, or None."""
+    rooms = (scene or {}).get("rooms") or {}
+    for x, y in ((a, b), (b, a)):
+        room = rooms.get(x)
+        for edge in (room.get("adjacent") or ()) if isinstance(room, dict) else ():
+            if isinstance(edge, dict) and str(edge.get("to") or "") == str(y):
+                return edge
+    return None
+
+
 def tread_events(scene: dict, movers) -> list:
     """The beat's footfalls as one-beat sound events: for every body in
-    `movers` ({name: pace}) a tread in its own room at `TREAD_LEVEL`, and
-    one in every room it lies over with a floor between, at the floor's
-    impact level (`FLOOR_IMPACT_DB`, plus `TREAD_RUN_DB` for a run). Events
-    reach a listener the way every other beat sound does -- in the room,
-    through the near field, and by the far flood -- and their `detail` is
-    a sound fact that names nobody. Before 2026-09-15 a man climbing three
-    storeys of stone stair made no sound anywhere.
+    `movers` ({name: pace}) a tread in its own room at `TREAD_LEVEL`, one in
+    every room it lies over with a floor between, at the floor's impact
+    level (`footfall_db`), and one in every room beside it on its storey a
+    flanking path's `FOOTFALL_FLANKING_DB` under that. Events reach a
+    listener the way every other beat sound does -- in the room, through
+    the near field, and by the far flood -- and their `detail` is a sound
+    fact that names nobody: the listener learns that someone moves overhead,
+    never who. Before 2026-09-15 a man climbing three storeys of stone stair
+    made no sound anywhere.
+
+    FOOTSTEPS COME THROUGH FLOORS (2026-10-20, wave A, DESIGN_SOUND_FIELD
+    § 12). The room under is the one the plan sets under the walker's room
+    (`site_plan.plan_rooms_below`) as well as one the room declares it lies
+    `over` (`spatial_levels.floor_edges`) -- only 4 of the 238 sited rooms
+    in the owner's scenes declared one, so a body pacing a cottage's
+    bedroom reached nobody in the kitchen under it -- and never a room a way
+    joins it to: a stair carries a tread through the air. A tread a room
+    could not hear over its own floor (`_footfall_heard`) is not filed
+    there: a sneak on stone, a walk next door to a stone floor. A SNEAK
+    (`TREAD_SNEAK_DB`) makes no tread in its own room -- not being heard
+    there is what the gait is -- and a softer one through the floor.
     """
     from language_runtime import compositor_text
+    from world.site_plan import plan_rooms_below
     from world.spatial_levels import floor_edges
     rooms = (scene or {}).get("rooms") or {}
     out = []
@@ -2625,21 +2978,38 @@ def tread_events(scene: dict, movers) -> list:
         room = room_of(scene, name)
         if not room or room not in rooms:
             continue
-        running = str(pace or "walk").strip().casefold() == "run"
-        tread = compositor_text("sound_tread_run" if running else "sound_tread_walk")
-        level = TREAD_LEVEL["run" if running else "walk"]
-        out.append({"kind": "sound", "room": str(room), "level": level,
-                    "source": str(name), "detail": tread, "tread": True})
-        for edge in floor_edges(scene, room):
-            if edge.get("vertical") != "down" or edge["to"] not in rooms:
+        gait = tread_gait(pace)
+        tread = compositor_text("sound_tread_" + gait)
+        if gait in TREAD_LEVEL:
+            out.append({"kind": "sound", "room": str(room),
+                        "level": TREAD_LEVEL[gait], "source": str(name),
+                        "detail": tread, "tread": True})
+        impact = footfall_db(scene, room, gait)
+        under = [str(e["to"]) for e in floor_edges(scene, room)
+                 if e.get("vertical") == "down" and e["to"] in rooms]
+        under += [rid for rid in plan_rooms_below(scene, room)
+                  if rid not in under and rid in rooms
+                  and _declared_edge(scene, room, rid) is None]
+        for rid in under:
+            if not _footfall_heard(scene, rid, impact):
                 continue
-            material = str((rooms.get(room) or {}).get("floor") or "").strip().casefold()
-            level_db = FLOOR_IMPACT_DB.get(material, FLOOR_IMPACT_DB["stone"])
-            if running:
-                level_db += TREAD_RUN_DB
-            out.append({"kind": "sound", "room": str(edge["to"]), "db": float(level_db),
+            out.append({"kind": "sound", "room": rid, "db": impact,
                         "source": str(name), "tread": True,
-                        "detail": compositor_text("sound_tread_overhead", tread=tread)})
+                        "detail": compositor_text("sound_tread_overhead",
+                                                  tread=tread)})
+        beside = impact - FOOTFALL_FLANKING_DB
+        for rid in _rooms_beside(scene, room, exclude=under):
+            if not _footfall_heard(scene, rid, beside):
+                continue
+            from world.spatial_routing import spatial_rel
+            from world.spatial_senses import _sound_barrier_phrases
+            barrier = normalize_barrier(spatial_rel(scene, rid, room).get("barrier"))
+            phrases = _sound_barrier_phrases()
+            where = phrases.get(barrier) or phrases.get("wall") or ""
+            out.append({"kind": "sound", "room": rid, "db": beside,
+                        "source": str(name), "tread": True,
+                        "detail": compositor_text("sound_tread_beside",
+                                                  tread=tread, where=where)})
     return out
 
 

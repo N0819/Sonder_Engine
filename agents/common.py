@@ -6141,8 +6141,7 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
 
 def _delivery_ok(relation, scene, observer_name, source_name, channel,
                  volume="normal", proximity=None, behind_sources=None,
-                 awareness=None, senses=None, level_db=None,
-                 addressed=False):
+                 awareness=None, senses=None, level_db=None, addressed=None):
     """Can this observer receive this source through this channel?
 
     Cross-seam pattern 3: the deterministic delivery paths each grew their own
@@ -6210,6 +6209,9 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
         return False
 
     if channel == "hearing":
+        # `addressed`: whether the line was spoken TO this observer -- in a
+        # din a bystander beyond conversational reach catches a far table's
+        # talk in pieces (`hear_level`); None, unknown, caps nothing.
         level = hear_level(relation, volume, proximity=proximity,
                            level_db=level_db, addressed=addressed)
         if senses is not None:

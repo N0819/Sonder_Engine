@@ -1605,11 +1605,20 @@ def _walk_underway(sc, res, name):
     return None
 
 
-def _beat_movers(ctx) -> dict:
+def _beat_movers(ctx, before=None, after=None, bodies=()) -> dict:
     """{name: pace} for every body the beat walked (the resolve's `travel`
     records, paces > 0): its tread is a sound source at the cell it ended
     on (`spatial_sound_field.sound_sources`). Empty before the resolve has
-    run, so the onset pass hears no footfall that has not happened."""
+    run, so the onset pass hears no footfall that has not happened.
+
+    AND EVERY BODY THE BEAT TOOK TO ANOTHER ROOM ON ITS OWN FEET, at a walk:
+    `bodies` (the cast and the player) whose room in `after` is not their
+    room in `before`, unless something carries them (`contained`). A walk
+    need not pass the travel system -- the encoder can write a body's room
+    as a `positions` patch with no `movement` -- and that walk made no sound
+    anywhere: chat 177 turn 19, Mellisande climbed from the kitchen to the
+    room over it and Hinami, under the timber floor, heard nothing
+    (DESIGN_SOUND_FIELD § 12)."""
     cached = ctx.get("_beat_movers")
     if cached is not None:
         return cached
@@ -1625,6 +1634,16 @@ def _beat_movers(ctx) -> dict:
         subject = str(rec.get("subject") or "").strip()
         if subject and paces > 0:
             movers[subject] = str(rec.get("pace") or "walk").strip().casefold() or "walk"
+    if isinstance(before, dict) and isinstance(after, dict):
+        carried = after.get("contained") or {}
+        for name in bodies or ():
+            name = str(name or "").strip()
+            if not name or name in movers or (isinstance(carried, dict)
+                                               and carried.get(name)):
+                continue
+            was, now = room_of(before, name), room_of(after, name)
+            if was and now and str(was) != str(now):
+                movers[name] = "walk"
     ctx["_beat_movers"] = movers
     return movers
 
@@ -4552,6 +4571,18 @@ def _composer_unknown_sources(name, known, roster, bodies_by_name=None):
     ]
 
 
+def _unseen_voice_label():
+    """What a speaker the listener can neither see nor recognise is called:
+    the channel's own word for a body it cannot place, in the story's
+    language (`unseen_voice_label`) -- never a name. It was the English
+    literal "a voice" in every pack, so a Japanese view read 「…」とa voice
+    が言うのが聞こえる (DESIGN_SOUND_FIELD § 12, wave A)."""
+    try:
+        return compositor_text("unseen_voice_label")
+    except LanguagePackError:
+        return "a voice"
+
+
 def _attributed_label(body, observer, *, recognized, display_map,
                       bodies_by_name, can_see, unseen, appearances,
                       cast_aliases):
@@ -6313,7 +6344,7 @@ def _opening_line_percept(ctx, sc, p, pid, name, entry, order, *, field,
         visual_level_between(sc, name, speaker, senses), "sight", senses) != "none")
     display = _attributed_label(
         speaker, name, recognized=recognized, display_map=display_map,
-        bodies_by_name=bodies_by_name, can_see=can_see, unseen="a voice",
+        bodies_by_name=bodies_by_name, can_see=can_see, unseen=_unseen_voice_label(),
         appearances=appearances, cast_aliases=aliases)
     return composer.speech_percept(
         entry, _with_comm_channel(sc, rel, speaker=speaker, observer=name,
@@ -6793,7 +6824,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 event_display = display if event_actor == p_name else _attributed_label(
                     event_actor, name, recognized=recognized, display_map=display_map,
                     bodies_by_name=bodies_by_name,
-                    can_see=_spoken_from(None, idx, event_actor)[1], unseen="a voice",
+                    can_see=_spoken_from(None, idx, event_actor)[1], unseen=_unseen_voice_label(),
                     appearances=onset_appearances, cast_aliases=onset_aliases)
                 if event.get("type") == "speech":
                     said_rel, said_seen = _spoken_from(
@@ -6832,6 +6863,14 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         # Whom it is spoken to, for the ear rung's own
                         # reading of the line (`addressed` below decides).
                         "targets": list(event.get("targets") or []),
+                        # WHOM IT WAS SPOKEN TO, as the outcome pass's lines
+                        # carry it: in a din the one addressed follows the
+                        # line and a bystander a few paces off does not
+                        # (DESIGN_SOUND_FIELD § 12). Dropped here, every
+                        # onset line read as addressed to nobody.
+                        "intended_target": _addressee_name(
+                            ctx, event.get("intended_target")
+                            or (event.get("targets") or [None])[0]) or None,
                     }
                     percept = composer.speech_percept(
                         entry, speech_rel, name, display=event_display,
@@ -7359,7 +7398,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         pass                       # a story with no charter adds nothing
     # THE BEAT'S FOOTFALLS ARE SOUND EVENTS (`spatial_sound_field.tread_events`):
     # a tread in the walker's room, and one in every room it lies over.
-    _incoming = list(_incoming) + tread_events(sc, _beat_movers(ctx))
+    _incoming = list(_incoming) + tread_events(sc, _beat_movers(
+        ctx, prev_scene, sc, bodies=[*cast_aliases, p_name]))
     # ...AND SO ARE ITS DOORS: a doorway that went from shut to open, or open
     # to shut, this beat sounds at itself in both its rooms
     # (`spatial_sound_field.door_events`), whoever wrote the change.
@@ -7935,7 +7975,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         speaker, name, recognized=recognized,
                         display_map=display_map,
                         bodies_by_name=bodies_by_name, can_see=can_see,
-                        unseen="a voice", appearances=appearances,
+                        unseen=_unseen_voice_label(), appearances=appearances,
                         cast_aliases=cast_aliases)
                     percept = composer.speech_percept(
                         d, _with_comm_channel(
@@ -8008,7 +8048,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         actor, name, recognized=recognized,
                         display_map=display_map,
                         bodies_by_name=bodies_by_name, can_see=can_see,
-                        unseen="a voice", appearances=appearances,
+                        unseen=_unseen_voice_label(), appearances=appearances,
                         cast_aliases=cast_aliases)
                     percept = composer.communication_percept(
                         entry, _with_comm_channel(

@@ -1011,9 +1011,16 @@ def test_a_line_the_noise_takes_is_still_seen_spoken_within_reach(monkeypatch):
     """Seen speaking, unheard. On a deck graded drowned a woman spoke at a
     man's ear twice and his view carried nothing (scratch play 2026-09-14,
     chat 2 turns 2-3). The words stay refused; that speech happened does
-    not, when the speaker is in sight within reach."""
+    not, when the speaker is in sight within reach.
+
+    Since 2026-10-20 (DESIGN_SOUND_FIELD § 12) a noise that takes the words
+    often leaves the voice, and then the HEARING percept says so -- "the
+    tall woman's voice -- the words do not carry"; this is the case where
+    the noise took the voice as well (`voice_carries`), and only the eyes
+    have it."""
     monkeypatch.setattr(composer, "line_hear_level",
                         lambda *a, **k: "none")
+    monkeypatch.setattr(composer, "voice_carries", lambda *a, **k: False)
     entry = {"speaker": "Tamsin Reyle", "text": "Is someone waiting for it?",
              "volume": "normal", "intended_target": "Bram Toll"}
     rel = {"tier": "within_reach", "barrier": "open", "same_room": True}

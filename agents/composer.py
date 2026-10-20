@@ -84,6 +84,7 @@ from world.spatial import (
     entity_side,
     hear_level,
     hearing_reason,
+    voice_carries,
     held_beam_falls_on,
     into_another_ear,
     _sense_channel,
@@ -104,6 +105,7 @@ from .common import (
     _compose_residue_view,
     _identity_token_set,
     _inject_dialogue,
+    _muffle_tokens,
     _muffled_fragment,
     _observable_predicate,
     _quote_body,
@@ -695,8 +697,15 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
     separately.
 
     `seen`: the observer sees the speaker's face, which is worth several
-    decibels where a deafening noise is what decides (`hear_level`)."""
-    if addressed is None:
+    decibels where noise is what decides (`hear_level`).
+
+    WHO THE LINE WAS SPOKEN TO is the hearing rule's question too: in a din
+    a bystander beyond conversational reach catches pieces of a far table's
+    talk, and the one it was said to follows it. A line that carries no
+    addressee field at all is unknown (None): the ear rung refuses it to
+    everyone, the din caps nothing."""
+    if addressed is None and isinstance(entry, dict) and (
+            "intended_target" in entry or "targets" in entry):
         addressed = line_addressed(entry, observer_name)
     if into_another_ear(entry.get("volume", "normal"), addressed,
                         entry.get("level_db")):
@@ -3843,8 +3852,12 @@ def _can_say_the_voice(p):
     after it, or in the manner slot of a line seen and not conducted. A
     fragment, an unseen line and a conducted one carry no manner -- a voice
     established on one of them was never said and filed as known all the
-    same (review, 2026-10-05)."""
+    same (review, 2026-10-05). A stranger's voice heard and not seen is
+    said after whatever of it arrived (`voice_apart`, § 12 of the sound
+    note), so that says it too."""
     d = p.data or {}
+    if d.get("voice_apart") and p.fidelity in ("full", "fragment", "voice"):
+        return True
     if p.fidelity != "full":
         return False
     if d.get("said_apart"):
@@ -3874,7 +3887,8 @@ def _one_voice_each(percepts):
         if p.kind == "speech" and d.get("voice_first") and d.get("voice_key") \
                 and d["voice_key"] in first and i not in keep:
             data = {k: v for k, v in d.items()
-                    if k not in ("voice_first", "said_apart", "manner")}
+                    if k not in ("voice_first", "said_apart", "manner",
+                                 "voice_apart")}
             data.update(_voice_fields("", data.get("tone", ""), True))
             p = dataclasses.replace(p, data=data)
         out.append(p)
@@ -3964,15 +3978,36 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         # all -- its own listener included -- and says so here, so the
         # missing target is found where the line went missing.
         _why = "ear_names_no_one"
+    # THE VOICE, WHERE NONE OF ITS WORDS ARRIVE (DESIGN_SOUND_FIELD § 12).
+    # A listener hears THAT someone spoke, how loudly and in what tone some
+    # ten decibels under the last word they could have caught: raised
+    # voices through a wall, a laugh through a door, a far table's talk in a
+    # tavern's din (`spatial_senses.voice_carries`). Words and names are not
+    # carried by it: the percept holds no body and no fragment, and its
+    # label is a name only where the listener knows the voice.
+    _voice_only = (level == "none"
+                   and sense_acuity_offset(senses, "hearing") is not None
+                   and voice_carries(rel, volume, proximity=proximity,
+                                     level_db=entry.get("level_db"),
+                                     seen=bool(can_see),
+                                     addressed=addressed))
     note_step_decision(
         "speech_percept", _who,
-        "refused" if level == "none" else "delivered",
+        "refused" if level == "none" and not _voice_only else "delivered",
         "%s via %s; volume %s, barrier %s, tier %s%s" % (
-            level, _how, volume,
+            "voice" if _voice_only else level, _how, volume,
             str(rel.get("barrier") or "none"),
             str(proximity or rel.get("tier") or "unmeasured"),
             ("; " + _why) if _why else ""))
-    if level == "none":
+    if level == "trace":
+        # DETECTED, AND NOTHING MORE (`spatial_senses.HEARING_LEVELS`): the
+        # rung a sense card reaches from `none` or falls to from `fragment`
+        # carries no words and no identity. It fell through to the full
+        # branch below, so an extraordinary ear behind a wall was handed the
+        # line verbatim under "the unfamiliar person" -- the wiretap the
+        # rung exists to refuse.
+        return _trace_percept(entry, bearing=bearing, order_key=order_key)
+    if level == "none" and not _voice_only:
         # SEEN SPEAKING, UNHEARD. A line the noise takes whole is still an
         # act the eyes have: a body within reach turns its head to yours
         # and its mouth moves. Refusing the WORDS is the firewall doing its
@@ -4030,8 +4065,34 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         "directed_at_self": _addresses(
             entry.get("intended_target"), observer_name),
     }
-    if level == "fragment":
+    _speaker = str(entry.get("speaker") or "").strip()
+    _label = str(display or "").strip()
+    _knows_the_voice = bool(
+        _speaker and _label.casefold() == _speaker.casefold())
+    # A STRANGER'S VOICE IS DESCRIBED BY WHAT A VOICE CARRIES (§ 12): a
+    # listener who cannot see the speaker and does not know the voice is
+    # given the speaker's own register from their card -- "low contralto,
+    # warm and unhurried" -- said once after the line, as a seen line says
+    # it in its manner slot; never a name (`_register_heard_unseen`). Over a
+    # live channel too, and through a body's mass the voice is the mass's,
+    # so not there.
+    _unseen_register = _register_heard_unseen(register, _speaker)
+    if voice_key and not established and not can_see \
+            and not _knows_the_voice and not rel.get("inside_source") \
+            and _unseen_register:
+        data["voice_apart"] = _unseen_register
+    if level == "none":
+        # The voice only: whose it is where it is known or seen, how loud
+        # (`volume`), the tone it carries (`_carried_tone`) -- no words.
+        data["level"] = "voice"
+        data["attributed"] = bool(_label) and (bool(can_see)
+                                               or _knows_the_voice)
+        data["tone_heard"] = _carried_tone(tone, body)
+        data.pop("manner", None)
+        fidelity = "voice"
+    elif level == "fragment":
         data["fragment"] = _muffled_fragment(body)
+        data["tone_heard"] = _carried_tone(tone, body)
         # WHO SPOKE IS SIGHT'S ANSWER, NOT HEARING'S. A line degraded by
         # distance or noise loses its WORDS, never its speaker, when the
         # observer can see who spoke: hearing less of a sentence is not the
@@ -4058,10 +4119,6 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         # ordinary appearance, deliberately altered voice -- has no field to
         # be authored in. It is a real thing a body does and the engine
         # cannot yet say it.
-        _speaker = str(entry.get("speaker") or "").strip()
-        _label = str(display or "").strip()
-        _knows_the_voice = bool(
-            _speaker and _label.casefold() == _speaker.casefold())
         data["attributed"] = bool(_label) and (bool(can_see)
                                                or _knows_the_voice)
         fidelity = "fragment"
@@ -4090,11 +4147,113 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     return Percept(
         kind="speech", channel="hearing", source_label=display,
         fidelity=fidelity, data=data,
-        salience=0.75 if volume in ("loud", "shout") else 0.7,
+        salience=(0.75 if volume in ("loud", "shout") else 0.7)
+        if fidelity != "voice" else 0.5,
         suddenness=0.5 if volume in ("loud", "shout") else 0.1,
         order_key=order_key,
-        dedupe_key="speech:" + _short_hash(entry.get("speaker"), body),
+        # ONE VOICE, ONE SENTENCE: a speaker whose words did not carry is
+        # heard as a voice once a beat, however many lines they said.
+        dedupe_key=("speech-voice:" + _short_hash(entry.get("speaker"))
+                    if fidelity == "voice"
+                    else "speech:" + _short_hash(entry.get("speaker"), body)),
     )
+
+
+def _trace_percept(entry, *, bearing="", order_key=0):
+    """A voice DETECTED and no more (`spatial_senses.HEARING_LEVELS`'
+    `trace`): no words, no speaker, no tone -- direction at best. What the
+    interaction loop already renders as `loop_faint_sound`, as a view
+    percept."""
+    return Percept(
+        kind="speech", channel="hearing", source_label="",
+        fidelity="trace",
+        data={"level": "trace", "bearing": str(bearing or ""),
+              "directed_at_self": False},
+        salience=0.3, order_key=order_key,
+        dedupe_key="speech-trace:" + _short_hash(entry.get("speaker")))
+
+
+#: Where a tone's first part ends: a clause separator in a spaced or an
+#: unspaced script. Structure, not words.
+_TONE_PART_END = re.compile(r"\s+-{1,2}\s+|[,;:()/—–、，；：（]")
+#: What no voice quality contains: a digit, a quotation mark.
+_TONE_NOT_A_QUALITY = re.compile(r"[0-9\"“”「」『』]")
+
+
+def _carried_tone(tone, words):
+    """The part of a line's declared `tone` an ear takes in with the voice
+    when its words do not come through, or "".
+
+    TONE IS A CHANNEL; WORDS AND NAMES ARE NOT (the firewall's half of § 12).
+    A tone is free prose the speaker's own model wrote -- "furious", "warm,
+    unhurried, with a small genuine laugh at the clay figure", "leaning
+    forward slightly", "brisk, reassuring, the mechanic reporting" -- and
+    what crosses a wall with a voice is its colour, never what it was about.
+    So only the tone's first part is carried, and only when it is shaped
+    like a voice quality: ONE word in a spaced script ("furious", "warm",
+    "low" -- a phrase is where what the voice did ends and what the body
+    did, "murmured against skin", or what the line was, "whispered
+    command", begins), short enough for the manner slot in an unspaced one
+    (`_fits_the_manner_slot`); no digit or quotation, no capital after its
+    first letter (a name), not a conduct the pack's tone reader already
+    calls one (`tone_behavior_words`, what the eye takes in), and no word
+    of the line itself. Anything else is withheld whole: a tone lost is a
+    sentence shorter, a tone that leaks carries the words the wall kept.
+    Deterministic and subtractive; a guard, listed for the owner."""
+    from story.character_schema import _UNSPACED_SCRIPT
+    raw = _strip_sentence_ends(
+        _TONE_PART_END.split(str(tone or "").strip(), 1)[0].strip())
+    if not raw or not _fits_the_manner_slot(raw) \
+            or _TONE_NOT_A_QUALITY.search(raw) \
+            or any(ch.isupper() for ch in raw[1:]) \
+            or (not _UNSPACED_SCRIPT.search(raw) and len(raw.split()) != 1):
+        return ""
+    head = _lower_lead(raw)
+    tokens = _tone_words(head)
+    if tokens & _pack_words("tone_behavior_words"):
+        return ""
+    if tokens & _tone_words(words):
+        return ""
+    return head
+
+
+def _register_heard_unseen(register, speaker):
+    """The speaker's register as it may be said to a listener who can
+    neither see them nor knows their voice, or "".
+
+    Review round 4 (2026-10-05) refused every register to a listener in the
+    dark, for two reasons that stay true: sheet text can NAME the body it
+    belongs to, and a register that is a clause is prose about anything.
+    So only a register shaped like a voice quality -- every part of it fits
+    the manner slot (`_fits_the_manner_slot`), as "low contralto, warm and
+    unhurried" does and "the voice of someone who has smoked for years"
+    does not -- holding no word of the speaker's own name
+    (`common._identity_token_set`). Anything else is withheld whole: the
+    listener has "a voice", as before."""
+    from story.character_schema import _UNSPACED_SCRIPT
+    register = str(register or "").strip()
+    if not register or not _fits_the_manner_slot(register):
+        return ""
+    folded = register.casefold()
+    for token in _identity_token_set(speaker):
+        if len(token) >= (1 if _UNSPACED_SCRIPT.search(token) else 3) \
+                and token in folded:
+            return ""
+    return register
+
+
+def _tone_words(text):
+    """The content words of a phrase, casefolded, for `_carried_tone`'s
+    no-word-of-the-line test: letter runs of four or more in a spaced
+    script (so "ledger-obsessed" holds "ledger"), every content run in an
+    unspaced one (`common._muffle_tokens`' own reading of such a script)."""
+    from story.character_schema import _UNSPACED_SCRIPT
+    text = str(text or "")
+    if _UNSPACED_SCRIPT.search(text):
+        runs, _keep = _muffle_tokens(text)
+        return {r.casefold() for r in runs if r}
+    return {w.casefold() for w in re.findall(r"[^\W\d_]+", text)
+            if len(w) >= 4}
 
 
 def silence_percept(display, *, order_key=0):
@@ -4148,6 +4307,9 @@ def communication_percept(entry, rel, observer_name, *, display, can_see,
                             addressed=addressed)
     if level == "none":
         return None
+    if level == "trace":
+        # Detected and nothing more: not even who (`_trace_percept`).
+        return _trace_percept(entry, order_key=order_key)
     # Partial hearing cannot deliver a proposition whose words were never
     # specified.  It carries only that communication occurred.
     data = {
@@ -5279,6 +5441,44 @@ def _render_ambient(p):
     return desc
 
 
+def _en_voice_line(p):
+    """A voice whose words did not carry (`fidelity == "voice"`): whose it
+    is where the listener knows or sees the speaker, how loud, and from
+    where -- "Mara's voice, raised, beyond the wall -- the words do not
+    carry." Never a word of the line."""
+    d = p.data or {}
+    loudness = {"loud": _en("speech_voice_raised"),
+                "shout": _en("speech_voice_shouting")}.get(
+        str(d.get("volume") or "").casefold(), "")
+    bearing = str(d.get("bearing") or "")
+    where = _en("speech_voice_where", where=bearing) if bearing else ""
+    if d.get("attributed") and str(p.source_label or "").strip():
+        return _en("speech_voice", label=_cap(p.source_label),
+                   loudness=loudness, where=where)
+    return _en("speech_voice_unknown", loudness=loudness, where=where)
+
+
+def _heard_after(p, line, *, ended=False):
+    """What follows a line where the listener did not have all of it: the
+    tone its voice carried (`tone_heard`, for a fragment or a voice alone),
+    and a stranger's voice said once (`voice_apart`) -- in that order,
+    each its own sentence."""
+    if not line:
+        return line
+    d = p.data or {}
+    extra = []
+    tone = str(d.get("tone_heard") or "").strip()
+    if tone and p.fidelity in ("fragment", "voice"):
+        extra.append(_en("speech_voice_tone", tone=tone))
+    if d.get("voice_apart"):
+        extra.append(_en("voice_register", register=d["voice_apart"]))
+    if not extra:
+        return line
+    head = _end_sentence(line) if ended or p.fidelity != "full" \
+        else line.rstrip()
+    return head + " " + " ".join(extra)
+
+
 def _render_event(p):
     if p.kind == "speech":
         # An answer that did not come (D6). Before the fragment branch,
@@ -5286,6 +5486,14 @@ def _render_event(p):
         # carries no words by construction.
         if p.fidelity == "silence":
             return _en("speech_silence", label=_cap(p.source_label))
+        # Detected, and nothing more: no words, no speaker, no tone.
+        if p.fidelity == "trace":
+            bearing = str(p.data.get("bearing") or "")
+            return (_en("speech_trace_placed", where=bearing) if bearing
+                    else _en("speech_trace"))
+        # The voice, without its words (§ 12 of the sound note).
+        if p.fidelity == "voice":
+            return _heard_after(p, _en_voice_line(p))
         body = p.data.get("body") or ""
         via = str(p.data.get("via") or "")
         # `_inject_dialogue` into an empty document is the production grammar
@@ -5318,7 +5526,7 @@ def _render_event(p):
             # A route clause ends without a stop; a line ends on its quote.
             line = (_end_sentence(line) if via or bearing else line.rstrip()) \
                 + " " + _en("voice_register", register=p.data["said_apart"])
-        return line
+        return _heard_after(p, line, ended=bool(via or bearing))
     if p.kind == "communication":
         line = _observable_predicate(
             p.source_label, p.data.get("surface")) or ""
@@ -5730,6 +5938,22 @@ def _episode_sentence(p):
     if p.kind == "speech":
         if p.fidelity == "silence":
             return _en("episode_speech_silence", label=p.source_label)
+        if p.fidelity == "trace":
+            return _en("episode_speech_trace")
+        if p.fidelity == "voice":
+            # The voice is the whole of what arrived, so it is what is kept:
+            # whose (where known or seen), how loud, the tone it carried.
+            d = p.data or {}
+            loudness = {"loud": _en("speech_voice_raised"),
+                        "shout": _en("speech_voice_shouting")}.get(
+                str(d.get("volume") or "").casefold(), "")
+            line = (_en("episode_speech_voice", label=p.source_label,
+                        loudness=loudness)
+                    if d.get("attributed") and str(p.source_label or "").strip()
+                    else _en("episode_speech_voice_unknown", loudness=loudness))
+            tone = str(d.get("tone_heard") or "").strip()
+            return line + (" " + _en("episode_speech_voice_tone", tone=tone)
+                           if tone else "")
         via = str(p.data.get("via") or "")
         if p.fidelity == "fragment":
             attributed = bool(p.data.get("attributed"))
@@ -6010,6 +6234,9 @@ def render_episode(percepts, *, prev_standing=frozenset(),
 
 _FIDELITY_AMBIGUITY = {"full": 0.15, "degraded": 0.5, "fragment": 0.7,
                        "trace": 0.8,
+                       # A voice whose words did not carry (§ 12 of the sound
+                       # note): fewer of them than a fragment.
+                       "voice": 0.75,
                        # A body moving, too little of it to make out: as
                        # ambiguous as a degraded presence, never "rendered"
                        # (it had no entry, and every motion-only act -- a

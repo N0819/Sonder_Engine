@@ -439,6 +439,63 @@ def drop_m(scene, from_room, to_room) -> Optional[float]:
     return round(height, 1)
 
 
+def plan_rooms_below(scene, room_id) -> list:
+    """The rooms one storey under `room_id` on its plan that its floor lies
+    over: sited on the same plan, their floor a storey down (at least
+    `LEVEL_STEP_M`, at most a storey and a step), and some cell of theirs
+    under some cell of its. The plan's own answer to `over`, which a room
+    states only where a planner wrote it (4 of 238 sited rooms in the
+    owner's scenes, 2026-10-20) -- so a footfall in the bedroom of a laid-out
+    cottage reached nobody in the kitchen under it. Sorted; empty off a
+    plan."""
+    site = room_site(scene, room_id)
+    if not site:
+        return []
+    mine = site_cells(scene, room_id)
+    here = room_elevation_m(scene, room_id)
+    out = []
+    for other in sorted(_scene_rooms(scene), key=str):
+        if str(other) == str(room_id):
+            continue
+        theirs = room_site(scene, other)
+        if not theirs or theirs["plan"] != site["plan"]:
+            continue
+        drop = here - room_elevation_m(scene, other)
+        if drop < LEVEL_STEP_M or drop > STOREY_M + LEVEL_STEP_M:
+            continue
+        if mine & site_cells(scene, other):
+            out.append(str(other))
+    return out
+
+
+def plan_rooms_beside(scene, room_id) -> list:
+    """The rooms on `room_id`'s own storey of its plan that share a wall with
+    it: their floors within `LEVEL_STEP_M`, no cell in common, and some cell
+    of theirs side by side with one of its. What a floor carries a footfall
+    into besides the room under it. Sorted; empty off a plan."""
+    site = room_site(scene, room_id)
+    if not site:
+        return []
+    mine = site_cells(scene, room_id)
+    here = room_elevation_m(scene, room_id)
+    edge = {(x + dx, y + dy) for x, y in mine
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))} - set(mine)
+    out = []
+    for other in sorted(_scene_rooms(scene), key=str):
+        if str(other) == str(room_id):
+            continue
+        theirs = room_site(scene, other)
+        if not theirs or theirs["plan"] != site["plan"]:
+            continue
+        if abs(here - room_elevation_m(scene, other)) >= LEVEL_STEP_M:
+            continue
+        cells = site_cells(scene, other)
+        if cells & mine or not cells & edge:
+            continue
+        out.append(str(other))
+    return out
+
+
 def drops_from(scene, room_id) -> dict:
     """{exit room id: metres} for every way out of `room_id` that is a drop."""
     from world.spatial import effective_adjacent

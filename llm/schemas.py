@@ -1299,6 +1299,9 @@ class MovementDecl(LenientModel):
     # RUN_PACES_PER_SECOND`); anything else is a walk. A declaration that
     # runs by its verb and omits the field is read as a run by
     # `_declares_rapid_movement`, the same fallback following uses.
+    # `sneak` (2026-10-20) is a body moving so as not to be heard: a walk's
+    # paces, and its footfalls the softest the floor carries
+    # (`spatial_sound_field.TREAD_GAITS`, `footfall_db`).
     pace: str = ""
 
 # ---- Flow ----

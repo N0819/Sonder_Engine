@@ -99,6 +99,8 @@ from world.spatial_sound_field import (  # noqa: E402
     ABSORPTION, ECHO_SPAN_PACES, TREAD_LEVEL, FLOOR_IMPACT_DB, TREAD_RUN_DB,
     room_surface, room_reverberation, normalize_surface, tread_events,
     door_events, DOOR_SOURCE_PREFIX,
+    # Footsteps come through floors (2026-10-20, wave A).
+    FOOTFALL_FLANKING_DB, footfall_db, TREAD_GAITS, tread_gait, TREAD_SNEAK_DB,
 )
 from world.spatial_transit import (
     _closed_enclosure_barrier, _entity_exterior_room, _interior_entry_room,
@@ -269,6 +271,8 @@ from world.spatial_senses import (
     sound_bearing, sound_bearing_via, sound_path,
     sound_walk_level, earshot_rooms,
     sighted_level, spatial_rel_between, visual_level_between,
+    # Tone travels farther than words (2026-10-20, wave A).
+    voice_carries,
 )
 
 
@@ -350,6 +354,11 @@ from world.spatial_sound_field import (
     # The hearing rule, restated (2026-10-20): noise decides speech only
     # in the reach of what the story made deafening; rooms away, the room
     # graph's loss against the quiet floor.
+    # Wave A (2026-10-20): a din keeps a far table's talk from a
+    # bystander; a voice's tone carries past its words; a crowd's talk
+    # fills its room.
+    CONVERSATION_REACH_PACES, CROWD_BABBLE_DB, DIN_DB, din_level,
+    TONE_BELOW_WORDS_DB, VOICE_TONE_SNR_DB, voice_margin_db,
     AV_BENEFIT_DB, FAR_CLEAR_EDGE_DB, far_path, far_speech_level,
     masked_level, MASKING_LEVELS, open_air_loss_db, quantise_speech_db,
     quiet_floor, ROOM_COUPLING_DB, SPEECH_FULL_SNR, SPEECH_FULL_SNR_DB,

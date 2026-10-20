@@ -35,6 +35,13 @@ of a room's noise, and the far field. §§ 1, 2, 4.4-4.5, 4b's first reader,
 § 6a's speech sentences and § 10.3 describe the speech grade that § 11
 replaces; they are kept as the record.
 
+**WAVE A, 2026-10-20** (§ 12, the owner's "I guess go ahead"): four things
+the world does that § 11 left out. A din keeps a far table's talk from a
+BYSTANDER -- never from the people talking to each other (§ 11.4's
+"noise never masks speech" was the over-simplification); a voice's tone
+travels farther than its words; a voice is known by its sound, and a
+stranger's is described by what it carries; footsteps come through floors.
+
 ---
 
 ## 1. What exists, and where it stops
@@ -688,6 +695,13 @@ decides -- how far a sound reaches and what the room's noise words say --
 until the owner ruled § 11.8's question 1 the same day: it is a household
 level now, 65 dB at a pace (§ 11.9).
 
+**Corrected by wave A (§ 12.1), for one listener:** "nothing else ever
+reaches a line" let a bystander anywhere in a busy tavern follow every word
+at another table. It stays true for the people talking to each other -- the
+line's addressee and anyone within conversational reach -- and for rain and
+a quiet house, which are never a din; for a bystander beyond conversational
+reach a din at their own ear limits what they follow (`din_level`).
+
 ### 11.5 Within the source's reach: the masking budget
 
 `spatial_sound_field.masked_level`, read only where `stamp_sound_relation`
@@ -1001,3 +1015,355 @@ Owner questions left:
    speaker's own description of a stranger, UNBUILT_CHARACTERS § 6.19) loses
    an `ear` line the same way.
 4. **Derivation from contacts**, declined above, is the owner's to reopen.
+## 12. Wave A: four real-world concepts (2026-10-20)
+
+The owner's go, the same day as § 11: "I guess go ahead". § 11 restated the
+hearing rule on real-world budgets and, to keep every error from running one
+way again, let no noise below `deafening` touch a line. Four things the world
+does were still missing, and the first of them § 11 had over-simplified away.
+Each is stated as a class in the engine's own vocabulary, with its real-world
+basis beside its constant, and each was built failing-first
+(`tests/test_a_din_keeps_a_far_tables_talk.py`,
+`tests/test_tone_travels_farther_than_words.py`,
+`tests/test_a_voice_is_known_by_its_sound.py`,
+`tests/test_footsteps_come_through_floors.py`).
+
+### 12.1 Privacy in a din
+
+**The over-simplification.** "Noise never masks speech except deafening" let a
+bystander anywhere in a busy tavern follow every word at another table.
+
+**The world.** In babble or music around 65-75 dB(A) the people TALKING TO
+EACH OTHER raise their voices (Lombard) and, a pace or two apart, understand
+each other; a bystander a few paces off has the same raised voice's DIRECT
+sound 10-15 dB down against the same din, and gets pieces of it or only the
+fact that people are talking -- energetic masking, plus the informational
+masking of competing talk: the cocktail-party effect cuts both ways. The room's
+ring, which carries a voice across a QUIET room (§ 11.3's one-room row), is
+under the din, and reverberant speech is the smeared part a listener cannot
+use.
+
+**The class.** Noise never stops people talking to each other -- the line's
+addressee, and anyone within conversational reach of its speaker. A din at the
+ear of a bystander beyond conversational reach limits what the bystander
+follows. Rain and an ordinary quiet house are not a din.
+
+**As built.**
+
+* `spatial_sound_field.stamp_sound_relation` stamps `din_db` -- the noise at
+  the listener's ear (`SoundField.noise_at`: standing sources, crowds, the
+  room's own sound, the ambient floor and the weather; never a one-beat event)
+  -- where it is at least `DIN_DB`, and `speaker_din_db` at the speaker's ear.
+  Only where the field places both bodies (`paces` is the budget's distance).
+* `DIN_DB` = 57 dB(A): the `din` rung's floor in the noise words
+  (`VOICE_ONE_PACE_DB - FULL_SNR_DB`), where a normal voice one pace off is no
+  longer followed as it is. Babble and music at 65-75 are a din; rain (37 at
+  its heaviest) and a quiet house (25-35) never are -- the owner's rain ruling
+  holds by construction -- and the view that says "you are in the din" and the
+  rule are one number.
+* `CONVERSATION_REACH_PACES` = 2.0: the people around one table or standing
+  together, the distance groups close to in a din.
+* `spatial_senses.hear_level(..., addressed=)`: `_bystander_in_a_din` caps a
+  voiced line for a listener it was not addressed to (`addressed is False`),
+  beyond conversational reach (a standing contact is always within it), by
+  `spatial_sound_field.din_level`: the speaker's level raised over the din at
+  THEIR ear (`lombard_level_db`, up to a shout), less the free-field spreading
+  over the field's path (`spreading_loss_db`, 6 dB a doubling) and an
+  opening's own loss, plus `AV_BENEFIT_DB` for a watched face, graded against
+  the din at the speech margins (`quantise_speech_db`: 0 / -12 dB). `addressed`
+  None -- a caller that does not know -- caps nothing. `hearing_reason` names
+  it `din_bystander`.
+* WHO IT WAS SPOKEN TO is read by `composer.line_addressed` (a line's
+  `intended_target`, or a span's `targets`; a line said to nobody in
+  particular was spoken to nobody) for both perception passes -- the onset
+  entry now carries its `intended_target`, which it had dropped, so every
+  onset line read as addressed to nobody -- by the interaction loop's round
+  (`_delivery_ok`, `loops.deterministic_micro_perception`) and by the three
+  background-presence readers (`background._addressed_to`).
+* WHERE THE DIN EXISTS. A crowd's talk is priced by its band at a real babble
+  level (`CROWD_BABBLE_DB`: a handful 55, a dozen or so 62, a few dozen 68, a
+  throng 75 dB(A); restaurants and canteens measure 60-80, a busy one around
+  70) and FILLS the room it stands in (`SoundField.intensity_at`); it was a
+  point at the room's centre on the emission ladder, so a few dozen people
+  talking were a 50 dB hearth fire and no crowd short of a throng was ever a
+  din. Music is a room's `sound` or a running thing's `sound_source`, at its
+  level. Whatever level a household or an industrial source is re-anchored to
+  (§ 11.8 question 1, the l7 lane), the rule reads the field's own decibels,
+  never a word. A crowd's `mood` is not read (free prose).
+
+In a taproom ten paces by eight, the speaker A, the one spoken to B beside A,
+E at A's elbow (1.4 paces), D 2.4 paces off and C at the far table (9 paces),
+a normal line not addressed to the listener:
+
+| crowd | din at C | B (addressed) | E (1.4) | D (2.4) | C (9) | C's voice rung |
+|---|---|---|---|---|---|---|
+| none | 27 | full | full | full | full | -- |
+| a handful | 55 | full | full | full | full | -- |
+| a dozen or so | 62 | full | full | full | fragment (a raised one whole) | -- |
+| a few dozen | 68 | full | full | full | fragment (raised and shouted too) | -- |
+| a throng | 75 | full | full | fragment | none | the voice carries |
+
+A watched speaker across a throng is caught in pieces rather than lost; a line
+spoken TO the far table is whole in all of them.
+
+### 12.2 Tone travels farther than words
+
+**The world.** Through a wall, a door or distance a listener detects a voice
+-- that someone spoke, how loudly, its pitch and its emotional colour --
+some 10-15 dB below the level at which its words come through (the speech
+detection threshold sits about 8-12 dB under recognition), and a partition
+takes a voice's consonants and leaves its low half, the vowels and the tune.
+
+**The class.** Where a line's words do not come through, the fact of the
+voice, how it sounds and its tone can still come through, down to a lower
+threshold. Tone is a channel; words and names are not, unless they come
+through.
+
+**As built.**
+
+* `TONE_BELOW_WORDS_DB` = 10, `VOICE_TONE_SNR_DB` = -22 dB: ten decibels
+  under the last caught word (`FRAGMENT_SNR_DB`), the near end of the range.
+* `spatial_sound_field.voice_margin_db` is the voice's budget, from the same
+  numbers the table is written against: rooms away the far field's loss,
+  under the sky the open air's, otherwise `_voice_path_loss_db`'s path classes
+  (the room's drop, the opening or door, the spread into the next room, a
+  wall), against the listening room's quiet floor; with `masking_db` or a din
+  the weaker of that budget and the path's.
+* `spatial_senses.voice_carries(rel, volume, ...)`: True where any word
+  arrives; where none does, where the margin is at least `VOICE_TONE_SNR_DB`.
+  Never for breath, never through a body's mass, never with no air.
+* `composer.speech_percept` mints, where the words are lost and the voice
+  carries, a hearing percept with fidelity `voice`: no body, no fragment, the
+  speaker's label only where the listener knows the voice or sees the speaker
+  (`attributed`), the line's loudness, the bearing it came from, and the tone
+  it carried (`tone_heard`). One per speaker per beat (`speech-voice:` dedupe).
+  "Mara's voice, raised, beyond the wall -- the words do not carry. It sounds
+  furious." Both packs and the memory renderers say it (`speech_voice*`,
+  `episode_speech_voice*`). A fragment carries its tone too. The "seen
+  speaking, unheard" sight percept stays for a noise that took the voice as
+  well.
+* THE TONE FLOOR (`composer._carried_tone`, a deterministic guard): a line's
+  `tone` is free prose its speaker's model wrote, and what crosses a wall with
+  a voice is its colour, never what it was about. Only the tone's first part
+  is carried, and only shaped like a voice quality: it fits the manner slot,
+  holds no digit or quotation, no capital after its first letter (a name), is
+  not conduct the pack's tone reader already calls conduct, and shares no
+  word with the line itself. Anything else is withheld whole. Measured on the
+  owner's tones: the heads that pass are "furious", "dry", "panicked",
+  "warm"; withheld are "flustered and bright", "Warm and lightly teasing,
+  glancing over her shoulder", "settling into the chair across from her",
+  "mocking Ivo" and a tone holding a word of its line. In a spaced script
+  the carried head is ONE word: a phrase is where what the voice did ends
+  and what the body did ("murmured against skin") or what the line was
+  ("whispered command") begins.
+* THE `trace` LEAK, found here and closed: a sense card's `trace` -- detected,
+  no words, no identity (`sense_adjusted`) -- fell through `speech_percept`'s
+  full branch, so an extraordinary ear behind a wall was handed the line
+  verbatim under "the unfamiliar person". It is now the contentless
+  `_trace_percept` ("A faint voice beyond the wall -- nothing you can make
+  out."), in `communication_percept` too.
+
+| path, a voice into a quiet room | words | the voice |
+|---|---|---|
+| a wall, normal voice | none (-28 dB) | no |
+| a wall, raised | none (-18) | yes |
+| a wall, shout | fragment (-6) | yes |
+| a heavy door or glass, nobody at it, normal | none (-11 to -18) | yes |
+| rooms away down open doorways, normal | pieces from four rooms, gone at eight | beyond the words |
+| a whisper or a mutter through a door | none | no -- breath has no voicing |
+
+### 12.3 A voice is recognised by its sound
+
+**Verified first** (`composer.observer_display_map`, perception's
+`_attributed_label`): a speaker the listener recognises -- the `known` ledger,
+with `disguise_breaks_recognition` on the way -- is named whether seen or not,
+for a whole line and a fragment ("A VOICE YOU KNOW IDENTIFIES ITS OWNER, SEEN
+OR NOT", built 2026-09-05 on the owner's § 1.136 ruling). A stranger who cannot
+be seen is "a voice" -- the English literal, in a Japanese view too -- and
+nothing of how the voice sounds reached the listener: the speaker's register
+was said only in the manner slot of a line SEEN in full.
+
+**What the cards hold.** A character card has `social.voice` -- `register`
+(how the voice sounds and is used: "low contralto, warm and unhurried",
+"Clinical, deadpan, and strictly monotone"), `cadence`, `verbosity`, `markers`
+(verbal tics: content) and `notes` (often what the character says). 61 of the
+owner's 70 characters fill `register`. A persona card has none -- its
+`narration.voice_setting` is the narration's -- and nothing on either card
+carries a voice's sex, rough age or accent as a fact about sound (pronouns are
+a gender, not a voice).
+
+**As built.**
+
+* An unseen stranger's voice is described once, after whatever of the line
+  arrived (`voice_apart`), by the speaker's own register: "You hear a voice
+  say: '...' The voice is low contralto, warm and unhurried." It files the
+  voice as heard (`voice_key`), so it is not said again, and never names
+  the speaker.
+* THE REGISTER FLOOR (`composer._register_heard_unseen`, a deterministic
+  guard) keeps review round 4's refusal (2026-10-05) where its reasons hold:
+  sheet text can NAME the body it belongs to, and a register that is a
+  clause is prose about anything. Only a register every part of which fits
+  the manner slot, and which holds no word of the speaker's name, is said to
+  a listener in the dark.
+* A speaker the listener sees keeps the manner slot, as before; a known voice
+  through a wall is named on the voice rung (12.2).
+* The unseen speaker's label is the story language's own word
+  (`unseen_voice_label`: "a voice", 「誰か」).
+
+**Proposed, not invented:** `embodiment.voice` on character AND persona cards
+-- what a listener who cannot see the body hears of it: sex, rough age,
+timbre, accent -- the hearing sibling of `visible.summary` and `scent`. The
+register would stay the voice's use; this would be its sound.
+
+### 12.4 Footsteps and thuds come through floors
+
+**The world.** Impact sound -- a footfall, a dropped weight, a slammed door, a
+body falling -- is made in the structure and travels through it far better
+than airborne speech: on a timber floor a footfall above is plainly heard
+below; stone or earth carries less; a sneaking step, soft footwear or a carpet
+carry less again.
+
+**What existed.** `tread_events` (2026-09-15): a tread in the walker's room
+and one in every room it declares itself `over`, at the floor's impact level
+(`FLOOR_IMPACT_DB` timber 55, masonry 40; a run `TREAD_RUN_DB` +8), for the
+bodies the resolve's travel record walked. 4 of the 238 sited rooms in the
+owner's scenes declare `over`, so a body pacing a laid-out cottage's bedroom
+reached nobody in the kitchen under it; and a walk the encoder wrote as a
+`positions` patch made no footfall anywhere (chat 177 turn 19).
+
+**The class.** A body that moves on a storey makes footfall impacts heard on
+the storey below and in the rooms beside it, graded by the floor's material
+and the gait. The listener learns that someone moves overhead, not who.
+
+**As built** (`spatial_sound_field.tread_events`, `footfall_db`, `tread_gait`;
+`site_plan.plan_rooms_below`, `plan_rooms_beside`):
+
+* the rooms under the walker are the plan's (a storey down on one plan, a
+  cell under a cell) as well as the declared `over`, never a room a way joins
+  it to (a stair carries a tread through the air);
+* the rooms beside it are those the plan sets wall to wall with it and those a
+  declared way that is not an opening joins it to on its storey, at
+  `FOOTFALL_FLANKING_DB` = 15 under what falls straight down (flanking
+  transmission, 10-20 dB);
+* the gaits are a closed set on the walk's `pace` (`TREAD_GAITS`): `sneak`,
+  `walk`, `run`; a sneak is `TREAD_SNEAK_DB` = 15 under a walk (measured impact
+  peaks fall 10-20 dB from a firm walk to a slow soft one) and makes no tread
+  in its own room. The encoder is told the value in one clause (en + ja):
+  "pace is run when the step runs, and sneak when the body moves so as not to
+  be heard";
+* a footfall is filed in a room only where it is heard over that room's own
+  floor (`_footfall_heard`: the place and its weather, a sound's margins);
+* the movers are the travel record's walkers and every body of the cast or the
+  player the beat took to another room on its own feet (`perception.
+  _beat_movers`), never a carried one.
+
+| footfall, into a quiet room (27) | below, timber | below, masonry | beside, timber | beside, masonry |
+|---|---|---|---|---|
+| sneak | 40, heard | 25, not | 25, not | 10, not |
+| walk | 55 | 40 | 40 | 25, not |
+| run | 63 | 48 | 48 | 33 |
+
+Thuds are not built: a one-beat impact event above reaches the room below only
+by the far field (70 dB and up at its cell) and only through a declared `over`
+(`spatial_levels.floor_edges`) -- § 12.6.
+
+### 12.5 Measured
+
+Offline, no model call and no network (every socket refused), through the
+engine's own readers, on the owner's `engine.db` read `mode=ro` and copies of
+the four 2026-09-26 stories (opera, harbour, fort, schoolhouse; copies deleted
+after). Scripts in the wave's lane directory: `regrade_a.py` (l6's regrade,
+plus each line's addressee from its beat's `dialogue_log` -- 1,172 of the
+2,296 distinct lines addressed to their listener, 809 to someone else, 264
+unmatched and graded with no addressee, 51 mixed -- and the listener's sight
+of the speaker), `compare_a.py`, `footfalls.py`, `tone_floor.py`.
+
+* **Privacy in a din: 0 of 2,408 recorded lines change.** A din reaches the
+  listener's ear on 162 distinct lines -- the TARDIS console written `loud`
+  (chats 153-159), Site-17's PA and klaxon (160-161), the kettle (176-178),
+  the opera's soprano and piano (the rival story) -- and every one was
+  addressed to its listener, within conversational reach, or spoken a few
+  paces off by a speaker who rises over the din and is watched: the kettle
+  kitchen's line said to nobody in particular, three paces from Hinami with
+  75 dB at her ear, arrives at 73.5 dB of raised voice and 6 more for
+  Mellisande's face, +4.4 dB, whole. No live scene holds a crowd record. The
+  rule bites where no recorded story has yet gone -- a full room of talk --
+  and the table in § 12.1 is that room.
+* **The tone rung: 7 of the 163 distinct lines whose words are lost still
+  carry their voice.** Three rooms away (chat 177 turn 19 between the
+  kitchen and the room above it, graded on the world after the beat -- the
+  replay artifact § 11.8 names -- and the opera's rehearsal room to the pit,
+  two rooms of stone), and the two lines in Site-17's klaxon (chats 160 and
+  161, the deafening rows), where Hinami's line to Sarah Moon -- who
+  sees her and does not yet know her -- is now her voice under Sarah's
+  descriptor for her, "the words do not carry". None of the 62 lines of breath
+  beyond reach or the 23 through a shut door carries (breath, as ruled), nor
+  the 70 the replay cannot place.
+* **A stranger's voice: 37 distinct lines reach a listener who neither sees
+  nor recognises the speaker.** 33 come from a body with no register (a
+  persona, a background presence); 2 now say "The voice is clinical,
+  deadpan, and strictly monotone." (Sarah Moon to Hinami at Site-17's
+  opening, chats 160 and 161); the floor withholds the Doctor's clause
+  register on 2 (chat 153 turn 25).
+* **The tone floor**, on the 272 distinct toned lines of the owner's chats
+  118 on: 201 would carry a one-word head -- "warm" 50, "low" 27, "flat" 14,
+  "soft" 8, "bright" and "dry" 7 each, "flustered", "husky", "panicked",
+  "exasperated" -- and 71 are withheld whole: every phrase head ("murmured
+  against skin", "whispered command", "sharp and commanding"), every head
+  of four words or a clause, and those sharing a word with their line.
+* **Footsteps: at HEAD no beat of the 4,347 with a checkpoint pair (every
+  chat in the owner's database and the four stories) delivered a footfall
+  to a body on another storey or in the room beside; now 7 beats do (5
+  distinct, chat 178 repeating 177's).** One below -- chat 177 turn 19,
+  Mellisande up the stair, "footsteps overhead" to Hinami in the kitchen
+  under the timber -- and four beside, "footsteps through the door": chat
+  177 turn 20 (Hinami up to the landing, heard by Mellisande in the room
+  off it), the opera's stage heard in the rehearsal room (turn 9), the
+  schoolhouse heard on its front step (turn 2) and in its back hall (turn
+  6). Only chat 177 turn 20 is reachable through the resolve's travel
+  record: 469 beats moved a body to another room with no travel row, and 37
+  had one. A walker's own-room tread reaches a body that cannot see them on
+  14 beats with room-change walkers counted, 3 without.
+
+### 12.6 The owner's questions, and what is left
+
+Each a constant or a reading this wave had to take, and the owner's:
+
+1. **Conversational reach, 2 paces.** A pace or two; a table of four is
+   inside it. At 3 a bystander at the next table follows more of a din.
+2. **The din is the noise words' `din` rung, 57 dB(A)** -- tied to the
+   words so the view and the rule agree. A fixed 65 (the low edge of
+   babble and music) would leave a dozen people talking a quiet room.
+3. **The crowd's babble by band**, 55 / 62 / 68 / 75 dB(A), filling its
+   room; and whether a raised `mood` (a brawl, a wedding) should add to it --
+   still unread, free prose.
+4. **Babble's informational masking is not apart from its level**: a
+   bystander in talk loses some few decibels more than in a machine's noise
+   of the same level; the margins are the speech margins.
+5. **A watched face across a din is worth 6 dB** to a bystander, as to a
+   listener in a klaxon's reach.
+6. **The tone rung, 10 dB under the last caught word** -- the near end of
+   10-15. At 15 a normal voice through a masonry wall would be heard as a
+   voice too.
+7. **Breath has no voice rung** -- the owner's privacy ruling read strictly.
+   The fact that someone is whispering, a few paces off, is real; whether it
+   should reach a mind is the owner's.
+8. **The tone crosses a wall only as one word** of the speaker's own `tone`,
+   under the floor. A typed vocal affect on a spoken event (a closed set the
+   engine would own) is the clean channel; it would be an encoder field and
+   a clause, so it is proposed, not built.
+9. **A stranger is described by their register**; `embodiment.voice` (sex,
+   rough age, timbre, accent) on character and persona cards is proposed.
+10. **The footfall numbers**: a sneak 15 under a walk, a flanking path 15
+    under the room below; and a sneak walks at a walk's pace.
+11. **A room change is a walk**: a body the beat took to another room is
+    heard walking there -- a cut or a carried body excepted, a teleport not.
+12. **The encoder clause**: "pace is run when the step runs, and sneak when
+    the body moves so as not to be heard" (en + ja). Its effect needs a live
+    run.
+
+What is left is registered in `docs/UNBUILT_PERCEPTION.md` § 2.36 (breath's
+voice, thuds through a sited building's floors, a sneak's pace, footwear and
+coverings, the round's voice rung, the callers that pass no addressee,
+`known` as recognition, the persona's voice, babble's informational
+masking) and § 1.209 of `docs/UNBUILT_WORLD.md` (floor coverings).
