@@ -6,7 +6,9 @@ import hashlib
 import re
 
 from world.spatial_containment import (_WHOLE_BODY_PARTS,
-                                 containment_conceals, enclosure_joins_rooms,
+                                 bearing_contact_holder,
+                                 containment_conceals, containment_record,
+                                 enclosure_joins_rooms,
                                  hiding_holders_of, inside_as_holder,
                                  scale_changed_names)
 from world.spatial_identity import (_ci_get, scene_names_body,
@@ -1363,6 +1365,34 @@ def _contact_ops_are_evidence(ops) -> bool:
     return False
 
 
+def _hold_the_containment_keeps(scene, contact) -> bool:
+    """Is this a BEARING contact -- a body holding, carrying, gripping or
+    supporting a thing (`bearing_contact_holder`) -- whose thing the
+    containment ledger still puts in that same body's keeping.
+
+    Such a hold is one fact stored twice, and silence is evidence against
+    only one of the two: the contact ledger turns the Director's not naming a
+    hold into its end, while `contained` is durable -- "a hand keeps what it
+    holds until something says otherwise" -- and is ended by a transfer, which
+    retires the bearing contact with it (`retire_carriage_evidence`). Ageing
+    the contact alone left the two ledgers disagreeing about one hand.
+    Measured, chat 177 between checkpoints 19 and 20: one beat of
+    Mellisande's contact talk aged out Hinami's hand on the plate while
+    `contained` went on recording the plate `held` by her, so every reader
+    of contacts -- the Director's standing relations first -- lost the hold,
+    and the beats after it set the plate down for her."""
+    if not isinstance(contact, dict):
+        return False
+    for thing in (contact.get("target"), contact.get("actor")):
+        holder = bearing_contact_holder(scene, contact, thing)
+        if not holder:
+            continue
+        record = containment_record(scene, str(thing or ""))
+        if record and same_subject(scene, record["in"], holder):
+            return True
+    return False
+
+
 def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     """Apply state_diff.contact_ops to scene.contacts.
 
@@ -1397,7 +1427,10 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     ended. Nothing read it. So on every beat that says anything about contact
     (`_contact_ops_are_evidence`), each standing contact ages one beat, and one
     that goes `_CONTACT_STALE_BEATS` such beats without re-assertion retires.
-    An `add` -- from either side, mirror included -- resets the count.
+    An `add` -- from either side, mirror included -- resets the count. A hold
+    whose thing the containment ledger still keeps in that hand does not age
+    at all (`_hold_the_containment_keeps`): silence is evidence a contact
+    ended only where no other ledger says it goes on.
 
     This does NOT cap how many contacts may stand at once; simultaneity is the
     point of the ledger. It removes the ones that are no longer true.
@@ -1426,6 +1459,16 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     if _age and _contact_ops_are_evidence(ops):
         aged = {}
         for key, contact in current.items():
+            # A HOLD THE CONTAINMENT LEDGER STILL KEEPS DOES NOT AGE: the
+            # other half of the same fact says it goes on, so the silence
+            # this rule reads is no evidence it ended
+            # (`_hold_the_containment_keeps`). Kept as it stands -- its count
+            # is not advanced -- until the record no longer keeps the thing
+            # in that hand; a transfer retires both, and anything else lets
+            # it age again from where it stood.
+            if _hold_the_containment_keeps(scene, contact):
+                aged[key] = contact
+                continue
             stale = int(contact.get("unasserted") or 0) + 1
             # An act is over as soon as the story moves on; a hold persists
             # until the Director stops naming it.

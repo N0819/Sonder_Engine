@@ -18,7 +18,6 @@ from world.spatial_barriers import (_SCENT_BARRIER_LEVELS, _SIGHT_BARRIERS,
 from world.spatial_containment import (_body_interior_holder, _shares_enclosure,
                                  containment_conceals)
 from world.scene_memo import scene_memo
-from world.spatial_contacts import contacts_of
 from world.spatial_geometry import (
     _anchor_dir,
     _relative_sector,
@@ -29,6 +28,7 @@ from world.spatial_geometry import (
     effective_room_size,
     effective_station,
     entity_arc,
+    normalize_cell,
     proximity_rel,
 )
 from world.spatial_identity import _ci_get, room_of, same_subject
@@ -749,6 +749,24 @@ def spatial_rel_between(
         if target_holder and not _shares_enclosure(
                 scene, _mass_holder(scene, observer), target):
             rel["source_enclosed"] = True
+    # TWO BODIES AT ONE SHUT DOORWAY, ONE EACH SIDE, ARE AT ARM'S REACH
+    # THROUGH IT (`DOOR_REACH_BARRIERS`). Both hearing paths graded a shut
+    # door with no idea who stood at it: the edge rule's `closed_door` makes
+    # a normal voice a fragment at any range, and the field walked the whole
+    # mouth-to-ear path as open-air spreading on top of the door's own loss.
+    # A voice spoken at a door is heard at its other face less what the door
+    # takes, and nothing else; `hear_level` and `stamp_sound_relation` read
+    # this flag for exactly that. Measured on chat 177 turn 21: the player a
+    # pace from a plank door asked the woman beside its other face a
+    # question, the line arrived "...you're... looking... something", and
+    # she answered "What was that?".
+    if not rel.get("same_room") and o_room and t_room and \
+            _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
+                                      rel.get("material")) in DOOR_REACH_BARRIERS:
+        from world.spatial_fov import at_doorway
+        if at_doorway(scene, observer, o_room, t_room) \
+                and at_doorway(scene, target, t_room, o_room):
+            rel["door_reach"] = True
     # Deferred import: the sound field reads this module's material ladder
     # at import time, and this module reads the field only per call.
     from world.spatial_sound_field import stamp_sound_relation
@@ -803,6 +821,11 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
 
     A VERTICAL edge is not on a wall and gets no cone at all: see the
     comment on that branch below.
+
+    A body on a measured cell -- a host's pin, or a cell derived with no
+    anchor named -- is not of unknown placement: its cell answers the cone at
+    cell grain (`spatial_fov.cell_in_doorway_view`), and the size fallback
+    below never reaches it.
 
     Placement unknown: fall back by room size -- tiny/small has no off-axis
     corner worth modelling (always in cone), medium keeps today's fail-open,
@@ -868,12 +891,43 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
                 and not _at_the_lip(scene, body, room_id, other_room):
             return "none"
         return "full"
-    at = effective_station(scene, body).get("at")
+    station = effective_station(scene, body)
+    at = station.get("at")
     if at and at == door_anchor_id(other_room):
         return "full"
     size = effective_room_size(scene, room_id)
     if size in ("tiny", "small"):
         return "full"
+    # A BODY STANDING ON A MEASURED CELL IS NOT A BODY OF UNKNOWN PLACEMENT.
+    # Everything below reads the anchor field `at` alone, so a body a host
+    # pinned to a cell -- or one seated beside another body, with no anchor
+    # named -- fell through every bearing test to the size fallback, and a
+    # large room's fallback is `conduct`: the face withheld for a distance
+    # the cell already measured. Measured on chat 175's opening: the player
+    # stood on the lane at cell [3, 21], a few paces short of the cottage's
+    # open door, and the woman leaning in that doorway was "an indistinct
+    # figure" to her, both ways, because the lane is `vast` and her `at` was
+    # empty. Where the cell exists it answers the cone at cell grain
+    # (`spatial_fov.cell_in_doorway_view`); a pinned cell is geometry over
+    # any anchor (`body_cell`), and an anchored body with no pin keeps the
+    # anchor-bearing test below, which is what this cone was written for.
+    #
+    # ...AND A BODY BESIDE ONE WHO STANDS IN THE DOORWAY SHARES THE DOOR.
+    # The cell alone would refuse the case UNBUILT_WORLD § 1.162 measured on
+    # chat 126 turn 9: a body placed `near` the one standing at the door,
+    # a pace to its side, looking past that shoulder through it -- "beside
+    # the doorframe" by cell, in the doorway by every record of the beat.
+    if normalize_cell(station.get("cell")) is not None or not at:
+        from world.spatial_fov import (body_cell, cell_in_doorway_view,
+                                       stands_in_doorway)
+        in_view = cell_in_doorway_view(scene, room_id, other_room,
+                                       body_cell(scene, body))
+        if in_view is False and any(
+                stands_in_doorway(scene, other, room_id, other_room)
+                for other in station.get("near") or []):
+            in_view = True
+        if in_view is not None:
+            return "full" if in_view else "none"
     bearing = _anchor_dir(scene, room_id, at) if at else None
     edge_bearing = travel_bearing(scene, room_id, other_room)
     if bearing and edge_bearing:
@@ -1046,11 +1100,15 @@ def _measured_intimacy(scene: dict, observer: str, target: str) -> bool:
     `within_reach`. `proximity_rel`'s "near" is deliberately absent: it is
     returned both as a reading and as the no-station-data fallback, and a
     gate that loosens on a fallback would un-dim every ordinary room.
+
+    The contact half is `spatial_fov.in_standing_contact`, the one
+    definition every sight reader shares -- the line check in
+    `body_visibility` asks it too, so the light and the line can never
+    disagree about whether two bodies are touching.
     """
-    for contact in contacts_of(scene, observer):
-        pair = (contact.get("actor"), contact.get("target"))
-        if any(same_subject(scene, side, target) for side in pair if side):
-            return True
+    from world.spatial_fov import in_standing_contact
+    if in_standing_contact(scene, observer, target):
+        return True
     return proximity_rel(scene, observer, target) == "within_reach"
 
 
@@ -1091,6 +1149,15 @@ _MATERIAL_SOUND_STEPS = {
 # membrane, so there is nothing for a material to modulate: _material_shifted_
 # barrier leaves any barrier not on this ladder exactly as it found it.
 _SOUND_LADDER = ("open", "open_door", "bars", "closed_door", "window", "wall")
+
+#: The closures of a doorway a voice is spoken THROUGH by two bodies standing
+#: at it, after the material shift (`_material_shifted_barrier`): a shut
+#: ordinary door and a hung curtain or hide. A door of dense or sealed stuff
+#: shifts onto `window`, glass is `window`, and a soundproofed one is `wall`
+#: -- none of them is here, so a door that really keeps a voice in keeps it
+#: at arm's reach too. Read by `spatial_rel_between`, which stamps
+#: `door_reach` on a pair at one of these, one body each side.
+DOOR_REACH_BARRIERS = ("closed_door", "membrane")
 
 
 def _material_shifted_barrier(barrier, material):
@@ -1334,7 +1401,9 @@ def _hear_level(
             return "full"
 
         if volume == "normal":
-            return "fragment"
+            # ...unless the two stand at it, one each side: spoken through,
+            # not overheard through (`door_reach`, `spatial_rel_between`).
+            return "full" if rel.get("door_reach") else "fragment"
 
         return "none"
 
@@ -1354,7 +1423,14 @@ def _hear_level(
             return "full"
 
         if volume == "normal":
-            return "fragment"
+            # A SHUT DOOR AT ARM'S REACH IS SPOKEN THROUGH. Overheard from
+            # across the next room an ordinary voice comes through a shut
+            # door in pieces; two bodies standing at the door, one each side,
+            # are talking through it, and a voice that reaches the door whole
+            # leaves it heard (`door_reach`). What is said under the breath
+            # stays this side of it either way -- the door still keeps a
+            # whisper and a mutter, below.
+            return "full" if rel.get("door_reach") else "fragment"
 
         return "none"
 

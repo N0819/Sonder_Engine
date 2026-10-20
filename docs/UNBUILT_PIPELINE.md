@@ -2094,6 +2094,87 @@ this is their status, the one list of it.
   a yes-only question) and 15 (records that mislead -- the capture row's
   read is now said, the rest is not).
 
+<a id="unbuilt-1-216"></a>
+
+### 1.216 Chats 175-178: the fix round of 2026-10-20 -- what is built, what waits on a ruling
+
+The owner asked for a review of every chat after Home 11 (chats 175, 176 and
+its branches 177 and 178, played 2026-10-15/16 before the arrangement-first
+layout core). Four reviewers read 52 distinct turns, stage by stage, and found
+72 faults in about thirteen classes. The owner: "the encoder is almost
+useless", then "lets go ahead and fix 1-6 and the encoder". Built, each with
+its row in `Design.md` and tests that fail without it:
+
+1. An act the world did not refuse is seen (54 withheld acts admitted).
+2. What a body holds is the same fact to the author who writes about it.
+3. A mind's conduct is its own at interpret, and every row keeps its actor.
+4. Bodies that touch see each other; a name is learned from a body seen.
+5. (with 4) A doorway's view reads the body's cell (§ 1.162 of
+   `UNBUILT_WORLD.md`, closed).
+6. The encoder writes doors, stops what it started, files happenings under the
+   world, consumes what is eaten, and keeps one record per thing.
+
+Measured on the encoder before the round: of 271 non-speech events it wrote in
+those 52 turns, 35 were clear misses (13%), concentrated where the engine made
+the job hard -- under a room author it held the door channel in 0 of 302
+calls, and a stop written as `null` read as no change.
+
+**Waiting on the owner's ruling.**
+- A player's reflexes at resolve: the resolve card keeps "the instant a body
+  answers before its mind can" (a flinch, a gasp); past it, a body's conduct
+  and a sound that says something are the player's.
+- The player-contact guard (`director_contact._player_contacts_held`) now
+  DROPS what it flags; it was detection-only by design. 0 flags over 155
+  stored resolves.
+- Under `world_author`, a player's assertion that another mind did something
+  (178 t27 "pinned under her") goes to that mind as an offer, as do the
+  Director's own inventions at interpret (177 t22's sit) -- typed data cannot
+  tell the two apart.
+- A `standing` fact may set another mind's body condition, but a
+  `conditions` row does not reach that mind's own payload; only `vitals` do.
+- The 2026-09-14 pin of a normal voice door-to-door as a `fragment` is
+  overturned to `full` (`DOOR_REACH_BARRIERS`, both bodies at the doorway):
+  the test's own design table said full, and the 2026-09-26 ruling is that
+  voices carry.
+- A loud machine still masks a shout beside it (the 2026-09-23 calibration):
+  chat 176's kettle reduced "Thank you" to a fragment across the kitchen.
+  Measured and not built: a shout rising with the speaker's noise up to 92 dB
+  at a pace makes that shout `full` and flips both pinned tests.
+- A hold the containment record keeps no longer ages out
+  (`spatial_contacts._hold_the_containment_keeps`); a seat contact still ages
+  while the pose says seated, which reverses the design if exempted
+  (`invalidate_contact_bound_poses`).
+- The new floors and guards: `doors_keep_their_state`,
+  `an_emission_stops_in_its_own_words`, `a_signal_elsewhere_is_nobodys_act`,
+  `spatial_substance.taken_in`, the `bind_items` rule, the repair battery on
+  the sheet's own channels; and the encoder sheet budget 0.62 -> 0.63.
+- No "main versus incidental" weighting: an incidental write the world truly
+  refuses (a body in another room, a rag nobody minted) still withholds the
+  whole act.
+
+**Residuals.**
+- A player's own restatement rows at interpret are left to the clause (chat
+  177 t17, "sits at the table holding the plate", re-added nine contacts).
+- Stored interpret steps rerun later still carry other-mind rows into
+  resolve-side readers (`_causal_event_inputs`, claims).
+- A silent beat stays whole with the empty-input guard: the interpret-stage
+  conduct rule runs only on a beat with input, so a stale invention is never
+  offered to a character as a suggestion.
+- Verifier gaps that still withhold an act: `time` claims, regional
+  destruction, `missing_desired_state`; `location` never verifies in a span.
+- `locked_door` folds to `closed_door` (176 t4's bolt lost); a window's latch
+  has no record anywhere; the establish card wrote `whistling: true` where
+  the switch is `state.running`; the composer renders "soup of soup"; a
+  thing's free-form `state` can contradict containment (`held: false`).
+- Carried things are re-told once per room change, every leg of a journey.
+
+**Needs a live replay** (no model was called in the round): whether the
+interpret and resolve clauses stop authored conduct (175 t4/t9/t10, 176 t4/t7,
+177 t17, 178 t28-35); whether 178 t23's out-of-character note and 176 t12's
+"her hunger grows" come out as `standing` facts; how characters take up the
+new offers; whether the encoder writes 177 t19's door once it holds `rooms`;
+and the encoder's new clauses.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

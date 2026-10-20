@@ -112,7 +112,7 @@ from persist.commit_attire import (_NON_ATTIRE_TERMS, sanitize_attire_items,
     # -- these four were the gap `from persist.commit import ...` fell into
     # (review 2026-09-07 B5).
     _identifying_words, _is_the_same_garment, _rename_worn_garment,
-    _reclaim_worn_shed_garments,
+    _reclaim_worn_shed_garments, _overlay_texts_by_subject,
     apply_attire_diff)
 from persist.commit_entities import (_is_gated_awareness, _subjects_that_moved,
     _subjects_targeted_by_an_action, _supersede_disguises, _inherit_known_to,

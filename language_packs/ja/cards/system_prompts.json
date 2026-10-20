@@ -267,6 +267,9 @@
     "encoder_cue": {
       "$text": "prose_contract/encoder_cue.txt"
     },
+    "encoder_interpret": {
+      "$text": "prose_contract/encoder_interpret.txt"
+    },
     "encoder_repair": {
       "$text": "prose_contract/encoder_repair.txt"
     },

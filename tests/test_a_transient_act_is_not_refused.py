@@ -5,8 +5,8 @@ a smith rendered only as sounds (idx 17, 19), and three kicks at one pawl
 (idx 14, 16) were un-seen, because their receipts read "no verifier" or "the
 contact is gone" as the world refusing them. A strike is kept out of the
 standing contacts on purpose, and a noise leaves nothing to verify; neither
-is a refusal. A physical channel whose verifier is merely unbuilt still holds
-an act back (`test_causal_physical_verification`).
+is a refusal. Since 2026-10-20 neither is a channel whose verifier is merely
+unbuilt (`test_causal_physical_verification`, `test_a_done_act_is_seen`).
 """
 from world.causal_completion import execution_receipt
 

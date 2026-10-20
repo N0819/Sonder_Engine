@@ -110,7 +110,6 @@ from .common import (
     _check_character_act_authority,
     _check_character_speech_authority,
     _check_player_act_authority,
-    _check_player_contact_authority,
     _check_player_interiority_authority,
     _check_presence_knowledge_channel,
     director_may_voice,
@@ -151,6 +150,7 @@ from .director_contact import (
     _drop_momentary_contact_adds,
     _validated_player_contact_assertions,
     _merge_player_contact_assertions,
+    _player_contacts_held,
     _validated_character_contact_endings,
     _ACTOR_MATERIAL_FIELDS,
     _character_material_effects,
@@ -276,6 +276,7 @@ from .director_evidence import (
     causal_scene_room_ids,
     causal_contact_rows,
     causal_room_names,
+    causal_standing_relations,
     causal_world_index,
     authority_by_entity,
     speech_transforms,
@@ -1972,14 +1973,11 @@ def director_interpret(ctx, nonce):
         # this is placement, and "the man by the door" is a question
         # about a room rather than about a list of names.
         "world_index": _causal_index,
-        "standing_relations": {
-            "positions": {
-                str(subject): str(room_id)
-                for subject, room_id in (sc.get("positions") or {}).items()
-                if str(room_id) in (_causal_index.get("rooms") or {})
-            },
-            "contacts": causal_contact_rows(sc, _causal_rooms),
-        },
+        # Where each subject is, what touches what, and what each body holds
+        # or carries (`causal_standing_relations`): the author writes about
+        # a thing in a hand, so it is shown the hand.
+        "standing_relations": causal_standing_relations(
+            sc, _causal_index, _causal_rooms),
         # A PARADOX UNFOLDING IN THIS FRAME, or None. Carried since alpha 9
         # on the one payload the Director read; the redesign kept it on the
         # full context dict above and left it off this lean model payload,
@@ -2219,6 +2217,27 @@ def director_interpret(ctx, nonce):
             "speech as an action when no exact line was supplied.")
     _route_authorial_npc_beat(
         ctx, out, [str(pers.get("name") or persona_name(pers) or "").casefold()])
+    # A MIND'S CONDUCT IS ITS OWN (`director_prose.conduct_is_its_owners`).
+    # What the interpretation wrote as another mind's act was refused before
+    # it became a row; what would have changed how things stand is that
+    # mind's to take up, so it goes to its own agent as the authorial offer
+    # `_route_authorial_npc_beat` makes of a player-authored response.
+    _refused_conduct = (((ctx.get(director_prose.CTX_KEY) or {}).get("record")
+                         or {}).get("conduct_refused") or [])
+    for _refused in _refused_conduct:
+        if not (isinstance(_refused, dict) and _refused.get("offer")
+                and str(_refused.get("event") or "").strip()):
+            continue
+        _mind = str(_refused.get("mind") or "")
+        _cid = next((c["id"] for c in ctx.cast
+                     if _mind == f"character:{c['id']}"), None)
+        if _cid is None:
+            continue
+        out.setdefault("authorial_offers", []).append({
+            "subject_id": _cid,
+            "proposition": str(_refused["event"]).strip(),
+            "source": "player",
+        })
     # Bind the acts the model left unbound BEFORE anything downstream asks
     # whether they land on a character: the reaction-phase gate, claim subject
     # binding and perception's targeted-observer check all read `targets`.
@@ -2327,6 +2346,25 @@ def director_interpret(ctx, nonce):
     ]
     _allows_new_onset_contact = any(
         item.get("commitment") == "asserted" for item in _declared_actions)
+    # A FACT ABOUT HOW THINGS STAND IS NOBODY'S CONDUCT (`UnifiedEvent.
+    # standing`, `director_prose.standing_is_authorship`). Its writes were
+    # folded with the beat's just above, so the world holds it from the
+    # onset on; the row itself leaves the player's sequence, so no observer
+    # perceives it happen, no claim is made of it and the page never
+    # narrates it as an act. Chat 178 t23: the owner's correction that the
+    # dishes were left downstairs became a walk to the kitchen and back that
+    # Mellisande, upstairs, saw and remembered.
+    _standing_rows = [item for item in (out.get("sequence") or [])
+                      if isinstance(item, dict) and item.get("standing")]
+    if _standing_rows:
+        out["sequence"] = [item for item in (out.get("sequence") or [])
+                           if not (isinstance(item, dict) and item.get("standing"))]
+        out["standing_assertions"] = [
+            {"event_id": item.get("event_id"),
+             "event": str(item.get("attempt") or item.get("description")
+                          or item.get("text") or "")}
+            for item in _standing_rows]
+        _sync_sequence_mirrors(out)
     out["state_assertions"] = validated_player_state_assertions(
         sc, out.get("state_assertions"), p_name,
         report=lambda note: ctx.add_warning(f"player state: {note}"),
@@ -6055,15 +6093,8 @@ def director_resolve(ctx, nonce, _corrections=None):
         # this is placement, and "the man by the door" is a question
         # about a room rather than about a list of names.
         "world_index": _resolve_causal_index,
-        "standing_relations": {
-            "positions": {
-                str(subject): str(room_id)
-                for subject, room_id in (resolve_sc.get("positions") or {}).items()
-                if str(room_id) in (_resolve_causal_index.get("rooms") or {})
-            },
-            "contacts": causal_contact_rows(
-                resolve_sc, _resolve_causal_rooms),
-        },
+        "standing_relations": causal_standing_relations(
+            resolve_sc, _resolve_causal_index, _resolve_causal_rooms),
         # Same restoration as the interpret's lean payload: the resolve
         # author sees this frame's paradox, or None. The hands do not -- a
         # paradox's consequences are applied deterministically at commit
@@ -6313,31 +6344,13 @@ def director_resolve(ctx, nonce, _corrections=None):
     _felt = _check_player_interiority_authority(
         (out.get("resolved_event") or _authority_prose), _player_name,
         _player_declared_text, _all_names)
-    # THE SAME RULE, ASKED OF THE CHANNEL THAT ALSO EXPRESSES IT. `contact_ops`
-    # stores an actor, so it can give the player an act the prose never
-    # mentions -- chat 95 t40, where the prose was clean and the ops had the
-    # player performing.
-    #
-    # DETECTION ONLY, DELIBERATELY. The rule itself now lives where a rule
-    # about what to write belongs: the contact specialist's own prompt says
-    # the player's body acts only when the player said so, and that any part
-    # of a character may reach any part of them. This reading exists to
-    # MEASURE whether that clause works, and it enforces nothing -- no retry,
-    # no dropped op. Four guards in one day were themselves the defect (the
-    # attire process clamp, the licence gate, the narration rewrites, mirrored
-    # contact displacement), every one of them subtracting true state on a
-    # heuristic reading of free text; this one matches names against declared
-    # act text and false-positived twice on its first run over the same chat.
-    # A warning costs nothing and is visible in the step inspector. If the
-    # prompt proves insufficient, the measurement is here to prove it.
-    _standing_ids = [c.get("contact_id") for c in
-                     ((resolve_sc or {}).get("contacts") or [])
-                     if isinstance(c, dict)]
-    _pcontacts = _check_player_contact_authority(
-        (out.get("state_diff") or {}).get("contact_ops"),
-        _declared_player_actions, _player_name, _standing_ids, ctx.cast)
-    for _i, _w in _pcontacts:
-        ctx.add_warning(_w)
+    # THE SAME RULE, ASKED OF THE CHANNEL THAT ALSO EXPRESSES IT -- not here.
+    # `contact_ops` stores an actor, so it can give the player an act the
+    # prose never mentions (chat 95 t40), but under the prose contract the
+    # encoder's ops are folded only at the fan-out below, so at this point
+    # the diff holds none and this reading measured nothing. It runs on the
+    # merged ops instead, where it also enforces (`_player_contacts_held`).
+    _pcontacts = []
     # Surfaced on the step itself, not only in ctx.warnings -- a content
     # violation that survives the retry must at least be visible in the
     # step/variant inspector rather than vanishing.
@@ -6528,9 +6541,23 @@ def director_resolve(ctx, nonce, _corrections=None):
         character_contact_endings, resolved_contact_ops,
         report=lambda note: ctx.add_warning(f"character contact: {note}"),
     )
+    # THE PLAYER'S BODY ACTS ONLY ON THE PLAYER'S DECLARATION, in the channel
+    # that stores an actor (`_player_contacts_held`): a resolve op giving her
+    # body a hold on another body no act of hers reached this beat is not
+    # committed as her conduct. Her own declared contacts are not among these
+    # ops -- they are the interpret's, merged below.
+    resolved_contact_ops, _held_contacts = _player_contacts_held(
+        resolved_contact_ops, _declared_player_actions, _player_name, sc,
+        resolve_sc, ctx.cast)
+    for _w in _held_contacts:
+        ctx.add_warning(_w)
+    if _held_contacts:
+        out["player_act_warnings"] = (
+            list(out.get("player_act_warnings") or []) + _held_contacts)
     sd["contact_ops"] = _merge_player_contact_assertions(
         declared_contacts, resolved_contact_ops,
         report=lambda note: ctx.add_warning(f"player contact: {note}"),
+        scene=sc, player_name=p_name,
     )
     sd["substance_ops"] = _merge_character_material_effects(
         resolve_sc, sd.get("substance_ops"), character_material_effects,

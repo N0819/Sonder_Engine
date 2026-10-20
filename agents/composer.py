@@ -3575,13 +3575,32 @@ def room_content_percepts(*groups):
             # `leads_the_beat` refuses for an ambient -- rather than as a
             # claim that something moved (`standing_verdicts`' own
             # degradation rule).
+            #
+            # A THING IN THE OBSERVER'S OWN KEEPING IS TOLD AGAIN WHEREVER IT
+            # IS CARRIED. Its row names the room it is kept in (`kept_in`,
+            # `perception._visible_things`), and that room is part of WHICH
+            # standing fact this is: the plate in a hand in the kitchen and
+            # the plate in that hand on the landing are facts of two rooms,
+            # as the kitchen's table and the landing's rail are. Keyed on the
+            # thing alone it read `unchanged` across every move, and a delta
+            # view dropped it for the whole walk: chat 177 told the player
+            # "You are holding an empty small plate." and "You are carrying
+            # the mug." on turn 12 and never again through turn 21, up the
+            # stairs and into the second room, and the next beat gave the
+            # dishes a floor and a bed to lie on. A room it has not been kept
+            # in is a subject this observer has not held -- first sight, so it
+            # is re-told as background beside the rest of the room, never as
+            # an event (`leads_the_beat`); within one room it stays furniture,
+            # and a change of grip there still re-renders as a change.
+            kept_in = str(entry.get("kept_in") or "").strip()
+            subject = (key, kept_in) if kept_in else (key,)
             state = entry.get("state")
             if isinstance(state, (list, tuple)) and any(
                     str(v or "").strip() for v in state):
-                dedupe = standing_key("content_state", (key,),
+                dedupe = standing_key("content_state", subject,
                                       tuple(str(v or "") for v in state))
             else:
-                dedupe = standing_key("content", (key,), (desc,))
+                dedupe = standing_key("content", subject, (desc,))
             out.append(Percept(
                 kind="ambient", channel="sight",
                 data={"desc": desc},

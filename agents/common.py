@@ -46,6 +46,7 @@ from llm.schemas import normalize_speech_volume
 from world.spatial import (
     _body_interior_holder,
     ambient_scope,
+    contact_id,
     earshot_rooms,
     visible_adjacent_rooms,
     containment_conceals,
@@ -4661,7 +4662,11 @@ def cut_short_speech(text, ratio=0.6):
 SPAN_FIELDS = ("category", "categories", "note", "items",
                "chrono_id", "item_id", "item_ids", "item_names",
                "object_name", "act",
-               "source_entity_id", "actor", "from_declaration", "movement")
+               "source_entity_id", "actor", "from_declaration", "movement",
+               # A fact about how things stand, not conduct
+               # (`UnifiedEvent.standing`): the interpret stage keeps its
+               # writes and leaves the row out of the player's sequence.
+               "standing")
 
 
 def _restore_span_fields(source, clean, before):
@@ -8852,8 +8857,10 @@ def _check_player_contact_authority(contact_ops, declared_actions, player_name,
         if target.casefold() in reached:
             continue
         # A standing hold re-stated is not a new act; only a contact this beat
-        # INVENTS is one.
-        if str(op.get("contact_id") or "") in ids:
+        # INVENTS is one. Matched by the contact's own endpoints as well as by
+        # a stored id: an encoder's op carries no `contact_id`, so an id match
+        # alone read every restated hold as invented.
+        if str(op.get("contact_id") or "") in ids or contact_id(op) in ids:
             continue
         out.append((index, (
             "Player contact not declared this beat (player-act authority): "

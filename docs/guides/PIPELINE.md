@@ -1314,12 +1314,22 @@ The program preserves original requested transforms through deterministic
 guards so a refused effect stays detectable. Receipts live in
 `ComposedBeat.causal_worlds`; the beat log retains every event with its
 `execution` status. A separate `action_status` controls outward action delivery.
-Perception withholds an action surface with missing or unverified physical
-effects, while retaining speech and valid standing-world percepts. Explicitly
-classified nonphysical commit domains may remain pending without suppressing
-an otherwise verified act. Local destruction requires proof of scene removal;
-its registry/book effects remain pending, and regional cascades cannot be
-certified from a local scene snapshot. Unknown channels never gain this exemption.
+Perception withholds an action surface only when a receipt is evidence the
+world REFUSED the act -- a requested state it does not show, a target it does
+not hold where the act happens, a removal of something it never held -- and
+records a `refused` decision row in both passes when it does; speech and valid
+standing-world percepts are retained. A channel or field nothing can verify
+yet, a write that is an event, an assigned hand that wrote nothing, and a
+write whose referent the world holds where the act happens in a form its
+ledger cannot carry (`ledger_cannot_hold`: a garment or the floor as a contact
+endpoint, a fixture in `near`, a room as what a pose faces) are limitations:
+the receipt stays pending and the act renders
+(`world.causal_completion.LIMITATION_CODES`). Receipts judge what the merge
+made of a request, never the raw request against a normalized world: a schema
+default is silence, a fixture is read in the room of the act, and weather is
+the commit's to write. Local destruction requires proof of scene removal; its
+registry/book effects remain pending, and regional cascades cannot be
+certified from a local scene snapshot.
 
 `commit_all` first prepares the exact post-turn scene, the beat's typed records, its memory mutations (embeddings included) and its background claims without holding SQLite's write lock (`_prepare_turn_commit`). No LORE is prepared or embedded here: the mapping domain has filed none since 2026-09-03 (`persist/commit_mapping.py`). It then invokes twenty durable domains inside one outer transaction under a per-turn idempotency lock, in this order:
 

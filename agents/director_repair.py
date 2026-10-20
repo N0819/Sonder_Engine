@@ -886,7 +886,8 @@ def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts)
 
 
 def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view, extras,
-                rooms_elsewhere=False, new_places=None, base_payload=None, held=None):
+                rooms_elsewhere=False, new_places=None, base_payload=None, held=None,
+                stage=None):
     """One encoder call for every job, with the completed draft in front of it.
     `base_payload` stands in for the slices the stage would assemble -- a
     replay of a captured encoder call has them and nothing to rebuild them
@@ -895,9 +896,14 @@ def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view,
     caches a prefix (`continuation`), and is sent on its own sheet otherwise.
     Its sheet and payload are the same either way -- what is validated
     against, and what the rungs that rebuild a broken answer send."""
-    from .director_prose import _agent_json, encoder_payload
+    from .director_prose import _agent_json, encoder_payload, sheet_channels
     language = ctx.language
-    sheet = unified_specialist_prompt(tools, language, parts)
+    # The draft's own sheet rule (`director_prose.sheet_channels`): under a
+    # room author a held `rooms` is the doorway the core card teaches. The
+    # stage's own piece rides along (`unified_specialist_prompt(stage=)`): a
+    # repair at interpret writes events of the same beat by the same rules.
+    sheet = unified_specialist_prompt(sheet_channels(tools, rooms_elsewhere),
+                                      language, parts, stage=stage)
     sheet += "\n" + prose_contract_text("encoder_repair", language)
     payload = (dict(base_payload, prose=numbered(units)) if base_payload is not None
                else encoder_payload(ctx, sc, numbered(units), model_payload, view, extras, tools))
@@ -975,10 +981,12 @@ def continuation(held, payload, tools, parts, language=None):
             same = False
         if key in REPAIR_TURN_KEYS or not same:
             turn[key] = value
+    from .director_prose import sheet_channels
     text = [prose_contract_text("encoder_repair_continues", language).strip(),
             prose_contract_text("encoder_repair", language).strip()]
-    extra = encoder_sheet_additions(tools, parts, held.get("channels") or (),
-                                    held.get("parts") or (), language)
+    extra = encoder_sheet_additions(
+        sheet_channels(tools, payload.get("places_authored_elsewhere")), parts,
+        held.get("channels") or (), held.get("parts") or (), language)
     if extra:
         text.append(extra)
     text.append(json.dumps(turn, ensure_ascii=False))
@@ -1074,7 +1082,7 @@ def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_pa
                                               facts, channels, parts)
     answers, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
                                  model_payload, view, extras, rooms_elsewhere, new_places,
-                                 base_payload, held=held)
+                                 base_payload, held=held, stage=stage)
     # THE REPAIR CALL STOPS SHORT AS THE ENCODER DOES: on its first runs it
     # answered a fix and skipped the sixteen-sentence event job beside it,
     # answered another with one event where the next run gave twenty-five,
@@ -1094,7 +1102,7 @@ def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_pa
     if leftover:
         again, more_notes = call_repair(ctx, sc, units, events, leftover, tools, tool_parts,
                                         model_payload, view, extras, rooms_elsewhere,
-                                        new_places, base_payload, held=held)
+                                        new_places, base_payload, held=held, stage=stage)
         retried = [job["id"] for job in leftover]
         by_id = {job["id"]: job for job in leftover}
         redo, extra = {}, []
@@ -1445,9 +1453,14 @@ def check_and_repair(ctx, stage, sc, units, events, channels, parts, model_paylo
 def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payload,
                       view, extras, facts, rooms_elsewhere, new_places, record,
                       base_payload=None, held=None):
-    from .director_prose import encoder_payload
+    from .director_prose import encoder_payload, sheet_channels
     events = [e for e in events or [] if isinstance(e, dict)]
     cited = citations(events, units)
+    # THE CHECKS ASK BY THE SHEET'S OWN DEFINITIONS. Under a room author the
+    # encoder's `rooms` is a held place's doorway, and the room-building
+    # chunk's opening -- what `battery` would judge each event by -- is not
+    # its rule (`director_prose.sheet_channels`).
+    checked = sheet_channels(channels, rooms_elsewhere)
     record["cited"] = sum(1 for sid in cited if cited[sid])
     payload = (dict(base_payload) if base_payload is not None
                else encoder_payload(ctx, sc, numbered(units), model_payload, view, extras,
@@ -1467,7 +1480,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     record["native"] = native
 
     identities = names_of(payload)
-    questions, about = battery(units, events, channels, ctx.language, identities)
+    questions, about = battery(units, events, checked, ctx.language, identities)
     record["questions"] = len(questions)
     state = jev_state(units, events, payload)
     try:
@@ -1599,7 +1612,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
         record["dropped"] = dropped
         ctx.add_warning(f"{stage}: repair wrote {len(dropped)} write(s) the engine would "
                         "discard; dropped")
-    recheck_q, recheck_about = battery(units, repaired, channels, ctx.language, identities)
+    recheck_q, recheck_about = battery(units, repaired, checked, ctx.language, identities)
     recheck_q = {k: v for k, v in recheck_q.items()
                  if recheck_about[k]["kind"] == "fix"
                  and (recheck_about[k]["event"], recheck_about[k]["index"],

@@ -1614,7 +1614,12 @@ it (the Lombard rule), and his listener still stands under the other.
   at; on the new engine the opera story's "sets the proof on the music rest
   in front of her" had still ended one pace inside the stage door, 4.5 paces
   off, and the stage's ring still smeared her answer. A pair near by station
-  and apart by cell for any other reason is open.
+  and apart by cell for any other reason is open. **Two bodies on one support
+  (2026-10-20):** `spatial_fov.body_cell` seats the bodies a station is `near`
+  that this body touches first, so two bodies lying on one bed no longer sit
+  with a chest of drawers between them (chat 178, turns 27-35); and a standing
+  contact between two bodies opens the line between them whatever stands on
+  the grid (`spatial_fov.in_standing_contact`, in `body_visibility`).
 - **A small hard room is priced as an empty one.** Sabine's rule here counts
   no absorption from the room's open doorways or the bodies standing in it,
   and a drip is steady noise where a real one is glimpsed between drops.

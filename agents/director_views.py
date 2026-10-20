@@ -140,6 +140,12 @@ def _route_authorial_npc_beat(ctx, out, actor_forms=()):
     kept = []
     changed = False
     for e in (out.get("sequence") or []):
+        # A fact about how things stand is nobody's response to puppet
+        # (`UnifiedEvent.standing`): its writes are the beat's, and the
+        # interpret stage takes the row out of the sequence once they are in.
+        if isinstance(e, dict) and e.get("standing"):
+            kept.append(e)
+            continue
         subject_cid = authored_other_subject(e, cast_forms, actor_forms)
         if subject_cid is not None:
             att = str(e.get("attempt") or "")

@@ -2525,6 +2525,11 @@ def install_prepared_rooms(cid, scene, body=None, *, cast=None, frame_id=None):
     installed, _refused = _install_test(scene, cache, targets, briefs)
     if not installed:
         return scene, {}
+    # A design drawn between turns never opens or shuts a door the world
+    # holds: the door's state is the beat's events', and the design was
+    # drawn against an older world (`director_prose.doors_keep_their_state`).
+    installed = (director_prose.doors_keep_their_state(
+        {"rooms": installed}, scene) or {}).get("rooms") or installed
     return (merge_scene_with_diff(copy.deepcopy(scene),
                                   {"rooms": copy.deepcopy(installed)},
                                   age_contacts=False),

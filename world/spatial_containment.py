@@ -443,6 +443,94 @@ def container_of(scene: dict, name: str):
     return record.get("in") or None
 
 
+def containment_record(scene: dict, name: str):
+    """`name`'s containment record as `{"in": holder, "mode": mode}`, found
+    under ANY spelling of the same being, with the holder spelled the way the
+    scene's own `positions` spell that body; else None.
+
+    `container_of` finds a record by its KEY, and the ledger keys a thing by
+    whatever its writer reached for -- a display name where the opening's
+    `held_by` was folded (`the mug`), an entity id where a transfer landed
+    (`da5e941e17264941`) -- and spells the holder the same way (chat 177
+    checkpoints 3-12 held the plate `in: dcfe50c5aeec4e5f`, Hinami's entity
+    id, beside `positions["Hinami"]`). A reader handed the other spelling
+    heard "nothing carries it". Matched by `same_subject`, the engine's one
+    identity test, so this never invents a match: a keyed hit is taken first.
+
+    A READER FOR WHOEVER WRITES ABOUT THE WORLD: the Director's world index
+    and standing relations (`director_evidence.causal_world_index`,
+    `causal_containment_rows`) read who keeps what through this, so the
+    author sees the record the encoder, the merge and every view read.
+    """
+    contained = (scene or {}).get("contained") or {}
+    text = str(name or "").strip()
+    if not isinstance(contained, dict) or not contained or not text:
+        return None
+    record = _ci_get(contained, text)
+    if isinstance(record, dict):
+        return _kept_record(scene, record)
+    index = kept_records(scene)
+    eid, entity = _unique_entity_keyed(scene, text)
+    for spelling in (text, eid, (entity or {}).get("name")):
+        found = index.get(str(spelling or "").strip().casefold())
+        if found is not None:
+            return found
+    return None
+
+
+def _kept_record(scene: dict, record):
+    """One raw ledger record as the readers above hand it out, else None."""
+    if not isinstance(record, dict):
+        return None
+    holder = str(record.get("in") or "").strip()
+    if not holder:
+        return None
+    spelled = canonical_subject(scene, holder) or holder
+    positions = (scene or {}).get("positions") or {}
+    if isinstance(positions, dict) and spelled not in positions:
+        folded = spelled.casefold()
+        spelled = next(
+            (str(key) for key in positions
+             if str(key).strip().casefold() == folded),
+            None) or next((str(key) for key in positions
+                           if same_subject(scene, str(key), spelled)), spelled)
+    mode = str(record.get("mode") or "").strip().casefold() or "carried"
+    return {"in": spelled, "mode": mode}
+
+
+def kept_records(scene: dict) -> dict:
+    """`containment_record` for every being the ledger keeps, in one pass:
+    `{casefolded spelling: record}` under each subject's ledger key and the
+    id and name of the one entity that key names. NEVER INVENTS A MATCH: an
+    ambiguous key adds no spelling (`_unique_entity_keyed`), and a name two
+    entities share is added for neither -- two plates both called "a plate"
+    are two plates, and the one on the table is not in the hand that holds
+    the other.
+
+    For a reader asking about many subjects at once -- the world index asks
+    about every body and thing in its rooms, and a charter scene stands
+    hundreds -- where `containment_record`'s per-call identity scan would be
+    paid once per subject."""
+    contained = (scene or {}).get("contained") or {}
+    out = {}
+    if not isinstance(contained, dict):
+        return out
+    for key, raw in contained.items():
+        record = _kept_record(scene, raw)
+        if record is None:
+            continue
+        eid, entity = _unique_entity_keyed(scene, str(key))
+        spellings = [key, eid]
+        name = str((entity or {}).get("name") or "").strip()
+        if name and _unique_entity_keyed(scene, name)[0] == eid:
+            spellings.append(name)
+        for spelling in spellings:
+            folded = str(spelling or "").strip().casefold()
+            if folded:
+                out.setdefault(folded, record)
+    return out
+
+
 def carrier_chain(scene: dict, name: str) -> list:
     """Every container above `name`, outermost last. Cycle-safe."""
     chain = []
@@ -1034,6 +1122,82 @@ def derive_worn_containment(scene: dict) -> dict:
             continue
         contained[subject] = {"in": wearer, "mode": "worn", "by": "attire"}
     return scene
+
+
+def held_by_bearings(scene: dict) -> list:
+    """`[(subject, bearer)]` for every thing whose own record names the body
+    that carries it (`held_by`), under the gates the commit's carriage
+    derivation has always applied: the bearer is a BODY the scene vouches for
+    (`contact_endpoint_is_body`), the thing is a thing the scene keeps one
+    entity record of (`contact_thing_label`, `_unique_entity_keyed`), never
+    `ubiquitous`, and `subject` is the spelling the scene's ledgers already
+    use for it (`_placement_subject_key`).
+
+    `held_by` is how the opening puts a thing in a body's keeping
+    (`SceneEntityDef.held_by`); `contained` is the one store every reader asks.
+    This is the join between them, read by `derive_held_by_containment` at
+    the merge and by `commit_scene_state.derive_borne_containment` after it.
+    """
+    # Imported here: `spatial_contacts` imports this module at load time.
+    from world.spatial_contacts import (contact_endpoint_is_body,
+                                        contact_thing_label)
+
+    out = []
+    if not isinstance(scene, dict):
+        return out
+    for eid, entity in (scene.get("entities") or {}).items():
+        if not isinstance(entity, dict):
+            continue
+        bearer = str(entity.get("held_by") or "").strip()
+        if not bearer or not contact_endpoint_is_body(scene, bearer):
+            continue
+        text = str(eid or "").strip()
+        if not text or not contact_thing_label(scene, text):
+            continue
+        key, record = _unique_entity_keyed(scene, text)
+        if not key or not isinstance(record, dict) or record.get("ubiquitous"):
+            continue
+        subject = str(_placement_subject_key(scene, key, record))
+        if subject.strip().casefold() == bearer.casefold():
+            continue
+        out.append((subject, bearer))
+    return out
+
+
+def derive_held_by_containment(scene: dict) -> list:
+    """A THING THAT SAYS WHO CARRIES IT IS CARRIED, from the merge on.
+
+    ONE STORE, AND IT IS `contained`. The opening writes `held_by` on the
+    thing; every reader -- the views (`perception._bearer_of`), position
+    derivation, the Director's index -- reads `scene.contained`. The commit
+    has always joined the two (`derive_borne_containment`), but only AFTER
+    the merge, so every stage that read a merged preview of the beat that
+    wrote `held_by` read the fact in the store nobody reads. Measured, chat
+    176's opening: the commit stored the towel and the mug `carried` by
+    Hinami, and the opening's own views -- built on the merged preview --
+    told her and Mellisande "There is the towel here. There is the mug
+    here." in the same view that said "You hold: the towel, the mug."
+
+    Writes exactly the record the commit derives, `{in: bearer, mode:
+    carried, by: bearing}`, from `held_by_bearings`, and yields to any record
+    already standing -- a hand that placed the thing elsewhere outranks this,
+    as it outranks the commit's derivation. Retiring stays the commit's
+    (`derive_borne_containment` drops a `bearing` record whose evidence
+    stopped), so nothing here can set a thing down. Returns
+    `[(subject, bearer)]` minted; mutates `scene`.
+    """
+    if not isinstance(scene, dict):
+        return []
+    contained = scene.get("contained")
+    if not isinstance(contained, dict):
+        contained = scene["contained"] = {}
+    minted = []
+    for subject, bearer in held_by_bearings(scene):
+        if isinstance(_ci_get(contained, subject), dict):
+            continue
+        contained[subject] = {"in": bearer, "mode": "carried", "by": "bearing"}
+        minted.append((subject, bearer))
+    return minted
 
 
 def _label_tokens(text):

@@ -2358,6 +2358,20 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     source_noise = sound.speaker_noise(target, speaker_room=t_room)
     gain = sound.gain_between(target, observer, speaker_room=target_room,
                               listener_room=observer_room)
+    if gain is not None and rel.get("door_reach"):
+        # A VOICE SPOKEN AT A SHUT DOOR IS HEARD AT ITS OTHER FACE. Two bodies
+        # at one doorway, one each side (`spatial_rel_between` stamps
+        # `door_reach`), are at the field's arm's reach -- a path of 0, gain
+        # 1, the convention a pair sharing a cell already has -- less the
+        # door's own loss (`APERTURE_PASS`, after the material shift), and
+        # nothing else. The flood charges the whole mouth-to-ear walk as
+        # open-air spreading on top of the door, which for two bodies pressed
+        # to its two faces counts the door's thickness and the step each
+        # stands back from it as paces of air. Never lowers a gain the flood
+        # found: it is a floor for the pair, not a second path.
+        shifted = _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
+                                            rel.get("material"))
+        gain = max(gain, APERTURE_PASS.get(shifted, 0.0))
     if gain is not None:
         rel["signal"] = gain
         rel["noise"] = noise

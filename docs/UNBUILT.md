@@ -207,6 +207,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.208 — Two frames, a lagging station, a full mind (2026-10-12)](UNBUILT_PIPELINE.md#unbuilt-1-208)
 - [§1.214 — An answer is never cut at its first brace — built 2026-10-13, residuals open](UNBUILT_PIPELINE.md#unbuilt-1-214)
 - [§1.215 — Home 10's fifteen failings — what is built, what waits on a ruling (2026-10-13)](UNBUILT_PIPELINE.md#unbuilt-1-215)
+- [§1.216 — Chats 175-178: the fix round of 2026-10-20 — what is built, what waits on a ruling](UNBUILT_PIPELINE.md#unbuilt-1-216)
 
 **2. Roadmap**
 
@@ -324,7 +325,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.153 — The corridor grows as fast as the player walks it, so a search can recede forever](UNBUILT_WORLD.md#unbuilt-1-153)
 - [§1.155 — A fixture is two records with two owners and no link, so the player was not told what his own hands had just done](UNBUILT_WORLD.md#unbuilt-1-155)
 - [§1.157 — A room in a chat with no lorebook is never registered, and the escape route died of it](UNBUILT_WORLD.md#unbuilt-1-157)
-- [§1.162 — The doorway cone reads no cell, so a body a pace from the door is graded by the room's size](UNBUILT_WORLD.md#unbuilt-1-162)
+- [§1.162 — The doorway cone reads no cell, so a body a pace from the door is graded by the room's size — CLOSED 2026-10-20](UNBUILT_WORLD.md#unbuilt-1-162)
 - [§1.166 — `state_diff.time.mode` has two readers and no writer](UNBUILT_WORLD.md#unbuilt-1-166)
 - [§1.168 — A crossing written at the resolve was refused at every shut door — FIXED 2026-09-26, residuals open](UNBUILT_WORLD.md#unbuilt-1-168)
 - [§1.169 — A player one open stair away is neither seen nor seen to leave — a lead, unclassified](UNBUILT_WORLD.md#unbuilt-1-169)

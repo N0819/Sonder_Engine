@@ -49,7 +49,12 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 287   # +1 (2026-10-10): `prose_contract.layout_brief`, the
+PART_COUNT = 288   # +1 (2026-10-20): `prose_contract.encoder_interpret`,
+                   # the encoder's interpret-stage piece: only a change is an
+                   # event, another mind's act is not one, and a fact the
+                   # input sets about how things stand is `standing`
+                   # (`prompts.unified_specialist_prompt(stage=)`).
+                   # +1 (2026-10-10): `prose_contract.layout_brief`, the
                    # layout tier's architect's brief, written before the
                    # two calls that lay a planned building out
                    # (agents/director_layout.py `_briefed`).

@@ -73,7 +73,7 @@ from world.spatial_geometry import (
     normalize_offset,
     proximity_rel,
 )
-from world.spatial_identity import _ci_get, room_of
+from world.spatial_identity import _ci_get, room_of, same_subject
 from world.spatial_orientation import (
     _BEARINGS,
     _LEFT_SECTORS,
@@ -1355,7 +1355,24 @@ def body_cell(scene: dict, name: str, _seen=None) -> Optional[tuple]:
     at = st.get("at")
     _seen = set(_seen or ())
     key = str(name).strip().casefold()
-    for other in st.get("near") or []:
+    # THE BODY YOU ARE TOUCHING IS THE ONE YOU STAND BESIDE. A station's
+    # `near` is a list and the first entry that resolves seats the body, so
+    # its order decided which neighbour a body was drawn beside -- and the
+    # order is only the order a beat happened to write, with the partners
+    # `effective_station` derives from standing contacts appended last. A
+    # standing contact is the strongest closeness fact the scene holds
+    # (`in_standing_contact`), so the bodies this one touches come first and
+    # the rest keep their order. Measured on chat 178 (checkpoints 27-35): a
+    # woman lying on another on a one-cell bed, her station `near` the
+    # blanket and then the body under her, was seated beside the blanket --
+    # two cells from the body she lay on, a chest of drawers between them.
+    near = list(st.get("near") or [])
+    if len(near) > 1 and scene.get("contacts"):
+        touching = [other for other in near
+                    if in_standing_contact(scene, name, other)]
+        if touching:
+            near = touching + [other for other in near if other not in touching]
+    for other in near:
         okey = str(other).strip().casefold()
         if not okey or okey == key or okey in _seen:
             continue
@@ -1643,6 +1660,73 @@ def _door_cells(scene, room_id, neighbour_id, *, derive=False):
     if not placed or not placed["cells"] or not placed.get("dir"):
         return None, None
     return list(placed["cells"]), placed["dir"]
+
+
+def cell_in_doorway_view(scene: dict, room_id, other_room, cell) -> Optional[bool]:
+    """Is `cell`, in `room_id`'s own grid, inside the slice of the room its
+    doorway onto `other_room` shows to someone looking in from beyond -- or
+    None when that doorway has no placed cells (no bearing to put it on a
+    wall), and the question has no geometry to answer it.
+
+    The cell form of the S2a view-cone (`spatial_senses._opening_view_cap`),
+    which was written at anchor grain: a body in the doorway is in view, and
+    so is any cell whose bearing from the doorway lies within one sector of
+    straight in; a cell along the door's own wall, beside the frame, is not.
+    Sight keeps its refusal here exactly as `observer_field` does -- an
+    unbeared doorway is not placed by a guess (`derive` stays off)."""
+    cells, bearing = _door_cells(scene, room_id, other_room)
+    if not cells or not bearing or cell is None:
+        return None
+    target = tuple(room_grid(scene, room_id).nearest(tuple(cell)))
+    door = [tuple(c) for c in cells]
+    if target in door:
+        return True
+    inward = opposite_bearing(bearing)
+    for at in door:
+        heading = bearing_between(at, target)
+        if heading is None or relative_bearing(inward, heading) in _FRONT_SECTORS:
+            return True
+    return False
+
+
+def stands_in_doorway(scene: dict, name: str, room_id, other_room) -> bool:
+    """Does `name` stand IN `room_id`'s doorway onto `other_room` --
+    stationed at the door itself, or on one of the doorway's own cells?"""
+    from world.spatial_geometry import door_anchor_id
+    if not name or not room_id or room_of(scene, name) != room_id:
+        return False
+    if str(effective_station(scene, name).get("at") or "") == door_anchor_id(other_room):
+        return True
+    cells, _bearing = _door_cells(scene, room_id, other_room)
+    cell = body_cell(scene, name)
+    return bool(cells) and cell is not None \
+        and tuple(cell) in {tuple(c) for c in cells}
+
+
+def at_doorway(scene: dict, name: str, room_id, other_room) -> bool:
+    """Does `name`, standing in `room_id`, stand AT its doorway onto
+    `other_room`: stationed at the door itself, or on a cell within reach
+    (`CELL_REACH_PACES`) of one of the doorway's cells?
+
+    The door's cells are the ones the sound field charges the aperture at
+    (`derive=True`, `acoustic_grid`): this is asked about what reaches an
+    ear through the door, which is an amount, not a list of things seen."""
+    from world.spatial_geometry import CELL_REACH_PACES, door_anchor_id
+    if not name or not room_id or not other_room:
+        return False
+    # A relation may be built with a room the caller states (a line heard
+    # from where it was spoken); a body the scene stands somewhere else is
+    # not at this doorway, and its cell is in another room's grid.
+    if room_of(scene, name) != room_id:
+        return False
+    if str(effective_station(scene, name).get("at") or "") == door_anchor_id(other_room):
+        return True
+    cells, _bearing = _door_cells(scene, room_id, other_room, derive=True)
+    cell = body_cell(scene, name)
+    if not cells or cell is None:
+        return False
+    return any(max(abs(cell[0] - x), abs(cell[1] - y)) <= CELL_REACH_PACES
+               for x, y in cells)
 
 
 def sight_passes(scene, room_id, edge):
@@ -2391,6 +2475,26 @@ def neighbour_cells_in_view(scene: dict, observer: str, to_room, cells):
     return out
 
 
+def in_standing_contact(scene: dict, a: str, b: str) -> bool:
+    """Does a standing contact join these two, in either direction?
+
+    THE ONE DEFINITION of "these two are touching" for every sight reader:
+    `body_visibility` (nothing stands between bodies that touch) and
+    `spatial_senses._measured_intimacy` (dim light does not hide a body you
+    have hands on). Asked from both sides and matched with `same_subject`,
+    so a body recorded in the contact ledger under an entity id still meets
+    the display name a reader asks with."""
+    if not a or not b:
+        return False
+    from world.spatial_contacts import contacts_of
+    for one, other in ((a, b), (b, a)):
+        for contact in contacts_of(scene, one):
+            sides = (contact.get("actor"), contact.get("target"))
+            if any(same_subject(scene, side, other) for side in sides if side):
+                return True
+    return False
+
+
 def body_visibility(scene: dict, observer: str, target: str) -> dict:
     """How one body's line reaches another, or does not.
 
@@ -2451,6 +2555,26 @@ def body_visibility(scene: dict, observer: str, target: str) -> dict:
     facing = effective_facing(scene, observer)
     sector = _cone_sector(facing, origin, goal) if facing else None
     if origin == goal:
+        return {**open_answer, "basis": "line", "sector": sector,
+                "side": _side_label(sector)}
+    # BODIES THAT TOUCH ARE WITHIN REACH, WHATEVER CELLS THEY WERE DRAWN ON.
+    # A standing contact between the two is the strongest closeness fact the
+    # scene records, and it is a measurement: nothing stands between two
+    # bodies that are touching, so no fixture the derivation happened to lay
+    # between their cells can hide one from the other. The cells are a
+    # derivation (`body_cell` seats a body beside whatever its station names
+    # first) and they are the thing that is wrong when the two disagree.
+    # Measured on chat 178, checkpoints 28-35: a body lying on another on a
+    # one-cell bed was drawn beside the blanket her station named before
+    # the body she lay on, two cells off with a waist-high chest of drawers
+    # between, and once both were lying down the chest hid each from the
+    # other: across turns 27-35 not one of her acts reached the player's
+    # view (every act percept between the two refused at the sight gate),
+    # and the Director's digest listed each body hidden from the other.
+    # Same room only: a contact never carries a line through a wall.
+    # Darkness, a shut container and the rear arc are decided elsewhere and
+    # are untouched; this answers only what the LINE meets.
+    if t_room == o_room and in_standing_contact(scene, observer, target):
         return {**open_answer, "basis": "line", "sector": sector,
                 "side": _side_label(sector)}
     # WITHIN ARM'S REACH NOTHING STANDS BETWEEN (Hollin Mill turn 13,

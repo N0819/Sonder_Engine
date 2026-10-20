@@ -7,6 +7,7 @@ successful no-op. Channels whose effects live outside a scene remain explicit
 unresolved receipts until their own commit boundary can verify them.
 """
 
+import re
 from copy import deepcopy
 
 
@@ -16,12 +17,22 @@ _AMBIGUOUS = object()
 
 #: Channels whose writes ARE events: a noise, an action riding a contact.
 #: They leave no standing state by construction, so there is no postcondition
-#: to find -- which is different from a physical channel whose verifier has
-#: simply not been built (`unsupported_channel`, which still holds an act
-#: back until something can vouch for it). The owner's ruling, 2026-09-16:
+#: to find -- which is different from a channel whose verifier has simply not
+#: been built (`unsupported_channel`: nothing vouches for the write, so the
+#: receipt stays pending, and the act still renders -- no verifier is a
+#: limitation, never the world refusing it). The owner's ruling, 2026-09-16:
 #: expression is an action and renders no matter how temporary.
 TRANSIENT_CHANNELS = frozenset({"sensory_events", "contact_action_ops"})
 TRANSIENT_EVENT = "transient_event"
+
+#: A write whose referent the world HOLDS where the act happens, in a form the
+#: ledger it was written to cannot carry: a garment or the floor underfoot as
+#: a contact endpoint, a fixture in a proximity list, a room as what a pose
+#: is turned toward, a chair the station's table has already overruled. The
+#: merge drops or empties such a write and the act it belongs to still
+#: happened, so this is a limitation of the ledger -- recorded for the audit,
+#: never the world refusing the act (see `_held_unplaced`).
+LEDGER_LIMIT = "ledger_cannot_hold"
 
 
 def _momentary(raw):
@@ -65,7 +76,7 @@ def _record(scene, channel, subject):
     return matches[0] if len(matches) == 1 else _AMBIGUOUS if matches else _MISSING
 
 
-def _known(scene, subject):
+def _known(scene, subject, here=None):
     """Whether the scene holds `subject`: an entity, a body in a ledger, or
     one room's own fixture.
 
@@ -76,12 +87,84 @@ def _known(scene, subject):
     by the world, and perception un-saw the act whole: a sluice tender
     working the jack in plain view of the yard and the woman watching him
     braced on the dock, both invisible (playerless Aldermill round 4 replay,
-    2026-09-23)."""
+    2026-09-23).
+
+    `here` is the room the fixture is read in first, as the merge reads it:
+    a contact's fixture against the room its other endpoint stands in
+    (`normalize_scene_contacts`). Read scene-wide only, a fixture whose id a
+    second room also uses named no room -- chat 175's cottage and mill house
+    both had a `table`, and 34 contact receipts on the cottage's table, every
+    one of them standing in the world, were read as "lacks established
+    endpoints" and 15 acts withheld."""
     from world.spatial import _anchor_room_of, _unique_entity_keyed
     key, _ = _unique_entity_keyed(scene, subject)
     return bool(key) or any(_record(scene, channel, subject) is not _MISSING
                             for channel in ("positions", "attire", "scales")) \
-        or _anchor_room_of(scene, subject) is not None
+        or _anchor_room_of(scene, subject, prefer=here) is not None
+
+
+def _garment_worn_in(scene, name, room):
+    """Whether `name` is a garment worn by a body standing in `room`."""
+    from world.spatial import room_of
+    folded = str(name or "").strip().casefold()
+    if not folded:
+        return False
+    return any(room_of(scene, wearer) == room
+               and any(str(garment).strip().casefold() == folded
+                       for garment in _worn(scene, wearer))
+               for wearer in (scene.get("attire") or {}))
+
+
+def _held_unplaced(scene, name, room, *, places=False):
+    """Whether the world holds `name` WHERE AN ACT HAPPENS (`room`), as
+    something the merge gives no position of its own: one of that room's
+    fixtures, the room itself, or a garment worn by a body standing in it.
+    With `places`, any room or fixture the world holds -- a body may be
+    turned toward a place it is not in.
+
+    This is the line between the ledger's limit and the world's refusal
+    (`LEDGER_LIMIT`). A write naming such a thing in a slot that cannot carry
+    it -- a fixture in a proximity list, a garment or the floor as a contact
+    endpoint, a room as what a pose faces -- is dropped by the merge, and
+    the act it belongs to still happened: the thing is right there. A thing
+    the world positions is never this: where it stands is a fact, and a
+    relation to it from another room is refused. Nor is a name the world
+    holds nowhere -- the Doctor's platform that is not there
+    (`tests/test_causal_completion_perception.py`)."""
+    from world.spatial import _anchor_room_of, room_of, scene_room_id
+    if not str(name or "").strip() or not room or room_of(scene, name) is not None:
+        return False
+    fixture_room = _anchor_room_of(scene, name, prefer=room)
+    if fixture_room == room or scene_room_id(scene, name) == room:
+        return True
+    if places and (fixture_room or scene_room_id(scene, name)):
+        return True
+    return _garment_worn_in(scene, name, room)
+
+
+def _endpoint_known(scene, raw, side):
+    """`_known` for one endpoint of a contact op, its fixture read against the
+    room the OTHER endpoint stands in -- the merge's own reading."""
+    from world.spatial import room_of
+    other = raw.get("target" if side == "actor" else "actor")
+    return _known(scene, raw.get(side), here=room_of(scene, other))
+
+
+def _contact_ledger_limit(scene, raw):
+    """Whether the one endpoint of this contact the world does not know is
+    held, unplaced, where the other endpoint stands (`_held_unplaced`): a
+    palm wiped on the wearer's own apron, a necklace sliding on her
+    collarbone, feet on the floor of the room she stands in. The contact
+    ledger relates bodies, things and fixtures and drops the rest; the touch
+    happened (chat 175 turn 8, 176 turn 11, 177 turn 19)."""
+    from world.spatial import room_of
+    missing = [side for side in ("actor", "target")
+               if not _endpoint_known(scene, raw, side)]
+    if len(missing) != 1:
+        return False
+    side = missing[0]
+    other = raw.get("target" if side == "actor" else "actor")
+    return _held_unplaced(scene, raw.get(side), room_of(scene, other))
 
 
 def _receipt(channel, target, satisfied, prior, *, code="postcondition_missing",
@@ -99,6 +182,90 @@ def _unresolved(channel, target, code, reason, **extra):
     return _receipt(channel, target, False, False, code=code, reason=reason, **extra)
 
 
+def _entity_request(before, subject, desired):
+    """What the merge makes of an entity redeclaration (`_merge_entity`),
+    restricted to the fields the request names.
+
+    A schema default is SILENCE there, never an erasure -- `scent: null`
+    keeps the standing smell, an empty alias list keeps the aliases -- and a
+    name derived from the key cannot displace a real one. A momentary state
+    key (`_is_transient_state_key`) is an expression: it renders however
+    temporary it is (owner ruling, 2026-09-16), the merge expires it on an
+    echo, and so it is never a postcondition. Chat 176 turn 7: "eats the
+    last of the scone" re-declared the plate with `scent: null`, the merge
+    kept "warm scone and butter", and the receipt held the act back for
+    asking for None."""
+    from world.spatial import (_is_transient_state_key, _merge_entity,
+                               _unique_entity_keyed)
+    wanted = dict(desired)
+    state = wanted.get("state")
+    if isinstance(state, dict):
+        lasting = {key: value for key, value in state.items()
+                   if not _is_transient_state_key(key)}
+        if lasting:
+            wanted["state"] = lasting
+        else:
+            wanted.pop("state")
+    key, existing = _unique_entity_keyed(before, subject)
+    if not key or not isinstance(existing, dict):
+        return wanted
+    merged = _merge_entity(key, existing, wanted)
+    out = {}
+    for field, value in wanted.items():
+        if field == "state" and isinstance(value, dict):
+            standing = merged.get("state") if isinstance(merged.get("state"), dict) else {}
+            out["state"] = {name: standing.get(name) for name in value}
+        else:
+            out[field] = merged.get(field)
+    return out
+
+
+def _pose_holds(scene, subject, desired):
+    """Whether `subject`'s standing pose is the requested one AS THE MERGE
+    STORES IT (`apply_pose_diff`, `normalize_scene_poses`).
+
+    Values are compared as the merge cleans them, and a snapshot carrying no
+    arrangement annotates the standing pose, as the merge reads it. A
+    relational slot the merge EMPTIED counts against the pose only when what
+    it names is not held where the body is (`_held_unplaced`): a support the
+    station's own fixture overruled -- a chair, with the forearms on the
+    table -- or a relation to a ROOM is the ledger's limit (chat 176 turn 8,
+    chat 177 turns 19-20, each act withheld while the body did exactly what
+    it said). A relation to a body in another room, to something an
+    enclosure stands between, or to nothing the world holds, is still the
+    world refusing it."""
+    from world.spatial import (_POSE_ARRANGEMENT_FIELDS, _POSE_FIELDS,
+                               _clean_pose, containment_conceals, room_of)
+    pose = _clean_pose(desired)
+    actual = _record(scene, "poses", subject)
+    if pose is None:
+        # An empty snapshot clears the pose.
+        return actual is _MISSING
+    if not isinstance(actual, dict):
+        return False
+    if pose["detail"] and not any(pose[field] for field in _POSE_ARRANGEMENT_FIELDS):
+        wanted = {"detail": pose["detail"]}
+    else:
+        wanted = {field: pose[field] for field in _POSE_FIELDS if field in desired}
+    here = room_of(scene, subject)
+    for slot, places in (("support", False), ("relative_to", True)):
+        named = wanted.get(slot)
+        if (not named or actual.get(slot)
+                or containment_conceals(scene, subject, named)
+                or not _held_unplaced(scene, named, here, places=places)):
+            continue
+        wanted.pop(slot)
+        if slot == "relative_to":
+            # Retired WITH its relation, as `_retire_pose_relation` retires it.
+            for tied in ("relation", "constraint"):
+                if not actual.get(tied):
+                    wanted.pop(tied, None)
+            if not actual.get("detail") and re.search(
+                    r"\b%s\b" % re.escape(named), wanted.get("detail") or "", re.I):
+                wanted.pop("detail", None)
+    return all(str(actual.get(field) or "") == value for field, value in wanted.items())
+
+
 def _map_receipts(before, after, channel, changes, context=None):
     from world.spatial import _unique_entity_keyed, room_of, scene_room_id
     if not isinstance(changes, dict) or not changes:
@@ -114,7 +281,11 @@ def _map_receipts(before, after, channel, changes, context=None):
         if channel == "entities":
             get = lambda world: _unique_entity_keyed(world, subject)[1]
             valid = isinstance(desired, dict)
-            check = lambda world: bool(get(world)) and _subset(desired, get(world))
+            wanted = _entity_request(before, subject, desired) if valid else desired
+            check = lambda world: bool(get(world)) and _subset(wanted, get(world))
+        elif channel == "poses":
+            valid = _known(after, subject) and isinstance(desired, dict)
+            check = lambda world: _pose_holds(world, subject, desired)
         elif channel == "positions":
             destination = scene_room_id(after, desired)
             valid = bool(destination) and _known(after, subject)
@@ -145,7 +316,17 @@ def _map_receipts(before, after, channel, changes, context=None):
                     return True
                 if not isinstance(desired["near"], list):
                     return False
-                expected = list(desired["near"])
+                # `near` relates things the world POSITIONS, so the merge
+                # drops a fixture, a garment or the room from it
+                # (`normalize_scene_stations`); the body is at the table all
+                # the same. Judged as the merge keeps it, and only that: a
+                # body named there that stands in another room is still a
+                # refusal (chat 176 turn 2, chat 177 turns 16 and 19 --
+                # `near: [Mellisande, kitchen_table, ...]`, every seat taken
+                # at that table withheld for the table).
+                here = room_of(world, subject)
+                expected = [other for other in desired["near"]
+                            if not _held_unplaced(world, other, here)]
                 if any(not _known(world, other) or room_of(world, other) != room_of(world, subject)
                        for other in expected):
                     return False
@@ -375,15 +556,32 @@ def _weather_receipts(before, after, desired):
                    and not isinstance(desired[key], bool))
     invalid.update(key for key in ("sky", "precipitation") if key in desired
                    and (not isinstance(desired[key], str) or not desired[key].strip()))
-    if invalid:
+    # A WORD OUTSIDE THE VOCABULARY IS SILENCE FOR THAT AXIS, as the commit
+    # reads it ("a field it left out, or wrote in a word outside the
+    # vocabulary, keeps what was blowing" -- `prepare_scene_commit`). One such
+    # word refused the whole record: chat 176 turn 4, `wind: moderate` beside
+    # a readable `steady rain`. A record with nothing readable still proves
+    # nothing.
+    readable = {key: value for key, value in desired.items() if key not in invalid}
+    if not readable:
         return [_unresolved("weather", "", "invalid_desired_state",
                             "Unrecognized weather fields or values cannot prove a change.", fields=sorted(invalid))]
-    expected = normalize_weather(desired, before.get("weather"))
+    extra = {"ignored": sorted(invalid)} if invalid else {}
+    expected = normalize_weather(readable, before.get("weather"))
     expected.pop(DRIFT_STEP_KEY, None)
     def check(world):
         actual = world.get("weather")
         return isinstance(actual, dict) and bool(actual) and _subset(expected, actual)
-    return [_receipt("weather", "weather", check(after), check(before))]
+    if not check(after) and after.get("weather") == before.get("weather"):
+        # THE SCENE MERGE NEVER WRITES WEATHER; the commit does, from the
+        # beat's diff, after the merge. A span's own world therefore cannot
+        # show it, and its absence there is not the world refusing anything
+        # -- it is the commit's to receipt, as `conditions` is (chat 176
+        # turns 4, 7, 10: the rain that set in, withheld as never falling).
+        return [_unresolved("weather", "weather", "pending_commit_domain",
+                            "Weather is written at commit; the scene merge does not apply it.",
+                            scope="commit", **extra)]
+    return [_receipt("weather", "weather", check(after), check(before), **extra)]
 
 
 def _time_receipts(before, after, desired):
@@ -443,6 +641,17 @@ def _inventory_receipts(before, after, changes, patch):
             continue
         room = destination if kind == "room" else room_of(after, destination)
         anchor = _anchor_for_entity(after, room, destination) if kind == "anchor" and not carry else None
+        # A THING SET DOWN ON ANOTHER THING IS IN THAT THING'S ROOM, and no
+        # more precisely than that: the merge writes a station only where the
+        # destination IS one of the room's fixtures, and never over a station
+        # this span wrote itself (`derive_inventory_placements`). Demanding
+        # a fixture station it never writes refused every set-down onto a
+        # bowl, a plate or a cloth -- chat 177 turn 18, "sets the spoon down
+        # against the rim of the bowl", the spoon out of her hand and in the
+        # kitchen, withheld. The precise placement stays unproved, as the
+        # ledger's limit (`LEDGER_LIMIT`, below); the act is not refused.
+        stationed = any(_same(after, key, target)
+                        for key in ((patch or {}).get("stations") or {}))
         known_garment = any(_known_garment(world, target) for world in (before, after))
         def check(world):
             actual = _record(world, "contained", target)
@@ -455,9 +664,9 @@ def _inventory_receipts(before, after, changes, patch):
                          or _wardrobe_has_object(world, destination, target)))
             if actual is not _MISSING or not room or room_of(world, target) != room:
                 return False
-            if kind == "anchor":
+            if kind == "anchor" and anchor and not stationed:
                 station = _record(world, "stations", target)
-                return bool(anchor) and isinstance(station, dict) and station.get("at") == anchor
+                return isinstance(station, dict) and station.get("at") == anchor
             return True
         def cleanup_holds(world):
             from world.spatial import bearing_contact_holder, scene_names_body
@@ -492,11 +701,101 @@ def _inventory_receipts(before, after, changes, patch):
                         carry and relation == "worn" and _same(world, wearer, destination)):
                     return False
             return True
-        out.append(_receipt("inventory_ops", target,
-                            check(after) and cleanup_holds(after),
+        landed = check(after) and cleanup_holds(after)
+        if landed and kind == "anchor" and not carry and not anchor and not stationed:
+            # In the thing's room and out of every hand: all the world records
+            # of a set-down onto a thing that is not a fixture. The exact
+            # placement is the ledger's limit, never proof it did not happen.
+            out.append(_unresolved("inventory_ops", target, LEDGER_LIMIT,
+                                   "Placed in the destination's room; the ledger stations "
+                                   "a set-down only at a room fixture.", operation=index))
+            continue
+        out.append(_receipt("inventory_ops", target, landed,
                             check(before) and cleanup_holds(before), operation=index))
     return out or [_unresolved("inventory_ops", "", "missing_desired_state",
                                "A nonempty typed transfer is required.")]
+
+
+def _substance_ledger_limit(scene, raw):
+    """Whether a matter add the resolver discarded named, as its
+    destination, something held in the room the matter came from that the
+    substance ledger cannot hold (`_held_unplaced`) -- tea wiped off the
+    table onto the apron the wiper wears (chat 175 turn 8). Each room a body
+    stands in is asked, because a source that is a fixture another room also
+    names (that chat's `table`) places the matter in no room by itself."""
+    from world.spatial import _anchor_room_of, room_of
+    source, target = raw.get("source"), raw.get("target")
+    if not raw.get("substance") or not source:
+        return False
+    rooms = {room for room in (scene.get("positions") or {}).values()
+             if isinstance(room, str) and room}
+    return any((room_of(scene, source) == room
+                or _anchor_room_of(scene, source, prefer=room) == room)
+               and _held_unplaced(scene, target, room)
+               for room in rooms)
+
+
+def _substance_receipts(before, after, changes):
+    """Matter placed or taken away, read off the substance ledger the merge
+    wrote, through the merge's own resolver.
+
+    `substance_ops` had no verifier, so every act whose effect was matter --
+    tea poured, soup ladled, spilt and eaten, a tail shaken dry -- was held
+    back from every observer while the matter stood in the world (chats
+    175-177: 25 acts). An add is judged as `resolve_substance_ops`
+    resolves it, and verified when its pool stands after the span; an add the
+    resolver discards had nowhere the world holds to go, and is refused. A
+    removal that NAMES a record by id must name one the world held, as an
+    entity removal must; one that DESCRIBES matter is satisfied when none of
+    it remains."""
+    from world.spatial import (_same_pool, _standing_substance_pools,
+                               resolve_substance_ops, substance_selector_matches)
+    if not isinstance(changes, list) or not changes:
+        return [_unresolved("substance_ops", "", "missing_desired_state",
+                            "A nonempty typed substance operation is required.")]
+    out = []
+    for index, raw in enumerate(changes):
+        if not isinstance(raw, dict):
+            out.append(_unresolved("substance_ops", "", "invalid_operation",
+                                   "A substance operation must be an object.", operation=index))
+            continue
+        target = str(raw.get("target") or raw.get("substance_id") or raw.get("id") or "")
+        resolved = resolve_substance_ops(after, [_without_metadata(raw)])
+        if not resolved:
+            if _substance_ledger_limit(after, raw):
+                out.append(_unresolved("substance_ops", target, LEDGER_LIMIT,
+                                       "The world holds this destination where the matter "
+                                       "came from, as nothing the substance ledger can hold.",
+                                       operation=index))
+            else:
+                out.append(_unresolved("substance_ops", target, "invalid_or_missing_target",
+                                       "The matter names no source, substance or destination "
+                                       "the world holds.", operation=index))
+            continue
+        record = {key: value for key, value in resolved[0].items() if key != "op"}
+        if resolved[0].get("op") == "add":
+            described = {field: record[field] for field in
+                         ("amount", "amount_band", "detail", "scent", "speech_impediment")
+                         if record.get(field)}
+            def pooled(world, exact, record=record, described=described):
+                return any(_same_pool(world, standing, record)
+                           and (not exact or all(standing.get(field) == value
+                                                 for field, value in described.items()))
+                           for standing in _standing_substance_pools(world).values())
+            out.append(_receipt("substance_ops", target, pooled(after, False),
+                                pooled(before, True), operation=index))
+            continue
+        held = [standing for standing in _standing_substance_pools(before).values()
+                if substance_selector_matches(before, record, standing)]
+        if record.get("substance_id") and not held:
+            out.append(_unresolved("substance_ops", target, "unknown_removal_target",
+                                   "The removal names a record the world never held.",
+                                   operation=index))
+            continue
+        remains = any(substance_selector_matches(after, record, standing)
+                      for standing in _standing_substance_pools(after).values())
+        out.append(_receipt("substance_ops", target, not remains, not held, operation=index))
+    return out
 
 
 def _contact_matches(scene, desired, actual, *, exact_parts=False):
@@ -532,7 +831,7 @@ def _contact_receipts(before, after, changes):
                                _same(world, actor, c.get("target"))
                                for c in world.get("contacts") or [] if isinstance(c, dict))
         elif operation == "remove":
-            valid = all(_known(after, raw.get(side)) or _known(before, raw.get(side))
+            valid = all(_endpoint_known(after, raw, side) or _endpoint_known(before, raw, side)
                         for side in ("actor", "target"))
             check = lambda world: not any(_contact_matches(world, raw, c)
                                          for c in world.get("contacts") or [])
@@ -552,7 +851,7 @@ def _contact_receipts(before, after, changes):
         elif operation in {"add", "cross"}:
             desired = {k: v for k, v in raw.items()
                        if k not in _META | {"op", "crossed_target_part"}}
-            valid = _known(after, raw.get("actor")) and _known(after, raw.get("target"))
+            valid = _endpoint_known(after, raw, "actor") and _endpoint_known(after, raw, "target")
             if operation == "cross":
                 source = {**raw, "target_part": raw.get("crossed_target_part")}
                 valid = valid and bool(raw.get("crossed_target_part")) and bool(raw.get("target_interior"))
@@ -567,7 +866,13 @@ def _contact_receipts(before, after, changes):
                            for c in world.get("contacts") or [])
         else:
             valid = False
-        if not valid:
+        if not valid and operation in {"add", "remove"} and any(
+                _contact_ledger_limit(world, raw) for world in (after, before)):
+            out.append(_unresolved("contact_ops", target, LEDGER_LIMIT,
+                                   "The world holds this endpoint where the other one "
+                                   "stands, as nothing the contact ledger can carry.",
+                                   operation=index))
+        elif not valid:
             out.append(_unresolved("contact_ops", target, "invalid_or_missing_target",
                                    "The contact lacks established endpoints or a valid transition.",
                                    operation=index))
@@ -612,7 +917,46 @@ def _known_garment(scene, subject):
                        for wearer in scene.get("attire") or {}))
 
 
-def _attire_receipts(before, after, changes):
+#: The wardrobe fields this module can read back off the scene. Any other
+#: field the attire channel carries has no verifier yet, which is a
+#: limitation and never the world refusing the act (chat 176 turn 8: the
+#: apron's wiped streak, a `conditions` field, was withheld as "needs a
+#: domain-specific verifier" until `_conditions_hold` read it).
+_ATTIRE_VERIFIED_FIELDS = frozenset({
+    "wearing", "replace", "add", "remove", "state", "regions", "conditions"})
+
+
+def _conditions_hold(scene, wearer, marks, context=None):
+    """Whether every garment condition a span wrote stands on its garment,
+    as `story.attire.apply_flat_change` writes it: the handle resolved
+    against what the body wears, the text cleaned to the ledger's limit.
+    An empty text is silence, and a text this span also filed as the body's
+    own overlay is the overlay's, never the garment's
+    (`commit_attire._drop_overlay_conditions`)."""
+    if not isinstance(marks, dict) or not marks:
+        return True
+    from story import attire as attire_model
+    from persist.commit import _overlay_texts_by_subject
+    entry = _record(scene, "attire", wearer)
+    if not isinstance(entry, dict):
+        return False
+    regions = attire_model.normalize_regions(entry)
+    worn = [garment.get("name", "") for region in regions.values()
+            for garment in (region.get("garments") or []) if garment.get("name")]
+    own = _overlay_texts_by_subject(context or {}).get(
+        str(wearer or "").strip().casefold()) or set()
+    for handle, text in marks.items():
+        text = " ".join(str(text or "").split())
+        if not text or text.casefold() in own:
+            continue
+        garment = attire_model.resolve_garment(handle, worn) or str(handle)
+        if attire_model.condition_of(regions, garment) != attire_model._clean(
+                text, attire_model.CONDITION_LIMIT):
+            return False
+    return True
+
+
+def _attire_receipts(before, after, changes, context=None):
     if not isinstance(changes, dict) or not changes:
         return [_unresolved("attire", "", "missing_desired_state", "A desired wardrobe change is required.")]
     out = []
@@ -627,10 +971,10 @@ def _attire_receipts(before, after, changes):
             out.append(_unresolved("attire", wearer, "invalid_or_missing_target",
                                    "A desired change and established wearer are required."))
             continue
-        unsupported = set(desired) - {"wearing", "replace", "add", "remove", "state", "regions"}
+        unsupported = set(desired) - _ATTIRE_VERIFIED_FIELDS
         if unsupported:
-            out.append(_unresolved("attire", wearer, "unsupported_postcondition",
-                                   "This wardrobe field needs a domain-specific verifier.",
+            out.append(_unresolved("attire", wearer, "unsupported_channel",
+                                   "This wardrobe field has no scene postcondition verifier.",
                                    fields=sorted(unsupported)))
         def check(world):
             wearing = _worn(world, wearer)
@@ -643,6 +987,8 @@ def _attire_receipts(before, after, changes):
                 return False
             if any(any(_same(world, _garment_name(value), name) for name in wearing)
                    for value in desired.get("remove") or []):
+                return False
+            if not _conditions_hold(world, wearer, desired.get("conditions"), context):
                 return False
             direct = {key: desired[key] for key in ("state", "regions") if key in desired}
             return _subset(direct, _record(world, "attire", wearer)) if direct else True
@@ -745,8 +1091,10 @@ def verify_patch(before, after, patch, *, item_id=None, chrono_id=None, speciali
             receipts.extend(_inventory_receipts(before, after, changes, context))
         elif channel == "contact_ops":
             receipts.extend(_contact_receipts(before, after, changes))
+        elif channel == "substance_ops":
+            receipts.extend(_substance_receipts(before, after, changes))
         elif channel == "attire":
-            receipts.extend(_attire_receipts(before, after, changes))
+            receipts.extend(_attire_receipts(before, after, changes, context))
         elif channel == "overlays":
             receipts.extend(_overlay_receipts(before, after, changes))
         elif channel == "conditions":

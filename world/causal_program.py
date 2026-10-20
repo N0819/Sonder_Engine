@@ -73,6 +73,16 @@ def bind_items(transforms, scene=None):
         groups.setdefault(str(row.get("item_id") or 0), []).append(row)
     aliases = {"entity": {}, "room": {}}
     bindings, notes = {}, []
+    # A THING MINTED UNDER A NAME OF ITS OWN IS ITS OWN THING: the forms of
+    # every entity record this beat writes with a name, by key. An item's
+    # rows may move such a thing -- a pastry broken off the board it lay on,
+    # handed across -- without the thing being the item.
+    named_mints = {}
+    for row in rows:
+        records = (row.get("patch") or {}).get("entities") or {}
+        for key, record in (records.items() if isinstance(records, dict) else ()):
+            if isinstance(record, dict) and str(record.get("name") or "").strip():
+                named_mints.setdefault(key, set()).update(_forms(key, record))
     for item, changes in groups.items():
         names = {str(r.get("object_name") or "").strip().casefold()
                  for r in changes} - {""}
@@ -92,6 +102,22 @@ def bind_items(transforms, scene=None):
                 folded = str(reference).strip().casefold()
                 return [key for key, record in standing.items()
                         if isinstance(record, dict) and folded in _forms(key, record)]
+
+            def own_thing(key):
+                # A key this beat mints under a name the item's own name does
+                # not vouch for is a DIFFERENT THING, which an op of the
+                # item's merely moves or removes. Where the item names a
+                # standing record the entities channel below already refuses
+                # such a mint; an op admitted it by its object_id alone, and
+                # `held`, finding nothing standing under it, then fell back to
+                # the record the item names and aliased the new thing onto
+                # it. Chat 175 turn 9 (2026-10-19): item "pastry_board" minted
+                # `broken_pastry` ("half a warm pastry") and transferred it to
+                # Mellisande; the half pastry was rewritten into
+                # `pastry_board`, the board was renamed after it, put into her
+                # hand, and stopped existing as a board.
+                return (key in named_mints and not standing_keys(key)
+                        and not (named_mints[key] & names))
             candidates = []
             # Which candidates the item's own NAME vouches for, and which are
             # only the singleton fallback's guess. An item may legitimately
@@ -120,14 +146,17 @@ def bind_items(transforms, scene=None):
                         else:
                             guessed.add(key)
                 if kind == "entity":
+                    # An op's object is a candidate unless it is `own_thing`.
                     operations = (row.get("patch") or {}).get("inventory_ops") or []
                     for op in operations if isinstance(operations, list) else []:
                         key = op.get("object_id") if isinstance(op, dict) else None
-                        if isinstance(key, str) and key and key not in candidates:
+                        if isinstance(key, str) and key and key not in candidates \
+                                and not own_thing(key):
                             candidates.append(key)
                     removals = (row.get("patch") or {}).get("remove_entities") or []
                     for key in removals if isinstance(removals, list) else []:
-                        if isinstance(key, str) and key and key not in candidates:
+                        if isinstance(key, str) and key and key not in candidates \
+                                and not own_thing(key):
                             candidates.append(key)
             if not candidates:
                 if kind == "entity":

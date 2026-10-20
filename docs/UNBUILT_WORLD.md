@@ -1824,7 +1824,20 @@ At minimum the skip should not be silent: it is the one branch here that
 discards a write and says nothing.
 
 <a id="unbuilt-1-162"></a>
-### 1.162 The doorway cone reads no cell, so a body a pace from the door is graded by the room's size
+### 1.162 The doorway cone reads no cell, so a body a pace from the door is graded by the room's size -- CLOSED 2026-10-20
+
+**Closed 2026-10-20 (the review of chats 175-178).** Both halves this entry asked for
+are built: `_opening_view_cap` reads a body's measured cell
+(`spatial_fov.cell_in_doorway_view`: the doorway's own cells and one sector of
+straight in), and a body `near` one standing in the doorway shares the door
+(`spatial_fov.stands_in_doorway`). The size fallback now applies only where
+placement is genuinely unknown. Measured: chat 175's opening -- Mellisande in
+the doorway, Hinami a pace outside -- went from `conduct` both ways ("an
+indistinct figure") to `full`; chat 126 turn 9, the case below, from `conduct`
+to `full`. A body measured one pace along the door's wall now grades `none`
+where the fallback gave `conduct` -- the cone's own rule. Tests:
+`tests/test_a_name_heard_through_a_doorway_is_learned.py`,
+`tests/test_every_view_reads_a_body_alike.py`. The record follows.
 
 `world/spatial_senses._opening_view_cap` grades what a body in the next room
 shows through an opening: in the cone (the strip from the doorway through the

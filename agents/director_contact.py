@@ -18,6 +18,8 @@ from story.character_schema import (character_name, character_name_from_text,
                                     normalized_character_from_text)
 from world.spatial import (
     _anchor_room_of,
+    canonical_region,
+    contact_id,
     contact_is_momentary,
     contact_motion,
     contacts_of,
@@ -28,6 +30,8 @@ from world.spatial import (
     room_of,
     same_subject,
 )
+
+from .common import _check_player_contact_authority
 
 
 def _drop_momentary_contact_adds(raw, report=None):
@@ -228,17 +232,124 @@ def _validated_player_contact_assertions(
     return out
 
 
-def _merge_player_contact_assertions(assertions, resolved_ops, report=None):
+def _carries_player_authority(scene, assertion, player_name):
+    """Does this interpret contact assertion hold its endpoint by the
+    PLAYER'S authority -- her own body and her own acts, and nothing else?
+
+    Her own act (she is the actor) always does. A contact some other body
+    makes on hers does only where it says something the ledger did not: a
+    first-person refinement of where it touches her (`cervix` where the
+    ledger said `groin`), which is her sensation of her own body. One that
+    says again what already stands -- the same two endpoints
+    (`contact_id`), the same inside -- asserts nothing of hers, and the body
+    that makes it keeps its own conduct. Measured on chat 178 t29-t35: the
+    interpretation restated Mellisande's standing holds every beat, and the
+    merge then held her lips at Hinami's throat, her hand at the waist and
+    her fingertip at the groin against Mellisande's own moves
+    ("preserved player-declared contact endpoint 'throat'...") -- three of
+    the chat's six such blocks; the other three were Hinami's own acts and
+    still hold. A contact between two bodies neither of which is hers is
+    never hers to hold."""
+    actor = assertion.get("actor")
+    target = assertion.get("target")
+    if same_subject(scene, actor, player_name):
+        return True
+    if not same_subject(scene, target, player_name):
+        return False
+    key = contact_id(assertion)
+    inside = str(assertion.get("target_interior") or "").strip().casefold()
+    for contact in (scene.get("contacts") or []):
+        if isinstance(contact, dict) and key and contact_id(contact) == key \
+                and str(contact.get("target_interior") or "").strip().casefold() \
+                == inside:
+            return False
+    return True
+
+
+def _player_contacts_held(ops, declared_actions, player_name, scene=None,
+                          onset_scene=None, cast=()):
+    """`(ops kept, warnings)`: the resolve's contact ops without those that
+    give the PLAYER'S body an act on another body she did not declare.
+
+    THE PLAYER IS THE ACTOR OR SHE IS NOT, and the op stores which
+    (`common._check_player_contact_authority`, the reading, which names its
+    own reasons -- reach rather than vocabulary, bodies rather than
+    furniture). Chat 95 t40 put her tongue on a body her declared act never
+    reached, and the reading only warned -- and under the prose contract it
+    ran before the encoder's ops were folded, so it read an empty diff and
+    warned of nothing at all. A flagged op is not committed: a body acting
+    without its owner is not a soft property. A hold that already stands, in
+    the stored scene or the onset the player's own declaration made
+    (`onset_scene`), is the same contact said again and is never flagged --
+    chat 177 t14's prose warning ("Player act not declared this beat") came
+    with two such holds re-asserted, her seat on the chair and her hand on
+    the plate, which change nothing and stay -- and nor is anything the world
+    does TO her, which is not her act."""
+    if not isinstance(ops, list) or not player_name:
+        return ops, []
+    standing = set()
+    for source in (scene, onset_scene):
+        for contact in ((source or {}).get("contacts") or []):
+            if isinstance(contact, dict):
+                standing.add(str(contact.get("contact_id") or ""))
+                standing.add(contact_id(contact))
+    standing.discard("")
+    flagged = _check_player_contact_authority(
+        ops, declared_actions, player_name, standing, cast)
+    # HER BODY ANSWERING A TOUCH IS NOT HER REACHING FOR WHOEVER TOUCHES HER.
+    # A part of another body that is on or in hers -- standing, at the onset,
+    # or put there by this beat's own ops -- is something done TO her, and
+    # her body closing on it is the world's to write, as a flinch is
+    # (`prose_contract/director_resolve`: what bodies do involuntarily).
+    # Measured on chat 155 t31, the only beat of 155 stored resolves the
+    # reading flags at all: Mirelle's thumb inside her, and the encoder wrote
+    # `Hinami.vaginal muscle -> Mirelle.left thumb` twice, as a clench and a
+    # grip. Without this both are dropped; whether the player's reflexes are
+    # the Director's to write at all is the owner's to rule.
+    folded = str(player_name).strip().casefold()
+    touching = set()
+    for contact in [c for source in (scene, onset_scene)
+                    for c in ((source or {}).get("contacts") or [])] + list(ops):
+        if not isinstance(contact, dict) or str(
+                contact.get("op") or "add").strip().casefold() not in ("add", "cross"):
+            continue
+        if str(contact.get("target") or "").strip().casefold() == folded:
+            touching.add((str(contact.get("actor") or "").strip().casefold(),
+                          canonical_region(contact.get("actor_part"))))
+    flagged = [(index, warning) for index, warning in flagged
+               if (str(ops[index].get("target") or "").strip().casefold(),
+                   canonical_region(ops[index].get("target_part"))) not in touching]
+    if not flagged:
+        return ops, []
+    drop = {index for index, _warning in flagged}
+    return ([op for index, op in enumerate(ops) if index not in drop],
+            [warning + " Not committed as the player's conduct."
+             for _index, warning in flagged])
+
+
+def _merge_player_contact_assertions(assertions, resolved_ops, report=None, *,
+                                     scene=None, player_name=None):
     """Place onset truth before resolve ops without allowing silent coarsening.
 
     Resolve may end/move an asserted contact, but must say so with an explicit
     remove/clear first. A bare later add for the same acting part at a different
     endpoint is the common re-description drift (`cervix` -> `groin`), not an
     authored transition, and is dropped.
+
+    ONLY WHAT THE PLAYER'S AUTHORITY COVERS IS HELD (`_carries_player_
+    authority`), given the standing `scene` and the `player_name`: every
+    assertion is still placed first, as the onset truth it is, but only her
+    own acts and her own refinements of her own body hold an endpoint against
+    the resolve. Without a scene every assertion holds, as it always did.
     """
     assertions = [dict(a) for a in (assertions or []) if isinstance(a, dict)]
     result = list(assertions)
     released = set()
+    if isinstance(scene, dict) and player_name:
+        unheld = {index for index, assertion in enumerate(assertions)
+                  if not _carries_player_authority(scene, assertion, player_name)}
+    else:
+        unheld = set()
 
     def same_pair(left, right):
         return (str(left.get("actor") or "").casefold()
@@ -295,7 +406,8 @@ def _merge_player_contact_assertions(assertions, resolved_ops, report=None):
 
         blocked = False
         for index, assertion in enumerate(assertions):
-            if index in released or not same_pair(assertion, raw):
+            if index in released or index in unheld \
+                    or not same_pair(assertion, raw):
                 continue
             if (str(assertion.get("actor_part") or "").casefold()
                     != str(raw.get("actor_part") or "").casefold()):

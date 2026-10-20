@@ -1050,6 +1050,63 @@ def _presence_room_of(ctx, scene, name, reaction=None):
     return presence_room(scene, name, record) or None
 
 
+def _player_identity_forms(ctx, p_name, persona_id=None):
+    """Every spelling the beat's rows use for one human player, casefolded:
+    the identity keys the interpret stage files their rows under
+    (`persona:<id>`, and `persona:primary` for a chat with no persona id)
+    and the name itself. `persona_id` names an extra player; the default is
+    the chat's own."""
+    chat = getattr(ctx, "chat", None)
+    primary = persona_id is None
+    if primary and chat is not None:
+        try:
+            persona_id = chat.get("persona_id")
+        except AttributeError:
+            persona_id = getattr(chat, "persona_id", None)
+    forms = {str(p_name or "").strip().casefold()}
+    if persona_id is not None:
+        forms.add(f"persona:{persona_id}".casefold())
+    if primary:
+        forms.add("persona:primary")
+    forms.discard("")
+    return forms
+
+
+def _row_actor_name(ctx, element, p_name):
+    """Whose conduct one row of the player's sequence is, by the name the
+    beat's records use: `p_name` for the player's own row, the cast member's
+    name for `character:<id>`, an extra player's name for theirs, and the
+    actor as written for anyone else (a figure).
+
+    THE ROW SAYS WHOSE IT IS. `normalize_causal_ledger` copies the encoder's
+    `source_entity_id` onto every row as `actor`, and the interpret stage
+    files every row under the player's event ids whatever that actor is --
+    chat 177 t22's "Mellisande sits on the spare room bed" carried actor
+    `character:83` and event id `turn:4677:player:1:action`. A row with no
+    actor is a declaration written before rows carried one, and is the
+    player's, as it always was."""
+    actor = str((element or {}).get("actor")
+                or (element or {}).get("source_entity_id") or "").strip()
+    if not actor or actor.casefold() in _player_identity_forms(ctx, p_name):
+        return p_name
+    if actor.startswith("character:"):
+        for row in (getattr(ctx, "cast", None) or []):
+            try:
+                if str(row["id"]) == actor[len("character:"):]:
+                    sheet = normalized_character_of_row(row)
+                    return (character_name(sheet) if sheet is not None
+                            else actor) or actor
+            except (KeyError, TypeError):
+                continue
+        return actor
+    if actor.startswith("persona:"):
+        for extra in (getattr(ctx, "extra_players", None) or []):
+            if isinstance(extra, dict) and \
+                    f"persona:{extra.get('persona_id')}" == actor:
+                return str(extra.get("name") or actor)
+    return actor
+
+
 def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                          scene=None, p_room=None, player_forms=(), scrub=None):
     """F1/F4: the pipeline's own numbered causal record of this beat, built
@@ -1080,26 +1137,6 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
     # an annotated referent, so the map above cannot reach it.
     page_names = scrub or (lambda text: text)
     di = ctx.get("director_interpret") or {}
-    for e in (di.get("sequence") or []):
-        if not isinstance(e, dict):
-            continue
-        if not sequence_event_allowed(e, ctx.get("director_resolve") or {}):
-            continue
-        destination = player_deferred if (
-            e.get("depends_on") or str(e.get("phase") or "").casefold()
-            in ("continuation", "completion")) else raw
-        if e.get("type") == "speech" and e.get("text"):
-            destination.append((p_name, "speech", e["text"]))
-        elif e.get("type") == "communication":
-            surface = communication_surface(e)
-            if surface:
-                destination.append((p_name, "communication", surface))
-        elif e.get("type") == "action":
-            surface = adjudicated_player_action_text(
-                e, ctx.get("director_resolve") or {})
-            if surface:
-                destination.append((p_name, "action", page_names(
-                    resolve_action_referents(surface, e, referent_labels))))
 
     seen_cache = {}
     player_card = _player_sense_card(ctx)
@@ -1174,6 +1211,40 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                 if perceives:
                     raw.append((name, "action", page_names(
                         resolve_action_referents(surface, e, referent_labels))))
+
+    # THE PLAYER'S DECLARATION FIRST -- and only the rows that ARE hers. Each
+    # interpret row carries its own actor, and a row whose actor is another
+    # mind is that mind's act wherever it was filed, so it takes that mind's
+    # gate (overt, perceivable) and that mind's name. Filing every row under
+    # the player is how chat 177 t22's "Mellisande sits on the spare room
+    # bed" (actor character:83, event id turn:4677:player:1:action) reached
+    # the page as "you fold onto the mattress", and chat 178 t27/t31/t35's
+    # Mellisande poses reached the narrator as `reconciled_player_action`
+    # with actor "Hinami".
+    for e in (di.get("sequence") or []):
+        if not isinstance(e, dict):
+            continue
+        if not sequence_event_allowed(e, ctx.get("director_resolve") or {}):
+            continue
+        actor = _row_actor_name(ctx, e, p_name)
+        if actor != p_name:
+            _seq_events(actor, [e])
+            continue
+        destination = player_deferred if (
+            e.get("depends_on") or str(e.get("phase") or "").casefold()
+            in ("continuation", "completion")) else raw
+        if e.get("type") == "speech" and e.get("text"):
+            destination.append((p_name, "speech", e["text"]))
+        elif e.get("type") == "communication":
+            surface = communication_surface(e)
+            if surface:
+                destination.append((p_name, "communication", surface))
+        elif e.get("type") == "action":
+            surface = adjudicated_player_action_text(
+                e, ctx.get("director_resolve") or {})
+            if surface:
+                destination.append((p_name, "action", page_names(
+                    resolve_action_referents(surface, e, referent_labels))))
 
     covered = set()
     for r in (ctx.reaction_loop or {}).get("rounds") or []:
@@ -2132,7 +2203,24 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
     return out, warnings, fidelity_warnings
 
 
-def _narrator_player_declared(interpreted):
+def _is_own_row(event, own_forms=None):
+    """Is this row of a player's sequence that player's own conduct?
+
+    A row with no actor is (it predates rows carrying one). With `own_forms`
+    -- the player's identity keys and name, casefolded
+    (`_player_identity_forms`) -- an actor outside them is somebody else's.
+    Without them only a cast key is refused, because a cast member is never
+    the player."""
+    actor = str((event or {}).get("actor")
+                or (event or {}).get("source_entity_id") or "").strip()
+    if not actor:
+        return True
+    if own_forms:
+        return actor.casefold() in own_forms
+    return not actor.startswith("character:")
+
+
+def _narrator_player_declared(interpreted, own_forms=None):
     """Player conduct for prose, with spoken CONTENT structurally absent.
 
     The Director has already interpreted the raw input and perception has
@@ -2140,10 +2228,18 @@ def _narrator_player_declared(interpreted):
     targets, visible action and explicitly authored private thought.  It does
     not need a third copy of the player's quote, whose only observed use was
     semantic drift while trying not to echo it.
+
+    ONLY THE PLAYER'S OWN ROWS (`_is_own_row`). Another mind's row filed in
+    the player's sequence is that mind's act, and it reaches the page through
+    perception or not at all; carried here it became `action` -- chat 178
+    t27's `player_declared.action` was Mellisande's "bears down over Hinami on
+    the bed", and the page gave the player her weight.
     """
     interpreted = interpreted if isinstance(interpreted, dict) else {}
+    own_rows = [event for event in (interpreted.get("sequence") or [])
+                if isinstance(event, dict) and _is_own_row(event, own_forms)]
     sequence = []
-    for event in interpreted.get("sequence") or []:
+    for event in own_rows:
         if not isinstance(event, dict):
             continue
         if event.get("type") == "speech":
@@ -2174,8 +2270,8 @@ def _narrator_player_declared(interpreted):
             sequence.append(safe)
     asserted = [
         observable_action_text(event)
-        for event in interpreted.get("sequence") or []
-        if isinstance(event, dict) and event.get("type") == "action"
+        for event in own_rows
+        if event.get("type") == "action"
         and str(event.get("commitment") or "") != "contestable"
         and observable_action_text(event)
     ]
@@ -2187,7 +2283,10 @@ def _narrator_player_declared(interpreted):
         # answered here in a third way -- True on a speech element carrying no
         # text and on a whitespace-only `speech` mirror, where the helper and
         # `character._player_silence_note` both say the player said nothing.
-        "spoke": player_communicated(interpreted),
+        "spoke": player_communicated(
+            dict(interpreted, sequence=own_rows)
+            if len(own_rows) != len(interpreted.get("sequence") or [])
+            else interpreted),
         "action": asserted[0] if asserted else None,
         "private_thought": interpreted.get("private_thought"),
     }
@@ -2246,13 +2345,13 @@ def narrator(ctx, nonce):
     di = ctx.get("director_interpret") or {}
     p_lines = player_speech_lines(di)
 
-    player_declared = _narrator_player_declared(di)
-
     # (x or {}) rather than .get(key, {}): a hand-edited sheet with an
     # explicit "identity": null defeats the .get default and would crash
     # the narrator stage every turn.
     player_name = (pers.get("identity") or {}).get("name") or "Player" if isinstance(pers, dict) else "Player"
     player_pronouns = (pers.get("identity") or {}).get("pronouns", {}) if isinstance(pers, dict) else {}
+    player_declared = _narrator_player_declared(
+        di, _player_identity_forms(ctx, player_name))
     # Durable persistence of a newly detected person is deferred to commit
     # (commit.py's commit_narration_person) via this pending sink -- the
     # narrator stage itself must not write world state before the commit
@@ -2343,11 +2442,14 @@ def narrator(ctx, nonce):
     })
     # THE PLAYER TURNED THIS BEAT: their own row said where they looked
     # (`look`), so the frame carries it and the page says what they now
-    # face and what is at their back, once, on the beat it changed.
+    # face and what is at their back, once, on the beat it changed. Their
+    # OWN row (`_is_own_row`): another mind's look is not where she faces.
+    _own = _player_identity_forms(ctx, player_name)
     _player_looks = [
         str(e.get("look") or "").strip()
         for e in (ctx.get("director_interpret") or {}).get("sequence") or []
-        if isinstance(e, dict) and str(e.get("look") or "").strip()]
+        if isinstance(e, dict) and _is_own_row(e, _own)
+        and str(e.get("look") or "").strip()]
     if _player_looks and _spatial_fields.get("spatial_frame") is not None:
         _frame = _spatial_fields["spatial_frame"]
         _facing = None
@@ -2895,7 +2997,9 @@ def narrator_extra(ctx, nonce):
         # This seat's own floor over the Director's words about its conduct
         # (`_page_identity_scrub`), as `narrator` applies the primary's.
         player_declared = scrub_names_deep(
-            _narrator_player_declared(entry), _page_identity_scrub(
+            _narrator_player_declared(entry, _player_identity_forms(
+                ctx, extra.get("name") or "", persona_id=pid)),
+            _page_identity_scrub(
                 ctx, extra.get("name") or "",
                 ctx.get("outcome_scene") or get_scene(chat["id"], chat),
                 wget(chat["id"], "known", {}) or {},

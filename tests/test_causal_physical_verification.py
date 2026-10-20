@@ -141,12 +141,16 @@ def test_same_span_other_owners_explicit_grip_is_context_not_credit():
 
 
 # `conditions` left 2026-10-01: it has a verifier now (a body here, receipted
-# at commit), `tests/test_a_transient_act_is_not_refused.py`.
-@pytest.mark.parametrize("channel", ["substance_ops", "artifact_ops", "unknown_physical_effect"])
-def test_unverified_physical_channel_blocks_action_without_claiming_execution(channel):
+# at commit), `tests/test_a_transient_act_is_not_refused.py`. `substance_ops`
+# left 2026-10-20 (`tests/test_a_done_act_is_seen.py`), and the rule itself
+# turned: an unverified channel used to BLOCK its act, and chats 175-177 lost
+# 54 acts to that and its siblings. No verifier is a limitation -- the
+# receipt claims nothing (pending), and the act renders.
+@pytest.mark.parametrize("channel", ["artifact_ops", "unknown_physical_effect"])
+def test_unverified_physical_channel_neither_claims_execution_nor_un_sees_the_act(channel):
     receipt = execution_receipt(scene(), scene(), {"patch": {channel: [{"target": "tin"}]}})
     assert receipt["status"] == "pending"
-    assert receipt["action_status"] == "unresolved"
+    assert receipt["action_status"] != "unresolved"
 
 
 def test_pending_social_record_does_not_erase_a_proven_physical_act():

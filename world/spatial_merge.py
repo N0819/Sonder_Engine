@@ -29,6 +29,7 @@ from world.spatial_containment import (
     containment_broken_by_scale_change,
     derive_containment_from_contacts,
     derive_contained_positions,
+    derive_held_by_containment,
     derive_worn_containment,
     derive_inventory_placements,
     mint_transferred_objects,
@@ -53,7 +54,7 @@ from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               normalize_scene_poses, normalize_scene_stations,
                               release_moved_body_supports)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
-                              ROOM_NAME_DERIVED,
+                              ROOM_NAME_DERIVED, canonical_subject_map,
                               derived_room_name, is_derived_room_name,
                               normalize_scene_subjects,
                               same_subject)
@@ -1726,6 +1727,34 @@ def _seat_the_resting(merged) -> list:
     return out
 
 
+def _onto_standing_spellings(merged, ledger, incoming):
+    """This beat's writes to a subject-keyed ledger (`stations`, `poses`),
+    each keyed by the spelling that ledger already stands the being under.
+
+    THE FRESH WRITE WINS, as it does for `positions`
+    (`_dedup_duplicate_position_keys`). `normalize_scene_subjects` folds two
+    spellings of one being onto the canonical one and keeps the record
+    already standing there -- right for a stale stored twin, and wrong for
+    the beat's own write, which it then discards. Chat 177 turn 15: the
+    towel stood in the kitchen under its name, `the towel`, and the beat
+    stationed it at the table under its entity id; the fold kept the older
+    record, the towel never reached the table, and "carries the steaming pot
+    to the kitchen table and sets it down on the folded cloth" was receipted
+    as never having happened. Only a spelling the fold would map onto a key
+    ALREADY standing is moved; every other key is left exactly as written.
+    """
+    table = merged.get(ledger)
+    if not isinstance(incoming, dict) or not incoming \
+            or not isinstance(table, dict) or not table:
+        return incoming
+    mapping = canonical_subject_map(merged)
+    out = {}
+    for name, value in incoming.items():
+        canonical = mapping.get(str(name or "").strip().casefold(), name)
+        out[canonical if canonical != name and canonical in table else name] = value
+    return out
+
+
 def _station_moved_off_its_pin(current, incoming) -> bool:
     """Does this incoming station name an anchor that is not the one the
     standing `cell` was written with?
@@ -1902,8 +1931,10 @@ def merge_scene_with_diff(
     # comparison `invalidate_moved_body_pose_details` needs further down, and
     # the same shape `previous_scales` takes for the scale retirements.
     _positions_before = dict(merged.get("positions") or {})
-    incoming_stations = diff.get("stations") or {}
-    incoming_poses = diff.get("poses") or {}
+    incoming_stations = _onto_standing_spellings(
+        merged, "stations", diff.get("stations") or {})
+    incoming_poses = _onto_standing_spellings(
+        merged, "poses", diff.get("poses") or {})
 
     # A POSE DESCRIBES THE BODY WHERE IT STANDS, so a move that did not
     # happen leaves nothing behind. The movement backstop refuses a declared
@@ -2427,6 +2458,13 @@ def merge_scene_with_diff(
     # after every declared containment above (which it yields to) and
     # before hygiene, so the record it writes satisfies the same rules.
     derive_worn_containment(merged)
+    # ...AND WHERE A THING THAT NAMES ITS BEARER IS, IS ITS BEARER'S: `held_by`
+    # on the thing's own record (the opening's way of putting it in a hand)
+    # is folded into `contained` here, where every preview of the beat reads
+    # it, and not only at the commit (`derive_held_by_containment`; chat
+    # 176's opening told both minds the towel and the mug in Hinami's hands
+    # were lying on the floor). Same slot and same yielding as the wardrobe.
+    derive_held_by_containment(merged)
     # A holder the town stands is a holder the scene may keep a record
     # against, whichever door the record came through: the op path vouches
     # its destination inside `derive_inventory_placements`, and this vouches

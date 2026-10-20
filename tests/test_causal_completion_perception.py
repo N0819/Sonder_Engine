@@ -60,6 +60,36 @@ def test_failed_outcome_act_is_not_delivered_but_speech_gesture_and_audit_surviv
     assert "steps onto the broken platform" in str(events[0])
 
 
+def test_a_withheld_outcome_act_leaves_a_decision_row(temp_db):
+    """The outcome pass dropped a withheld act with a bare `continue`, so an
+    act the world never refused vanished from every view with nothing in the
+    pipeline drawer to say where it went (chats 175-177, 2026-10-19: 54 such
+    acts). It is said out loud now, as the onset pass says it."""
+    from core.pipeline_context import current_decision_sink
+    ctx = _beat(temp_db)
+    sequence, diff = _program("The Doctor", "resolve")
+    ctx["interaction_loop"]["rounds"][0]["result"]["sequence"] = sequence
+    ctx.character_results[int(ctx.cast[0]["id"])] = {"sequence": sequence}
+    ctx.director_resolve = {
+        "ledgers": [{}], "state_diff": diff,
+        "sequence": [{**row, "from_declaration": row["event_id"]} for row in sequence],
+        "resolved_event": "The Doctor steps onto the broken platform and raises two fingers.",
+        "dialogue_log": [{"speaker": "The Doctor", "exact_quote": sequence[1]["text"],
+                          "volume": "normal"}],
+    }
+    decisions = []
+    token = current_decision_sink.set(
+        lambda kind, subject, verdict, reason: decisions.append(
+            (kind, subject, verdict, reason)))
+    try:
+        out = perception.perception_outcome(ctx, "n0")
+    finally:
+        current_decision_sink.reset(token)
+    assert "steps onto the broken platform" not in out["views"]["player"]
+    assert ("act_percept", "The Doctor -> Hinami", "refused",
+            "the beat verified this act as unexecuted") in decisions
+
+
 def test_failed_onset_act_is_not_delivered_but_speech_and_transient_gesture_survive(temp_db):
     ctx = _beat(temp_db)
     sequence, diff = _program("Hinami", "interpret")
@@ -90,30 +120,57 @@ def test_a_sole_failed_action_cannot_return_through_resolved_prose_fallback(temp
     assert ctx["_composed_beat"].causal_worlds[0]["completion"]["status"] == "unresolved"
 
 
-@pytest.mark.parametrize("channel, seen", [("substance_ops", False), ("public_evidence", True)])
-def test_pending_physical_work_blocks_completed_action_while_social_record_can_wait(temp_db, channel, seen):
+def _one_act(temp_db, observable, wanted, specialist):
+    """The Doctor's act and his line, the act's span writing `wanted`."""
     ctx = _beat(temp_db)
     sequence, _ = _program("The Doctor", "resolve")
-    sequence[0].update(observable="raises a palm in greeting", attempt="raises a palm in greeting")
+    sequence[0].update(observable=observable, attempt=observable)
     sequence = sequence[:2]
-    wanted = {channel: [{"target": "The Doctor", "kind": "greeting"}]}
-    history = [{"chrono_id": 1, "item_id": 1, "specialist": "contact" if not seen else "social",
-                "patch": wanted}]
+    history = [{"chrono_id": 1, "item_id": 1, "specialist": specialist, "patch": wanted}]
     diff = {**wanted, "causal_steps": program_from_history(history, sequence, "resolve")}
     ctx["interaction_loop"]["rounds"][0]["result"]["sequence"] = sequence
     ctx.character_results[int(ctx.cast[0]["id"])] = {"sequence": sequence}
     ctx.director_resolve = {
         "ledgers": [{}], "sequence": [{**row, "from_declaration": row["event_id"]} for row in sequence],
-        "state_diff": diff, "resolved_event": "The Doctor raises a palm in greeting.",
+        "state_diff": diff, "resolved_event": "The Doctor " + observable + ".",
         "dialogue_log": [{"speaker": "The Doctor", "exact_quote": sequence[1]["text"], "volume": "normal"}],
     }
     out = perception.perception_outcome(ctx, "n0")
-    view = out["views"]["player"]
-    assert ("raises a palm in greeting" in view) is seen
+    return out["views"]["player"], ctx["_composed_beat"].causal_worlds[0]["completion"]
+
+
+@pytest.mark.parametrize("channel, specialist", [("artifact_ops", "objects"),
+                                                 ("public_evidence", "social")])
+def test_unverified_work_stays_pending_and_never_un_sees_the_act(temp_db, channel, specialist):
+    """NO VERIFIER IS A LIMITATION, never the world refusing the act. Until
+    2026-10-20 this test held the opposite for a PHYSICAL channel -- a
+    `substance_ops` row nothing could vouch for kept "raises a palm in
+    greeting" from the player -- and chats 175-177 lost 54 acts to that rule
+    and its siblings (`tests/test_a_done_act_is_seen.py`). The receipt still
+    claims nothing: it stays pending."""
+    view, completion = _one_act(temp_db, "raises a palm in greeting",
+                                {channel: [{"target": "The Doctor", "kind": "greeting"}]},
+                                specialist)
+    assert "raises a palm in greeting" in view
     assert "The platform will have to wait." in view
-    completion = ctx["_composed_beat"].causal_worlds[0]["completion"]
     assert completion["status"] == "pending"
-    assert completion["action_status"] == ("recorded" if seen else "unresolved")
+    assert completion["action_status"] == "recorded"
+
+
+@pytest.mark.parametrize("target, seen", [("The Doctor", True), ("a cloak nobody brought", False)])
+def test_matter_that_landed_renders_and_matter_with_nowhere_to_go_does_not(temp_db, target, seen):
+    """`substance_ops` is verified off the ledger the merge wrote. Matter that
+    landed is an act that happened; matter whose destination the world does
+    not hold is the world refusing the act, as the Doctor's platform is."""
+    view, completion = _one_act(
+        temp_db, "shakes the sea water off his hands",
+        {"substance_ops": [{"op": "add", "source": "The Doctor", "source_part": "hands",
+                            "substance": "sea water", "target": target,
+                            "placement": "surface", "target_part": "coat"}]},
+        "contact")
+    assert ("shakes the sea water off his hands" in view) is seen
+    assert "The platform will have to wait." in view
+    assert completion["action_status"] == ("applied" if seen else "unresolved")
 
 
 @pytest.mark.parametrize("requested", [["inventory_ops"], ["not_a_channel"]])

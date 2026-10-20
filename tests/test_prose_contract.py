@@ -762,7 +762,9 @@ def test_the_encoder_may_turn_a_doorway_and_build_nothing():
     out = director_prose.doorway_edits_only(events, scene, warn=warned.append)
     assert out[0]["transforms"] == [{"item": "door", "patch": {"rooms": {
         "parlour": {"adjacent": [{"to": "treatment_room", "barrier": "closed_door"}]}}}}]
-    assert warned and "new_attic" in warned[0]
+    # Both drops are said: the held parlour's redrawn desc, and the new attic.
+    assert any("new_attic" in w for w in warned)
+    assert any("'parlour'" in w and "desc" in w for w in warned)
 
 
 def test_a_new_place_named_as_minted_binds_without_asking(temp_db, monkeypatch):

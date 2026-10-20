@@ -185,10 +185,20 @@ def test_the_owners_sheet_is_half_what_it_was():
     (2026-10-12: a walk toward an office 6 of 6, against no movement at all
     4 of 4). The first put the sheet at about 19,890, over the 19,851
     ceiling -- unnoticed, because that day's gate ran a subset of the
-    suite; with both it is 20,025."""
+    suite; with both it is 20,025.
+
+    0.63 since 2026-10-20, from 0.62 (the sheet stood at 20,148 of the
+    20,176 ceiling): three core lines from the chats 175-178 review, 232
+    characters, which put it at 20,380. A happening no body performs has no
+    actor (`source_entity_id` "world"; a hen, a gate, a log and a window
+    filed under Mellisande, 175/177); a change is written in its record,
+    never only as an observable or a sound (a walk back upstairs with no
+    position, 178 turn 23; a latch checked as a click, 177 turn 20); and a
+    doorway of a held place is the encoder's, `rooms` granted or not (177
+    turn 19's door, opened with the channel stripped)."""
     sheet = prompts.unified_specialist_prompt(
         ["obligations", "entities", "sensory_events", "poses"], parts=[])
-    assert len(sheet) < 32543 * 0.62, len(sheet)
+    assert len(sheet) < 32543 * 0.63, len(sheet)
 
 
 def _scores(scores):

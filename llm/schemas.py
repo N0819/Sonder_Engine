@@ -3183,6 +3183,14 @@ class UnifiedEvent(LenientModel):
     difficulty: str = ""
     item_names: list[str] = Field(default_factory=list)
     transforms: list[LedgerPatchTransform] = Field(default_factory=list)
+    # NOT SOMETHING DONE THIS BEAT: a fact the input sets about how things
+    # already stand -- a correction of the record, an aside to the story's
+    # authors, a body's condition asserted. Its transforms are applied and
+    # nobody performs it, so nobody perceives it happen
+    # (`director_prose.standing_is_authorship`). Asked for by the encoder's
+    # interpret-stage piece (`prose_contract/encoder_interpret`), where the
+    # player's input is what enters the world.
+    standing: bool = False
 
 
 class UnifiedSpecialistOutput(LenientModel):

@@ -267,16 +267,24 @@ def _names_heard_in(quote, hearer_name, roster, scene, hearer_room,
     player asked as though Tamamo had asked it.
 
     THE RULE. A name is learned when it is SPOKEN in your hearing and the
-    person it names is in the room with you. That is the ordinary way people
-    learn names, it needs no model call, and it rides a channel the firewall
-    already governs -- the caller passes only lines this hearer's own view
-    received.
+    person it names is THERE FOR YOU -- in the room with you, or in your sight
+    from where you stand. That is the ordinary way people learn names, it
+    needs no model call, and it rides a channel the firewall already governs
+    -- the caller passes only lines this hearer's own view received.
 
     Two refusals, both of which keep this from becoming a leak:
 
-      * The named person must be PRESENT and in the hearer's room. Hearing
-        about somebody absent teaches you a name, not a face, and letting it
-        through would license recognising a stranger who walks in later.
+      * The named person must be PERCEIVED: in the hearer's room, or seen by
+        the hearer at any grade (`world.spatial.sighted_level`, the one rule
+        every reader that asks whether a mind saw a body uses). Hearing about
+        somebody absent teaches you a name, not a face, and letting it
+        through would license recognising a stranger who walks in later; a
+        body behind a shut door, or out of sight round a corner, is absent in
+        exactly that sense, whatever room it stands in. The same-room test
+        alone refused the opposite case: measured on chat 175, a woman
+        leaning in her open doorway said "I'm Mellisande" to the player on
+        the lane outside, the line reached the player whole through the open
+        door, and the player went fourteen turns without the name.
       * Your own name teaches you nothing, and a speaker who says a name
         already knew it.
     """
@@ -299,15 +307,32 @@ def _names_heard_in(quote, hearer_name, roster, scene, hearer_room,
                 _form_in(form, body) for form in forms.get(candidate, ()))
         if not mentioned:
             continue
-        # Present, and here. `_room_of` resolves through the scene's own
-        # subject identity, so a body recorded under an entity id still
+        # Present, and perceived. `_room_of` resolves through the scene's
+        # own subject identity, so a body recorded under an entity id still
         # matches the display name the line used.
         named_room = ((rooms_by_name or {}).get(candidate)
                       or (_room_of(scene, candidate) if scene else None))
-        if not named_room or (hearer_room and named_room != hearer_room):
+        if not named_room:
+            continue
+        if hearer_room and named_room != hearer_room \
+                and not _in_sight_of(scene, hearer_name, candidate, hearer_room):
             continue
         learned.append(candidate)
     return learned
+
+
+def _in_sight_of(scene, observer, target, observer_room) -> bool:
+    """Does `observer`, standing in `observer_room`, see `target` at all, at
+    any grade -- the cross-room half of `_names_heard_in`'s presence test.
+    Fails closed: no scene, a body the scene cannot place, or a scene that
+    does not put the observer in the room the caller says they hear from,
+    is not a sighting."""
+    if not scene or not observer or not target:
+        return False
+    if _room_of(scene, observer) != observer_room:
+        return False
+    from world.spatial import sighted_level
+    return sighted_level(scene, str(observer), str(target)) != "none"
 
 
 def charter_recognition_projection(cid, frame_id=None):

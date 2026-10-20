@@ -22,7 +22,8 @@ from llm import schemas
 from story.character_schema import (fold_identity_key,
                                     normalized_character_of_row)
 from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
-                           room_of, visible_adjacent_rooms)
+                           containment_record, kept_records, room_of,
+                           visible_adjacent_rooms)
 
 # `director_scopes` owns the ownership table and imports no
 # sibling, so this direction adds no cycle.
@@ -2981,6 +2982,13 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
             "resolution_notes": note,
             "categories": categories,
         }
+        # NOT SOMETHING DONE THIS BEAT (`UnifiedEvent.standing`): a fact the
+        # input set about how things already stand. Carried on both the row
+        # and its projection, and only where it is so, because the interpret
+        # stage reads it off the projection to keep the row's writes and
+        # leave its conduct out (`director.director_interpret`).
+        if entry.get("standing") is True:
+            normalized["standing"] = True
         ledger.append(normalized)
         projected = {
             "event_id": chrono_id,
@@ -3064,6 +3072,8 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
             })
         if categories:
             projected["category"] = categories[0]
+        if normalized.get("standing"):
+            projected["standing"] = True
         sequence.append(projected)
     out["ledgers"] = ledger
     out["causal_ledger"] = ledger
@@ -3109,6 +3119,59 @@ def causal_contact_rows(sc, room_ids):
     ]
 
 
+def causal_containment_rows(sc, room_ids):
+    """WHO KEEPS WHAT: the containment ledger's records whose thing or holder
+    stands in the causal aperture, as `{thing: {"in": holder, "mode": mode}}`
+    -- the record `contained` keeps, read through `containment_record`, so
+    the holder is spelled as `positions` spells that body.
+
+    The Director's standing relations were positions and contacts, and a
+    thing in a body's keeping is in neither: its position is DERIVED from its
+    bearer's room, and a hand-hold, where one was ever written, ages out of
+    the contact ledger. So the author saw a mug and a plate standing loose in
+    a room and gave them resting places, beat after beat, while Hinami held
+    them -- "the mug stands where it was left" (chat 176 turn 1), "The mug
+    sits where it was set down" (chat 177 turn 14), "the empty small plate on
+    the floor near her feet" (turn 22) -- and the encoder, which IS shown
+    `contained`, reconciled the two by filing set-downs as the player's acts.
+    """
+    selected = {str(room_id) for room_id in room_ids or [] if room_id}
+    contained = (sc or {}).get("contained") or {}
+    if not selected or not isinstance(contained, dict):
+        return {}
+    rows = {}
+    for subject in contained:
+        record = containment_record(sc, str(subject))
+        if record is None:
+            continue
+        if room_of(sc, str(subject)) in selected \
+                or room_of(sc, record["in"]) in selected:
+            rows[str(subject)] = record
+    return rows
+
+
+def causal_standing_relations(sc, index, room_ids):
+    """The standing relations the Director reads beside its world index, at
+    interpret and resolve alike: where each subject in the indexed rooms is,
+    which contacts touch the aperture, and -- where anything is kept --
+    what each body holds or carries (`causal_containment_rows`). Absent
+    when nothing is, so a payload with nothing carried is unchanged."""
+    sc = sc if isinstance(sc, dict) else {}
+    indexed = (index or {}).get("rooms") or {}
+    relations = {
+        "positions": {
+            str(subject): str(room_id)
+            for subject, room_id in (sc.get("positions") or {}).items()
+            if str(room_id) in indexed
+        },
+        "contacts": causal_contact_rows(sc, room_ids),
+    }
+    kept = causal_containment_rows(sc, room_ids)
+    if kept:
+        relations["contained"] = kept
+    return relations
+
+
 def causal_room_names(index):
     """{room id: name} for every room a causal world index names -- the
     slice and the rest of the map alike. The identity index the Director and
@@ -3138,6 +3201,9 @@ def causal_world_index(sc, here=None, *, room_ids=None,
     HOLDS and OPENS ONTO. Identity and place only. No state, no minds, no
     lore, no ledger values -- a Director that can see what a condition says
     is a Director being invited to resolve it, and resolving is the hands'.
+    A thing in a body's keeping is PLACED there, so its row names the keeper
+    (`contained`, the containment ledger's own record): where it is, not
+    what state it is in.
 
     ``room_ids`` narrows that index to the actors' immediate sight aperture.
     An exit may still name a room outside the slice -- adjacency is precisely
@@ -3234,6 +3300,8 @@ def causal_world_index(sc, here=None, *, room_ids=None,
     entity_names = {" ".join(str(record.get("name") or "").split()).casefold()
                     for record in entities.values() if isinstance(record, dict)}
     entity_names.discard("")
+    # Who keeps what, read once for every row below (`kept_records`).
+    kept_by = kept_records(sc)
     for key, room_id in positions.items():
         room = index.get(str(room_id))
         if room is None:
@@ -3246,6 +3314,15 @@ def causal_world_index(sc, here=None, *, room_ids=None,
         aloft = body_altitude_m(sc, key) if row["kind"] == "body" else 0.0
         if aloft:
             row["aloft_m"] = aloft
+        # IN WHOSE KEEPING, where a body holds or carries it: a thing in a
+        # hand is placed in the hand, and its row in the room was the
+        # author's only account of where it was -- so a plate Hinami held up
+        # the stairs was listed loose in each room she took it to and given
+        # a floor to lie on (chat 177 turn 22). The containment ledger's own
+        # record, the one the encoder and every view read.
+        kept = kept_by.get(str(key).strip().casefold())
+        if kept:
+            row["contained"] = dict(kept)
         room["holds"].append(row)
     # A CHARTER BODY STANDING IN THE SLICE IS HERE TOO. `positions` holds the
     # scene's own bodies; a charter body is a derived placement and never a

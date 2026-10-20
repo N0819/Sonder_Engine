@@ -6,17 +6,24 @@ can actually be certified. Unsupported commit domains remain pending.
 """
 from copy import deepcopy
 
-from world.causal_verification import TRANSIENT_EVENT
+from world.causal_verification import LEDGER_LIMIT, TRANSIENT_EVENT
 
 
-# These commit-side records describe knowledge, recognition, evidence, or
-# obligations. Their pending persistence does not undo an observed gesture.
-# Physical channels, unknown channels, and mixed scene/commit domains are not
-# exempt merely because a particular specialist owns them.
-DEFERRED_NONPHYSICAL_CHANNELS = frozenset({
-    "public_evidence", "introductions", "ratified_claims",
-    "contradicted_claims", "claim_dispositions", "obligations", "telling_ops",
-})
+#: Receipt codes that say what the LEDGER could not do, never that the world
+#: refused the act: an assigned hand that wrote nothing (`missing_effect`), a
+#: write that is an event (TRANSIENT_EVENT), a channel or field nothing can
+#: verify yet (`unsupported_channel`), and a write the world holds in a form
+#: its ledger cannot carry (LEDGER_LIMIT). None of them may un-see an act.
+#:
+#: `unsupported_channel` used to be exempt only for seven nonphysical
+#: channels -- knowledge, evidence, obligations -- on the reasoning that a
+#: physical channel nothing could vouch for should hold its act back. That
+#: is the ledger being thin, and it withheld acts by the dozen: chats
+#: 175-177 (2026-10-19), tea poured six times over, soup ladled, spilt and
+#: eaten, a tail shaken dry, a follow through a door, every one standing in
+#: the world while every observer was told it never happened.
+LIMITATION_CODES = frozenset({
+    "missing_effect", TRANSIENT_EVENT, "unsupported_channel", LEDGER_LIMIT})
 
 
 def execution_receipt(before, after, step):
@@ -73,7 +80,7 @@ def execution_receipt(before, after, step):
     # No verifier is a limitation, never a successful no-op or a failed act.
     pending = [effect for effect in unresolved
                if effect.get("code") in {"unsupported_channel", "pending_commit_domain",
-                                         TRANSIENT_EVENT}]
+                                         TRANSIENT_EVENT, LEDGER_LIMIT}]
     status = ("unresolved" if len(unresolved) > len(pending) else
               "pending" if pending else
               "applied" if any(e.get("status") == "applied" for e in effects) else
@@ -101,10 +108,14 @@ def execution_receipt(before, after, step):
     # `status` is untouched, so the gap stays in the audit ledger exactly
     # as it was -- the test's own title, "failed requested effects remain
     # auditable without becoming observed successes", is what this keeps.
+    #
+    # NO VERIFIER IS A LIMITATION, AND SO IS A LEDGER THAT CANNOT CARRY A
+    # TRUE WRITE (`LIMITATION_CODES`). What is left -- a requested state the
+    # world does not show, a target it does not hold where the act happens,
+    # a removal of something it never held -- is the world refusing the act,
+    # and only that un-sees it.
     action_unresolved = [effect for effect in unresolved
-                         if not (effect.get("code") in ("missing_effect", TRANSIENT_EVENT)
-                                 or (effect.get("code") == "unsupported_channel"
-                                     and effect.get("channel") in DEFERRED_NONPHYSICAL_CHANNELS)
+                         if not (effect.get("code") in LIMITATION_CODES
                                  or (effect.get("code") == "pending_commit_domain"
                                      and effect.get("scope") == "commit"))]
     action_status = ("unresolved" if action_unresolved else

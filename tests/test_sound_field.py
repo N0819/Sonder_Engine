@@ -247,12 +247,18 @@ def test_a_shout_through_a_closed_door_and_a_normal_voice_through_it():
     assert {v: heard[v] for v in ("mutter", "whisper", "loud", "shout")} == {
         "mutter": "none", "whisper": "none", "loud": "full", "shout": "full"}
     # REAL LOSSES (2026-09-14, later the same day): a shut solid door is 25
-    # dB, so a normal voice spoken right at it arrives in the next room in
-    # pieces, and a whisper not at all.
+    # dB, and a whisper spoken right at it does not arrive at all. A normal
+    # voice spoken at it, to a body standing at its other face, is heard
+    # whole (2026-10-20, `door_reach`): the two are at arm's reach through
+    # the door, less the door's 25 dB and nothing else. From 2026-09-14 the
+    # flood priced the pair as three paces of open air AS WELL AS the door
+    # and this line read `fragment`, which is how a question asked through a
+    # plank door at arm's reach became "What was that?" (chat 177 turn 21).
     sc = scene(two_rooms("closed_door"), {"S": "a", "L": "b"},
                {"S": {"at": "door:b"}, "L": {"at": "door:a"}})
-    assert levels(sc, "S", "L")["normal"] == "fragment"
+    assert levels(sc, "S", "L")["normal"] == "full"
     assert levels(sc, "S", "L")["whisper"] == "none"
+    assert levels(sc, "S", "L")["mutter"] == "none"
 
 
 def test_a_closed_door_holds_a_normal_voice_registered():

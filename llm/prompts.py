@@ -443,7 +443,7 @@ def encoder_definition(channel, language=None):
 
 
 def unified_specialist_prompt(channels, language=None, parts=None, *,
-                              extensions=()):
+                              extensions=(), stage=None):
     """The prose contract's encoder sheet, from its own card.
 
     The core, then every granted channel's `encoder.<channel>` chunk in
@@ -464,15 +464,22 @@ def unified_specialist_prompt(channels, language=None, parts=None, *,
     after the engine's chunks, under the card's own header
     (`prose_contract.encoder_extensions`), each channel's name and its
     extension's instructions verbatim. Their names are the grant: a channel
-    in `channels` with no entry here reaches no sheet."""
+    in `channels` with no entry here reaches no sheet.
+
+    `stage` is the Director stage the encoder writes for. At `interpret` the
+    sheet carries the card's interpret piece (`prose_contract.
+    encoder_interpret`) after the core: there the beat is the players' input
+    entering the world, and what the account says already stands, or what
+    another mind does, is not an event of it."""
     sections, overlay = _encoder_pieces(channels, language, parts,
-                                        extensions=extensions)
+                                        extensions=extensions, stage=stage)
     sheet = "\n\n".join(text.strip("\n") for _key, text in sections) + "\n"
     sheet += overlay
     return apply_prompt_policy(sheet, _language(language), "director_specialist")
 
 
-def _encoder_pieces(channels, language=None, parts=None, *, extensions=()):
+def _encoder_pieces(channels, language=None, parts=None, *, extensions=(),
+                    stage=None):
     """`([(key, text)], overlay)`: the encoder sheet's pieces in sheet order
     -- the core, each granted channel's chunk and its picked parts, the
     extensions block -- and the adult overlay it closes with, or "".
@@ -490,6 +497,9 @@ def _encoder_pieces(channels, language=None, parts=None, *, extensions=()):
         return str(override if override is not None else encoder[key])
 
     sections = [("core", piece("core"))]
+    if stage == "interpret":
+        sections.append(("encoder_interpret",
+                         str(card["prose_contract"]["encoder_interpret"])))
     hands = []
     for name, spec in card["specialists"].items():
         shipped = [channel for channel in spec["order"] if channel in granted]

@@ -603,9 +603,10 @@ def normalize_scene_subjects(scene: dict) -> list:
 
     So the data is made single-spelled instead. Run at merge, before position
     derivation, this leaves exactly one key per being in `positions`, `scales`,
-    `attire`, `stations`, `poses`, `contained` (keys and `in`), `contacts`
-    (actor/target), `substances` (source/target) and `following` -- after which `==` is correct again because
-    there is nothing left for it to be wrong about.
+    `attire`, `stations` (keys and `near`), `poses`, `contained` (keys and
+    `in`), `contacts` (actor/target), `substances` (source/target) and
+    `following` -- after which `==` is correct again because there is nothing
+    left for it to be wrong about.
 
     Two entries that fold together are a genuine conflict: the same being
     recorded twice, in two spellings, possibly in two rooms. The one already
@@ -681,6 +682,26 @@ def normalize_scene_subjects(scene: dict) -> list:
     if isinstance(contained, dict):
         for record in contained.values():
             fold_field(record, "in", "contained.in")
+    # A STATION'S `near` NAMES BEINGS TOO, and the fold left it out, so an
+    # entry spelled by entity id failed `normalize_scene_stations`' positions
+    # test right after this and the link was dropped as a body nowhere. Chat
+    # 177 turn 15: the beat stood Mellisande `near` the towel by its id
+    # while the towel stood in the kitchen under its name, the two lost each
+    # other, and the receipt withheld "sets it down on the folded cloth".
+    stations = scene.get("stations")
+    if isinstance(stations, dict):
+        for record in stations.values():
+            near = record.get("near") if isinstance(record, dict) else None
+            if not isinstance(near, list):
+                continue
+            spelled = []
+            for value in near:
+                target = canon(value) if isinstance(value, str) else value
+                if target != value:
+                    folded.append(("stations.near", str(value), target))
+                if target not in spelled:
+                    spelled.append(target)
+            record["near"] = spelled
     following = scene.get("following")
     if isinstance(following, dict):
         for record in following.values():

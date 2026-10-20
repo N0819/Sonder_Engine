@@ -12,7 +12,7 @@ from world.spatial_contacts import (
     contact_relation,
     same_owned_region,
 )
-from world.spatial_identity import canonical_subject, same_subject
+from world.spatial_identity import canonical_subject, room_of, same_subject, scene_names_body
 
 
 # Non-discrete matter which remains somewhere after a beat.  This is distinct
@@ -246,7 +246,7 @@ def _substance_id(record):
     return "substance:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
 
 
-def _substance_target_exists(scene, target):
+def _substance_target_exists(scene, target, here=None):
     """Whether a material destination is a live room, body, entity, or one
     room's own fixture.
 
@@ -255,8 +255,17 @@ def _substance_target_exists(scene, target):
     smeared with it. Without this the whole of a repair was discarded as
     "target is not present" -- six substance adds over one playerless run
     (Aldermill round 3, 2026-09-23), leaving only the rag and the hand
-    holding anything. An id two rooms both claim names no fixture, as for
-    contact."""
+    holding anything.
+
+    `here` is the room the matter comes from, and a fixture is read there
+    first, exactly as a contact reads it against its other endpoint's room:
+    a fixture id is unique within its room, and the one at hand is the one
+    matter can reach. Read scene-wide only, the name went ambiguous the moment
+    a second room had one -- chat 175's cottage kitchen and mill house both
+    held a `table`, and the grease and flakes a pastry left on the cottage
+    table were thrown away as "not present" (turn 11) while the contact
+    ledger kept the hands on that very table. An id two rooms claim and
+    neither is at hand still names no fixture."""
     label = str(target or "").strip()
     if not label:
         return False
@@ -277,7 +286,7 @@ def _substance_target_exists(scene, target):
         if any(same_subject(scene, alias, label)
                for alias in (entity.get("aliases") or [])):
             return True
-    return _anchor_room_of(scene, label) is not None
+    return _anchor_room_of(scene, label, prefer=here) is not None
 
 
 def _resolved_substance_add(scene, raw, report=None):
@@ -351,7 +360,10 @@ def _resolved_substance_add(scene, raw, report=None):
         if report:
             report("discarded substance add without a target or unique interior destination")
         return None
-    if not _substance_target_exists(scene, target):
+    # Where the matter comes from: the source's room, or the room of the
+    # fixture it is when it is one (a sill dripping onto the floor).
+    here = room_of(scene, source) or _anchor_room_of(scene, source)
+    if not _substance_target_exists(scene, target, here=here):
         if report:
             report("discarded substance add whose target is not present in the scene")
         return None
@@ -517,6 +529,37 @@ def _same_pool(scene, a, b) -> bool:
                              b.get("target"), right)
 
 
+def taken_in(scene, record) -> bool:
+    """Is this matter a body TOOK IN -- eaten, drunk, breathed or swallowed
+    from a thing or a place, rather than left inside it by another body?
+
+    WHAT A BODY EATS OR DRINKS IS CONSUMED. The ledger holds matter that
+    stays where it ended, and a body's inside is not a shelf: food and drink
+    pass on from where they went in. The op vocabulary has no word for that,
+    so an eaten spoonful is an `add` into the eater's interior like any
+    deposit -- and stood there for good. Chat 177 turns 17-22: "a spoonful
+    of soup" sat in Mellisande's mouth from supper to bed, and her memory
+    kept "My mouth registers a spoonful of soup of soup being deposited
+    within it".
+
+    Structural, and the matter is never named: matter placed INSIDE a body
+    from a source that is NO BODY -- a vessel, a fixture, a room -- is taken
+    in. Matter a body leaves inside another body (`source` a body) is a
+    deposit, and stands, as does a body's own product at its own region.
+    Measured over every checkpoint in the play database (2026-10-20): of 67
+    distinct interior records, 3 had a body's inside as destination and no
+    body as source, and all three were taken in -- a potion drunk from its
+    vial (chat 111) and the soup above, twice (chats 177/178); the other 64,
+    a body's matter inside a body, stand as they did."""
+    if not isinstance(record, dict) \
+            or _substance_placement(record.get("placement")) != "interior":
+        return False
+    source, target = record.get("source"), record.get("target")
+    if not source or not target or same_subject(scene, source, target):
+        return False
+    return scene_names_body(scene, target) and not scene_names_body(scene, source)
+
+
 def _record_region(record) -> str:
     """Where on its target a standing record sits: the enclosure, else the part."""
     return _substance_text(record.get("target_interior"), 160) \
@@ -662,6 +705,11 @@ def _standing_substance_pools(scene) -> dict:
         if _substance_placement(record.get("placement")) != "interior" \
                 and _substance_text(record.get("target_interior"), 160):
             record["target_interior"] = ""
+        # Matter a body took in was consumed the beat it went in
+        # (`taken_in`); a row a scene saved before that rule is shed here,
+        # so the ledger heals on the next merge.
+        if taken_in(scene, record):
+            continue
         record["substance_id"] = _substance_id(record)
         pooled_id = next((sid for sid, standing in current.items()
                           if _same_pool(scene, standing, record)), None)
@@ -720,6 +768,11 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
                     current.pop(sid, None)
             record.pop("source_substance_id", None)
             record.pop("portion", None)
+            # Taken in, it left its origin above and is consumed: the beat's
+            # event delivers it (`resolve_substance_ops`), and nothing of it
+            # stands inside the body afterwards (`taken_in`).
+            if taken_in(scene, record):
+                continue
             if pooled_id is not None:
                 # The standing record keeps its own id, so a removal by either
                 # id's selector still finds one row rather than half of two.
@@ -728,24 +781,31 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
             current[record["substance_id"]] = record
             continue
 
-        def matches(record):
-            sid = raw.get("substance_id")
-            if sid and str(record.get("substance_id")) != sid:
-                return False
-            for field in ("source", "target"):
-                if raw.get(field) and not same_subject(
-                        scene, record.get(field), raw[field]):
-                    return False
-            for field in ("substance", "placement", "target_interior", "target_part"):
-                if raw.get(field) and _substance_text(
-                        record.get(field), 160).casefold() != raw[field].casefold():
-                    return False
-            return True
-
         current = {sid: record for sid, record in current.items()
-                   if not matches(record)}
+                   if not substance_selector_matches(scene, raw, record)}
     scene["substances"] = list(current.values())
     return scene
+
+
+def substance_selector_matches(scene: dict, selector: dict, record: dict) -> bool:
+    """Whether a resolved remove/clear `selector` (`resolve_substance_ops`)
+    names this standing `record`.
+
+    Hoisted out of `apply_substance_ops` so the receipt that verifies a
+    removal (`causal_verification._substance_receipts`) asks the question the
+    apply answered, not a second spelling of it: one selector, one answer."""
+    sid = selector.get("substance_id")
+    if sid and str(record.get("substance_id")) != sid:
+        return False
+    for field in ("source", "target"):
+        if selector.get(field) and not same_subject(
+                scene, record.get(field), selector[field]):
+            return False
+    for field in ("substance", "placement", "target_interior", "target_part"):
+        if selector.get(field) and _substance_text(
+                record.get(field), 160).casefold() != selector[field].casefold():
+            return False
+    return True
 
 
 def substances_for(scene: dict, name: str) -> list[dict]:

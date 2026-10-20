@@ -249,9 +249,14 @@ def already_happened(ctx):
     # characters of reasoning and once opened "The stair brought them up",
     # and neither time resolved the pilot's own walk, line or knock.
     waiting = _waiting_spans(interp)
-    prose = (((interp.get("orchestration") or {}).get("prose_contract") or {})
-             .get("prose"))
-    if prose and not waiting:
+    record = ((interp.get("orchestration") or {}).get("prose_contract") or {})
+    prose = record.get("prose")
+    # NOR HAS AN ACT THE STAGE REFUSED (`conduct_is_its_owners`): the prose
+    # still tells another mind's step the interpretation wrote for it, and
+    # that mind has not taken it -- it was handed to them as an offer, or was
+    # only the standing scene said again. Told from the kept rows, as a
+    # waiting walk is.
+    if prose and not waiting and not record.get("conduct_refused"):
         return str(prose)
     lines = []
     for row in interp.get("causal_ledger") or interp.get("ledgers") or []:
@@ -1403,6 +1408,39 @@ def room_agent_enabled() -> bool:
     return str(get_setting(ROOM_AGENT_SETTING) or "1").strip() not in ("0", "false", "off")
 
 
+#: The room channel whose encoder chunk BUILDS places (`encoder.rooms`):
+#: room creation, interiors, anchors, zones. Under a room author it is the
+#: author's sheet; the encoder's own use of the channel there is the doorway
+#: the core card teaches (`sheet_channels`).
+ROOM_BUILDING_CHANNEL = "rooms"
+
+
+def sheet_channels(channels, places_elsewhere):
+    """The channels whose encoder chunks an encoder sheet carries.
+
+    A DOOR'S STATE IS WORLD STATE, and a granted channel is never dropped
+    silently. Under a room author (`places_authored_elsewhere`) every room
+    channel used to be stripped from the encoder whether or not the author
+    ran this beat -- and it runs only for a place reserved or developed. So
+    on the owner's chat 177 turn 19 the decision model granted `rooms` at
+    0.74, nothing was reserved or entered, no author ran, and "Mellisande
+    shoves open the sticking door of the second room and enters" wrote no
+    barrier anywhere: the door stood `closed_door` behind three bodies for
+    the rest of the story, with no warning. Across chats 175-178 the decision
+    model granted `rooms` in 8 of 100 stages, the author ran in one of them,
+    and the encoder held `rooms` in none of its 302 calls.
+
+    So the encoder HOLDS every room channel it is granted, and is told so
+    (`granted_tools`). What it does not carry under a room author is the
+    room-building chunk: building a place is the author's, and the doorway of
+    a place the world holds -- the one room write that stays the encoder's --
+    is taught by the core card's own paragraph for it
+    (`doorway_edits_only` holds the writes to that)."""
+    if not places_elsewhere:
+        return list(channels)
+    return [channel for channel in channels if channel != ROOM_BUILDING_CHANNEL]
+
+
 def _room_payload(ctx, sc, prose, model_payload, view, extras, reserved, develop):
     payload = {
         "prose": prose,
@@ -1624,6 +1662,75 @@ def keep_new_places(rooms_answer, scene, develop=(), warn=None):
     return rooms_answer
 
 
+#: The barriers that are a DOOR, whichever state it is in: whether it stands
+#: open or shut -- fastened included, which `normalize_barrier` folds into
+#: `closed_door` -- is that door's state, never what the doorway is.
+DOOR_STATE_BARRIERS = frozenset({"open_door", "closed_door"})
+
+
+def doors_keep_their_state(rooms_answer, scene, warn=None):
+    """A room design never opens or shuts a door the world holds.
+
+    A design arrives whole: a planned room developed the beat a body enters
+    it, or one prepared between turns and installed when it came into view,
+    carries every doorway it draws WITH a barrier -- the plan's, or whatever
+    stood when it was drawn. On a doorway the world already holds that
+    barrier is a second account of the door's state, older than the beat.
+    Chat 177 turn 20: the second room, developed that beat from a design
+    prepared between turns, wrote its door `closed_door`. Had turn 19's
+    "shoves open the sticking door" been recorded, the design would have
+    shut it again; as it was, the door stayed shut behind three bodies to
+    the end.
+
+    What a doorway IS -- an opening, a door, a window, a wall -- stays the
+    design's to say. Whether a door in it stands open or shut is the world's,
+    and only the beat's own events change it. So where the standing barrier
+    and the designed one are both a door, the design's barrier is dropped and
+    the standing one stands; the rest of the edge (its name, material,
+    description) merges as designed, since a barrier left out is silence to
+    the merge (`spatial_merge._merge_room`)."""
+    from world.spatial import normalize_barrier
+    rooms = (rooms_answer or {}).get("rooms") if isinstance(rooms_answer, dict) else None
+    held = ((scene or {}).get("rooms") or {}) if isinstance(scene, dict) else {}
+    if not isinstance(rooms, dict) or not rooms or not held:
+        return rooms_answer
+
+    def standing(room_id, to_id):
+        for a, b in ((room_id, to_id), (to_id, room_id)):
+            for edge in ((held.get(a) or {}).get("adjacent") or []) \
+                    if isinstance(held.get(a), dict) else []:
+                if isinstance(edge, dict) and str(edge.get("to")) == str(b) \
+                        and str(edge.get("barrier") or "").strip():
+                    return str(edge["barrier"])
+        return None
+
+    kept_doors = []
+    out = {}
+    for rid, room in rooms.items():
+        if not isinstance(room, dict) or not room.get("adjacent"):
+            out[rid] = room
+            continue
+        edges, touched = [], False
+        for edge in room["adjacent"]:
+            if isinstance(edge, dict) and edge.get("to") \
+                    and str(edge.get("barrier") or "").strip():
+                was = standing(rid, edge["to"])
+                if was is not None \
+                        and normalize_barrier(was) in DOOR_STATE_BARRIERS \
+                        and normalize_barrier(edge["barrier"]) in DOOR_STATE_BARRIERS:
+                    if str(edge["barrier"]).strip() != was.strip():
+                        kept_doors.append((rid, str(edge["to"]), was))
+                    edge = {k: v for k, v in edge.items() if k != "barrier"}
+                    touched = True
+            edges.append(edge)
+        out[rid] = dict(room, adjacent=edges) if touched else room
+    if warn:
+        for rid, to_id, was in kept_doors:
+            warn(f"a room design wrote the door {rid!r} -> {to_id!r} in another "
+                 f"state; it stands as the world holds it ({was!r})")
+    return dict(rooms_answer, rooms=out)
+
+
 def doorway_edits_only(events, scene, new_ids=(), warn=None):
     """The encoder's room writes, kept to what it may change: the doorway
     between two places, and nothing else of a place the world holds. A room
@@ -1651,12 +1758,27 @@ def doorway_edits_only(events, scene, new_ids=(), warn=None):
                         warn(f"encoder wrote {rid!r}, a place the world does not "
                              "hold; a new place is the room author's, named new:")
                     continue
-                edges = [{"to": edge["to"], "barrier": edge["barrier"]}
-                         for edge in ((room or {}).get("adjacent") or [])
-                         if isinstance(edge, dict) and edge.get("to") in known
-                         and str(edge.get("barrier") or "").strip()]
+                room = room if isinstance(room, dict) else {}
+                edges, left = [], []
+                for edge in room.get("adjacent") or []:
+                    if isinstance(edge, dict) and edge.get("to") in known \
+                            and str(edge.get("barrier") or "").strip():
+                        edges.append({"to": edge["to"], "barrier": edge["barrier"]})
+                    else:
+                        left.append(edge.get("to") if isinstance(edge, dict) else edge)
                 if edges:
                     kept[rid] = {"adjacent": edges}
+                # WHAT IS DROPPED IS SAID. Of a place the world holds only a
+                # doorway's barrier is the encoder's; anything else it wrote
+                # there -- the room's light, a re-description, an edge to a
+                # place nobody holds or with no barrier -- used to vanish
+                # without a word (chat 175 turn 6: `lane_end: {light: dim}`).
+                others = sorted(key for key in room if key != "adjacent")
+                if warn and (others or left):
+                    warn(f"encoder's write to {rid!r}, a place the world holds, "
+                         "kept only its doorways' barriers; dropped "
+                         + ", ".join([*others, *(f"the edge to {to!r}"
+                                                 for to in left)]))
             patch = {k: v for k, v in patch.items() if k != "rooms"}
             if kept:
                 patch["rooms"] = kept
@@ -2077,9 +2199,311 @@ def _near_the_kept(events, scene, kept):
     return out
 
 
+#: The fields of a pose that say how a body stands, against which a pose an
+#: event writes is read as a restatement (`_restates_how_things_stand`). Its
+#: `detail` and `constraint` are wording, not position: a re-worded detail on
+#: an unchanged posture is the same pose said again.
+POSE_STANDING_FIELDS = ("posture", "support", "relative_to", "relation")
+
+
+def _fold(value):
+    return " ".join(str(value or "").split()).casefold()
+
+
+def _record_of(table, who):
+    """`table[who]`, by the subject's folded spelling."""
+    if not isinstance(table, dict):
+        return None
+    if who in table:
+        return table[who]
+    folded = _fold(who)
+    return next((value for key, value in table.items() if _fold(key) == folded),
+                None)
+
+
+def _restates_how_things_stand(scene, event):
+    """Does every write this event makes only say again what the scene holds?
+
+    Read off the typed records, never the words: a pose whose posture,
+    support and relation are the standing ones, a contact whose two endpoints
+    stand already (`contact_id`), a body in the room it is in, a station at
+    the anchor it holds. Anything else -- another channel, a removal, a line,
+    a walk -- is a change, and so is an event that writes nothing at all,
+    because what it did cannot be read off any record. Fails toward "a
+    change", which only ever costs an offer."""
+    if not isinstance(scene, dict) or not isinstance(event, dict):
+        return False
+    if event.get("speech") or isinstance(event.get("movement"), dict):
+        return False
+    patches = [transform.get("patch") for transform in event.get("transforms") or ()
+               if isinstance(transform, dict) and isinstance(transform.get("patch"), dict)
+               and transform.get("patch")]
+    if not patches:
+        return False
+    from world.spatial import contact_id, room_of
+    standing = {contact_id(contact) for contact in scene.get("contacts") or ()
+                if isinstance(contact, dict)} - {""}
+    for patch in patches:
+        for channel, value in patch.items():
+            if channel == "poses" and isinstance(value, dict):
+                for who, pose in value.items():
+                    now = _record_of(scene.get("poses"), who)
+                    if not isinstance(pose, dict) or not isinstance(now, dict):
+                        return False
+                    if any(_fold(pose.get(field)) != _fold(now.get(field))
+                           for field in POSE_STANDING_FIELDS):
+                        return False
+            elif channel == "contact_ops" and isinstance(value, list):
+                for op in value:
+                    if not isinstance(op, dict) or _fold(op.get("op") or "add") != "add":
+                        return False
+                    if contact_id(op) not in standing:
+                        return False
+            elif channel == "positions" and isinstance(value, dict):
+                for who, room in value.items():
+                    if not room or room_of(scene, who) != room:
+                        return False
+            elif channel == "stations" and isinstance(value, dict):
+                for who, station in value.items():
+                    now = _record_of(scene.get("stations"), who)
+                    if not isinstance(station, dict) or not isinstance(now, dict) \
+                            or _fold(station.get("at")) != _fold(now.get("at")):
+                        return False
+            else:
+                return False
+    return True
+
+
+def conduct_is_its_owners(events, event_inputs, identity_index, scene=None,
+                          warn=None):
+    """`(kept, refused)`: AT INTERPRET A MIND ACTS ONLY ON ITS OWN
+    DECLARATION, and the only declarations there are the players'.
+
+    The interpret stage writes what the players' input amounts to, before
+    anyone answers it; every other mind's conduct is decided afterwards, by
+    its own agent, and resolved at resolve. So an event recorded as the
+    conduct of a registered mind (`persona:<id>`, `character:<id>`) that has
+    no input in `event_inputs` is nobody's declaration: it is the Director
+    restating where that mind already is, or authoring what it does next,
+    and either way it was filed under the player's input. Measured: chat 177
+    t22, "Mellisande sits on the spare room bed" (`source_entity_id`
+    character:83; she had been standing by the door, and the player only
+    spoke) went out as the player's event `turn:4677:player:1:action` and the
+    page read "you fold onto the mattress"; chat 178 t27/t31/t35 the same for
+    three of Mellisande's poses, and t27's carried seven contacts. Over every
+    stored interpret whose encoder events are on record (148 steps, 342
+    events) this refuses 9, each another mind's act: 6 that would have
+    changed the world, 3 that only said it again.
+
+    REFUSED, NOT RE-FILED. Re-filed under the mind it belongs to, the row
+    would still be conduct nobody declared -- every observer would see it
+    happen, and a restated pose would be seen happening again. The rule is
+    the one `a_walk_is_its_owners` holds for walks (an event recorded as the
+    moved mind's own conduct is dropped whole), held here for every act at
+    the one stage where no other mind has spoken yet. Its writes go with it,
+    because a mind's state changes by its own conduct, the world's, or what
+    the player does to it -- the player's own events, which stay.
+
+    NOTHING THE PLAYER WROTE IS LOST. An event that would change how things
+    stand is handed to that mind as an authorial offer -- the route
+    `director_views._route_authorial_npc_beat` already gives a player who
+    authors a character's response -- so its own agent takes it up or lets it
+    pass. One that only restates the standing records
+    (`_restates_how_things_stand`) offers nothing and is simply refused.
+
+    A figure (no registered mind) is the world's and is kept; so is any event
+    whose source is a declarer. `refused` rows are `{mind, name, event,
+    offer}`."""
+    declarers = set()
+    for entry in event_inputs or []:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("authority_mode") or "").casefold() in WORLD_AUTHORITY:
+            continue
+        who = str(entry.get("entity_id") or "").strip()
+        if who:
+            declarers.add(who)
+    names = {str(key): str(name or "").strip()
+             for key, name in (identity_index or {}).items()}
+    key_of = {name.casefold(): key for key, name in names.items() if name}
+    key_of.update({key.casefold(): key for key in names})
+
+    def mind(label):
+        text = str(label or "").strip()
+        key = key_of.get(text.casefold()) or (text if _MIND_KEY.match(text) else None)
+        return key if key and _MIND_KEY.match(key) else None
+
+    kept, refused = [], []
+    for event in events or []:
+        if not isinstance(event, dict):
+            kept.append(event)
+            continue
+        who = mind(event.get("source_entity_id"))
+        if not who or who in declarers:
+            kept.append(event)
+            continue
+        refused.append({
+            "mind": who, "name": names.get(who) or who,
+            "event": str(event.get("event") or "").strip(),
+            "offer": not _restates_how_things_stand(scene, event),
+        })
+    if refused and warn:
+        warn("a mind's conduct is its own: refused %d act(s) the interpretation "
+             "wrote for %s, who declared nothing this beat (%d handed to them "
+             "as an offer)"
+             % (len(refused), ", ".join(sorted({row["name"] for row in refused})),
+                sum(1 for row in refused if row["offer"])))
+    return kept, refused
+
+
+def is_standing(event):
+    """Is this event a fact about how things stand rather than something done
+    this beat? (`UnifiedEvent.standing`, read leniently: an encoder writes
+    a JSON true, and a repair's answer may carry it as text.)"""
+    value = (event or {}).get("standing") if isinstance(event, dict) else None
+    return value is True or _fold(value) in ("true", "yes", "1")
+
+
+def standing_is_authorship(events, event_inputs, identity_index, warn=None):
+    """`(kept, refused)`: a standing event stands only where its source may
+    author the world.
+
+    A STANDING EVENT IS STATE, NOT CONDUCT (`UnifiedEvent.standing`): what the
+    input sets about how things already are -- a correction of the record, an
+    aside to the story's authors, a body's condition asserted. It is written
+    through the channel that owns the fact and nobody performs it, so nobody
+    perceives it happen. Measured on chat 178 t23: the owner wrote "You left
+    the plates and cups downstairs (write a note to the encoder so that it
+    can fix the position of the dinnerware ...)", and with nowhere for a
+    correction to go one take had Hinami write a note "for the encoder"
+    in-world and the kept take walked her down to the kitchen and back --
+    which Mellisande, upstairs, then saw and remembered.
+
+    Setting how things stand is AUTHORSHIP, the `world` grant of the
+    player-authority ladder (`story.scene.PLAYER_AUTHORITY_GRANTS`): the
+    default `world_author` grants it and the narrower rungs do not. A
+    standing event whose source's input was handed a mode without it is
+    refused whole, and said so -- never re-filed as conduct, which would
+    make a correction something a body did."""
+    from story.scene import PLAYER_AUTHORITY_GRANTS, normalize_player_authority
+    mode_of = {}
+    for entry in event_inputs or []:
+        if isinstance(entry, dict) and str(entry.get("entity_id") or "").strip():
+            mode_of[str(entry["entity_id"]).strip()] = normalize_player_authority(
+                entry.get("authority_mode"))
+    names = {str(key): str(name or "").strip()
+             for key, name in (identity_index or {}).items()}
+    key_of = {name.casefold(): key for key, name in names.items() if name}
+    key_of.update({key.casefold(): key for key in names})
+    kept, refused = [], []
+    for event in events or []:
+        if not isinstance(event, dict) or not is_standing(event):
+            kept.append(event)
+            continue
+        source = str(event.get("source_entity_id") or "").strip()
+        key = key_of.get(source.casefold(), source)
+        mode = mode_of.get(key)
+        if mode is not None and "world" in PLAYER_AUTHORITY_GRANTS[mode]:
+            kept.append(event)
+            continue
+        refused.append({"source": key, "mode": mode,
+                        "event": str(event.get("event") or "").strip()})
+    if refused and warn:
+        warn("standing is authorship: refused %d fact(s) about how things stand "
+             "that the input's authority mode does not let it set: %s"
+             % (len(refused), "; ".join(repr(row["event"][:80]) for row in refused)))
+    return kept, refused
+
+
 #: How many characters a copied id may get wrong and still be read as that
 #: id (`entity_keys_name_held_things`). Named per ask-before-limiting.
 ID_COPY_SLIPS = 3
+
+
+#: The source of a happening no body performs (`core` card, source_entity_id):
+#: an engine key like `engine:places`, never an identity, so every reader of
+#: a row's actor finds no body behind it and the act renderer gives the
+#: happening as its whole sentence, where it happened
+#: (`perception._sourceless_event_rel`).
+WORLD_SOURCE = "world"
+
+
+def a_signal_elsewhere_is_nobodys_act(events, scene, identities, warn=None):
+    """A happening no body performs has no actor -- and a signal that
+    happened in a room a body does not stand in is not that body's act.
+
+    The encoder files every step under some identity, and a happening nobody
+    does went to the body nearest the beat: in the owner's chat 175, "a hen
+    clucks sharply once down the lane" (turn 2), "a gate clicks shut down the
+    lane" (turn 3) and "a cart wheel grinds past outside" (turn 14) under
+    Mellisande, indoors, and chat 177 turn 15's upstairs window rattling in
+    the wind under her in the kitchen below. The act renderer then put her
+    label in front of the happening -- "The warm approachable figure a hen
+    clucks sharply once down the lane" -- beside the same sound delivered as
+    the signal it was.
+
+    Which body a happening belongs to is a matter of prose, and the encoder
+    is told (`source_entity_id`, the world key). What code can know without
+    reading prose is narrower, and this holds it: a step whose every write is
+    a signal (`sensory_events`), with no movement, line or look, filed under
+    a body that stands -- when the beat began, or anywhere the beat puts it --
+    in none of the rooms its signals happened in. A body acts where it is,
+    and a signal's `room` is where it happened. Such a step is re-filed under
+    the world, still following from the input it cites. Measured on every
+    stored step of chats 175-178 filed under a body whose only writes were
+    signals (14): it re-files the four above. The other ten all happened in
+    the actor's own room: five were her own acts (a chewing noise, a moan, a
+    scone torn open), which it rightly leaves, and five were same-room
+    happenings (a log settling in the range beside her, a casement knocking),
+    which stay the card's to prevent."""
+    from world.spatial import room_of
+    identities = identities if isinstance(identities, dict) else {}
+    rooms_of = {}
+    for event in events or []:
+        if not isinstance(event, dict):
+            continue
+        mover = event.get("movement")
+        if isinstance(mover, dict) and str(mover.get("to_room") or "").strip():
+            who = str(mover.get("mover") or "").strip()
+            if who:
+                rooms_of.setdefault(who.casefold(), set()).add(str(mover["to_room"]).strip())
+        for transform in event.get("transforms") or []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            positions = patch.get("positions") if isinstance(patch, dict) else None
+            for who, room in (positions.items() if isinstance(positions, dict) else ()):
+                if isinstance(room, str) and room.strip():
+                    rooms_of.setdefault(str(who).casefold(), set()).add(room.strip())
+    out, refiled = [], []
+    for event in events or []:
+        if not isinstance(event, dict) or event.get("speech") \
+                or event.get("movement") or str(event.get("look") or "").strip():
+            out.append(event)
+            continue
+        source = str(event.get("source_entity_id") or "").strip()
+        name = str(identities.get(source) or "").strip()
+        transforms = [t for t in event.get("transforms") or [] if isinstance(t, dict)]
+        patches = [t.get("patch") for t in transforms]
+        signals = [signal for patch in patches if isinstance(patch, dict)
+                   for signal in (patch.get("sensory_events") or [])]
+        if not name or not signals or any(
+                not isinstance(patch, dict) or set(patch) != {"sensory_events"}
+                for patch in patches):
+            out.append(event)
+            continue
+        here = room_of(scene, name) if isinstance(scene, dict) else None
+        stands = {room for room in [here, *rooms_of.get(name.casefold(), ())] if room}
+        where = [str((signal or {}).get("room") or "").strip()
+                 for signal in signals if isinstance(signal, dict)]
+        if not stands or not where or any(not room or room in stands for room in where):
+            out.append(event)
+            continue
+        refiled.append((name, str(event.get("observable") or event.get("event") or "")[:80]))
+        out.append(dict(event, source_entity_id=WORLD_SOURCE))
+    if warn:
+        for name, what in refiled:
+            warn(f"a signal filed under {name} happened where {name} does not "
+                 f"stand; filed as the world's, not {name}'s act: {what!r}")
+    return out
 
 
 def _slipped_copy(key, eid):
@@ -2173,6 +2597,72 @@ def entity_keys_name_held_things(events, scene, warn=None):
         if unheld:
             warn(f"entities under {sorted(set(unheld))}: no thing the world holds "
                  "and no name to mint one; filed as written")
+    return out
+
+
+#: An emission's level field and the one switch every reader of it honours
+#: (`spatial_sound_field._running`, `spatial_light._is_lit_switch`).
+EMISSION_SWITCHES = {"sound_source": "running", "light_source": "lit"}
+
+
+def an_emission_stops_in_its_own_words(events, scene):
+    """A thing that emits, written with its level as nothing, has stopped:
+    its switch goes off, and its level stays for the day it starts again.
+
+    AN EMISSION IS STOPPABLE IN THE VOCABULARY IT WAS DECLARED IN. A source
+    is declared as a level (`sound_source: loud`), and the encoder stops one
+    the way it was declared -- by writing that level as nothing. The merge
+    reads a field written as nothing as SILENCE, never an erasure
+    (`spatial_merge._ENTITY_DEFAULT_FIELDS`: a re-echo validated through the
+    schema arrives None-filled and must not unmake a lamp), and only the
+    switch stops a source. So the stop was lost: chat 176's opening set the
+    kettle `sound_source: loud`; at turn 4 the encoder wrote
+    `sound_source: null, whistling: false`, and the kettle stayed loud
+    through turn 11 -- seven beats past its stop, until a later beat wrote
+    `running: false` -- masking the player's own speech.
+
+    Here, before any validation, a null is still the encoder's own word and
+    cannot be a schema's default: a level written null or empty on a thing
+    that stands emitting -- in the world, or earlier this beat -- becomes
+    that switch written off, and the level is left as it stood. A level the
+    thing does not have is left as written."""
+    entities = ((scene or {}).get("entities") or {}) if isinstance(scene, dict) else {}
+    emitting = {}
+    for key, entity in entities.items():
+        if isinstance(entity, dict):
+            for field in EMISSION_SWITCHES:
+                if str(entity.get(field) or "").strip():
+                    emitting.setdefault(str(key), set()).add(field)
+    out = []
+    for event in events or []:
+        if not isinstance(event, dict) or not event.get("transforms"):
+            out.append(event)
+            continue
+        transforms = []
+        for transform in event["transforms"]:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            records = patch.get("entities") if isinstance(patch, dict) else None
+            if not isinstance(records, dict):
+                transforms.append(transform)
+                continue
+            fixed = {}
+            for key, record in records.items():
+                key = str(key)
+                if isinstance(record, dict):
+                    for field, switch in EMISSION_SWITCHES.items():
+                        if field not in record:
+                            continue
+                        value = record[field]
+                        if value is not None and str(value).strip():
+                            emitting.setdefault(key, set()).add(field)
+                        elif field in emitting.get(key, ()):
+                            record = {k: v for k, v in record.items() if k != field}
+                            state = record.get("state")
+                            record["state"] = dict(state if isinstance(state, dict)
+                                                   else {}, **{switch: False})
+                fixed[key] = record
+            transforms.append(dict(transform, patch=dict(patch, entities=fixed)))
+        out.append(dict(event, transforms=transforms))
     return out
 
 
@@ -2493,7 +2983,7 @@ def _extension_sections(channels):
             for c in granted if c in specs]
 
 
-def _call_encoder(ctx, channels, payload, parts):
+def _call_encoder(ctx, channels, payload, parts, stage=None):
     """`(answer, exchange, attempt)`. Where the encoder's route caches a prefix
     (`providers.role_caches_prefix`), the request goes as one -- its user
     message a cache breakpoint, and one line after it (`encoder_cue`),
@@ -2514,8 +3004,10 @@ def _call_encoder(ctx, channels, payload, parts):
     the call did not say -- a stand-in for the model call, in a test."""
     from llm import llm_quality
     from llm.providers import role_caches_prefix
-    sheet = unified_specialist_prompt(channels, ctx.language, parts,
-                                      extensions=_extension_sections(channels))
+    shown = sheet_channels(channels, payload.get("places_authored_elsewhere"))
+    sheet = unified_specialist_prompt(shown, ctx.language, parts,
+                                      extensions=_extension_sections(channels),
+                                      stage=stage)
     sent = dict(payload, granted_tools=list(channels) + list(parts))
     prefix = None
     if role_caches_prefix("encoder"):
@@ -2539,10 +3031,12 @@ def _call_encoder(ctx, channels, payload, parts):
     exchange = None
     if prefix is not None and isinstance(answer, dict):
         try:
+            # `channels` is what the SHEET carries, which is what a repair
+            # continuing this request compares its own sheet against.
             exchange = {"system": sheet, "user": prefix["user"],
                         "after": list(prefix["after"]),
                         "answer": json.dumps(answer, ensure_ascii=False),
-                        "channels": list(channels), "parts": list(parts)}
+                        "channels": list(shown), "parts": list(parts)}
         except (TypeError, ValueError):
             exchange = None
     if isinstance(answer, dict) and isinstance(answer.get("events"), list):
@@ -2557,8 +3051,10 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     request the kept answer came from, as sent (`_call_encoder`; None
     elsewhere), which the repair continues. At most one widening pass, whose
     answer REPLACES the first. With `rooms_elsewhere`, places are the room
-    author's: the encoder holds no room tool, may not ask for one, and names
-    a new place as `new:<words>`.
+    author's: the encoder names a new place as `new:<words>`, and of a place
+    the world holds writes only the doorways the prose opens, shuts, fastens
+    or breaks through -- its `rooms` grant is that and nothing more, taught
+    by the core card rather than the room-building chunk (`sheet_channels`).
 
     `parts` are the encoder parts the decision model chose (None: every part
     of every held channel -- fail open). The payload's `requestable_tools`
@@ -2572,9 +3068,10 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     parts = (parts_of(channels, language) if parts is None
              else [part for part in parts if part_channel(part) in channels])
     stage_channels = candidate_channels(stage, facts)
+    # EVERY ROOM CHANNEL STAYS REQUESTABLE under a room author: a doorway
+    # the prose opens is the encoder's to write whoever builds places
+    # (`sheet_channels`), so a beat whose grant missed it may ask for it.
     known = set(stage_channels)
-    if rooms_elsewhere:
-        known -= set(ROOM_AUTHOR_CHANNELS)
     known_parts = set(parts_of([c for c in stage_channels if c in known], language))
 
     def requestable():
@@ -2592,7 +3089,8 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     payload["new_places"] = dict(new_places or {})
     payload["requestable_tools"] = requestable()
     t0 = time.time()
-    answer, exchange, attempt = _call_encoder(ctx, channels, payload, parts)
+    answer, exchange, attempt = _call_encoder(ctx, channels, payload, parts,
+                                              stage=stage)
     record["seconds"] = round(time.time() - t0, 3)
     # WHICH ATTEMPT THE BEAT'S EVENTS CAME FROM (D5, the owner's ruling of
     # 2026-10-09): the first answer, a local mend, the rebuild, or the one
@@ -2609,6 +3107,10 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     # the console room as movement, Jev scored positions 0.43 under a 0.5
     # threshold, and the player never changed rooms.
     for tool in implied_tools(answer.get("events") or [], sc):
+        # A place the world lacks is the room author's under one, never a
+        # widening of the encoder's (`unheld_places_are_new` routes it).
+        if rooms_elsewhere and tool == ROOM_BUILDING_CHANNEL:
+            continue
         if tool in known and tool not in channels and tool not in missing:
             missing.append(tool)
     # A THING THE PROSE NEEDS AND THE WORLD LACKS IS MADE WITH `entities`,
@@ -2649,7 +3151,7 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
             t1 = time.time()
             try:
                 answer, exchange, widen_attempt = _call_encoder(
-                    ctx, channels, payload, parts)
+                    ctx, channels, payload, parts, stage=stage)
             except Aborted:
                 raise
             except Exception as exc:
@@ -2944,6 +3446,10 @@ def ledger_from_events(events, known_channels=None, *, start_hour=None,
             categories.append("attention")
         row = {field: event.get(field) for field in _ROW_FIELDS
                if event.get(field) not in (None, "", [])}
+        # Only where it is so: a row is conduct unless it says otherwise, and
+        # a `standing: false` on every row would be a key nobody reads.
+        if is_standing(event):
+            row["standing"] = True
         if spans[index] is not None:
             row["seconds"] = spans[index]
         row.update(
@@ -3105,8 +3611,10 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
                                   view, extras, reserved, develop, room_record,
                                   prepared)
         room_record["ran"] = "parallel"
-    encoder_channels = ([c for c in channels if c not in ROOM_AUTHOR_CHANNELS]
-                        if rooms_elsewhere else channels)
+    # EVERY GRANTED CHANNEL REACHES THE ENCODER, room channels included: the
+    # author builds places, and a doorway of a place the world holds is the
+    # encoder's whether or not the author runs (`sheet_channels`).
+    encoder_channels = list(channels)
     # The repair pass checks the draft sentence by sentence (on unless the
     # host turns it off: `director_repair.enabled`).
     from . import director_repair
@@ -3156,6 +3664,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             # done: the author's seconds that were the beat's.
             room_record["waited"] = round(max(0.0, done - ready), 3)
             pool.shutdown(wait=True)
+    # A source stopped in the words it was declared in stops by its switch.
+    events = an_emission_stops_in_its_own_words(events, sc)
     if rooms_elsewhere:
         events = doorway_edits_only(events, sc, set(new_places), warn=ctx.add_warning)
         events = unheld_places_are_new(events, sc, set(new_places), warn=ctx.add_warning)
@@ -3205,18 +3715,47 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         if installed:
             rooms_answer = with_installed_rooms(rooms_answer, installed)
             room_record["installed"] = sorted(installed)
+        # ...and none of those designs opens or shuts a door the world holds:
+        # a door's state is the beat's events', never a design's.
+        if rooms_answer:
+            rooms_answer = doors_keep_their_state(rooms_answer, sc,
+                                                  warn=ctx.add_warning)
         extra = room_event(rooms_answer or {}, events)
         if extra is not None:
             events = [extra] + events
             room_record["rooms"] = sorted(((rooms_answer or {}).get("rooms") or {}))
     events = bodies_stand_in_rooms(events, sc, ((rooms_answer or {}).get("rooms") or {}),
                                    warn=ctx.add_warning)
+    identities = identities_with_figures(model_payload, extras)
     events = a_walk_is_its_owners(
         events, model_payload.get("event_inputs") or [],
-        identities_with_figures(model_payload, extras), sc, warn=ctx.add_warning)
+        identities, sc, warn=ctx.add_warning)
+    # A happening no body performs is re-filed under the world BEFORE the
+    # interpret stage refuses another mind's acts: filed under a mind, a hen
+    # clucking down the lane would otherwise be refused as that mind's
+    # undeclared conduct and lost, where it is the world's and stands.
+    events = a_signal_elsewhere_is_nobodys_act(events, sc, identities,
+                                               warn=ctx.add_warning)
+    conduct_refused, standing_refused = [], []
+    # A SILENT BEAT IS THE EMPTY-INPUT GUARD'S, WHOLE
+    # (`director.director_interpret`): on no input the stage's prose is the
+    # Director restating stale conduct, and the guard discards everything it
+    # filed, keeps the row establishing the beat's places, and reports it.
+    # Run here first, this rule took a character's invented act out before
+    # the guard saw it -- so the guard fell quiet -- and offered that stale
+    # invention to the character as a suggestion
+    # (`test_a_silent_beat_keeps_the_rooms_it_opened_on`).
+    if stage == "interpret" and str(getattr(ctx, "input", "") or "").strip():
+        events, conduct_refused = conduct_is_its_owners(
+            events, model_payload.get("event_inputs") or [],
+            identities, sc, warn=ctx.add_warning)
+        events, standing_refused = standing_is_authorship(
+            events, model_payload.get("event_inputs") or [],
+            identities, warn=ctx.add_warning)
     channels = list(encoder_channels) + [
         c for c in ROOM_AUTHOR_CHANNELS
-        if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)]
+        if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)
+        and c not in encoder_channels]
     quoting = quotation_authority(ctx, stage, prose)
     events = quoted_lines_keep_their_words(events, quoting)
     events = spoken_words_are_the_quotation(events, quoting, warn=ctx.add_warning)
@@ -3252,6 +3791,14 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     }
     if repair_record is not None:
         record["repair"] = repair_record
+    # What the interpretation wrote that the stage did not keep, on the
+    # record the step stores: another mind's conduct (`conduct_is_its_owners`,
+    # whose offers `director.director_interpret` hands on) and a fact about
+    # how things stand the input's mode may not set (`standing_is_authorship`).
+    if conduct_refused:
+        record["conduct_refused"] = conduct_refused
+    if standing_refused:
+        record["standing_refused"] = standing_refused
     # AN EXTENSION'S CHANNEL IS COLLECTED FOR ITS EXTENSION, never split to
     # an owner: no engine owner holds it and no engine domain reads it
     # (`api.add_director_channel`; `attach_record` files what is collected).

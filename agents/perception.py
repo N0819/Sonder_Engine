@@ -5403,8 +5403,10 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
             if same_subject(sc, holder, name) and mode != "worn":
                 what = composer.thing_in_hand_clause(label, mode)
                 if what:
+                    # `kept_in`: the room it is carried in, so a move re-tells
+                    # it (`composer.room_content_percepts`; chat 177 t13-t21).
                     rows.append({"what": what, "uid": str(eid),
-                                 "state": [mode, holder]})
+                                 "state": [mode, holder], "kept_in": room})
             continue                                        # rule 3b
         if str(eid).casefold() in furniture \
                 or label.casefold() in furniture:
@@ -7814,6 +7816,16 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         percepts.append(percept)
                         order += 1
                 if beat_event.get("kind") != "speech" and execution_statuses.get(at_index) == "unresolved":
+                    # SAID OUT LOUD, as the onset pass says it: a bare
+                    # `continue` here left no trace of a withheld act, so an
+                    # act the world never refused vanished from every view
+                    # with nothing in the drawer to say where it went -- 54
+                    # of them across chats 175-177 (2026-10-19).
+                    note_step_decision(
+                        "act_percept", "%s -> %s" % (
+                            beat_event.get("actor") or "?", name),
+                        "refused",
+                        "the beat verified this act as unexecuted")
                     continue
                 event_scene = causal_moments.get(at_index, sc)
                 event_observer_room = room_of(event_scene, name) or p.get("room")
