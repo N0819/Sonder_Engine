@@ -140,7 +140,8 @@ class JapaneseRenderer:
                    else prefix + "muffled")
             return self._text(key, label=label,
                               fragment=data.get("fragment", "")) \
-                + (self._heard_after(p, data, prefix) if not prefix else "")
+                + (self._heard_after(p, data, prefix) if not prefix
+                   else self._own_name(data, prefix))
         body = data.get("body", "")
         if data.get("conducted"):
             key = (prefix + "conducted") if prefix else "dialogue_conducted"
@@ -184,7 +185,17 @@ class JapaneseRenderer:
         if data.get("voice_apart") and not prefix:
             parts.append(self._text("voice_register",
                                     register=data["voice_apart"]))
-        return "".join(_full_stop(part) for part in parts)
+        return "".join(_full_stop(part) for part in parts) \
+            + (self._own_name(data, prefix)
+               if p.fidelity in ("fragment", "voice") else "")
+
+    def _own_name(self, data, prefix):
+        """`composer._heard_after`'s own-name sentence (DESIGN_SOUND_FIELD
+        § 13): the listener's own name came through a line they had only in
+        pieces, or as a voice alone -- that it did, never which form."""
+        if not data.get("own_name"):
+            return ""
+        return _full_stop(self._text(prefix + "speech_own_name"))
 
     def _tone(self, tone):
         tone = str(tone or "").strip()
@@ -583,6 +594,10 @@ class JapaneseRenderer:
             # -- so the general branch below rendered it as nothing, and a
             # bell five rooms off was heard in English and not here.
             return self._distant_sound(data.get("distant"))
+        if p.kind == "sensation" and data.get("ears") in ("ringing", "recovered"):
+            # The body's own ears (DESIGN_SOUND_FIELD § 13, `composer.
+            # ear_percepts`): ringing after a blast, and its fading.
+            return self._text(prefix + "ears_" + data["ears"])
         if p.kind in ("sensation", "substance", "ambient"):
             return _full_stop(data.get("clause") or data.get("text")
                               or data.get("desc") or "")
@@ -597,7 +612,8 @@ class JapaneseRenderer:
             from agents.common import _compose_residue_view
             return _compose_residue_view(
                 data.get("level"), targeted=data.get("targeted", False),
-                loud_event=data.get("loud_event", False), pain=data.get("pain", False))
+                loud_event=data.get("loud_event", False), pain=data.get("pain", False),
+                woke=data.get("woke", ""))
         return ""
 
     # -- whole views --------------------------------------------------------
@@ -657,8 +673,8 @@ class JapaneseRenderer:
         # beat. Which percepts a view may carry is an information decision
         # and belongs to one function; how the sentence reads is the pack's.
         player = mode == "player"
-        verdicts = composer.standing_verdicts(
-            percepts, prev_standing, prev_described) if player else {}
+        verdicts = composer.view_verdicts(
+            percepts, prev_standing, prev_described, player=player)
         presence_leads = player and any(
             composer.leads_the_beat(
                 p, verdicts.get(p.dedupe_key, "first"), prev_standing)
@@ -691,6 +707,10 @@ class JapaneseRenderer:
             # stopped is news to THIS observer is an information decision
             # (D3), and the pack only spells the sentence.
             if composer.unheard_ceasing(p, verdict):
+                continue
+            # A steady sound it was hearing, unchanged, has faded from its
+            # attention (`composer.habituated`, shared).
+            if composer.habituated(p, verdict, full_render=full_render):
                 continue
             brief = False
             if player and p.order_key is None and not full_render:

@@ -101,6 +101,7 @@ from world.spatial import (
 
 from .common import (
     _appearance_as_prose,
+    self_name_forms,
     name_occurrence_pattern,
     _base_from_third_person_s,
     _compose_residue_view,
@@ -2424,6 +2425,45 @@ def body_state_percept(entity_state):
     )
 
 
+#: What a body knows of its own ears (DESIGN_SOUND_FIELD § 13): `ringing`
+#: after a blast, while the shift is at least `spatial_listener.RINGING_DB`;
+#: `recovered`, said once to an ear that was ringing the beat before.
+EAR_STATES = ("ringing", "recovered")
+
+
+def ear_percepts(shift_db, prev_standing=frozenset(), *, fresh=False):
+    """A BODY KNOWS ITS OWN RINGING EARS (DESIGN_SOUND_FIELD § 13). After a
+    blast past `spatial_listener.BLAST_DB` the ear is dulled and rings; the
+    listener has that as interoception -- their own body's state, never
+    another's (nobody else knows it unless they see it, and nothing here
+    reaches any view but this body's own). `fresh` is a blast that reached
+    them THIS beat, before the commit has written the shift; `shift_db` is
+    the shift the scene holds.
+
+    Standing, keyed by its state, so it is news when it starts and furniture
+    while it lasts; and its FADING is said once, to an ear whose own ledger
+    held the ringing (`prev_standing`), which is the class every steady
+    sound's stopping is told by (`sound_ceased_percept`)."""
+    from world.spatial import RINGING_DB
+    ringing = standing_key("ears", ("self",), ("ringing",))
+    try:
+        shift = float(shift_db or 0.0)
+    except (TypeError, ValueError):
+        shift = 0.0
+    if fresh or shift >= RINGING_DB:
+        return [Percept(
+            kind="sensation", channel="interoception", source_label="you",
+            data={"ears": "ringing", "directed_at_self": True},
+            salience=0.55, dedupe_key=ringing)]
+    if ringing in (prev_standing or ()):
+        return [Percept(
+            kind="sensation", channel="interoception", source_label="you",
+            data={"ears": "recovered", "directed_at_self": True},
+            salience=0.4,
+            dedupe_key=standing_key("ears", ("self",), ("recovered",)))]
+    return []
+
+
 def contact_percepts(contacts_with_sensation):
     """Standing contact sensations. Input: [(contact_record, sensation_clause)]
     where the clause came from `spatial.contact_sensation(you=observer)` --
@@ -3882,17 +3922,24 @@ def micro_round_percepts(deliveries):
     return out
 
 
-def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
-    """A non-awake mind gets the residue and nothing else."""
+def residue_percepts(level, *, targeted=False, loud_event=False, pain=False,
+                     woke=""):
+    """A non-awake mind gets the residue and nothing else -- and a sleeper a
+    sound woke this beat gets only what woke them (`woke`, one of
+    `spatial_listener.WAKING_SOUNDS`; DESIGN_SOUND_FIELD § 13)."""
+    data = {"level": level, "targeted": bool(targeted),
+            "loud_event": bool(loud_event), "pain": bool(pain),
+            "directed_at_self": True}
+    if woke:
+        data["woke"] = str(woke)
     return [Percept(
         kind="residue", channel="interoception", source_label="you",
         fidelity="trace",
-        data={"level": level, "targeted": bool(targeted),
-              "loud_event": bool(loud_event), "pain": bool(pain),
-              "directed_at_self": True},
-        salience=0.2,
+        data=data,
+        salience=0.2 if not woke else 0.6,
         dedupe_key=standing_key("residue", (level,),
-                                (targeted, loud_event, pain)),
+                                (targeted, loud_event, pain)
+                                + ((str(woke),) if woke else ())),
     )]
 
 
@@ -4002,7 +4049,7 @@ def _one_voice_each(percepts):
 def speech_percept(entry, rel, observer_name, *, display, can_see,
                    proximity=None, order_key=0, observer_id=None,
                    senses=None, voice="", prev_standing=None, bearing="",
-                   addressed=None):
+                   addressed=None, name_forms=()):
     """Admit one spoken line for one observer, or None.
 
     A VOICE IS ESTABLISHED ONCE (D2; Wood -- theatre gives a vocal quality
@@ -4229,6 +4276,18 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     else:
         data["body"] = body
         fidelity = "full"
+    # YOUR OWN NAME CATCHES YOUR EAR (DESIGN_SOUND_FIELD § 13, wave B1). One's
+    # own name is detected at lower signal levels than other words, and out
+    # of a din or a conversation one is not following -- the cocktail-party
+    # effect (Moray 1959; Wood & Cowan 1995). So where this listener has
+    # only pieces of a line, or its voice without words, and the line holds
+    # a name others call them by (`name_forms`, `own_name_forms`), they know
+    # their name was said: the percept carries THAT, never which form of
+    # it, never another word of the line, never who. A line whose voice
+    # did not reach them at all carries no name either.
+    if fidelity in ("fragment", "voice") and name_forms \
+            and own_name_said(body, name_forms):
+        data["own_name"] = True
     # WHICH channel carried it, when one did. Not decoration: a voice arriving
     # over a speaker is a different fact from a voice arriving from a body in
     # the room, and a mind handed the second when the first is true has been
@@ -4344,6 +4403,93 @@ def _register_heard_unseen(register, speaker):
                 and token in folded:
             return ""
     return register
+
+
+def own_name_forms(name, aliases=()):
+    """THE NAMES OTHERS CALL THIS BODY BY, for `speech_percept`'s own-name
+    rescue: its name; the name without a leading article ("The Doctor" is
+    called "Doctor"); every word of the name substantial enough to be called
+    alone -- a given name, a surname (`common.self_name_forms`, the rule the
+    views already use for a body's own name); and its card's aliases.
+
+    Never an engine handle -- a uid, a `character:<id>` -- and never a
+    descriptor the engine coined ("the apprentice"): those are not what a
+    voice across a room says. A Latin form under three letters is dropped,
+    as name-learning drops it (`commit_common._address_forms`): "Al" is
+    inside too much English to be a name heard through a wall."""
+    from story.character_schema import _UNSPACED_SCRIPT
+    base = [str(name or "").strip()]
+    base += [str(a or "").strip() for a in (aliases or ())]
+    forms = []
+    for form in self_name_forms(base[0], [b for b in base if b]):
+        forms.append(form)
+        for article in ("the ", "a ", "an "):
+            if form.casefold().startswith(article) and len(form) > len(article):
+                forms.append(form[len(article):].strip())
+    out, seen = [], set()
+    for form in forms:
+        text = str(form or "").strip()
+        if not text or text.casefold() in seen:
+            continue
+        if any(ch in text for ch in "_:/") or any(ch.isdigit() for ch in text):
+            continue
+        if not _UNSPACED_SCRIPT.search(text) and len(text) < 3:
+            continue
+        seen.add(text.casefold())
+        out.append(text)
+    return out
+
+
+def own_name_said(text, forms) -> bool:
+    """Is one of `forms` spoken in `text`, as a whole name? The name-learning
+    reader's own rule (`commit_common._form_in`): a name boundary in
+    whatever script the name is written, case-insensitive for a distinctive
+    name and case-SENSITIVE for one that is also an ordinary word (the
+    pack's `_COMMON_WORD_NAMES`: "Will", "Hope", "Data")."""
+    from story.character_schema import name_boundary_regex
+    body = str(text or "")
+    if not body:
+        return False
+    common_word_names = linguistic("agents.common", "_COMMON_WORD_NAMES")
+    for form in forms or ():
+        form = str(form or "").strip()
+        if not form:
+            continue
+        flags = 0 if form.casefold() in common_word_names else re.I
+        if name_boundary_regex(form, flags).search(body):
+            return True
+    return False
+
+
+def _names_kept(percepts):
+    """ONE VOICE A BEAT, AND THE NAME IN IT KEPT. Every voice-only line of
+    one speaker shares a dedupe key (`speech-voice:`), and the renderers say
+    the first; a name caught in a later line of the same speaker would be
+    lost with it. So the earliest of each such group carries the group's
+    `own_name`. A copy, never the caller's percept."""
+    percepts = list(percepts or ())
+    named = {p.dedupe_key for p in percepts
+             if p.kind == "speech" and p.fidelity == "voice"
+             and (p.data or {}).get("own_name")}
+    if not named:
+        return percepts
+    out, done = [], set()
+    ranked = sorted(range(len(percepts)), key=lambda i: (
+        percepts[i].order_key is None, percepts[i].order_key or 0, i))
+    first = {}
+    for i in ranked:
+        p = percepts[i]
+        if p.kind == "speech" and p.fidelity == "voice" \
+                and p.dedupe_key in named and p.dedupe_key not in first:
+            first[p.dedupe_key] = i
+    for i, p in enumerate(percepts):
+        if first.get(p.dedupe_key) == i and p.dedupe_key not in done:
+            done.add(p.dedupe_key)
+            if not (p.data or {}).get("own_name"):
+                p = dataclasses.replace(p, data={**(p.data or {}),
+                                                 "own_name": True})
+        out.append(p)
+    return out
 
 
 def _tone_words(text):
@@ -4867,7 +5013,73 @@ def leads_the_beat(percept, verdict, prev_standing):
         return True
     if percept.kind == "appearance" and appearance_delta(percept):
         return True
+    # A STEADY SOUND THAT STARTS WHERE THE OBSERVER ALREADY STOOD is news
+    # (DESIGN_SOUND_FIELD § 13): the room they were in has begun to sound.
+    # One they walk into is the room as it is -- background, as before.
+    if verdict == "first" and steady_sound(percept) \
+            and not (percept.data or {}).get("ceased") \
+            and _was_in_its_room(percept, prev_standing):
+        return True
     return verdict == "first" and percept.kind in _FIRST_SIGHT_LEADS
+
+
+#: THE STEADY SOUNDS A MIND GETS USED TO (DESIGN_SOUND_FIELD § 13, wave
+#: B1): the room's soundscape -- where the noise is and what makes it -- and
+#: a crowd's hum, standing hearing percepts keyed by the sound's own state,
+#: so a sound that changes is a new key and a sound that stops is
+#: `sound_ceased_percept`. Not a beat's own sounds (`ambient`, an event's
+#: line) or a far one (`distant_sound`): those are news each time they
+#: happen. Not a crowd's overheard fragment (`chatter`): its words change
+#: under one key.
+HABITUATING_SOUND_TAGS = ("soundscape", "hum")
+
+
+def steady_sound(percept) -> bool:
+    """Is this a steady sound's standing percept (`HABITUATING_SOUND_TAGS`)?"""
+    return (getattr(percept, "order_key", None) is None
+            and getattr(percept, "kind", "") == "ambient"
+            and getattr(percept, "channel", "") == "hearing"
+            and str(getattr(percept, "dedupe_key", "") or "").split(":", 1)[0]
+            in HABITUATING_SOUND_TAGS)
+
+
+def view_verdicts(standing, prev_standing=frozenset(),
+                  prev_described=frozenset(), *, player=False):
+    """The verdicts a view renders by: every standing percept's on the player
+    tier, as ever, and on the character tier a STEADY SOUND's
+    (`steady_sound`) -- getting used to a sound, and noticing it stop, are
+    facts about what THIS mind was hearing, whichever tier it is on. Shared
+    by both renderers: which percepts a view carries is decided once."""
+    if player:
+        return standing_verdicts(standing, prev_standing, prev_described)
+    return standing_verdicts([p for p in standing or () if steady_sound(p)],
+                             prev_standing, prev_described)
+
+
+def habituated(percept, verdict, *, full_render=False) -> bool:
+    """GETTING USED TO A SOUND (DESIGN_SOUND_FIELD § 13). A steady sound this
+    observer was already hearing, unchanged, fades from attention: it is
+    told when it starts, when it changes and when it stops
+    (`sound_ceased_percept`, once), and in between it is out of the view --
+    on the character tier too, which otherwise re-tells everything every
+    beat, so a generator a mind has stood beside for an hour was announced
+    to it hourly. An explicit look (`full_render`) asks for the room back;
+    a mind that walks in hears the room as it is (its ledger does not hold
+    the sound, so the verdict is `first`)."""
+    return (not full_render and verdict == "unchanged"
+            and steady_sound(percept) and not asked_this_beat(percept))
+
+
+def _was_in_its_room(percept, prev_standing) -> bool:
+    """Was this observer in the room this percept's sound fills, last beat?
+    The soundscape's subject is the room (`soundscape_percept`), and so is
+    the room description's (`environment_percept`): the observer's own
+    ledger holding the room's `env` subject is the answer."""
+    subject = _subject_prefix(getattr(percept, "dedupe_key", ""))
+    if not subject or not prev_standing:
+        return False
+    want = "env:" + subject.split(":", 1)[1]
+    return any(_subject_prefix(key) == want for key in prev_standing)
 
 
 def unheard_ceasing(percept, verdict):
@@ -5474,6 +5686,8 @@ def _render_standing(p):
             parts.append(_en("held", items=", ".join(p.data["held_items"])))
         return " ".join(parts)
     if p.kind == "sensation":
+        if p.data.get("ears") in EAR_STATES:
+            return _en("ears_" + p.data["ears"])
         clause = str(p.data.get("clause") or "").strip()
         return _end_sentence(_cap(clause)) if clause else ""
     if p.kind == "body_region":
@@ -5574,6 +5788,8 @@ def _heard_after(p, line, *, ended=False):
     tone = str(d.get("tone_heard") or "").strip()
     if tone and p.fidelity in ("fragment", "voice"):
         extra.append(_en("speech_voice_tone", tone=tone))
+    if d.get("own_name") and p.fidelity in ("fragment", "voice"):
+        extra.append(_en("speech_own_name"))
     if d.get("voice_apart"):
         extra.append(_en("voice_register", register=d["voice_apart"]))
     if not extra:
@@ -5719,7 +5935,7 @@ def _render_view_english(percepts, *, mode="character",
         text = _compose_residue_view(
             p.data.get("level"), targeted=p.data.get("targeted", False),
             loud_event=p.data.get("loud_event", False),
-            pain=p.data.get("pain", False))
+            pain=p.data.get("pain", False), woke=p.data.get("woke", ""))
         return RenderedView(text=text, spans=[(p, text)],
                             standing_keys={p.dedupe_key},
                             described=set(prev_described))
@@ -5742,8 +5958,8 @@ def _render_view_english(percepts, *, mode="character",
     # already delivered: knowing how somebody sounds does not lapse.
     standing_keys = carried_voices(prev_standing)
     seen_dedupe = set()
-    verdicts = standing_verdicts(
-        standing, prev_standing, prev_described) if player else {}
+    verdicts = view_verdicts(standing, prev_standing, prev_described,
+                             player=player)
     # Presence is ONE observation -- who is here -- so the whole group takes
     # one side of the partition, decided before the loop reaches the first
     # of them: if any body in it is new or has moved tier, who is here is
@@ -5797,6 +6013,10 @@ def _render_view_english(percepts, *, mode="character",
         # is already filed above, so the sound coming back next beat still
         # reads as a change against it.
         if unheard_ceasing(p, verdict):
+            continue
+        # ...and a steady sound it has been hearing, unchanged, has faded
+        # from its attention (`habituated`) -- on either tier.
+        if habituated(p, verdict, full_render=full_render):
             continue
         leads = player and leads_the_beat(p, verdict, prev_standing)
         if is_landscape(p):
@@ -5936,9 +6156,11 @@ def _render_view_english(percepts, *, mode="character",
         spans = (event_spans + standing_spans) if sudden \
             else (standing_spans + event_spans)
     text = " ".join(sentence for _, sentence in spans).strip()
+    # The ledger's verdicts are the player tier's, as before: a character's
+    # steady-sound verdicts decide its view and are not filed.
     return RenderedView(text=text, spans=spans,
                         standing_keys=standing_keys, described=described,
-                        verdicts=dict(verdicts))
+                        verdicts=dict(verdicts) if player else {})
 
 
 def render_view(percepts, *, mode="character", prev_standing=frozenset(),
@@ -5970,7 +6192,7 @@ def render_view(percepts, *, mode="character", prev_standing=frozenset(),
                 prev_standing, prev_described)
         return out
 
-    percepts = _one_voice_each(percepts)
+    percepts = _names_kept(_one_voice_each(percepts))
     selected = renderer if renderer is not None else _safe_renderer(language)
     if selected is not None:
         try:
@@ -6057,7 +6279,9 @@ def _episode_sentence(p):
                     else _en("episode_speech_voice_unknown", loudness=loudness))
             tone = str(d.get("tone_heard") or "").strip()
             return line + (" " + _en("episode_speech_voice_tone", tone=tone)
-                           if tone else "")
+                           if tone else "") + (
+                " " + _en("episode_speech_own_name")
+                if d.get("own_name") else "")
         via = str(p.data.get("via") or "")
         if p.fidelity == "fragment":
             attributed = bool(p.data.get("attributed"))
@@ -6066,7 +6290,9 @@ def _episode_sentence(p):
                    else "episode_muffled_attributed" if attributed
                    else "episode_muffled")
             return _en(key, via=via, label=p.source_label,
-                       fragment=p.data.get("fragment", ""))
+                       fragment=p.data.get("fragment", "")) + (
+                " " + _en("episode_speech_own_name")
+                if p.data.get("own_name") else "")
         body = p.data.get("body") or ""
         # The route rides into MEMORY too. A character who later recalls being
         # told something over a radio must not remember the speaker standing
@@ -6115,6 +6341,8 @@ def _episode_sentence(p):
     if p.kind == "pose":
         return _render_pose(p, past=True)
     if p.kind == "sensation":
+        if p.data.get("ears") in EAR_STATES:
+            return _en("episode_ears_" + p.data["ears"])
         clause = _first_person(str(p.data.get("clause") or "").strip())
         return _end_sentence(_cap(clause)) if clause else ""
     if p.kind == "appearance":
@@ -6126,7 +6354,7 @@ def _episode_sentence(p):
         return _compose_residue_view(
             p.data.get("level"), targeted=p.data.get("targeted", False),
             loud_event=p.data.get("loud_event", False),
-            pain=p.data.get("pain", False))
+            pain=p.data.get("pain", False), woke=p.data.get("woke", ""))
     if p.kind == "ambient":
         # What was seen far off and what was heard this beat: a vista line,
         # what a look at one found, a beat's own sound. The view rendered
@@ -6318,7 +6546,7 @@ def episode_signature(p):
 def render_episode(percepts, *, prev_standing=frozenset(),
                    prev_described=frozenset(), language=None, renderer=None):
     """Mint a memory episode through the selected deterministic adapter."""
-    percepts = _one_voice_each(percepts)
+    percepts = _names_kept(_one_voice_each(percepts))
     selected = renderer if renderer is not None else _safe_renderer(language)
     if selected is not None:
         try:

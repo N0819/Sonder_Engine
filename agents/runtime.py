@@ -1241,6 +1241,8 @@ SIDE_CHANNELS = {
     "_books": "memo: the chat's lorebook ids",
     "_book_weights": "memo: the chat's lorebook weights",
     "_sound_crowds": "memo: the chat's crowd ledger from world state",
+    "_own_name_forms": "memo: the names each body's card says others call "
+                       "it by (`perception._own_name_forms`), read once a turn",
     "_beat_movers": "memo: {name: pace} read off the resolve's travel record "
                     "and the beat's room changes",
     "_background_beats_cache": "memo: derived from the hydrated "

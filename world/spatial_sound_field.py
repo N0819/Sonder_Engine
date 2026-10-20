@@ -3195,7 +3195,12 @@ def heard_events(scene: dict, listener: str, events, *, room=None,
                           or event.get("room_id") or "")
         if not source_room or source_room == str(room):
             continue
-        level = field.level_of(listener, "event:%d" % idx, room=room)
+        # Through the listener's own ear (wave B1, `spatial_listener`): a
+        # covered or blast-dulled ear misses a sound an open one catches;
+        # `level_of` itself for an ear that carries neither.
+        from world.spatial_listener import heard_at_ear
+        level = heard_at_ear(scene, listener, field, "event:%d" % idx,
+                             room=room)
         if level != "none":
             out.append((event, level))
     return out
@@ -4312,7 +4317,12 @@ def distant_sounds(scene: dict, listener: str, *, room=None, turn_idx=None,
         # the shadow (`wind_bend_db`).
         level = float(rec["db"]) + _wind_on_a_sound(
             scene, source, listener, listener_room, rec)
-        word = distant_level_word(level, floor_db)
+        # Through the listener's own ear (wave B1): covered or dulled, a far
+        # sound arrives fainter against a floor the ear raised.
+        from world.spatial_listener import ear_adjusted_db
+        heard_db, ear_floor_db = ear_adjusted_db(scene, listener, level,
+                                                 floor_db)
+        word = distant_level_word(heard_db, ear_floor_db)
         if word is None:
             continue
         out.append({"kind": "sound", "level": word,

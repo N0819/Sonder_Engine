@@ -787,6 +787,10 @@ def spatial_rel_between(
     from world.spatial_sound_field import stamp_sound_relation
     stamp_sound_relation(scene, rel, observer, target, sound=sound,
                          observer_room=o_room, target_room=t_room)
+    # THE LISTENER'S OWN EAR (wave B1): covered, sounding a machine of its
+    # own, or dulled by a blast -- read by `hear_level`'s last cap.
+    from world.spatial_listener import stamp_listener_ear
+    stamp_listener_ear(scene, rel, observer, sound=sound)
     return rel
 
 
@@ -1497,13 +1501,13 @@ def _weaker_hearing(a: str, b: str) -> str:
 
 
 def _capped_levels(rel, word, vouched, proximity, level_db, seen, addressed):
-    """`(table, after masking, after the din)`: the rule's three answers in
-    order, each the weaker of the one before and its cap -- so
-    `hearing_reason` can say which clause took a line, and `hear_level`
+    """`(table, after masking, after the din, after the ear)`: the rule's
+    four answers in order, each the weaker of the one before and its cap --
+    so `hearing_reason` can say which clause took a line, and `hear_level`
     reads the last."""
     table = _hear_level(rel, word, vouched, proximity, level_db)
     if vouched or table == "none" or not isinstance(rel, dict):
-        return table, table, table
+        return table, table, table, table
     masked = table
     if rel.get("masking_db") is not None:
         from world.spatial_sound_field import masked_level
@@ -1516,7 +1520,20 @@ def _capped_levels(rel, word, vouched, proximity, level_db, seen, addressed):
         from world.spatial_sound_field import din_level
         dinned = _weaker_hearing(masked, din_level(
             rel, word, level_db=level_db, seen=seen))
-    return table, masked, dinned
+    # THE LISTENER'S OWN EAR (wave B1, `spatial_listener`): what covers it,
+    # what the listener is sounding themselves, and a shift a blast left.
+    # Stamped only where the listener carries one (`stamp_listener_ear`), so
+    # every other relation is graded exactly as before. It caps everyone,
+    # the addressee included: the noise is at THIS ear, which the speaker
+    # does not share, and a covered or dulled ear is the listener's own.
+    eared = dinned
+    if dinned != "none" and (rel.get("ear_cover_db") or rel.get("own_noise_db")
+                             or rel.get("dulled_db")):
+        from world.spatial_listener import ear_level
+        eared = _weaker_hearing(dinned, ear_level(
+            rel, word, reach=_reach(rel, proximity), level_db=level_db,
+            seen=seen))
+    return table, masked, dinned, eared
 
 
 def _bystander_in_a_din(rel, word, proximity, addressed) -> bool:
@@ -1621,6 +1638,15 @@ def voice_carries(rel: dict, volume: str, proximity: str | None = None,
     margin = voice_margin_db(
         rel, word, reach=_reach(rel, proximity), level_db=level_db,
         seen=seen, din=_bystander_in_a_din(rel, word, proximity, addressed))
+    if margin is not None:
+        # ...AND THROUGH THE LISTENER'S OWN EAR (wave B1): the voice a
+        # covered or dulled ear, or one beside its own machine, still
+        # detects is the weaker of the path's budget and the ear's.
+        from world.spatial_listener import ear_margin_db
+        at_ear = ear_margin_db(rel, word, reach=_reach(rel, proximity),
+                               level_db=level_db, seen=seen)
+        if at_ear is not None:
+            margin = min(margin, at_ear)
     return margin is not None and margin >= VOICE_TONE_SNR_DB
 
 
@@ -1801,7 +1827,8 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
     `breath_beyond_reach`, `open_air_distance`, `breath_through_a_door`,
     `shut_door_from_farther_off`, `heavy_door_or_glass`, `wall`,
     `rooms_away`, `rooms_away_muffled`, `deafening`, `din_bystander`,
-    `no_air`, `conducted`. Read by the speech replay and by perception's
+    `ears_covered`, `own_noise`, `hearing_dulled` (the listener's own ear,
+    wave B1), `no_air`, `conducted`. Read by the speech replay and by perception's
     decision notes, so a hearing complaint is answered with the clause
     that decided it.
 
@@ -1814,8 +1841,8 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
     word = _graded_word(volume, level_db, addressed)
     if word is None:
         return "into_another_ear"
-    table, masked, level = _capped_levels(rel, word, False, proximity,
-                                          level_db, seen, addressed)
+    table, masked, dinned, level = _capped_levels(rel, word, False, proximity,
+                                                  level_db, seen, addressed)
     if level == "full":
         return ""
     if rel.get("speaker_turned_away") and _capped_levels(
@@ -1828,8 +1855,11 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
         return "upwind"
     if table != masked:
         return "deafening"
-    if masked != level:
+    if masked != dinned:
         return "din_bystander"
+    if dinned != level:
+        from world.spatial_listener import ear_reason
+        return ear_reason(rel)
     if rel.get("inside_source") or rel.get("enclosed_from_source") \
             or rel.get("source_enclosed"):
         return "conducted"

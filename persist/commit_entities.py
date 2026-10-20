@@ -212,6 +212,73 @@ def _inherit_known_to(cursor, chat_id, written_id, superseded_rows):
         "AND condition_id=?", (json.dumps(payload), chat_id, written_id))
 
 
+def _ended_in(cond_value) -> bool:
+    """Did the diff itself close this condition (any entry with a falsy
+    `active`)? A re-assertion does not count."""
+    for cond in (cond_value if isinstance(cond_value, list) else [cond_value]):
+        if not isinstance(cond, dict):
+            continue
+        try:
+            if not int(cond.get("active", 1)):
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _with_sound_wakings(ctx, chat_id, conditions):
+    """The beat's conditions, with every SLEEP A SOUND ENDED (DESIGN_SOUND_FIELD
+    § 13, wave B1).
+
+    The outcome view decided, by the hearing rule, which sleepers a sound
+    reached hard enough to wake -- one at `spatial_listener.WAKING_DB` and
+    standing out of the room, or their own name in a line whose words would
+    reach them awake -- and told each of them so (`perception._sleep_hears`,
+    its `woken`). The stage that renders a beat does not write the world, so
+    this is where the sleep ends: every active awareness row on that body is
+    closed under its own `condition_id` (the commit UPDATEs on it), its
+    payload kept, `ended_reason` saying what woke them. Only a body that is
+    nothing but asleep -- one also sedated or unconscious was not woken by a
+    sound -- and never over an ending the diff already wrote; a diff that
+    RE-ASSERTS the sleep is overruled, as the Director's own waking floor
+    overrules one (`director_floors._awareness_exits`): a re-emitted row is
+    how a sleep the world has ended survives.
+
+    Returns a new mapping; the diff is the prepared bundle's and is not
+    edited."""
+    outcome = getattr(ctx, "perception_outcome", None) or {}
+    woken = outcome.get("woken") if isinstance(outcome, dict) else None
+    if not isinstance(woken, dict) or not woken:
+        return conditions
+    from story.scene import awareness_conditions
+    from world.spatial import SOUND_WAKES
+    records = awareness_conditions(chat_id)
+    out = dict(conditions)
+    for subject, why in woken.items():
+        folded = str(subject or "").strip().casefold()
+        mine = [r for r in records
+                if str(r.get("subject") or "").strip().casefold() == folded]
+        if not mine or any(r["level"] not in SOUND_WAKES for r in mine):
+            continue
+        by = str((why or {}).get("by") or "a sound") if isinstance(why, dict) \
+            else "a sound"
+        for record in mine:
+            existing = out.get(record["condition_id"])
+            if existing is not None and _ended_in(existing):
+                continue
+            ended = dict(record.get("payload") or {})
+            ended["condition_id"] = record["condition_id"]
+            ended["subject_id"] = record["subject"]
+            ended["kind"] = str(ended.get("kind") or "").strip() or "awareness"
+            ended["active"] = 0
+            ended["ended_reason"] = "woken by a sound (%s)" % by
+            out[record["condition_id"]] = ended
+            ctx.warnings.append(
+                "Ended awareness 'asleep' on %s: a sound reached them and "
+                "woke them this beat (%s)" % (record["subject"], by))
+    return out
+
+
 def commit_world_entities(ctx, nonce, *, prepared=None):
     """Commit world entities and conditions, and sweep decommissioned rows.
 
@@ -485,7 +552,8 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
         except (TypeError, ValueError, AttributeError):
             _asserted_turn = 0
 
-        for cond_id, cond_list in (diff.get("conditions") or {}).items():
+        for cond_id, cond_list in _with_sound_wakings(
+                ctx, cid, diff.get("conditions") or {}).items():
             if not isinstance(cond_list, list):
                 cond_list = [cond_list]
             for cond in cond_list:

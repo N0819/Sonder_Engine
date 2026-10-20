@@ -2480,6 +2480,24 @@ quarter wave B2 carries (`"moon": weather.get("moon")` in the drift's
 record); it changes sight on every drifted moonlit night, so it is the
 owner's to land with its own measurement.
 
+<a id="unbuilt-1-218"></a>
+
+### 1.218 A sleeper never recovers stamina by sleeping: the commit's sleeper set is always empty
+
+Found 2026-10-20 while verifying what wakes a sleeper (`DESIGN_SOUND_FIELD.md`
+§ 13). `persist/commit_scene_state.py`'s `compose_beat_scene` builds
+`_sleeping` as `{subject for subject, level in awareness_map(cid).items()
+if level == "asleep"}`, but `awareness_map` maps a subject to a RECORD
+(`{subject, level, cause, ...}`), never to a level string, so the comparison
+is never true and the set is always empty -- the sleep-recovery branch of
+`world/survival.tick_vitals` that the block was written to reach is
+unreachable again ("nobody has ever recovered stamina by sleeping", the
+comment it carries). Untested at this caller: `tests/test_world_model_sleep_
+recovery.py` pins the `sleeping=` seam of `merge_scene_with_diff` only. The
+fix is `record["level"] == "asleep"` (and, since the set is read before the
+beat's own diff, a sleep that began this beat recovers from the next);
+not made here -- it changes stamina for every survival story, and was outside
+the hearing wave's brief.
 
 ## 2. Roadmap
 

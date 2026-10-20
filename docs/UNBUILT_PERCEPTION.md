@@ -2212,6 +2212,53 @@ reach. What wave A leaves, each registered here rather than built:
   bystander some few decibels more than steady noise of the same level; the
   margins are the speech margins.
 
+**Wave B1, 2026-10-20** (`design/DESIGN_SOUND_FIELD.md` § 13, the
+listener's state): a sleeper wakes to a sound loud for the room or to their
+own name, and the commit ends the sleep; a listener's own running machine
+and their covered ears cap what reaches them; a blast past 120 dB leaves a
+dulled, ringing ear on the scene (`dulled_hearing`) that recovers with the
+clock; a steady sound fades from every mind's view and its stopping is told
+once, the character tier's included; one's own name comes through a line
+heard only in pieces or as a voice. What it leaves, each the owner's
+(§ 13.7):
+
+- **"The rain has stopped" is not built.** The weather's sound is no
+  hearing percept -- it is folded into the field's floor, and the narrator's
+  manifest re-derives `weather_words(scoped, "sound")` every beat with no
+  key and no verdict -- and a steady source in a room it fills evenly (a
+  clock, a generator in a small room) has none either (`sound_shape` speaks
+  only for an uneven room), so neither can start, fade or stop for a mind.
+  Proposed: a weather-sound percept keyed like the soundscape, its ceasing
+  told by what the observer's ledger held, the manifest entry carrying its
+  verdict.
+- **The listener's own speech is not self-masking**: lines in a beat take
+  turns and nothing typed says two overlapped.
+- **A garment over the ears is not read**: the attire ledger has a `head`
+  region and no `ears` zone, so a hood, a helmet or earmuffs cover nothing.
+- **Own noise is a HELD running thing only**: a tap a body operates, chewing,
+  a hammer's one-beat blows are not read.
+- **A voice through a body's mass wakes a sleeper by name only**, and a
+  sedated body is never woken by a sound.
+- **The waking beat delivers only what woke them**; what followed the waking
+  sound within the beat is not perceived.
+- **A habituated sound is in no memory**: a character's soundscape -- its
+  start, its stop -- is not filed (`_EPISODE_SOUND_TAGS`).
+- **The impact ladder**: a gunshot written `deafening` is 80 dB at its cell
+  and dulls nobody; only `thunderous` and `catastrophic` (or an authored
+  `db`) reach `BLAST_DB`.
+- **The residue's `targeted` fragment at the outcome** ("something shifts
+  you") still reads a LINE addressed to the sleeper, from anywhere, as being
+  moved -- a sound question answered by a touch sentence.
+- **The interaction loop's micro-round** carries no own-name rescue and no
+  ear cap of its own beyond `hear_level`'s.
+- **Waking reads the voice before the head is turned to its addressee**:
+  `perception._sleep_hears` prices a line at the sleeper's ear by
+  `spatial_listener.voice_at_ear_db` on the raw relation, so a line spoken TO
+  a sleeper by a speaker whose back the record turned to them (under the sky,
+  beyond conversational reach) is priced with the head's shadow that
+  `hear_level` lifts for an addressee (the note's § 14.8). Rare by
+  construction; found merging the two waves.
+
 **Wave B2, 2026-10-20** (`design/DESIGN_SOUND_FIELD.md` § 14, how sound
 travels): a voice behind its speaker loses its words first, where a budget
 reads the direct sound; outdoors a strong wind is a din at the ear and bends
@@ -2236,7 +2283,9 @@ What it leaves:
   body that fired or rang it.
 - **Facing is the end-of-beat record** (`effective_facing`): a speaker who
   turned to say a line and turned back is graded as facing where the record
-  left them, and a turned head is not told from a turned body.
+  left them, and a turned head is not told from a turned body. Since the
+  merge this reaches a BYSTANDER only (the note's § 14.8): a line's
+  addressee, and a listener nobody can say it was for, are graded as faced.
 - **The felt rule** counts no ground-to-building coupling loss and no
   material damping (the longest reaches are long), cannot tell a siren on a
   wall from a machine on the floor (one `deafening` class), and does not

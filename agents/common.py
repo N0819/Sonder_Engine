@@ -9587,7 +9587,8 @@ def _normalise_views(raw_views, perceivers):
         clean[sk] = v
     return clean
 
-def _compose_residue_view(level, *, targeted=False, loud_event=False, pain=False):
+def _compose_residue_view(level, *, targeted=False, loud_event=False, pain=False,
+                          woke=""):
     """The content-free perception RESIDUE for a non-awake mind (asleep /
     sedated / unconscious). An unconscious mind integrates no channel into
     scene, identity, or words -- so this NEVER carries speech content, a name, a
@@ -9597,8 +9598,18 @@ def _compose_residue_view(level, *, targeted=False, loud_event=False, pain=False
     LLM is never asked for a non-awake view (it would leak with the full payload
     in hand), so this IS the whole output. The fragments become, verbatim, that
     mind's fragmentary memory of the beat (commit mints episodic memory from the
-    view), which is exactly the vague recovered impression waking should give."""
+    view), which is exactly the vague recovered impression waking should give.
+
+    WOKEN (`woke`, DESIGN_SOUND_FIELD § 13): a sleeper a sound woke this beat
+    is told THAT it did, and what kind of sound -- their own name, a shout,
+    a voice, a noise (`spatial_listener.WAKING_SOUNDS`) -- and nothing else:
+    no word of the line but the fact of the name, no speaker, no room. The
+    rest of the beat happened while they slept; from the next beat they
+    perceive as anyone awake does."""
     residue = compositor_value("residue")
+    woke_text = (residue.get("woke") or {}).get(str(woke or ""))
+    if woke_text:
+        return woke_text
     lead = residue["lead"].get(level, residue["lead"]["default"])
     frag = []
     if pain:

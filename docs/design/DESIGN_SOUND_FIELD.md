@@ -42,6 +42,13 @@ BYSTANDER -- never from the people talking to each other (§ 11.4's
 travels farther than its words; a voice is known by its sound, and a
 stranger's is described by what it carries; footsteps come through floors.
 
+**WAVE B1, 2026-10-20** (§ 13): the LISTENER'S state, which every path ends
+at. A sleeper wakes to a sound loud for the room, or to their own name; a
+listener's own machine and their covered ears lower what reaches them; a
+blast leaves an ear dulled and ringing, recovering with the clock; a steady
+sound fades from every mind's attention and its stopping is told once; and
+one's own name comes through a line otherwise lost.
+
 **WAVE B2, 2026-10-20** (§ 14, how sound TRAVELS; § 13 is the listener's
 state): a voice is directional, and behind its speaker the words fall
 first; outdoors the wind is noise at the ear and bends a sound's reach by
@@ -1375,6 +1382,394 @@ voice, thuds through a sited building's floors, a sneak's pace, footwear and
 coverings, the round's voice rung, the callers that pass no addressee,
 `known` as recognition, the persona's voice, babble's informational
 masking) and § 1.209 of `docs/UNBUILT_WORLD.md` (floor coverings).
+
+## 13. Wave B1: the listener's state (2026-10-20)
+
+The owner, the same day: "the system is failing to meet several real world
+principles", and, on this list, "I guess go ahead". §§ 11 and 12 price the
+PATH between a speaker and a listener. Nothing priced the one thing every
+path ends at: the listener's own ear -- whether its owner is asleep, making
+noise, covering it, or ringing from a blast -- nor what an ear does over
+time (it stops attending to a steady sound, and notices it stop) or with one
+word above all others (its owner's name). Wave B1 builds the five, each from
+typed state only, each stated with its real-world basis beside its constant
+(`world/spatial_listener.py`, re-exported by the `world/spatial.py` facade),
+and each failing-first (`tests/test_a_sleeper_wakes_to_sound.py`,
+`tests/test_your_own_noise_and_covered_ears.py`,
+`tests/test_a_blast_dulls_hearing.py`,
+`tests/test_getting_used_to_a_sound.py`,
+`tests/test_your_own_name_catches_your_ear.py`). Lane B2 (how sound
+TRAVELS: facing, wind, delay, vibration) ran beside it.
+
+### 13.1 A sleeper wakes to sound
+
+**The world.** A sleeper is woken by a sound loud or sudden for the room --
+behavioural awakening climbs steeply across about 50-70 dB(A) at the ear (a
+smoke alarm must put 75 dB(A) at the pillow to wake nearly every adult) --
+or by a meaningful sound far quieter, their own name above all (the
+own-name effect in sleep). A steady murmur does not wake them.
+
+**What existed.** A non-awake mind gets a content-free residue
+(`composer.residue_percepts`, `common._compose_residue_view`). Three waking
+rules live in `director_floors._awareness_exits` (the player's own
+declaration; a rouse aimed at a sleeper; a full night on the clock) -- and
+they run only inside `_reconcile_resolution`, which a beat with encoded rows
+skips (`UNBUILT_PIPELINE.md` § 1 item 3), so on today's prose path waking is
+the encoder's, by one clause ("a noise reaches them") with no model of what
+reaches an ear. The residue's "a sound, huge and wordless, reaches down" fired
+for any loud or shouted line ANYWHERE in the beat -- another building's
+included, and the sleeper's own cry.
+
+**The class.** A sound reaching a sleeper's ear at `WAKING_DB` and standing
+`WAKING_EMERGENCE_DB` out of the room's steady noise, or their own name in a
+line whose words would reach them awake, wakes them. Nothing quieter does.
+Only sleep: a sedated or unconscious body is not woken by a sound (dosage and
+medicine, the line `_awareness_exits`' third rule draws). The woken mind is
+told what woke them and nothing else; the commit ends the sleep; from the
+next beat they perceive as anyone awake does.
+
+**As built.**
+
+* `WAKING_DB` = 60 dB(A) at the ear, the middle of 50-70: a voice RAISED
+  anywhere in the room wakes a sleeper, a normal one only at the bedside, a
+  conversation across the room never. `WAKING_EMERGENCE_DB` = 10: what wakes
+  is loud or sudden FOR THE ROOM (a sleeper on an engine deck sleeps through
+  what wakes one in a bedroom). `SOUND_WAKES` = `asleep`.
+* `perception._sleep_hears` (the outcome pass, for every perceiver under):
+  the beat's lines -- each voice at the sleeper's ear by the hearing rule's own
+  path, `spatial_listener.voice_at_ear_db` -- its one-beat sounds on the
+  sleeper's field, far sounds the room graph brings (`distant_sounds`), and a
+  running thing that STARTED this beat (`started_sources`, measured against
+  the room's noise without it); a thing already running when they went under
+  is the room's own and is slept through. Through whatever covers the ears
+  (§ 13.2). Their own name (`composer.own_name_forms`, § 13.5) wakes them
+  where `hear_level` gives the line's words at all. A body with no hearing is
+  woken by none of it. Only a sleeper asleep when the beat BEGAN
+  (`_asleep_when_the_beat_began`: every active awareness row on them
+  `asleep`) -- a sleep the beat itself began is not ended by its own sounds.
+* The woken view is the residue's `woke` sentence alone, by what woke them
+  (`WAKING_SOUNDS`: `name`, `shout`, `voice`, `noise`; `residue.woke` in both
+  packs): "A shout tears through your sleep. You are awake." -- "Someone says
+  your name, and it pulls you up out of sleep. You are awake." No word of the
+  line, no speaker, no room: the rest of the beat happened while they slept.
+* The stage that renders the beat does not write the world: the outcome
+  hands on `woken`, and the commit closes every active awareness row on that
+  body under its own `condition_id` (`commit_entities._with_sound_wakings`,
+  `ended_reason: woken by a sound (...)`), over a re-assertion, never over an
+  ending the diff already wrote -- `_awareness_exits`' own merge rule.
+* The residue's intrusion now fires only for a LOUD sound (a loud or
+  shouted line, a `loud`-and-up event, a far sound) that reached the
+  sleeper's ear and stood out of the room, at the outcome and at the onset
+  (the player's raised line), never the sleeper's own.
+
+A voice through a body's mass (a sleeper inside another body) has no air
+budget (`voice_at_ear_db` answers None for the conducted cases), so it wakes
+by name only.
+
+### 13.2 Your own noise, and covered ears
+
+**The world.** You hear others less while you make noise yourself -- a
+drill, a hair-dryer, a vacuum cleaner at your own ear -- and hands over the
+ears take about 15-25 dB, a finger or a plug in the canal 25-30; a hood or a
+helmet muffles some.
+
+**The class.** A listener's own sound, and what covers their ears, lower
+what reaches them -- read from typed state only.
+
+**As built** (`spatial_listener.stamp_listener_ear`, called by
+`spatial_senses.spatial_rel_between` after the sound field's stamp; the cap
+`ear_level` is `hear_level`'s fourth, after the masking and the din, in
+`_capped_levels`; `hearing_reason` names `ears_covered`, `own_noise`,
+`hearing_dulled`):
+
+* COVERED (`ear_cover_db`): a settled contact over BOTH of the listener's
+  ears -- the part kind `ear` by the contact ledger's structural rule
+  (`_part_identity`, `_same_appendage`: "ears", "both ears", "ear canal"),
+  plural or a left and a right; a covering part that is a pair (hands,
+  palms, fingers) or a thing with no part. One ear, a moving or momentary
+  contact (read the way the ledger reads a record saved before `motion`), a
+  single thumb on "ears": nothing. On the surface `EARS_COVERED_DB` = 20 (the
+  middle of 15-25); into the canal (`relation: interior`) `EARS_STOPPED_DB` =
+  27 (the middle of 25-30). It takes from everything, the room's floor and
+  the listener's own noise included, down to the ear's own threshold.
+* OWN NOISE (`own_noise_db`): a running thing whose holder is the listener
+  (`sound_sources` places it at the holder's own cell), counted only where it
+  is a din at the ear (`DIN_DB`, the noise words' own threshold): a drill,
+  never a pocket watch. It caps everyone, the line's addressee included --
+  the din's "noise never stops people talking to each other" rests on both
+  of them sharing the noise and rising over it, and this noise is at the
+  listener's ear and a few decibels down at the speaker's.
+* THE EAR'S BUDGET (`ear_margin_db`): the voice at the ear
+  (`voice_at_ear_db`: its level, raised over the noise where the speaker
+  stands where the relation knows it, less the rule's own path), through the
+  covering, plus `AV_BENEFIT_DB` for a watched face, against
+  `ear_noise_db` -- the room's quiet floor and the listener's own noise, both
+  through the covering, and `EAR_SPEECH_THRESHOLD_DB` = 25 dB(A) (a healthy
+  ear follows a sentence in perfect quiet at about 20-30 dB(A): a speech
+  reception threshold of 0-10 dB HL, where 0 dB HL for speech in a sound
+  field is about 20 dB SPL), summed as powers; graded at the speech margins.
+  The voice rung (`voice_carries`) reads the weaker of the path's budget and
+  the ear's.
+* A SOUND, not only a line: `heard_events` and `distant_sounds` grade
+  through the ear (`heard_at_ear`, `ear_adjusted_db`), and a one-beat sound
+  in the listener's own room, received whole by an open ear as ever, is
+  graded on the field for a covered or dulled one
+  (`perception._reaches_this_ear`).
+
+| hands over both ears (20 dB) | open ear | covered |
+|---|---|---|
+| a normal voice across the room | full | full |
+| a whisper at arm's reach | full | none |
+| a normal voice through an open doorway | full | fragment |
+| a raised one through it | full | full |
+
+| a `loud` drill in the listener's own hands | quiet | drilling |
+|---|---|---|
+| a normal line said TO them from 9 paces | full | fragment |
+| a shout from 9 paces | full | full |
+| a normal line from at their elbow (the voice risen over it) | full | full |
+| a whisper from at their elbow | full | none |
+
+NOT READ, each for want of a typed fact or by ruling, and registered:
+the listener's own SPEECH (a beat's lines take turns and nothing typed says
+two overlapped -- read as masking every other line of the beat, a speaker
+would never hear an answer); a one-beat sound they make (a hammer blow is a
+moment, not a floor -- the owner, 2026-09-25); a running thing they operate
+but do not hold (a tap); a hood, a helmet or earmuffs (the attire ledger
+knows a garment covers the `head`, never whether it covers the ears, and a
+garment's name is prose).
+
+### 13.3 After a blast, hearing is dulled
+
+**The world.** An impulse past about 120-140 dB at the ear -- a gunshot
+close, an explosion, a crash in a closed space -- leaves a temporary
+threshold shift: muffled hearing and ringing, recovering over minutes to
+hours, linearly in the logarithm of the time since (Ward, Glorig & Sklar
+1959); a shift under 40 dB is gone within about sixteen hours.
+
+**As built.**
+
+* `BLAST_DB` = 120, the lower end. The shift: `DULLED_SHIFT_AT_BLAST_DB` = 20
+  at the threshold, a decibel more for each over it, to
+  `DULLED_SHIFT_MAX_DB` = 40 (past which the damage is not temporary, and not
+  modelled) -- `blast_shift_db`.
+* Recovery (`recovered_shift_db`): whole for `DULLED_HELD_SECONDS` = 120
+  (TTS2 is measured at two minutes), then linear in log time to nothing at
+  `DULLED_RECOVERY_SECONDS` = 16 h: some 45% left after an hour, a ninth
+  after eight.
+* THE BODY STATE is the scene key `dulled_hearing` (`HEARING_KEY`): `{name:
+  {shift_db, shift0_db, since_seconds, exposure_db}}`, beside the body's
+  other live physical state, so it rides checkpoints, archives and branches
+  with the scene. The outcome measures the loudest thing at each composed
+  mind's ear (`perception._blast_exposure`, `loudest_at_ear`: the field's
+  placed sources and the far sounds, through any covering) wherever anything
+  this beat could reach the threshold at all (`blast_possible`), and hands on
+  `hearing_exposures`; the commit (`commit_scene_state._record_dulled_hearing`)
+  ages every shift to the beat's end on the story clock, lays the exposures
+  on (a fresh blast restarts the recovery from the larger shift) and drops
+  the ears that are back (`DULLED_GONE_DB` = 1) -- `next_hearing_ledger`.
+* The hearing rule reads it (`dulled_db`) as the ear's threshold raised by
+  the shift; a far sound and a sound in the next room too.
+* THE LISTENER KNOWS (`composer.ear_percepts`, interoception, in their own
+  view only): "Your ears are ringing, and every sound comes to you
+  muffled." while the shift is at least `RINGING_DB` = 10, from the beat of
+  the blast (`blast_exposure`) on; "The ringing in your ears has faded."
+  once, to an ear whose own ledger held the ringing. Nobody else is told:
+  another body knows it only by what it sees.
+
+| a dulled ear in a quiet hall | shift 40 | 30 | 20 | 10 |
+|---|---|---|---|---|
+| a normal voice a pace off | fragment | full | full | full |
+| a normal voice across the hall | fragment | fragment | full | full |
+| a raised voice across the hall | fragment | full | full | full |
+| a whisper a pace off | none | none | fragment | fragment |
+
+### 13.4 Getting used to a sound, and noticing it stop
+
+**The world.** A steady sound fades from attention (habituation), and its
+stopping or changing is salient: "the clock has stopped".
+
+**What existed.** The player's delta view already drops a standing percept
+it holds unchanged, and `sound_ceased_percept` ("The noise has stopped.")
+reaches a player seat whose own ledger held the room's sound. The character
+tier re-rendered every steady sound every beat and was never told one stop:
+it computed no verdict to tell it by (`unheard_ceasing` dropped every
+`ceased` percept there).
+
+**As built** (`composer.HABITUATING_SOUND_TAGS` = the room's soundscape and a
+crowd's hum; `steady_sound`, `view_verdicts`, `habituated`,
+`_was_in_its_room`; both renderers):
+
+* a steady sound is told when it starts and when it changes (its key moves:
+  `changed`); between, `habituated` takes it out of the view -- on the
+  character tier too, which otherwise re-tells everything every beat; an
+  explicit look (`full_render`) asks for the room back;
+* its stopping is told ONCE to whoever was hearing it, character or player:
+  the character tier now has a steady sound's verdict (`view_verdicts`), so a
+  `ceased` percept its own ledger earned renders, and the next beat's
+  `unchanged` one does not; an ear that never had the sound is told nothing;
+* a sound that STARTS where the observer already stood (their ledger holds
+  the room's own description, `env`) leads the player's beat
+  (`leads_the_beat`); a newcomer hears the room as it is, in the background;
+* the character ledger files no verdicts, as before.
+
+NOT BUILT, and the larger half of the class: "THE RAIN HAS STOPPED". Rain,
+wind and thunder are no hearing percept at all -- the weather's sound is
+folded into the field's floor, and the narrator's manifest re-derives its
+words every beat, unkeyed (`narration.py`, `weather_words(scoped, "sound")`)
+-- and a steady sound in a room it fills evenly (a clock, a generator in a
+small room) has no percept either (`sound_shape` speaks only for an uneven
+room). Neither can be told to start, to fade, or to stop until it is one;
+registered, with the proposed shape (§ 13.7).
+
+### 13.5 Your own name catches your ear
+
+**The world.** One's own name is detected at lower signal levels than other
+words, out of a din or a conversation one is not following -- the
+cocktail-party effect (Moray 1959; Wood & Cowan 1995).
+
+**As built.**
+
+* `composer.own_name_forms`: the names others call a body by -- the card's
+  name, the name without a leading article ("The Doctor" is called
+  "Doctor"), each word of it substantial enough to be called alone
+  (`self_name_forms`), and the card's aliases; never a uid, a
+  `character:<id>` or an engine-coined descriptor, never a Latin form under
+  three letters. `perception._own_name_forms` reads them off the cards, once
+  a turn.
+* `own_name_said`: the name-learning reader's own match (`commit_common.
+  _form_in`): a name boundary in whatever script (so 「ヒナミさん」 holds
+  「ヒナミ」), case-sensitive for a name that is also an ordinary word.
+* `speech_percept(name_forms=)`: where the listener has the line only in
+  pieces (`fragment`) or as a voice alone (the voice rung, § 12.2), and it
+  holds their own name, the percept carries `own_name` -- "You catch your
+  name in it." / 「その中に、自分の名前が聞こえた。」, and in memory "I caught
+  my name in it." It says THAT the name was said, never which form, never
+  who said it, never another word: the voice rung still carries no words and
+  the fragment keeps exactly the pieces it had. A voice that does not reach
+  the listener carries no name either.
+* One voice a beat (`_names_kept`): voice-only lines of one speaker share a
+  sentence, and a name caught in a later one is kept on it.
+
+### 13.6 Measured
+
+Offline, no model call and no network (every socket refused), through the
+engine's own readers, on the owner's `engine.db` read `mode=ro` and copies
+of the four 2026-09-26 stories (deleted after). Scripts in the lane
+directory: `regrade_b1.py` (wave A's `regrade_a.py` plus each line's
+listener's ear stamps and own name), `compare_b1.py`, `measure_sleep.py`,
+`measure_blast.py`, `measure_habituation.py`, `scan_listener_state.py`.
+
+* **Every recorded line, re-graded: 2,408 of 2,408 decisions identical** in
+  every field (word, word if addressed, voice). No recorded relation carries
+  an ear stamp: of the 42 ear contacts in 4,505 checkpoints, one covers both
+  ears (chat 44 turn 94, Lilaeve's hands pressed over Hinami's ears while she
+  slept), and no recorded listener held a running thing.
+* **Your own name: 305 recorded decisions are of a line holding the
+  listener's own name; the rescue fires on 4 (2 beats).** 287 were heard
+  whole and 16 not at all, voice included. Chat 137 turn 49, from inside
+  Mirelle, "M-mirelle it tingles in here." reaches her through her own mass
+  in pieces -- now she catches her name; the opera story's turn 9,
+  "Then supper it is. Isolde -- your arm." two rooms off reaches Isolde as a
+  voice alone -- now she catches her name.
+* **Sleep: 128 beats began with a body under** (116 unconscious, 12
+  asleep). **Woken by sound: 1** -- chat 40 turn 11, "Good morning,
+  Hinami." muttered at the nest's side; the player's own input that beat was
+  "You eventually wake when morning comes". **Kept asleep: 11** -- Tamamo's
+  muttered "Slept well?" (40 t10); Lilaeve's normal-voice lines in the bath
+  (44 t93, t95), spoken within reach -- 60 dB at the ear, the waking level --
+  and kept from waking her only by Lilaeve's own hands pressed over her ears
+  (20 dB): a soothing voice the encoder wrote `normal` at arm's reach is the
+  edge question 1 is about; Mirelle's line to Hinami asleep inside her (101,
+  102, 112, 113 t70: a voice through a body's mass wakes by name only); four
+  beats with no line (t81). No unconscious body woken.
+  **The residue's intrusion: 4 beats lose it, 0 gain it** -- all four were
+  the sleeper's OWN cry (chats 23 and 27, the unconscious player's "AaUaa!"
+  and "WAAAAAAAA").
+* **Blast: 2 beats past `BLAST_DB`**, both the Site-17 elevator crash (chats
+  160 and 161 turn 11: "a tremendous crashing impact of metal crumpling and
+  concrete fracturing", `catastrophic`; "a bone-jarring crash as the car
+  impacts the concrete floor", `thunderous`): Hinami and Sarah Moon in the
+  car at 128-138 dB at the ear, shifts of 28-38 dB, 23-33 dB left by the
+  last recorded beat. Of the 26 recorded lines to them afterwards, 2 change:
+  Hinami's normal line to Sarah Moon the beat after (160 t12, shift 38) now
+  arrives in pieces, and Sarah Moon's whisper to Hinami nine beats on (161
+  t20, shift 25) is lost. Both minds would be told their ears ring. "A sound
+  like a gunshot echoing through the vertical shaft" in the same beat is
+  written `loud` (72 dB at its cell on the impact ladder) and dulls nobody.
+* **Habituation, on 9,315 stored views (onset and outcome): 37 character
+  views re-told an unchanged steady sound** (chat 122's character 58 on
+  turns 1-9, among them) -- now faded; 39 player views already dropped
+  theirs; **3 sound stops a character's ledger held were never told** -- now
+  told once.
+
+What changes for the worse, read as fiction: a character mind that has
+habituated holds no record of the steady sound past the beat it began (a
+soundscape is not filed into memory) -- its source is still seen; a raised
+voice, a slammed door or an argument in a sleeper's room now wakes them,
+which the corpus never asked of a story; a whisper beside a body running a
+machine in its own hands is lost (`tests/test_sound_field.py`'s
+`test_the_listener_hears_their_own_running_machine_first`, overturned in
+part, says so).
+
+### 13.7 The owner's questions, and what is left
+
+1. **Waking at 60 dB(A) at the ear, 10 out of the room.** At 55 a normal
+   voice two paces off wakes a sleeper; at 65 a raised voice across the room
+   does not. At 60 a normal voice at arm's reach does -- a body talking a
+   sleeper down in an ordinary voice, as chat 44's bath did, wakes them
+   unless the line is written as the hush it is.
+2. **A name wakes at any level its words carry** -- a muttered "Good
+   morning, Hinami" wakes her (chat 40 t11); a whispered name at arm's reach
+   would too.
+3. **Only sleep is woken by sound.** A lightly sedated body responds to voice
+   in the world (the RASS scale's -1 to -3); `sedated` is one rung here, and
+   it is not woken.
+4. **A voice through a body's mass wakes by name only** (chats 101-113 t70).
+5. **The waking beat tells only what woke them**; the rest of the beat --
+   even what followed the waking sound -- is not perceived. An ordered
+   reading (the beat's moments, `_sound_moments`) would give them the
+   remainder.
+6. **The listener's own speech is not self-masking**: no typed overlap. A
+   typed `over` on a line (an interruption, two people shouting at once) is
+   the shape that would let it be.
+7. **Garments over the ears are not read**: an `ears` zone on the attire
+   ledger's `head` region (`VISIBLE_ZONES`, `covered_zones`) is the typed
+   fact a hood, a helmet or earmuffs would need.
+8. **Own noise is a held running thing at a din** (`DIN_DB` 57): a tap a body
+   operates, a one-beat hammer blow and chewing are not read.
+9. **Covering takes 20 dB on the surface, 27 in the canal, and needs both
+   ears**; one covering part covers one ear at most.
+10. **The blast**: `BLAST_DB` 120; a shift of 20 at it, a decibel a decibel,
+    to 40; held two minutes, gone at sixteen hours; ringing from 10. The
+    impact ladder's `deafening` is 80 dB at its cell (§ 11.9's table), so a
+    gunshot written `deafening` dulls nobody -- the ladder's recalibration
+    (`docs/UNBUILT.md`) is what would let a close gunshot ring an ear.
+11. **The ear's own threshold, 25 dB(A).**
+12. **Characters habituate to a steady sound** -- the one place this wave
+    departs from the character tier's "a stateless mind is re-told
+    everything" -- and a soundscape is still filed into no memory, start or
+    stop. Whether a sound's starting and stopping should be remembered is the
+    owner's (memory is the priority).
+13. **"The rain has stopped" is not built**: a hearing percept for the
+    weather's sound -- told when it starts and changes, faded between, its
+    stopping told once by what the observer's ledger held -- keyed like the
+    soundscape, with the narrator's manifest entry carrying its verdict; and
+    an even room's steady source (a clock) given a percept of its own.
+14. **The own-name rescue says "your name"**, never the form spoken; a name
+    the fragment keeps by chance still trips the self-narration tripwire,
+    which does not read a fragment's pieces as quoted speech
+    (`UNBUILT_PERCEPTION.md` § 1.159, "a composer symptom the fragment
+    exposed").
+15. **The encoder's waking clause** ("WAKING IS YOURS ... a noise reaches
+    them", `conditions__awareness.txt`, en + ja) is unchanged: the model may
+    still wake a sleeper on a noise the hearing rule says did not reach them,
+    and the engine now wakes one a noise did. Whether the card should leave
+    noise to the engine is the owner's; no prompt text was touched.
+
+What is left is registered in `docs/UNBUILT_PERCEPTION.md` § 2.36 (wave B1's
+paragraph), and the defect found on the way -- the commit's sleeper set for
+stamina is always empty -- in `docs/UNBUILT_WORLD.md` § 1.218.
 
 ## 14. Wave B2: how sound travels (2026-10-20)
 

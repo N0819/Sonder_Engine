@@ -159,7 +159,7 @@ def test_a_room_that_went_even_by_filling_up_is_not_a_silence():
 def test_a_silence_is_only_news_to_an_ear_that_had_the_noise():
     """The firewall half. A percept that reaches a renderer against a ledger
     holding no sound for this room renders nothing at all, and the character
-    tier -- which computes no verdicts -- renders nothing either."""
+    tier, handed no ledger, renders nothing either."""
     sc = lamp_hall(generator=True)
     key = _soundscape_key(sc, "Q")
     sc["entities"]["gen"]["state"] = {"running": False}
@@ -176,7 +176,9 @@ def test_a_silence_is_only_news_to_an_ear_that_had_the_noise():
                                     prev_standing={stranger},
                                     language=language).text
         assert CEASED_EN not in text and CEASED_JA not in text
-        # Character mode diffs against nothing, so it says nothing here.
+        # Character mode with no ledger of the noise says nothing either
+        # (since wave B1 it diffs a steady sound against its own ledger:
+        # tests/test_getting_used_to_a_sound.py).
         text = composer.render_view(percepts, mode="character",
                                     full_render=True, language=language).text
         assert CEASED_EN not in text and CEASED_JA not in text

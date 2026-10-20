@@ -162,6 +162,12 @@
       "asleep": "",
       "default": ""
     },
+    "woke": {
+      "name": "誰かが自分の名前を口にし、その声に眠りの底から引き上げられる。目が覚めた。",
+      "shout": "叫び声が眠りを引き裂く。目が覚めた。",
+      "voice": "声が眠りの底まで届き、意識が引き上げられる。目が覚めた。",
+      "noise": "物音に眠りから叩き起こされる。目が覚めた。"
+    },
     "separator": "。",
     "drowsy": "意識が薄れ、輪郭がほどけていく。"
   },
@@ -329,11 +335,17 @@
     "speech_voice_shouting": "叫ぶような",
     "speech_voice_where": "{where}から、",
     "speech_voice_tone": "声の調子は、{tone}。",
+    "ears_ringing": "耳鳴りがして、どの音もくぐもって聞こえる。",
+    "ears_recovered": "耳鳴りが収まった。",
+    "episode_ears_ringing": "耳鳴りがして、どの音もくぐもって聞こえた。",
+    "episode_ears_recovered": "耳鳴りが収まった。",
+    "speech_own_name": "その中に、自分の名前が聞こえた。",
     "speech_trace": "かすかな声がするが、何も聞き取れない。",
     "speech_trace_placed": "{where}からかすかな声がするが、何も聞き取れない。",
     "episode_speech_voice": "{label}の{loudness}声を聞いたが、言葉までは聞き取れなかった。",
     "episode_speech_voice_unknown": "誰かの{loudness}声を聞いたが、言葉までは聞き取れなかった。",
     "episode_speech_voice_tone": "声の調子は、{tone}だった。",
+    "episode_speech_own_name": "その中に、自分の名前が聞こえた。",
     "episode_speech_trace": "かすかな声を聞いたが、何も聞き取れなかった。",
     "tone_adjective": "{tone}を声ににじませ、",
     "tone_article": "{tone}を声ににじませ、",

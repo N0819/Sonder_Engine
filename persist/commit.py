@@ -116,7 +116,7 @@ from persist.commit_attire import (_NON_ATTIRE_TERMS, sanitize_attire_items,
     apply_attire_diff)
 from persist.commit_entities import (_is_gated_awareness, _subjects_that_moved,
     _subjects_targeted_by_an_action, _supersede_disguises, _inherit_known_to,
-    commit_world_entities)
+    _ended_in, _with_sound_wakings, commit_world_entities)
 from persist.commit_ledgers import (OBLIGATION_OVERDUE_AGE, OBLIGATION_CAP,
     pending_obligation_view, _find_obligation, causal_obligation_ops, commit_obligations,
     _demand_unheard_by, _zip_rows,
@@ -182,6 +182,7 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     _merge_overlays, _overlay_handles, _overlay_ending_handles,
     _is_overlay_ending, _minted_this_beat, _entity_labels, _own_labels,
     _fold_duplicate_mints, _place_orphan_mints, _report_started_sources,
+    _record_dulled_hearing,
     BEARING_MANNERS, _bearing_subject_key, derive_borne_containment,
     _refuse_unheld_transfers, ComposedBeat, compose_beat_key,
     compose_beat_scene, composed_beat_for)

@@ -438,8 +438,16 @@ def test_the_listener_hears_their_own_running_machine_first():
     the voice beside them, raised over the engine at every conversational
     effort, was pinned in pieces and a whisper gone. A `loud` thing is an
     everyday one -- the same word is a whistling kettle -- and nothing short
-    of deafening takes a voice away, so every line from beside them is
-    whole, running or switched off."""
+    of deafening takes a VOICE away, so every voiced line from beside them
+    is whole, running or switched off.
+
+    AND IN PART BY WAVE B1 THE SAME DAY (DESIGN_SOUND_FIELD § 13, "your own
+    noise", the owner's "I guess go ahead"): a machine in the listener's OWN
+    hands is at their own ear, a din there that the speaker beside them
+    meets a few decibels down -- so breath, which has no voicing to rise
+    over it, is lost while it runs (a whisper to someone running a vacuum
+    cleaner is not heard), and comes back the moment it stops. The voice
+    rises over it and stays whole, as the ruling has it."""
     sc = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
                {"L": {"at": "south"}, "S": {"near": ["L"]}},
                copy.deepcopy(GENERATOR),
@@ -447,7 +455,8 @@ def test_the_listener_hears_their_own_running_machine_first():
     field = sound_field(sc, "L")
     [source] = field.sources
     assert source["holder"] == "L" and source["at"] == field.locate("L")
-    assert levels(sc, "S", "L") == {v: "full" for v in VOLUMES}
+    assert levels(sc, "S", "L") == {**{v: "full" for v in VOLUMES},
+                                    "whisper": "none", "mutter": "none"}
     sc["entities"]["gen"]["state"] = {"running": False}
     assert sound_field(sc, "L").sources == []
     assert levels(sc, "S", "L") == {v: "full" for v in VOLUMES}

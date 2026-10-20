@@ -1254,6 +1254,39 @@ def _place_orphan_mints(ctx, cid, sc, diff):
     return placed
 
 
+def _record_dulled_hearing(ctx, sc, beat_end, prev_clock):
+    """AN EAR A BLAST REACHED IS DULLED, AND IT RECOVERS WITH THE CLOCK
+    (DESIGN_SOUND_FIELD § 13, wave B1).
+
+    The outcome view measured, for every mind it composed, the loudest thing
+    at that mind's ear this beat (`perception._blast_exposure`) and handed on
+    each one past `spatial_listener.BLAST_DB` (`hearing_exposures`). This is
+    where that becomes the body's state: `next_hearing_ledger` ages every
+    shift the scene holds to the beat's end on the story clock -- whole for
+    two minutes, falling linearly in the logarithm of the time since, gone
+    at sixteen hours (`DULLED_RECOVERY_SECONDS`) -- lays the beat's
+    exposures on, and drops the ears that have recovered. The hearing rule
+    reads the result off the scene (`stamp_listener_ear`), and the body is
+    told its ears ring (`composer.ear_percepts`). A scene with no ledger and
+    no exposure is untouched."""
+    from world.spatial import HEARING_KEY, next_hearing_ledger
+    outcome = getattr(ctx, "perception_outcome", None) or {}
+    exposures = outcome.get("hearing_exposures") if isinstance(outcome, dict) else None
+    exposures = exposures if isinstance(exposures, dict) else {}
+    ledger = sc.get(HEARING_KEY)
+    ledger = ledger if isinstance(ledger, dict) else {}
+    if not exposures and not ledger:
+        return
+    now = beat_end
+    if now is None:
+        now = (prev_clock or {}).get("elapsed_seconds") or 0.0
+    after = next_hearing_ledger(ledger, exposures, now)
+    if after:
+        sc[HEARING_KEY] = after
+    else:
+        sc.pop(HEARING_KEY, None)
+
+
 def _record_sensory_events(ctx, cid, sc, diff, turn_idx):
     """A NOISE IS AN EVENT, AND AN EVENT IS OVER WHEN THE BEAT IS.
 
@@ -2742,6 +2775,7 @@ def prepare_scene_commit(ctx):
     _place_orphan_mints(ctx, cid, sc, diff)
     _report_started_sources(ctx, cid, sc, diff, _turn_idx)
     _record_sensory_events(ctx, cid, sc, diff, _turn_idx)
+    _record_dulled_hearing(ctx, sc, _beat_end, prev_clock)
     sc[BEAT_KEY] = _turn_idx + 1
     # THE LAYOUT LINT, under the same once-on-appearance rule
     # (`world/spatial_lint.py`, DESIGN_ROOM_FIDELITY §3): a reciprocal bearing
