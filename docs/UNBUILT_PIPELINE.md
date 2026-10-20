@@ -2120,9 +2120,12 @@ the job hard -- under a room author it held the door channel in 0 of 302
 calls, and a stop written as `null` read as no change.
 
 **Waiting on the owner's ruling.**
-- A player's reflexes at resolve: the resolve card keeps "the instant a body
-  answers before its mind can" (a flinch, a gasp); past it, a body's conduct
-  and a sound that says something are the player's.
+- RULED 2026-10-20 (the owner: "The director writing such details like
+  flinching reflex or sensation is completely fine, what it must not do is
+  write player or character decisions"): the resolve card states what a body
+  undergoes -- a reflex, a flinch, a sensation and what it stirs -- as the
+  Director's for every body, and what a mind decides, the player's or any
+  character's, as never the Director's; a word spoken is speech.
 - The player-contact guard (`director_contact._player_contacts_held`) now
   DROPS what it flags; it was detection-only by design. 0 flags over 155
   stored resolves.
