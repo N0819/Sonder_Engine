@@ -466,12 +466,14 @@ def test_a_thing_with_no_wall_for_its_door_costs_only_itself():
     onto the garden and no other a pace clear of it, so its woodpile found no
     door and was dropped -- and dropped, it asked for a band and a door of
     its own, and the whole building was refused. Its way now opens through
-    the room's door onto the garden; the woodpile alone is left out."""
+    the room's door onto the garden; the woodpile alone may be left out, and
+    nothing else. (The tier's arrangement-first core gives that room a
+    second outside wall, and lays the woodpile too: 2026-10-15.)"""
     plan = (copy.deepcopy(PLAN_106), {"rooms": {}, "positions": {}, "entities": {}}, set(),
             copy.deepcopy(SORT_106), copy.deepcopy(RELATE_106))
     spec, _layout, refused = _lay(plan)
     assert refused == []
-    assert spec.get("places_dropped") == ["woodpile"]
+    assert spec.get("places_dropped") in (None, ["woodpile"])
     assert {"garden", "path", "lantern", "gate", "shed", "byre"} <= set(spec["ground_is"])
 
 

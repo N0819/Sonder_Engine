@@ -528,6 +528,8 @@
   "Below {below}": "Below {below}",
   "bigger/newer for narrator and character_major": "bigger/newer for narrator and character_major",
   "Blacklist": "Blacklist",
+  "block ${b}: its storeys could not be laid on any outline of storey ${first}": "block ${b}: its storeys could not be laid on any outline of storey ${first}",
+  "block ${b}: storey ${first} could not be laid": "block ${b}: storey ${first} could not be laid",
   "Bodies": "Bodies",
   "bodies must be 'hash_only' or 'full'.": "bodies must be 'hash_only' or 'full'.",
   "Body and clothing generated. Review, then save.": "Body and clothing generated. Review, then save.",

@@ -500,6 +500,8 @@
   "behavioral expression": "行動表現",
   "bigger/newer for narrator and character_major": "ナレーターと主要登場人物の文字を大きくするcharacter_major",
   "Blacklist": "ブラックリスト",
+  "block ${b}: its storeys could not be laid on any outline of storey ${first}": "ブロック ${b}：階 ${first} のどの外形の上にも、その階々を配置できませんでした",
+  "block ${b}: storey ${first} could not be laid": "ブロック ${b}：階 ${first} を配置できませんでした",
   "Bodies": "身体",
   "bodies must be 'hash_only' or 'full'.": "bodies は 'hash_only' または 'full' でなければなりません。",
   "Body and clothing generated. Review, then save.": "身体と衣服が生成されました。確認後、保存してください。",

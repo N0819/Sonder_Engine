@@ -1002,6 +1002,133 @@ through the location path, which cannot say a storey; the lighthouse's
 lamp room is planned round off its stair alone; the manor holds 32 rooms.
 Each is the owner's call (`UNBUILT_WORLD.md` §2.43).
 
+## The arrangement-first core (2026-10-15 to 19)
+
+After the lab's look round the owner asked: "Just what the hell do we have
+to do to have sensible layouts?" Then, on the proposal below: "I suppose you
+can go ahead and try. but I'd rather get it mostly right the first try
+rather than resolved."
+
+**Why the old search could not.** The lab's solver works in four steps:
+- it places the stair halls first;
+- it carves the floor left into pieces;
+- it drops rooms into those pieces at random;
+- it keeps the best of about 600 tries.
+
+A side or a size the plan asks for is one cost among many, so the house
+swings with the seed. Over 14 shrine runs it turned 36 of 87 asked sides.
+It laid a stated twelve-mat hall at half or twice its size. It left a room
+nobody could reach in 7 of 18 layouts, and stood upper rooms over roof in
+10. The spread was the search's, not the calls'.
+
+**The core (`world/layout_arrange.py`, `solve_arranged`).** It lays each
+building in one pass, with the same house every time, in three steps:
+- **The arrangement.** Each storey is divided as a slicing tree of the
+  plan's own relations: who stands beside whom, on which side, and in which
+  order along a wall. An asked side is a constraint of the division, and
+  gives way only when no division can hold it. Asks give way in a fixed
+  order (`RELAX_ORDER`), and are given back where they need not have gone
+  (`_relaxed`).
+- **The sizes.** A dynamic program over each division sizes every room. A
+  room the lore sizes is held within `STATED_BAND` (15%) of that size; any
+  other room is sized from what it holds (`room_target`). A service room
+  keeps its size and a flexible room takes the spare floor. A stair hall is
+  its flight and a landing.
+- **The storeys stack.** The ground is laid first, then each storey on the
+  one below:
+  - every room above the ground stands over a room or a stair hall;
+  - a storey under the roof is smaller;
+  - a flight arrives where the floor above needs it;
+  - below the ground a storey is dug: its rooms lie under the house's
+    footprint, with earth where no room stands (`Layout.earth`).
+
+Doors, windows, furniture and the grounds are then laid by the lab's own
+code. The seam is `layout_solver.solve_with`, over `_prepare`, `_materialize`
+and `_finish`. The lab's `solve()` is that same code with its own search,
+and re-solves its baselines cell for cell.
+
+**Never worse than today.** `layout_bridge.solve_for` lays a building with
+the core once. The old four-seed search (`lab_solve_for`) lays it instead,
+with a warning on the layout, where the core:
+- raises;
+- passes its work budget (`ARRANGE_WORK_BUDGET`, 2.0 million table entries
+  a building, counted rather than clocked, so the fallback is deterministic);
+- or is refused.
+
+A layout refused only for its ground keeps the core's house, with its
+failing places dropped by `lay_out`'s rounds (`FALL_BACK_ON_GROUND = False`;
+the owner's page showed this setting).
+
+**The review, and the three rounds that answered it.** Four reviewers read
+the core: its code, its drawings as houses, seven buildings it had never
+seen, and the tests. They found 31 faults, 11 of them high:
+- whole buildings refused where the old search laid them: outdoor doors
+  that could not all hold, a floor above larger than the ground, a skipped
+  storey, room ids that changed the result;
+- unsided joins that blew the dynamic program past a gigabyte;
+- a byre crushed to 8 m² of its stated 36 by the ladder hall beside it;
+- the hospital's main stair, which could not be climbed;
+- two caverns laid on the cells of one wall;
+- on the shrine, a main hall open on three sides with no outside wall.
+
+Round 1, robustness:
+- the fallback;
+- a per-storey work budget with mid-solve narrowing (`NARROW_WORK`);
+- an unsided join read as one variant;
+- tables shared across a flight's ends and across relaxations;
+- a tier for turning a door outdoors;
+- the ground grown to carry a heavier floor above (`LOOKAHEAD_GROW`);
+- ranked down-sets;
+- a 126-case regression gate.
+
+Round 2, stairs:
+- Every stair can be climbed. A straight flight whose rooms reach the same
+  end becomes a U (`layout_solver.STAIR_FALLBACK`, never an L).
+- A stair hall may take a landing past `LANDING_MAX`, at `LANDING_OVER_COST`
+  a cell, up to `LANDING_OVER_CEILING` times its least area, and only where
+  that buys a size or a side.
+- An upper room stands over what its stair serves (`OVER_COST`).
+- A one-room tower storey rises sheer.
+
+Round 3, the ground's shape. Here the owner chose that the outline may
+step, rather than rooms leaving their asked sides.
+- A ground room may leave a strip of open ground (a porch, a recess, an L)
+  at `NOTCH_COST` a cell and `NOTCH_STEP_COST` a corner, with at most
+  `GROUND_STEPS_MAX` corners. A strip never lies under a room of the storey
+  above and never seals a landing. Such strips are kept in `Layout.notches`,
+  and every reader treats them as open ground: doors and windows face them,
+  and the grounds lie on them.
+- On the engine path, an open join between rooms opens at most
+  `OPEN_JOIN_MAX` (3) cells of wall.
+- A heart room with no outside wall is priced (`HEART_DARK_COST`).
+- A block stands against the room it joins, and slides along the wall off
+  another block on the same wall.
+- Where the lore puts a cavern beyond the basement's wall, the cavern takes
+  that wall from a cellar stair asked on it.
+- A door with no asked side faces the shortest way to what it serves.
+
+**Measured.** The new core against the old search, on 14 shrine runs
+relayed from their recorded answers through `lay_out` with no model, plus
+the 4 lab specs where a count is out of 18:
+
+| | new core | old search |
+|---|---|---|
+| sense checks failed per shrine layout (of 23) | 5.06 | 11.3 |
+| asked sides turned (of 87) | 1 | 36 |
+| lore claims passed (of 742) | 516 | 355 |
+| similarity to the lab's liked shrine | 0.519 | 0.503 |
+| Seal Cavern beyond the basement's north wall (of 14) | 11 | 12 |
+| layouts with a room nobody can reach (of 18) | 0 | 7 |
+| median seconds per shrine through `lay_out` | 2.4 | 37 |
+| fuzz places laid (of 1,053) | 932 | 903 |
+
+Seven new plans were written as the Room would write them: an inn, the inn
+without its office, a townhouse, a farmhouse with its byre, a hospital wing,
+a watchtower and a merchant's house. All seven lay, with a median of 4.8 s.
+The owner read the drawings beside the lab's and the engine's: "it looks
+much much nicer", and then "it's much better than it was before we started
+this workflow". What is left is in `UNBUILT_WORLD.md` §2.43.
+
 ## Tests
 
 `tests/test_a_planned_building_is_laid_out_by_relations.py` (the tier, the
@@ -1022,3 +1149,25 @@ a part of the map of its own), `tests/test_the_layout_cards_offer_nothing_to_cop
 count, the ground's lore), `tests/test_a_thing_across_ground_keeps_its_place.py`
 (a thing joined across ground keeps the answer's relation) and
 `tests/test_a_walk_runs_between_its_doors.py` (a way with a door at each end).
+
+The arrangement-first core has four test files of its own. Each new or
+rewritten test fails with its fix taken back.
+- `tests/test_the_core_never_lays_worse_than_the_lab.py`: the fallback on a
+  raise, a budget or a refusal; the door-turn tier; the grown ground; a
+  skipped storey; a corridor's end; unsided joins within budget.
+- `tests/test_a_storey_below_the_ground_is_dug.py`: earth below the ground,
+  and a cavern beyond its wall.
+- `tests/test_a_stair_is_climbed_and_its_landing_reached.py`: the U for an
+  unclimbable flight, the priced landing, a landing nobody reaches, the desk
+  under its window, doorways spread, the sheer tower, an upper room over
+  what its stair serves.
+- `tests/test_the_ground_may_step_and_the_heart_keeps_a_wall.py`: the
+  outline steps, a notch as open ground for every reader, the heart's wall,
+  the three-cell open join, the placing and sliding of blocks, the
+  entrance's tie-break, the latrine door, the stair-head price.
+
+Two tests pinned the old search and were rewritten:
+- the four-seed loop is now the fallback's
+  (`test_a_planned_building_is_laid_out_by_relations.py`);
+- a woodpile the old geometry dropped is laid
+  (`test_the_grounds_keep_their_doors.py`).

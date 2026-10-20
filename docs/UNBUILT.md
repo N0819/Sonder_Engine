@@ -351,7 +351,7 @@ Not scheduled and not committed to a phase. See the
 - [§2.39 — The site plan: sight with height, drops, flight, terrain](UNBUILT_WORLD.md#unbuilt-2-39)
 - [§2.40 — A level of detail for distant landscapes — BUILT 2026-10-05, what is left](UNBUILT_WORLD.md#unbuilt-2-40)
 - [§2.44 — The rooms the closure invents: frontages and names — BUILT 2026-10-08, what is left](UNBUILT_WORLD.md#unbuilt-2-44)
-- [§2.43 — Buildings from relations: the layout solver as a tier of the plan — first slice BUILT 2026-10-08, what is left](UNBUILT_WORLD.md#unbuilt-2-43)
+- [§2.43 — Buildings from relations: the layout solver as a tier of the plan — first slice BUILT 2026-10-08, the arrangement-first core 2026-10-19, what is left](UNBUILT_WORLD.md#unbuilt-2-43)
 
 **4. Architecture gaps**
 

@@ -1848,14 +1848,17 @@ def test_the_plans_own_sides_reach_the_solver_as_asked_sides():
 
 
 def test_a_building_the_search_missed_on_one_seed_is_tried_on_the_next(monkeypatch):
-    """`solve_for` solves every seed, the solver's own first: of those the
-    bridge does not refuse, one with every stair landed is taken -- the one
-    that turned the fewest sides asked of its joins, the earlier seed on a
-    tie -- else the first the bridge does not refuse, else the first seed's
-    refusal. On the owner's shrine (chat 164, 2026-10-10) one answer set
-    stood on 13 of 20 seeds, the solver's own among the failures; and the
-    first seed that stood was taken whatever it turned, where a later one
-    kept more of what was asked (2026-10-15)."""
+    """The lab's search, as the bridge solved every building until
+    2026-10-15 and as it lays one the tier's core cannot (`lab_solve_for`,
+    `solve_for`'s fallback since 2026-10-19), solves every seed, the
+    solver's own first: of those the bridge does not refuse, one with every
+    stair landed is taken -- the one that turned the fewest sides asked of
+    its joins, the earlier seed on a tie -- else the first the bridge does
+    not refuse, else the first seed's refusal. On the owner's shrine (chat
+    164, 2026-10-10) one answer set stood on 13 of 20 seeds, the solver's
+    own among the failures; and the first seed that stood was taken
+    whatever it turned, where a later one kept more of what was asked
+    (2026-10-15)."""
     from world.layout_solver import SEED
     seen, plans = [], {}
 
@@ -1873,7 +1876,7 @@ def test_a_building_the_search_missed_on_one_seed_is_tried_on_the_next(monkeypat
         seen.clear()
         for k, outcome in enumerate(table):
             plans[f"layout{SEED + k}"] = outcome
-        return lb.solve_for({}, {}, attempts=attempts)
+        return lb.lab_solve_for({}, {}, attempts=attempts)
 
     def clean(turned=0):
         return [], [], turned

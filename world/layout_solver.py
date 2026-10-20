@@ -171,6 +171,14 @@ REACH_MAX = 2
 #: thing's step lies outside the other door's ground (`_grounds`' aprons).
 #: Named per ask-before-limiting.
 THING_DOOR_GAP = 2
+#: AN OPEN JOIN BETWEEN TWO ROOMS opens at most this many cells of their
+#: shared wall, centred on its doorway, on the arrangement core's path
+#: (`_place_doors(apart=True)`); the lab's own solve opens the whole wall,
+#: as before. Opened whole, a room asked a neighbour on every side and every
+#: join open stood open on three sides (the shrine's main hall: 12 of 14
+#: runs; capped at three, none -- the review's visual 1). An open stair keeps
+#: its whole wall open. Named per ask-before-limiting.
+OPEN_JOIN_MAX = 3
 #: Paces between two outbuildings the plan bears the same way
 #: (`_place_blocks`): one pace between them is ground no place is read to
 #: hold, and a door opening into it opened onto nothing (a review of
@@ -1407,6 +1415,8 @@ class Layout:
     roofs: dict = field(default_factory=dict)        # level -> [Rect] roof of the storey below, outside this one
     towers: set = field(default_factory=set)         # blocks whose walls rise sheer: no storey has roof beside it
     contents: dict = field(default_factory=dict)     # room_id -> {fixture_id: [things in or on it]}
+    earth: dict = field(default_factory=dict)        # level < 0 -> [Rect] undug ground inside a storey's outline
+    notches: dict = field(default_factory=dict)      # level 0 -> [Rect] open ground inside the ground's outline
 
     def as_dict(self):
         return {
@@ -1432,10 +1442,63 @@ class Layout:
             "details": self.details, "contents": self.contents, "windows": self.windows,
             "voids": {str(lv): [r.as_dict() for r in rs] for lv, rs in self.voids.items()},
             "roofs": {str(lv): [r.as_dict() for r in rs] for lv, rs in self.roofs.items()},
+            # BELOW THE GROUND, cells of a storey's outline no room takes are
+            # EARTH (`layout_arrange.EARTH_COST`): no room, no floor, no door.
+            # Written only where a storey holds some, so a layout with none
+            # -- every one the lab's own search lays -- reads as it did
+            **({"earth": {str(lv): [r.as_dict() for r in rs] for lv, rs in sorted(self.earth.items())}}
+               if self.earth else {}),
+            # ON THE GROUND, cells of the outline no room takes are OPEN
+            # GROUND -- a notch in the house's outline (`layout_arrange.
+            # NOTCH_COST`): outside its walls, no room, no floor. Written only
+            # where a ground holds some, as `earth` is
+            **({"notches": {str(lv): [r.as_dict() for r in rs] for lv, rs in sorted(self.notches.items())}}
+               if self.notches else {}),
         }
 
 
-def solve(spec, seed=SEED) -> Layout:
+@dataclass
+class Division:
+    """What an arrangement core hands to the materializer (`solve_with`):
+    exactly what `_search` leaves for `_materialize`, plus the outlines when
+    the core sizes them itself.
+
+    `chosen` -- {(block, level): {room id | "<shaft>@<level>" |
+    "spare:<level>:<x>:<y>" | "earth:<level>:<x>:<y>": Rect}}: one rectangle
+    per room, stair hall and spare piece -- or, below the ground, piece of
+    earth (`Layout.earth`) -- covering that block's outline on that storey
+    exactly.
+    `hall_at` -- {shaft id: (kind laid, flight Rect)}: one flight for every
+    storey of the shaft. `outlines` -- {block: {level: Rect}}, or None to keep
+    `_place_blocks`' own. `warnings` -- sentences the layout carries."""
+    chosen: dict
+    hall_at: dict
+    outlines: dict | None = None
+    warnings: list = field(default_factory=list)
+
+
+def _blocks_apart_towers(spec, rooms, layout):
+    """What `_place_blocks` writes on the layout that no size decides -- its
+    towers, every room's block and the blocks set apart -- for a core that
+    sizes the outlines itself (`solve_with(own_outlines=True)`)."""
+    levels_of = {}
+    for r in rooms.values():
+        levels_of.setdefault(r["block"], set()).add(r["level"])
+    for b, levels in levels_of.items():
+        if all(sum(1 for r in rooms.values() if r["block"] == b and r["level"] == lv) <= 1 for lv in levels):
+            layout.towers.add(b)
+    declared = {str(b.get("id")): b for b in spec.get("blocks") or () if isinstance(b, dict) and b.get("id")}
+    layout.blocks = {rid: r["block"] for rid, r in rooms.items()}
+    layout.apart = {b for b, decl in declared.items() if decl.get("apart")}
+
+
+def _prepare(spec, seed=SEED, own_outlines=False):
+    """Everything `solve` reads before it divides a storey, as a namespace
+    (or the finished Layout when the spec holds no room): the rooms and
+    stairs read, the shafts, the outlines (`_place_blocks`, unless the core
+    sizes them: `own_outlines`), the stair halls as rooms, the grounds' ids,
+    the rooms that open outdoors, the cross-block facing read off the
+    outlines, and `weights_for`."""
     rng = random.Random(seed)
     front = str(spec.get("front") or "s")[:1]
     front = front if front in _SIDES else "s"
@@ -1451,8 +1514,12 @@ def solve(spec, seed=SEED) -> Layout:
         layout.warnings.append("the spec names no entrance room")
     layout.entrance = entrance
     shafts = _shafts(rooms, stairs, layout)
-    outlines = _place_blocks(spec, rooms, shafts, front, layout)
-    layout.outlines = outlines
+    if own_outlines:
+        outlines = None
+        _blocks_apart_towers(spec, rooms, layout)
+    else:
+        outlines = _place_blocks(spec, rooms, shafts, front, layout)
+        layout.outlines = outlines
     halls = _hall_rooms(shafts, rooms)
     every = dict(rooms)
     every.update(halls)
@@ -1475,26 +1542,27 @@ def solve(spec, seed=SEED) -> Layout:
         outward_weight[entrance["room"]] = 40
     # a room joined to a room of another block stands on the wall facing it
     facing = {}
-    for rid, r in rooms.items():
-        for other, _j in _joins(rid, rooms).items():
-            ob = rooms[other]["block"]
-            if ob == r["block"]:
-                continue
-            a = outlines[r["block"]].get(r["level"])
-            c = outlines[ob].get(rooms[other]["level"])
-            if a is None or c is None:
-                continue
-            side = ("e" if a.x + a.w <= c.x else "w" if c.x + c.w <= a.x else
-                    "s" if a.y + a.d <= c.y else "n" if c.y + c.d <= a.y else None)
-            if side:
-                facing.setdefault(r["level"], {})[rid] = side
-                # standing off that wall, the join has no doorway and the
-                # building is refused for it (`layout_bridge.refusals`), so it
-                # costs what a missing doorway costs, not an outward room's 15:
-                # at 15 the owner's shrine (chat 164, 2026-10-10) set its
-                # basement off the wall its Seal Cavern stands beyond, in every
-                # one of 20 seeds
-                outward_weight[rid] = max(outward_weight.get(rid, 0), 60)
+    if outlines is not None:
+        for rid, r in rooms.items():
+            for other, _j in _joins(rid, rooms).items():
+                ob = rooms[other]["block"]
+                if ob == r["block"]:
+                    continue
+                a = outlines[r["block"]].get(r["level"])
+                c = outlines[ob].get(rooms[other]["level"])
+                if a is None or c is None:
+                    continue
+                side = ("e" if a.x + a.w <= c.x else "w" if c.x + c.w <= a.x else
+                        "s" if a.y + a.d <= c.y else "n" if c.y + c.d <= a.y else None)
+                if side:
+                    facing.setdefault(r["level"], {})[rid] = side
+                    # standing off that wall, the join has no doorway and the
+                    # building is refused for it (`layout_bridge.refusals`), so it
+                    # costs what a missing doorway costs, not an outward room's 15:
+                    # at 15 the owner's shrine (chat 164, 2026-10-10) set its
+                    # basement off the wall its Seal Cavern stands beyond, in every
+                    # one of 20 seeds
+                    outward_weight[rid] = max(outward_weight.get(rid, 0), 60)
 
     def weights_for(ids, free_area):
         """Each room's share: what it needs, grown toward its ceiling when the
@@ -1527,9 +1595,44 @@ def solve(spec, seed=SEED) -> Layout:
                 t[i] += spare * t[i] / ts
         return t, 0.0
 
-    # BLOCK BY BLOCK -- the entrance's first -- the stair halls are placed
-    # first (several placements tried), every storey divided around them, and
-    # the placement whose storeys score best kept.
+    return _Prepared(spec=spec, seed=seed, rng=rng, front=front, layout=layout, rooms=rooms, stairs=stairs,
+                     entrance=entrance, shafts=shafts, outlines=outlines, halls=halls, every=every,
+                     grounds=grounds, things=things, outdoor_ids=outdoor_ids, outward=outward,
+                     outward_weight=outward_weight, facing=facing, weights_for=weights_for)
+
+
+@dataclass
+class _Prepared:
+    """What `_prepare` hands the rest of a solve (see `_prepare`)."""
+    spec: dict
+    seed: int
+    rng: random.Random
+    front: str
+    layout: Layout
+    rooms: dict
+    stairs: list
+    entrance: dict
+    shafts: list
+    outlines: dict | None
+    halls: dict
+    every: dict
+    grounds: dict
+    things: set
+    outdoor_ids: set
+    outward: dict
+    outward_weight: dict
+    facing: dict
+    weights_for: object
+
+
+def _search(p):
+    """The lab's core: BLOCK BY BLOCK -- the entrance's first -- the stair
+    halls are placed first (several placements tried), every storey divided
+    around them, and the placement whose storeys score best kept. Returns
+    `(chosen, hall_at)`."""
+    rooms, outlines, shafts, every, layout = p.rooms, p.outlines, p.shafts, p.every, p.layout
+    entrance, seed, front, rng = p.entrance, p.seed, p.front, p.rng
+    weights_for, outward, outward_weight, facing = p.weights_for, p.outward, p.outward_weight, p.facing
     block_order = sorted(outlines, key=lambda b: (b != (rooms[entrance["room"]]["block"] if entrance else b)))
     chosen = {}          # (block, level) -> parts
     hall_at = {}         # shaft id -> (kind, Rect)
@@ -1537,7 +1640,7 @@ def solve(spec, seed=SEED) -> Layout:
         mine = [sh for sh in shafts if sh.block == b]
         spots = {sh.id: _shaft_spots(sh, outlines, rng) for sh in mine}
 
-        def evaluate(pick, tries):
+        def evaluate(pick, tries, b=b, mine=mine):
             # every placement is judged by the same sequence of divisions
             # (common random numbers), so comparing two placements compares
             # them, not their luck
@@ -1585,7 +1688,7 @@ def solve(spec, seed=SEED) -> Layout:
                 parts_by_level[lv] = best_lv[1]
             return total, parts_by_level
 
-        def clashes(sh, spot, pick):
+        def clashes(sh, spot, pick, mine=mine):
             return any(spot[1].overlaps(pick[o.id][1]) and set(o.levels) & set(sh.levels)
                        for o in mine if o.id in pick and o.id != sh.id)
 
@@ -1623,18 +1726,35 @@ def solve(spec, seed=SEED) -> Layout:
                     sc = evaluate(trial, quick)[0]
                     if sc < current:
                         current, pick = sc, trial
-        total, parts_by_level = evaluate(pick, TRIES)
-        best = (total, parts_by_level, pick)
-        _total, parts_by_level, pick = best
+        _total, parts_by_level = evaluate(pick, TRIES)
         for lv, prts in parts_by_level.items():
             chosen[(b, lv)] = prts
         hall_at.update(pick)
+    return chosen, hall_at
 
-    # the layout's rooms: the spec's, the stair halls, and the stores left over
+
+def _materialize(p, chosen, hall_at):
+    """The layout's rooms: the spec's, the stair halls, and the stores left
+    over; roofs and voids above the ground; the stairwells."""
+    layout, outlines, rooms, every, shafts = p.layout, p.outlines, p.rooms, p.every, p.shafts
     for (b, lv), prts in chosen.items():
         # a tower's walls rise sheer: beside its stair is a well, never roof
         roof = set() if b in layout.towers else _roof_cells(prts, outlines[b][lv], lv)
         for rid, r in prts.items():
+            if rid.startswith("earth:"):
+                # A STOREY BELOW THE GROUND IS DUG, NOT BUILT: cells of its
+                # outline no room takes are earth -- no room, no store, no
+                # floor (`layout_arrange.EARTH_COST`; `check` refuses earth
+                # above the ground)
+                layout.earth.setdefault(lv, []).append(r)
+                continue
+            if rid.startswith("notch:"):
+                # THE GROUND'S OUTLINE MAY STEP: cells of it no room takes are
+                # open ground, outside the house's walls -- no room, no store,
+                # no floor (`layout_arrange.NOTCH_COST`; `check` refuses a
+                # notch off the ground)
+                layout.notches.setdefault(lv, []).append(r)
+                continue
             if rid.startswith("spare:") and lv > 0 and r.cells() <= roof:
                 layout.roofs.setdefault(lv, []).append(r)
                 continue
@@ -1680,14 +1800,50 @@ def solve(spec, seed=SEED) -> Layout:
             "enclosed": sh.enclosed, "door": sh.door, "flights": [st.id for st in sh.flights],
             "halls": {str(lv): f"{sh.id}@{lv}" for lv in sh.levels}})
 
+
+def _finish(p, apart=False, face=True):
+    """Everything downstream of the division: doors, windows, zones,
+    furniture and the grounds. `apart`: a room's doorways stand on cells of
+    their own where a wall allows (`_place_doors`) -- the arrangement core's
+    path only (`solve_with`); the lab's own solve is unchanged. `face`
+    (read only with `apart`): an outside door no side is asked of opens
+    where its way is shortest (`_sides_toward`); off, in the lab's order."""
+    layout, every, grounds = p.layout, p.every, p.grounds
     approaches = {str(w.get("id")) for w in grounds.get("ways") or ()
                   if isinstance(w, dict) and str(w.get("from") or "") == "entrance"}
-    _place_doors(layout, every, outdoor_ids, approaches, things)
+    _place_doors(layout, every, p.outdoor_ids, approaches, p.things, apart=apart, face=face)
     _place_windows(layout, every)
     _place_zones(layout, every)
     _furnish(layout, every)
     _grounds(layout, every, grounds)
     return layout
+
+
+def solve(spec, seed=SEED) -> Layout:
+    """The lab's solve: `_prepare`, the search (`_search`), `_materialize`,
+    `_finish` -- one seed of the randomized division search."""
+    p = _prepare(spec, seed)
+    if isinstance(p, Layout):
+        return p
+    chosen, hall_at = _search(p)
+    _materialize(p, chosen, hall_at)
+    return _finish(p)
+
+
+def solve_with(spec, core, seed=SEED, own_outlines=False, face=True) -> Layout:
+    """A solve with `core(p) -> Division` in place of `_search` -- and of
+    `_place_blocks`' sizing too where `own_outlines` (the core then returns
+    `outlines`, and reads any cross-block facing itself). Materializing and
+    everything downstream stay the lab's. `face`: `_finish`'s."""
+    p = _prepare(spec, seed, own_outlines=own_outlines)
+    if isinstance(p, Layout):
+        return p
+    div = core(p)
+    if own_outlines:
+        p.outlines = p.layout.outlines = div.outlines
+    p.layout.warnings.extend(div.warnings)
+    _materialize(p, div.chosen, div.hall_at)
+    return _finish(p, apart=own_outlines, face=face)
 
 
 # ------------------------------------------------------------ doors
@@ -1798,13 +1954,22 @@ def _stair_doorways(layout, per_wall):
     return out
 
 
-def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=frozenset()):
+def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=frozenset(), apart=False,
+                 face=True):
     """One doorway per join between rooms, spread along a shared wall in
     declared order; a doorway onto every enclosed stairwell; the entrance
     and every other outside door on the outside wall asked, one a wall --
     save a door onto a thing at a door (`things`), laid after the rest on the
     wall asked where a cell of it stands `THING_DOOR_GAP` paces clear of the
-    room's other outside doors, else on another wall."""
+    room's other outside doors, else on another wall.
+
+    `apart` (the arrangement core's path, `solve_with`): A ROOM NEVER OPENS
+    TWO DOORWAYS FROM ONE CELL where the wall has another -- the spread
+    avoids a cell of either room a doorway on another wall already opens
+    from, a stair's first (the review of 2026-10-16, visual 5: a hallway's
+    corner cell held the stair's arrival door and the meditation room's door
+    in 8 of 18 shrine layouts; the spread avoided only cells fixed on its
+    own wall). Off, the lab's spread is unchanged."""
     per_wall = {}
     done = set()
     for lv, parts in layout.floors.items():
@@ -1830,6 +1995,18 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
     # its storey takes (`_stair_doorways`); every other doorway of the wall
     # is spread evenly over the cells left, as every doorway was before
     at_stair = _stair_doorways(layout, per_wall)
+    held = {}                           # (storey, room) -> its cells a doorway opens from (`apart`)
+
+    def hold(lv, rid, other, side, pos):
+        dx, dy = _STEP[side]
+        held.setdefault((lv, rid), set()).add(tuple(pos))
+        held.setdefault((lv, other), set()).add((pos[0] + dx, pos[1] + dy))
+
+    if apart:
+        for (lv, rid, side), items in per_wall.items():
+            for _o, other, _c, _kind in items:
+                if (lv, rid, other) in at_stair:
+                    hold(lv, rid, other, side, at_stair[(lv, rid, other)])
     for (lv, rid, side), items in per_wall.items():
         fixed = {k: at_stair[(lv, rid, other)] for k, (_o, other, _c, _kind) in enumerate(items)
                  if (lv, rid, other) in at_stair}
@@ -1838,7 +2015,14 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
         for j, k in enumerate(rest):
             cells = items[k][2]
             free = [c for c in cells if tuple(c) not in set(fixed.values())] or cells
+            if apart:
+                dx, dy = _STEP[side]
+                other = items[k][1]
+                free = [c for c in free if tuple(c) not in held.get((lv, rid), ())
+                        and (c[0] + dx, c[1] + dy) not in held.get((lv, other), ())] or free
             spread[k] = free[min(len(free) - 1, int((j + 1) * len(free) / (len(rest) + 1)))]
+            if apart:
+                hold(lv, rid, items[k][1], side, spread[k])
         for k, (_o, other, cells, kind) in enumerate(items):
             pos = fixed[k] if k in fixed else spread[k]
             door = {"a": rid, "b": other, "level": lv, "side": side, "cell": list(pos), "kind": kind}
@@ -1846,6 +2030,17 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
                 # an open stair: no wall between it and its room, the whole
                 # shared wall open
                 door["span"] = [list(c) for c in cells]
+                if apart and "stair" not in (rooms.get(rid, {}).get("purpose"), rooms.get(other, {}).get("purpose")):
+                    # AN OPEN JOIN BETWEEN TWO ROOMS OPENS AT MOST
+                    # OPEN_JOIN_MAX CELLS of their shared wall, centred on
+                    # its doorway -- the arrangement core's path only
+                    # (`solve_with`): opened whole, the shrine's main hall
+                    # stood open on three sides in 12 of 14 runs, its wall
+                    # things backed against no wall (the review's visual 1)
+                    run = [tuple(c) for c in cells]
+                    at = run.index(tuple(pos)) if tuple(pos) in run else len(run) // 2
+                    lo = max(0, min(at - OPEN_JOIN_MAX // 2, len(run) - OPEN_JOIN_MAX))
+                    door["span"] = [list(c) for c in run[lo:lo + OPEN_JOIN_MAX]]
             if "stair" in (rooms.get(rid, {}).get("purpose"), rooms.get(other, {}).get("purpose")):
                 door["stair"] = True
             layout.doors.append(door)
@@ -1854,6 +2049,11 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
     for b, levels in layout.outlines.items():
         for lv, o in levels.items():
             outside.setdefault(lv, set()).update(o.cells())
+    # a wall facing a notch in the ground's outline faces open ground: an
+    # outside wall (`Layout.notches`)
+    for lv, rs in layout.notches.items():
+        for r in rs:
+            outside.get(lv, set()).difference_update(r.cells())
     ent = layout.entrance.get("room")
     wants = {}
     for rid, r in rooms.items():
@@ -1874,7 +2074,10 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
         house = outside.get(lv, set())
         seen_sides, used = set(), []
         for target, side, kind in sorted(items, key=lambda t: t[0] in things):
-            for sd in ([side] if side else []) + [x for x in _SIDES if x != side]:
+            order = ([side] if side else []) + [x for x in _SIDES if x != side]
+            if apart and face and not side:
+                order = _sides_toward(layout, rooms, rid, r, target, lv, house) or order
+            for sd in order:
                 dx, dy = _STEP[sd]
                 cells = [c for c in sorted(r.cells()) if (c[0] + dx, c[1] + dy) not in house
                          and (c[0] + dx, c[1] + dy) not in r.cells()]
@@ -1907,6 +2110,64 @@ def _place_doors(layout, rooms, outdoor_ids, approaches=frozenset(), things=froz
                 layout.warnings.append(f"{layout.names[rid]} has no outside wall to open to {target}")
 
 
+def _sides_toward(layout, rooms, rid, r, target, lv, house):
+    """AN OUTSIDE DOOR NO SIDE IS ASKED OF OPENS WHERE ITS WAY IS SHORTEST
+    (the arrangement core's path, `_place_doors(apart=True)`): the sides of
+    room `r` in order of how few steps the doorstep each would give lies from
+    the far end of the way -- the doorstep of a door another room already
+    opens onto the same place `target`, else the nearest cell of the other
+    rooms the plan opens onto it, else of the entrance's room. [] where none
+    of these is laid on its storey.
+
+    Evidence, both ways. The review's visual 6: a latrine's door onto the
+    way to the washroom's back door faced away from the house in 9 of 14
+    shrine runs, the first outside side in n, e, s, w order. Phase 3's first
+    answer turned the door to face the other rooms' centres, and a privy east
+    of a side room (fuzz plan 125, and 126 and 167) then opened west into the
+    garden between them, while the side room's own door onto the privy's way
+    was on its north wall: the way had to cross the garden, the garden lost
+    the side room's doorway, and the privy was dropped. Its north door's
+    step lies 9 steps from the side room's, its west door's 10."""
+    floors = layout.floors.get(lv, {})
+    ends = [(d["cell"][0] + _STEP[d["side"]][0], d["cell"][1] + _STEP[d["side"]][1])
+            for d in layout.doors if d.get("outside") and d.get("b") == target
+            and d.get("a") != rid and d.get("level") == lv and d.get("side") in _STEP]
+    rects = []
+    if not ends:
+        rects = [floors[o][0] for o, x in sorted(rooms.items()) if o != rid and o in floors
+                 and any(j.get("to") == target for j in x.get("joins") or ())]
+        ent = (layout.entrance or {}).get("room")
+        if not rects and ent and ent != rid and ent in floors:
+            rects = [floors[ent][0]]
+    if not ends and not rects:
+        return []
+
+    def steps(c):
+        if ends:
+            return min(abs(c[0] - e[0]) + abs(c[1] - e[1]) for e in ends)
+        return min(max(e.x - c[0], 0, c[0] - (e.x + e.w - 1)) + max(e.y - c[1], 0, c[1] - (e.y + e.d - 1))
+                   for e in rects)
+
+    solid = _solid(layout, lv)
+    far = {}
+    for sd in _SIDES:
+        dx, dy = _STEP[sd]
+        # the cells the caller would open a door in on this side, as it reads them
+        cells = [c for c in sorted(r.cells()) if (c[0] + dx, c[1] + dy) not in house
+                 and (c[0] + dx, c[1] + dy) not in r.cells() and c not in solid]
+        if cells:
+            c = cells[len(cells) // 2]
+            far[sd] = steps((c[0] + dx, c[1] + dy))
+    # of two sides as near, the one facing the far end more squarely: the
+    # shrine's latrines lie 6 steps from the washroom's back door by their
+    # east doors and by their south ones, and the washroom is south
+    pts = ends or [(e.x + e.w / 2, e.y + e.d / 2) for e in rects]
+    cx = sum(p[0] for p in pts) / len(pts) - (r.x + r.w / 2)
+    cy = sum(p[1] for p in pts) / len(pts) - (r.y + r.d / 2)
+    face = {"e": cx, "w": -cx, "s": cy, "n": -cy}
+    return sorted(_SIDES, key=lambda sd: (far.get(sd, float("inf")), -face[sd], _SIDES.index(sd)))
+
+
 # ------------------------------------------------------------ windows
 
 def _place_windows(layout, rooms):
@@ -1923,7 +2184,7 @@ def _place_windows(layout, rooms):
         for b, levels in layout.outlines.items():
             if lv in levels:
                 inside |= levels[lv].cells()
-        for rf in layout.roofs.get(lv, ()):
+        for rf in list(layout.roofs.get(lv, ())) + list(layout.notches.get(lv, ())):
             inside -= rf.cells()
         doors = {tuple(d["cell"]) for d in layout.doors if d["level"] == lv and rid in (d["a"], d["b"])}
         solid = _solid(layout, lv)
@@ -2310,6 +2571,20 @@ def _place_fixtures(room_id, room, cells, layout, *, clear=frozenset(), zones=No
 
 # ------------------------------------------------------------ the grounds
 
+def _ground_house(layout):
+    """The ground cells inside the house's walls: every block's outline on
+    the ground, less its notches -- open ground where the outline steps
+    (`Layout.notches`), which the grounds may take and every wall facing it
+    is an outside wall of."""
+    house = set()
+    for _block, levels in layout.outlines.items():
+        if 0 in levels:
+            house |= levels[0].cells()
+    for r in layout.notches.get(0, ()):
+        house -= r.cells()
+    return house
+
+
 def _things_at_doors(layout, rooms, feats, free, place, foot=fixture_footprint):
     """THINGS AT DOORS: each feature the plan joins to a room of the building
     (`at_door`, the bridge's) stands across that room's door onto it -- a
@@ -2327,10 +2602,7 @@ def _things_at_doors(layout, rooms, feats, free, place, foot=fixture_footprint):
         if door.get("outside") and door["side"] in _STEP:
             sx, sy = _STEP[door["side"]]
             steps[id(door)] = (door["cell"][0] + sx, door["cell"][1] + sy)
-    house = set()
-    for _block, levels in layout.outlines.items():
-        if 0 in levels:
-            house |= levels[0].cells()
+    house = _ground_house(layout)
     for f in feats:
         at = f.get("at_door") if isinstance(f.get("at_door"), dict) else None
         if not at:
@@ -2489,10 +2761,7 @@ def _doors_onto_their_ground(layout, rooms, open_cells, around=None):
     for aid, cells in layout.areas.items():
         for c in cells:
             held_by[c] = aid
-    house = set()
-    for _block, levels in layout.outlines.items():
-        if 0 in levels:
-            house |= levels[0].cells()
+    house = _ground_house(layout)
     for door in layout.doors:
         aid = door.get("b")
         if not door.get("outside") or aid not in layout.areas or door["side"] not in _STEP \
@@ -2603,10 +2872,7 @@ def _grounds(layout, rooms, grounds):
     out of the front; features stand in the open by their relation; areas
     of ground take the side they are asked for, and the one the building
     stands `around` takes the rest."""
-    house = set()
-    for b, levels in layout.outlines.items():
-        if 0 in levels:
-            house |= levels[0].cells()
+    house = _ground_house(layout)
     if not house:
         return
     hb = _bbox(house)
@@ -3191,11 +3457,19 @@ def check(layout: Layout):
                 covered |= cs
                 if not cs <= o.cells():
                     out.append(f"{rid} stands outside its block's outline on storey {lv}")
-            for v in list(layout.voids.get(lv, ())) + list(layout.roofs.get(lv, ())):
+            # what no room takes is roof or void above the ground, earth
+            # below it (`Layout.earth`) -- never earth above it -- and on it
+            # open ground where the outline steps (`Layout.notches`)
+            for v in list(layout.voids.get(lv, ())) + list(layout.roofs.get(lv, ())) + \
+                    (list(layout.earth.get(lv, ())) if lv < 0 else []) + \
+                    (list(layout.notches.get(lv, ())) if lv == 0 else []):
                 if v.cells() <= o.cells():
                     covered |= v.cells()
             if ids and covered != o.cells():
                 out.append(f"block {b} storey {lv}: rooms leave {len(o.cells() - covered)} cells of the outline empty")
+    for lv in layout.notches:
+        if lv != 0:
+            out.append(f"storey {lv}: a notch off the ground")
     for s in layout.stairwells:
         rect = Rect(**s["rect"])
         for lv in s["levels"]:

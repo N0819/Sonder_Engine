@@ -2820,8 +2820,8 @@ def _predevelop_run(job, cid, frame_id, language_id):
         tiers.append(tier)
     near = [rid for tier in tiers for rid in tier]
     # A PLANNED BUILDING IS LAID OUT BEFORE ITS ROOMS ARE DESIGNED
-    # (`agents/director_layout.py`, off unless the host or the story turns it
-    # on): the solver places a building of several storeys with a room in
+    # (`agents/director_layout.py`, on unless the host or the story turns it
+    # off): the solver places a building of several storeys with a room in
     # reach, the plan takes its geometry, and every brief and design below is
     # made on the stubs as the next beat will hold them. Off, nothing is read.
     laid_out = set()

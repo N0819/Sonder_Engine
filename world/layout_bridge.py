@@ -129,10 +129,16 @@ import json
 import math
 import re
 
-from world.layout_solver import (FIXTURE_SIZES, PURPOSE_AREA, SIZE_WORD_FOOTPRINT,
+from world.layout_arrange import ArrangeBudget, solve_arranged
+from world.layout_solver import (FIXTURE_SIZES, PURPOSE_AREA, SIZE_WORD_FOOTPRINT,  # noqa: F401
                                  STAIR_FALLBACK, STAIRS, ZONE_SIZES, check, fixture_footprint,
-                                 solve)
+                                 purpose_key, solve)
 from world.structure import LAYOUT_MADE_KEY, LAYOUT_PLAN_PREFIX
+
+#: The purposes (`layout_solver.purpose_key`) of a room that is the house's
+#: own door where several rooms open onto the ground its entrance does
+#: (`_building`): an entry, a hall.
+ENTRY_PURPOSES = ("entryway", "hall")
 
 #: Rooms one building may hold for the tier to lay it out. The solver
 #: divides every storey many times over (`layout_solver.QUICK`/`TRIES`): the
@@ -143,18 +149,32 @@ from world.structure import LAYOUT_MADE_KEY, LAYOUT_PLAN_PREFIX
 #: time; a building over it fails open to the designer, which builds it
 #: room by room as it always has. Named per ask-before-limiting.
 LAYOUT_TIER_MAX_ROOMS = 24
-#: How many seeds of the solver's search one building is solved with
-#: (`solve_for`): the solver's own seed and the next ones, EVERY one solved,
-#: since the first that stands is not the best that does. A solve of the
-#: owner's shrine takes 7 to 9 s, so every building now costs what only the
-#: worst case did, near 35 s of one background job, or of a launch whose
-#: opening stands in a planned building
-#: (`director_layout.lay_out_opening_ground`). Named per ask-before-limiting.
+#: How many seeds of the lab's search a building the tier's core cannot lay
+#: is solved with (`lab_solve_for`, the fallback of `solve_for`; until
+#: 2026-10-15 every building's solve): the solver's own seed and the next
+#: ones, every one solved, the best that stands kept. The core
+#: (`layout_arrange`) is deterministic and is solved once. A solve of the
+#: owner's shrine by the lab takes 7 to 9 s, so a building that falls back
+#: costs near 35 s more. Named per ask-before-limiting.
 LAYOUT_SOLVE_SEEDS = 4
+#: A CORE LAYOUT REFUSED ONLY FOR ITS GROUND -- a place of the ground that
+#: does not meet (`ground_breaches`), the house itself standing -- falls back
+#: to the lab's search like any other refusal (`solve_for`), whose seeds may
+#: lay the whole ground. False leaves such a solve to `director_layout.
+#: lay_out`'s own rounds instead, which take the failing places out and lay
+#: the core's house again, as the core did before the fallback. Measured
+#: 2026-10-19 on the 14 recorded shrine runs: on one (lm3 clone 168 #1) the
+#: core's house holds but the well's walk does not meet, and the lab's seed
+#: 8 lays every place -- True takes the lab's house there (13 sensible core
+#: checks failing where the core's failed 4, the well laid); on two more the
+#: lab's seeds fail too, and the fallback costs their four solves. The
+#: owner's call: places laid against the house's sense.
+FALL_BACK_ON_GROUND = False
 #: How many times a building whose grounds do not hold is solved again with
 #: only the places that failed taken out (`agents.director_layout.lay_out`,
 #: the owner's ruling of 2026-10-13: drop only the failing places), before
-#: the house is laid alone. Each round is up to `LAYOUT_SOLVE_SEEDS` solves.
+#: the house is laid alone. Each round is one `solve_for`: the core, and the
+#: lab's seeds where the core's solve does not stand.
 #: Named per ask-before-limiting.
 GROUND_DROP_ROUNDS = 2
 #: The one shape the solver lays. A room the plan states another shape of
@@ -777,6 +797,27 @@ def _building(members, specs, rooms, edges, structure, *, held_open, max_rooms,
                 building.setdefault("own_blocks", {})[uid] = block
     entrance = sorted(outside, key=lambda o: (bool(o.get("vertical")),
                                               abs(levels.get(o["room"], 0)), o["room"], o["to"]))
+    if entrance:
+        # AMONG THE ROOMS OPENING ONTO THE SAME GROUND THE ENTRANCE IS THE
+        # HOUSE'S OWN DOOR, NOT THE FIRST BY ID (the fix round's phase 3: the
+        # unseen farmhouse's byre and cross passage both open south onto the
+        # farmyard, and 'lg_byre' sorting first made the byre's cart door the
+        # front door): a room the engine reads as an entry or a hall first
+        # (`purpose_key`), then the one joined to the most other rooms of the
+        # building, then the id. Only the tie is read again -- the ground the
+        # entrance opens onto, its storey and its kind stay the first's
+        head = entrance[0]
+        tied = [o for o in outside if o["to"] == head["to"] and bool(o.get("vertical")) == bool(head.get("vertical"))
+                and abs(levels.get(o["room"], 0)) == abs(levels.get(head["room"], 0))]
+        if len(tied) > 1:
+            here = set(members)
+
+            def ties(o):
+                purpose = purpose_key(dict(plan.get(o["room"]) or {}, id=o["room"], name=names.get(o["room"])))
+                joined = {j["b"] if j["a"] == o["room"] else j["a"] for j in joins
+                          if o["room"] in (j["a"], j["b"])} & here
+                return (purpose not in ENTRY_PURPOSES, -len(joined), o["room"], o["to"])
+            entrance = sorted(tied, key=ties) + [o for o in entrance if o not in tied]
     building["entrance"] = entrance[0] if entrance else None
     building["plan"] = (f"{LAYOUT_PLAN_PREFIX}{entrance[0]['room']}" if entrance
                         else f"{LAYOUT_PLAN_PREFIX}{members[0]}")
@@ -1923,21 +1964,139 @@ def _mount(value, ids):
 
 # ---------------------------------------------------------------- the solve
 
+def _arranged(spec, face=True):
+    """The core's layout of `spec` (`layout_arrange.solve_arranged`, on a
+    copy, so a fallback reads the spec as written), and why it does not
+    stand where it does not: `(layout or None, words or None)`. `face`:
+    `layout_solver._finish`'s."""
+    try:
+        return solve_arranged(copy.deepcopy(spec), face=face), None
+    except ArrangeBudget as exc:
+        return None, f"it passed its work budget ({exc})"
+    except Exception as exc:  # noqa: BLE001 -- any failure of the core falls back, MemoryError too
+        return None, f"it could not lay the building ({type(exc).__name__}: {' '.join(str(exc).split())[:160]})"
+
+
+def _unturned(building, spec, layout, refused, found):
+    """A DOOR TURNED TOWARD ITS WAY NEVER COSTS THE GROUND A PLACE: where the
+    core's layout is refused for its ground alone, the same division with
+    every outside door no side is asked of opened in the lab's order
+    (`solve_arranged(face=False)`, which does not arrange the building again)
+    stands instead if the ground refuses it less. `(layout, refused, found)`.
+
+    Evidence: turned to face its way (`layout_solver._sides_toward`, the
+    review's visual 6), a privy north of a hall whose garden lies north too
+    opened south into the garden, the privy's way cut it, and the privy was
+    dropped where the lab's order -- its door north -- had kept every place
+    (fuzz plans 62 and 126). The shrine's latrines still face the washroom:
+    their grounds hold either way, and the turned door stands."""
+    plain, _why = _arranged(spec, face=False)
+    if plain is None:
+        return layout, refused, found
+
+    def doors(lay):
+        return sorted((d["a"], d["b"], d.get("side"), tuple(d.get("cell") or ())) for d in lay.doors)
+
+    if doors(plain) == doors(layout):
+        return layout, refused, found
+    found2 = []
+    refused2 = refusals(building, spec, plain, breaches=found2)
+    if len(refused2) < len(refused):
+        return plain, refused2, found2
+    return layout, refused, found
+
+
+def _fell_back(layout, why, seed=None):
+    """The warning a layout laid by the lab's search carries, naming why the
+    core's did not stand."""
+    by = f"the lab's search (seed {seed})" if seed is not None else "the lab's search"
+    layout.warnings.append(f"the arrangement core's layout did not stand -- {why}; laid by {by}")
+    return layout
+
+
 def solve_spec(spec):
-    """The solver's layout for a spec (`world.layout_solver.solve`)."""
-    return solve(spec)
+    """The tier's layout for a spec: the arrangement-first core
+    (`layout_arrange.solve_arranged`), one deterministic solve -- or, where
+    it raises, passes its work budget, or lays what `check` or the house's
+    own structure (`_standing_breaches`) refuses, the lab's search on the
+    solver's own seed, as this was until 2026-10-15, with a warning naming
+    why. A spec both refuse is laid as the core laid it."""
+    layout, why = _arranged(spec)
+    if layout is not None:
+        bad = check(layout) + _standing_breaches(layout)
+        if not bad:
+            return layout
+        why = "it was refused: " + "; ".join(bad[:3])
+    lab = solve(spec)
+    if layout is not None and (check(lab) + _standing_breaches(lab)):
+        return layout
+    return _fell_back(lab, why)
 
 
 def solve_for(building, spec, attempts=None):
-    """`(layout, refusals)`: the solve that stands for the plan, of
-    `LAYOUT_SOLVE_SEEDS` seeds of the solver's search taken in order from its
-    own (`layout_solver.SEED`), every one solved. Of the seeds the bridge
-    does not refuse, one whose every stair lands in each room it joins
-    (`unlanded`) is taken -- the one that turned the fewest of the sides
-    asked of its joins (`turned_sides`), the earlier seed on a tie; failing
-    that, the first the bridge does not refuse; failing every seed, the
-    first seed's solve and its refusals, the building failing open as
-    before. Each seed is deterministic, so a building solves the same way
+    """`(layout, refusals)`: the solve that stands for the plan.
+
+    THE ARRANGEMENT-FIRST CORE FIRST (`layout_arrange.solve_arranged`), laid
+    ONCE: it is deterministic -- it lays the plan's relations and sizes
+    them, and every seed would give the same layout. NEVER WORSE THAN THE
+    LAB'S SEARCH (the fix round's phase 1, 2026-10-19): where the core
+    raises, passes its work budget (`layout_arrange.ARRANGE_WORK_BUDGET`) or
+    lays what the bridge refuses (`refusals`, which holds the hard contract
+    the core's layout must keep), the building is solved as it was until
+    2026-10-15 -- `LAYOUT_SOLVE_SEEDS` seeds of the lab's search, the best
+    that stands (`lab_solve_for`) -- and that layout says why. The code
+    review of 2026-10-16 found plans the lab lays that the core refused or
+    raised on: doors outdoors on three sides of a hall, a top-heavy house,
+    a storey skipped, eleven rooms with the hall's id spelled first. (A
+    solve refused only for its ground falls back too, unless
+    FALL_BACK_ON_GROUND says to leave it to `lay_out`'s rounds.) Where
+    the lab refuses too, the building is refused as before: the core's own
+    solve and refusals when it laid one (`attempts` holding it alone, as
+    the core's solve was the only attempt), else the lab's first seed's,
+    with every seed in `attempts`, for a caller that chooses places to take
+    out (`places_to_drop`)."""
+    layout, why = _arranged(spec)
+    found = []
+    refused = []
+    if layout is not None:
+        refused = refusals(building, spec, layout, breaches=found)
+        ground_only = refused and set(refused) <= {words for words, _place in found}
+        if ground_only:
+            layout, refused, found = _unturned(building, spec, layout, refused, found)
+            ground_only = refused and set(refused) <= {words for words, _place in found}
+        if not refused or (ground_only and not FALL_BACK_ON_GROUND):
+            if attempts is not None:
+                attempts.append((layout, refused, found))
+            return layout, refused
+        why = "it was refused: " + "; ".join(refused[:3])
+    lab_attempts = []
+    lab, lab_refused = lab_solve_for(building, spec, attempts=lab_attempts)
+    if not lab_refused:
+        if attempts is not None:
+            attempts.extend(lab_attempts)
+        k = next((k for k, a in enumerate(lab_attempts) if a[0] is lab), None)
+        from world.layout_solver import SEED
+        return _fell_back(lab, why, None if k is None else SEED + k), lab_refused
+    if layout is not None:
+        if attempts is not None:
+            attempts.append((layout, refused, found))
+        return layout, refused
+    if attempts is not None:
+        attempts.extend(lab_attempts)
+    return lab, lab_refused
+
+
+def lab_solve_for(building, spec, attempts=None):
+    """`(layout, refusals)`: the lab's own search for the plan, as the bridge
+    solved every building until 2026-10-15 (a2393abb) -- `solve_for`'s
+    fallback. `LAYOUT_SOLVE_SEEDS` seeds of the solver's search taken in
+    order from its own (`layout_solver.SEED`), every one solved. Of the
+    seeds the bridge does not refuse, one whose every stair lands in each
+    room it joins (`unlanded`) is taken -- the one that turned the fewest of
+    the sides asked of its joins (`turned_sides`), the earlier seed on a
+    tie; failing that, the first the bridge does not refuse; failing every
+    seed, the first seed's solve and its refusals, the building failing open
+    as before. Each seed is deterministic, so a building solves the same way
     every time.
 
     The owner's shrine (chat 164, 2026-10-10), replicated: of twenty seeds,
@@ -2014,7 +2173,7 @@ def refusals(building, spec, layout, breaches=None):
     grounds floor's own findings, `(words, place)`, are added to `breaches`
     where a list is handed in, so a caller choosing places to take out
     never runs the floor twice on one seed (`places_to_drop`)."""
-    out = list(check(layout))
+    out = list(check(layout)) + _standing_breaches(layout)
     placed = {}
     for lv, floor in layout.floors.items():
         for rid, rects in floor.items():
@@ -2079,6 +2238,29 @@ def refusals(building, spec, layout, breaches=None):
             out += [words for words, _place in found]
             if breaches is not None:
                 breaches.extend(found)
+    return out
+
+
+def _standing_breaches(layout):
+    """What the house's own structure refuses that the lab's `check` does
+    not read -- it judges each block alone: two blocks' outlines on one
+    storey standing on the same ground (the code review's finding 4: two
+    caverns off one basement wall laid on the same nine cells, and `check`
+    and `refusals` both returned nothing), and a block's storey reaching
+    past the storey under it. Read off the layout, for every solve."""
+    out = []
+    by_level = {}
+    for b, levels in sorted(layout.outlines.items()):
+        for lv, o in levels.items():
+            by_level.setdefault(lv, []).append((b, o))
+            under = levels.get(lv - 1)
+            if lv > 0 and under is not None and not under.contains(o):
+                out.append(f"block {b}'s storey {lv} reaches past its storey {lv - 1}")
+    for lv, blocks in sorted(by_level.items()):
+        for k, (b1, o1) in enumerate(blocks):
+            for b2, o2 in blocks[k + 1:]:
+                if o1.overlaps(o2):
+                    out.append(f"blocks {b1} and {b2} stand on the same ground on storey {lv}")
     return out
 
 

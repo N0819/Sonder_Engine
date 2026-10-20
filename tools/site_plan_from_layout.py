@@ -178,6 +178,9 @@ def rooms_from_layout(layout: dict, plan: str, region: str = "") -> dict:
         for levels in (layout.get("outlines") or {}).values():
             if levels.get("0"):
                 footprint |= _cells([levels["0"]])
+        # a notch in the ground's outline is open ground, the grounds' own
+        # (`layout_solver.Layout.notches`)
+        footprint -= _cells((layout.get("notches") or {}).get("0") or [])
         cells = _cells([site]) - footprint
         if cells:
             sx, sy, sw, sd = _rect(site)

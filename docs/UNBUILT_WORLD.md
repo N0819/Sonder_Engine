@@ -3326,7 +3326,7 @@ said in the Room's review. What it leaves:
 
 
 <a id="unbuilt-2-43"></a>
-### 2.43 Buildings from relations: the layout solver as a tier of the plan -- first slice BUILT 2026-10-08, on by default 2026-10-10, what is left
+### 2.43 Buildings from relations: the layout solver as a tier of the plan -- first slice BUILT 2026-10-08, on by default 2026-10-10, the arrangement-first core 2026-10-19, what is left
 
 The owner's choice of 2026-10-08, the fourth procedural-generation item
 ([`design/DESIGN_LAYOUT_TIER.md`](design/DESIGN_LAYOUT_TIER.md); Design.md, "A
@@ -3588,29 +3588,12 @@ Left, each with what it needs:
   that matched the engine's shrines to the lab's liked one
   (`design/DESIGN_LAYOUT_TIER.md`, "The lab's look, measured live") left,
   from six live runs read stage by stage and nine answer sets relayed with
-  no model:
-  - *The solver's stair search* places one shaft at a time from the middle
-    spot, so two flights asked into one wall block each other's moves; in
-    four of five specs its own objective ranks a back-wall pick first that
-    the descent never reaches (forced, +0.16 to +0.38 similarity). Needs a
-    search that moves the shafts of a storey together, fast enough for four
-    seeds a building, and keeps the lab cell for cell.
-  - *Asked sides the division cannot meet*: the outline's proportions come
-    from total area at one aspect, so the washroom the lore puts west of the
-    hall has no division that also keeps the genkan south (none of 600 on
-    the lab's own spec). Needs the outline sized from the widest row the
-    joins set side by side -- a solver change that moves every building.
-  - *A size the lore states is a floor the furniture lifts* (the twelve-mat
-    hall laid at 16 to 25 mats); capping it alone moved the lab and laid no
-    hall nearer (the division's size cost is too weak, the outline is sized
-    from furniture). Needs the outline and the division reworked together.
-  - *A straight flight end-on to its asked wall*: a cost of 4 per asked wall
-    is measured and held for the owner -- it turns the lab's fresh run 2 to
-    the liked shrine's stairs (a change to the lab) and stands one engine
-    front door in the back wall.
-  - *Every seed solved* costs about +4 to +23 s a building, at launch where
-    the opening stands in it; the first-seed rule it replaced is one line
-    back, should the owner want the time more than the two improved houses.
+  no model. Five of its residuals were the old search's own and landed
+  with the arrangement-first core on 2026-10-19 (next bullet): the stair
+  search that moved one shaft at a time, the asked sides no division could
+  meet, the stated size the furniture lifted, the straight flight end-on to
+  its asked wall, and every seed solved -- the core solves once, the four
+  seeds are its fallback's. The lab's own search keeps all five. Left:
   - *The Room re-plans the grounds away from the lore's relations*: a court
     the lore never names between the front door and the path, the camphor
     planned as the ground round it, the garden narrowed to one side, the
@@ -3634,10 +3617,10 @@ Left, each with what it needs:
     would admit it -- and the seal's lore by its key `seal` against
     `seal_cavern`, the over-match the whole-label rule was written against.
     The owner's call.
-  - *Furnishing, the corridor, the roof storey*: a fixture pushed off its
-    wall takes the wall another was asked for (placed largest first); a
-    corridor's axis follows the outline, not its joins; a roof storey is
-    inset on every side, so a bed and its strip may not fit under it.
+  - *Furnishing*: a fixture pushed off its wall takes the wall another was
+    asked for (placed largest first). (A corridor's axis and the roof
+    storey's inset were the old search's; in the core a corridor follows
+    its joins and a roof storey is laid deep enough for what it holds.)
   - *The walk between two doors* is laid door to door and never reaches open
     ground the plan also joins it to on another side of the house (a strict
     xfail in `tests/test_a_walk_runs_between_its_doors.py`); on synthetic
@@ -3645,6 +3628,46 @@ Left, each with what it needs:
     stands in an inside wall.
   - `layout_solver._spine_h` names every leftover `spare:0:`; fixing the name
     changes the lab's fresh run 2.
+- **The arrangement-first core (2026-10-19): what is left.** The core
+  (`world/layout_arrange.py`; `design/DESIGN_LAYOUT_TIER.md`, "The
+  arrangement-first core") left, on 14 shrine runs, 7 new plans and a
+  126-case regression gate:
+  - *No room over open ground.* A porch that would give the shrine's main
+    hall a wall to the garden lies under the floor above in most runs, and
+    the core never stands a room over a notch, so the hall is dark in 11
+    layouts of 18 and the outline steps in 2. An upper floor on posts over a
+    porch is the owner's call.
+  - *A room's own plan makes it large*: the washroom spans the ground's
+    whole depth in 18 of 18 (its fixtures need about 39 cells); the inn's
+    entry is +56% and, without its office, its parlour +29% and taproom
+    -18% where the ground grows to carry the guest rooms; the farmhouse's
+    dairy is a two-pace strip (-30%) and its passage +69%.
+  - *Two slow buildings*: the farmhouse 29 s and the merchant's house about
+    100 s through `lay_out` -- the plain ground's dynamic program, 1.05
+    million entries for the merchant's nine ground rooms, dominates, and
+    `lay_out` solves it twice when the street place is refused first. The
+    notched pass runs on every shrine run (+0.2 to 0.8 s) and holds on two.
+  - *More furniture left out* than the old search: 70 pieces over 14 shrine
+    runs against 49, mostly in halls laid at their lore size.
+  - *A watchtower's windows* face east where its stair fills the north wall;
+    *the landing past a cellar stair's foot* stays sealed in most shrine runs
+    (ranking the flight along its wall comes first).
+  - *A manor of 35 rooms* is not laid by the core (no ground carries its
+    storeys) nor by the fallback; it is past `LAYOUT_TIER_MAX_ROOMS` anyway.
+  - *The plan cannot ask for the new shapes*: a porch, a U stair, a tower
+    rising on its own are code's decisions; the Room's plan has no field for
+    them.
+  - *The regression gate lives outside the repository* (the job's scratch
+    tree): its 126 cases -- the review's adversarial specs, the seven plans
+    with canned answers, the 14 relays -- are not yet test fixtures.
+  - *Rules set in the rounds, the owner's to overrule*: an unclimbable
+    straight stair becomes a U and climbing wins over an asked side; a
+    landing past two paces is priced, never free; an open join opens three
+    cells; the lore's cavern takes the cellar stair's wall; halls, living
+    rooms and common rooms are the heart; a ground place that cannot connect
+    is dropped rather than the house handed to the old search; a door with
+    no asked side faces the way it serves. Every price and budget is a named
+    constant in `layout_arrange.py`.
 - **Buildings other than the shrine, asked of the Room live (2026-10-15).**
   The owner asked for "actual engine tests on ... other structures that we
   just ask the room to make, like ... hospital buildings, lighthouse". Three
@@ -3681,7 +3704,11 @@ Left, each with what it needs:
     scratch tree, both seeds tried left eight joins with no doorway between
     them (the back passage and the entrance hall, the dining room and the
     kitchen, ...) and the tier laid nothing, after 285 s. Raising the cap is
-    not enough: the solver does not yet hold a house that size.
+    not enough: the solver does not yet hold a house that size. (The
+    arrangement-first core does not lay it either; the seven plans the
+    review wrote -- an inn with and without its office, a townhouse, a
+    farmhouse, a hospital wing, a watchtower, a merchant's house -- are all
+    laid by the core itself, none by its fallback.)
 - **OR-Tools and Codex's plan lab** stay unread beyond the survey and unmerged
   (the owner's hands-off ruling); the solver stays pure Python.
 
