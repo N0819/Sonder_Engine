@@ -4053,4 +4053,8 @@ What that leaves:
   beat is on record and it was benign.
 - **The cast stay where they stood across a skip** (the probe's F16, §1.99d):
   "That night, when Elias comes down from the first watch ..." is a walk the
-  input may not declare for him.
+  input may not declare for him. The owner's direction (2026-10-21) and a live
+  probe of it: `docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md` -- ask each
+  cast member what they do over the skip, run their answers as the charter
+  runs a day, place them where it leaves them, write their memories after.
+  Proposed, not built.

@@ -1333,6 +1333,21 @@ time moves the clock by it"), so the charter's own population is carried
 through it, under the `time_skip` budget. A registered character is not: it
 wakes into the evening where it stood, which is the half this entry asks for.
 
+**2026-10-21: the timeskip half is designed and probed.** The owner restated
+it the same day ("handing off major characters to charter, either their own or
+a towns ... a prompt before the time skip ... a memory generator based on
+their declared actions or charter hand off").
+`docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md` consolidates this entry, the
+dormancy ruling (`DESIGN_OFFSCREEN_SUPERSEDED.md` § 3c) and the Writers' Room
+plan's skip paragraph, answers the three undecided questions above, and records
+a live probe:
+- seven characters asked what they do over a skip, every answer in
+  character, an offered framing taken up;
+- three memory sets written from simulated records, vivid but inventing in 8
+  of 15, so a check pass is part of the design.
+
+Proposed, not built; the owner's questions are its § 6.
+
 <a id="unbuilt-1-99e"></a>
 
 ### 1.99e The three tiers, and the chatter already being thrown away

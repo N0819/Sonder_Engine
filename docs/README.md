@@ -174,6 +174,14 @@ they answer different questions about it:
   on, the phases (engine seams first, then the Planner, then the
   Dramaturge, then room-authored creatures, look laws and skips), open
   owner decisions and the replay measures each phase reports against.
+- [`DESIGN_THE_CAST_ACROSS_A_SKIP.md`](design/DESIGN_THE_CAST_ACROSS_A_SKIP.md) — the
+  cast lives through a time skip (proposed 2026-10-21):
+  - ask each character what they do for the duration;
+  - run the answers as the charter runs a day;
+  - place them where it leaves them;
+  - write their memories after.
+
+  Carries the live probe of both model calls and the owner's open questions.
 - [`DESIGN_ROOM_DIALS.md`](design/DESIGN_ROOM_DIALS.md) — how the story's
   configuration might become the Writers' Room's (2026-09-04): the rule that
   decides whether a value is authored or configured, why a package operation

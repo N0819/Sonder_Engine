@@ -215,6 +215,10 @@ nothing, which is the gap § 3c exists to close.
 
 ### 3c. Dormancy is the cheap tier, and it must not cost a memory
 
+*2026-10-21: the skip half of this tier -- a dormant or present character living
+through a time skip, and its memories written after -- is designed and probed
+in `DESIGN_THE_CAST_ACROSS_A_SKIP.md`, which keeps all four rules below.*
+
 **NOT BUILT. Owner ruling, 2026-09-17**, in the same breath as the no-cap one:
 "we should have charter start handling dormant characters and generate a
 memory log to add to their old ones when they are undormanted through an llm
