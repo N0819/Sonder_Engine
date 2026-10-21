@@ -34,7 +34,7 @@ from world.spatial_sound_field import (
     AMBIENT_DB, AV_BENEFIT_DB, DIN_DB, SPEECH_DB, _ONE_PACE_LOSS_DB,
     _running, _voice_path_loss_db, db_of_power,
     lombard_level_db, normalize_sound_level, power_of_db, quantise_hearing_db,
-    quantise_speech_db,
+    quantise_speech_db, TREAD_LEVEL, tread_gait, tread_source,
 )
 
 
@@ -661,6 +661,53 @@ def heard_at_ear(scene: dict, listener: str, sound, source_id, *,
     return quantise_hearing_db(sig_db, noise_db)
 
 
+def movement_heard_at_ear(scene: dict, listener: str, sound, mover, *,
+                          room=None, mover_room=None,
+                          gait="walk") -> Optional[str]:
+    """WHAT A LISTENER'S EAR MAKES OF A BODY IT CANNOT SEE, MOVING:
+    `none | fragment | full`, or None where `sound` -- the listener's field
+    -- cannot place both bodies, and the caller keeps what it did without a
+    field. A gait that makes no tread where it walks -- a SNEAK, whose point
+    is not to be heard -- is `none` with or without one.
+
+    The ordinary movement of a body -- a hand on a bar, a turn on a stool,
+    a step -- sounds no louder than its own tread: the footfall
+    `tread_events` files in a walker's own room, at the body's gait
+    (`tread_source`; a walk where the beat did not walk it, the "at most"
+    of an act that filed no sound of its own). Graded at the listener's
+    cell against the noise there (`SoundField.noise_at`: the place's floor,
+    every crowd and every running thing; a beat's one-off sounds are
+    moments, not a floor), through their ear (`ear_adjusted_db`), at the
+    margins every sound is heard by (`quantise_hearing_db`) -- the
+    footfall's own. So a body moving a few paces behind someone in a quiet
+    room is heard, and the same body behind them in a tavern's din is not:
+    a walk's tread arrives some 28-32 dB against a few dozen people's 68
+    (the tavern probe, 2026-10-20: "Something moves behind you" on three
+    beats running from a barman's rag on his own bar)."""
+    from world.spatial_identity import room_of
+    if TREAD_LEVEL.get(tread_gait(gait)) is None:
+        return "none"          # no tread where it walks, whatever the room
+    if sound is None:
+        return None
+    room = room or room_of(scene, listener)
+    if sound.locate(listener, room) is None:
+        return None
+    mover_room = mover_room or room_of(scene, mover)
+    if sound.locate(mover, mover_room) is None:
+        return None
+    noise = sound.noise_at(listener, room=room)
+    if noise is None:
+        return None
+    source = tread_source(sound, mover, room=mover_room, gait=gait)
+    signal = sound.signal_of(source, listener, room=room) \
+        if source is not None else None
+    if signal is None:
+        return None
+    sig_db, noise_db = ear_adjusted_db(scene, listener, db_of_power(signal),
+                                       db_of_power(noise))
+    return quantise_hearing_db(sig_db, noise_db)
+
+
 # ---------------------------------------------------------------------------
 # A sleeper, and what wakes one
 # ---------------------------------------------------------------------------
@@ -729,7 +776,7 @@ __all__ = [
     "blast_shift_db", "dulled_shift_db", "ear_adjusted_db", "ear_cover_db",
     "ear_is_changed", "ear_level", "ear_margin_db", "ear_noise_db",
     "ear_reason", "garment_over_ears_db", "heard_at_ear", "loudest_at_ear",
-    "next_hearing_ledger",
+    "movement_heard_at_ear", "next_hearing_ledger",
     "own_noise_db", "recovered_shift_db", "stamp_listener_ear",
     "started_sources", "voice_at_ear_db", "wakes_sleeper",
 ]

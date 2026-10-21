@@ -88,6 +88,7 @@ from world.spatial import (
     voice_carries,
     held_beam_falls_on,
     into_another_ear,
+    movement_heard_at_ear,
     _sense_channel,
     sense_adjusted,
     proximity_rel,
@@ -4877,7 +4878,8 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
                 display, can_see, self_forms=None, self_pronouns=None,
                 other_forms=None,
                 order_key=0,
-                observer_id=None, surface=None, sight="full"):
+                observer_id=None, surface=None, sight="full",
+                sound=None, gait=None, own_sound=False):
     """Admit one action element's observable surface for one observer, or
     None. Gates: concealment, rear arc, sight (an action is visible or it is
     nothing -- a touch-only source contributes sensation percepts instead,
@@ -4890,6 +4892,12 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
     live (PC1), a shape-in-a-doorway budget bought "opens a black notebook on
     her knee" through a locked door, in the same beat the dialogue gate
     honoured the same wall.
+
+    What reaches the rear arc is a SOUND, and three arguments say what it
+    is: `sound` is the observer's sound field for `scene` (None where the
+    room carries no geometry), `gait` the actor's gait where the beat walked
+    them (`TREAD_GAITS`; a walk otherwise), and `own_sound` whether the act
+    filed a sound event of its own this beat.
     """
     # Each refusal below is recorded with the reason it refused. They all
     # return None, and from outside the four are indistinguishable from "the
@@ -4925,6 +4933,33 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
         # observer's own egocentric sector where the geometry supports one
         # and nothing when it does not, and it is firewall-clean by
         # construction (it names no room and no body).
+        #
+        # ...AND ONLY WHERE ITS SOUND REACHES THE EAR (2026-10-21). An act
+        # that filed a sound event of its own is heard AS THAT SOUND -- the
+        # beat's sound channel tells it -- and is not told a second time as
+        # movement. Any other act sounds no louder than the body's own tread
+        # (`movement_heard_at_ear`), graded against the noise at this
+        # observer's ear: heard a few paces off in a quiet room, not in a
+        # crowd's din. Measured on the tavern probe (2026-10-20, chat 2 idx
+        # 3-5): a barman's rag along his own bar, his steps round to a
+        # barrel and a woman lifting her cup reached three listeners in a
+        # 68 dB taproom as "Something moves ..." seven times in three beats,
+        # where a walk's tread arrives at 28-32 dB. Without a field (a room
+        # with no geometry) the percept stands as it was -- but for a gait
+        # that makes no tread where it walks, which is heard nowhere.
+        if own_sound:
+            note_step_decision("act_percept", _who, "refused",
+                               "actor is in the observer's rear arc, and "
+                               "the act filed its own sound -- it is told "
+                               "as that sound, not twice")
+            return None
+        if movement_heard_at_ear(scene, observer_name, sound, actor_name,
+                                 gait=gait or "walk") == "none":
+            note_step_decision("act_percept", _who, "refused",
+                               "actor is in the observer's rear arc, and a "
+                               "body's movement makes no sound that carries "
+                               "over the noise at the observer's ear")
+            return None
         note_step_decision("act_percept", _who, "delivered",
                            "actor is in the observer's rear arc -- heard, "
                            "not seen, and not identified")

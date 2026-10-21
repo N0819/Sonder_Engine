@@ -78,6 +78,7 @@ from world.spatial import (
     _entity_named,
     entity_arc,
     entity_side,
+    _sense_channel,
     feature_visibility,
     has_visual,
     anchor_cells,
@@ -1930,6 +1931,50 @@ def _beat_movers(ctx, before=None, after=None, bodies=()) -> dict:
                 movers[name] = "walk"
     ctx["_beat_movers"] = movers
     return movers
+
+
+def _act_gait(event) -> str:
+    """The gait an act declares for its own walk -- its `movement` record's
+    `pace` (`MovementSpec.pace`: run, sneak) -- or "" where it declares
+    none. Typed data on the act itself, so an act behind an observer is
+    heard at the gait it was made at even before the beat's travel record
+    exists (the onset)."""
+    movement = (event or {}).get("movement") if isinstance(event, dict) else None
+    if not isinstance(movement, dict):
+        return ""
+    return str(movement.get("pace") or "").strip().casefold()
+
+
+def _sound_filing_spans(diff, sounds) -> set:
+    """`{(stage, chrono)}` for every causal step of the beat that filed a
+    sound event of its own which is among the beat's `sounds` (the records
+    the stage delivers, each carrying its step as `_at`).
+
+    The step is read off the typed program (`state_diff.causal_steps`: each
+    step's own `patch`), never matched by words, and the chrono alone does
+    not say it: the resolve's diff carries the interpret's sounds as well,
+    and the two stages number their steps from 1 each -- on the tavern
+    probe (2026-10-20, chat 2 idx 5) the player's call (interpret 2) and a
+    turn of the heads at the bar (resolve 2) shared one number. A sound the
+    beat no longer holds (a floor took it) files nothing. Empty for a diff
+    with no program."""
+    present = {str(record.get("_at")) for record in sounds or ()
+               if isinstance(record, dict)
+               and record.get("_at") not in (None, "")}
+    out = set()
+    for step in (diff or {}).get("causal_steps") or ():
+        if not isinstance(step, dict):
+            continue
+        patch = step.get("patch") if isinstance(step.get("patch"), dict) else {}
+        rows = patch.get("sensory_events")
+        if not any(isinstance(row, dict) and _sense_channel(
+                str(row.get("kind") or "sound")) == "hearing"
+                for row in (rows if isinstance(rows, list) else ())):
+            continue
+        chrono = str(step.get("chrono_id"))
+        if chrono in present:
+            out.add((str(step.get("stage") or ""), chrono))
+    return out
 
 
 def _source_channels(sc, perceiver_name, perceiver_room, sources,
@@ -6956,6 +7001,19 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
         normalize_sensory_event(event, rooms=sc.get("rooms") or {})
         for event in (_onset.get("sensory_events") or [])
         if isinstance(event, dict)) if record and record.get("detail")]
+    # WHICH ONSET ACTS FILED A SOUND OF ITS OWN -- a sound's `from_event` is
+    # its act's `chrono_id`, one stage, so the number says it: an act behind
+    # an observer is heard as that sound, not told again as movement
+    # (`composer.act_percept`).
+    _onset_sounding = set()
+    for _event in (_onset.get("sensory_events") or []):
+        if not isinstance(_event, dict) \
+                or _event.get("from_event") in (None, ""):
+            continue
+        _record = normalize_sensory_event(_event, rooms=sc.get("rooms") or {})
+        if _record and _record.get("detail") and _sense_channel(
+                str(_record.get("kind") or "sound")) == "hearing":
+            _onset_sounding.add(str(_event["from_event"]))
     if speech_elems and not any(
             isinstance(e, dict) and e.get("type") == "speech"
             for e in onset_sequence):
@@ -7178,6 +7236,18 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     arrival_rels[(_name, room)] = cached
                 return cached
 
+            _act_fields = {}
+
+            def _act_field(then, then_room, _name=name):
+                """This observer's sound field over the scene an act was
+                made in -- one per moment (a causal moment's scene is not
+                the read pass's, so it is not memoised there)."""
+                key = (id(then), then_room)
+                if key not in _act_fields:
+                    _act_fields[key] = _sound_field_for(
+                        ctx, then, _name, then_room, events=act_sounds)
+                return _act_fields[key]
+
             for idx, event in enumerate(onset_sequence):
                 if not isinstance(event, dict):
                     continue
@@ -7353,7 +7423,16 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                             in self_forms_by_name.items()
                             if other_name != name
                             for form in (other_names or ())),
-                        order_key=idx, observer_id=pid, surface=surface)
+                        order_key=idx, observer_id=pid, surface=surface,
+                        # WHAT AN ACT BEHIND THIS OBSERVER SOUNDS LIKE, as
+                        # at outcome: on the field of the act's own moment,
+                        # at the gait it declares (a walk where it declares
+                        # none: no travel record exists yet), unless it
+                        # filed a sound of its own.
+                        sound=_act_field(event_scene, event_observer_room),
+                        gait=_act_gait(event) or None,
+                        own_sound=str(event.get("chrono_id") or "")
+                        in _onset_sounding)
                     if percept:
                         percepts.append(percept)
             company[pid] = _composer_company(others, display_map, percepts)
@@ -7825,6 +7904,13 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             _sensory.append(record)
     beat_sounds = [dict(record, desc=record["detail"])
                    for record in _sensory if record.get("detail")]
+    # WHICH OF THE BEAT'S ACTS FILED A SOUND OF ITS OWN: an act behind an
+    # observer is heard as that sound and not told again as movement
+    # (`composer.act_percept`, `_sound_filing_spans`); any other act behind
+    # one sounds as its actor's own tread, at the gait the beat walked them.
+    _sounding_spans = _sound_filing_spans(diff, beat_sounds)
+    _gaits = {str(name).strip().casefold(): pace for name, pace
+              in (_beat_movers(ctx) or {}).items()}
     _sound_moments = {}
     for _world in getattr(ctx.get("_composed_beat"), "causal_worlds", None) or ():
         if str(_world.get("stage") or "") == "resolve" and isinstance(_world.get("after"), dict):
@@ -8740,7 +8826,19 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         in self_forms_by_name.items()
                         if other_name != name
                         for form in (other_names or ())),
-                    order_key=order, observer_id=pid, surface=surface)
+                    order_key=order, observer_id=pid, surface=surface,
+                    # WHAT AN ACT BEHIND THIS OBSERVER SOUNDS LIKE: graded on
+                    # the field of the act's own moment, as `event_scene`
+                    # is, at the gait the act declares or else the one the
+                    # beat walked its actor at, unless it filed a sound of
+                    # its own (`composer.act_percept`).
+                    sound=(_as_of(at_index)[2] if at_index in causal_moments
+                           else field),
+                    gait=(_act_gait(act.get("event"))
+                          or _gaits.get(str(actor or "").strip().casefold())),
+                    own_sound=tuple(
+                        str(part) for part in (act.get("causal_span") or ())
+                    ) in _sounding_spans)
                 if percept:
                     percepts.append(percept)
                     if percept.channel == "sight":

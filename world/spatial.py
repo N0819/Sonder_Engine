@@ -101,6 +101,9 @@ from world.spatial_sound_field import (  # noqa: E402
     door_events, DOOR_SOURCE_PREFIX,
     # Footsteps come through floors (2026-10-20, wave A).
     FOOTFALL_FLANKING_DB, footfall_db, TREAD_GAITS, tread_gait, TREAD_SNEAK_DB,
+    # A body's own tread, asked of a listener's field without filing it
+    # (2026-10-21, the unseen act).
+    tread_source,
 )
 from world.spatial_transit import (
     _closed_enclosure_barrier, _entity_exterior_room, _interior_entry_room,
@@ -292,6 +295,8 @@ from world.spatial_listener import (  # noqa: E402
     ear_cover_db, garment_over_ears_db,
     ear_is_changed, ear_level, ear_margin_db, ear_noise_db, ear_reason,
     heard_at_ear, loudest_at_ear, next_hearing_ledger, own_noise_db,
+    # What an unseen body's movement makes at an ear (2026-10-21).
+    movement_heard_at_ear,
     recovered_shift_db, stamp_listener_ear, started_sources,
     voice_at_ear_db, wakes_sleeper,
 )

@@ -1053,6 +1053,14 @@ CHANGED PLACE this beat, which `act_percept` cannot see. Over-granting a sound
 is the safe direction against three of five bodies missing the beat entirely,
 and it is the direction taken.
 
+Narrowed 2026-10-21 (`Design.md`, "What moves behind you is heard only over
+the noise at your ear"): the over-grant is priced as the body's own tread and
+graded at the listener's ear, so it holds only where a step would be heard --
+a few paces off in a quiet room; in a din, a gale, or past about eight paces
+of an ordinary room it is not told, and an act that filed a sound of its own
+is told as that sound. A raised hand in a quiet room is still told as
+movement; the changed-place answer above is still the structural one.
+
 <a id="unbuilt-1-140"></a>
 
 ### 1.140 A crowbar on steel does not carry eighteen paces down a dead corridor — BUILT 2026-09-06
@@ -2501,6 +2509,44 @@ cottage), far-field deliveries 55 -> 45. What it leaves, each the owner's:
   Sabine's terms.
 - **A body absorbs nothing** in any ring: a crowded stone room rings as an
   empty one.
+
+**The unseen act, 2026-10-21** (`Design.md`, "What moves behind you is heard
+only over the noise at your ear"): an act behind an observer is heard only
+where its sound reaches the ear -- an ordinary one as its actor's own tread,
+graded against the noise there, one that filed a sound as that sound alone.
+What it leaves, each the owner's:
+
+- **A beat's own sound in the listener's own room is received whole**,
+  whatever the noise at the ear (`perception._reaches_this_ear` grades only a
+  covered or dulled ear; a sound in the NEXT room is graded at the ear,
+  `heard_events`). The tavern probe's mallet, filed `audible` (58 dB at the
+  bar), reaches the player's ear about 41 dB against a 68 dB din and is told
+  whole; so is a door worked behind a listener in a din, and an unseen
+  walker's footfalls. Grading the own room too would move every own-room
+  sound in every story, which "a signal is received whole in its own room"
+  was written to avoid.
+- **The yardstick is the walker's own-room tread** (`TREAD_LEVEL`, a walk
+  `faint`: 45 dB at the cell), not the floor's impact level (`footfall_db`,
+  what the room UNDER hears: 55 on timber, 40 on stone). Priced at that, a
+  walk behind a listener is heard to about eight paces over an ordinary
+  room's 27 dB floor and never in a din; priced at `footfall_db` it would
+  carry some twenty-five paces on timber and four on stone. An act is a
+  footfall at most because nothing typed says it is louder: a loud act the
+  encoder files no sound for is heard no further than a footfall.
+- **No habituation**: a routine act behind a listener in a quiet room is
+  told on each beat it happens. Not built -- the din rule cleared every
+  probe line. Where it would bite, measured: the 2026-09-26 `lie_new` play,
+  idx 15-19, the player at Aurel Holt's right in a quiet schoolhouse, and
+  "Something moves to your right." in his views on five beats running
+  (both passes on four of them). The steady-sound machinery
+  (`composer.habituated`) keys on a standing sound's own state; an act's
+  sound is beat content, so it would want a ledger of its own.
+- **A sound filed by an act the beat verified as unexecuted is still told**
+  (the tavern probe, chat 2 idx 5: the mallet's act refused at every view,
+  its blows delivered).
+- **The link to an act's own sound is the typed program**
+  (`state_diff.causal_steps`); a resolve without one (an archived output)
+  links nothing, and a quiet room can still be told such an act twice.
 
 Designed and built 2026-09-04 on `writers-room` (not yet on `main`;
 [`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),

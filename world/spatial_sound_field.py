@@ -2530,6 +2530,19 @@ class SoundField:
                     * ratio_of_db(self._wind_db(source, cell))
         return 0.0
 
+    def signal_of(self, source, listener, *, room=None) -> Optional[float]:
+        """`signal_at` for a source this field did NOT place: a record shaped
+        as `sources` holds one (`room`, `at` -- a cell on this field's grid
+        -- `power`, `kind`), so a sound can be asked about without being
+        filed. What a body's own tread would put at this listener's cell
+        (`tread_source`, `spatial_listener.movement_heard_at_ear`). None
+        where the field cannot place the listener."""
+        cell = self.locate(listener, room)
+        if cell is None:
+            return None
+        return self.intensity_at(source, cell) \
+            * ratio_of_db(self._wind_db(source, cell))
+
     def _wind_db(self, source, cell) -> float:
         """What the wind does to a source's sound on its way to `cell`
         (`wind_bend_db`), where the source and the listener both stand
@@ -3976,6 +3989,31 @@ def tread_events(scene: dict, movers) -> list:
                         "detail": compositor_text("sound_tread_beside",
                                                   tread=tread, where=where)})
     return out
+
+
+def tread_source(sound, mover, *, room=None, gait="walk") -> Optional[dict]:
+    """A body's own tread as a source on `sound`'s grid, NOT filed: the
+    record `tread_events` files in the walker's own room -- `TREAD_LEVEL`
+    at the gait, on the impact ladder (`EVENT_POWER`) -- placed where
+    `sound_sources` places a beat sound, at the body's own cell. What the
+    ordinary movement of a body sounds like, asked of a listener's field
+    (`SoundField.signal_of`) without adding a sound to the beat.
+
+    None where the field does not place the body, and where the gait makes
+    no tread in the walker's own room: a SNEAK files none there -- not
+    being heard there is what the gait is (`tread_events`)."""
+    if sound is None:
+        return None
+    at = sound.locate(mover, room)
+    if at is None:
+        return None
+    level = TREAD_LEVEL.get(tread_gait(gait))
+    if level is None:
+        return None
+    return {"id": "tread:%s" % mover, "kind": "event",
+            "room": str(sound.grid.inside.get(at) or room or ""),
+            "at": at, "power": EVENT_POWER[level], "level": None,
+            "holder": None, "beat": "steady"}
 
 
 #: Where a door event sounds: the doorway of the event's room onto the room
