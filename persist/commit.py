@@ -190,7 +190,8 @@ from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_s
     commit_information_carriers, commit_cast_changes, town_for_sweep)
 from persist.commit_memory import (_names_spoken_by, RECENT_TELLS_CAP, _durable_dialogue_category,
     _cited_memory_ids, _marked_for_memory, _quote_body, _is_player,
-    _salience_of, _own_sequence_memory, _inference_memory_text,
+    _salience_of, _own_sequence_memory, _own_pronouns_in_scene, _own_turn,
+    _inference_memory_text,
     _intent_names_term, _interior_relations_of,
     _evidence_spans, _witnessed_signals, _memory_about,
     prepare_memory_commit)

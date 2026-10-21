@@ -413,8 +413,10 @@ def test_the_turns_memory_is_in_the_order_it_was_lived_and_says_nothing_twice(te
     ctx.perception_outcome["episode_meta"] = {str(char_id): {"gist": "The door closed.", "entities": []}}
     prepare_memory_commit(ctx)
     (row,) = captured["memories"]
+    # What it did is its attempt, in its own first person (2026-10-21: the
+    # bare act was filed with its doer named and as done).
     assert row["content"] == ("What I witnessed: I saw Klara Hess nod.\n"
-                              "What I did: Sarel picks up the card.\n"
+                              "What I did: I tried to pick up the card.\n"
                               "What happened: I saw the door close behind Klara Hess.")
     assert row["gist"] == "I saw Klara Hess nod."
 

@@ -509,6 +509,52 @@ person"). What the fix leaves:
   episode files one (`_EPISODE_SOUND_TAGS`). Found here; not a person
   defect.
 
+**2026-10-21, the mind's own act -- BUILT, residuals open.** The bare
+contract's act, written as a watcher sees it, was filed with its doer named
+and as done: "What I did: Pell Hardacre takes the sealed letter from Rhona
+Carrick's hand and tucks it into the inside pocket of the oilskin jacket." (the
+lighthouse probe, chat 2 row 40, a take the world had refused, believed two
+story days later). `composer.own_attempt` now turns it into the mind's own
+attempt, "I tried to take ... and tuck it ...", where the turn is exact, and
+keeps it as filed before where it is not (`Design.md`: "A mind remembers what
+it said and did"). Over every stored own act (213 named, 2,550 attempts):
+third-person done-framed lines 213 to 102, "I tried to" with a third-person
+verb 207 to 21, quoted spans changed 0. What it leaves:
+
+- **102 own acts are still filed as before, named and as done**, wherever the
+  turn cannot be made exactly: the doer's pronouns where another body in the
+  scene could own them (every two-women scene in the owner's bank; a body in
+  another room or held inside the doer counts), a clause a dash or a
+  semicolon opened for its own subject, a body noun followed only by a phrase,
+  an auxiliary ("does not turn"), an act that opens with something other than
+  its verb. Whether a fallback should instead say "I tried to" with the doer's
+  name left in ("I tried this: ...") is the owner's call.
+- **Two misreadings the forms cannot rule out.** A plural noun after "and"
+  with a word of its own phrase after it reads as a verb ("the letter and keys
+  from the ledge" would file "key"; 0 in the corpus after the stop and
+  participle rules); and an act that opens with a plural noun outside the
+  pack's body nouns (`_OWN_BODY_NOUNS`) reads as a verb ("thumbs sweep slowly
+  across ...", the owner's bank, row 26322, filed "thumb sweep"). The body
+  noun table lacks thumbs, calves, ankles, toes and wrists; completing it is
+  a change to every reader of the table.
+- **A doer's own "her" before a bare verb** is read as a possessive by the
+  pose rewrite's `_reads_as_possessive` ("letting her feel" would turn to
+  "letting my feel" where the scene leaves "her" the doer's alone).
+- **A Japanese story's own-conduct line is English.** `_own_sequence_memory`
+  writes "I said", "I tried to", "Then" and "I communicated" in code:
+  "したこと： I said '手紙は預かります'. Then ペル 手紙を受け取り、上着の内ポケットに
+  しまう. Then I communicated ネルに." (0 such rows recorded). The words
+  belong to the packs; a Japanese attempt frame needs either a conjugator
+  (しようとした) or a noun frame (試みたこと：…) -- the owner's call.
+- **An observed act keeps its first verb's turn only**: the witnessed episode's
+  "I saw Rhona Carrick dig into her jacket and brings out a sealed letter"
+  (`composer._episode_sentence`'s act branch de-inflects the first word
+  alone). The same verb rule would put it right; not built.
+- **`emotional_context` stays in the second person** ("frustration (You held
+  back from: ...)"): checked, recall does not hand it to the mind
+  (`memory_context`'s projection carries no affect field); it reaches the
+  embedding document and the consolidation summarizer's input.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-2"></a>

@@ -395,7 +395,89 @@ def _unwrapped(spoken):
     return text
 
 
-def _own_sequence_memory(seq, name=""):
+def _own_pronouns_in_scene(ctx, scene, sheet, name):
+    """``(pronouns, mine)``: this mind's pronoun set from its card, and
+    whether nobody else in the scene could be meant by them this beat.
+
+    A watcher-form act writes its doer's body in the doer's pronouns ("lifts
+    his hand"), and the mind's own memory turns them into "my" -- but a
+    pronoun's referent is whoever the act is dealing with, and the engine can
+    only say it is the doer where no other body in the scene shares the set,
+    and none has a set the engine does not hold (a body that is not on the
+    cast or a player's card: an inn's barman, a crowd). THE SCENE, NOT THE
+    ROOM: an act deals with bodies in other rooms ("calls up to him at the
+    ladder head") and inside its doer -- measured in the owner's chats, a body
+    held in an interior room of its doer, "draw her in ... letting her feel",
+    was the other woman's, and so was "slides both hands from her inner
+    thighs" with two women in one room.
+    """
+    from story.character_schema import character_identity, persona_name
+    from story.scene import persona_of
+    from world.spatial import scene_names_body
+    try:
+        own = (character_identity(sheet) or {}).get("pronouns") or {}
+    except Exception:
+        own = {}
+    if not isinstance(own, dict) or not str(own.get("subject") or "").strip():
+        return None, False
+    scene = scene if isinstance(scene, dict) else {}
+    if not _room_of(scene, name):
+        return own, False                     # a scene the mind is not in
+    held = []                                 # (name, pronouns) the engine holds
+    for row in getattr(ctx, "cast", None) or ():
+        try:
+            ident = character_identity(json.loads(row["sheet"]))
+        except Exception:
+            continue
+        held.append((ident.get("name"), ident.get("pronouns")))
+    try:
+        pers = persona_of(ctx.chat) or {}
+        held.append((pers.get("name") or persona_name(pers),
+                     (pers.get("identity") or {}).get("pronouns")))
+    except Exception:
+        pass
+    for extra in getattr(ctx, "extra_players", None) or ():
+        held.append((extra.get("name"),
+                     (extra.get("identity") or {}).get("pronouns")))
+
+    def forms(p):
+        return {str(p.get(r) or "").strip().casefold()
+                for r in ("subject", "object", "possessive")} - {""} \
+            if isinstance(p, dict) else set()
+
+    mine = forms(own)
+    bodies = list(scene.get("positions") or {})
+    for ent in (scene.get("entities") or {}).values():
+        if isinstance(ent, dict) and str(ent.get("name") or "").strip():
+            bodies.append(str(ent["name"]))
+    for body in dict.fromkeys(bodies):
+        if same_subject(scene, body, name):
+            continue
+        card = next((p for n, p in held
+                     if n and same_subject(scene, body, n)), False)
+        if card is False and not scene_names_body(scene, body):
+            continue                          # a thing, not a body
+        if not forms(card) or forms(card) & mine:
+            return own, False
+    return own, True
+
+
+def _own_turn(ctx, scene, sheet, name):
+    """What `_own_sequence_memory` needs to turn this mind's acts into its own
+    first person: its names, its pronouns, and the room's verdict on them."""
+    from agents.common import self_name_forms
+    from story.character_schema import character_identity
+    try:
+        aliases = (character_identity(sheet) or {}).get("aliases") or []
+    except Exception:
+        aliases = []
+    pronouns, mine = _own_pronouns_in_scene(ctx, scene, sheet, name)
+    return {"self_forms": self_name_forms(name, aliases),
+            "pronouns": pronouns, "pronouns_mine": mine}
+
+
+def _own_sequence_memory(seq, name="", *, self_forms=(), pronouns=None,
+                         pronouns_mine=False):
     """Render a character's own conduct as grammatical, chronological first
     person: ``I said 'X.' Then I tried to Y.``
 
@@ -409,7 +491,14 @@ def _own_sequence_memory(seq, name=""):
     resolved event competing with it. The old ``I chose to attempted '...'``
     construction is what actually replayed an act as though it were a second
     happening; preserve order, and never cut a gist midway through an act.
+
+    An act is turned into that first person by `composer.own_attempt`, with
+    the doer's names (`self_forms`) and its pronouns, which it turns only
+    where `pronouns_mine` (nobody else present could be meant by them,
+    `_own_pronouns_in_scene`). Where the turn cannot be made exactly the act
+    is kept as it was filed before, word for word.
     """
+    from agents.composer import own_attempt
     clauses = []
     for event in (seq or []):
         if not isinstance(event, dict):
@@ -432,15 +521,32 @@ def _own_sequence_memory(seq, name=""):
         elif (event.get("type") == "action" and event.get("subjectless")
               and str(name or "").strip() and str(event.get("attempt") or "").strip()):
             # The bare contract's act, written without a subject as a watcher
-            # sees it -- its own pronouns included ("stays where she is") --
-            # so it is kept as written, its doer named. "I tried to" in front
-            # of it read "I tried to lifts the latch" (story run 2026-09-30).
+            # sees it -- its own pronouns included ("stays where she is").
+            # "I tried to" in front of it as written read "I tried to lifts
+            # the latch" (story run 2026-09-30), so it was filed with its doer
+            # named instead -- third person, and AS DONE: "Pell Hardacre takes
+            # the sealed letter ... and tucks it into the inside pocket", a
+            # take the world had refused (the lighthouse probe, 2026-10-20,
+            # chat 2 row 40), believed two story days later. Turned now into
+            # the mind's own attempt; kept as before where it cannot be.
             act = str(event["attempt"]).strip().rstrip(".")
-            clauses.append(f"{str(name).strip()} {_continues_a_clause(act)}.")
+            turned = own_attempt(act, self_forms=self_forms, pronouns=pronouns,
+                                 pronouns_mine=pronouns_mine)
+            clauses.append(f"I tried to {turned}." if turned else
+                           f"{str(name).strip()} {_continues_a_clause(act)}.")
         elif event.get("type") == "action" and str(event.get("attempt") or "").strip():
+            # The same turn: an attempt written in the third person ("I tried
+            # to steps forward ... and reaches for", the owner's bank, memory
+            # row 30622) reads as English; one written in the base form, as
+            # the contract asks, passes through as it was. Its pronouns stood
+            # as written in this line before, so where whose they are cannot
+            # be said they stay as written and the rest still turns.
+            attempt = str(event["attempt"]).strip().rstrip(".")
+            turned = own_attempt(attempt, self_forms=self_forms,
+                                 pronouns=pronouns, pronouns_mine=pronouns_mine,
+                                 keep_pronouns=True)
             clauses.append(
-                "I tried to %s." % _continues_a_clause(
-                    str(event["attempt"]).strip().rstrip(".")))
+                "I tried to %s." % (turned or _continues_a_clause(attempt)))
     if not clauses:
         return "", ""
     content = " Then ".join(clauses)
@@ -1293,7 +1399,8 @@ def prepare_memory_commit(ctx, *, scene=None):
         # turn-0 row any mind had was its view of the room.
         if est and not ctx.director_resolve and not own_result.get("sequence"):
             _opening_own = _opening_own_sequence(est, cname)
-            _self_content, _self_gist = _own_sequence_memory(_opening_own, cname)
+            _self_content, _self_gist = _own_sequence_memory(
+                _opening_own, cname, **_own_turn(ctx, sc, sh, cname))
             if _self_content:
                 _file_own_acts(pending_memories, _episode_row, {
                     "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
@@ -1416,7 +1523,8 @@ def prepare_memory_commit(ctx, *, scene=None):
             # `_own_sequence_memory`'s decision framing is that fix, and it
             # stands whether or not a view exists.
             if should_store_own_acts:
-                self_content, self_gist = _own_sequence_memory(seq, cname)
+                self_content, self_gist = _own_sequence_memory(
+                    seq, cname, **_own_turn(ctx, sc, sh, cname))
                 _file_own_acts(pending_memories, _episode_row, {
                     "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                     "turn_idx": turn.idx, "kind": "episodic", "category": "self",
