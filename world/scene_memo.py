@@ -161,9 +161,20 @@ class scene_read_pass:
             # some answer it was handed may have been derived from the scene
             # as it stood before the write. Say so loudly: this is a bug in
             # the caller's placement of the pass, not a condition to absorb.
+            # Name the pass's opener, so the writer can be found: the
+            # warning fired on a probe story's opening (2026-10-20) and said
+            # nothing about WHICH of the engine's eight passes it was.
+            import traceback
+            opener = ""
+            for frame in reversed(traceback.extract_stack(limit=12)[:-1]):
+                if "scene_memo" not in str(frame.filename):
+                    opener = "%s:%s %s" % (frame.filename.rsplit("/", 1)[-1],
+                                           frame.lineno, frame.name)
+                    break
             log.warning(
                 "scene_read_pass: the scene changed inside a read pass; "
-                "memoised derivations in that region may be stale")
+                "memoised derivations in that region may be stale "
+                "(pass opened at %s)", opener)
         return False
 
 

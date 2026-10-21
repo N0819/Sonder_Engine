@@ -7654,7 +7654,24 @@ def _appearance_ledger_changed(prev_scene, scene, field, subject):
 
 def _composer_outcome(ctx, sc, *args, **kwargs):
     """Every observer's pass-2 view, built inside one scene read pass (C12
-    -- see the note above `_composer_establish`)."""
+    -- see the note above `_composer_establish`).
+
+    WHO LOOKED AROUND THIS BEAT is stamped on the working copy BEFORE the
+    pass opens. `_sweeping` is in the pass's read set (`scene_memo.
+    SCENE_READS`: `effective_facing` reads it), and the views stamped it
+    INSIDE the pass -- after the pass had fingerprinted the scene, so every
+    derivation memoised before the write could be stale, which is exactly
+    what the pass's exit warning reports (it fired on a probe story's
+    opening, 2026-10-20: "the scene changed inside a read pass ... opened
+    at _composer_outcome"). The stamp now precedes the pass; the views
+    read it."""
+    import inspect
+    bound = inspect.signature(_composer_outcome_views).bind(
+        ctx, sc, *args, **kwargs).arguments
+    swept = swept_this_beat(bound["res"], bound["p_name"], ctx.cast,
+                            bound["interp"])
+    if swept:
+        sc["_sweeping"] = sorted(swept)
     with scene_read_pass(sc):
         return _composer_outcome_views(ctx, sc, *args, **kwargs)
 
@@ -8044,10 +8061,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     base_ledger.update(ctx.get("_composer_turn_ledger") or {})
     full_player_render = _explicit_look_intent(interp)
     # Who looked around this beat: the cone subtracts nothing for them
-    # (`effective_facing` reads the marker on this working copy).
-    _swept_names = swept_this_beat(res, p_name, ctx.cast, interp)
-    if _swept_names:
-        sc["_sweeping"] = sorted(_swept_names)
+    # (`effective_facing` reads the marker on this working copy). Stamped
+    # by `_composer_outcome` BEFORE the pass opened -- a write here, inside
+    # the pass, is the staleness the pass exists to prevent.
+    _swept_names = set(sc.get("_sweeping") or ())
     _ubiq = _ubiquitous_names(sc)
 
     # EVERY line this beat produced, until a view takes it.
