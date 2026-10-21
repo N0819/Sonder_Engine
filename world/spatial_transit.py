@@ -822,6 +822,10 @@ def apply_transit_dock_edges(scene: dict) -> bool:
             # there: the rewrite drew `{"to": "the vortex"}` from a console
             # room whose ship stood in no room. The door opens once it exists.
             route = str(transit.get("route_room") or "")
+            # ...and a route naming the destination names no between
+            # (`settle_departures`): no door opens onto a place not reached.
+            if _same_room(route, transit.get("destination_room")):
+                route = ""
             target = route if isinstance(rooms.get(route), dict) else None
             barrier = _under_way_barrier(ent, transit, phase, target, exterior)
         elif phase == "arriving":
@@ -1134,6 +1138,22 @@ def settle_departures(before: dict, merged: dict) -> bool:
                 str(prior.get("destination_room") or "").strip() if was_under_way else "")
             elsewhere = destination if destination \
                 and not _same_room(destination, origin) else ""
+            # THE SPACE IT MOVES THROUGH IS NEVER THE PLACE IT IS BOUND FOR.
+            # A route is the BETWEEN (the transit card: "the space it moves
+            # through between its places"), and a journey under way has not
+            # reached its end, so a route naming the destination names no
+            # between at all: it is no route, and the vessel is in no room
+            # until the space it crosses is named or built (the 09-25 rule)
+            # -- never in the place it is going. The control story
+            # (2026-10-20, chat 1 idx 4): the Mary Ann cast off from a
+            # lighthouse landing "for the harbour" with `route_room` AND
+            # `destination_room` the mainland street a letter was addressed
+            # to, and stood in that street within the beat, her well's door
+            # open onto it, a rock in the sea behind her.
+            if elsewhere and _same_room(named, elsewhere):
+                named = ""
+            if elsewhere and _same_room(kept, elsewhere):
+                kept = ""
             # A POSITION THE SAME STEP GIVES IT NAMES THE SPACE IT IS IN: the
             # beat rowed it there, so that room is where it moves, and the
             # room it set off from is behind it (review F6, 2026-10-09: a

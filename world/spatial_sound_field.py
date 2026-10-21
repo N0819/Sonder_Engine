@@ -1592,7 +1592,21 @@ def sound_passes(scene, room_id, edge):
     sound places whatever a wall lets through. ONE grid derivation serves
     both since 2026-09-04: `_acoustic_grid` was a second copy of the
     placement loop, and it still laid rooms out as tier squares after the
-    room-shapes work had taught `room_field` about L and round rooms."""
+    room-shapes work had taught `room_field` about L and round rooms.
+
+    A WAY THAT COVERS GROUND IS NOT A WALL SHARED WITH A NEIGHBOUR
+    (2026-10-20, `spatial_routing.is_long_way`): a room reached by a `far`
+    or `remote` way is not laid beside the listener's on the grid, because
+    the grid is the claim that the two rooms touch at that wall, and what
+    is loud enough to cross the ground between them is the far field's to
+    deliver at the way's length (`way_paces`). The control story (chat 1
+    idx 4): a mainland street `{open, far}` onto a lighthouse's ground
+    floor was placed through that opening, and a boat's engine standing in
+    the street was heard in the tower "all through the room, low enough to
+    talk over"."""
+    from world.spatial_routing import is_long_way
+    if is_long_way(edge):
+        return None
     factor = _aperture_pass(scene, room_id, edge)
     return factor if factor > 0 else None
 
@@ -3116,13 +3130,128 @@ def far_path_gain(scene, listener_room, source_room):
     # thing the edge rules say something deliberate about; the flood would
     # overrule that with a coarser reading of the same single hop for no
     # gain, since there is no distance to be wrong about across one edge.
-    from world.spatial_senses import rooms_adjacent
-    if rooms_adjacent(scene, listener_room, source_room):
+    # ...across a DOORWAY. A pair joined only by a way that covers ground
+    # (`_next_door`) has exactly the distance the flood prices.
+    if _next_door(scene, listener_room, source_room):
         return None
     path = far_path(scene, listener_room, source_room)
     if path is None:
         return None
     return ratio_of_db(-path["loss_db"])
+
+
+def _next_door(scene, a, b) -> bool:
+    """Are `a` and `b` neighbours at a DOORWAY: some declared edge between
+    them, from either side, that is not a way covering ground
+    (`spatial_routing.is_long_way`). The edge model's pairs. Two rooms
+    joined only by a `far` or `remote` way are a street's length apart,
+    whatever their barrier, and the far field prices that length
+    (`way_paces`); read as next door, a lighthouse's ground floor heard a
+    mainland street `{open, far}` from it as the room beyond an opening
+    (the control story, 2026-10-20, chat 1 idx 4)."""
+    from world.spatial_routing import is_long_way
+    rooms = (scene or {}).get("rooms") or {}
+    a, b = str(a or ""), str(b or "")
+    if not a or not b or a == b:
+        return False
+    for x, y in ((a, b), (b, a)):
+        room = rooms.get(x) or {}
+        for edge in (room.get("adjacent") or []) if isinstance(room, dict) else []:
+            if isinstance(edge, dict) and str(edge.get("to") or "") == y \
+                    and not is_long_way(edge):
+                return True
+    return False
+
+
+#: WHAT A WAY THAT COVERS GROUND COSTS A SOUND (2026-10-20,
+#: DESIGN_SOUND_FIELD § 19): path length in paces, charged on top of the
+#: spans of the rooms it joins -- `room_sound_flood` charges every room on a
+#: path its whole span, so between two rooms that touch the spans ARE the
+#: walk and a doorway adds nothing. The tiers are `spatial_routing.
+#: normalize_edge_distance`'s, read off the edge's own `distance`:
+#:
+#:   unsaid, adjacent (to 5 m), near (to 20 m)   0 paces -- a doorway, or a
+#:       few rooms' spans, which the flood already charges as the rooms;
+#:   far   its measurement where one is written (`edge_metres`, at
+#:       `PACE_M`), else what the engine already charges a body to walk the
+#:       word: `charter_move.WALK_EDGE_PACES["far"]`, 240 paces, "what a
+#:       road costs" -- one length for the word, read where it is kept, not a
+#:       second copy free to disagree. A street's length or more: a normal
+#:       voice at a pace (63 dB) arrives 15 dB under an open place's floor
+#:       and is not heard, and a shout (85 dB) arrives 7 dB over it and is --
+#:       the owner's "a call carries across a street" holds across a far
+#:       way, as across one open room or a `near` way, which cost nothing;
+#:   remote (beyond 75 m, or the word)   an infinite length: no air -- the
+#:       near field's dead drop (`spatial_senses.hear_level`) and
+#:       `spatial_rel`'s "different locales: no air between them", carried to
+#:       the far field, so no flood and no walk through the structure
+#:       crosses it.
+#:
+#: Measured on the control story (2026-10-20, chat 1 idx 4): a mainland
+#: street the room designer joined to a lighthouse's ground floor as `{open,
+#: far}` -- "connected without pretending it is beside the tower", in its
+#: own words -- was charged its own 6-pace span and nothing for the way, so
+#: a normal voice from the lamp room reached it at 54.7 dB over a 17-pace
+#: path (DESIGN_SOUND_FIELD § 19 has the numbers after).
+
+
+def way_paces(edge) -> float:
+    """The ground a declared way itself covers, in paces, for the far field
+    (the tiers above): 0.0 for a doorway (`distance` unsaid, `adjacent` or
+    `near`), the measurement or the walk's price of the word for a `far`
+    way, and infinity for `remote` -- no air."""
+    from world.spatial_routing import edge_metres, normalize_edge_distance
+    edge = edge if isinstance(edge, dict) else {}
+    tier = normalize_edge_distance(edge.get("distance"))
+    if tier == "remote":
+        return math.inf
+    if tier != "far":
+        return 0.0
+    metres = edge_metres(edge)
+    if metres is not None:
+        return float(metres) / PACE_M
+    # Read where it is kept, lazily: the charter walks `world.spatial`.
+    from world.charter_move import WALK_EDGE_PACES
+    return float(WALK_EDGE_PACES["far"])
+
+
+def far_field_way_paces(scene: dict) -> dict:
+    """`{room: {other: paces}}`: every way on the room graph that covers
+    ground (`way_paces` above zero), both directions, for the far field to
+    charge beside the spans. Read off each room's own edges -- a passage
+    carries no `distance` (`PASSAGE_FIELDS`). Only an AUTHORED distance is a
+    claim: an edge that leaves it unsaid is the default, so a way written
+    `far` from one side and nothing from the other is far; where both sides
+    write one and disagree, the shorter wins, the permissive reading
+    `far_field_graph` takes of a loss. Cached on the scene object like the
+    graph."""
+    rooms = (scene or {}).get("rooms") or {}
+    hit = _FAR_WAYS_CACHE.get(id(scene))
+    if hit is not None and hit[0] is scene and hit[1] is rooms:
+        return hit[2]
+    ways: dict = {}
+    for room_id, room in rooms.items():
+        for edge in (room.get("adjacent") or []) if isinstance(room, dict) else []:
+            if not isinstance(edge, dict) or not str(edge.get("distance") or "").strip():
+                continue
+            other = str(edge.get("to") or "")
+            if other not in rooms or other == str(room_id):
+                continue
+            paces = way_paces(edge)
+            for a, b in ((str(room_id), other), (other, str(room_id))):
+                known = (ways.get(a) or {}).get(b)
+                if known is None or paces < known:
+                    ways.setdefault(a, {})[b] = paces
+    ways = {a: {b: p for b, p in row.items() if p > 0.0} for a, row in ways.items()}
+    ways = {a: row for a, row in ways.items() if row}
+    if len(_FAR_WAYS_CACHE) >= _FAR_GRAPH_CACHE_MAX:
+        _FAR_WAYS_CACHE.clear()
+    _FAR_WAYS_CACHE[id(scene)] = (scene, rooms, ways)
+    return ways
+
+
+#: `far_field_way_paces`'s memo, held like `_FAR_GRAPH_CACHE`.
+_FAR_WAYS_CACHE: dict = {}
 
 
 #: The heaviest single edge a far path may cross and still carry a voice's
@@ -3151,8 +3280,9 @@ def far_path(scene, listener_room, source_room) -> Optional[dict]:
         return None
     if listener_room not in rooms or source_room not in rooms:
         return None
-    from world.spatial_senses import rooms_adjacent
-    if rooms_adjacent(scene, listener_room, source_room):
+    # Neighbours at a doorway are the edge model's; neighbours by a way
+    # that covers ground are this field's (`_next_door`, 2026-10-20).
+    if _next_door(scene, listener_room, source_room):
         return None
     probe = SPEECH_DB["shout"]
     rec = room_sound_flood(scene, source_room, probe).get(listener_room)
@@ -3539,6 +3669,7 @@ def _structure_paces(scene, a, b) -> Optional[float]:
     if a == b:
         return 0.0
     graph = far_field_graph(scene)
+    ways = far_field_way_paces(scene)
     spans: dict = {}
 
     def span(room_id):
@@ -3555,7 +3686,9 @@ def _structure_paces(scene, a, b) -> Optional[float]:
         if dist > best.get(room, math.inf) + _DB_EPS:
             continue
         for other in sorted(graph.get(room) or ()):
-            step = dist + (span(room) + span(other)) / 2.0
+            # ...plus the ground the way itself covers (`way_paces`).
+            step = dist + (span(room) + span(other)) / 2.0 \
+                + float((ways.get(room) or {}).get(other) or 0.0)
             if step < best.get(other, math.inf) - _DB_EPS:
                 best[other] = step
                 heapq.heappush(heap, (step, other))
@@ -4276,6 +4409,9 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
     if not source_room or source_room not in rooms:
         return {}
     graph = far_field_graph(scene)
+    # The ground each way covers (`way_paces`): a doorway 0, a `far` way a
+    # street's length, charged as path length like the rooms' spans.
+    ways = far_field_way_paces(scene)
     cut = _inaudible_everywhere_db(scene)
     #: A room's span is derived from its shape, and deriving it lays the
     #: room's cells out. Measured on a 600-room grid: 543 ms without this
@@ -4307,7 +4443,8 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
             continue                    # inaudible here, and beyond it too
         for other in sorted(graph.get(room) or ()):
             barrier = rec["barrier_db"] + graph[room][other]
-            length = rec["length"] + span(other)
+            length = rec["length"] + float((ways.get(room) or {}).get(other) or 0.0) \
+                + span(other)
             level = source_db - barrier - spreading_loss_db(length)
             if level < cut:
                 continue

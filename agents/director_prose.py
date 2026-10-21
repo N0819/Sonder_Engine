@@ -1881,6 +1881,72 @@ def unheld_places_are_new(events, scene, new_ids=(), warn=None):
     return out
 
 
+#: The transit phases in which a vehicle is between its places -- the
+#: transit card's `in_transit` and `arriving` (`spatial_transit`'s
+#: `_UNDER_WAY_PHASES`, named here rather than imported past the facade).
+UNDER_WAY_PHASES = frozenset({"in_transit", "arriving"})
+
+
+def journeys_end_where_the_world_is(events, warn=None):
+    """A vehicle under way is bound only for a place the world holds: a
+    `destination_room` naming a place still to be built -- `new:<words>` --
+    is left out, as the transit card says ("never a place still to be built,
+    which is left out: a journey sets off before its end is built"), with
+    its `eta_seconds`. The vehicle stays under way until the prose brings it
+    in, and the compiler files the journey's end as a planning need
+    (`mapping._transit_destination_needs`).
+
+    THE ENGINE WOULD OTHERWISE BUILD IT NOW. Every string the encoder writes
+    is walked for `new:` places (`new_place_refs`), so a destination named
+    that way started the room author this beat (serially, when nothing else
+    had), and the binding tied the words to whatever room the author built
+    or the world held (`bind_new_places`): a journey's end built in the beat
+    the vessel merely set off, among the rooms it is leaving -- or the words
+    bound to a room the world already held, which then stood as the end.
+    The control story's mainland street (2026-10-20, chat 1 idx 3) came the
+    other way, from the prose author's place list, and was joined to the
+    lighthouse's ground floor; this closes that door for a journey's end.
+    Measured over every stored transit write
+    naming a destination (153 in the owner's database, 1 in the control
+    story, none in the four 2026-09-26 stories), none named a `new:` place:
+    this holds the contract and has not yet fired. A `docked` vehicle is
+    untouched: an arrival's room may be one built this beat."""
+    out = []
+    dropped = []
+    for event in events or []:
+        if not isinstance(event, dict) or not event.get("transforms"):
+            out.append(event)
+            continue
+        transforms = []
+        for transform in event["transforms"]:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            entities = patch.get("entities") if isinstance(patch, dict) else None
+            if not isinstance(entities, dict):
+                transforms.append(transform)
+                continue
+            kept = {}
+            for eid, ent in entities.items():
+                state = ent.get("state") if isinstance(ent, dict) else None
+                transit = state.get("transit") if isinstance(state, dict) else None
+                destination = str((transit or {}).get("destination_room") or "").strip() \
+                    if isinstance(transit, dict) else ""
+                if destination.startswith(NEW_PLACE_PREFIX) \
+                        and str(transit.get("phase") or "").strip().casefold() in UNDER_WAY_PHASES:
+                    transit = {k: v for k, v in transit.items()
+                               if k not in ("destination_room", "eta_seconds")}
+                    ent = dict(ent, state=dict(state, transit=transit))
+                    dropped.append((str(eid), destination))
+                kept[eid] = ent
+            transforms.append(dict(transform, patch=dict(patch, entities=kept)))
+        out.append(dict(event, transforms=transforms))
+    if warn:
+        for eid, destination in dropped:
+            warn(f"{eid!r} was written bound for {destination!r}, a place still to be "
+                 "built; a journey sets off before its end is built, so it is under "
+                 "way with no destination until the prose brings it in")
+    return out
+
+
 def bodies_stand_in_rooms(events, scene, built=None, warn=None):
     """Every position a body ends the beat in names a room that stands: one
     the world holds, one built this beat, or a holder to be inside. One
@@ -3666,6 +3732,9 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             pool.shutdown(wait=True)
     # A source stopped in the words it was declared in stops by its switch.
     events = an_emission_stops_in_its_own_words(events, sc)
+    # A journey's end is a place the world holds, before any `new:` place is
+    # collected for the room author to build (`journeys_end_where_the_world_is`).
+    events = journeys_end_where_the_world_is(events, warn=ctx.add_warning)
     if rooms_elsewhere:
         events = doorway_edits_only(events, sc, set(new_places), warn=ctx.add_warning)
         events = unheld_places_are_new(events, sc, set(new_places), warn=ctx.add_warning)

@@ -414,6 +414,8 @@ from world.spatial_sound_field import (
     distant_sounds, FAR_FIELD_ENTRY_DB, far_field_graph, far_field_sources,
     FLOOR_CEILING_LOSS_DB, OVERWHELMING_MARGIN_DB, room_sound_flood,
     room_span, WALL_LOSS_DB,
+    # A way that covers ground, priced (2026-10-20).
+    far_field_way_paces, way_paces,
     # A sound that HAPPENS: the beat-scoped event channel.
     beat_sensory_events, MAX_SENSORY_EVENTS, normalize_sensory_event,
     SENSORY_EVENTS_KEY,

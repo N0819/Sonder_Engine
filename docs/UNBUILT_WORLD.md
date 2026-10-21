@@ -2463,6 +2463,56 @@ What the 2026-10-13 round left:
   call -- today it has (8 of 11 captured re-drafts echo them, which makes
   Home 11's futon-under-trunk the designer's to clear).
 
+<a id="unbuilt-1-219"></a>
+
+### 1.219 A boat bound for the mainland stood in a mainland street -- BUILT 2026-10-20, residuals open
+
+The control probe story (2026-10-20; a rock lighthouse at sea, the round's
+scratch chat 1, idx 3-5). Three engine fixes, two clauses (`Design.md`:
+"Under way a vessel is in the space it moves through, never in the place
+it is bound for", "A place no walk reaches is a locale, and nothing invents
+a doorway onto it", "A way that covers ground is priced as ground, never as
+a doorway"; DESIGN_SOUND_FIELD § 19). What they leave:
+
+- **A route that names the destination without saying so.** The interpret
+  stage wrote the street as the boat's route with no `destination_room`; a
+  route naming a held room the vessel is not known to be bound for is a
+  legitimate shape (a car's route is the street it drives along), so that
+  stage still stood the boat in the street until the resolve named it as
+  the end too. The transit card's new complement ("never the place it is
+  bound for") is the guard; it needs a live run.
+- **The medium is asked for, not built.** `transit_route_unplanned` is a
+  planning need the Writers' Room answers out of band; until a beat names
+  or builds the water, the boat is in no room and its well opens onto
+  nothing. No card tells the Room what a need's reason asks for (neither
+  this one nor `transit_destination_unplanned`).
+- **The designer dropped a field it meant to write.** Its first step
+  narrated "its own zone" and wrote none; the clause states the class where
+  `doorways_that_fit` are offered, and only a live run shows whether a
+  designer now writes the field -- and whether one building the WATER a
+  boat floats on beside its landing still joins it there, as the homecoming
+  story's `the_south_channel` was joined to the lighthouse rail.
+- **One-sided locales.** `spatial_rel` answers `remote` only when both rooms
+  declare a locale; a zoned street and an unzoned rock with no edge read
+  `separated` (a shout a fragment). Left because 20 of the 22 such occupied
+  pair-beats in the owner's scenes are chat 33's Enterprise, zoned on some
+  rooms of one ship and not on the corridor between them.
+- **A place named only in speech is built.** "Harrow Street" was reserved by
+  the prose Director's place list from a promise ("it'll be in the post
+  office before the shutters come down"), a place no body went to or
+  perceived; whether the list should hold a place only spoken of is the
+  prose author's card's question.
+- **Sight still crosses a far way as a doorway** (the owner's 2026-10-05
+  ruling, `Design.md` "Distance takes nothing one doorway away"): from the
+  tower's foot the street's description still shows through the quay road,
+  and a body could still walk it in two beats. That is the mislink's, which
+  the clause and the healer's exception are there to prevent.
+- **Three readings of `far`** (the normalizer's 20-75 m, the charter's 240
+  paces, the sound field's 0.75 m pace) and **`remote` as no air for a loud
+  event** too -- DESIGN_SOUND_FIELD § 19.3.
+- **The ring** carries the lamp room's normal voice to the street as a
+  fragment even at a street's length; the coupling lane's.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

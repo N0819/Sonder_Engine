@@ -60,7 +60,7 @@ from world.spatial_identity import (_ci_get, _entity_named, room_of,
                               same_subject)
 from world.spatial_senses import apply_comms_ops, normalize_scene_comms
 from world.spatial_substance import apply_substance_ops, apply_contact_action_ops
-from world.spatial_routing import stamp_sight_direction
+from world.spatial_routing import room_locale, stamp_sight_direction
 from world.spatial_transit import (apply_transit_dock_edges,
                                   evict_self_contained_entities,
                                   infer_body_enclosures,
@@ -1391,6 +1391,20 @@ def connect_orphan_new_rooms(scene: dict, prev_scene: dict) -> list:
         if anchor is None:
             anchor = next((r for r in rooms if r != rid), None)
         if not anchor:
+            continue
+        # A ROOM THAT SAYS IT LIES WHERE NO WALK REACHES IS NOT AN ISLAND TO
+        # HEAL (2026-10-20). `zone` is the author's word for a disconnected
+        # locale -- "anywhere not reachable by walking through this
+        # location's own rooms" (`encoder/rooms`), the word `spatial_rel`
+        # reads as no air between two locales and `spatial_frames` splits a
+        # frame on -- and the designer's own check accepts a zoned place
+        # with no doorway (`director_rooms._no_way_in`). Opened onto the room
+        # the bodies stood in, it is exactly the doorway the zone denies. The
+        # control story (chat 1 idx 3): the designer's draft of a mainland
+        # street, joined to nothing, came back from this merge with a doorway
+        # onto the lighthouse's ground floor, where the bodies stood. A zoned
+        # room joins a room of its own zone as any island does.
+        if room_locale(room) and room_locale(room) != room_locale(rooms.get(anchor)):
             continue
         room.setdefault("adjacent", []).append(
             {"to": anchor, "barrier": "open", "distance": "near"})

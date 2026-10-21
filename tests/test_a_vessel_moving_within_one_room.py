@@ -284,13 +284,18 @@ def test_the_encoder_is_told_a_journey_within_one_place_stays_in_it():
     from llm import prompts
     en = prompts.unified_specialist_prompt(["entities"], parts=["entities__transit"])
     ja = prompts.unified_specialist_prompt(["entities"], "ja", parts=["entities__transit"])
+    # ...and never the place it is bound for (2026-10-20: the control
+    # story's boat named the mainland street as route AND destination, and
+    # stood in it within the beat; `spatial_transit.settle_departures`).
     assert ("leaving the place it stood in, never the place it set off from, "
-            "which is behind it the moment it is under way.") in en
+            "which is behind it the moment it is under way, and never the "
+            "place it is bound for, which it has not reached.") in en
     assert ("A thing moving within the place it is already in has left nothing "
             "behind and stays there, whether it names that place as the space "
             "it moves through or names none.") in en
     assert "that place is the space it moves through" not in en
     assert "立っていた場所を離れるなら、出発した場所は決して書きません。" in ja
+    assert "向かう先の場所も決して書きません。そこにはまだ着いていないからです。" in ja
     assert "すでにいる場所の中で動くものは、何も後ろにせず、そこにとどまります。" in ja
     assert "その場所を通り抜けている空間として名指しても、何も名指さなくても同じです。" in ja
     assert "その場所こそが通り抜けている空間であり" not in ja

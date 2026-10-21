@@ -161,13 +161,31 @@ def contained_interior_holder(target, scene):
 
 
 def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
-    """A room need for every vehicle moving toward no room.
+    """A room need for every vehicle moving toward no room, and one for
+    every vehicle moving THROUGH no room.
 
     A transit that names no `destination_room`, or names one the scene does
     not hold and no plan reserves, can never dock (`mechanics` schedules an
     arrival only for a named destination). The need makes the journey's end
-    a place somebody has to plan; the vehicle keeps moving meanwhile."""
+    a place somebody has to plan; the vehicle keeps moving meanwhile.
+
+    AND THE SPACE IT MOVES THROUGH (`transit_route_unplanned`, 2026-10-20).
+    Under way a vehicle stands in its route room or, when the world holds no
+    room for that space, in no room (`spatial_transit.settle_departures`),
+    and no room is only the floor (the owner, 2026-09-25). A vehicle with an
+    inside -- the one whose doorway and occupants that answer strands --
+    that the scene places in no room files a need for that space: its route
+    when one is named (`new:<words>` or an id nothing holds), else the
+    stretch between the place it left and the place it is bound for, both
+    on the surface, so the space is planned as reached from where the
+    vehicle left and never as the place it is going. The control story
+    (chat 1 idx 4): the Mary Ann cast off from the landing with the
+    mainland street as route AND destination; refused as no between, the
+    route left her in no room, and nothing asked for the water. A vehicle
+    with no inside (a coach, a boat the story never boarded) is a thing in
+    no room, and asks for nothing."""
     from world.planning_needs import planning_need
+    from world.spatial import room_of_record
     needs = []
     rooms = (scene or {}).get("rooms") or {}
     for eid, ent in ((scene or {}).get("entities") or {}).items():
@@ -179,14 +197,33 @@ def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
         if phase not in ("in_transit", "arriving"):
             continue
         destination = str(transit.get("destination_room") or "").strip()
-        if destination and (destination in rooms or planned_for(destination)):
-            continue
+        label = str(ent.get("name") or eid)
+        route = str(transit.get("route_room") or "").strip()
+        origin = str(transit.get("departed_from") or "").strip()
+        if not (destination and (destination in rooms or planned_for(destination))):
+            needs.append(planning_need(
+                "room", "transit_destination_unplanned",
+                subject=destination or label,
+                surface={"vehicle": str(eid),
+                         "route_room": route,
+                         "eta_seconds": str(transit.get("eta_seconds") or "")},
+                turn_idx=turn_idx, frame_id=frame_id))
+        here = room_of_record(scene, eid, ent)
+        if here and here in rooms:
+            continue                        # in its route, or (D2) where it set off
+        if not any(isinstance(room, dict)
+                   and str(room.get("parent_entity") or "").strip() == str(eid)
+                   for room in rooms.values()):
+            continue                        # no inside: nothing is stranded
+        if route and planned_for(route):
+            continue                        # the plan holds that space already
+        words = route[len("new:"):].strip() if route.casefold().startswith("new:") \
+            else route
         needs.append(planning_need(
-            "room", "transit_destination_unplanned",
-            subject=destination or str(ent.get("name") or eid),
-            surface={"vehicle": str(eid),
-                     "route_room": str(transit.get("route_room") or ""),
-                     "eta_seconds": str(transit.get("eta_seconds") or "")},
+            "room", "transit_route_unplanned",
+            subject=words or "%s -> %s" % (origin or label, destination or label),
+            surface={"vehicle": str(eid), "route_room": route,
+                     "departed_from": origin, "destination_room": destination},
             turn_idx=turn_idx, frame_id=frame_id))
     return needs
 

@@ -102,6 +102,33 @@ def normalize_edge_distance(value) -> str:
     return "remote"
 
 
+#: THE TIERS OF A WAY THAT COVERS GROUND, as against a doorway between two
+#: rooms that touch: `far` (the normalizer's 20-75 m) and `remote` (beyond
+#: it, or the word itself, which `spatial_senses.hear_level` already reads as
+#: no air). One set, read by every reader that prices a way: the far field's
+#: length (`spatial_sound_field.way_paces`), the near field's placement of a
+#: neighbour on the listener's grid (`spatial_sound_field.sound_passes`) and
+#: the edge model's claim to a pair (`spatial_sound_field.far_path`).
+#: `director_movement._LONG_EDGE_DISTANCES` is the same pair for a walk's
+#: beats. Measured on the control story (2026-10-20, chat 1 idx 3-4): a
+#: mainland street built with `{open, far}` onto a lighthouse's ground floor
+#: was placed beside it by every one of those readers, because none of them
+#: read the word.
+LONG_WAY_TIERS = frozenset({"far", "remote"})
+
+
+def is_long_way(edge) -> bool:
+    """Whether a declared edge is a way that covers ground -- its `distance`
+    folds to `far` or `remote` -- rather than a doorway between neighbours.
+    An unsaid distance is a doorway: `normalize_edge_distance` answers `near`
+    for it, the default every reader assumed, and the engine's own writers
+    (`spatial_transit.apply_transit_dock_edges`, `spatial_merge.
+    connect_orphan_new_rooms`) stamp `near` on a doorway they draw."""
+    if not isinstance(edge, dict):
+        return False
+    return normalize_edge_distance(edge.get("distance")) in LONG_WAY_TIERS
+
+
 def _one_way_edges(rooms: dict, source, target):
     """Every `one_way_window` edge `source` declares toward `target`."""
     return [edge for edge in ((rooms.get(source) or {}).get("adjacent") or [])

@@ -78,6 +78,19 @@ NEED_REASONS = (
     # hull nudging the Murrow jetty at turn 13, and every later page put her
     # in the cabin she had left.
     "transit_destination_unplanned",
+    # A vehicle with an inside, under way in NO ROOM. Under way it is in the
+    # space it moves through -- its route room -- or, when the world holds no
+    # room for that space, in no room (the owner, 2026-09-25;
+    # `spatial_transit.settle_departures`): its route names a space nothing
+    # built (a `new:` place, an id nothing holds), or none while it is bound
+    # elsewhere. No room is only the floor, so the MEDIUM -- the water, the
+    # sky, the shaft -- is a place somebody has to plan: a room of its own,
+    # reached from the place the vehicle left by the way it left, never from
+    # the place it is bound for (`mapping._transit_destination_needs` puts
+    # both ends on the surface). The control story (2026-10-20, chat 1 idx
+    # 4): a boat cast off from a lighthouse landing with the mainland street
+    # as its route, and nothing anywhere asked for the water between.
+    "transit_route_unplanned",
     # A thread being told OFF SCREEN has stopped going anywhere. A body in a
     # causality bubble (`world/spatial_bubbles.py`) spends a beat of its own
     # every turn, and `agents/offscreen_beat` files this when several of them

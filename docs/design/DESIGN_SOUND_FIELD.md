@@ -3237,3 +3237,108 @@ after); the script in the lane's directory (`scripts/measure.py`).
    hood goes up and un-naming them when it comes down.
 
 What is left is registered in `docs/UNBUILT_PERCEPTION.md` § 2.36.
+
+## 19. A way that covers ground is not a doorway (2026-10-20)
+
+The control probe story (a rock lighthouse at sea, chat 1 of the round's
+scratch database). At idx 3 the room designer was asked to build "Harrow
+Street", a mainland address in a promise, and its first step said the
+place was "a disconnected locale (the mainland, nine kilometres east across
+the water) ... No doorway to the rock" -- and wrote no `zone`. Nudged by its
+check, its second step joined the street to the tower's foot as `{open,
+far}`, "connected without pretending it is beside the tower". Every reader
+of sound read that edge as a doorway next door:
+
+* **the far field** charged the way nothing but the street's own 6-pace
+  span, so a normal voice in the lamp room reached the street at 54.7 dB
+  over a 17-pace path (the bare lamp room's ring, `ring_boost_db`, added 22.3
+  of it);
+* **the near field** placed the street on the tower foot's acoustic grid
+  through the opening, so the boat's engine, standing in the street after
+  the vessel bug of the same beat, was heard at the tower's foot "all
+  through the room, low enough to talk over" -- the narrator's "wash of the
+  quay road coming in low off the street";
+* **the edge model** took the pair as neighbours (`rooms_adjacent`), whose
+  voices cross an opening whole.
+
+### 19.1 The rule
+
+A declared `distance` that folds to `far` or `remote`
+(`spatial_routing.LONG_WAY_TIERS`, `is_long_way`) is a way that covers
+ground, and the readers of sound charge it the ground:
+
+| tier (`normalize_edge_distance`) | path length the far field adds | basis |
+|---|---|---|
+| unsaid, `adjacent` (to 5 m), `near` (to 20 m) | 0 | a doorway, or a few rooms' spans -- which the flood already charges as the rooms |
+| `far` | the measurement where one is written (at `PACE_M`), else 240 paces | the engine's own price for the word: `charter_move.WALK_EDGE_PACES["far"]`, "what a road costs" -- read where it is kept, so the walk and the sound cannot disagree |
+| `remote` (beyond 75 m, or the word) | infinite: no air | the near field's dead drop (`hear_level`) and `spatial_rel`'s "different locales: no air between them", carried to the far field |
+
+Read by `spatial_sound_field.way_paces` / `far_field_way_paces` (a sparse
+map beside the loss graph, cached on the scene object like it; only an
+AUTHORED distance is a claim, and where both sides author one the shorter
+wins, as the smaller loss does), and charged in three places:
+
+1. `room_sound_flood` -- the way's paces are path length, like a span;
+   `_structure_paces` (what is felt through a building) the same;
+2. `sound_passes` -- the near field does not lay a room reached by a long
+   way beside the listener's: the grid is the claim that two rooms touch at
+   that wall;
+3. `far_path` / `far_path_gain` (`_next_door`) -- a pair joined only by a
+   long way is the far field's to grade, not the edge model's.
+
+`far_field_graph` and `_build_far_field_graph` are untouched (the coupling
+lane owns the per-opening losses and the ring); the only hunk inside
+`room_sound_flood` is its `length` line.
+
+The owner's "a call carries across a street" holds: across one open room
+(the open-air law, untouched), across a `near` way (charged nothing), and
+across a `far` one -- a shout (85 dB at a pace) arrives 7 dB over an open
+place's floor at 250 paces, and a normal voice (63) 15 dB under it.
+
+### 19.2 Measured
+
+Offline, the engine's own readers on stored scenes, HEAD (06f5bb82) against
+the patch:
+
+* **The control story, checkpoint 5** (the street joined `{open, far}`):
+  a normal voice from the lamp room reaches the street at 31.1 dB over 257
+  paces (54.7 over 17 before); the street's sounds no longer reach the
+  kitchen at all (49.9 dB of loss before, so its shout arrived there at
+  35.1); the tower foot's grid no longer holds the street, and Rhona's
+  standing soundscape there, which named the quay road as the opening the
+  engine's noise came through, is empty. The 31.1 dB is a fragment over the
+  street's 30 dB floor only because of the lamp room's ring; with no ring
+  the same voice is not heard.
+* **Every occupied pair in every checkpoint holding a `far` or `remote`
+  way** -- the owner's database (chats 2, 4, 10, 160, 161: 103 scenes, 758
+  pairs) and the 2026-09-26 stories with the control story (38 scenes, 124
+  pairs), a normal voice and a shout each: **0 of 1,764 grades change**.
+  The owner's three long ways (chat 2's basement stair, chat 4's walled
+  stairwell, chat 10's array chamber) lie on no path between two occupied
+  rooms; on chat 10's, a shout from the access shafts to bay nine, where
+  nobody stood, now loses 48.4 dB over 264 paces (27.6 over 24).
+* **Standing soundscapes**: 1 of 394 changes -- the control story's above.
+* **Loud far-field sources**: none crossed a long way in any database,
+  before or after.
+
+### 19.3 What is left
+
+1. **The ring** (`ring_boost_db`) is what still carries the lamp room's normal voice to
+   the street as a fragment; the coupling lane bounds it.
+2. **Sight is untouched.** The owner ruled on 2026-10-05 that an authored
+   `far`/`remote` edge is graded as a doorway for sight ("Distance takes
+   nothing one doorway away", `Design.md`), so the tower's foot still sees
+   the street's description through the quay road while no longer hearing it
+   as next door. Whether a way that covers ground should show its far room by
+   its `far_look` is the owner's.
+3. **Three readings of the word `far`.** The measurement normalizer bands it
+   20-75 m, the charter walks it 240 paces (a pace "about the metre"), and
+   the sound field's pace is 0.75 m: a measured 75 m way costs a sound 100
+   paces, the word 240, and a measured 76 m way is `remote`, no air. One
+   length per word is the owner's to set; the far field reads the charter's.
+4. **`remote` carries no loud event either.** The owner's one remote way
+   (chat 10's 200 m lift shaft, `Design.md` "Distance takes nothing one
+   doorway away") would carry no explosion now; priced at the charter's 780
+   paces instead, a catastrophic event would cross it and a shout would not.
+
+Registered in `docs/UNBUILT_WORLD.md` § 1.219.
