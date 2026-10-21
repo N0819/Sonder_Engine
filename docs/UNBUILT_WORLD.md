@@ -2638,6 +2638,19 @@ leaves:
   the landing or the mainland, where the `{value, unit}` record had read as a
   doorway -- the rule for any measured way over 75 m. Sight across a `remote`
   edge was not measured.
+- **The speed clause, checked live (2026-10-21).** The probe's departure
+  encoder call (capture 114) was replayed through `encoder_replay/` on a
+  scratch copy, with the new card.
+  - **Prose that states a speed.** With one sentence added ("the steady seven
+    knots she always made"), both replays wrote `state.speed = {value: 7,
+    unit: "kn"}` beside the transit, never inside it.
+  - **Prose that states none.** As stored, the prose only names "a stout,
+    slab-sided motor boat"; none of the three replays invented a speed or a
+    time. Two wrote the transit as the old card did. One wrote the departure
+    as a position in `the_channel` with "full throttle" in the boat's state
+    and no transit, so it had no destination and no arrival. That is encoder
+    variance the old card shares, but it is the stranded-boat class arriving
+    by another door, and worth watching.
 
 ## 2. Roadmap
 
