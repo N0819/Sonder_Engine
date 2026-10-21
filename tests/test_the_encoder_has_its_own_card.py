@@ -204,7 +204,31 @@ def test_the_owners_sheet_is_half_what_it_was():
     paces, a whisper arm's reach, ear its one named listener -- in the
     sentence the old "(said to oneself, under the breath, into one ear ...)"
     stood in; tightened with the pitched clause beside it, it put the sheet at
-    20,535 of the 20,502 ceiling."""
+    20,535 of the 20,502 ceiling.
+
+    Still 0.64 after lane A of the sound round (2026-10-20, the sheet 20,550
+    of the 20,827 ceiling before it): two core additions paid for by trims,
+    not a raise. Added: the addressee clause on `targets` (a spoken line
+    names the body it is spoken to wherever the prose says whom it is to;
+    a line to the room names nobody -- the lever under privacy in a din and
+    the head's shadow, which bite only on a line naming somebody else, and
+    31% of recorded lines named nobody) and the `vocal_affect` field (what a
+    voice carries without its words, the schema's closed set printed as
+    volume's is). Trimmed: the movement
+    parenthetical's repeat of "the engine walks the legs"; the observable
+    bullet's rule said twice; the brief-reaction sentence; and "Do not split
+    one act merely because it touches several things", which the transforms
+    bullet (one step, several transforms) and THE TOOLS (a handover that is
+    also a new grip, both at that step) already say. 20,765 of 20,827.
+
+    The lane had also trimmed the volume clause's illustration ("a soft,
+    breathy, shaky, murmured or moaned line") to its class ("a line however
+    it sounds"). RESTORED the same day: replayed on 40 captured encoder
+    calls, the class alone moved a stammered, blushing line (chat 178 turn
+    28, "Aaah... D-do I taste good?") from `normal` to `whisper`; with the
+    illustration back, 0 of 44 lines moved. A reduction is real only if it
+    still says what the children said, and this one did not; it stands at
+    10,424 characters, under the ceiling."""
     sheet = prompts.unified_specialist_prompt(
         ["obligations", "entities", "sensory_events", "poses"], parts=[])
     assert len(sheet) < 32543 * 0.64, len(sheet)

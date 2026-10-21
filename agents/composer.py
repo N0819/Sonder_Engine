@@ -4190,6 +4190,7 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         return None
     channel = rel.get("comm_channel")
     tone = str(entry.get("tone") or "").strip()
+    affect = typed_affect(entry)
     # A register is AUTHORED sheet text and arrives as a sentence ("Clinical,
     # deadpan, and strictly monotone.") where a tone is a phrase; splice it
     # as the manner slot expects, or the page reads "in a Clinical, deadpan,
@@ -4234,16 +4235,16 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         data["voice_apart"] = _unseen_register
     if level == "none":
         # The voice only: whose it is where it is known or seen, how loud
-        # (`volume`), the tone it carries (`_carried_tone`) -- no words.
+        # (`volume`), the feeling it carries (`_voice_feeling`) -- no words.
         data["level"] = "voice"
         data["attributed"] = bool(_label) and (bool(can_see)
                                                or _knows_the_voice)
-        data["tone_heard"] = _carried_tone(tone, body)
+        data.update(_voice_feeling(affect, tone, body))
         data.pop("manner", None)
         fidelity = "voice"
     elif level == "fragment":
         data["fragment"] = _muffled_fragment(body)
-        data["tone_heard"] = _carried_tone(tone, body)
+        data.update(_voice_feeling(affect, tone, body))
         # WHO SPOKE IS SIGHT'S ANSWER, NOT HEARING'S. A line degraded by
         # distance or noise loses its WORDS, never its speaker, when the
         # observer can see who spoke: hearing less of a sentence is not the
@@ -4334,6 +4335,46 @@ def _trace_percept(entry, *, bearing="", order_key=0):
               "directed_at_self": False},
         salience=0.3, order_key=order_key,
         dedupe_key="speech-trace:" + _short_hash(entry.get("speaker")))
+
+
+def typed_affect(entry):
+    """The `VOCAL_AFFECTS` member a dialogue entry carries in `vocal_affect`,
+    or "" (a record carrying none -- every line recorded before the field,
+    and any value outside the set)."""
+    from llm.schemas import normalize_vocal_affect
+    return normalize_vocal_affect((entry or {}).get("vocal_affect"))
+
+
+def _voice_feeling(affect, tone, words):
+    """What a voice carries of its feeling where its words do not all come
+    through, as percept data: the TYPED affect where the record has one
+    (`vocal_affect`, DESIGN_SOUND_FIELD § 15 -- a closed set the engine
+    owns, rendered through each pack's `vocal_affects`), else the one-word
+    tone floor over the line's free-text `tone` (`_carried_tone`), so a line
+    recorded before the field renders exactly as it did. `neutral` is an
+    affect: the prose gave the voice no feeling, and the free text behind it
+    is not read."""
+    if affect:
+        return {"vocal_affect": affect}
+    return {"tone_heard": _carried_tone(tone, words)}
+
+
+def _affect_word(data):
+    """The English pack's word for a percept's typed affect, or "" -- an enum
+    key mapped through the pack, never printed raw; a pack may leave a member
+    unsaid (`neutral`)."""
+    affect = str((data or {}).get("vocal_affect") or "").strip()
+    if not affect:
+        return ""
+    return str((_ENGLISH_COMPOSITOR.get("vocal_affects") or {}).get(affect) or "")
+
+
+def _feeling_heard(data):
+    """The tone word a renderer says after a line heard in pieces or as a
+    voice alone: the typed affect's word, else the carried tone."""
+    if (data or {}).get("vocal_affect"):
+        return _affect_word(data)
+    return str((data or {}).get("tone_heard") or "").strip()
 
 
 #: Where a tone's first part ends: a clause separator in a spaced or an
@@ -5785,7 +5826,7 @@ def _heard_after(p, line, *, ended=False):
         return line
     d = p.data or {}
     extra = []
-    tone = str(d.get("tone_heard") or "").strip()
+    tone = _feeling_heard(d)
     if tone and p.fidelity in ("fragment", "voice"):
         extra.append(_en("speech_voice_tone", tone=tone))
     if d.get("own_name") and p.fidelity in ("fragment", "voice"):
@@ -6277,7 +6318,7 @@ def _episode_sentence(p):
                         loudness=loudness)
                     if d.get("attributed") and str(p.source_label or "").strip()
                     else _en("episode_speech_voice_unknown", loudness=loudness))
-            tone = str(d.get("tone_heard") or "").strip()
+            tone = _feeling_heard(d)
             return line + (" " + _en("episode_speech_voice_tone", tone=tone)
                            if tone else "") + (
                 " " + _en("episode_speech_own_name")

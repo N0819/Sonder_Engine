@@ -2199,11 +2199,36 @@ reach. What wave A leaves, each registered here rather than built:
   three-valued -- `spatial_senses.spoken_to`, the note's § 14.8.)
 - **A line that names nobody has no bystander** (§ 14.8): privacy in a din
   and the head's shadow bite only on a line naming SOMEBODY ELSE, and 31% of
-  the owner's recorded lines (3,678 of 11,841) name nobody -- the harbour
+  the owner's recorded lines (3,678 of 11,858) name nobody -- the harbour
   story's gale line, aimed at Jonah by the prose, names nobody, so a
   bystander follows it whole. The lever is the encoder naming a line's
-  addressee wherever the prose says whom it is to: a prompt clause, the
-  owner's, and it needs a live run.
+  addressee wherever the prose says whom it is to. BUILT as one clause on
+  the core card's `targets` bullet, en + ja (round 2 lane A, the note's
+  § 15.3); its effect needs the live replay. Measured first (§ 15.2): 3,645
+  of the 3,678 are the causal Director's lines, 3,014 of them two-body
+  rooms; of the 143 empty lines in prose-Director beats the prose plainly
+  names the listener on 68 (the clause's ceiling by the prose alone), 43
+  more are rooms with one other body (the encoder sees it in `positions`;
+  whether "however it says so" reaches it is the replay's to show), and 32
+  are to the room, to no one, or addressed by a role or an epithet. Left: a
+  line addressed by an epithet ("little fox") or a role ("Captain") is
+  named only if the model resolves it through the identity index -- no
+  reader matches an epithet to a body.
+- **The voice's feeling is typed** (§ 12.6 item 8, built § 15.4):
+  `vocal_affect` on the encoder's spoken event and the dialogue entry,
+  `schemas.VOCAL_AFFECTS`; the one-word `tone` floor (`_carried_tone`) now
+  reads only a record carrying no affect -- every line recorded before the
+  field, and every line the encoder leaves the field empty on. Left: the
+  character's own declared line has no typed affect (its `tone` is free
+  prose; the encoder's transcription supplies the affect), the interaction
+  loop's round renders no voice rung and so no affect, and whether the
+  encoder writes the field at all needs the live replay.
+- **The encoder's waking clause leaves sound to the engine** (§ 13.7 item
+  15, built § 15.5): `conditions__awareness` (en + ja) no longer names a
+  noise as the model's reason to end a sleep; the prose's own wakings, a
+  hand on them, the clock and the drug stay the model's. The double write
+  is harmless (`_ended_in`). Its effect on the model's wakings needs the
+  live replay.
 - **`known` is recognition, not having heard a voice**: a listener who
   learned a name without meeting its owner would know the voice.
 - **A persona has no voice field**, and no card carries a voice's sex, rough

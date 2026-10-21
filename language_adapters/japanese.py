@@ -176,7 +176,12 @@ class JapaneseRenderer:
         each its own sentence. A memory keeps the tone of a voice heard
         alone, and never the register (as `said_apart` is never filed)."""
         parts = []
-        tone = str(data.get("tone_heard") or "").strip()
+        # The typed affect's word (`vocal_affects`, an enum key mapped through
+        # the pack, never printed raw), else the carried tone; a pack may
+        # leave a member unsaid (`neutral`).
+        affect = str(data.get("vocal_affect") or "").strip()
+        tone = (str((self._value("vocal_affects") or {}).get(affect) or "")
+                if affect else str(data.get("tone_heard") or "").strip())
         if tone and p.fidelity in ("fragment", "voice"):
             if not prefix:
                 parts.append(self._text("speech_voice_tone", tone=tone))

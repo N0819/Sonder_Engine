@@ -2966,6 +2966,13 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
             "conceal_from": [str(value)
                              for value in entry.get("conceal_from") or []],
             "volume": str(entry.get("volume") or "normal"),
+            # THE FEELING IN THE VOICE, typed (`schemas.VOCAL_AFFECTS`), or
+            # "". Carried like `volume`: a field this dict forgets is dropped
+            # without a word, and the dialogue log is re-minted from this
+            # projection, so the voice rung would read every line as
+            # affectless.
+            "vocal_affect": schemas.normalize_vocal_affect(
+                entry.get("vocal_affect")),
             "movement": (dict(entry["movement"])
                          if isinstance(entry.get("movement"), dict) else None),
             "look": str(entry.get("look") or "").strip(),
@@ -3017,6 +3024,7 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
             projected.update({
                 "type": "speech", "text": event,
                 "volume": normalized["volume"],
+                "vocal_affect": normalized["vocal_affect"],
                 "visibility": normalized["visibility"],
                 "conceal_from": normalized["conceal_from"],
                 "targets": normalized["targets"],

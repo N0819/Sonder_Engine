@@ -469,7 +469,75 @@ def normalize_speech_volume(value: Any) -> str:
         return "normal"
 
     return volume
-    
+
+
+#: WHAT A VOICE CARRIES WITHOUT ITS WORDS (DESIGN_SOUND_FIELD § 15, lane A,
+#: 2026-10-20): the closed set a spoken event's `vocal_affect` may take, read
+#: by the composer's voice rung where a line's words do not arrive -- through
+#: a wall, across a din -- in place of the one-word floor over the line's
+#: free-text `tone` (`composer._carried_tone`). The members are the emotion
+#: families a listener decodes from vocal cues alone at well above chance,
+#: across cultures and without the words (Scherer 1986; Banse & Scherer
+#: 1996, fourteen emotions judged from content-free utterances; Juslin &
+#: Laukka 2003, the meta-analysis of 104 studies), each with the acoustic
+#: profile that makes it audible through a partition that keeps a voice's
+#: low half -- its level, pitch, tempo and tune -- and takes its consonants:
+#:   anger       -- high mean pitch and intensity, fast tempo, a hard, tense
+#:                  voice (hot anger decoded at ~78%; cold anger is the same
+#:                  family); the loudest and most reliably heard;
+#:   fear        -- high pitch with wide variability, fast tempo, a breathy,
+#:                  unsteady voice (panic fear; anxiety is its quieter
+#:                  member);
+#:   sadness     -- low pitch and intensity, slow tempo, falling contours and
+#:                  pauses; the family decoded most reliably of all;
+#:   joy         -- high pitch and variability, fast tempo, a bright timbre;
+#:                  happiness, elation, amusement and laughter;
+#:   tenderness  -- low intensity, low pitch, slow tempo, a soft voice --
+#:                  Juslin & Laukka's fifth family, warmth and affection;
+#:   neutral     -- no marked departure from the speaker's baseline (Banse &
+#:                  Scherer's reference), and a positive statement: the prose
+#:                  gave the voice no feeling, so the free-text tone is NOT
+#:                  read behind it.
+#: An empty value is not `neutral`: it is a record carrying no affect, and
+#: the voice rung then reads the line's `tone` under the floor, as every
+#: line recorded before this field did.
+VOCAL_AFFECTS = ("anger", "fear", "sadness", "joy", "tenderness", "neutral")
+
+#: The grammatical forms and the literature's own names of each family, so a
+#: model writing the adjective or the study's label lands on the member. A
+#: closed table the engine owns, not a list to match prose against: anything
+#: outside it is dropped to "" (no affect), never guessed.
+_VOCAL_AFFECT_ALIASES = {
+    "angry": "anger", "hot anger": "anger", "cold anger": "anger",
+    "rage": "anger", "fury": "anger", "irritation": "anger",
+    "afraid": "fear", "fearful": "fear", "frightened": "fear",
+    "panic": "fear", "panic fear": "fear", "anxiety": "fear",
+    "anxious": "fear", "terror": "fear",
+    "sad": "sadness", "despair": "sadness", "grief": "sadness",
+    "sorrow": "sadness",
+    "happy": "joy", "happiness": "joy", "elation": "joy", "elated": "joy",
+    "amusement": "joy", "amused": "joy", "joyful": "joy", "delight": "joy",
+    "cheerful": "joy",
+    "tender": "tenderness", "warmth": "tenderness", "warm": "tenderness",
+    "affection": "tenderness", "affectionate": "tenderness",
+    "calm": "neutral", "even": "neutral", "level": "neutral",
+    "flat": "neutral", "none": "neutral",
+}
+
+
+def normalize_vocal_affect(value: Any) -> str:
+    """The `VOCAL_AFFECTS` member a model's value names, or "" (no affect
+    recorded). Casefolded; an enum member by its value; the family's own
+    grammatical forms and the literature's labels through
+    `_VOCAL_AFFECT_ALIASES`. A phrase, a sentence, a word of a line, a name
+    -- anything outside the set -- is "" and the record carries no affect,
+    so the voice rung falls back to the tone floor rather than to a guess."""
+    if isinstance(value, Enum):
+        value = value.value
+    affect = str(value or "").strip().casefold()
+    affect = _VOCAL_AFFECT_ALIASES.get(affect, affect)
+    return affect if affect in VOCAL_AFFECTS else ""
+
 
 # ---- Fiction Model ----
 
@@ -2319,6 +2387,16 @@ class DialogueLogEntry(LenientModel):
     )
     intended_target: Optional[str] = None
     tone: str = ""
+    # WHAT THE VOICE CARRIED WITHOUT ITS WORDS: one of `VOCAL_AFFECTS`, or ""
+    # for a line recorded with none. Written by the encoder on its spoken
+    # event (`UnifiedEvent.vocal_affect`) and carried onto the line it
+    # transcribes; `tone` stays the free prose a speaker's model wrote. The
+    # composer's voice rung reads this first and the tone floor only where
+    # this is empty (`composer.speech_percept`).
+    vocal_affect: str = ""
+
+    _norm_vocal_affect = validator("vocal_affect", pre=True, allow_reuse=True)(
+        lambda cls, v: normalize_vocal_affect(v))
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
     # WHAT CARRIED THE LINE. The output shape has asked for `medium?:'comm'`
@@ -3187,6 +3265,15 @@ class UnifiedEvent(LenientModel):
     visibility: str = "overt"
     conceal_from: list[str] = Field(default_factory=list)
     volume: str = "normal"
+    # THE FEELING IN THE VOICE'S SOUND, where the prose gives the voice one:
+    # a `VOCAL_AFFECTS` member, "" where it gives none (the core card's
+    # `vocal_affect` clause, en + ja). Normalised here so an adjective or a
+    # study's label lands on the member and anything else is "", never a
+    # guess (`normalize_vocal_affect`).
+    vocal_affect: str = ""
+
+    _norm_vocal_affect = validator("vocal_affect", pre=True, allow_reuse=True)(
+        lambda cls, v: normalize_vocal_affect(v))
     movement: Optional[dict] = None
     look: str = ""
     seconds: Optional[float] = None

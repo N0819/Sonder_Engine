@@ -3353,8 +3353,8 @@ def _framed_line(event, lines):
 
 _ROW_FIELDS =("source_entity_id", "source_event_id", "event", "act",
                "observable", "commitment", "targets", "visibility",
-               "conceal_from", "volume", "movement", "look", "seconds",
-               "ability", "difficulty")
+               "conceal_from", "volume", "vocal_affect", "movement", "look",
+               "seconds", "ability", "difficulty")
 
 
 def _spans_until(events, start_hour, day_length):

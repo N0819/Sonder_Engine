@@ -242,6 +242,14 @@
     "stifled": ", the words stifled and barely shaped",
     "default": ""
   },
+  "vocal_affects": {
+    "anger": "angry",
+    "fear": "frightened",
+    "sadness": "sad",
+    "joy": "happy",
+    "tenderness": "tender",
+    "neutral": ""
+  },
   "residue": {
     "lead": {
       "unconscious": "Darkness.",

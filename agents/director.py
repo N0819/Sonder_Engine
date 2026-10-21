@@ -4675,8 +4675,9 @@ def _own_words_only(declaration, said):
 
 
 def _addressees_from_speech_spans(dlog, spans, scene, cast_names, p_name):
-    """Fill an EMPTY `intended_target` on a dialogue_log line from the speech
-    span the same speaker declared with the same words.
+    """Fill an EMPTY `intended_target` -- and an empty `vocal_affect` -- on a
+    dialogue_log line from the speech span the same speaker declared with
+    the same words.
 
     The Director's transcription of a line carries no addressee unless the
     model thought to write one, and its OWN ledger row for that line does:
@@ -4688,6 +4689,11 @@ def _addressees_from_speech_spans(dlog, spans, scene, cast_names, p_name):
     and the gentleman stood where he was). A target spelled as an entity id
     or a cast id is rendered as the name the gate matches on; a speaker's
     own id is not an addressee. A filled target is never touched.
+
+    THE VOICE'S AFFECT COMES THE SAME WAY (DESIGN_SOUND_FIELD § 15): the
+    encoder writes `vocal_affect` on its spoken event, and a character's own
+    line is re-appended from the declaration, which carries none; the span
+    is the only record that has it. A filled affect is never touched.
     """
     entities = (scene or {}).get("entities") or {}
 
@@ -4715,17 +4721,25 @@ def _addressees_from_speech_spans(dlog, spans, scene, cast_names, p_name):
         targets = [_display(t) for t in (element.get("targets") or []) if t]
         targets = [t for t in targets
                    if t and t.casefold() != str(actor).casefold()]
-        speech.append((str(actor).casefold(), body, targets))
+        affect = str(element.get("vocal_affect") or "").strip()
+        speech.append((str(actor).casefold(), body, targets, affect))
     for d in dlog:
-        if not isinstance(d, dict) or d.get("intended_target"):
+        if not isinstance(d, dict):
+            continue
+        if d.get("intended_target") and d.get("vocal_affect"):
             continue
         body = _quote_body(str(d.get("exact_quote") or ""))
         speaker = str(d.get("speaker") or "").strip().casefold()
         if not body or not speaker:
             continue
-        for actor, span_body, targets in speech:
-            if actor == speaker and span_body == body and targets:
+        for actor, span_body, targets, affect in speech:
+            if actor != speaker or span_body != body:
+                continue
+            if targets and not d.get("intended_target"):
                 d["intended_target"] = targets[0]
+            if affect and not d.get("vocal_affect"):
+                d["vocal_affect"] = affect
+            if d.get("intended_target") and d.get("vocal_affect"):
                 break
 
 
@@ -7552,6 +7566,7 @@ def director_resolve(ctx, nonce, _corrections=None):
                          "volume": vol,
                          "intended_target": _player_addressee.get(body),
                          "tone": "",
+                         "vocal_affect": str(_element.get("vocal_affect") or ""),
                          "visibility": vis, "conceal_from": cf})
             existing_keys.add((p_name.casefold(), body))
 
@@ -7619,6 +7634,13 @@ def director_resolve(ctx, nonce, _corrections=None):
             for field in ("volume", "tone", "visibility", "conceal_from"):
                 if field in tags:
                     line[field] = tags[field]
+            # THE VOICE'S AFFECT IS THE ENCODER'S (DESIGN_SOUND_FIELD § 15): a
+            # declaration never carries one, so the transcription's stands
+            # where the tags give none.
+            for source in (tags, element):
+                if str(source.get("vocal_affect") or "").strip() \
+                        and not line.get("vocal_affect"):
+                    line["vocal_affect"] = str(source["vocal_affect"]).strip()
             # A DECLARED LINE'S TAGS ARE THE DECLARATION'S. A resolve moment
             # is the encoder's transcription of the line -- for a character's
             # own declaration, which reaches only the resolve, the only

@@ -146,6 +146,14 @@
     "stifled": "声を塞がれ、言葉をほとんど形にできないまま",
     "default": ""
   },
+  "vocal_affects": {
+    "anger": "怒っている",
+    "fear": "怯えている",
+    "sadness": "悲しげ",
+    "joy": "嬉しそう",
+    "tenderness": "優しげ",
+    "neutral": ""
+  },
   "residue": {
     "lead": {
       "unconscious": "闇。",

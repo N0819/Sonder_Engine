@@ -1028,22 +1028,7 @@ Owner questions left:
    need a Jev probe in each pack; an unresolved addressee there (the
    speaker's own description of a stranger, UNBUILT_CHARACTERS § 6.19) loses
    an `ear` line the same way.
-   **Probed 2026-10-20** (the main session; the exact read-back question,
-   `character_jev._choice("line_volume")` with each pack's options, asked of
-   the owner's decision model -- `typesafe/jev-1.13` on OpenRouter -- for
-   nine cases in three phrasings each, 21 questions a pack): English 20 of
-   21, Japanese 21 of 21. Every lips-at-the-ear phrasing answered `ear`
-   (a hiss into an ear as a patrol passes included), every whisper
-   `whisper`, every mutter, ordinary voice, raised voice and shout its own
-   rung, and "quietly, my head beside hers so the magistrate cannot hear"
-   `whisper` in both packs. The one miss: English "softly" with no listener
-   named read as `mutter` (Japanese 「やわらかく」 read as `whisper`) -- a
-   defensible reading of a line said softly to nobody in particular, not a
-   defect. Closed. Script and results in the job's
-   `fixes/jev_volume_probe/`.
-
 4. **Derivation from contacts**, declined above, is the owner's to reopen.
-
 ## 12. Wave A: four real-world concepts (2026-10-20)
 
 The owner's go, the same day as § 11: "I guess go ahead". § 11 restated the
@@ -2257,3 +2242,203 @@ at Jonah, names nobody, so Aldo sixteen paces up the wall follows it whole.
 The lever is upstream -- the encoder naming a line's addressee wherever the
 prose says whom it is to -- and is a prompt clause that needs a live run
 (UNBUILT_PERCEPTION § 2.36).
+
+## 15. Round 2, lane A: the encoder names the listener (2026-10-20)
+
+The owner's go, after § 14.8: "build the encoder change, then I run a live
+replay". Three changes, one of them prompt text alone, each built
+failing-first (`tests/test_the_encoder_names_the_listener.py`,
+`tests/test_a_voice_carries_a_typed_affect.py`,
+`tests/test_a_noise_wakes_a_sleeper_by_the_engine.py`).
+
+### 15.1 Verified first: how a line's addressee reaches the record
+
+The encoder's spoken event carries `targets` (`UnifiedEvent`), and the
+core card's example already showed `"Keep it shut," she tells Ivo` encoded
+with `targets: ["Ivo"]`. `director_prose.ledger_from_events` keeps it on the
+row (`_ROW_FIELDS`); `director_evidence.normalize_causal_ledger` projects
+the row as the stage's `sequence` element with `intended_target =
+targets[0]`. At interpret, `director._address_from_spans` fills an empty
+`flow.addressed_to` from the spans' targets, and `director.
+_bodies_addressed_as` resolves a declaration's `interaction.addresses`
+(the speaker's own words for a body) onto a speech row that carries no
+target. At resolve the dialogue log is re-minted: the player's line takes
+its interpret element's `intended_target` or first target, a character's
+line its declaration's targets, and `director._addressees_from_speech_spans`
+fills what is still empty from the encoder's span of the same speaker's
+same words; the timeline's occurrence keeps the declaration's addressee
+over the transcription's (`_restamped_target`). The read-back is
+`composer.line_addressed` (`intended_target`, then `targets`), three-valued
+through `spatial_senses.spoken_to`. So the one writer whose empty field
+reaches every reader is the encoder's `targets` on a spoken event, and the
+card said nothing about when a spoken line should name a body.
+
+### 15.2 Measured: the ceiling of a clause
+
+`addressee_ceiling.py` (the lane's scripts), read-only on the owner's
+`engine.db` and copies of the four 2026-09-26 stories (deleted after). A
+recorded line is a `dialogue_log` entry of the active resolve or establish
+variant; its beat's Director prose is the interpret and resolve
+`prose_contract.prose` where the prose Director ran, else the causal
+Director's `resolved_event`. Present bodies are the checkpoint positions
+before and after the turn, the cast and the persona. A deterministic
+heuristic graded every empty-addressee line: the line's own words hold a
+present body's name (a vocative); the prose sentence holding the quote says
+"to / tells / asks / at / turns to <name>" of a present body; that sentence
+names a present body at all; a pronoun address ("tells him"); and, apart
+from the prose, a room holding exactly one other registered body.
+
+| | lines | empty | vocative | to <name> | named | pronoun | one other body | none |
+|---|---|---|---|---|---|---|---|---|
+| owner's engine.db, all | 11,858 | 3,678 (31%) | 194 | 6 | 67 | 9 | 3,014 | 388 |
+| of which prose-Director beats | 321 | 33 (10%) | 7 | 3 | 6 | 0 | 14 | 3 |
+| the four stories (all prose-Director) | 215 | 110 (51%) | 50 | 1 | 0 | 1 | 29 | 29 |
+| every prose-Director beat | 536 | 143 (27%) | 57 | 4 | 6 | 1 | 43 | 32 |
+
+Two things the table says. The 31% is nearly all the CAUSAL Director's:
+3,645 of the 3,678 empty lines predate the prose contract, and 3,014 of
+those are two-body rooms where that Director simply never wrote the field
+(1,468 of their quotes are not in its `resolved_event` at all -- it
+paraphrased). The encoder already names an addressee on 90% of its lines
+in the owner's play and 49% in the four stories. Where it leaves the field
+empty, the prose plainly names the listener on 68 of 143 lines (48%) -- the
+ceiling of what a clause can recover by the prose alone -- and a further 43
+are rooms with one other body, which the encoder sees in `positions`
+("however it says so" reaches those only if the model reads the room as
+saying it). The remaining 32 are lines to the room, to no one ("barely
+audible, flat, to no one"), or addressed by a role or an epithet ("little
+fox", "Captain", "old girl") the heuristic cannot match to a name -- which
+the encoder can, since the identity index gives it the names.
+
+### 15.3 The addressee clause
+
+Stated once, on the `targets` bullet of the encoder's core card (en + ja):
+"A spoken line names the body it is spoken to wherever the prose says whom
+it is to, however it says so; a line to the room, or to nobody in
+particular, names nobody." The class and its complement, no list of the
+ways prose names a listener (CLAUDE.md). No guard: a model not knowing whom
+a line was for is the sentence's job, and every reader already refuses to
+cap a line that names nobody (§ 14.8). The sheet budget (0.64) was kept by
+trimming, not raised -- the trims are named in
+`tests/test_the_encoder_has_its_own_card.py`'s budget docstring; the sheet
+stands at 20,765 of 20,827.
+
+### 15.4 A typed vocal affect
+
+§ 12.2 carried a voice's feeling through a wall as one word of the line's
+free-text `tone` under `composer._carried_tone`, a guard over free prose
+(§ 12.6 item 8 proposed the typed channel). Built: `vocal_affect` on the
+encoder's spoken event (`schemas.UnifiedEvent`) and the dialogue entry
+(`schemas.DialogueLogEntry`), a closed set the engine owns --
+`schemas.VOCAL_AFFECTS` = anger, fear, sadness, joy, tenderness, neutral,
+the emotion families a listener decodes from a voice's sound alone, well
+above chance and across cultures (Scherer 1986; Banse & Scherer 1996;
+Juslin & Laukka 2003), each with the acoustic profile a partition keeps
+when it takes a voice's consonants (its level, pitch, tempo and tune; the
+basis of each member is in the comment on the constant). `neutral` is a
+member and not the absence: the prose gave the voice no feeling, and the
+free text behind it is not read. `normalize_vocal_affect` lands a family's
+grammatical forms and the studies' own labels on the member and drops
+anything else to "" (no affect, never a guess); it runs as a validator on
+both models and at the projection.
+
+The record: the row keeps it (`_ROW_FIELDS`), the projected speech element
+carries it beside `intended_target`, the player's line takes it from its
+interpret element, a character's line from the encoder's span of the same
+words (`_addressees_from_speech_spans`, which fills it as it fills the
+addressee), and the timeline occurrence takes it from the tags or the
+transcription where the template has none; the dialogue log the commit
+files carries it whole. The read: `composer.speech_percept` reads the typed
+affect first (`typed_affect`, `_voice_feeling`) on both the voice rung and
+a fragment, and falls back to the tone floor ONLY for a record carrying no
+affect -- so every recorded line renders exactly as before. Both packs say
+it through a `vocal_affects` value map in the compositor card (an enum key
+mapped through the pack, never printed raw; a pack may leave `neutral`
+unsaid), in the view (`_heard_after`, the Japanese adapter's twin) and the
+memory episode (`_episode_sentence`): "Mara's voice, raised, beyond the
+wall -- the words do not carry. It sounds angry." The card states the field
+as a class ("the feeling a listener would hear in the voice without its
+words ... never what the words mean") and prints the schema's set, as the
+volume ladder is printed.
+
+Measured: 0 recorded voice-only percepts would carry a typed affect if the
+field were present -- by construction, no recorded line has one -- and the
+regrade of every recorded line is byte-identical before and after
+(`regrade_b2.py` / `compare_b2.py`, § 15.6). The one-word tone today: see
+§ 15.6.
+
+### 15.5 The waking clause
+
+§ 13.7 item 15. The encoder's awareness part told the model "WAKING IS
+YOURS ... whenever the world would: someone shakes or calls them awake, the
+night passes, the drug wears off, a noise reaches them" -- and since wave B1
+the engine wakes the sleeper a noise DID reach (`perception._sleep_hears`,
+`commit_entities._with_sound_wakings`), while the model has no ear to say
+whether one did. Amended, en + ja: "whenever the prose wakes them, or the
+world would by anything but sound: a hand on them, the night passing, the
+drug wearing off, a body waking of itself. Sound is the engine's: it hears
+for every sleeper and wakes the one a noise reaches, so a noise alone --
+however loud, however near -- is never your reason to end a sleep." What
+stays the model's: touch and a shake, a body's own waking, the drug and the
+clock, and the Director's authored wakings (the prose says they wake).
+
+Verified, the double write is harmless: where the encoder also ends the
+same `condition_id` the engine would end, `_with_sound_wakings` keeps the
+diff's own ending (`_ended_in`) and writes no second one, the diff's
+`ended_reason` included; where the encoder re-asserts a sleep the sound
+ended, the engine's ending overrules it, as the Director's own waking floor
+does; where the encoder leaves it alone, the engine ends it. Three tests
+pin the three cases.
+
+### 15.6 Measured, and what needs the live replay
+
+Every recorded line re-graded through `regrade_b2.py` before and after:
+the numbers are in the lane's report (identical in word, reason and voice
+on every line, because no addressee is rewritten offline and no recorded
+line carries an affect). The clauses' effect is a live question:
+
+* **Chats and turns to replay.** The harbour story (the four 2026-09-26
+  stories' `homecoming.db`, turn 19 -- the gale line aimed at Jonah that
+  names nobody, with Aldo sixteen paces up the wall), the quay's turns 1-3
+  (two people trading lines that name nobody), chat 178 turns 19-23 (a
+  two-body kitchen where Mellisande's lines name Hinami and Hinami's name
+  nobody), and chat 155 turns 29-37 (an epithet address, "little fox",
+  through nine lines that name nobody). Reroll the latest turn first
+  (a rerun deletes every later checkpoint).
+* **What to look for.** On each rerolled beat: the encoder's spoken
+  events' `targets` -- does a line the prose aims at a body now name it,
+  and does a line to the room or to no one stay empty; the merged
+  `dialogue_log`'s `intended_target`; `vocal_affect` on a line the prose
+  colours ("low and purring", "flat, to no one") and its absence on one it
+  does not; and, for the sleeper, that a beat whose prose only says a noise
+  reached a sleeper writes no `awareness` ending (the engine's does the
+  waking) while a beat whose prose wakes them by hand still does.
+* **The volume trim.** "a soft, breathy, shaky, murmured or moaned line"
+  became "a line however it sounds": watch a soft or murmured line for a
+  reach it was not given (mutter, whisper).
+
+### 15.7 Replayed (the main session, 2026-10-20)
+
+Forty captured encoder calls (chats 173-178, first calls with quoted prose,
+twenty at interpret and twenty at resolve) replayed on a slim copy under the
+old card (0e1a7a7b) and the new, the owner's routing (Gemini 3.8 Flash on
+OpenRouter, about four seconds and a cent a call; harness in the job's
+`fixes/encoder_replay/`):
+
+* **The listener.** 44 speech events under each card; 43 named a listener
+  under BOTH -- the one unnamed line ("Come when you can, little one," said
+  after a creature that is no registered body) is rightly unnamed under
+  both. The clause gained and lost nothing here, because under the prose
+  Director with this encoder the listener is already named on nearly every
+  line of the owner's chats (§ 15.2's 90%); its room to act is the four
+  2026-09-26 stories (51% empty), whose encoder calls were not captured, so
+  that half of the measurement needs whole-turn replays.
+* **The typed affect** appeared on 34 of 44 lines (tenderness 11, neutral
+  17, joy 2 on the first run) and read right against the prose.
+* **A trim reverted.** The lane had reduced the volume clause's illustration
+  ("a soft, breathy, shaky, murmured or moaned line") to its class ("a line
+  however it sounds"). On the first run the class alone moved two stammered,
+  blushing lines of chat 178 turn 28 from `normal` to `whisper`; with the
+  illustration restored, 0 of 44 lines changed volume. The reduction dropped
+  a case the children stated (CLAUDE.md: "an implied case is a dropped
+  case"); it is back, in both packs, within the budget.

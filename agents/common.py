@@ -42,7 +42,7 @@ from llm.prompts import get_prompt
 from story.provenance_text import strip_engine_provenance
 from story.scene import (get_scene, persona_of, NON_AWAKE_GATED,
                    normalize_player_authority, PLAYER_AUTHORITY_GRANTS)
-from llm.schemas import normalize_speech_volume
+from llm.schemas import normalize_speech_volume, normalize_vocal_affect
 from world.spatial import (
     _body_interior_holder,
     ambient_scope,
@@ -4831,6 +4831,15 @@ def norm_sequence(out, warn=None):
                     "text": str(txt),
                     "volume": normalize_speech_volume(e.get("volume")),
                     "tone": e.get("tone", ""),
+                    # THE FEELING IN THE VOICE, typed (`schemas.VOCAL_AFFECTS`),
+                    # or "". This arm rebuilds a spoken element from a fixed
+                    # key list, and at interpret it runs AFTER the encoder's
+                    # rows were projected (`director.director_interpret`), so a
+                    # field missing here is dropped from the player's own
+                    # line before the dialogue log is minted -- the way
+                    # `intended_target` is, which survives only as
+                    # `targets[0]`.
+                    "vocal_affect": normalize_vocal_affect(e.get("vocal_affect")),
                     # Who this lands on top of, if the character declared it as
                     # cutting somebody off. Resolved deterministically in the
                     # interaction loop against who has actually spoken this
