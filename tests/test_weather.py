@@ -291,6 +291,23 @@ def test_a_short_beat_does_not_move_the_weather():
     assert advance_weather(start, 400, seed="chat:1") == start
 
 
+def test_the_drift_keeps_a_moon_the_sky_did_not_name():
+    """A record declaring `moon: full` under a sky named only "clear night"
+    kept its moon through no drift window at all: the drift rebuilt the
+    record from the axes it walks and carries, the moon was not among them,
+    and `normalize_weather` fell to `none` (UNBUILT_WORLD 1.217, 2026-10-20).
+    A sky whose own words name the moon never lost it, which is why no
+    recorded night had."""
+    start = normalize_weather({"sky": "a clear night", "moon": "full"})
+    assert start["moon"] == "full"
+    weather = start
+    for hour in (2, 5, 9, 30):
+        weather = advance_weather(weather, hour * 3600, seed="chat:4")
+        assert weather["moon"] == "full", (hour, weather)
+    named = normalize_weather({"sky": "clear, under a full moon"})
+    assert advance_weather(named, 2 * 3600, seed="chat:4")["moon"] == "full"
+
+
 def test_drift_stays_inside_the_vocabulary():
     weather = normalize_weather({"sky": "fair"})
     for hour in range(1, 60):

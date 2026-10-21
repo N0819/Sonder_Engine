@@ -1580,6 +1580,29 @@ def _declared_looks(ctx, res, p_name=None):
     return looks
 
 
+def sleepers_of(awareness) -> set:
+    """The bodies ASLEEP in an awareness map (`story.scene.awareness_map`: a
+    casefolded name -> record `{subject, level, cause, ...}`), by each
+    subject's own spelling -- the `sleeping=` set `merge_scene_with_diff`
+    hands the survival tick. `asleep` only; the exclusions are argued where
+    this is called.
+
+    Found 2026-10-20 (UNBUILT_WORLD 1.218, closed): the set was built by
+    comparing each RECORD to the string "asleep", which is never true, so it
+    was empty on every beat since the seam was wired and nobody ever
+    recovered stamina by sleeping -- the defect the seam was built to end,
+    one level up. A map of name -> level string is read too, so a caller
+    with the older shape gets the same answer."""
+    out = set()
+    for key, record in (awareness or {}).items():
+        if isinstance(record, dict):
+            if record.get("level") == "asleep":
+                out.add(str(record.get("subject") or key))
+        elif record == "asleep":
+            out.add(str(key))
+    return out
+
+
 def compose_beat_scene(ctx):
     """Compose the scene this beat produced: ONE function, two callers.
 
@@ -1827,10 +1850,7 @@ def compose_beat_scene(ctx):
     # under-recovering is fixed by the next beat; a perverse incentive is not.
     from story.scene import awareness_map
 
-    _sleeping = {
-        _subject for _subject, _level in (awareness_map(cid) or {}).items()
-        if _level == "asleep"
-    }
+    _sleeping = sleepers_of(awareness_map(cid))
     # WHO THE TOWN STANDS HERE, for the transfer ledger. A handover's
     # destination resolves against the scene, and a Charter body standing
     # in the room has no scene record until something mints one -- so the

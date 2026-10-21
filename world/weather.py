@@ -1275,6 +1275,15 @@ def advance_weather(weather, elapsed_seconds, seed, severity=None):
         # The wind's QUARTER is carried, never walked: a strength the drift
         # moves is still blowing from where the story said it did.
         WIND_FROM_KEY: weather.get(WIND_FROM_KEY),
+        # The MOON is carried too. It was not (found 2026-10-20 adding the
+        # quarter; UNBUILT_WORLD 1.217, closed): `normalize_weather` given no
+        # base reads the moon off the sky's own words or falls to `none`, so
+        # a record declaring `moon: full` under a sky named only "clear
+        # night" came out of its first drift window moonless and the night
+        # went from `dim` to `dark`. Measured on the owner's checkpoints
+        # before the fix: every one of the 8 frames that named a moon also
+        # named it in the sky's words, so no recorded night had lost it.
+        "moon": weather.get("moon"),
         # Temperature is authored, not drifted: a beat that says the night
         # turns bitter is the Director's to write, and guessing it here would
         # fight that.

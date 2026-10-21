@@ -2463,42 +2463,6 @@ What the 2026-10-13 round left:
   call -- today it has (8 of 11 captured re-drafts echo them, which makes
   Home 11's futon-under-trunk the designer's to clear).
 
-<a id="unbuilt-1-217"></a>
-
-### 1.217 The weather drift drops the moon -- found 2026-10-20, not fixed
-
-**Found 2026-10-20** by wave B2 (`DESIGN_SOUND_FIELD.md` § 14.2), adding the
-wind's quarter to the record the drift carries. `weather.advance_weather`
-rebuilds the record from the axes it walks and the ones it carries -- `sky`,
-`air`, `cloud`, `electrical`, the fall, `wind`, `temperature` -- and the
-`moon` is not among them, so `normalize_weather` (given no base) reads it
-from the sky's own text or falls to `none`. Measured at HEAD 47137002: a
-record declaring `moon: full` under a sky named "clear night" comes out of
-its first drift window with `moon: none`, and the night goes from `dim` to
-`dark` (`spatial_light` reads `MOONLIT`). The fix is one line beside the
-quarter wave B2 carries (`"moon": weather.get("moon")` in the drift's
-record); it changes sight on every drifted moonlit night, so it is the
-owner's to land with its own measurement.
-
-<a id="unbuilt-1-218"></a>
-
-### 1.218 A sleeper never recovers stamina by sleeping: the commit's sleeper set is always empty
-
-Found 2026-10-20 while verifying what wakes a sleeper (`DESIGN_SOUND_FIELD.md`
-§ 13). `persist/commit_scene_state.py`'s `compose_beat_scene` builds
-`_sleeping` as `{subject for subject, level in awareness_map(cid).items()
-if level == "asleep"}`, but `awareness_map` maps a subject to a RECORD
-(`{subject, level, cause, ...}`), never to a level string, so the comparison
-is never true and the set is always empty -- the sleep-recovery branch of
-`world/survival.tick_vitals` that the block was written to reach is
-unreachable again ("nobody has ever recovered stamina by sleeping", the
-comment it carries). Untested at this caller: `tests/test_world_model_sleep_
-recovery.py` pins the `sleeping=` seam of `merge_scene_with_diff` only. The
-fix is `record["level"] == "asleep"` (and, since the set is read before the
-beat's own diff, a sleep that began this beat recovers from the next);
-not made here -- it changes stamina for every survival story, and was outside
-the hearing wave's brief.
-
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

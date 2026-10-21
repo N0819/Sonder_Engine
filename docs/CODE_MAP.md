@@ -109,7 +109,7 @@
 | `persist/commit_memory_write.py` | 367 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 620 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 2958 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.landscape`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.structure`, `world.weather` |
+| `persist/commit_scene_state.py` | 2978 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.landscape`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.structure`, `world.weather` |
 | `persist/llm_capture.py` | 604 |  | `core.db` |
 | `persist/pipeline_trace.py` | 635 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `persist/steps.py` | 150 |  | `core.db` |
@@ -257,7 +257,7 @@
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
 | `world/vistas.py` | 391 |  | — |
-| `world/weather.py` | 1454 |  | — |
+| `world/weather.py` | 1463 |  | — |
 
 ## Largest top-level functions
 
@@ -1425,8 +1425,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compose_beat_scene()` | 1583 | 753 lines |
-| `prepare_scene_commit()` | 2338 | 500 lines |
+| `compose_beat_scene()` | 1606 | 750 lines |
+| `prepare_scene_commit()` | 2358 | 500 lines |
 | `_fold_duplicate_mints()` | 784 | 135 lines |
 | `derive_borne_containment()` | 954 | 124 lines |
 | `_advance_day_cycle()` | 72 | 111 lines |
@@ -3205,11 +3205,11 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `normalize_weather()` | 433 | 170 lines |
+| `advance_weather()` | 1203 | 90 lines |
 | `weather_for_room()` | 945 | 86 lines |
-| `advance_weather()` | 1203 | 81 lines |
 | `weather_words()` | 1063 | 59 lines |
 | `weather_depth()` | 814 | 57 lines |
-| `ground_after()` | 1364 | 51 lines |
+| `ground_after()` | 1373 | 51 lines |
 | `_derive_exposure()` | 703 | 32 lines |
 | `anchor_exposure()` | 887 | 29 lines |
 

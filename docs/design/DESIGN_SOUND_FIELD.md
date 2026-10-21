@@ -1768,8 +1768,9 @@ part, says so).
     noise to the engine is the owner's; no prompt text was touched.
 
 What is left is registered in `docs/UNBUILT_PERCEPTION.md` § 2.36 (wave B1's
-paragraph), and the defect found on the way -- the commit's sleeper set for
-stamina is always empty -- in `docs/UNBUILT_WORLD.md` § 1.218.
+paragraph). The defect found on the way -- the commit's sleeper set for
+stamina was always empty -- was fixed the same day (`commit_scene_state.
+sleepers_of`, `tests/test_a_sleeper_recovers_stamina_through_the_commit.py`).
 
 ## 14. Wave B2: how sound travels (2026-10-20)
 
@@ -2186,7 +2187,9 @@ What is left is registered in `docs/UNBUILT_PERCEPTION.md` § 2.36 (the
 outcome pass's keyless beat sounds, the act pass's order, a maker matched by
 its name, the felt coupling and damping, the sky's thunder felt, the heard
 thud through a floor, the head turned against the body, the near field's
-unbent noise) and `docs/UNBUILT_WORLD.md` (the weather drift drops the moon).
+unbent noise). The weather drift dropping the moon, found here, was fixed
+the same day (`weather.advance_weather` carries `moon`; measured, no recorded
+night had lost it, every moonlit sky in the corpus naming its moon in words).
 
 ### 14.8 Merged: whom a line is spoken to (main session, 2026-10-20)
 
