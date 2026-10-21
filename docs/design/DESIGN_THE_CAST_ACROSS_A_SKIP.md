@@ -143,6 +143,46 @@ each.
 So the writer needs a check pass. The line between texture and invention, for
 people off the map, is the owner's call (§ 6).
 
+**Second round, the same day (`skip_probe/mint2.py`, `t_*.json`).** The
+same three records were rerun with a tighter card and with the mind's own
+`memory` packet beside the record. The card's added lines:
+- where the record gives no outcome, the memory stops at the attempt;
+- nobody's words, looks or reactions appear beyond the record, a stranger's
+  included;
+- the past is only what `memory` and the card hold;
+- the consequence is in the first person.
+
+First, a correction to the count above. The boatman's "I tucked it in the
+pocket" is not an invention. His own turn memory of that beat reads "What I
+did: Pell Hardacre takes the sealed letter … and tucks it into the inside
+pocket", and his notebook reads "Letter in the inside pocket". The world had
+refused the take (F15, fixed in c9ba38e7), so the writer was faithful to what
+he believed. The keeper's "pin sheared at 0214 … twenty-six minutes dark",
+however, is not in his card or his memory, and in the rerun the writer quoted
+the log entry again with a different time (0315).
+
+| Writer | Memories with an invention | Serious ones | Words each | Cost per set |
+|---|---|---|---|---|
+| glm-5.2, first card | 8 of 15 | 3: a registered mind placed where he was not; how the mechanism fits; the 0214 times | 91-181 | about $0.05 |
+| glm-5.2, tight card | about 7 of 15 | the keeper's whole log entries with times; the plate "half a millimetre off" | 59-171 | about $0.05 |
+| deepseek flash (`character_mid`), tight card | 3-4 of 15, all mild | none; one slip swapped who watched the gear from below | 72-115 | about $0.004 |
+
+**What the rerun showed:**
+- **The tight card helps glm-5.2 only partly.** The strangers' reactions
+  mostly went, and guesses now arrive hedged ("or I thought I did"). But a
+  character whose nature runs to exact detail draws invented exact detail.
+- **The cheap model held closest to the record and stayed in voice:** "I took
+  the log down and went back through it to the March pin and the August belt
+  … I read them twice".
+- **A broad model checker is not a check.** Asked to flag every unsupported
+  statement, deepseek flash (`director`) flagged none of the first card's
+  inventions in two sets, and flagged facts the record gives in a third.
+- **So the check pass in § 4.6 is two things:**
+  - a deterministic floor for the most damaging kind: a number, time or count
+    in a memory that neither the record nor `memory` holds;
+  - narrow per-memory questions to Jev ("does anyone besides {name} act or
+    speak in this memory?"), never one open "find the inventions".
+
 ### 2.3 Cost
 
 | Call | Cost | Time |
@@ -480,8 +520,10 @@ what a mind knows.
 5. **Off-map whereabouts.** A mind whose day ends somewhere unbuilt is away
    there. It comes back through its next skip's plan, or through a beat that
    reaches for it (the Room builds the place then). Is that the rule?
-6. **The writer's model.** `utility` (glm-5.2, as the historian uses), or
-   probe a cheaper one?
+6. **The writer's model.** Measured in § 2.2's second round, the cheaper
+   model with the tight card was the most faithful at a tenth of the cost.
+   Recommended: deepseek flash (the `character_mid` route), with the tight
+   card and the two-part check.
 7. **The player's account placing a cast member under `world_author`**, which
    was the earlier option 1. With offers, the probe says the mind usually
    takes the framing up. Recommended: offers, not authority.
