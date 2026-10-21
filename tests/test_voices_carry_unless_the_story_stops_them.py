@@ -400,11 +400,12 @@ def test_a_body_in_another_building_hears_nothing_of_a_normal_voice():
     reach the other's, and a shout crosses as pieces at most.
 
     (With BOTH front doors standing open as well, the far field's room
-    lengths put a normal voice into the other parlour in pieces -- today and
-    before, measured 42.6 dB of loss -- because it charges nothing for a
-    voice leaving a building: a doorway radiating into the open sky loses
-    what a room would have held, some twenty decibels the far field does
-    not count. Registered in `docs/UNBUILT_PERCEPTION.md` § 1.159.)"""
+    lengths put a normal voice into the other parlour in pieces -- measured
+    42.6 dB of loss -- because it charged nothing for a voice leaving a
+    room. Since 2026-10-20 each of the four openings pays the table's
+    coupling (DESIGN_SOUND_FIELD.md § 20): 57.0 dB, the voice and no word.
+    The open street is still charged as a room's length: registered in
+    `docs/UNBUILT_PERCEPTION.md` § 1.159.)"""
     def room_(name, exposure, adjacent, w=6, d=6):
         return {"name": name, "exposure": exposure, "extent": {"w": w, "d": d},
                 "anchors": {}, "adjacent": adjacent}

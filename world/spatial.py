@@ -416,6 +416,10 @@ from world.spatial_sound_field import (
     room_span, WALL_LOSS_DB,
     # A way that covers ground, priced (2026-10-20).
     far_field_way_paces, way_paces,
+    # ...and a voice leaves a room by its opening (2026-10-20).
+    DOORWAY_AREA_M2, far_field_coupling, HATCH_AREA_M2,
+    ORDINARY_RING_GAIN_DB, ORDINARY_ROOM_CONSTANT_M2, RING_GAIN_MAX_DB,
+    ring_boost_db, ring_hold_db, WAY_LOSS_DB,
     # A sound that HAPPENS: the beat-scoped event channel.
     beat_sensory_events, MAX_SENSORY_EVENTS, normalize_sensory_event,
     SENSORY_EVENTS_KEY,

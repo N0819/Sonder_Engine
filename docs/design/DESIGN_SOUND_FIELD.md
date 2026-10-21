@@ -56,6 +56,12 @@ its direction; a sound arrives after the sight of what made it; and loud
 sound is felt through what a body stands on. Found on the way: two places
 under the sky joined by an opening are one stretch of open air.
 
+**THE FAR FIELD'S COUPLING, 2026-10-20** (§ 20): rooms away, a voice pays
+the hearing table's own budget room by room -- every opening its coupling,
+a stair's flight its own loss, every ringing room on the way what it holds
+with its open doorways counted -- so a path is one number both ways; a
+sound's far field keeps the free field.
+
 ---
 
 ## 1. What exists, and where it stops
@@ -686,7 +692,10 @@ place's own level, never its weather or what runs in it), at the speech
 margins; a way that crossed anything heavier than a shut ordinary door
 (`FAR_CLEAR_EDGE_DB` 25) leaves the voice its low half -- in pieces at best.
 A normal voice down a run of open doorways is whole three rooms on, in
-pieces from four, gone at eight.
+pieces from four, gone at eight. (RESTATED 2026-10-20, § 20: rooms away a
+voice now pays each opening the table's coupling, a ringing room on the
+way what it holds -- whole two openings on, in pieces at three, its voice
+only at four; and a path is one number both ways.)
 
 ### 11.4 Noise never masks speech -- but for what the story makes deafening
 
@@ -890,6 +899,10 @@ built):
    normal voice reaches the parlour across a 16-pace street in pieces (42.6
    dB of loss), today and before. A doorway radiating into the sky loses
    some 20 dB more than a room would hold; an envelope term is proposed.
+   **Since § 20 (2026-10-20)** each of the four openings on that way pays
+   the table's coupling: 57.0 dB, the normal voice its voice and no word, a
+   raised one in pieces, a shout whole; the open street is still a room's
+   length.
 
 ### 11.9 The rulings of 2026-10-20, built
 
@@ -1184,7 +1197,7 @@ through.
 | a wall, raised | none (-18) | yes |
 | a wall, shout | fragment (-6) | yes |
 | a heavy door or glass, nobody at it, normal | none (-11 to -18) | yes |
-| rooms away down open doorways, normal | pieces from four rooms, gone at eight | beyond the words |
+| rooms away down open doorways, normal | pieces from four rooms, gone at eight (since § 20: pieces at three, its voice only at four) | beyond the words |
 | a whisper or a mutter through a door | none | no -- breath has no voicing |
 
 ### 12.3 A voice is recognised by its sound
@@ -3342,3 +3355,284 @@ the patch:
    paces instead, a catastrophic event would cross it and a shout would not.
 
 Registered in `docs/UNBUILT_WORLD.md` § 1.219.
+
+## 20. The far field prices a voice by the openings it crosses (2026-10-20)
+
+A probe story (a rock lighthouse, all stone, no site plan; `control.db`
+chat 1, turn idx 5) laid out the lamp room, a stair landing and the tower's
+foot on one open stair, each room three or four paces square, with the
+kitchen off the foot behind a shut timber door. The keeper spoke in an
+ordinary voice in the lamp room and the player, two storeys down in the
+kitchen, was given every word: "full via spatial; barrier separated; tier
+unmeasured", `far_loss_db` 30.2 from the speaker's cell -- a voice of 32.8
+dB against a 27 dB floor. The other way, her ordinary voice reached him as
+a voice and no word (`far_loss_db` 52.5): one path, 22 dB apart by
+direction. Two storeys and a closed door are not borderline, so the
+owner's lean toward a voice carrying decided nothing here.
+
+### 20.1 Verified first
+
+* **The graph** (`far_field_graph`, `_edge_loss_db`): each edge its
+  barrier's transmission loss after the material shift -- an aperture at
+  `APERTURE_DB` (open 0, open door and grille 2, curtain 5, shut door 25,
+  pane 28), a vertical edge that is no aperture a floor (50), a wall 45,
+  anything unreadable a wall; a floor between stacked rooms with no way
+  between them by the upper room's floor word (timber 30, stone 50). A
+  stair is an edge like a doorway: the probe's stone stairs are `open`
+  shifted one grade by `stone` to `open_door`, 2 dB.
+* **The flood** (`room_sound_flood`): a room's level is the source's level
+  at its cell, plus the source room's ring, less every edge's loss and the
+  free field's spreading `10 log10(1 + L^2)` over `L`, the summed spans of
+  every room on the way, the source's included. So each room cost what
+  the free field from the SPEAKER happened to be across it -- steep near
+  the speaker, nearly flat four rooms on: a run of medium rooms cost 5.9,
+  3.5, 2.5, 2.0 dB a room, a small room still less. The hearing table
+  charges a voice into the next room the opening's transmission and its
+  COUPLING into the room beyond (`ROOM_COUPLING_DB` 10). The probe's open
+  stairs cost 6.7 and 5.8 dB; the shut door 27.7.
+* **The ring** (`room_reverberation`): Sabine over the room's box at
+  `ROOM_HEIGHT_M` 3 and `PACE_M` 0.75, `ABSORPTION` bare 0.05 (only a bare
+  enclosed room rings), the gain over the ONE-PACE level `8.5 + 10 log10(4
+  / R)`, unbounded (a two-pace closet 13.8 dB). The lamp room: 10.0.
+* **`ring_boost_db`** = gain + the free field's spreading over the source
+  room's span, refunded: the ringing room's level replaced the far wall's
+  direct level -- applied at the SOURCE ONLY, and from the voice's level at
+  its CELL, three decibels over the one-pace level the gain is stated
+  against. The lamp room's 22.3 dB (10.0 + 12.3): the whole asymmetry.
+* **The rooms-away row** (`spatial_senses._hear_level`): `far_speech_level`
+  grades the speaker's level less `far_loss_db` against the listening
+  room's QUIET floor (`quiet_floor`) at the speech margins
+  (`quantise_speech_db`: whole at 0 dB, pieces to -12, `SPEECH_FULL_SNR`,
+  `FRAGMENT_SNR`), muffled past a light door (`FAR_CLEAR_EDGE_DB`); the
+  voice rung (`voice_carries`) to -22.
+* **The cut.** `far_path` floods with a shout and stops the flood at
+  `_inaudible_everywhere_db` -- the SOUNDS' gate, the quietest floor
+  itself. A normal voice was covered down to its voice rung (the shout's
+  22 dB of headroom), a shout only to "whole": a shout in pieces read as
+  no air at all.
+* **`EAR_SPEECH_THRESHOLD_DB`** (25, wave B1) is read only for an ear
+  something has changed (`ear_noise_db`: the floor and the threshold
+  summed as powers); an undisturbed ear hears against the floor alone. See
+  § 20.3.
+
+### 20.2 The rule as built
+
+**A VOICE ROOMS AWAY PAYS THE HEARING TABLE'S BUDGET ROOM BY ROOM**
+(`room_sound_flood(voice=True)`, `_voice_flood`; `far_path` asks for it).
+A way's loss is every edge's transmission loss plus the LARGER of two
+budgets:
+
+* the ROOMS' budget, the table's own: the one-pace step, the room's drop
+  once the way is indoors (`VOICE_ROOM_DROP_DB` 6), every opening its
+  coupling and a stair's flight its own loss (`far_field_coupling`), less
+  what every ringing room on the way holds (`ring_hold_db`) -- the room the
+  voice is made in, the room it is heard in and every room between;
+* the FREE FIELD's: the spreading over the spans of the rooms that hold
+  nothing (the open air's, a long hall's); a room that holds a voice holds
+  one level from wall to wall, unless it is a duct, which guides a sound
+  rather than holding it.
+
+**Each opening** (`_edge_coupling_db`): an aperture with an enclosed room
+on either side couples at the table's 10 dB for a doorway, scaled by its
+area against the doorway's 2 m2 (`_opening_area_m2`: a declared `width` in
+paces is that many doorways -- a five-pace opening couples 7 dB better --
+a hatch's 0.8 m2 4 dB worse, an open side as one space; never below
+nothing). A partition pays nothing here: a wall's 45 and a floor's 30-50
+are the two rooms' difference, its radiation included. Two places under
+the sky joined by an opening are one stretch of air and pay nothing.
+
+**A way between storeys** is an opening and its way: a stair adds its
+flight (`WAY_LOSS_DB["stair"]` 3.0 -- 13 in all, inside the world's 10-15
+dB a flight; the straight flight's figure, since no typed fact says a
+stair winds); a ladder or a hatch pays through the hatch's area (14 in
+all). One flight between two rooms is still one opening, and the table's:
+whole.
+
+**What a ringing room holds** (`ring_hold_db`): its Sabine gain over the
+ordinary room the coupling is written for (`ORDINARY_ROOM_CONSTANT_M2` 20,
+1.5 dB), WITH ITS OPEN APERTURES COUNTED as absorption -- every open
+doorway, stair mouth and hatch lets out what reaches the room, and in a
+small stone room an open stairwell is most of what absorbs. The lamp room
+holds 5.9 dB (sealed, 8.5), the landing 4.6 (sealed, the whole 10), the
+tower's foot 3.6; a stone hall of 24 by 12 nothing -- a big bare hall rings
+long, not loud. Bounded by the coupling, and by construction no higher: an
+open aperture is part of the room's absorption, so Sabine holds the room
+under the very coupling it is entered by, and a voice never stands louder
+in a room than in the room that feeds it -- which is also what lets the
+flood stop on audibility.
+
+**One path, one number.** Both budgets read the way's rooms and edges as
+a set, never their order: a room's absorption is one fact whichever way a
+sound goes. When one end is bare and the other furnished, the bare room's
+ring is counted at its end either way -- as the room the voice fills when
+it is spoken there, as the room that holds what arrives when it is heard
+there -- and the furnished room's not at all. That is the reciprocity an
+airborne path has (the diffuse-field relation is a product of the rooms'
+absorptions and the openings' areas, symmetric by construction); the
+asymmetry the ring made was its being counted at one end.
+
+**The voice flood's cut** (`_voice_inaudible_db`): the quietest floor a
+listener on the scene can be graded against (27 indoors, 24 for an open
+place on a still night, lower in a room declared quiet) less the voice
+rung's 22 dB, so a shout arriving in pieces is reported in pieces.
+
+**The ring itself**: `room_reverberation`'s gain is bounded at
+`RING_GAIN_MAX_DB` 13 (a small bare masonry room stands 8-13 dB over the
+direct level a metre off; the corpus's largest is 12, so nothing built
+moves); and a SOUND's ring boost (`ring_boost_db`) is measured from one
+pace, 3.01 dB less -- the defect the near field's echo had and lost on
+2026-09-23.
+
+**A SOUND's far field keeps the free field** (`distant_sounds`). The
+table's coupling is a speech-band figure; a boom, an engine and thunder
+carry their energy low, where an opening passes far more of it, and the
+owner's reach for very loud sounds stands on the free field. § 20.4 gives
+what moving sounds onto the voice's model would do.
+
+The probe tower, as built (the probe's checkpoint and
+`tests/test_a_voice_leaves_a_room_by_its_opening.py`'s tower alike):
+
+| path | before | after |
+|---|---|---|
+| lamp room -> kitchen (2 flights, shut door) | 30.2 dB: normal whole | 59.9 dB: normal nothing (-23.9), raised its voice only (-13.9), shout in pieces (-1.9) |
+| kitchen -> lamp room | 52.5 dB: normal its voice | 59.9 dB, the same answers |
+| lamp room -> tower foot (2 flights, no door) | 2.6 dB: whole | 24.9 dB: normal whole (+11) |
+| lamp room -> the boat outside the foot (idx 4) | 9.7 / 13.3 dB by direction: whole | 43.6 dB both ways: normal in pieces |
+
+And the shapes the story did not have:
+
+| path | before | after |
+|---|---|---|
+| a run of medium rooms, open doorways, normal voice | whole to 3, pieces to 7, gone at 8 | whole at 2 (+3), pieces at 3 (-9), its voice at 4 (-21), gone at 5; a shout in pieces at 5 |
+| two houses across a 16-pace street, both front doors open | 42.6 dB: normal in pieces | 57.0 dB: normal its voice, raised in pieces, shout whole |
+| a house: hall, open stair, landing, bedroom door open | 26.1 dB: whole | 34.0 dB: whole |
+| ... the bedroom door shut | 49.1 dB: its voice; raised in pieces; shout whole | 57.0 dB: the same answers |
+| chat 177's cottage: spare room upstairs to the kitchen (the layout tier's two-room stair) | 51.0 dB: its voice | 67.0 dB: nothing as the lane built it; its voice again once the flight inside one stairwell is charged as the flight (§ 20.6, built at the merge) |
+
+### 20.3 An absolute floor for intelligibility
+
+The question: a voice at 30 dB(A) over a 27 dB floor is at the edge of
+hearing, and the speech margins (whole at 0 dB) assume a voice well above
+the threshold of hearing. **It belongs, and the engine already has it --
+for one ear.** A sentence is followed from some 20-30 dB(A) in perfect
+quiet (`EAR_SPEECH_THRESHOLD_DB` 25, wave B1) and near-whole intelligibility
+asks 15-20 dB over the hearing threshold besides the signal to noise; the
+ear model sums the room's floor and that threshold as powers
+(`ear_noise_db`), so the effective floor is 29.1 dB in an ordinary room
+(+2.1), 31.2 in an open place (+1.2), 26.5 in a hushed room (+5.5) and 25.4
+in a dead one (+10.5) -- where a voice at the room's own 15 dB was followed
+whole with nothing to follow it by. Read for every ear by the level-graded
+budgets (`far_speech_level`: rooms away and under the sky), it is the
+measured change in § 20.4; NOT BUILT here, because it is a limit on every
+open-air conversation as well as the far field, and limits are the owner's.
+
+### 20.4 Measured
+
+Offline, read-only (`mode=ro`), no model call and every socket refused, on
+the owner's `engine.db`, copies of the four 2026-09-26 stories (deleted
+after) and the probe story, through HEAD's tree and this one (the lane's
+scripts: `regrade_b2.py` from wave B2, `far_deliveries.py`,
+`compare_lines.py`, `compare_far.py`).
+
+**Every recorded line** (2,472 `speech_percept` decisions, each re-graded on
+its beat's checkpoint): **24 are graded rooms away at all; 12 change, none
+upward.**
+
+| lines | change | as fiction |
+|---|---|---|
+| the probe, idx 5: the keeper to the player in the kitchen (2) | whole -> nothing | right: two storeys and a shut door |
+| the probe, idx 5: the player to the keeper (1) | its voice -> nothing | right, and the same path as the two above |
+| the probe, idx 4: the keeper and the man on the boat moored outside the tower's open foot (3) | whole -> pieces | right: two flights, the foot and the quay; HEAD had 9.7 dB one way and 13.3 the other |
+| chats 177/178 idx 19: Mellisande in the shut spare room upstairs and Hinami in the kitchen, both ways (6) | its voice -> nothing | wrong as a model: a murmur should come down a house's stair. The lines themselves are § 11.8's replay artifact (spoken before she went upstairs; delivered whole live); the layout tier built the stair as two rooms and the flight between them pays a doorway's coupling (§ 20.6, question 1) |
+
+Nine more moved in loss and not in word: the probe's tower foot from the
+lamp room and from the boat (2.6-6.3 -> 24.1-24.9 dB, still whole), and the
+opera's pit and rehearsal room (51.5 -> 52.1, its voice; a mutter's path
+there had been 29.6 dB one way and 51.5 the other, and is 52.1 both). The
+three harbour lines rooms away cross open air and did not move.
+
+**The absolute floor for intelligibility** (§ 20.3, measured by grading
+every level-graded voice against the floor and the ear's threshold summed,
+not built): **0 of 2,472 change.** The 531 lines graded by a level -- rooms
+away or under the sky -- stand at least 1.6 dB clear of the floor
+(+1.6, +3.0 three times, -4.4 twice, +5.0 ...), and the ear's floor moves an
+ordinary room's by 2.1 dB and an open place's by 1.2.
+
+**Every far-field delivery** (`distant_sounds`, every body on every
+checkpoint where something enters the far field: 145 scene-checkpoints,
+330 listener records): **55 deliveries -> 45, 12 listener-checkpoints
+change.** A sound's way is the free field's as it was; what moved them is
+the ring's boost measured from one pace (3.01 dB):
+
+| where | change | as fiction |
+|---|---|---|
+| chat 160 idx 12, Hinami and Sarah Moon in the falling lift car: "a shriek of metal on metal grinding along the rails" in the bare shaft (2) | overwhelming (52.1) -> plain (49.1) | a shade under the moment: the 50 dB floor of `overwhelming` sits 0.9 dB above it; the unit was wrong, and inside a falling car the rails' shriek is also a felt thing (§ 14.4) |
+| the opera, idx 10-20, the stage: the bare stage-door corridor's own standing sound, "a soprano's voice carrying from somewhere deeper in the building", 50.2 dB at its cell (10) | plain (19.1) -> gone | right: it entered the far field only on the 3 dB the boost had too much, and the soprano herself -- the rehearsal room next to the stage -- is the stage's near field, unmoved |
+
+**Sounds priced as voices** (measured, NOT built -- the owner's question
+4): 55 -> 41 deliveries and 20 listener-checkpoints; beside the twelve
+above, the fort's "deep, concussive thud rolling through stone" goes
+overwhelming (68.8) -> plain (50.0), "a sharp metallic tap ringing out ...
+against the stone" overwhelming (58.5) -> plain (42.5), a heavy thud 45 ->
+30 and a snow slide lost; on the 300-room chain the reach of `deafening`,
+`thunderous` and `catastrophic` falls from 18, 26 and 35 rooms to 6, 8 and
+9. A blow through stone is carried low and in the structure, which is the
+argument for leaving sounds on the free field.
+
+### 20.5 Guards and clauses
+
+No new guard, no new clause, no prompt text: every rule here re-prices a
+path a body already had. New constants, each named with its basis beside
+it: `WAY_LOSS_DB` (stair 3.0), `DOORWAY_AREA_M2` 2.0, `HATCH_AREA_M2` 0.8,
+`ORDINARY_ROOM_CONSTANT_M2` 20.0 (and the derived `ORDINARY_RING_GAIN_DB`
+1.5), `RING_GAIN_MAX_DB` 13.0.
+
+### 20.6 The owner's questions, and what is left
+
+1. **The layout tier's two-room stair is three openings.** Chat 177's
+   cottage: kitchen -> stair foot (an opening five paces wide, 3.0 dB) ->
+   the flight between the stair's own two rooms (a doorway's 10 and the
+   flight's 3) -> the stair head (two paces, 7.0) -> the landing -> a shut
+   door (25 + 10). The flight between two halves of one stairwell is not a
+   doorway; nothing typed says two rooms are one stairwell (the stair rooms
+   carry no common marker -- one has `purpose: "stair"`, its twin none --
+   and a lighthouse's stacked rooms share a footprint just as they do). A
+   marker the layout tier writes on a stair's rooms, or a `width` on the
+   flight it makes, would let the flight be charged as the flight; until
+   then a murmur from a shut room upstairs does not reach the kitchen.
+   **BUILT at the merge (the main session, 2026-10-20):** the marker exists
+   -- the tier's own record of what it made. Each half is `made_by_layout`,
+   both under one `laid_out.plan`, each named in the other's
+   `laid_out.made` (`_one_stairwell`); the flight between them pays only
+   `WAY_LOSS_DB["stair"]`, never a doorway's coupling; a stair an author drew
+   between two rooms of their own is a doorway and pays as one. Re-graded:
+   the cottage's lines are back, and all 265 lines of chats 175-178 grade as
+   they did before wave B. `tests/test_a_laid_out_stair_is_one_stairwell.py`.
+2. **`WAY_LOSS_DB["stair"]` 3** -- 13 dB a flight in all. The probe's shout
+   wants at least 2.1 (below it a shout from the lamp room is whole in the
+   kitchen); a house's ordinary talk in the hall reaching a shut bedroom
+   upstairs as a voice wants at most 4. A winding stair is 10-15 and more
+   in the world; no typed fact says which a stair is.
+3. **What a room holds counts its open apertures; the ring its own sounds
+   get does not.** `room_reverberation` -- the near field's ring, the
+   narrator's `ringing`/`live`, a sound's far-field boost -- is still the
+   sealed box: counting the lamp room's stair there would take it from
+   1.61 s (`ringing`) to 0.92 s (`live`) and lower every bare room's
+   near-field level by its openings. Two readings of one room's
+   absorption, the second the realistic one.
+4. **Sounds keep the free field** (§ 20.4): moving them onto the voice's
+   model is the owner's.
+5. **An absolute floor for intelligibility** (§ 20.3): the ear's 25 dB
+   summed with the room's floor wherever a voice is graded by its level.
+   No recorded line moves; a declared hushed or dead room is where it
+   bites.
+6. **The rooms' budget charges the source room the table's 6 dB drop**
+   (`VOICE_ROOM_DROP_DB`), a furnished room from a parlour to a hall, while
+   the coupling's reference room has some 20 m2 of absorption and stands
+   1.5 dB over the one-pace level in Sabine's terms: the budget is the
+   table's, margin and all, and a bare room's hold is counted against the
+   coupling's room.
+7. **A body absorbs nothing** in any ring (a person is some 0.5 m2 of
+   absorption) -- a crowded stone room rings as an empty one.
+
+Registered in `docs/UNBUILT_PERCEPTION.md` § 2.36.

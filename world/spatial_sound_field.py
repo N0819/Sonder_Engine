@@ -1860,6 +1860,27 @@ REVERBERANT_SURFACES = frozenset({"bare"})
 #: The height a room is assumed to have, in metres, and a pace in metres.
 ROOM_HEIGHT_M = 3.0
 PACE_M = 0.75
+#: THE RING IS BOUNDED (2026-10-20, the far-field coupling; § 20 of the
+#: note). Sabine's gain over the one-pace level has no ceiling as a bare
+#: room shrinks -- a closet two paces square, the smallest room the grid
+#: lays, reads 13.8 dB -- where the reverberant level in a small bare
+#: masonry room stands some 8-13 dB over the direct level a metre off
+#: (Sabine, alpha 0.02-0.05; the ladders' one-pace figures are the
+#: textbook's metre figures). The top of that. Measured on every live room
+#: of the corpus (1,140; 62 of them bare and enclosed) the largest gain is
+#: 12, so the bound moves no room a story has built: it is the ceiling for
+#: the closet built tomorrow.
+RING_GAIN_MAX_DB = 13.0
+
+
+def _sabine_gain_db(room_constant: float) -> float:
+    """A room's reverberant level over the ONE-PACE direct level, in dB,
+    for Sabine's room constant `R` (m2): `10 log10(4 pi r^2)` at r one pace
+    (8.5) plus `10 log10(4 / R)`. Unbounded; `room_reverberation` bounds
+    it. Written once, so the far field's ordinary room
+    (`ORDINARY_RING_GAIN_DB`) is priced by the same expression as a ringing
+    one."""
+    return 8.5 + 10.0 * math.log10(4.0 / max(1e-6, float(room_constant)))
 #: THE RING NO LONGER SMEARS A LINE (2026-10-20, the hearing rule). From
 #: 2026-09-15 a voice whose reverberant part outran its direct part at the
 #: listener's cell -- by 15 dB of ring, then (2026-10-02) by its clarity
@@ -1941,7 +1962,8 @@ def room_reverberation(scene: dict, room_id) -> Optional[dict]:
     the reverberant field's level everywhere in the room relative to the
     ONE-PACE direct level the ladders are authored at
     (L_rev - L_1 = 8.5 + 10 log10(4 / R), R = A / (1 - a)), as a power
-    ratio; `echo` says the room's longer side clears `ECHO_SPAN_PACES`.
+    ratio, never over `RING_GAIN_MAX_DB`; `echo` says the room's longer
+    side clears `ECHO_SPAN_PACES`.
 
     ONLY AN ENCLOSED ROOM RINGS, for the reason only an enclosed room is a
     duct (`is_duct`): a ring is sound the walls AND THE ROOF keep, and a
@@ -1971,13 +1993,16 @@ def room_reverberation(scene: dict, room_id) -> Optional[dict]:
     absorption = max(1e-6, alpha * surface_m2)
     rt60 = 0.161 * volume / absorption
     room_constant = absorption / max(1e-6, 1.0 - alpha)
-    gain_db = 8.5 + 10.0 * math.log10(4.0 / room_constant)
+    gain_db = min(RING_GAIN_MAX_DB, _sabine_gain_db(room_constant))
     word = next((name for floor, name in REVERB_WORDS if rt60 >= floor), "")
     longest = max(getattr(grid, "w", 0) or 0, getattr(grid, "d", 0) or 0) \
         or grid_side(scene, room_id)
     return {"rt60": round(rt60, 2), "gain": ratio_of_db(gain_db),
             "gain_db": round(gain_db, 1), "word": word,
-            "echo": float(longest) >= ECHO_SPAN_PACES}
+            "echo": float(longest) >= ECHO_SPAN_PACES,
+            # The box Sabine priced, for a reader that adds what the box
+            # leaves out -- the far field's open apertures (`ring_hold_db`).
+            "surface_m2": surface_m2, "absorption_m2": absorption}
 
 
 def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None) -> tuple:
@@ -3285,7 +3310,10 @@ def far_path(scene, listener_room, source_room) -> Optional[dict]:
     if _next_door(scene, listener_room, source_room):
         return None
     probe = SPEECH_DB["shout"]
-    rec = room_sound_flood(scene, source_room, probe).get(listener_room)
+    # A VOICE's way: the hearing table's budget room by room, each opening
+    # its coupling, every ringing room on the way what it holds (2026-10-20).
+    rec = room_sound_flood(scene, source_room, probe, voice=True).get(
+        listener_room)
     if rec is None:
         # The flood terminates on audibility, so "no record" is two
         # different facts: the rooms are joined and a shout dies before it
@@ -4226,6 +4254,132 @@ def _edge_loss_db(edge) -> float:
     return _UNKNOWN_BARRIER_LOSS_DB
 
 
+# A VOICE LEAVING A ROOM IS PRICED BY THE OPENING IT LEAVES BY (2026-10-20,
+# the far-field coupling; `DESIGN_SOUND_FIELD.md` § 20). The hearing table
+# prices a voice into the next room as the room's drop, the opening's
+# transmission loss and the opening's COUPLING -- what it radiates spreading
+# over the receiving room's absorption (`ROOM_COUPLING_DB`) -- and the far
+# field did not: it charged each room the free field's spreading over its
+# span, measured from the speaker, which is steep near the speaker and
+# nearly flat four rooms on. So a run of rooms cost less a room the further
+# it went, small rooms cost almost nothing, and an open stair in a stone
+# tower cost 6-7 dB where the table charges a doorway 12 (the probe story,
+# 2026-10-20: the keeper's ordinary voice reached the kitchen two storeys
+# down, behind a shut door, whole). `room_sound_flood(voice=True)` now
+# carries the table's own budget room by room; these are the edge's half.
+
+#: The doorway the coupling is written for (`ROOM_COUPLING_DB`: 2 m2 into
+#: 20 m2 of absorption), and a hatch -- a hole in a floor, some 0.6-1 m2.
+#: An opening that declares its `width` in paces (the passage record's, the
+#: near field's aperture cells) is that many doorways wide.
+DOORWAY_AREA_M2 = 2.0
+HATCH_AREA_M2 = 0.8
+
+#: WHAT A WAY BETWEEN STOREYS COSTS A VOICE past the opening it is. A stair,
+#: a ladder and a hatch are each an opening -- coupled into the room beyond
+#: by their area (`_edge_coupling_db`) -- and a stair's flight its own loss
+#: besides:
+#:
+#:   stair   3.0  a flight is a passage about a doorway wide that climbs a
+#:                storey and turns at its foot and its head: 10-15 dB a
+#:                flight in the world, more where it winds -- so the
+#:                doorway's 10 and a few for the climb, 13 in all. The
+#:                straight flight's figure, because no typed fact says a
+#:                stair winds (`edge_way` reads the way, never its shape)
+#:                and the owner's lean where hearing is borderline is
+#:                toward the voice carrying
+#:
+#: A ladder climbs through a hatch and a hatch IS its aperture: they pay
+#: nothing here and the hatch's smaller area in the coupling, 10 log10(2 /
+#: 0.8) = 4.0 dB over a doorway's -- 14 in all. An `overlook` -- a
+#: gallery's side open over the room below -- is an opening at least a
+#: doorway wide and takes nothing past its coupling. Read only for a VOICE
+#: (`far_field_coupling`); a sound's far field is the free field's.
+WAY_LOSS_DB = {"stair": 3.0}
+
+
+def _opening_area_m2(scene, room, edge) -> float:
+    """An aperture's area in m2 -- what couples it to the room beyond
+    (`_edge_coupling_db`) and what a ringing room loses through it
+    (`ring_hold_db`), one number for both: a hatch -- a ladder's or a
+    hatch's way -- `HATCH_AREA_M2`; an opening that declares a `width` in
+    paces that many doorways; an open side (`width: "wall"`) the room's
+    whole side; anything else a doorway."""
+    from world.spatial_levels import edge_way
+    if edge_way(edge) in ("ladder", "hatch"):
+        return HATCH_AREA_M2
+    width = edge.get("width")
+    if str(width or "").strip().casefold() == "wall":
+        return DOORWAY_AREA_M2 * max(1.0, float(grid_side(scene, room)))
+    if isinstance(width, (int, float)) and not isinstance(width, bool) \
+            and width >= 1:
+        return DOORWAY_AREA_M2 * float(width)
+    return DOORWAY_AREA_M2
+
+
+def _edge_coupling_db(scene, room, edge) -> float:
+    """What a VOICE crossing this edge pays past its transmission loss
+    (`_edge_loss_db`), in dB: an OPENING with an enclosed room on either
+    side radiates into the room beyond -- the hearing table's coupling for
+    a doorway (`ROOM_COUPLING_DB`), scaled by the aperture's area against
+    the doorway's the coupling is written for (`_opening_area_m2`: an
+    opening five paces wide couples 7 dB better, a hatch 4 worse, an open
+    side as one space; never below nothing) -- and a stair's flight its own
+    loss (`WAY_LOSS_DB`). Nothing for a PARTITION -- a wall, a floor, a door
+    of stuff the material shift makes a wall: a partition's loss is
+    measured as the difference between the two rooms' levels, so its
+    radiation into the room beyond is in it already. Nothing between two
+    places under the sky: they are one stretch of air, and the free field
+    prices it.
+
+    The same either way across the edge, by construction: it reads the
+    edge and both its rooms, never which way the sound goes. And never
+    cheaper than what a ringing room behind it holds (`ring_hold_db`): an
+    open aperture is part of that room's absorption, so Sabine bounds the
+    hold by this very coupling, and a voice cannot stand louder in a room
+    than in the room that feeds it."""
+    from world import weather as _weather
+    from world.spatial_levels import edge_way
+    shifted = _material_shifted_barrier(
+        normalize_barrier(edge.get("barrier")), edge.get("material"))
+    if shifted not in APERTURE_LOSS_DB:
+        return 0.0
+    if not any(_weather.room_exposure(scene, rid) == "enclosed"
+               for rid in (room, str(edge.get("to") or ""))):
+        return 0.0
+    way = edge_way(edge)
+    if way == "stair" and _one_stairwell(scene, room, str(edge.get("to") or "")):
+        # The flight inside ONE stairwell: one space's air, not a doorway.
+        return WAY_LOSS_DB.get(way, 0.0)
+    area = _opening_area_m2(scene, room, edge)
+    coupling = ROOM_COUPLING_DB - 10.0 * math.log10(area / DOORWAY_AREA_M2)
+    return max(0.0, coupling) + WAY_LOSS_DB.get(way, 0.0)
+
+
+def _one_stairwell(scene, a, b) -> bool:
+    """Are `a` and `b` the two halves of ONE stair the layout tier laid out:
+    each `made_by_layout`, under the same `laid_out.plan`, each named in the
+    other's `laid_out.made`? The tier makes a stair two rooms so that each
+    storey has its landing, and the flight between them is one stairwell's
+    air, not a third doorway. Charged as one, a voice up a laid-out house's
+    stair paid three couplings (merging the coupling lane, 2026-10-20: the
+    cottage of chats 177/178, kitchen to landing, went 51.0 -> 67.0 dB and
+    lost a murmur it should keep). Typed, from the tier's own record of what
+    it made; a stair an author drew between two rooms of their own is a
+    doorway and pays as one."""
+    rooms = (scene or {}).get("rooms") or {}
+    ra, rb = rooms.get(a) or {}, rooms.get(b) or {}
+    if not (isinstance(ra, dict) and isinstance(rb, dict)
+            and ra.get("made_by_layout") and rb.get("made_by_layout")):
+        return False
+    la, lb = ra.get("laid_out") or {}, rb.get("laid_out") or {}
+    if not isinstance(la, dict) or not isinstance(lb, dict):
+        return False
+    if not la.get("plan") or la.get("plan") != lb.get("plan"):
+        return False
+    return b in (la.get("made") or ()) and a in (lb.get("made") or ())
+
+
 def far_field_graph(scene: dict) -> dict:
     """`{room: {other: loss_db}}` -- the room graph a loud sound crosses,
     UNDIRECTED and with every edge on it.
@@ -4248,17 +4402,35 @@ def far_field_graph(scene: dict) -> dict:
     field's -- one beat's scene is one object, read many times and mutated
     by nobody while it is being read.
     """
+    return _far_field_maps(scene)[0]
+
+
+def far_field_coupling(scene: dict) -> dict:
+    """`{room: {other: coupling_db}}` -- what a VOICE crossing each edge of
+    `far_field_graph` pays past its transmission loss (`_edge_coupling_db`:
+    an opening's coupling into the room beyond and a way's own loss; 0 for
+    a partition and for open air). Undirected like the graph, every edge on
+    it, and where both sides declare an edge and disagree the SMALLER
+    wins, the graph's permissive reading. Built in the graph's own pass and
+    cached with it."""
+    return _far_field_maps(scene)[1]
+
+
+def _far_field_maps(scene: dict) -> tuple:
+    """`(graph, coupling, openings)` -- `openings` each room's open
+    apertures' area in m2 (`ring_hold_db`) -- built once per scene object
+    (`far_field_graph` says why the cache is by identity)."""
     rooms = (scene or {}).get("rooms") or {}
     hit = _FAR_GRAPH_CACHE.get(id(scene))
     if hit is not None and hit[0] is scene and hit[1] is rooms:
         return hit[2]
-    graph = _build_far_field_graph(scene, rooms)
+    maps = _build_far_field_graph(scene, rooms)
     if len(_FAR_GRAPH_CACHE) >= _FAR_GRAPH_CACHE_MAX:
         _FAR_GRAPH_CACHE.clear()
     #: The scene is held, not just its id, so the id cannot be recycled onto
     #: another object while this entry stands.
-    _FAR_GRAPH_CACHE[id(scene)] = (scene, rooms, graph)
-    return graph
+    _FAR_GRAPH_CACHE[id(scene)] = (scene, rooms, maps)
+    return maps
 
 
 #: How many scenes' room graphs to remember. Small: the readers of one beat
@@ -4268,9 +4440,14 @@ _FAR_GRAPH_CACHE: dict = {}
 _FAR_GRAPH_CACHE_MAX = 8
 
 
-def _build_far_field_graph(scene, rooms) -> dict:
+def _build_far_field_graph(scene, rooms) -> tuple:
     from world.spatial_barriers import effective_adjacent
     graph: dict = {room: {} for room in rooms}
+    coupling: dict = {room: {} for room in rooms}
+    #: Each room's open apertures, by the room beyond: the area a sound in
+    #: the room leaves it by (`ring_hold_db`). The larger reading where both
+    #: sides declare one opening.
+    open_by: dict = {room: {} for room in rooms}
     for room in sorted(rooms):
         for edge in effective_adjacent(scene, room) or ():
             if not isinstance(edge, dict) or not edge.get("to"):
@@ -4279,10 +4456,20 @@ def _build_far_field_graph(scene, rooms) -> dict:
             if other not in rooms or other == str(room):
                 continue
             loss = _edge_loss_db(edge)
+            couple = _edge_coupling_db(scene, str(room), edge)
+            shifted = _material_shifted_barrier(
+                normalize_barrier(edge.get("barrier")), edge.get("material"))
+            area = _opening_area_m2(scene, str(room), edge) \
+                if shifted in _SOUND_WALK_BARRIERS else 0.0
             for a, b in ((str(room), other), (other, str(room))):
                 known = graph[a].get(b)
                 if known is None or loss < known:
                     graph[a][b] = loss
+                known = coupling[a].get(b)
+                if known is None or couple < known:
+                    coupling[a][b] = couple
+                if area > open_by[a].get(b, 0.0):
+                    open_by[a][b] = area
         # A FLOOR IS AN EDGE TO A SOUND. Two rooms stacked with no stair
         # between them (`over`) share a floor the far field crosses at the
         # floor's loss -- a timber floor passes a shout and a heavy tread,
@@ -4298,7 +4485,11 @@ def _build_far_field_graph(scene, rooms) -> dict:
                 known = graph[a].get(b)
                 if known is None or loss < known:
                     graph[a][b] = loss
-    return graph
+                # A floor is a partition: its loss is the two rooms'
+                # difference, coupling and all (`_edge_coupling_db`).
+                coupling[a].setdefault(b, 0.0)
+    openings = {room: sum(by.values()) for room, by in open_by.items()}
+    return graph, coupling, openings
 
 
 def room_span(scene: dict, room_id) -> float:
@@ -4365,23 +4556,116 @@ def _inaudible_everywhere_db(scene=None) -> float:
     return cut
 
 
+def _voice_inaudible_db(scene=None) -> float:
+    """THE VOICE FLOOD'S CUT (2026-10-20): below this the probe `far_path`
+    floods with -- a shout -- is not even a voice to anybody on this scene.
+    The quietest floor a listener here can be graded against (`quiet_floor`:
+    an enclosed room's 27 dB, an open place on a still night 24, a room
+    that declares itself quiet lower) less the voice rung's margin
+    (`VOICE_TONE_SNR_DB`, -22).
+
+    Not the sounds' gate (`_inaudible_everywhere_db`), which stops at the
+    floor itself: a voiced line is graded down to 12 dB under the floor and
+    its voice to 22 under (`quantise_speech_db`, `voice_carries`), so a
+    voice flood cut at the floor answered `inf` -- no air -- for a shout
+    arriving in pieces, and the far field could say a shout was whole or
+    nothing. Measured on the probe story's tower: a shout from the lamp
+    room reaches the kitchen at 24 dB, three under its 27 dB floor."""
+    floor = min(AMBIENT_DB["enclosed"],
+                AMBIENT_DB["open"] + db_ratio(QUIET_SCALE["hushed"]))
+    for room in ((scene or {}).get("rooms") or {}).values():
+        if not isinstance(room, dict):
+            continue
+        word = normalize_quiet(room.get("quiet"))
+        if word:
+            floor = min(floor, AMBIENT_DB["enclosed"]
+                        + db_ratio(QUIET_SCALE[word]))
+    return floor + VOICE_TONE_SNR_DB
+
+
 def ring_boost_db(scene: dict, room_id) -> float:
-    """How much louder a room that rings hands its walls than the direct
-    sound crossing it would be: the reverberant gain less the spreading
-    the far field would otherwise charge for the room's span, never below
-    nothing. The one term a bare room adds to the far field, applied at
-    its entry and at the flood's start alike (`room_reverberation`)."""
+    """How much louder a room that rings hands its walls a SOUND than the
+    direct sound crossing it would be: the reverberant level less the free
+    field's level at the room's far wall, never below nothing. The term a
+    bare room adds to a sound's far field, applied at its entry
+    (`far_field_sources`) and at the flood's start alike
+    (`room_reverberation`). A VOICE's far field reads the room's ring as
+    what the room holds instead (`ring_hold_db`).
+
+    MEASURED FROM ONE PACE (2026-10-20). The ring's gain is stated over the
+    one-pace level and the flood starts from the source's level at its
+    CELL, three decibels over it (`one_pace_power`); added unscaled, every
+    ringing room handed its doorways its ring 3.01 dB loud -- the defect
+    the near field's echo had and lost on 2026-09-23 (`SoundField.
+    rev_gain`). The probe story's stone lamp room: 22.3 dB, now 19.3."""
     ring = room_reverberation(scene, room_id)
     if not ring:
         return 0.0
-    return max(0.0, float(ring["gain_db"]) + spreading_loss_db(room_span(scene, room_id)))
+    return max(0.0, float(ring["gain_db"]) - _ONE_PACE_LOSS_DB
+               + spreading_loss_db(room_span(scene, room_id)))
 
 
-def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
+#: THE ROOM THE COUPLING IS WRITTEN FOR: `ROOM_COUPLING_DB` is a doorway's
+#: 2 m2 radiating into some 20 m2 of absorption -- an ordinary furnished
+#: room, read as its room constant -- and its ring over the one-pace level
+#: is Sabine's for that room, about 1.5 dB. A ringing room holds a voice by
+#: how much its own ring stands over this one (`ring_hold_db`).
+ORDINARY_ROOM_CONSTANT_M2 = 20.0
+ORDINARY_RING_GAIN_DB = _sabine_gain_db(ORDINARY_ROOM_CONSTANT_M2)
+
+
+def ring_hold_db(scene: dict, room_id) -> float:
+    """WHAT A RINGING ROOM HOLDS of a voice, in dB, over the ordinary room
+    the hearing table's coupling is written for: its ring's Sabine gain
+    less that room's (`ORDINARY_RING_GAIN_DB`) -- 0.0 for a room that does
+    not ring (`room_reverberation`), and never more than the coupling
+    itself (`ROOM_COUPLING_DB`).
+
+    WITH ITS OPENINGS COUNTED. Sabine's box is sealed; a room a voice
+    crosses is not -- every open doorway, stair mouth and hatch it has lets
+    out what reaches it, and absorbs as an open window does, all of its
+    area (`_far_field_maps`' openings, `_opening_area_m2`). In a small stone
+    room an open stairwell is most of what absorbs: the probe story's
+    lamp room, four paces of bare stone with its one stair, holds 5.9 dB
+    (sealed, 8.5); its landing, three paces with a stair down and a stair
+    up, 4.6 (sealed, the whole 10); a stone hall of 24 by 12 holds nothing
+    -- a big bare hall rings long, not loud. The ring a room's own sounds
+    get (`room_reverberation`: the near field, the narrator's word, a
+    sound's far field) is still the sealed box.
+
+    ONE NUMBER FOR THE ROOM, read wherever the room stands on a voice's
+    way (`room_sound_flood(voice=True)`): the room a voice is made in fills
+    with it, the room it is heard in holds what arrives, a room it crosses
+    holds it on the way. A room's absorption is one fact whichever way a
+    sound goes, which is what makes a path one number both ways -- the
+    reciprocity an airborne path has. Until 2026-10-20 the ring was counted
+    at the source alone, as the reverberant level over the far wall's
+    direct level, and the probe story's one path was 22 dB apart by
+    direction. Never above the coupling: what an opening into a ringing
+    room costs is the coupling less this, and no opening gives back more
+    than it takes."""
+    ring = room_reverberation(scene, room_id)
+    if not ring:
+        return 0.0
+    surface = max(1e-6, float(ring.get("surface_m2") or 0.0))
+    absorption = float(ring.get("absorption_m2") or 0.0) \
+        + float(_far_field_maps(scene)[2].get(str(room_id), 0.0))
+    alpha = min(0.99, absorption / surface)
+    gain = min(RING_GAIN_MAX_DB,
+               _sabine_gain_db(absorption / max(1e-6, 1.0 - alpha)))
+    return max(0.0, min(ROOM_COUPLING_DB, gain - ORDINARY_RING_GAIN_DB))
+
+
+def room_sound_flood(scene: dict, source_room, source_db: float, *,
+                     voice: bool = False) -> dict:
     """`{room_id: {"db", "length", "barrier_db", "via", "max_edge_db"}}` for every room a
     sound of `source_db` at one pace can still be heard in, `via` being the
     room it arrives FROM (the last hop, which is the direction a listener
     there would turn).
+
+    `voice`: price a VOICE -- the hearing table's own budget carried room
+    by room (`_voice_flood`, 2026-10-20) -- rather than a sound. What
+    follows is a sound's.
 
     Dijkstra minimising ACCUMULATED LOSS. A room's level is
     `source_db - barrier_db - spreading_loss_db(length)`, where `length` is
@@ -4408,6 +4692,8 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
     rooms = (scene or {}).get("rooms") or {}
     if not source_room or source_room not in rooms:
         return {}
+    if voice:
+        return _voice_flood(scene, source_room, float(source_db))
     graph = far_field_graph(scene)
     # The ground each way covers (`way_paces`): a doorway 0, a `far` way a
     # street's length, charged as path length like the rooms' spans.
@@ -4459,6 +4745,106 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
                            "max_edge_db": max(rec["max_edge_db"],
                                               graph[room][other])}
             heapq.heappush(heap, (-level, other))
+    return best
+
+
+def _voice_flood(scene: dict, source_room: str, source_db: float) -> dict:
+    """`room_sound_flood` for a VOICE: THE HEARING TABLE CARRIED ROOM BY
+    ROOM (2026-10-20, the far-field coupling; `DESIGN_SOUND_FIELD.md`
+    § 20). The same record, the same termination on audibility, the same
+    label-correcting search; what a way costs is the larger of two budgets,
+    plus every edge's transmission loss:
+
+      * the ROOMS' budget, the table's own: the one-pace step, the room's
+        drop once the way is indoors (`VOICE_ROOM_DROP_DB`), every opening
+        its coupling and a way between storeys its own loss
+        (`far_field_coupling`), less what every ringing room on the way
+        holds (`ring_hold_db`) -- the room the voice is made in, the room
+        it is heard in and every room between;
+      * the FREE FIELD's: the spreading over the spans of the rooms that
+        hold nothing (`room_span`), the open air's and a long hall's, and
+        over the ground a way covers (`far_field_way_paces`: a `far` way its
+        length, a `remote` one no air), as a sound's flood charges it. A
+        room that holds a voice holds one level from wall to wall -- its
+        span costs a voice nothing -- unless it is a duct, which guides a
+        sound rather than holding it.
+
+    Both budgets read the way's rooms and edges as a SET, never their
+    order, so the answer from A to B is the answer from B to A. Two open
+    doorways on, a normal voice stands 3 dB over a quiet room (whole); at
+    three, 9 under it (pieces); at four, 21 under it (its voice only) --
+    the table's arithmetic, where the free field had it whole three rooms
+    on and in pieces to seven.
+
+    Loss only accumulates: an opening costs at least the coupling a ringing
+    room behind it gives back (`ring_hold_db` is bounded by it), and a
+    partition's 30 dB and up is more than any ring holds. So the level
+    falls along every way and the flood may stop at the cut."""
+    from world import weather as _weather
+    graph = far_field_graph(scene)
+    coupling = far_field_coupling(scene)
+    ways = far_field_way_paces(scene)
+    cut = _voice_inaudible_db(scene)
+    facts: dict = {}
+
+    def room_facts(room_id):
+        """(span, free span, hold, enclosed) -- memoised, as the sound's
+        flood memoises its spans."""
+        hit = facts.get(room_id)
+        if hit is None:
+            span = room_span(scene, room_id)
+            hold = ring_hold_db(scene, room_id)
+            free = 0.0 if hold > 0.0 and not is_duct(scene, room_id) else span
+            hit = facts[room_id] = (
+                span, free, hold,
+                _weather.room_exposure(scene, room_id) == "enclosed")
+        return hit
+
+    def level(barrier, free, couple, held, indoors) -> float:
+        rooms_budget = (_ONE_PACE_LOSS_DB
+                        + (VOICE_ROOM_DROP_DB if indoors else 0.0)
+                        + couple - held)
+        return source_db - barrier - max(spreading_loss_db(free),
+                                         rooms_budget)
+
+    span0, free0, hold0, indoors0 = room_facts(source_room)
+    best = {source_room: {"db": level(0.0, free0, 0.0, hold0, indoors0),
+                          "length": span0, "barrier_db": 0.0, "via": None,
+                          "max_edge_db": 0.0}}
+    #: What each room's best way has accumulated past its record: the free
+    #: span, the couplings, the holds, whether it has been indoors.
+    state = {source_room: (free0, 0.0, hold0, indoors0)}
+    heap = [(-best[source_room]["db"], source_room)]
+    while heap:
+        neg_db, room = heapq.heappop(heap)
+        rec = best.get(room)
+        if rec is None or rec["db"] < -neg_db - _DB_EPS:
+            continue                    # stale: a louder way here was found
+        if rec["db"] < cut:
+            continue                    # inaudible here, and beyond it too
+        free, couple, held, indoors = state[room]
+        for other in sorted(graph.get(room) or ()):
+            o_span, o_free, o_hold, o_indoors = room_facts(other)
+            barrier = rec["barrier_db"] + graph[room][other]
+            # The ground the way itself covers (`way_paces`): a doorway 0, a
+            # `far` way a street's length or more, a `remote` one no air.
+            ground = float((ways.get(room) or {}).get(other) or 0.0)
+            way = (free + ground + o_free,
+                   couple + (coupling.get(room) or {}).get(other, 0.0),
+                   held + o_hold, indoors or o_indoors)
+            heard = level(barrier, *way)
+            if heard < cut:
+                continue
+            known = best.get(other)
+            if known is not None and known["db"] >= heard - _DB_EPS:
+                continue
+            best[other] = {"db": heard,
+                           "length": rec["length"] + ground + o_span,
+                           "barrier_db": barrier, "via": room,
+                           "max_edge_db": max(rec["max_edge_db"],
+                                              graph[room][other])}
+            state[other] = way
+            heapq.heappush(heap, (-heard, other))
     return best
 
 

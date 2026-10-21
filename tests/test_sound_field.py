@@ -2159,12 +2159,17 @@ def test_a_shout_carries_down_a_long_run_and_a_normal_voice_falls_away():
         assert hear_level(rel, "shout") != "none", hops
     # A real normal voice (60 dB(A) at a pace) down a straight run of open
     # doorways in a still building (27.0 dB floor), against the quiet floor
-    # alone and followed at 0 dB (2026-10-20, the hearing rule): whole three
-    # rooms down, in pieces from four, gone at eight. It was whole at two
-    # and in pieces at three while a line was held to +3 dB.
+    # alone and followed at 0 dB (2026-10-20, the hearing rule).
+    # RESTATED the same day (the far-field coupling, DESIGN_SOUND_FIELD.md
+    # § 20): each doorway now costs the hearing table's coupling into the
+    # room beyond, so the run is the table's own arithmetic -- whole two
+    # rooms down (+3 dB), in pieces at three (-9), no word from four (-21;
+    # its voice still carries there, `test_tone_travels_farther_than_
+    # words`). While each room cost only the free field's spreading over its
+    # span it was whole three rooms down and in pieces to seven.
     words = [hear_level(spatial_rel_between(_run(h), "L", "S"), "normal")
-             for h in (2, 3, 5, 7, 8)]
-    assert words == ["full", "full", "fragment", "fragment", "none"]
+             for h in (2, 3, 4, 5, 8)]
+    assert words == ["full", "fragment", "none", "none", "none"]
 
     # ...and the loss GROWS with distance, which is the whole complaint.
     losses = [spatial_rel_between(_run(h), "L", "S")["far_loss_db"]

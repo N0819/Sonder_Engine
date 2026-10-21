@@ -73,9 +73,11 @@ def test_a_raised_voice_through_a_wall_is_heard_as_a_voice():
 
 
 def test_rooms_away_the_voice_outlasts_its_words():
-    """Down a run of open doorways an ordinary voice is in pieces from four
-    rooms and gone at eight; its voice is still there where its words are
-    gone, and at last gone too."""
+    """Down a run of open doorways an ordinary voice is in pieces at three
+    rooms and its words are gone at four (each doorway pays the hearing
+    table's coupling, DESIGN_SOUND_FIELD.md § 20; it was pieces from four
+    and gone at eight); its voice is still there where its words are gone,
+    and at last gone too."""
     def run(hops):
         rooms = {}
         for i in range(hops + 1):

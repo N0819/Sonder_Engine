@@ -1542,8 +1542,11 @@ speech. What stays open, and is the owner's:
   (`spatial_sound_field.doorway_air_loss_db`, the free-field law from the
   door). What stays: the FAR field still charges a street's open air as a
   room's length -- with both front doors open, a normal voice in one
-  parlour reaches the parlour across a 16-pace street in pieces (42.6 dB of
-  far-field loss); the envelope term on the far field is still the owner's.
+  parlour reached the parlour across a 16-pace street in pieces (42.6 dB of
+  far-field loss). Since 2026-10-20 (the far-field coupling, the note's
+  § 20) each of the four openings on that way pays the table's coupling:
+  57.0 dB, its voice and no word, a raised one in pieces, a shout whole. The
+  envelope term for the open street itself is still the owner's.
 - ~~**The impact ladder** (`EVENT_POWER`) is still the 2026-09-06 one~~
   RE-ANCHORED 2026-10-20 at `deafening` (round 2, lane B): 108 at the cell;
   the three lower rungs are the 2026-09-06 ones still.
@@ -2456,6 +2459,48 @@ What it leaves:
   seals off by walls alone hears no thunder through its own roof, because
   the graph cannot tell a roof from earth above it -- the storey can, and is
   read only to exclude.
+
+**The far field's coupling, 2026-10-20** (`design/DESIGN_SOUND_FIELD.md`
+§ 20): rooms away, a voice pays the hearing table's own budget room by room
+-- every opening its coupling by its area, a stair's flight its own loss,
+every ringing room on the way what it holds with its open apertures counted
+-- the larger of that and the free field's spreading; a path is one number
+both ways; the voice flood is cut at the voice rung; the ring is bounded and
+a sound's ring boost measured from one pace. Re-graded: 12 of 2,472 recorded
+lines change (the probe story's lighthouse, and chats 177/178's replayed
+cottage), far-field deliveries 55 -> 45. What it leaves, each the owner's:
+
+- **The layout tier's two-room stair is three openings.** The flight between
+  a stairwell's two rooms pays a doorway's coupling as well as the flight's
+  own loss: chat 177's cottage loses the murmur of a shut room upstairs in
+  the kitchen (51.0 -> 67.0 dB). Nothing typed says two rooms are one
+  stairwell; a marker the layout tier writes on a stair's rooms, or a
+  `width` on the flight it makes, would let the flight be charged as one.
+- **A winding stair costs what a straight flight does**
+  (`WAY_LOSS_DB["stair"]` 3, 13 a flight in all; the world's spiral is
+  10-15 and more): no typed fact says a stair winds. The probe's shout asks
+  at least 2.1, a house's talk up a stair to a shut bedroom at most 4.
+- **Two readings of one room's absorption.** What a room holds of a voice
+  counts its open apertures (`ring_hold_db`); the ring its own sounds get
+  (`room_reverberation`: the near field, the narrator's `ringing`/`live`, a
+  sound's boost) is still Sabine's sealed box. Counting them there moves the
+  narrator's word for a bare room with an open way (the lamp room 1.61 s ->
+  0.92 s, `ringing` -> `live`) and every bare room's near-field level.
+- **A sound's far field keeps the free field.** Priced as a voice, the
+  corpus's far deliveries would go 55 -> 41 and the 300-room chain's reach
+  of `deafening`/`thunderous`/`catastrophic` 18/26/35 -> 6/8/9 rooms; a blow
+  through stone is carried low and in the structure, where an opening
+  passes far more than the speech band's coupling says.
+- **An absolute floor for intelligibility** -- the ear's 25 dB summed with
+  the room's floor wherever a voice is graded by its level -- is measured
+  and not built: no recorded line moves (the nearest of 531 level-graded
+  lines stands 1.6 dB clear); a hushed or dead room is where it would bite.
+- **The rooms' budget is the table's**, margin and all: the source room's
+  6 dB drop is a furnished room's from a parlour to a hall, and the
+  coupling's reference room stands 1.5 dB over the one-pace level in
+  Sabine's terms.
+- **A body absorbs nothing** in any ring: a crowded stone room rings as an
+  empty one.
 
 Designed and built 2026-09-04 on `writers-room` (not yet on `main`;
 [`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),
