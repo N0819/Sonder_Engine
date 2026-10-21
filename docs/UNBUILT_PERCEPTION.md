@@ -2254,15 +2254,26 @@ once, the character tier's included; one's own name comes through a line
 heard only in pieces or as a voice. What it leaves, each the owner's
 (§ 13.7):
 
-- **"The rain has stopped" is not built.** The weather's sound is no
-  hearing percept -- it is folded into the field's floor, and the narrator's
-  manifest re-derives `weather_words(scoped, "sound")` every beat with no
-  key and no verdict -- and a steady source in a room it fills evenly (a
-  clock, a generator in a small room) has none either (`sound_shape` speaks
-  only for an uneven room), so neither can start, fade or stop for a mind.
-  Proposed: a weather-sound percept keyed like the soundscape, its ceasing
-  told by what the observer's ledger held, the manifest entry carrying its
-  verdict.
+- **"The rain has stopped": BUILT, round 2 lane C (2026-10-20, the note's
+  § 17).** The weather's sound is a hearing percept keyed like the
+  soundscape (`composer.weather_sound_percepts`: the precipitation and the
+  wind as two sounds, under the room as subject), told, faded and its
+  stopping told once; an even room's steady source is one too
+  (`spatial_sound_field.sound_fill`, the same `soundscape` subject); the
+  narrator's manifest entries carry the player's verdict
+  (`narration._weather_hearing_entries`). What the round leaves: the
+  precipitation's sound indoors is ONE percept per room at the muffling it
+  arrives at, so a rain that eases below a wall's reach is told as "the
+  sound of the rain from beyond the walls has stopped" and never as
+  "eased"; the manifest's key is minted from the room's reach, so a player
+  under a canopy the room does not share (`weather.exposure_at`) ships the
+  entry with no verdict; the weather's sight and touch percepts
+  (`weather_percepts`) mint their sentence through the English templates
+  (`_en`) and a Japanese view carries them in English -- pre-existing, found
+  on the way, not touched; and a record whose name carries its intensity
+  ("light snow" at `light`) doubles the word in `weather_percepts`' sight
+  and touch sentences ("light light snow is landing on you", the betrayal
+  story's yard) -- the hearing percept guards it, the other two do not.
 - **The listener's own speech is not self-masking**: lines in a beat take
   turns and nothing typed says two overlapped.
 - **A garment over the ears is not read**: the attire ledger has a `head`
@@ -2271,10 +2282,28 @@ heard only in pieces or as a voice. What it leaves, each the owner's
   a hammer's one-beat blows are not read.
 - **A voice through a body's mass wakes a sleeper by name only**, and a
   sedated body is never woken by a sound.
-- **The waking beat delivers only what woke them**; what followed the waking
-  sound within the beat is not perceived.
-- **A habituated sound is in no memory**: a character's soundscape -- its
-  start, its stop -- is not filed (`_EPISODE_SOUND_TAGS`).
+- **The woken beat: BUILT, round 2 lane C (2026-10-20, § 17).** From the
+  waking moment on, the woken mind perceives as an awake one
+  (`perception._sleep_hears_where`'s place in `beat_events`; the outcome
+  pass's `wake_at`). What the round leaves: a waking the beat cannot PLACE
+  -- a sound with no resolve step (a door, a tread, a charter noise, a
+  Director event with no `from_event`), a running thing that started -- is
+  read as the end of the beat, so the woken mind gets the room and the
+  company and none of the beat's lines; a crossing is the woken mind's only
+  where the beat's steps place it after the waking step; a substance event
+  and an unplaced tell never are. The waking line's own words stay out by
+  ruling (the residue tells the waking); whether the end of a name-bearing
+  line should be caught is the owner's.
+- **A habituated sound's start and stop ARE memory: BUILT, round 2 lane C
+  (2026-10-20, § 17)** -- `_EPISODE_SOUND_TAGS` carries
+  `HABITUATING_SOUND_TAGS`, filed on the beat a steady sound begins,
+  changes or stops, once each; the Japanese episode files the room's
+  sound and its stop for the first time (the `not prefix` guards). Left:
+  the line is the view's sentence in the first person, so a room's
+  soundscape in memory names the anchors it was loud at ("I am in the din
+  at the shelf") -- a memory of where one stood, not only of the sound;
+  and the clock on it is the row's (`encoded_at_seconds`), never a word in
+  the line.
 - ~~**The impact ladder**: a gunshot written `deafening` is 80 dB at its
   cell and dulls nobody~~ RULED AND BUILT 2026-10-20 (round 2, lane B;
   the note's § 16): impact `deafening` is 105 dB(A) a pace from the blow,

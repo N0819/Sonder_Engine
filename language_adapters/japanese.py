@@ -295,6 +295,13 @@ class JapaneseRenderer:
         froms = shape["sources"] + [
             self._text("sound_beyond_opening", opening=o)
             for o in shape["openings"]]
+        if shape.get("even"):
+            # A steady sound filling the room at one word (`composer.
+            # render_sound_shape`, DESIGN_SOUND_FIELD § 17). The field is
+            # English's `origin`; here it is the joined sources, since the
+            # pack's `sound_origin` is a whole sentence of its own.
+            return self._text("sound_even_" + shape["even"],
+                              origin=self._items(froms))
         if froms and shape["groups"]:
             parts.append(self._text("sound_origin", items=self._items(froms)))
         for group in shape["groups"]:
@@ -584,10 +591,19 @@ class JapaneseRenderer:
             return self._pose(p, data, label, prefix)
         if p.kind == "scent":
             return self._scent(data, label, prefix)
-        if p.kind == "ambient" and data.get("ceased") and not prefix:
+        # A STEADY SOUND'S STOP AND ITS SHAPE REACH THE EPISODE TOO
+        # (DESIGN_SOUND_FIELD § 17): these two were view-only (`not
+        # prefix`), so a Japanese mind filed no memory of a sound starting
+        # or stopping; the English episode files both since round 2.
+        if p.kind == "ambient" and data.get("ceased"):
+            # A stopping that names what stopped carries its own sentence
+            # (`composer.weather_sound_percepts`: 「雨が止んだ。」).
+            own = str(data.get("desc") or "").strip()
+            if own:
+                return _full_stop(own)
             return self._text("sound_subsided" if data.get("subsided")
                               else "sound_ceased")
-        if p.kind == "ambient" and data.get("soundscape") and not prefix:
+        if p.kind == "ambient" and data.get("soundscape"):
             return self._sound_shape(data.get("soundscape"))
         if p.kind == "ambient" and data.get("landscape"):
             from agents import composer
@@ -667,6 +683,22 @@ class JapaneseRenderer:
                 sentence = _full_stop(self._sentence(p))
                 if sentence:
                     spans.append((p, sentence))
+            rest = [q for q in percepts if q.kind != "residue"]
+            if (residue[0].data or {}).get("woke") and rest and spans:
+                # A sleeper a sound woke perceives the rest of the beat
+                # (`composer._render_view_english`, DESIGN_SOUND_FIELD
+                # § 17): the waking leads, the remainder follows as an
+                # awake mind's view, and the ledger files the room.
+                after = self._render_view(
+                    rest, mode=mode, prev_standing=prev_standing,
+                    prev_described=prev_described, full_render=full_render)
+                woke = [(composer.as_beat(p), s) for p, s in spans[:1]]
+                return RenderedView(
+                    text="".join(s for _, s in woke) + after.text,
+                    spans=woke + list(after.spans),
+                    standing_keys=set(after.standing_keys),
+                    described=after.described,
+                    verdicts=dict(after.verdicts))
             return RenderedView(
                 text="".join(sentence for _, sentence in spans), spans=spans,
                 standing_keys=standing_keys, described=described)
@@ -808,19 +840,38 @@ class JapaneseRenderer:
     def _render_episode(self, percepts, *, prev_standing=frozenset(),
                         prev_described=frozenset()):
         percepts = list(percepts or [])
+        from agents import composer
+        from agents.composer import _first_person
         residue = [p for p in percepts if p.kind == "residue"]
         if residue:  # the same floor as render_view
             sentences = [s for s in (_full_stop(self._sentence(p, episode=True))
                                      for p in residue) if s]
+            rest = [p for p in percepts if p.kind != "residue"]
+            if (residue[0].data or {}).get("woke") and rest and sentences:
+                # The woken mind remembers the rest of the beat (§ 17): the
+                # waking in the first person, then what it perceived from
+                # that moment on, as any awake mind's episode.
+                woke = _first_person(sentences[0])
+                content, gist, entities = self._render_episode(
+                    rest, prev_standing=prev_standing,
+                    prev_described=prev_described)
+                if content:
+                    return woke + content, gist or woke[:240], entities
+                return woke, woke[:240], []
             content = "".join(dict.fromkeys(sentences))
             return content, (sentences[0][:240] if sentences else ""), []
-        from agents import composer
-        from agents.composer import _first_person
+        # A silence is only a memory to an ear that had the noise (D3,
+        # § 17): the view's own verdicts, shared.
+        verdicts = composer.standing_verdicts(
+            [p for p in percepts if p.order_key is None],
+            prev_standing, prev_described)
         selected = [p for p in percepts if p.order_key is not None]
         selected.extend(
             p for p in percepts
             if p.order_key is None and not composer.is_landscape(p)
             and p.dedupe_key not in (prev_standing or ())
+            and not composer.unheard_ceasing(
+                p, verdicts.get(p.dedupe_key, "first"))
             and (p.kind != "appearance" or (p.data or {}).get("force")
                  or str((p.data or {}).get("source_key") or "")
                  not in (prev_described or ())))

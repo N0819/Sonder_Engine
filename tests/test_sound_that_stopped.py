@@ -317,21 +317,31 @@ def test_a_machine_that_quiets_has_not_stopped(language, sentence, wrong):
     assert sound_shape(sc, "Q") is None                  # the room went even
     assert room_noise_word(sc, "r") == NOISE_WORDS[0]    # at `quiet`
     percepts = _standing(sc, "Q", prev_standing={key})
-    [news] = [p for p in percepts if (p.data or {}).get("ceased")]
-    assert composer.standing_verdicts(percepts, {key})[news.dedupe_key] == "ceased"
+    # SINCE ROUND 2 (DESIGN_SOUND_FIELD § 17) the even room's steady sound
+    # is a percept of its own (`spatial_sound_field.sound_fill`), under the
+    # same subject: the hum is told as the room's NEW level -- a change
+    # against the din's key, the beat's news -- and never as a stop. The
+    # generic "died down" sentence is kept for an even room whose source
+    # this observer has no channel to.
+    assert not any((p.data or {}).get("ceased") for p in percepts)
+    [hum] = [p for p in percepts if (p.data or {}).get("soundscape")]
+    assert hum.data["soundscape"].get("even") == NOISE_WORDS[0]
+    assert composer.standing_verdicts(percepts, {key})[hum.dedupe_key] == "changed"
     text = composer.render_view(percepts, mode="player", prev_standing={key},
                                 language=language).text
-    assert sentence in text and wrong not in text
+    assert composer.render_view([hum], mode="character",
+                                language=language).text in text
+    assert wrong not in text and sentence not in text
 
-    # And when it IS switched off, that is news again: the din died down one
+    # And when it IS switched off, that is news again: the din gentled one
     # beat and the hum stopped the next.
     sc["entities"]["gen"]["state"] = {"running": False}
-    later = _standing(sc, "Q", prev_standing={news.dedupe_key})
+    later = _standing(sc, "Q", prev_standing={hum.dedupe_key})
     [stopped] = [p for p in later if (p.data or {}).get("ceased")]
-    assert stopped.dedupe_key != news.dedupe_key
+    assert stopped.dedupe_key != hum.dedupe_key
     assert composer._subject_prefix(stopped.dedupe_key) == \
         composer._subject_prefix(key)
     text = composer.render_view(later, mode="player",
-                                prev_standing={news.dedupe_key},
+                                prev_standing={hum.dedupe_key},
                                 language=language).text
     assert wrong in text and sentence not in text

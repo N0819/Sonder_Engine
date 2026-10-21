@@ -4693,6 +4693,23 @@ def sound_shape(scene: dict, observer: str, *, sound=None, room=None,
                      + (c[1] - origin[1]) ** 2)
         groups.setdefault(noise_word(noise_at_cell(target)), []).append(
             row["desc"])
+    sources, openings = _heard_standing_sources(
+        field, observer, room, visible_doors, placed)
+    ordered = [{"level": word, "items": groups[word]}
+               for word in reversed(NOISE_WORDS) if groups.get(word)]
+    self_word = noise_word(noise_at_cell(origin)) if how == "measured" else None
+    if not ordered and self_word is None:
+        return None
+    return {"groups": ordered, "sources": sources, "openings": openings,
+            "self": self_word}
+
+
+def _heard_standing_sources(field, observer, room, visible_doors, placed):
+    """Rule (c) of `sound_shape`, shared with `sound_fill`: the standing
+    sources this observer HEARS -- `(labels of those in this room, descs of
+    the visible openings a neighbour's comes through)`. A line and a
+    one-beat event are the beat's, not the room's; a source neither heard
+    nor in view is not mentioned."""
     sources = []
     openings = []
     for source in field.sources:
@@ -4710,10 +4727,53 @@ def sound_shape(scene: dict, observer: str, *, sound=None, room=None,
             desc = str((placed.get(door) or {}).get("desc") or "").strip()
             if desc and desc not in openings:
                 openings.append(desc)
-    ordered = [{"level": word, "items": groups[word]}
-               for word in reversed(NOISE_WORDS) if groups.get(word)]
-    self_word = noise_word(noise_at_cell(origin)) if how == "measured" else None
-    if not ordered and self_word is None:
+    return sources, openings
+
+
+def sound_fill(scene: dict, observer: str, *, sound=None, room=None,
+               sweep=False) -> Optional[dict]:
+    """A STEADY SOUND THAT FILLS THE ROOM EVENLY, as the composer's
+    closed-vocabulary input, or None (DESIGN_SOUND_FIELD.md § 17, round 2
+    lane C, 2026-10-20).
+
+    `sound_shape` speaks only for an UNEVEN room (rule (a)), so a clock in a
+    quiet study, or a generator in a room small enough that every cell is in
+    its din, reached no mind as a sound at all: it could not start, fade or
+    stop for anyone (§ 13.4's registered half). This is the even case, and
+    it keeps every other rule of the shape: the room's own cells agree on
+    ONE noise word (`room_noise_word`), and a standing source -- an entity or
+    a crowd, running -- is HEARD by this observer, named as rule (c) names
+    it (`_heard_standing_sources`: a source in this room by its label, one
+    in a placed neighbour by the opening it comes through where that opening
+    is in view). A room whose even sound is the floor alone, or whose source
+    this observer has no channel to, answers None, as before.
+
+    Returns {"groups": [], "sources": [...], "openings": [...], "self": None,
+             "even": word}: the shape vocabulary with the one word the whole
+    room carries, so `composer.soundscape_percept` keys it under the same
+    `soundscape` subject (the room) and the room's sound stays ONE ledger --
+    an even sound that starts is `first`, one that changes word is
+    `changed`, its stopping is `sound_ceased_percept`, and a mind gets used
+    to it (`composer.habituated`) exactly as to an uneven one.
+    """
+    room = room or room_of(scene, observer)
+    if not room:
         return None
-    return {"groups": ordered, "sources": sources, "openings": openings,
-            "self": self_word}
+    field = sound if sound is not None else sound_field(scene, observer, room=room)
+    if field is None or field.room != room:
+        return None
+    word = room_noise_word(scene, room, sound=field)
+    if word is None:
+        return None                         # uneven, or no cells: the shape's question
+    visible_doors = {
+        row["anchor"] for row in feature_visibility(scene, observer,
+                                                     sweep=bool(sweep))
+        if row.get("visible") and row.get("implicit")
+        and str(row["anchor"]).startswith("door:")}
+    placed = field.grid.anchors.get(room) or {}
+    sources, openings = _heard_standing_sources(
+        field, observer, room, visible_doors, placed)
+    if not sources and not openings:
+        return None                         # the floor alone, or nothing heard
+    return {"groups": [], "sources": sources, "openings": openings,
+            "self": None, "even": word}

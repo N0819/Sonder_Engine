@@ -898,12 +898,18 @@ def _clean_shape(shape, levels):
              if str(a or "").strip()]
     self_word = shape.get("self")
     self_word = self_word if self_word in levels else None
-    if not groups and self_word is None:
+    # AN EVEN ROOM'S ONE WORD (`spatial_sound_field.sound_fill`, § 17): a
+    # steady sound filling the room at one level, named by its sources.
+    even = shape.get("even")
+    even = even if even in levels and (sources or openings) else None
+    if not groups and self_word is None and even is None:
         return None
     return {"groups": groups, "sources": sources, "openings": openings,
             "self": self_word,
             # No beam, no key (D5): every reader takes absence as "nothing aimed".
-            **({"aimed": aimed} if aimed else {})}
+            **({"aimed": aimed} if aimed else {}),
+            # No even word, no key: an uneven shape hashes as it always did.
+            **({"even": even} if even else {})}
 
 
 def _shape_signature(shape):
@@ -929,7 +935,11 @@ def _shape_signature(shape):
         # re-announce itself as news on the first beat after this landed.
         # A shape with no beam hashes byte for byte to what it hashed
         # before.
-        + (["aimed=" + ",".join(aimed)] if aimed else []))
+        + (["aimed=" + ",".join(aimed)] if aimed else [])
+        # ...and the even room's word the same way (§ 17): appended only
+        # when there is one, so every uneven shape keeps its stored key, and
+        # a room that fills up to one word or falls to another is `changed`.
+        + (["even=" + str(shape["even"])] if shape.get("even") else []))
 
 
 def environment_percept(room_id, room_name, room_notes="", light="",
@@ -1183,13 +1193,18 @@ def render_sound_shape(shape):
     if not shape:
         return ""
     parts = []
+    froms = [_noun_phrase(s) for s in shape["sources"]] + [
+        _en("sound_beyond_opening", opening=_noun_phrase(o))
+        for o in shape["openings"]]
+    origin = (_en("sound_origin", items=_join_clauses(froms)) if froms
+              else _en("sound_origin_none"))
+    if shape.get("even"):
+        # A STEADY SOUND FILLING THE ROOM AT ONE WORD (§ 17): there is no
+        # "where" to grade, so the sentence says what is heard, all through
+        # the room, at the one level the room carries.
+        return _cap(_en("sound_even_" + shape["even"], origin=origin))
     clauses = _shape_clauses(shape, "sound_at_", SOUND_SHAPE_LEVELS)
     if clauses:
-        froms = [_noun_phrase(s) for s in shape["sources"]] + [
-            _en("sound_beyond_opening", opening=_noun_phrase(o))
-            for o in shape["openings"]]
-        origin = (_en("sound_origin", items=_join_clauses(froms)) if froms
-                  else _en("sound_origin_none"))
         parts.append(_cap(_en("sound_shape", origin=origin,
                               clauses=_join_clauses(clauses))))
     if shape["self"]:
@@ -3518,6 +3533,132 @@ def _storm_percepts(reach, sky):
     return out
 
 
+def _weather_sound_heard(reach):
+    """`(what, template)` for the precipitation this room hears, or
+    `("", "")`: the fall's own name (free text, spliced as written, with
+    its intensity where the sky marked one), and the sentence that fits how
+    it arrives -- under the sky, on the cover over you, through the walls
+    muffled or faint (`weather_for_room`'s `exposure` and `muffling`)."""
+    if not reach.get("audible"):
+        return "", ""
+    what = str(reach.get("precipitation") or "").strip()
+    if not what or what.casefold() == "none":
+        return "", ""
+    how = str(reach.get("intensity") or "").strip()
+    exposure = str(reach.get("exposure") or "")
+    muffling = str(reach.get("muffling") or "")
+    if exposure == "open":
+        template = "weather_sound_open"
+    elif exposure == "sheltered":
+        template = "weather_sound_sheltered"
+    else:
+        template = "weather_sound_faint" if muffling == "faint" \
+            else "weather_sound_muffled"
+    # MODERATE IS THE UNMARKED CASE, as in `weather_percepts`; and a name
+    # that already carries its intensity word (a record stored before the
+    # axes were split: "light snow" at `light`) is not marked twice --
+    # measured "the light light snow" on the betrayal story's yard.
+    named = _t("weather_falling", intensity=how, what=what) \
+        if how in ("light", "heavy") and not what.casefold().startswith(how) \
+        else what
+    return _noun_phrase(named), template
+
+
+def _was_hearing(prev_standing, tag, room_id):
+    """Was this observer being delivered THIS room's sound under `tag`
+    (`WEATHER_SOUND_TAG`, `WIND_SOUND_TAG`) last beat -- the same subject
+    test `perception._was_hearing_this_room` makes of the soundscape: the
+    key hashes the room as its subject, so a body that walked out of
+    earshot holds another room's key and notices no stopping here."""
+    if not prev_standing or not room_id:
+        return False
+    want = standing_key(tag, (room_id,), ("",)).rsplit(":", 1)[0]
+    return any(_subject_prefix(key) == want for key in prev_standing)
+
+
+def weather_sound_percepts(reach, room_id, *, prev_standing=frozenset(),
+                           before=None):
+    """THE WEATHER'S SOUND, as standing hearing percepts (DESIGN_SOUND_FIELD
+    § 17, round 2 lane C): what this body hears of the sky from where it
+    stands -- the precipitation that reaches the room (`weather_for_room`'s
+    `audible`, at its `muffling`) and a wind at the ear (`wind_reaches`) --
+    as two sounds, each keyed like the room's soundscape by its own state
+    under the ROOM as subject (`HABITUATING_SOUND_TAGS`): told when it
+    starts and when it changes, faded between (`habituated`), and its
+    STOPPING told once, by what this observer's own ledger held
+    (`prev_standing`, the `ceased` key under the same subject), never to an
+    ear that never had it and never to one that walked out of earshot. A
+    newcomer hears the room as it is.
+
+    `before` is the room's reach as it stood last beat where the caller has
+    it (the outcome pass hands `prev_scene`'s), so the stopping can name
+    what fell; without it the record's own name stands -- a sky keeps its
+    fall's name through a dry spell (`weather.advance_weather`) -- and
+    failing both, the sentence names the class ("the weather").
+
+    TELLING ONLY. The weather's level in the field's floor
+    (`spatial_sound_field.WEATHER_NOISE`) is untouched: the owner's rain
+    ruling -- rain never masks a line -- stands. Indoors the sound is what
+    reaches the room, by the same audibility the sound bed reads
+    (`weather_words(scoped, "sound")`), so the page and the ambience cannot
+    disagree about whether a cellar hears the storm.
+    """
+    reach = reach if isinstance(reach, dict) else {}
+    before = before if isinstance(before, dict) else {}
+    out = []
+    if not room_id:
+        return out
+    what, template = _weather_sound_heard(reach)
+    if what:
+        out.append(Percept(
+            kind="ambient", channel="hearing",
+            data={"desc": _cap(_t(template, what=what))},
+            salience=0.35,
+            dedupe_key=standing_key(
+                WEATHER_SOUND_TAG, (room_id,),
+                (str(reach.get("precipitation") or ""),
+                 str(reach.get("intensity") or ""),
+                 str(reach.get("muffling") or ""),
+                 str(reach.get("exposure") or "")))))
+    elif _was_hearing(prev_standing, WEATHER_SOUND_TAG, room_id):
+        # THE RAIN HAS STOPPED -- or no longer reaches this room, which
+        # is the honest sentence through a wall. Named from what WAS heard
+        # where the caller can say, else from the record's own name.
+        name = ""
+        for record in (before, reach):
+            candidate = str(record.get("precipitation") or "").strip()
+            if candidate and candidate.casefold() != "none":
+                name = candidate
+                break
+        if not name:
+            desc = _t("weather_sound_ceased_plain")
+        elif str(reach.get("exposure") or "") == "enclosed":
+            desc = _t("weather_sound_ceased_beyond", what=_noun_phrase(name))
+        else:
+            desc = _t("weather_sound_ceased", what=_noun_phrase(name))
+        out.append(Percept(
+            kind="ambient", channel="hearing",
+            data={"ceased": True, "desc": _cap(desc)},
+            salience=0.4,
+            dedupe_key=standing_key(WEATHER_SOUND_TAG, (room_id,),
+                                    ("ceased",))))
+    wind = str(reach.get("wind") or "").strip()
+    if reach.get("wind_reaches") and wind:
+        out.append(Percept(
+            kind="ambient", channel="hearing",
+            data={"desc": _cap(_t("wind_sound", wind=wind))},
+            salience=0.35,
+            dedupe_key=standing_key(WIND_SOUND_TAG, (room_id,), (wind,))))
+    elif _was_hearing(prev_standing, WIND_SOUND_TAG, room_id):
+        out.append(Percept(
+            kind="ambient", channel="hearing",
+            data={"ceased": True, "desc": _cap(_t("wind_sound_ceased"))},
+            salience=0.4,
+            dedupe_key=standing_key(WIND_SOUND_TAG, (room_id,),
+                                    ("ceased",))))
+    return out
+
+
 #: How far a felt shake stands out of a view, by how hard it is felt
 #: (`spatial_sound_field.FELT_LEVELS`): a faint tremor is under a room's own
 #: salience, a jolt over a pose's.
@@ -5072,7 +5213,14 @@ def leads_the_beat(percept, verdict, prev_standing):
 #: line) or a far one (`distant_sound`): those are news each time they
 #: happen. Not a crowd's overheard fragment (`chatter`): its words change
 #: under one key.
-HABITUATING_SOUND_TAGS = ("soundscape", "hum")
+#: Since round 2 (§ 17) the WEATHER'S sound is one of them: what a body
+#: hears of the sky from its room (`weather_sound_percepts`, the
+#: precipitation and the wind as two sounds), told when it starts, faded
+#: between, its stopping told once -- "the rain has stopped".
+WEATHER_SOUND_TAG = "weather_sound"
+WIND_SOUND_TAG = "wind_sound"
+HABITUATING_SOUND_TAGS = ("soundscape", "hum", WEATHER_SOUND_TAG,
+                          WIND_SOUND_TAG)
 
 
 def steady_sound(percept) -> bool:
@@ -5788,6 +5936,12 @@ def _render_ambient(p):
         lines = landscape_lines([p])
         return render_landscape_line(lines[0][1]) if lines else ""
     if p.data.get("ceased"):
+        # A stopping that names what stopped carries its own sentence
+        # (`weather_sound_percepts`: "The rain has stopped."); the room's
+        # soundscape keeps the pack's generic one.
+        own = str(p.data.get("desc") or "").strip()
+        if own:
+            return own if own[-1:] in ".!?" else own + "."
         return _en("sound_subsided" if p.data.get("subsided")
                    else "sound_ceased")
     if p.data.get("soundscape"):
@@ -5977,6 +6131,23 @@ def _render_view_english(percepts, *, mode="character",
             p.data.get("level"), targeted=p.data.get("targeted", False),
             loud_event=p.data.get("loud_event", False),
             pain=p.data.get("pain", False), woke=p.data.get("woke", ""))
+        rest = [q for q in percepts if q.kind != "residue"]
+        if p.data.get("woke") and rest:
+            # A SLEEPER A SOUND WOKE PERCEIVES THE REST OF THE BEAT
+            # (DESIGN_SOUND_FIELD § 17): what woke them leads, as the
+            # residue tells it, and the remainder follows as an awake mind's
+            # view. What the remainder holds was decided by the caller
+            # (`perception._composer_outcome_views`, from the waking moment
+            # on); this only orders it. The woke sentence is the beat's
+            # (`as_beat`), and the ledger files the room they woke in.
+            after = _render_view_english(
+                rest, mode=mode, prev_standing=prev_standing,
+                prev_described=prev_described, full_render=full_render)
+            return RenderedView(
+                text=(text + " " + after.text).strip(),
+                spans=[(as_beat(p), text)] + list(after.spans),
+                standing_keys=set(after.standing_keys),
+                described=after.described, verdicts=dict(after.verdicts))
         return RenderedView(text=text, spans=[(p, text)],
                             standing_keys={p.dedupe_key},
                             described=set(prev_described))
@@ -6416,7 +6587,15 @@ _EPISODE_STANDING_KINDS = ("environment", "sensation", "pose", "scent")
 #: A beat's own sound, as the outcome stage mints it: STANDING, keyed by
 #: what it says (`ambient_percepts`, `distant_sound_percepts`), so new only
 #: on the beat it is heard -- English filed it nowhere (review 2026-10-05).
-_EPISODE_SOUND_TAGS = ("ambient", "distant_sound")
+#: AND A STEADY SOUND'S START AND STOP (DESIGN_SOUND_FIELD § 17, round 2):
+#: the room's soundscape, a crowd's hum and the weather's sound
+#: (`HABITUATING_SOUND_TAGS`) are keyed by the sound's own state, so they
+#: are new on the beat they begin, on a beat they change, and on the beat
+#: they stop (`sound_ceased_percept`'s key) -- and on no other: a sound
+#: heard every beat is filed once, while the view, which has habituated,
+#: says nothing (the owner, 2026-09-26: memory is the priority; "the
+#: generator stopped some time in the night" must be recallable).
+_EPISODE_SOUND_TAGS = ("ambient", "distant_sound", *HABITUATING_SOUND_TAGS)
 
 
 def _files_as_memory(p):
@@ -6445,11 +6624,30 @@ def _render_episode_english(percepts, *, prev_standing=frozenset(),
     residue = [p for p in percepts if p.kind == "residue"]
     if residue:
         sentence = _episode_sentence(residue[0])
+        rest = [p for p in percepts if p.kind != "residue"]
+        if (residue[0].data or {}).get("woke") and rest:
+            # THE WOKEN MIND REMEMBERS THE REST OF THE BEAT (§ 17): the
+            # waking as the residue tells it, in the first person, then
+            # what it perceived from that moment on, filed as any awake
+            # mind's episode is.
+            woke = _first_person(sentence)
+            content, gist, entities = _render_episode_english(
+                rest, prev_standing=prev_standing,
+                prev_described=prev_described)
+            if content:
+                return (woke + " " + content).strip(), gist or woke, entities
+            return woke, woke, []
         return sentence, sentence, []
 
     events = sorted(
         [p for p in percepts if p.order_key is not None],
         key=lambda p: p.order_key)
+    # A SILENCE IS ONLY A MEMORY TO AN EAR THAT HAD THE NOISE (D3, § 17):
+    # the same verdicts the view renders by, so a stopping this mind's own
+    # ledger never earned is filed nowhere.
+    verdicts = standing_verdicts(
+        [p for p in percepts if p.order_key is None],
+        prev_standing, prev_described)
     changed = []
     for p in percepts:
         if p.order_key is not None or is_landscape(p):
@@ -6458,6 +6656,8 @@ def _render_episode_english(percepts, *, prev_standing=frozenset(),
             if p.data.get("force") \
                     or str(p.data.get("source_key") or "") not in prev_described:
                 changed.append(p)
+        elif unheard_ceasing(p, verdicts.get(p.dedupe_key, "first")):
+            continue
         elif _files_as_memory(p) and p.dedupe_key not in prev_standing:
             # A pose that CHANGED is a real memory -- somebody knelt, or was
             # pinned. An unchanged one is furniture and the dedupe key keeps

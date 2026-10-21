@@ -117,6 +117,7 @@ from world.spatial import (
     scene_as_of,
     sound_field,
     sound_shape,
+    sound_fill,
     room_holds_a_standing_source,
     room_noise_word,
     room_still_sounding,
@@ -1571,19 +1572,44 @@ def _sleep_hears(ctx, sc, name, room, lines, *, events=(), prev_scene=None,
     a loud sound that REACHED them and stood out of the room. It was any
     loud or shouted line anywhere in the beat, so a shout in another
     building reached a sleeper's residue."""
+    woke, loud, _at = _sleep_hears_where(
+        ctx, sc, name, room, lines, events=events, prev_scene=prev_scene,
+        senses=senses, name_forms=name_forms)
+    return woke, loud
+
+
+def _sleep_hears_where(ctx, sc, name, room, lines, *, events=(),
+                       prev_scene=None, senses=None, name_forms=(),
+                       order=None):
+    """`_sleep_hears`, and WHERE in the beat the waking fell:
+    `(woke, loud, at)` (DESIGN_SOUND_FIELD § 17, round 2 lane C).
+
+    `order(kind, record)` places a line (`"line"`, its dialogue row) or a
+    one-beat sound (`"event"`, its record) in the beat -- the outcome pass's
+    `beat_events` index -- or answers None; a running thing that started
+    this beat has no place in it. With it, the sleeper wakes to the EARLIEST
+    placed sound that wakes them (their own name before a louder sound at
+    the same place), and `at` is that place: what they perceive from then
+    on is theirs, what came before it is not (`_composer_outcome_views`).
+    A beat that places none of what wakes them keeps § 13's choice -- the
+    name, else the loudest -- with `at` None, which the outcome reads as
+    "the remainder is the standing state alone": an unplaced waking cannot
+    say which of the beat's events came after it, and the firewall
+    subtracts. Without `order`, § 13's answer exactly."""
     from world.spatial import (AMBIENT_DB, WAKING_EMERGENCE_DB, db_of_power,
                                ear_cover_db, into_another_ear,
                                sense_acuity_offset, started_sources,
                                voice_at_ear_db, wakes_sleeper)
     if sense_acuity_offset(senses, "hearing") is None:
-        return "", False
+        return "", False, None
     field = _sound_field_for(ctx, sc, name, room, events=list(events) or None)
     placed = field is not None and field.locate(name, room) is not None
     steady = (db_of_power(field.noise_at(name, room=room)) if placed
               else AMBIENT_DB["enclosed"])
     cover = ear_cover_db(sc, name)
     # (level at the ear before the cover, kind, loud, the steady noise it
-    # stands out of -- a thing that started this beat is not its own room)
+    # stands out of -- a thing that started this beat is not its own room,
+    # what kind of record made it and the record, for `order`)
     heard = []
     for idx, event in enumerate(events or ()):
         if not isinstance(event, dict) or not placed:
@@ -1595,7 +1621,8 @@ def _sleep_hears(ctx, sc, name, room, lines, *, events=(), prev_scene=None,
         if power:
             heard.append((db_of_power(power), "noise",
                           str(event.get("level") or "").casefold()
-                          in _RESIDUE_LOUD_EVENT_LEVELS, steady))
+                          in _RESIDUE_LOUD_EVENT_LEVELS, steady,
+                          "event", event))
     if events:
         try:
             far = distant_sounds(
@@ -1606,7 +1633,8 @@ def _sleep_hears(ctx, sc, name, room, lines, *, events=(), prev_scene=None,
             far = []
         for record in far:
             try:
-                heard.append((float(record.get("db")), "noise", True, steady))
+                heard.append((float(record.get("db")), "noise", True, steady,
+                              "", None))
             except (TypeError, ValueError):
                 continue
     if prev_scene is not None and placed:
@@ -1615,8 +1643,9 @@ def _sleep_hears(ctx, sc, name, room, lines, *, events=(), prev_scene=None,
             if power:
                 heard.append((db_of_power(power), "noise", False,
                               db_of_power(field.noise_at(
-                                  name, exclude=(sid,), room=room))))
-    named = False
+                                  name, exclude=(sid,), room=room)),
+                              "", None))
+    named = []
     for entry in lines or ():
         if not isinstance(entry, dict):
             continue
@@ -1639,20 +1668,36 @@ def _sleep_hears(ctx, sc, name, room, lines, *, events=(), prev_scene=None,
         word = volume.strip().casefold()
         if level is not None:
             heard.append((level, "shout" if word == "shout" else "voice",
-                          word in ("loud", "shout"), steady))
-        if name_forms and not named and composer.own_name_said(body, name_forms) \
+                          word in ("loud", "shout"), steady, "line", entry))
+        if name_forms and composer.own_name_said(body, name_forms) \
                 and hear_level(rel, volume, level_db=entry.get("level_db"),
                                addressed=addressed) in ("fragment", "full"):
-            named = True
+            named.append(entry)
+    waking = [(level, kind, rk, rec) for level, kind, _loud, under, rk, rec
+              in heard if wakes_sleeper(level - cover, under - cover)]
+    if order is not None and (named or waking):
+        # THE EARLIEST PLACED WAKING: by its place in the beat, a name
+        # first at the same place, then the loudest.
+        candidates = []
+        for entry in named:
+            at = order("line", entry)
+            if at is not None:
+                candidates.append((at, 0, 0.0, "name"))
+        for level, kind, rk, rec in waking:
+            at = order(rk, rec) if rk else None
+            if at is not None:
+                candidates.append((at, 1, -float(level), kind))
+        if candidates:
+            first = min(candidates)
+            return first[3], False, first[0]
     if named:
-        return "name", False
-    waking = [(level, kind) for level, kind, _loud, under in heard
-              if wakes_sleeper(level - cover, under - cover)]
+        return "name", False, None
     if waking:
-        return max(waking)[1], False
+        return max((level, kind) for level, kind, _rk, _rec in waking)[1], \
+            False, None
     loud = any(is_loud and level >= under + WAKING_EMERGENCE_DB
-               for level, _kind, is_loud, under in heard)
-    return "", loud
+               for level, _kind, is_loud, under, _rk, _rec in heard)
+    return "", loud, None
 
 
 def _reaches_this_ear(sc, name, room, field, events, event) -> bool:
@@ -5984,7 +6029,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 prune_appearance=False,
                                 self_forms=(), self_pronouns=None,
                                 sound=None, prev_standing=frozenset(),
-                                regions=None):
+                                regions=None, prev_scene=None):
     """The standing-state half of one observer's IR: environment, presence,
     first-mention/changed appearances, own body state, standing contact
     sensations, bare body regions. Every admission is a subtraction --
@@ -6008,7 +6053,13 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
 
     `regions` is the frame's region registry (`_far_regions`): the far
     layer's outline look for a place with none of its own, and the region
-    names its floor withholds."""
+    names its floor withholds.
+
+    `prev_scene` is the world as it stood before the beat, where the caller
+    holds it (the outcome pass): read for one thing only, what the weather
+    sounded like then, so its stopping can name what fell
+    (`composer.weather_sound_percepts`). Absent, the record's own name
+    stands."""
     percepts = []
     room = p.get("room")
     via_names = {}
@@ -6033,7 +6084,16 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         percepts.append(env)
     if room:
         soundscape = composer.soundscape_percept(
-            sound_shape(sc, name, sound=sound, room=room, sweep=sweep), room)
+            sound_shape(sc, name, sound=sound, room=room, sweep=sweep)
+            # AN EVEN ROOM'S STEADY SOUND (DESIGN_SOUND_FIELD § 17): the
+            # shape speaks only for an uneven room, and a clock in a quiet
+            # study or a generator in a small room had no percept at all --
+            # it could not start, fade or stop for anyone. `sound_fill` is
+            # the rest of the class, under the same `soundscape` subject,
+            # so the ceased branch below and the habituation read one
+            # ledger for both.
+            or sound_fill(sc, name, sound=sound, room=room, sweep=sweep),
+            room)
         if soundscape:
             percepts.append(soundscape)
         elif (_was_hearing_this_room(prev_standing, room)
@@ -6101,13 +6161,22 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # freezing thundersnow gale was told the room was dim and loud and never
     # that it was snowing. Asked per BODY, not per room, because a canopy in an
     # open square is between THIS body and the sky (`weather.exposure_at`).
-    # Hearing is deliberately absent: `spatial_sound_field` already folds rain
-    # and wind into the soundscape, and one fact with two voices can only
-    # disagree with itself.
+    # HEARING, since round 2 (DESIGN_SOUND_FIELD § 17): the weather's sound
+    # was folded into the field's FLOOR alone, which masks and is never
+    # told, so no mind was ever told it was raining by ear, and none could
+    # be told it stopped. `weather_sound_percepts` is the telling -- the
+    # precipitation this room hears, at the audibility the sound bed reads
+    # (`weather_for_room`), and the wind at the ear -- keyed like the
+    # soundscape, so it starts, fades and stops as one; the floor's level
+    # is untouched (the owner's rain ruling: rain never masks a line).
     if room:
         from world.weather import weather_for_room
-        percepts.extend(composer.weather_percepts(
-            weather_for_room(sc, room, name)))
+        reach = weather_for_room(sc, room, name)
+        percepts.extend(composer.weather_percepts(reach))
+        percepts.extend(composer.weather_sound_percepts(
+            reach, room, prev_standing=prev_standing,
+            before=(weather_for_room(prev_scene, room, name)
+                    if prev_scene else None)))
         # WHAT LIES FAR OFF (`world/landscape`, UNBUILT_WORLD §2.40): the
         # places past the next room a body sees from open air, a window or a
         # height, at the grain distance leaves them -- places, never people,
@@ -7711,6 +7780,56 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     _now_sounds = [e for e in beat_sounds if e.get("_at") not in _sound_moments]
     _then_sounds = [e for e in beat_sounds if e.get("_at") in _sound_moments]
 
+    def _beat_position(kind, record):
+        """WHERE IN THE BEAT a line or a placed sound falls -- its index in
+        `beat_events` -- or None (DESIGN_SOUND_FIELD § 17, the woken beat).
+        A line is found by its dialogue row (the stream binds the row
+        itself, or a copy of it with the same speaker and words); a sound
+        tied to its moment (`_at`, the resolve step it came from) by the
+        stream entry resolved in that step (`causal_span`). An unplaced
+        sound -- a door, a tread, a charter noise, an event with no step --
+        has no place, and a reader that needs one subtracts."""
+        if kind == "line" and isinstance(record, dict):
+            speaker = str(record.get("speaker") or "").strip()
+            words = str(record.get("exact_quote") or "")
+            for index, event in enumerate(beat_events):
+                if event.get("kind") != "speech":
+                    continue
+                entry = event.get("entry") or {}
+                if entry is record or (
+                        str(entry.get("speaker") or "").strip() == speaker
+                        and str(entry.get("exact_quote") or "") == words):
+                    return index
+            return None
+        if kind == "event" and isinstance(record, dict):
+            at = record.get("_at")
+            if at is None or str(at) not in _sound_moments:
+                return None
+            for index, event in enumerate(beat_events):
+                span = event.get("causal_span")
+                if (isinstance(span, (list, tuple)) and len(span) == 2
+                        and str(span[0]) == "resolve"
+                        and str(span[1]) == str(at)):
+                    return index
+            return None
+        return None
+
+    def _step_index_of(at_index):
+        """The index among the beat's causal worlds (`_step_worlds`) of the
+        step `beat_events[at_index]` was resolved in, or None -- the clock
+        the arrival steps (`_arrival_step`) are read on."""
+        if at_index is None or not (0 <= at_index < len(beat_events)):
+            return None
+        span = (beat_events[at_index] or {}).get("causal_span")
+        if not (isinstance(span, (list, tuple)) and len(span) == 2):
+            return None
+        for index, world in enumerate(_step_worlds):
+            if (isinstance(world, dict)
+                    and str(world.get("stage") or "") == str(span[0])
+                    and str(world.get("chrono_id")) == str(span[1])):
+                return index
+        return None
+
     # The complete set of lines actually spoken this beat (the invented-
     # dialogue tripwire's ground truth).
     spoken_lines = list(player_speech_lines(interp))
@@ -7930,6 +8049,18 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         seen_bodies = set()
         display_map = {}
         prev_standing, prev_described = _composer_prev_state(base_ledger, pid)
+        # THE WOKEN BEAT (DESIGN_SOUND_FIELD § 17). `wake_at` is None for an
+        # awake mind (the whole beat is theirs) and, for a sleeper a sound
+        # woke this beat, the `beat_events` index of what woke them: they
+        # perceive what came AFTER it as an awake mind would -- the room
+        # they wake in, who is there, what is said -- and nothing from
+        # before, which happened while they slept. A waking the beat cannot
+        # place (`_beat_position` None) is read as the end of the beat: the
+        # standing state alone, since no event can be said to have followed
+        # it. The ledger is empty for them: a mind that just woke has no
+        # record, and the world arrives as background, never as a claim
+        # that any of it just moved (`standing_verdicts`).
+        wake_at, wake_step, woke_percept = None, None, None
         if p.get("awareness") in NON_AWAKE_GATED:
             name_cf = name.casefold()
             targeted = any(
@@ -7939,16 +8070,18 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             pain = any(w in cause for w in _ling("_PAIN_CUES"))
             # WHAT REACHED THIS MIND'S EAR, AND WHETHER IT WOKE THEM
             # (DESIGN_SOUND_FIELD § 13, `_sleep_hears`). A sleeper the sound
-            # wakes is told what woke them and nothing else; the commit ends
-            # their sleep (`woken`), and from the next beat they perceive as
-            # anyone awake does. A sedated or unconscious mind is not woken
-            # by a sound, and keeps the residue's intrusion where a loud one
+            # wakes is told what woke them, then the rest of the beat from
+            # that moment on (§ 17, below); the commit ends their sleep
+            # (`woken`), and from the next beat they perceive as anyone
+            # awake does. A sedated or unconscious mind is not woken by a
+            # sound, and keeps the residue's intrusion where a loud one
             # reached it.
-            woke, loud_event = _sleep_hears(
+            woke, loud_event, woke_at = _sleep_hears_where(
                 ctx, sc, name, p.get("room"), enriched_dlog,
                 events=beat_sounds, prev_scene=prev_scene,
                 senses=p.get("sense_card"),
-                name_forms=_own_name_forms(ctx, name))
+                name_forms=_own_name_forms(ctx, name),
+                order=_beat_position)
             if woke and not (p["awareness"] == "asleep"
                              and _asleep_when_the_beat_began(chat["id"], name)):
                 woke = ""
@@ -7968,7 +8101,29 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 p["awareness"], targeted=targeted, loud_event=loud_event,
                 pain=pain, woke=woke)
             company[pid] = []       # an unconscious observer sees nobody
-        else:
+            if woke:
+                woke_percept = percepts[0]
+                wake_at = woke_at if woke_at is not None else len(beat_events)
+                wake_step = _step_index_of(wake_at)
+                prev_standing = frozenset()
+                note_step_decision(
+                    "sleep", name, "remainder",
+                    "the woken mind perceives the beat from %s on"
+                    % ("event %d" % wake_at if woke_at is not None
+                       else "its end (the waking is unplaced)"))
+        if woke_percept is not None or p.get("awareness") not in NON_AWAKE_GATED:
+            # What of the beat's one-beat sounds is this mind's: all of them
+            # for an awake mind; for a woken one, only those the beat places
+            # after the waking (an unplaced sound has no moment to be after).
+            if wake_at is None:
+                _my_now, _my_then = _now_sounds, _then_sounds
+            else:
+                _my_now = []
+                _my_then = [
+                    e for e in _then_sounds
+                    if (lambda at: at is not None and at > wake_at)(
+                        _beat_position("event", e))]
+            _my_sounds = beat_sounds if wake_at is None else list(_my_then)
             others = [b for b in bodies
                       if not _is_the_observer(sc, b["name"], name)]
             # A SWEEP IS A SWEEP FOR WHOEVER MADE IT: the player's full
@@ -8030,21 +8185,27 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"),
                 sound=field, prev_standing=prev_standing,
+                prev_scene=prev_scene,
                 regions=regions)
+            if woke_percept is not None:
+                # The waking leads the woken mind's view and episode
+                # (`composer.render_view`, `render_episode`: the residue's
+                # `woke` sentence, then the remainder).
+                percepts.insert(0, woke_percept)
             # SOUND ARRIVES AFTER WHAT MADE IT (wave B2): a sound whose
             # maker this observer SEES far enough off is held back here and
             # told after the act it was seen doing, below, once the beat's
             # events have their places (`_sounds_after_sight`).
             _after_sight = {id(event): (after, source) for event, after, source
-                            in _sounds_after_sight(sc, name, _now_sounds)}
+                            in _sounds_after_sight(sc, name, _my_now)}
             _held_sounds = []
-            if beat_sounds:
+            if _my_sounds:
                 # WHERE IT HAPPENED, and then everywhere else it reached.
                 # A signal is received whole only in its own room, so that
                 # room's observers get the authored detail through the same
                 # admission gate the establish stage uses...
                 _here_sounds = [
-                    e for e in _now_sounds
+                    e for e in _my_now
                     # A walker's own footfalls are no news to the walker,
                     # and a walker in plain view is seen walking, not
                     # heard: the tread reaches whoever cannot see them.
@@ -8086,12 +8247,12 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 # `ambient_percepts`' own-room admission takes it; the gate
                 # still scrubs the text.
                 afar = heard_events(
-                    sc, name, _now_sounds, room=p.get("room"),
+                    sc, name, _my_now, room=p.get("room"),
                     turn_idx=getattr(ctx.turn, "idx", None),
                     crowds=ctx.get("_sound_crowds"))
                 # A sound tied to its moment is graded in that moment's world,
                 # from where this listener stood then (see `_sound_moments`).
-                for _sound in _then_sounds:
+                for _sound in _my_then:
                     _then = _sound_moments[_sound["_at"]]
                     _there = room_of(_then, name) or p.get("room")
                     if str(_sound.get("room") or "") == str(_there or ""):
@@ -8127,12 +8288,12 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         turn_idx=getattr(ctx.turn, "idx", None),
                         near_rooms=(field.grid.offsets if field else ()),
                         crowds=ctx.get("_sound_crowds"),
-                        events=_now_sounds)))
+                        events=_my_now)))
             # LOUD SOUND IS FELT (wave B2): the beat's blows -- a sound tied
             # to its moment included -- and the steady trembling of what
             # runs, on the touch channel, whatever this body can hear.
             percepts.extend(_felt_percepts_for(ctx, sc, name, p.get("room"),
-                                               beat_sounds))
+                                               _my_sounds))
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(
@@ -8231,6 +8392,13 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     then, _observer, counterparty)
 
             for at_index, beat_event in enumerate(beat_events):
+                if wake_at is not None and at_index <= wake_at:
+                    # BEFORE THE WAKING, OR THE WAKING ITSELF (§ 17): what
+                    # woke them is told by the residue, without its words;
+                    # what came before it happened while they slept. The
+                    # tells placed here go with it.
+                    order += 1
+                    continue
                 for _giver, _cue in cue_slots.get(at_index, ()):
                     # A TELL IS PLACED WHERE IT SHOWED ONLY IF IT COULD BE SEEN
                     # THERE. It was admitted on the end-of-beat relation
@@ -8557,6 +8725,16 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     continue
                 if p.get("room") not in (from_room, to_room):
                     continue
+                if wake_at is not None:
+                    # A BODY THAT WAS THERE WHEN YOU WOKE DID NOT COME IN
+                    # (§ 17): only a crossing the beat's steps place after
+                    # the waking step is the woken mind's to have seen;
+                    # with no step on either side, it is who is there
+                    # (the presence percepts), not an arrival.
+                    _theirs = _arrival_step(mover, to_room)
+                    if wake_step is None or _theirs is None \
+                            or _theirs <= wake_step:
+                        continue
                 if _own_from and _own_from != to_room \
                         and p.get("room") == to_room and from_room != to_room:
                     _mine = _arrival_step(name, to_room)
@@ -8581,7 +8759,12 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 percepts.append(composer.crossing_percept(
                     mover, label, direction, order_key=order))
                 order += 1
-            for event in substance_events or []:
+            # A substance event and an unplaced tell have no moment in the
+            # beat; a woken mind, which has only the moments after its
+            # waking, gets neither (§ 17) -- the demeanor, a standing look,
+            # it still gets.
+            for event in ([] if wake_at is not None
+                          else (substance_events or [])):
                 if not isinstance(event, dict) or event.get("op") != "add":
                     continue
                 percept = composer.substance_percept(
@@ -8591,7 +8774,11 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     percepts.append(percept)
                     order += 1
             minted, order = _manifest_percepts(
-                sc, unplaced_manifest, name, display_map, recognized,
+                sc, (unplaced_manifest if wake_at is None else {
+                    _s: {_k: _v for _k, _v in _e.items() if _k != "cues"}
+                    for _s, _e in (unplaced_manifest or {}).items()
+                    if isinstance(_e, dict)}),
+                name, display_map, recognized,
                 unknown, order, sense_card=p.get("sense_card"))
             percepts.extend(minted)
             company[pid] = _composer_company(others, display_map, percepts)

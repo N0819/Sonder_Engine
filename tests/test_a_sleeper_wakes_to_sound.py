@@ -154,7 +154,10 @@ def test_a_shout_across_the_room_wakes_her_and_a_conversation_does_not(temp_db):
     out = _outcome(ctx, [_line("Everyone out, the roof is coming in!",
                                "shout", target=None)])
     view = out["views"]["player"]
-    assert view == "A shout tears through your sleep. You are awake."
+    # The waking leads; since round 2 the rest of the beat follows it
+    # (tests/test_a_woken_sleeper_perceives_the_rest_of_the_beat.py).
+    assert view.startswith("A shout tears through your sleep. You are awake.")
+    assert "roof" not in view               # not a word of what woke her
     assert out.get("woken") == {"Hinami": {"by": "shout"}}
 
     ctx, _chat = _make_ctx(temp_db)
@@ -169,7 +172,9 @@ def test_a_voice_at_the_bedside_wakes_the_sleeper(temp_db):
     ctx, _chat = _make_ctx(temp_db, moon_cell=(2, 1))
     out = _outcome(ctx, [_line("The coffee's ready.", target=None)])
     assert out.get("woken") == {"Hinami": {"by": "voice"}}
-    assert out["views"]["player"].endswith("You are awake.")
+    assert out["views"]["player"].startswith(
+        "A voice reaches down into your sleep and draws you up. You are awake.")
+    assert "coffee" not in out["views"]["player"]
 
 
 # --- 2. their own name ------------------------------------------------------
@@ -183,11 +188,13 @@ def test_their_own_name_across_the_room_wakes_them(temp_db):
     out = _outcome(ctx, [_line("Hinami, the car is here.")])
     assert out.get("woken") == {"Hinami": {"by": "name"}}
     view = out["views"]["player"]
-    assert view == ("Someone says your name, and it pulls you up out of "
-                    "sleep. You are awake.")
-    # The firewall: what woke them, and not one word of the line or who.
-    for word in ("car", "Moon", "here"):
-        assert word not in view
+    assert view.startswith("Someone says your name, and it pulls you up out "
+                           "of sleep. You are awake.")
+    # The firewall: what woke them, and not one word of the line. Who is in
+    # the room reaches them since round 2 -- they are awake now and he is
+    # standing there -- but not as the line's speaker.
+    assert "car" not in view
+    assert "says" not in view.split("You are awake.", 1)[1]
 
     ctx, _chat = _make_ctx(temp_db)
     out = _outcome(ctx, [_line("Hinami is asleep, let her be.", "whisper",

@@ -1161,11 +1161,27 @@ def weather_words(scoped, channel="sight"):
             words.append("%s blowing" % scoped["wind"])
         return words
 
+    grouped = weather_sound_words(scoped)
+    return [*grouped["precipitation"], *grouped["thunder"], *grouped["wind"]]
+
+
+def weather_sound_words(scoped):
+    """`weather_words(scoped, "sound")`, by WHICH sound each word is of:
+    `{"precipitation": [...], "thunder": [...], "wind": [...]}`, every list
+    empty where that sound does not reach the room. The three are three
+    standing hearing percepts in a mind's view (`composer.
+    weather_sound_percepts`, `composer.weather_percepts`' thunder), each
+    with its own ledger key, and the narrator's manifest joins each word to
+    its percept's verdict by this grouping (DESIGN_SOUND_FIELD § 17)."""
+    out = {"precipitation": [], "thunder": [], "wind": []}
+    if not scoped:
+        return out
     # Sound. The noun leads, because a search query is ranked on its terms and
     # "rain" is the one that has to survive any truncation downstream. The
     # muffling word matters as much as the intensity: "muffled rain" and "heavy
     # rain" are different RECORDINGS, not the same recording at two volumes,
     # and a library has both.
+    words = out["precipitation"]
     if scoped.get("audible"):
         if scoped.get("muffling"):
             words.append("%s %s" % (scoped["muffling"], scoped["precipitation"]))
@@ -1183,10 +1199,10 @@ def weather_words(scoped, channel="sight"):
     # point of thunder: it gets in where the weather does not.
     muffling = thunder_heard(scoped)
     if muffling is not None:
-        words.append(_thunder_words(muffling))
+        out["thunder"].append(_thunder_words(muffling))
     if scoped.get("wind_reaches"):
-        words.append(scoped["wind"])
-    return words
+        out["wind"].append(scoped["wind"])
+    return out
 
 
 # --- deterministic drift ---------------------------------------------------

@@ -940,7 +940,7 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         scoped = weather_for_room(scene, p_room) or {}
     except Exception:
         scoped = {}
-    hearing_standing = [_entry(word) for word in weather_words(scoped, "sound")]
+    hearing_standing = _weather_hearing_entries(scoped, p_room, _entry)
     if scoped.get("falls_on_you"):
         touch_standing.append(_entry(
             "%s %s falling on you"
@@ -1021,6 +1021,43 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         if include_delivery_text:
             manifest["mixed"]["this_beat"] = by_channel["mixed"]
     return manifest
+
+
+def _weather_hearing_entries(scoped, p_room, entry):
+    """The manifest's standing HEARING entries: the sound bed's own words
+    for this room's weather (`weather.weather_sound_words`), each carrying
+    the player's ledger verdict on the percept the view minted for that
+    sound (DESIGN_SOUND_FIELD § 17) -- the precipitation on the
+    weather-sound key, the wind on its own, thunder on the storm's
+    (`composer.weather_sound_percepts`, `composer.weather_percepts`).
+
+    Until round 2 these words were re-derived every beat with no key, so
+    steady rain reached the narrator as news on every beat of a storm --
+    the B28 defect one channel over. The join is the composer's own key,
+    minted here from the same `weather_for_room` answer the words come
+    from; where the player's view was composed under a cover the room does
+    not share (`weather.exposure_at`, a canopy), the keys differ and the
+    entry ships with no verdict, which reads as "not computed", never as
+    "new"."""
+    from world.weather import weather_sound_words
+    grouped = weather_sound_words(scoped)
+    if not any(grouped.values()):
+        return []
+    keys = {}
+    for percept in composer.weather_sound_percepts(scoped, p_room):
+        if (percept.data or {}).get("ceased"):
+            continue
+        keys[str(percept.dedupe_key).split(":", 1)[0]] = percept.dedupe_key
+    for percept in composer.weather_percepts(scoped):
+        if percept.channel == "hearing":
+            keys["thunder"] = percept.dedupe_key
+    out = []
+    for group, tag in (("precipitation", composer.WEATHER_SOUND_TAG),
+                       ("thunder", "thunder"),
+                       ("wind", composer.WIND_SOUND_TAG)):
+        for word in grouped[group]:
+            out.append(entry(word, keys.get(tag)))
+    return out
 
 
 def _presence_room_of(ctx, scene, name, reaction=None):

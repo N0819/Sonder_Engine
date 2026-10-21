@@ -2796,3 +2796,251 @@ is the owner's.
    buried storey; a cellar hears the clap.
 8. **A far sound is still standing state** (`distant_sound_percepts`); the
    near field's are the beat's now.
+
+## 17. Round 2, lane C: the woken beat, the rain that stops, the sound remembered (2026-10-20)
+
+The owner, on § 13.7's list: build items 5, 12 and 13. Two standing rulings
+bound the lane: "memory is the priority -- the goal is GOOD memory, never
+realistic forgetting" (2026-09-26), and "no placeholder answers" (a view
+never says nothing can be made out). Three classes, each verified against
+what existed first and built failing-first
+(`tests/test_a_woken_sleeper_perceives_the_rest_of_the_beat.py`,
+`tests/test_the_rain_has_stopped.py`,
+`tests/test_a_steady_sound_is_remembered.py`); scripts in the lane
+directory (`replay_woken.py`, `measure_rain.py`, `measure_sound_memory.py`),
+all offline, every socket refused, the owner's `engine.db` read `mode=ro`
+and the four 2026-09-26 stories on copies.
+
+### 17.1 A woken sleeper perceives the rest of the beat (item 5)
+
+**Verified first.** The outcome pass (`perception._composer_outcome_views`)
+reads the beat as ONE ordered stream, `beat_events` (`_outcome_event_stream`:
+the declarations bound to their dialogue rows and acts, in the world's own
+order where the beat is causal -- each entry carrying the resolve step it
+was resolved in as `causal_span`), and the beat's one-beat sounds beside it:
+a sound tied to its moment (`from_event`, the resolve step's `chrono_id`)
+in `_then_sounds`, graded in that moment's world; an unplaced one in
+`_now_sounds`. For a sleeper the pass built the residue and nothing else:
+`_sleep_hears` answered what woke them and not WHERE in the beat, and the
+view was the residue's `woke` sentence alone. Replayed on chat 40 turn 11
+at HEAD: "Someone says your name, and it pulls you up out of sleep. You are
+awake." -- and Tamamo's three lines after "Good morning, Hinami.", the
+roost, the nest, the woman at arm's reach, reached Hinami on the next beat.
+
+**The class.** From the waking moment on, the woken mind perceives as an
+awake mind does -- the room they wake in, who is there, what is said after
+the waking sound -- and nothing from before it: what happened while they
+slept is not theirs. The firewall is the order of the beat, read off the
+beat's own record and never guessed; where the record cannot place the
+waking, it subtracts.
+
+**As built.**
+
+* `_sleep_hears_where(..., order=)`: `_sleep_hears` with its place. `order`
+  puts a line (its dialogue row) or a placed sound (its resolve step) at
+  its `beat_events` index; the sleeper wakes to the EARLIEST placed sound
+  that wakes them -- their own name first at the same place, then the
+  loudest -- and `at` is that index. A beat that places none of what wakes
+  them keeps § 13's choice (the name, else the loudest) with no place.
+  `_sleep_hears` is the same function with the place dropped, so the act
+  stage and every measuring script read what they read.
+* The outcome pass (`_beat_position`, `_step_index_of`, `wake_at`,
+  `wake_step`): a woken mind runs the AWAKE branch with `wake_at` set, and
+  every reader keyed on it subtracts -- the event loop skips every stream
+  index up to and including the waking (the tells placed there with it);
+  the unplaced sounds (`_now_sounds`) are dropped whole and the placed ones
+  kept only after the waking; a crossing is theirs only where the beat's
+  steps put the mover's arrival after the waking step (a body there when
+  you woke did not come in); substance events and unplaced tells never;
+  the demeanor, a standing look, stays. The ledger is EMPTY for them
+  (`standing_verdicts`' own case: "a mind that just woke"), so the world
+  arrives as background and the lines after the waking lead. An unplaced
+  waking -- a sound with no resolve step, a thing that started this beat --
+  is read as the END of the beat: the standing state alone, since no event
+  can be said to have followed it.
+* The residue percept rides the list; both renderers lead with its `woke`
+  sentence (the beat's, `as_beat`: `change` to the narrator, never
+  wallpaper) and render the remainder as the tier renders it; the ledger
+  files the room, not the residue. Both episode renderers file the waking
+  in the first person and the remainder as any awake mind's. The commit is
+  unchanged: `woken` is handed on as before.
+* The waking line's own words stay out, by ruling: the residue tells the
+  waking without them.
+
+**Measured.** The corpus holds one waking (chat 40 t11; 128 beats began
+with a body under, § 13.6). Replayed offline through the real
+`perception_outcome` on a copy with checkpoint 11 restored: before, the
+woke sentence alone; after, the woke sentence (the beat's), then "You seem
+to have shaken off that chill." / "Or was my nest simply too comfortable to
+leave?" / "Tell me what brought you here so cold last night." as heard
+events, the woman within arm's reach, the roost, her own state
+(`awake_observing_in_nest`) and seven contacts -- 3 lines, 1 body, 1 room
+gained; "Good morning, Hinami." kept out. The composer tripwire on
+"Tamamo" in that view is pre-existing: the room is named "Tamamo's Roost"
+and Hinami has no `known` entry for her, and the same tripwire fires at
+HEAD on turn 7 with her awake.
+
+### 17.2 "The rain has stopped" (item 13)
+
+**Verified first.** The weather's sound entered the engine in one place:
+the field's floor (`WEATHER_NOISE`, `WIND_NOISE`), which masks and is never
+told. `composer.weather_percepts` minted sight and touch and said in its
+docstring that hearing was deliberately absent, "one fact with two voices";
+the narrator's manifest re-derived `weather_words(scoped, "sound")` every
+beat with no key, so steady rain reached the page as news on every beat of
+a storm (B28's defect, one channel over). An even room's steady source had
+no percept: `sound_shape` rule (a).
+
+**The class.** The weather's sound is a steady sound like the room's own:
+told when it starts and when it changes, faded between, its stopping told
+once by what the observer's ledger held -- for every tier -- and the
+narrator's manifest entry carries that verdict. Indoors it is what REACHES
+the room, by the one audibility the sound bed already reads; a newcomer
+hears the room as it is. An even room's steady source is the rest of
+§ 13.4's class, under the same subject. Telling only: the floor's level
+is untouched, and the owner's rain ruling stands (rain never masks a line;
+`test_the_rain_never_masks_a_line`).
+
+**As built.**
+
+* `composer.weather_sound_percepts(reach, room_id, prev_standing=,
+  before=)`: two standing hearing percepts under the ROOM as subject, in
+  `HABITUATING_SOUND_TAGS` -- the precipitation (`WEATHER_SOUND_TAG`,
+  keyed by its name, intensity, muffling and exposure: "The sound of the
+  rain is all around you." under the sky; "You can hear the rain on the
+  cover over you." sheltered; "Through the walls, you can hear the rain,
+  muffled." / "Faintly, from beyond the walls, ..." by `weather_for_room`'s
+  muffling) and the wind at the ear (`WIND_SOUND_TAG`, by `wind_reaches`:
+  "The gale is loud in your ears."). Their STOPPING: where the ledger holds
+  the subject and nothing is heard now (`_was_hearing`, the soundscape's
+  own subject test), a `ceased` percept under the same subject with its own
+  sentence -- "The rain has stopped."; through a wall, "The sound of the
+  rain from beyond the walls has stopped." (honest where the rain eased
+  below the wall's reach); "The wind has dropped." -- named from the
+  previous scene where the outcome pass hands it (`prev_scene`, a new
+  `_composer_standing_percepts` argument), else the record's own name (a
+  sky keeps its fall's name through a dry spell, `advance_weather`), else
+  the class. A body that walked out of earshot holds another room's key
+  and notices no stop; a newcomer's percept is `first`, in the background.
+  The names are the story's own, spliced as written (a Japanese record says
+  雨), and the sentence is minted in the active pack (`_t`), so a Japanese
+  turn carries Japanese. The light/heavy word is not doubled on a record
+  whose name already carries it ("light snow").
+* `spatial_sound_field.sound_fill`: an even room (its cells agree on one
+  noise word) whose standing source this observer HEARS, named as
+  `sound_shape` rule (c) names it (`_heard_standing_sources`, shared), as
+  the shape vocabulary with `even: word`; `soundscape_percept` keys it under
+  the `soundscape` subject, so the ceased branch, habituation and memory
+  read one ledger for both; `render_sound_shape` and the Japanese adapter
+  say it as the room's one level ("The noise from the clock can be heard
+  all through the room, low enough to talk over." / "... fills the whole
+  room as a din; you would have to raise your voice over it." / "...
+  drowns everything in the room."); `_shape_signature` appends the word
+  only when there is one, so every uneven shape keeps its stored key.
+  `sound_shape`'s rule (a) is untouched and the Director's digest reads
+  it as before. ONE BEHAVIOUR CHANGED: a source that gentles with the room
+  still even at `quiet` (chat 157's rotor) was told "The noise has died
+  down."; it is now told the room's new level as a `changed` sound, never
+  a stop (`tests/test_sound_that_stopped.py`, the case rewritten); the
+  generic sentence survives for an even room whose source the observer has
+  no channel to.
+* `narration._weather_hearing_entries` with `weather.weather_sound_words`:
+  the sound bed's words for the room, grouped by which sound each is of
+  (precipitation, thunder, wind), each entry carrying the player's ledger
+  verdict on the percept the view minted for it, by the composer's own key.
+  `weather_words(scoped, "sound")` is the concatenation, byte-identical.
+
+**Measured** (`measure_rain.py`, every checkpoint scene, every body the
+scene places): 10,738 body-beats, 2,319 under a sky; **686 beats heard the
+weather**, of which **535 are steady** (now faded from the view, keyed and
+filed), 89 changed, 16 began where the body already stood (the beat's news:
+"The sound of the light drizzle is all around you.", chat 57 t20, the
+Doctor and Hinami in the alley), 80 were a newcomer's background; **12
+stops told** ("The snow has stopped." and "The wind has dropped.", chat 46
+t3, the snowy clearing; "The sound of the drizzle from beyond the walls has
+stopped.", chat 58 t29, three minds in the TARDIS console room; the
+infirmary's light snow, the betrayal stories t15; the rehearsal room's rain,
+rival t10). The player's manifest: 114 beats carried weather-sound words,
+**77 of them steady** -- re-told with no verdict before, `unchanged` now --
+2 starts where the player stood, 2 stops told. Even rooms: see § 17.3's
+count.
+
+### 17.3 A steady sound's start and stop are remembered (item 12)
+
+**Verified first.** `_EPISODE_SOUND_TAGS` was `("ambient",
+"distant_sound")`: a beat's own sound and a far one, filed on the beat they
+are heard. The room's soundscape, a crowd's hum and (now) the weather's
+sound are keyed by their state and in no memory at all; the Japanese
+episode had `not prefix` guards on the soundscape and its stop, so it filed
+neither in any case.
+
+**The class.** A steady sound is a memory on the beat it begins, the beat
+it changes and the beat it stops -- once each -- and on no other beat: its
+key is in the ledger between, where the view has habituated and memory
+files nothing. A stop the mind never heard is no memory.
+
+**As built.** `_EPISODE_SOUND_TAGS` carries `HABITUATING_SOUND_TAGS`;
+`_render_episode_english` and the Japanese `_render_episode` compute the
+view's own `standing_verdicts` and drop an `unheard_ceasing` percept; the
+Japanese `_sentence` renders the soundscape and its stop in the episode
+too. THE LINE carries the sound's character: the view's own sentence in
+the first person -- the named sources and the level, where this body stood
+in an uneven room, the one word of an even one, "The rain has stopped." --
+nothing numeric. THE CLOCK is the row's: `commit_memory` stamps every
+memory with `encoded_at_seconds` and the turn, so "the generator stopped
+some time in the night" is the recall layer's reading of the row
+(`memory_time`), never a word in the line.
+
+**Measured** (`measure_sound_memory.py`, every cast character on every
+checkpoint scene, the standing builder run with the character's own
+previous keys): 4,806 character-beats, **323 with a
+steady sound** in the character's view (120 of them an even room's -- the
+Doctor on chat 122's tide strand, "The noise from Ocean Surf can be heard
+all through the room, low enough to talk over.", which had no percept at
+all before). The filing would add **108 memory lines**: 63 starts (28 the
+weather's -- "The sound of the light rain is all around you.", Lilaeve in
+chat 45's market; 25 the room's; 10 the wind's), 25 changes (12 weather,
+13 soundscape) and **20 stops** (8 the weather's -- the drizzle beyond the
+TARDIS's walls, chat 58 t29, for the Doctor and a Dalek; 12 the room's,
+mostly ONE beat -- a sound on the moonlit beach at t2 -- repeated across
+chats 150-159, which are copies of one story; Mellisande in chat 176's
+kitchen). **194 steady beats file nothing**: the view has habituated and
+the key is in the ledger. An upper bound: a line lands only on a beat
+whose episode is minted for that mind.
+
+### 17.4 Guards and clauses
+
+No prompt text was touched and no new guard reads free prose. The floors
+added are typed-order floors: the woken mind's subtraction keyed on
+`wake_at`/`wake_step` (an unplaced waking subtracts to the standing state),
+and the `unheard_ceasing` filter on the episode. `sound_fill` and
+`weather_sound_percepts` are readers, not guards.
+
+### 17.5 The owner's questions, and what is left
+
+1. **The waking line's words stay out.** A name-bearing line wakes by its
+   name and the residue tells the waking; the end of the sentence ("..., the
+   car is here") is not caught. Whether a sleeper should catch the tail of
+   the line that woke them is the owner's.
+2. **An unplaced waking gives the standing state alone.** A Director event
+   with no `from_event`, a door, a tread, a charter noise, a thing that
+   started this beat: the woken mind gets the room and the company and none
+   of the beat's lines. The alternative -- reading an unplaced waking as
+   the beat's start -- would hand them a line said while they slept, and
+   the firewall subtracts. The lever is upstream: every encoded sensory
+   event carrying its step.
+3. **Indoors, a rain that eases below a wall's reach is told as its sound
+   stopping**, which is what the room hears; "eased" would need the
+   previous level, which only the outcome pass holds.
+4. **The gentled source is told as its new level, not as "died down"**
+   (§ 17.2); the generic sentence survives where no source is named.
+5. **The manifest's key is the room's reach**: a player under a canopy the
+   room does not share ships the entry with no verdict (not computed).
+6. **A soundscape memory names where one stood** ("I am in the din at the
+   shelf"): the sound sentence is the memory line, by design; a shorter
+   sound-only line is a wording question for the owner.
+7. **Found, not touched**: `weather_percepts`' sight and touch sentences
+   are minted through the English templates (`_en`) and reach a Japanese
+   view in English, and double the intensity word on a record whose name
+   carries it ("light light snow is landing on you") -- registered in
+   UNBUILT_PERCEPTION § 2.36.

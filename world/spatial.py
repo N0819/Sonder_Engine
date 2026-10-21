@@ -360,6 +360,8 @@ from world.spatial_sound_field import (
     room_holds_a_standing_source, room_still_sounding, STANDING_SOURCE_KINDS,
     quantise_hearing, sound_field, sound_notices,
     sound_passes, sound_shape, sound_sources, SOUND_LEVELS, SOUND_POWER,
+    # An even room's steady sound (round 2 lane C, 2026-10-20).
+    sound_fill,
     # An impact is not a voice and is not a machine (2026-09-06).
     EVENT_DB, EVENT_POWER,
     # A room a sound has nowhere to go but along (2026-09-06).
