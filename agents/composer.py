@@ -115,6 +115,7 @@ from .common import (
     _fix_you_agreement,
     _self_second_person,
     _unknown_actor_label,
+    stranger_label_ladder,
 )
 
 
@@ -325,36 +326,22 @@ def _subject_prefix(dedupe_key):
 _LABEL_DANGLING = frozenset(_ENGLISH_COMPOSITOR["label_dangling"])
 
 
-def _descriptor_words(name, appearance, aliases=None, role="", *,
-                      surface=None):
-    """The full name-stripped content word list of an appearance summary --
-    the raw material a stranger label is cut from.
+def _descriptor_words(surface):
+    """The words a structured SURFACE's label widens through when two
+    strangers collide on it (`charter_surface.surface_words`): words in
+    axis order, none of them a name. [] for no surface, or one with
+    nothing to show.
 
-    `role` is exempt from the strip for the reason `_unknown_actor_label`
-    gives at length: a rank or duty carried inside a minted display name is
-    a public noun, not an identity token, and subtracting it deletes the
-    description of a body the observer can plainly see.
-
-    A structured `surface` supplies its own words in widening order
-    (`charter_surface.surface_words`); nothing in them is a name."""
-    if surface:
-        from world.charter_surface import surface_words
-        words = surface_words(surface, "full")
-        if words:
-            return words
-    text = _appearance_as_prose(appearance)
-    if not text:
+    A SUMMARY no longer widens this way. Its words came as a flat list in
+    prose order and the collision ladder cut it at a count, which landed on
+    anything ("the tall and predatory-graceful at top human", the owner's
+    cards, 2026-10-20); a summary's label widens through the feature
+    phrases the summary attached to its own noun instead
+    (`common.stranger_label_ladder`)."""
+    if not surface:
         return []
-    name_tokens = _identity_token_set(name, aliases)
-    if role:
-        name_tokens = name_tokens - _identity_token_set(role)
-    cleaned = re.sub(r"^(a|an|the)\s+", "", text.strip(), flags=re.I)
-    cleaned = cleaned.replace(",", " ").replace(";", " ")
-    words = [w for w in cleaned.split()
-             if re.sub(r"[^\w]", "", w).casefold() not in name_tokens]
-    while words and words[0].lower() in ("a", "an", "the"):
-        words = words[1:]
-    return words
+    from world.charter_surface import surface_words
+    return surface_words(surface, "full") or []
 
 
 def _label_core(text):
@@ -371,6 +358,14 @@ def _label_core(text):
     text = _strip_sentence_ends(text)
     if not text:
         return ""
+    # The ordinal comes off in the shape the ACTIVE pack writes it
+    # (`_ordinal_label`'s template): "the second <label>", "2番目の<label>".
+    for word in _active_ordinal_words().values():
+        prefix = _t("ordinal_label", ordinal=word, label="").strip()
+        if prefix and len(text) > len(prefix) \
+                and text.casefold().startswith(prefix.casefold()):
+            text = text[len(prefix):].strip()
+            break
     articles = frozenset(str(a).casefold() for a in _compositor("articles"))
     ordinals = frozenset(str(w).casefold() for w in _ORDINAL_WORDS.values())
     parts = text.split()
@@ -384,22 +379,20 @@ def _label_core(text):
 def _label_from_words(words, cap):
     """Cut a label at `cap` words, dropping a trailing function word.
 
-    KNOWN WART, and left alone on purpose: the cap can still land on a
-    dangling adjective — "a tall woman in a long grey coat" gives "the tall
-    woman in a long" at five words. Two smarter rules were tried and both
-    made it worse. Walking the cut back past the last connective produced
-    labels SHORTER than the base ("the person" from "the person of
-    unremarkable appearance"), which then collided, which drove
-    `assign_stranger_labels` up through cap 8/10/14 into run-ons like "the
-    person of unremarkable appearance wearing wrinkled lab coat station
-    jumpsuit comm badge rumpled tired" — measured across 83 views on the
-    corpus, so decidedly worse than the wart.
-
-    Cutting a noun phrase correctly needs to know where the noun is, and
-    nothing here does. The real fix is to cut on the appearance summary's
-    own comma-separated clauses instead of a flat word count, which is a
-    change to `_descriptor_words` and the collision escalation together,
-    not to this line.
+    THE SURFACE LADDER ONLY. A structured surface's words come in widening
+    order by axis (age, build, complexion, stature, marks, worn, hair,
+    gait), so a count lands between axes often enough to read; a SUMMARY's
+    words came in prose order, and a count landed on anything -- "the tall
+    woman in a long" at five, "the tall and predatory-graceful at top
+    human" at ten (the owner's cards, 2026-10-20). The wart this docstring
+    carried for a year named the fix: cut on the summary's own clauses. That
+    is `common.stranger_label_ladder` now, which widens a summary's label
+    through the feature phrases the summary itself attached, and this
+    function no longer sees a summary. Two earlier attempts to make THIS cut
+    smarter both made it worse (a cut walked back past the last connective
+    produced labels shorter than the base, which collided, which drove the
+    caps into run-ons across 83 views), which is why the surface path keeps
+    the plain count.
     """
     take = list(words[:cap])
     while take and take[-1].lower() in _LABEL_DANGLING:
@@ -419,7 +412,21 @@ _ORDINAL_WORDS = {
 }
 
 
+def _active_ordinal_words():
+    """The ACTIVE pack's ordinal words, English where it has none. Bound
+    from the English card at import, a Japanese collision read
+    "secondの見知らぬ人物" (2026-10-20)."""
+    try:
+        return {int(k): str(v) for k, v in dict(
+            _compositor("ordinal_words")).items()}
+    except Exception:
+        return dict(_ORDINAL_WORDS)
+
+
 def _ordinal_word(n):
+    words = _active_ordinal_words()
+    if n in words:
+        return words[n]
     if n in _ORDINAL_WORDS:
         return _ORDINAL_WORDS[n]
     suffix = "th" if 10 <= (n % 100) <= 20 else \
@@ -450,11 +457,18 @@ def _ordinal_label(label, n):
     """
     label = str(label or "").strip()
     word = _ordinal_word(n)
-    if label.lower().startswith("the "):
-        return f"the {word} {label[4:]}"
-    if label.lower().startswith(("a ", "an ")):
-        return f"the {word} {label.split(' ', 1)[1]}"
-    return f"the {word} {label}"
+    # The pack says how an ordinal sits on a label: English "the second
+    # <label less its article>", Japanese "2番目の<label>". The English form
+    # was hard-coded, so two identical Japanese strangers read "the 2番目
+    # 見知らぬ人物" (2026-10-20).
+    articles = sorted((str(a) for a in _compositor("articles")), key=len,
+                      reverse=True)
+    core = label
+    for article in articles:
+        if label.lower().startswith(article.lower() + " "):
+            core = label[len(article) + 1:]
+            break
+    return _t("ordinal_label", ordinal=word, label=core)
 
 
 def assign_stranger_labels(bodies):
@@ -464,10 +478,13 @@ def assign_stranger_labels(bodies):
     ``[(name, appearance, aliases, role)]`` -- for every co-present body the
     observer does NOT recognize. Starts from `_unknown_actor_label`'s
     short form; when two strangers collide on it, the colliding parties'
-    labels are widened word by word from their own appearance summaries until
-    they differ ("the fox woman with six tails" instead of "a second fox
-    woman"). Only when the appearances genuinely cannot distinguish them does
-    the ordinal distinguisher survive as the last resort (`_ordinal_label`).
+    labels are widened from their own appearance summaries until they
+    differ -- a summary by the feature phrases it attached to its noun
+    (`common.stranger_label_ladder`: "the fox woman with six tails and
+    amber eyes" instead of "a second fox woman"), a structured surface by
+    its words in axis order (`SURFACE_WIDENING_CAPS`). Only when the
+    appearances genuinely cannot distinguish them does the ordinal
+    distinguisher survive as the last resort (`_ordinal_label`).
 
     The optional fourth element is the body's public role noun, exempt from
     the identity strip (`_unknown_actor_label`). Two bodies of one rank still
@@ -481,22 +498,33 @@ def assign_stranger_labels(bodies):
     # a cut description (`_unknown_actor_label`).
     rows = [(name, appearance, aliases, role or "", surface, noun or "")
             for name, appearance, aliases, role, surface, noun in rows]
-    labels = {}
+    labels, ladders = {}, {}
     for name, appearance, aliases, role, surface, noun in rows:
-        labels[str(name)] = _unknown_actor_label(
-            name, appearance, aliases, role=role, surface=surface,
-            head_noun=noun or None)
-    words = {str(name): _descriptor_words(name, appearance, aliases, role,
-                                          surface=surface)
-             for name, appearance, aliases, role, surface, _noun in rows}
-    for cap in (6, 8, 10, 14):
+        words = _descriptor_words(surface)
+        if words:
+            labels[str(name)] = _unknown_actor_label(
+                name, appearance, aliases, role=role, surface=surface,
+                head_noun=noun or None)
+            ladders[str(name)] = [w for w in (
+                _label_from_words(words, cap) for cap in SURFACE_WIDENING_CAPS)
+                if w]
+            continue
+        # A SUMMARY WIDENS THROUGH ITS OWN CLAUSES. The label is a noun
+        # phrase and the steps are the feature phrases the summary attached
+        # to its noun, one at a time ("the fox woman with six tails" -> "...
+        # and amber eyes"), so no step is ever a cut inside a phrase.
+        base, wider = stranger_label_ladder(
+            name, appearance, aliases, role=role, head_noun=noun or None)
+        labels[str(name)] = base
+        ladders[str(name)] = wider
+    for step in range(max((len(l) for l in ladders.values()), default=0)):
         collided = _collided_names(labels)
         if not collided:
             return labels
         for name in collided:
-            wide = _label_from_words(words.get(name) or [], cap)
-            if wide:
-                labels[name] = wide
+            ladder = ladders.get(name) or []
+            if step < len(ladder):
+                labels[name] = ladder[step]
     collided = _collided_names(labels)
     if collided:
         seen = {}
@@ -507,6 +535,11 @@ def assign_stranger_labels(bodies):
             else:
                 seen[label] = 1
     return labels
+
+
+#: The word caps a structured SURFACE's label widens through on collision
+#: (`_label_from_words`); a summary widens by clauses instead.
+SURFACE_WIDENING_CAPS = (6, 8, 10, 14)
 
 
 def _collided_names(labels):

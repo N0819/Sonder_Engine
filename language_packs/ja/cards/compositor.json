@@ -77,6 +77,12 @@
     "9": "九人",
     "10": "十人"
   },
+  "number_words": [
+    "百",
+    "千",
+    "万",
+    "億"
+  ],
   "count_words": {
     "2": "二人",
     "3": "三人",
@@ -373,6 +379,7 @@
     "tone_noun": "{tone}を声ににじませ、",
     "unknown_actor": "見知らぬ{description}",
     "unseen_voice_label": "誰か",
+    "ordinal_label": "{ordinal}の{label}",
     "unknown_actor_fallback": "見知らぬ人物",
     "surface_label": "{adjectives}{noun}",
     "surface_with": "{feature}のある{label}",

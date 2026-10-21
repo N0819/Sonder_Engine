@@ -32,6 +32,7 @@ from story.character_schema import (
 )
 from core.db import get_setting, q, wget
 from core.pipeline_context import note_step_decision, note_step_warning
+from language_runtime import referring as _referring
 from language_runtime import (
     compositor_text, compositor_value, english_linguistic, linguistic,
 )
@@ -5873,9 +5874,9 @@ def scene_figures(chat, cast, scene, recognized=None):
     return out
 
 
-#: Where a description's first sentence ends: a stop after three lowercase
-#: letters (so "Dr." and "Mrs." never end one), or a full-width stop.
-_SENTENCE_END = re.compile(r"(?<=[a-z]{3}[.!?])\s+|(?<=[\u3002\uff01\uff1f])")
+#: Where a description's first sentence ends -- `referring.SENTENCE_END`,
+#: kept under its old name for the readers that import it from here.
+_SENTENCE_END = _referring.SENTENCE_END
 
 
 def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
@@ -5927,226 +5928,482 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
         if described:
             return _text("unknown_actor", description=described)
     if appearance_text:
-        articles = frozenset(compositor_value("articles"))
-        name_tokens = _identity_token_set(actor_name, aliases)
-        if role:
-            name_tokens -= _identity_token_set(role)
-        # THE HEAD CLAUSE IS THE DESCRIPTOR. An appearance is a sentence of
-        # clauses -- "a county surveyor of thirty, small and brisk, ink on
-        # her right cuff" -- and running them together before the word cap
-        # made "the county surveyor of thirty small" (Hollin Mill, 2026-09-15).
-        # The first clause is what a stranger's eye takes in; the rest is
-        # detail a label has no room for.
-        head = appearance_text.strip()
-
-        def _content(text):
-            return [w for w in text.split() if w.lower() not in articles]
-
-        # A COMMA BETWEEN ADJECTIVES IS NOT A CLAUSE BREAK. "a short,
-        # thick-forearmed man ..." cut at its first comma left "a short" --
-        # two words only because the article counted -- and a body read "the
-        # short" in every view and memory of him for eight beats (playerless
-        # Aldermill round 9, 2026-09-23); "A tall, powerfully built ...
-        # humanoid" read "the tall". A part with one content word is joined
-        # to the next until the head holds two, so the noun it describes
-        # comes with it -- and where the head OPENED WITH AN ARTICLE, which
-        # promises a noun, a series of one-word parts runs on until a part
-        # carries more: "A tall, slim, youthful-looking man ..." stopped at
-        # two words and read "the tall slim" in every view of him
-        # (Kirinoura, scratch chat 167, 2026-10-05). A bare list ("Tall,
-        # square-shouldered, short black hair, ...") promises no noun, and run
-        # on it took a feature for one: "the tall square-shouldered short
-        # black hair" (review, 2026-10-05).
-        promised = bool(re.match(
-            r"^(?:" + "|".join(map(re.escape, articles)) + r")\s", head, re.I))
-        # THE DESCRIPTOR IS IN THE FIRST SENTENCE: "A tall, thin, pale,
-        # nervous man. He wears wire glasses" ran on into "he wears wire"
-        # (review round 5, 2026-10-05). Cut there when that sentence holds a
-        # descriptor of its own; a fragment ("Tall.") keeps the run.
-        first = _SENTENCE_END.split(head, 1)[0]
-        if first != head and len(_content(first)) >= 2:
-            head = first.strip()
-        for mark in (";", ","):
-            parts = head.split(mark)
-            taken = last = parts[0]
-            joined = [parts[0]]
-            for part in parts[1:]:
-                if len(_content(taken if not promised else last)) >= 2:
-                    break
-                taken, last = taken + mark + part, part
-                joined.append(part)
-            # PAST THE CAP THE ADJECTIVES YIELD, NOT THE NOUN. The run-on
-            # reaches its noun; the five-word cap below would cut it off
-            # again ("A tall, thin, pale, nervous young clerk"), so the
-            # earliest one-word parts give way first (review round 4).
-            if promised and len(joined) > 2:
-                # The noun phrase is the last part up to its first
-                # preposition or linking participle -- what follows is
-                # trimmed by the cap's own phrase rules below anyway.
-                stops = frozenset(compositor_value("label_dangling")) | frozenset(
-                    compositor_value("linking_participles"))
-                noun = []
-                for w in _content(last):
-                    if re.sub(r"[^\w]", "", w).casefold() in stops:
-                        break
-                    noun.append(w)
-                lead = joined[0].split()
-                singles = [s for s in [" ".join(lead[1:])]
-                           + [p.strip() for p in joined[1:-1]] if s]
-                if len(singles) + len(noun) > 5:
-                    singles = singles[len(singles) + len(noun) - 5:] if len(noun) < 5 else []
-                    taken = " ".join([lead[0], (mark + " ").join(singles + [last.strip()])])
-            if len(_content(taken)) >= 2:
-                head = taken.strip()
-        cleaned = re.sub(
-            r"^(?:" + "|".join(map(re.escape, articles)) + r")\s+", "",
-            head, flags=re.I,
-        ).replace(",", "")
-        # STRIP THE NAME FORMS BEFORE TOKENISING. The token filter below
-        # splits on whitespace, which an unspaced script does not have: a
-        # Japanese summary is one "word", the name inside it is never a
-        # token on its own, and the descriptor handed to a stranger carried
-        # the canonical name whole. The boundary-aware strip removes every
-        # form wherever it stands; the token filter then does what it
-        # always did for spaced scripts.
-        cleaned = _strip_identity_tokens(
-            cleaned, [f for f in [actor_name, *(aliases or [])]
-                      if str(f or "").strip()
-                      and not (role and _identity_token_set(str(f))
-                               <= _identity_token_set(role))])
-        # A word that holds the body's OWN name in a possessive or a compound
-        # ("Sarah's", "Sulmirath-house") is the name. Only a personal-name
-        # token, two letters or more and written as a name: an alias's words
-        # took "nine-tailed" from Tamamo-no-Mae, the "T" of William T. Riker
-        # took "T-shirt", and "Gray" took "gray-eyed" (review, 2026-10-05).
-        personal = {t for t in _identity_token_set(actor_name) if len(t) >= 2}
-        if role:
-            personal -= _identity_token_set(role)
-
-        def _holds_the_name(i, w):
-            pieces = [piece for piece in re.split(r"[^\w]+", w) if piece]
-            named = [k for k, piece in enumerate(pieces)
-                     if piece[:1].isupper() and piece.casefold() in personal]
-            if not named:
-                return False
-            # A possessive is the name wherever it stands ("Sarah's"). So is
-            # any piece of a compound -- "half-Sulmirath" -- except the first
-            # piece of the word that OPENS a description with no article,
-            # whose capital is sentence case: "Black-haired and slight" (Mira
-            # Black) is a description, "A Sulmirath-blooded heir" names the
-            # house (review rounds 3-4, 2026-10-05).
-            if len(pieces) == 2 and pieces[1].casefold() == "s" and "-" not in w:
-                return True
-            if i == 0 and not promised:
-                return any(k > 0 for k in named)
-            return True
-
-        words = [w for i, w in enumerate(cleaned.split())
-                 if re.sub(r"[^\w]", "", w).casefold() not in name_tokens
-                 and not _holds_the_name(i, w)]
-        # Dropping a leading name can expose the article that followed it
-        # ("Hinami, a fox-eared..." -> "a fox-eared..."); re-strip it.
-        while words and words[0].lower() in articles:
-            words = words[1:]
-        # A LINKING PARTICIPLE introduces a phrase, and the 5-word cap cuts
-        # that phrase off part-way: appearance summaries overwhelmingly read
-        # "<body> appearing in her early twenties" or "<body> wearing a
-        # patched flight jacket", which cap to "...woman appearing" and
-        # "...smuggler wearing a patched" -- both promising a clause neither
-        # delivers. Truncating AT the participle rather than trimming it off
-        # the end is what fixes the second case, where the participle is not
-        # the last word. Only verbs that introduce a following phrase are
-        # listed; a bare -ing rule would eat real nouns ("the figure in
-        # mourning"). Applied before the cap so the kept words are the
-        # distinguishing head of the description rather than its filler.
-        linking_participles = frozenset(
-            compositor_value("linking_participles"))
-        for _i, _w in enumerate(words):
-            if _i and re.sub(r"[^\w]", "", _w).casefold() in linking_participles:
-                words = words[:_i]
-                break
-        # The first word the cap DROPS, which is the evidence for whether it
-        # cut between phrases or inside one (see the convergence loop below).
-        overflow = words[5] if len(words) > 5 else ""
-        truncated = len(words) > 5
-        words = words[:5]
-        # The cap can still slice mid-phrase and leave a dangling function
-        # word ("...five-foot-seven-inches with a"), which reads as broken
-        # prose when this label is injected inline. Trim any trailing
-        # article/preposition/conjunction/possessive so the label ends on a
-        # content word.
-        dangling = frozenset(compositor_value("label_dangling"))
-        # One preposition over from the participle fix above: the cap can
-        # also cut a phrase just AFTER the dangler took one word with it --
-        # "towering hooded stranger with smooth [skin...]" keeps "with
-        # smooth", which the trailing-word trim cannot see because "smooth"
-        # is a content word. Only when the cap actually truncated (a phrase
-        # this short cannot be judged incomplete otherwise), a dangler in the
-        # tail with at most one word after it is an amputated phrase: cut
-        # back to the content head. "the figure in mourning" survives when
-        # nothing was truncated; a cap-cut label ends on a whole phrase.
-        # ...and the two trims have to CONVERGE, because each one exposes a
-        # new tail for the other. Measured live 2026-08-19, in an A/B run: "a
-        # lean courier in a rain-darkened canvas coat, hair cropped short"
-        # capped to "lean courier in a rain-darkened", lost "a rain-darkened"
-        # to the amputated-phrase rule, and was left as "the lean courier IN"
-        # -- ending on a preposition, which the comment above says in so many
-        # words must not happen. Every unrecognised body in that story was
-        # labelled that way, in views, in prose and in the memories written
-        # from them: "the broad man in", "the old porter in". Each rule ran
-        # once and neither looked at what the other uncovered. The leading
-        # article strip above already knew this and used a `while`.
-        # A CAP-CUT LABEL ENDS ON A WHOLE PHRASE, and the question is whether
-        # the cap fell BETWEEN phrases or INSIDE one. The window that used to
-        # decide it was one word wide -- an approximation tuned on a case
-        # where the amputated tail happened to be short -- and it misses the
-        # same shape one word longer: "a young woman with golden fox ears and
-        # six golden tails" caps to "young woman with golden fox", a noun
-        # phrase with its head noun cut off, kept because two words followed
-        # the preposition instead of one.
-        #
-        # The evidence is the first word the cap DROPPED. A conjunction there
-        # means the phrase we kept finished and a new one was starting, so the
-        # label is whole -- "old woman with silver hair" | "and sharp eyes".
-        # Anything else means the phrase runs on into the words we cut, and
-        # what we kept is a fragment -- "young woman with golden fox" |
-        # "ears", "lean courier in a rain-darkened" | "canvas". Then cut back
-        # to the word that opened the phrase, however much of it we were
-        # holding. "the figure in mourning" is untouched: nothing truncated.
-        cut_inside_a_phrase = bool(truncated) and (
-            re.sub(r"[^\w]", "", overflow).casefold()
-            not in _ling("_BREATH_CONJUNCTIONS"))
-        while True:
-            before = len(words)
-            while words and words[-1].lower() in dangling:
-                words = words[:-1]
-            if cut_inside_a_phrase:
-                for _i in range(len(words) - 1, 0, -1):
-                    if words[_i].lower() in dangling:
-                        words = words[:_i]
-                        break
-            if len(words) == before:
-                break
-        # ...and it ends on a WORD. Stripping a quote out of "5'7\"" leaves
-        # "5 7", which distinguishes nobody and reads as debris; a bare
-        # measurement is not what a stranger is recognised by at a glance.
-        while words and not re.search(r"[^\W\d_]", words[-1]):
-            words = words[:-1]
-        description = _label_safe(
-            " ".join(words).rstrip(".;:").lower()).rstrip(".;:").strip()
-        # A CUT DESCRIPTION ENDS ON THE THING'S OWN NOUN. `head_noun` is what
-        # a stranger's eye calls the body in place of "person" (a creature's
-        # authored `noun`); a look cut to its first words is adjectives
-        # with nothing to hang on -- "the long black-slick" (scratch play
-        # 2026-09-14, chat 5 turn 1) -- so the noun closes it.
-        noun = " ".join(str(head_noun or "").split()).casefold()
-        if description and noun and noun not in description.casefold().split():
-            description = f"{description} {noun}"
-        if description:
-            return _text("unknown_actor", description=description)
+        label, _wider = _label_and_ladder(
+            actor_name, appearance_text, aliases, role=role,
+            head_noun=head_noun)
+        if label:
+            return label
     if head_noun:
         return _text("unknown_actor", description=str(head_noun).strip())
     return _text("unknown_actor_fallback")
+
+
+#: The word cap on a stranger's label: the modifiers and head of a noun
+#: phrase, with the phrase the summary attached to it where that fits. Five
+#: since the label was first cut; the cut now keeps the HEAD under the cap,
+#: so a long run of adjectives yields its earliest words and never its noun.
+LABEL_WORDS = 5
+
+#: The word cap on one FEATURE phrase appended to a label, articles
+#: counted ("with a thin white scar through the left eyebrow" is nine), cut
+#: back to a whole phrase when the cap lands inside one. Twice the label's
+#: own cap because a feature is appended only to tell two strangers apart,
+#: and a feature cut short told nobody anything ("the striking succubus with
+#: an athletic", the owner's cards measured 2026-10-20).
+LABEL_FEATURE_WORDS = 10
+
+
+def _fold_word(word):
+    return re.sub(r"[^\w]", "", str(word or "")).casefold()
+
+
+def _describe(words):
+    """The description a label template takes: lowercased, prose structure
+    out, no terminal stop."""
+    return _label_safe(
+        " ".join(words).rstrip(".;:").lower()).rstrip(".;:").strip()
+
+
+def _cap_phrase(words, cap, *, keep=None, ends_at_cut=False):
+    """Cut a phrase to ``cap`` words so that it ends on a whole phrase, and
+    -- with ``keep`` -- so that its head noun is still in it.
+
+    The rules are the ones the label has carried since 2026-08, in the
+    order they run:
+
+    * A LINKING PARTICIPLE introduces a phrase the cap would cut part-way:
+      summaries overwhelmingly read "<body> appearing in her early twenties"
+      or "<body> wearing a patched flight jacket", which cap to "...woman
+      appearing" and "...smuggler wearing a patched". Cut AT the participle,
+      before the cap, so the kept words are the head of the description.
+      Only verbs that introduce a following phrase are listed; a bare -ing
+      rule would eat real nouns ("the figure in mourning").
+    * A CAP-CUT PHRASE ENDS ON A WHOLE PHRASE. The evidence is the first
+      word the cap DROPPED: a conjunction there means the kept phrase had
+      finished ("old woman with silver hair" | "and sharp eyes"); anything
+      else means the phrase runs on into the cut ("young woman with golden
+      fox" | "ears"), so cut back to the word that opened it. The trailing
+      function-word trim and this cut-back must CONVERGE, because each
+      exposes a new tail for the other: "a lean courier in a rain-darkened
+      canvas coat" capped to "lean courier in a rain-darkened", lost "a
+      rain-darkened" to the cut-back and stood as "the lean courier IN" in
+      every view of that story (A/B run, 2026-08-19).
+    * ...and it ends on a WORD: a bare measurement ("5 7") distinguishes
+      nobody and reads as debris.
+    * THE HEAD SURVIVES THE CAP. When the trims leave the phrase without
+      ``keep`` -- "An extraordinarily tall and powerfully built armoured
+      knight" capped and cut back to "extraordinarily tall" -- the earliest
+      modifiers yield instead: the cap's worth of words ending on the head,
+      with any function word they open on dropped. A rule the comma series
+      already had ("A tall, thin, pale, nervous young clerk" -> "the thin
+      pale nervous young clerk", review round 4, 2026-10-05), now the
+      phrase's whatever its shape.
+    """
+    words = list(words)
+    # A RELATIVE CUTS AS A PARTICIPLE DOES: "A tall, spare man who has the
+    # look of a sailor" capped to "the tall spare man who has" (the
+    # 2026-09-26 stories, every view of Aurel Holt). What follows "who",
+    # "that" or "which" is a clause about conduct, not the body's noun
+    # phrase, and no cap inside it ends on anything whole. ``ends_at_cut``
+    # says the caller already cut the run there.
+    for i, w in enumerate(words):
+        if i and _referring.cuts_phrase(w):
+            words = words[:i]
+            ends_at_cut = True
+            break
+    whole = list(words)
+    overflow = words[cap] if len(words) > cap else ""
+    truncated = len(words) > cap
+    words = words[:cap]
+    dangling = frozenset(str(w).casefold() for w in compositor_value("label_dangling"))
+    if truncated and _fold_word(overflow) not in _ling("_BREATH_CONJUNCTIONS"):
+        ends_at_cut = True
+        # ONE CUT, TO THE OPENER OF THE PHRASE THE CAP LANDED INSIDE -- the
+        # last word of the kept run that opens a phrase (`phrase_openers`:
+        # a preposition, a possessive, a participle; never an article,
+        # which sits inside a phrase). The walk used to stop at the last
+        # FUNCTION word and run again until nothing moved, which with every
+        # preposition in the table cut "woman across the room in | a" down
+        # to "woman" (2026-10-20); before the table was complete it left
+        # "the woman across".
+        openers = _referring.phrase_openers()
+        at = max((i for i, w in enumerate(words)
+                  if i and _referring.is_boundary(
+                      w, words[i + 1] if i + 1 < len(words) else overflow)
+                  # A number is a measurement inside its phrase ("in her
+                  # late thirties"), and a possessive after a preposition
+                  # ("in HER late thirties") is inside the phrase that
+                  # preposition opened: neither opens one.
+                  and not _referring.is_number(w)
+                  and _fold_word(words[i - 1]) not in openers),
+                 default=-1)
+        if at > 0:
+            words = words[:at]
+            # The run now ends where a phrase opener followed it, which is
+            # where the phrase before it was whole.
+            ends_at_cut = False
+    arts = _referring.articles()
+    while True:
+        before = len(words)
+        while words and words[-1].lower() in dangling:
+            words = words[:-1]
+            # The run now ends BEFORE a function word, which opens a phrase:
+            # what it keeps is whole ("with a habit | of standing").
+            ends_at_cut = False
+        # AN ARTICLE PROMISES A NOUN. A run that ends AT a cut one word
+        # after an article has lost that noun to the cut ("with an
+        # athletic | yet curvaceous build", "in a long | grey coat"); an
+        # article followed by a function word has lost it to the identity
+        # strip ("with the of beauty", an alias holding the word). Either
+        # way the words from the article on come off and the trim runs
+        # again. A run that ends before a phrase opener is whole ("at the
+        # belly | from ale"), article or no article.
+        hole = next((i for i in range(1, len(words))
+                     if words[i].lower() in arts
+                     and ((ends_at_cut and i == len(words) - 2)
+                          or (i + 1 < len(words)
+                              and words[i + 1].lower() in dangling))), -1)
+        if hole > 0:
+            words = words[:hole]
+        if len(words) == before:
+            break
+    while words and not re.search(r"[^\W\d_]", words[-1]):
+        words = words[:-1]
+    if keep and not any(_fold_word(w) == _fold_word(keep) for w in words):
+        at = max((i for i, w in enumerate(whole)
+                  if _fold_word(w) == _fold_word(keep)), default=-1)
+        # ...unless a coordinator lies between the cut and the head: "A
+        # young woman built lean AND weathered by cold water" read its
+        # head as "weathered", and the floor would have dropped "young" to
+        # keep it (the 2026-09-26 stories). The floor fires only where the
+        # head is a plain continuation of the kept run.
+        between = whole[len(words):at] if at >= 0 else []
+        if any(_referring.coordinator(w) for w in between):
+            at = -1
+        if at >= 0:
+            tail = whole[max(0, at + 1 - cap):at + 1]
+            conjunctions = _ling("_BREATH_CONJUNCTIONS")
+            while tail and (tail[0].lower() in dangling
+                            or _fold_word(tail[0]) in conjunctions):
+                tail = tail[1:]
+            if tail:
+                words = tail
+    return words
+
+
+def _summary_label(actor_name, appearance_text, aliases=None, *, role="",
+                   head_noun=None):
+    """``(label, features, named)`` for a stranger described by an
+    appearance summary: the label every observer who does not recognise the
+    body starts from, the ordered feature phrases
+    `composer.assign_stranger_labels` widens it through when two strangers
+    share it (`stranger_label_ladder`), and whether the label carries a
+    noun of the summary's own (``named``) or is the pack's generic person.
+    ``("", [], False)`` for an empty summary.
+
+    A STRANGER'S LABEL IS A NOUN PHRASE WHOSE HEAD IS THE BODY
+    (`language_runtime.referring`, which states the grammar). The first
+    sentence is read for the clause that names the body: a clause opening
+    with an article promises a noun, and the noun is the last word of the
+    phrase before its first boundary. Where that noun is a word, the label
+    is the phrase cut to `LABEL_WORDS` with the head kept under the cap.
+    Where the clause promises no noun -- it opens on a list of what the eye
+    noticed, "Forty and weathered by years at sea ..." -- the summary names
+    no body, and the label is the pack's generic person carrying the first
+    feature the summary attached: "the unfamiliar person with a scar
+    through her eyebrow". The cut used to take the first five words and
+    trim back to a content word, and the content word it stopped on was
+    "forty" (tavern probe, chat 1 turn 2, 2026-10-20): every view of the
+    player who did not know her, the interaction loop ("the forty says:")
+    and the page ("the forty shifts the tin candle dish") called her that.
+    The owner's own cards carried the class -- "the lean", "the tall", "the
+    sharp gaze", "the weathered flight jacket over", "the tall full-figured
+    who moves like" -- and the collision ladder, which cut the same flat
+    word list wider, was worse ("the tall and predatory-graceful at top
+    human").
+
+    THE NAME COMES OFF BEFORE THE CUT. Summaries routinely lead with the
+    canonical name ("Hinami, a fox-eared young woman ..."), and a label
+    carrying it was an identity leak walking straight past the recognition
+    gate it serves. Every name and alias form is stripped boundary-aware
+    first (an unspaced script has no token to filter), then the tokens,
+    then the words that HOLD a name -- a possessive ("Sarah's"), a piece of
+    a compound ("Sulmirath-house", "half-Sulmirath") written as a name --
+    except the sentence-case capital that opens a description with no
+    article before it ("Black-haired" for Mira Black; review rounds 3-4,
+    2026-10-05). A personal-name token only, of two letters or more: an
+    alias's words took "nine-tailed" from Tamamo-no-Mae, the "T" of William
+    T. Riker took "T-shirt", and "Gray" took "gray-eyed". An article inside
+    an alias ("the navigator") is the language's, not the name's.
+
+    A NOUN THE STRIP TOOK IS STILL A NOUN. When the promised head is itself
+    an alias the card wears -- "A lean tinker ..." on a card aliased "the
+    tinker" -- the modifiers that survive close on the generic noun, "the
+    lean person": an observer who may not say the alias can still see a
+    person. The owner's Cass Mott read "the lean" in every view.
+
+    A ROLE WORN IN THE NAME IS NOT IDENTITY: `role`'s own tokens are exempt
+    from the strip (chat 98 turns 13-21: five crew rendered "the unfamiliar
+    person" because their rank stood in their display names, while the
+    crowd they had been subtracted from called them ensigns aloud).
+
+    IN A HEAD-FINAL PACK (no articles) the body noun ENDS its clause, so
+    the label is the first sentence's noun-final clause; a sentence that
+    ends on inflection names nothing and takes the generic noun. Until
+    2026-10-20 the Japanese path cut nothing at all: the label was the
+    entire summary, every sentence of it, with its 。 on.
+    """
+    from language_runtime import referring
+
+    text = str(appearance_text or "").strip()
+    if not text:
+        return "", [], False
+    articles = referring.articles()
+    # A FUNCTION WORD IN A NAME IS THE LANGUAGE'S, NOT THE NAME'S: an alias
+    # "Succubus of Endless Craving" or "the navigator" must not take every
+    # "of" and "the" out of the body's own description (the owner's
+    # Vaelith read "with kind beauty" for "with the kind of beauty").
+    function_words = articles | {
+        str(w).casefold() for w in compositor_value("label_dangling")}
+    name_tokens = _identity_token_set(actor_name, aliases) - function_words
+    if role:
+        name_tokens -= _identity_token_set(role)
+    forms = [f for f in [actor_name, *(aliases or [])]
+             if str(f or "").strip()
+             and _identity_token_set(str(f)) - articles
+             and not (role and _identity_token_set(str(f))
+                      <= _identity_token_set(role))]
+    noun = " ".join(str(head_noun or "").split())
+    generic = str(compositor_value("surface_person"))
+
+    def _close(description, close):
+        if description and close and close.casefold() not in description.casefold().split():
+            return compositor_text("surface_label", adjectives=description,
+                                   noun=close).strip()
+        return description
+
+    if referring.head_final() or referring.unspaced(text):
+        sentence = _strip_identity_tokens(referring.first_sentence(text), forms)
+        clause = referring.head_final_clause(sentence)
+        description = _label_safe(clause).strip(" ,.;:、。")
+        description = _close(description, noun)
+        if description:
+            return _text("unknown_actor", description=description), [], True
+        if noun:
+            return _text("unknown_actor", description=noun), [], True
+        return _text("unknown_actor_fallback"), [], False
+
+    # READ THE RAW TEXT FOR THE HEAD, THE STRIPPED TEXT FOR THE REST: the
+    # boundary strip takes a name-led summary's name off so the article it
+    # hid can promise its noun ("Hinami, a fox-eared young woman"), and the
+    # same strip takes a NOUN that happens to be the body's name or alias
+    # ("a masked guard" on a card named Guard) -- the raw reading is what
+    # says a noun stood there.
+    raw_head = referring.read(text).head
+    reading = referring.read(_strip_identity_tokens(text, forms))
+    if not reading.parts:
+        return "", [], False
+    raw_words = list(reading.words)
+    head = reading.head
+    # A PUBLIC NOUN THE ENGINE OWNS IS A HEAD WITHOUT AN ARTICLE: the
+    # body's `role` (the crowd's own noun for what it is -- "ensign",
+    # "chief engineer") and a creature's authored noun. A bare description
+    # that ENDS on one names the body by it: five crew whose appearance
+    # was their rank alone (chat 98) read "the ensign", never "the
+    # unfamiliar person" and never "the ensign person".
+    if not head and not reading.promised and raw_words:
+        public = _identity_token_set(role) | ({noun.casefold()} if noun else set())
+        if _fold_word(raw_words[-1]) in public:
+            head = raw_head = raw_words[-1]
+            reading.phrase = list(raw_words)
+            reading.tail = []
+    personal = {t for t in _identity_token_set(actor_name) if len(t) >= 2}
+    if role:
+        personal -= _identity_token_set(role)
+
+    def _holds_the_name(i, w):
+        pieces = [piece for piece in re.split(r"[^\w]+", w) if piece]
+        named = [k for k, piece in enumerate(pieces)
+                 if piece[:1].isupper() and piece.casefold() in personal]
+        if not named:
+            return False
+        # A possessive is the name wherever it stands ("Sarah's"). So is
+        # any piece of a compound -- "half-Sulmirath" -- except the first
+        # piece of the word that OPENS a description with no article,
+        # whose capital is sentence case.
+        if len(pieces) == 2 and pieces[1].casefold() == "s" and "-" not in w:
+            return True
+        if i == 0 and not reading.promised:
+            return any(k > 0 for k in named)
+        return True
+
+    def _strip(words):
+        out = [w for i, w in enumerate(words)
+               if _fold_word(w) not in name_tokens and not _holds_the_name(i, w)]
+        while out and out[0].casefold() in articles:
+            out = out[1:]
+        return out
+
+    words = _strip(raw_words)
+    phrase = list(reading.phrase)
+    lost = raw_head and not any(_fold_word(w) == _fold_word(raw_head) for w in words)
+    kept_head = bool(head) and not lost and any(
+        _fold_word(w) == _fold_word(head) for w in words)
+    features = _label_features(reading, _strip)
+
+    if head and kept_head:
+        description = _close(_describe(_cap_phrase(words, LABEL_WORDS, keep=head)), noun)
+        if description:
+            return _text("unknown_actor", description=description), features, True
+    if lost:
+        modifiers = [w for w in _strip(phrase) if _fold_word(w) != _fold_word(raw_head)]
+        description = _describe(_cap_phrase(modifiers, LABEL_WORDS - 1))
+        if description:
+            description = _close(description, noun or generic)
+            return _text("unknown_actor", description=description), features, True
+    if reading.modifiers:
+        description = _describe(_cap_phrase(_strip(reading.modifiers), LABEL_WORDS - 1))
+        if description:
+            description = _close(description, noun or generic)
+            return _text("unknown_actor", description=description), features, True
+    # NO NOUN PROMISED, OR A NUMBER WHERE ONE WAS: the body is the pack's
+    # generic person, told apart by what the summary attached to it
+    # (`_label_and_ladder` puts the first feature on the label itself).
+    label = (_text("unknown_actor", description=noun) if noun
+             else _text("unknown_actor_fallback"))
+    return label, features, bool(noun)
+
+
+def _label_and_ladder(actor_name, appearance_text, aliases=None, *, role="",
+                      head_noun=None):
+    """``(label, wider)``: the label a stranger starts from and the labels it
+    widens into. A label that is the pack's generic person carries the
+    first feature the summary attached ("the unfamiliar person with a scar
+    through her eyebrow"), because the generic noun alone tells two
+    strangers apart no better than nothing; a label with a noun of its own
+    keeps the features for the collision ladder."""
+    label, features, named = _summary_label(
+        actor_name, appearance_text, aliases, role=role, head_noun=head_noun)
+    if not label:
+        return "", []
+    wider = _widen(label, features)
+    if not named and wider:
+        return wider[0], wider[1:]
+    return label, wider
+
+
+def _label_features(reading, strip):
+    """The feature phrases of a summary's first sentence, in the order a
+    label widens through them: the phrases its head clause attaches after
+    the noun ("with six tails", "and amber eyes"), then the later clauses
+    the sentence attached with a boundary word (", with a slightly
+    dishevelled uniform"). Each is cut to `LABEL_FEATURE_WORDS` on a whole
+    phrase; one that comes to its opener alone is nothing."""
+    from language_runtime import referring
+
+    # Only a clause that named its noun has a tail: a list or prose with no
+    # noun attaches its later words to nothing of the body's ("the
+    # unfamiliar person by years at sea", first draft of this rule).
+    tail = list(reading.tail)
+    phrases, current = [], []
+    for w in tail:
+        if current and referring.splits_tail(w):
+            phrases.append(current)
+            current = []
+        current.append(w)
+    if current:
+        phrases.append(current)
+    # A phrase that does not ATTACH -- one opening on a relative or a
+    # number -- is a clause about conduct or a measurement, not a feature,
+    # and everything after it in the tail is inside that clause ("who reads
+    # as older than thirty-six in poor light" is not "as older than...").
+    kept = []
+    for i, words in enumerate(phrases):
+        if not words or not referring.attaches(words[0]):
+            break
+        # A phrase the tail split ended at a conjunction ("with an athletic
+        # | yet curvaceous build") ends at a cut, which `_cap_phrase` must
+        # know to apply its article rule.
+        following = phrases[i + 1] if i + 1 < len(phrases) else None
+        kept.append((words, bool(following) and referring.cuts_phrase(following[0])))
+    kept.extend((part.split(), False) for part in reading.attached
+                if part.split() and referring.attaches(part.split()[0]))
+    out = []
+    for words, ends_at_cut in kept:
+        # AN ARTICLE THAT FOLLOWS NO OPENER OPENS A CLAUSE: "in the way
+        # dock work makes A man big" is a sentence wearing a preposition,
+        # and no cut of it is a feature.
+        if _clause_like(words):
+            continue
+        # A FEATURE THE IDENTITY STRIP TOOK A WORD FROM IS NOT SAYABLE: an
+        # alias "The Hollow Smile" takes "smile" out of "with a deceptively
+        # soft smile" and leaves a phrase ending on an adjective.
+        stripped = strip(words)
+        if len(stripped) != len(words):
+            continue
+        cut = _cap_phrase(stripped, LABEL_FEATURE_WORDS, ends_at_cut=ends_at_cut)
+        if len(cut) < 2:
+            continue
+        text = _describe(cut)
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _clause_like(words):
+    arts = _referring.articles()
+    openers = _referring.phrase_openers()
+    for i, w in enumerate(words):
+        if i and w.casefold() in arts:
+            before = _fold_word(words[i - 1])
+            if before not in openers and not _referring.coordinator(before) \
+                    and before not in arts:
+                return True
+    return False
+
+
+def _append_feature(label, feature):
+    return f"{label} {feature}".strip()
+
+
+def _widen(base, features):
+    """The labels ``base`` widens into, one feature at a time. A feature
+    that only continues a phrase ("and amber eyes") is skipped where no
+    phrase precedes it; what the label already ends with is not said
+    twice ("the woman across the room" + "across the room in a grey
+    coat")."""
+    wider, label = [], base
+    attached = any(_referring.is_boundary(w) for w in base.split()[1:])
+    for feature in features:
+        first = feature.split()[0] if feature.split() else ""
+        if _referring.coordinator(first) and not attached:
+            continue
+        have, add = label.casefold().split(), feature.split()
+        overlap = max((n for n in range(min(len(have), len(add)), 0, -1)
+                       if have[-n:] == [w.casefold() for w in add[:n]]),
+                      default=0)
+        rest = " ".join(add[overlap:])
+        if not rest or rest.casefold() in label.casefold():
+            continue
+        label = _append_feature(label, rest)
+        attached = True
+        wider.append(label)
+    return wider
+
+
+def stranger_label_ladder(actor_name, appearance_text, aliases=None, *,
+                          role="", head_noun=None):
+    """``(base, wider)``: a stranger's label and the labels it widens into,
+    one attached feature at a time, when another stranger shares it. The
+    composer walks `wider` on collision and falls to the ordinal
+    distinguisher when it is spent. A feature that only continues a phrase
+    ("and amber eyes") is skipped where no phrase precedes it."""
+    base, wider = _label_and_ladder(actor_name, appearance_text, aliases,
+                                    role=role, head_noun=head_noun)
+    if not base:
+        return _unknown_actor_label(actor_name, None, aliases, role=role,
+                                    head_noun=head_noun), []
+    return base, wider
 
 def _delivery_ok(relation, scene, observer_name, source_name, channel,
                  volume="normal", proximity=None, behind_sources=None,
@@ -9210,7 +9467,13 @@ def self_reference_forms(name, appearance=None, aliases=None, *,
       ways: the label must be long enough for the short form to be a genuine
       shortening, the head noun must not be generic
       (`_GENERIC_LABEL_HEADS`), and the head noun must not appear in any
-      `avoid` label.
+      `avoid` label. THE HEAD IS THE NOUN THE LABEL IS BUILT ON, not its
+      last word: a label carries a feature phrase after its noun ("the old
+      woman with silver hair", "the unfamiliar person with a scar across
+      one cheek"), and the last word of that phrase is a part or a thing,
+      which claimed as self-reference would turn every "the hair" and "the
+      cheek" in a view into "you" (found 2026-10-20, when feature-bearing
+      labels became the rule rather than the exception).
 
     `avoid` is the set of labels this observer currently holds for OTHER
     bodies. Any form colliding with one of them is dropped outright: two
@@ -9240,10 +9503,11 @@ def self_reference_forms(name, appearance=None, aliases=None, *,
         words = re.findall(r"[\w']+", label)
         if len(words) < 3:
             continue
-        head = words[-1].casefold()
+        phrase = _referring.noun_phrase(words[1:]) or words[1:]
+        head = phrase[-1].casefold()
         if head in _ling("_GENERIC_LABEL_HEADS") or head in avoid_words or len(head) < 3:
             continue
-        short = f"the {words[-1]}"
+        short = f"the {phrase[-1]}"
         if short.casefold() in avoid_labels:
             continue
         if short.casefold() not in {m.casefold() for m in out}:

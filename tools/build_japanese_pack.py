@@ -129,6 +129,10 @@ comp.update({
                     "6": "六人", "7": "七人", "8": "八人", "9": "九人", "10": "十人"},
     "count_words": {"2": "二人", "3": "三人", "4": "四人", "5": "五人",
                     "6": "六人", "7": "七人", "8": "八人", "9": "九人"},
+    # The cardinals the counts and ``counter_numerals`` do not already
+    # name; `language_runtime.referring.number_words` reads the union, so
+    # an age is never a label's noun.
+    "number_words": ["百", "千", "万", "億"],
     "tier_phrases": {"within_reach": "手の届く距離", "near": "すぐ近く",
                      "across": "部屋の向こう", "default": "ここ"},
     "leading_connectives": ["そして", "また", "さらに"],
@@ -194,6 +198,7 @@ comp["templates"].update({
     "observable": "{label}は{body}。",
     "unknown_actor": "見知らぬ{description}",
     "unknown_actor_fallback": "見知らぬ人物",
+    "ordinal_label": "{ordinal}の{label}",
     "environment_here": "{label}がここにいる。",
     "environment_nearby": "近くに{label}が見える。",
     "fallback_speech": "{label}：「{quote}」",

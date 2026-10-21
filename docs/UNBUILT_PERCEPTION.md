@@ -1898,6 +1898,75 @@ What it leaves:
   repeated the ears and tails on every page.
 
 
+<a id="unbuilt-1-217"></a>
+
+### 1.217 What the stranger-label rule leaves (2026-10-20)
+
+**Built 2026-10-20** (stranger-label lane): a stranger's label is a noun
+phrase whose head is the body (`language_runtime.referring`,
+`common._summary_label`, `common.stranger_label_ladder`,
+`composer.assign_stranger_labels`; `Design.md` "A stranger's label is a body,
+never an age or a fragment"). Measured offline over the owner's 93 cards
+(engine.db and the tavern probe's four) and the 82 of the 2026-09-26 stories:
+labels with no body noun 8 -> 0 ("the forty", "the lean", "the tall", "the
+sharp gaze", "the weathered flight jacket over", "the tall full-figured who
+moves like", "the young slightly disheveled junior maintenance", "the
+voluptuous futa with crimson skin"); labels ending inside a phrase or a clause
+8 -> 1 and 18 -> 0, and under a forced collision 44 -> 1 and 56 -> 0. The 318
+recorded views of chats 159-178 rendered five stranger labels, none without a
+noun, and none changes. These remain:
+
+- **A first clause that promises a noun that is not the body.** "A scar
+  splits her eyebrow in two" is "the scar splits her eyebrow": an article
+  promises a noun and the engine takes it, nothing structural tells "scar"
+  from "woman", and the card warning cannot see it, because a noun was
+  promised. The generator clause is the defence.
+- **A phrase that runs into an adverb before a measure.** "A bronze-gold
+  conical war machine roughly 1.7 meters tall" is "the bronze-gold conical war
+  machine roughly", as before: the number ends the phrase and the word in
+  front of it is taken for the head.
+- **A feature the pack has no word for is not a rung.** ", bundled in a
+  frost-stiffened parka" attaches with a participle `linking_participles`
+  does not list, and a bare comma part ("practical build", "heavy with winter
+  fat") could be a noun phrase or an adjective phrase. A body whose first
+  sentence attaches nothing the engine can read widens to nothing, so two such
+  strangers fall to the ordinal: under the forced collision, owner 16 -> 25
+  and stories 0 -> 18, where the old word caps escaped it by appending a
+  fragment ("...with a deceptively", "...roughly thirty feet").
+- **"yet" and "but" end a coordination.** "with an athletic yet curvaceous
+  build" is not a rung: the conjunction ends the phrase, and the article rule
+  then refuses "with an athletic".
+- **A feature in a later sentence is never taken.** The probe card's scar is
+  its third sentence ("A thin white scar cuts clean through the left
+  eyebrow"); a later sentence opens on its own subject and verb, and the
+  engine cannot find the verb. The probe body is "the weathered person"; "the
+  unfamiliar person with a scar through her eyebrow" needs the scar attached
+  in the first sentence.
+- **A descriptive alias holding a common noun removes it from every label.**
+  The identity strip is token-wise and subtracts on purpose: Mireille's alias
+  "the woman behind the plain door" makes her "the tall full-figured person",
+  Lilith Vexara's "Succubus of Endless Craving" makes her "the voluptuous futa
+  person". The generic noun now closes the phrase where a fragment stood.
+  Firewall territory; the owner's call.
+- **A model-minted presence sketch can be missing its own noun.** Chat 159's
+  storekeeper ("past seventy sturdy thick through the middle sun-browned spry
+  storekeeper, with grey and thinning, flour on the cuffs") reads "the
+  unfamiliar person with grey and thinning". Not rendered while the body has
+  a dealt surface, which it does.
+- **The generic noun is "person" whatever the card's pronouns.** Views
+  already carry a stranger's pronouns ("her drink at her elbow"), so "the
+  weathered woman" would disclose nothing new, but it would change what
+  memory indexes as an entity (`generic_labels` keeps "the unfamiliar person"
+  out), so it was not built. A card has no `identity.gender`, `species` or
+  `role` to read instead: identity is uid, name, aliases and pronouns.
+- **Japanese reads the first sentence only.** "四十歳。海の女。" is
+  "見知らぬ人物": a later sentence's noun is not taken, because it can as easily
+  be a feature ("左の眉に傷跡").
+- **A body called by its age.** A compound noun built on a number heads a
+  label ("the gangly fifteen-year-old with scorched cuffs", kept from before);
+  a number or a decade never does. The owner's call whether the first goes
+  too.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-11"></a>

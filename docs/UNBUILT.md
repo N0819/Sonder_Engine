@@ -265,6 +265,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.182 — What the review of the present-tense rule found that predates it (2026-10-05)](UNBUILT_PERCEPTION.md#unbuilt-1-182)
 - [§1.200 — What a body reads does not reach it — BUILT 2026-10-11, residuals open](UNBUILT_PERCEPTION.md#unbuilt-1-200)
 - [§1.206 — Words in the view that break (2026-10-12)](UNBUILT_PERCEPTION.md#unbuilt-1-206)
+- [§1.217 — What the stranger-label rule leaves (2026-10-20)](UNBUILT_PERCEPTION.md#unbuilt-1-217)
 
 **2. Roadmap**
 

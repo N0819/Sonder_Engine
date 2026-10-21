@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, validator
 
 from story import attire
 from llm.schemas import coerce_to_declared
+from language_runtime import referring
 
 _PYDANTIC_V2 = hasattr(BaseModel, "model_validate")
 if _PYDANTIC_V2:
@@ -2614,6 +2615,31 @@ def character_card_warnings(sheet):
     # one of the owner's cards on all ten surfaces, which is how a warning
     # teaches people to stop reading warnings (`attire.spans_guessed`).
     visible = (sheet.get("embodiment") or {}).get("visible") or {}
+    # A SUMMARY THAT NAMES NO BODY. Every view, memory and page that does
+    # not know this character by name calls them by a label cut from the
+    # summary's opening clause, and the label is a noun phrase whose head
+    # is the body (`language_runtime.referring`): a clause that opens with
+    # an article promises that noun, and a clause that opens on a list of
+    # what the eye noticed -- an age, a build, a garment -- promises none,
+    # so every stranger has only the pack's generic word for a person to
+    # call the character by ("the weathered person", "the unfamiliar
+    # person"), or worse before the rule ("the forty" for "Forty and
+    # weathered by years at sea ...", tavern probe, 2026-10-20). Silent for
+    # an empty summary, which is defaulted and says nothing about itself.
+    summary = str(visible.get("summary") or "").strip()
+    if summary and not referring.names_a_body(summary):
+        opening = referring.first_sentence(summary)
+        opening = opening if len(opening) <= 60 else opening[:57].rstrip() + "..."
+        warnings.append(
+            "The appearance summary never says what this body IS to a "
+            "stranger's eye: it opens on “%s”. Anyone who does not "
+            "recognise this character calls them by the summary's opening "
+            "clause, and with no noun there every view, memory and page has "
+            "only a generic word for a person to call them by. Open "
+            "embodiment.visible.summary with the body as a stranger would "
+            "name it — a noun with its modifiers, then the features."
+            % opening
+        )
     if visible.get("distinctive_features"):
         warnings.append(
             "This card lists distinctive features, but nothing in the story "

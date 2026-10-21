@@ -102,9 +102,14 @@ def test_a_comma_between_adjectives_is_not_the_head_clause():
     # ...but only where an article promised a noun: a bare list run on took a
     # feature for one, "the tall square-shouldered short black hair", and
     # through a possessive reached the body's own name (review, 2026-10-05).
+    # The list's one-word parts are the body's modifiers and hang on the
+    # pack's generic noun: "the tall square-shouldered" was a bare modifier
+    # label -- the class that put "the forty" in every view of the tavern
+    # probe (2026-10-20) -- and a label is a noun phrase whose head is the
+    # body (`language_runtime.referring`).
     assert _unknown_actor_label(
         "Mika Oda", "Tall, square-shouldered, short black hair, wire-rimmed "
-        "glasses.") == "the tall square-shouldered"
+        "glasses.") == "the tall square-shouldered person"
     assert "sarah" not in _unknown_actor_label(
         "Sarah Moon", "A tall, slim, Sarah's red hair tied back.").casefold()
     assert "sulmirath" not in _unknown_actor_label(
