@@ -2561,14 +2561,44 @@ timed arrival scheduled on a written eta and nothing else (`Design.md`: "A
 journey under way toward a place arrives when its way is done"). What the fix
 leaves:
 
-- **The pace is a walk.** Nothing types a vehicle's speed -- no transit,
-  entity or card field carries one in any stored scene -- so a journey with
-  no written time is priced at the charter's walking pace
-  (`charter_move.WALK_PACES_PER_SECOND`, 1.3 paces a second): the channel's
-  thirteen kilometres take 2.8 hours, where a motor workboat would take about
-  one, and a measured sea crossing of hundreds of kilometres would take days.
-  A written `eta_seconds` stands over the price. The owner's: a typed speed
-  (on the transit, or the vehicle's record), a default per kind, or the walk.
+- **The pace was a walk -- CLOSED 2026-10-21.** Nothing typed a vehicle's
+  speed, so a journey with no written time was priced at the charter's
+  walking pace: the channel's thirteen kilometres in 2.8 hours, a measured
+  sea crossing of hundreds of kilometres in days. The owner's ruling,
+  verbatim: "vessels should perhaps be given speeds but i'd rather handle
+  it on a case by case basis rather than rigid code". So no table of
+  speeds by kind of craft exists, in code or in a card: a vessel's speed is
+  its own record's, `state.speed`, a `{value, unit}` measurement in m/s,
+  km/h, mph or kn (`spatial_transit.vessel_speed`),
+  written by the story case by case where the fiction says or makes plain
+  how fast that craft goes -- one clause each in the encoder's transit and
+  new-thing parts, the opening's `transit_note`, the repair card and the
+  Room's `plan_entity` brief -- and the walk prices the way only where
+  nothing is written (`journey_pace`). A written `eta_seconds` still stands
+  over both, and a speed written under way re-times what is left of the
+  way (`mechanics._schedule_new_arrivals`, `PRICED_SPEED_KEY`). What it
+  leaves:
+  - **An unmeasured way is still one `far` tier way, 240 paces.** A speed
+    sharpens a way the world measured and does nothing for one it did not:
+    at twenty knots a vessel crosses an unmeasured way in 23 s. Every stored
+    journey with a destination but the probe's crossed no measured way (25
+    of the owner's 27 priced journeys had no chain of edges to their end at
+    all, 2 an end the world did not hold) -- and every one of those carried
+    a written eta, which stands.
+  - **A speed in a unit outside the four, a bare number, or a speed written
+    inside the transit is read as no speed**, and the walk prices the way.
+    Silent: nothing warns.
+  - **A speed of zero is no speed.** A craft written dead in the water is
+    priced at the walk and still arrives; whether a stopped craft should
+    hold its arrival until a speed is written again is the owner's.
+  - **A written time is never moved by a speed.** An engine that fails
+    after somebody wrote the crossing's time leaves that time standing,
+    unless the encoder writes a new eta -- and a later eta for the same end
+    does not move a written one either (faba15b3's rule).
+  - **"Makes plain" is the model's to read.** Whether a craft's kind alone
+    (a motor workboat, an express train) makes its speed plain is not said;
+    the live check is what a model writes for a craft the story never gave a
+    speed.
 - **A body written into the route room is not aboard.** The probe's encoder
   put the boatman inside the boat (`containment: inside mary_ann`, which the
   merge reads as her inside) and, one event later in the same beat, wrote his

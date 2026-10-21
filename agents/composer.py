@@ -4000,12 +4000,17 @@ def thing_in_hand_clause(desc, mode=""):
 #: and whose it was is not written on it -- rendered, a body reading a shed
 #: tank top was told "clothing: yes; worn by: Hinami; shed: yes; garment:
 #: fitted tank top" (chat 137 replay, 2026-09-23), and a stranger would learn
-#: the owner's name off the cloth.
+#: the owner's name off the cloth. `speed` is a vessel's own pace, which the
+#: engine times its journeys by (`spatial_transit.vessel_speed`, 2026-10-21):
+#: read off a craft lying at its mooring it would state a motion it is not
+#: making ("speed: value 7, unit kn"), and what checking a craft finds -- its
+#: engine, its sails, its condition -- is in its own words in the rest of its
+#: state.
 _UNREADABLE_STATE_KEYS = frozenset({
     "transit", "link", "phase", "hatch", "destination_room", "route_room",
     "eta_seconds", "posture", "activity", "held_items", "zone", "description",
     "proximity", "target", "targets", "kind", "name", "lit", "running",
-    "pointed_at", "clothing", "worn_by", "shed", "garment",
+    "pointed_at", "clothing", "worn_by", "shed", "garment", "speed",
 })
 
 

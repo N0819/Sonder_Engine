@@ -66,9 +66,9 @@ import hashlib
 import json
 
 from core import jobs
-from world.spatial import (apply_transit_dock_edges, journey_seconds,
-                           room_of_record, scene_names_body, scene_room_id,
-                           stand_in_no_room)
+from world.spatial import (apply_transit_dock_edges, journey_pace,
+                           journey_seconds, room_of_record, scene_names_body,
+                           scene_room_id, stand_in_no_room, vessel_speed)
 from world.spatial_frames import infer_vehicle_zones
 
 
@@ -890,6 +890,35 @@ def _same_place(scene, a, b) -> bool:
 #: (`_schedule_new_arrivals`).
 PRICED_ARRIVAL_KEY = "priced_seconds"
 
+#: ...and the pace that price was made at, in paces (metres) a second
+#: (`spatial.journey_pace`: the vessel's own speed, else the charter's walk).
+#: A row priced before a vessel could carry a speed has none, and was priced
+#: at the walk (`_priced_pace`). It is what re-times a journey under way when
+#: the story changes how fast the vessel goes (`_schedule_new_arrivals`).
+PRICED_SPEED_KEY = "priced_speed"
+
+#: Decimal places (of a metre a second) at which the pace an arrival was
+#: priced at and the speed the vessel now makes are compared; the payload
+#: keeps the pace whole, so the re-timed remainder is exact. Not a tolerance
+#: anyone tunes: a speed restated in the same words reads back as the same
+#: number, and one restated in another unit (seven knots as 12.96 km/h)
+#: differs only past these places, where it is the same speed.
+PRICED_SPEED_DIGITS = 4
+
+
+def _priced_pace(booked):
+    """The pace an arrival the engine priced was priced at: its
+    `PRICED_SPEED_KEY`, else the charter's walk, the only pace there was
+    before a vessel could carry its own (2026-10-21)."""
+    try:
+        pace = float(booked.get(PRICED_SPEED_KEY))
+    except (TypeError, ValueError):
+        pace = 0.0
+    if pace > 0:
+        return pace
+    from world.charter_move import WALK_PACES_PER_SECOND
+    return float(WALK_PACES_PER_SECOND)
+
 
 def _written_eta(transit):
     """The positive `eta_seconds` a transit carries, else None. A positive
@@ -924,16 +953,27 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_arrivals,
       that many seconds from this sweep's clock, as it always was.
     * WITHOUT ONE, THE ENGINE PRICES THE WAY (`spatial.journey_seconds`: the
       world's own edges from the space it moves through to where it is bound,
-      at the charter's walking pace) for a journey under way -- `in_transit`
-      or `arriving`; a vehicle `sealed` and not yet away has not begun one --
-      and the payload carries the price (`PRICED_ARRIVAL_KEY`). A vessel
-      already standing where it is bound is not timed again: its way is done.
+      at the vessel's own speed where the story wrote one, else the charter's
+      walking pace -- `spatial.journey_pace`) for a journey under way --
+      `in_transit` or `arriving`; a vehicle `sealed` and not yet away has not
+      begun one -- and the payload carries the price and the pace it was made
+      at (`PRICED_ARRIVAL_KEY`, `PRICED_SPEED_KEY`). A vessel already
+      standing where it is bound is not timed again: its way is done.
     * ONE ARRIVAL PER JOURNEY. A pending arrival for the same end stands --
       a time restated each beat never slips -- unless it was the engine's
       price and a time has since been written, which replaces it once. A
       pending arrival for an end the journey no longer names is cancelled
       and the journey it is on is timed (`_fire_due_events` cancels one that
       comes due so, too).
+    * A SPEED THE STORY CHANGES RE-TIMES THE JOURNEY UNDER WAY, as a turn
+      does: the engine's price, booked at one pace, is cancelled when the
+      vessel's record writes another, and what is left of the way -- the
+      seconds still to run at the old pace -- is booked again at the new one.
+      The owner's ruling (2026-10-21) gives each vessel the speed its story
+      gives it, so an engine that fails mid-crossing, written as the slower
+      speed it now makes, must slow the crossing it is on. A record that
+      stops saying a speed is silence, not a return to a walk, and a time
+      somebody wrote is never moved by a speed.
 
     ``pending_arrivals`` is `_fire_due_events`' `{entity id: row}`; a plain
     collection of ids is read as rows unknown, which are left standing."""
@@ -957,18 +997,33 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_arrivals,
         if not destination:
             continue
         written = _written_eta(transit)
+        speed = vessel_speed(ent)
+        rest_of_the_way = None
         if str(eid) in pending:
             row = pending[str(eid)]
             if row is None:
                 continue
             booked = _payload_of(row)
             same_end = _same_place(scene, booked.get("destination_room"), destination)
-            if same_end and not (written is not None and PRICED_ARRIVAL_KEY in booked):
-                continue
+            priced_row = PRICED_ARRIVAL_KEY in booked
+            if same_end:
+                if written is not None and priced_row:
+                    pass        # a time written after the price replaces it once
+                elif written is None and priced_row and speed is not None \
+                        and round(speed, PRICED_SPEED_DIGITS) \
+                        != round(_priced_pace(booked), PRICED_SPEED_DIGITS):
+                    # What is left of the way, at the pace it was priced at,
+                    # covered at the speed the vessel now makes.
+                    left = max(0.0, float(row["due_at"]) - float(elapsed))
+                    rest_of_the_way = left * _priced_pace(booked) / speed
+                else:
+                    continue
             event_ops.append(("status", row["event_id"], "cancelled"))
         priced = None
         if written is not None:
             eta = written
+        elif rest_of_the_way is not None:
+            eta = priced = rest_of_the_way
         else:
             # Under way toward a place, or nothing to price (`journey_seconds`).
             eta = journey_seconds(scene, eid, ent)
@@ -979,6 +1034,7 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_arrivals,
                    "frame_id": frame_id}
         if priced is not None:
             payload[PRICED_ARRIVAL_KEY] = round(float(priced), 1)
+            payload[PRICED_SPEED_KEY] = journey_pace(ent)
         event_id = stable_event_key(
             "transit_arrival", chat_id, frame_id, eid, turn_id)
         event_ops.append(("schedule", {

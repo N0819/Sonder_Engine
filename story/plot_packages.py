@@ -3278,6 +3278,7 @@ from world.spatial import (  # noqa: E402  (module table, needs the values)
     LIGHT_LEVELS as _LIGHT_LEVELS,
     LIGHT_SHAPES as _LIGHT_SHAPES,
     SOUND_LEVELS as _SOUND_LEVELS,
+    SPEED_UNITS as _SPEED_UNITS,
     STEADINESS as _STEADINESS,
 )
 
@@ -3352,7 +3353,13 @@ OPERATION_FIELDS = {
                  "what has happened to it before the story opens. It stands "
                  "up as the thing's `state`, the record a hand on it is "
                  "answered from and the Director keeps thereafter; a condition "
-                 "written into `truths` prose reaches no hand.",
+                 "written into `truths` prose reaches no hand. A thing that "
+                 "carries bodies between places, when the story says or makes "
+                 "plain how fast it goes, carries `speed: {value, unit}` there "
+                 "too (unit %s, converted where the story uses another): the "
+                 "pace of every journey it makes. Where the story does not "
+                 "say, leave it out, and the engine prices the way from the "
+                 "world's own distances." % " | ".join(_SPEED_UNITS),
         "look?": "how they read at a glance",
         "light_source?": "how much light this thing PUTS OUT (%s) -- a thing "
                          "that gives light says so in this field; prose about "

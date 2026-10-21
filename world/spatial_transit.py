@@ -2,6 +2,7 @@
 """parent_entity-linked rooms: derived dock edges, inferred body enclosures, and
 nesting-aware ambient scope."""
 
+import math
 import re
 from typing import Optional
 
@@ -1311,6 +1312,100 @@ def _shortest_way_paces(scene, rooms, start, destination, skip, walk_prices):
     return None
 
 
+# ---------------------------------------------------------------------------
+# A vessel's own speed (2026-10-21). The owner's ruling on the walking pace
+# the journey's price fell back to, verbatim: "vessels should perhaps be given
+# speeds but i'd rather handle it on a case by case basis rather than rigid
+# code". So nothing here knows what a boat, a lift or a coach goes at: a
+# vessel's speed is the story's, written on the vessel's own record when the
+# fiction says or makes plain how fast it goes, and the charter's walk prices
+# the way only where nothing does.
+# ---------------------------------------------------------------------------
+
+#: The four units a vessel's speed is published in: the cards print them as
+#: `unit:'m/s'|'km/h'|'mph'|'kn'`, and the Room's `plan_entity` brief joins
+#: them from here (`story.plot_packages.OPERATION_FIELDS`). A closed set the
+#: engine owns, so a unit added here is a unit the writers must be told of.
+SPEED_UNITS = ("m/s", "km/h", "mph", "kn")
+
+#: What one of each unit is worth in metres a second -- and so in paces a
+#: second, a pace being about the metre the charter walks
+#: (`charter_move.WALK_PACES_PER_SECOND`): the four of `SPEED_UNITS`, each
+#: beside the spellings of that same unit, as `spatial_routing.
+#: _DISTANCE_UNIT_METERS` keeps a metre's -- the names of a unit, never a kind
+#: of craft or a guess at one.
+SPEED_UNIT_METRES_PER_SECOND = {
+    "m/s": 1.0, "mps": 1.0,
+    "km/h": 1000.0 / 3600.0, "kmh": 1000.0 / 3600.0, "kph": 1000.0 / 3600.0,
+    "mph": 1609.344 / 3600.0, "mi/h": 1609.344 / 3600.0,
+    "kn": 1852.0 / 3600.0, "kt": 1852.0 / 3600.0, "kts": 1852.0 / 3600.0,
+    "knot": 1852.0 / 3600.0, "knots": 1852.0 / 3600.0,
+}
+
+#: A speed written as text: a number and a unit ("7 kn", "40 km/h").
+_SPEED_TEXT = re.compile(r"^~?\s*(\d+(?:\.\d+)?)\s*([a-z/]+)\.?$")
+
+
+def _speed_unit(unit) -> str:
+    return re.sub(r"\s*/\s*", "/", " ".join(str(unit or "").split()).casefold())
+
+
+def vessel_speed(entity) -> Optional[float]:
+    """How fast a vessel makes its way, in metres (paces) a second, as its own
+    record writes it; None when it writes nothing the engine can read as one.
+
+    THE SPEED IS THE VESSEL'S, AND IT IS THE STORY'S. It lives on the
+    vessel's own record, `state.speed`, as a measurement: a `{value, unit}`
+    record -- the shape the room author already gives a distance
+    (`spatial_routing._distance_text`) -- or the same as text ("7 kn"), in a
+    unit of `SPEED_UNIT_METRES_PER_SECOND`. Beside `state.transit` and never
+    inside it: every journey writes its transit whole, and the speed is the
+    craft's for all of them, kept through docking and through every write
+    that does not name it, as the rest of `state` is (`spatial_merge.
+    _merge_entity`), until a beat changes how fast it goes and writes the new
+    one. A speed written inside the transit is read nowhere.
+
+    NONE IS NEVER A GUESS. Nothing written, a unit the table does not hold, a
+    bare number with no unit, no number, or nothing positive is no speed, and
+    the journey is priced at the charter's walk as before -- the fallback,
+    never a default by kind of craft (the owner's ruling, above). Measured
+    when this landed: no vessel record in any stored scene (the owner's
+    database, the three probe stories) carried a speed in any shape, nor a
+    rate in its words."""
+    record = entity if isinstance(entity, dict) else {}
+    state = record.get("state")
+    written = state.get("speed") if isinstance(state, dict) else None
+    if isinstance(written, dict):
+        number, unit = written.get("value"), written.get("unit")
+    elif isinstance(written, str):
+        matched = _SPEED_TEXT.match(_speed_unit(written))
+        if not matched:
+            return None
+        number, unit = matched.group(1), matched.group(2)
+    else:
+        return None
+    if isinstance(number, bool) or not isinstance(number, (int, float, str)):
+        return None
+    try:
+        number = float(number)
+    except (TypeError, ValueError):
+        return None
+    scale = SPEED_UNIT_METRES_PER_SECOND.get(_speed_unit(unit))
+    if scale is None or not math.isfinite(number) or number <= 0:
+        return None
+    return number * scale
+
+
+def journey_pace(entity) -> float:
+    """The pace a journey under way is priced at, in paces a second: the
+    vessel's own speed (`vessel_speed`) where its record writes one, else the
+    charter's walk, `charter_move.WALK_PACES_PER_SECOND` -- the one pace the
+    engine owns for covering ground, and the only one it can honestly use for
+    a craft the story never said the speed of."""
+    from world.charter_move import WALK_PACES_PER_SECOND
+    return vessel_speed(entity) or float(WALK_PACES_PER_SECOND)
+
+
 def journey_seconds(scene: dict, eid, entity=None) -> Optional[float]:
     """How long what remains of a journey under way takes, in story seconds,
     priced from what the world already holds; None when there is no journey
@@ -1338,12 +1433,14 @@ def journey_seconds(scene: dict, eid, entity=None) -> Optional[float]:
     and the far field's (fa244418), on top of the span of where it is. Never
     nothing, and never forever: a journey with a destination arrives.
 
-    THE PACE IS THE CHARTER'S WALK, `charter_move.WALK_PACES_PER_SECOND`,
-    read where it is kept: nothing in the world types a vehicle's speed --
-    no transit, entity or card field carries one, in any stored scene -- so
-    the one pace the engine owns for covering ground is the only one it can
-    honestly use. A written `eta_seconds` is a typed speed for one journey,
-    and it stands over this price (`world.mechanics`)."""
+    THE PACE IS THE VESSEL'S OWN WHERE THE STORY GAVE IT ONE, `journey_pace`:
+    its `state.speed` (`vessel_speed`), written case by case from what the
+    fiction says of that craft (the owner's ruling, 2026-10-21) -- else the
+    charter's walk, `charter_move.WALK_PACES_PER_SECOND`, read where it is
+    kept. At the walk the control story's motor workboat took 2.8 hours over
+    the channel's thirteen kilometres; at the seven knots a story might give
+    her, about one. A written `eta_seconds` is a stated time for one journey,
+    and it stands over this price, whatever the speed (`world.mechanics`)."""
     record = entity if isinstance(entity, dict) else (
         ((scene or {}).get("entities") or {}).get(eid))
     transit = _transit_state(record)
@@ -1369,7 +1466,7 @@ def journey_seconds(scene: dict, eid, entity=None) -> Optional[float]:
         if candidate and candidate not in own and isinstance(rooms.get(candidate), dict):
             start = candidate
             break
-    from world.charter_move import WALK_EDGE_PACES, WALK_PACES_PER_SECOND
+    from world.charter_move import WALK_EDGE_PACES
     paces = None
     if start and isinstance(rooms.get(destination), dict):
         skip = set(own)
@@ -1386,7 +1483,7 @@ def journey_seconds(scene: dict, eid, entity=None) -> Optional[float]:
             except Exception:
                 span = 0.0
         paces = span + float(WALK_EDGE_PACES["far"])
-    return max(0.0, paces) / float(WALK_PACES_PER_SECOND)
+    return max(0.0, paces) / journey_pace(record)
 
 
 def stand_in_no_room(scene: dict, eid, entity=None) -> bool:
