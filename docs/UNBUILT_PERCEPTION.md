@@ -1535,18 +1535,23 @@ speech. What stays open, and is the owner's:
   pace -- a `din` at most at every cell of its room, heard in its room and
   the next -- and what stops conversation is `deafening`. Open within it:
   the band's floor (65 rather than 70) as the owner's number.
-- **A voice leaving a building** is charged nothing for the open air it
-  spreads into: with both front doors open, a normal voice in one parlour
-  reaches the parlour across a 16-pace street in pieces (42.6 dB of far-field
-  loss; the same before the restatement). A doorway radiating into the sky
-  keeps some 20 dB less than a room would -- an envelope term on the far
-  field is the proposal, and it would move every sound's reach across a
-  street, so it is the owner's.
-- **The impact ladder** (`EVENT_POWER`) is still the 2026-09-06 one, under
-  the emission ladder at `loud` and `deafening`; it decides reach only.
+- ~~**A voice leaving a building** is charged nothing for the open air it
+  spreads into~~ BUILT 2026-10-20 for the NEAR field (round 2, lane B; the
+  note's § 16): a voice crossing an opening between a building and the open
+  air is priced with the doorway as the source for the outdoor leg
+  (`spatial_sound_field.doorway_air_loss_db`, the free-field law from the
+  door). What stays: the FAR field still charges a street's open air as a
+  room's length -- with both front doors open, a normal voice in one
+  parlour reaches the parlour across a 16-pace street in pieces (42.6 dB of
+  far-field loss); the envelope term on the far field is still the owner's.
+- ~~**The impact ladder** (`EVENT_POWER`) is still the 2026-09-06 one~~
+  RE-ANCHORED 2026-10-20 at `deafening` (round 2, lane B): 108 at the cell;
+  the three lower rungs are the 2026-09-06 ones still.
 - **Since wave A (2026-10-20, the note's § 12.1) noise decides a line for one
-  more listener**: a BYSTANDER beyond conversational reach in a din -- never
-  the line's addressee, never anyone within a pace or two of its speaker, and
+  more listener**: a listener beyond conversational reach in a din -- a
+  bystander, and since round 2 (lane B, § 16) the line's addressee too; never
+  anyone within a pace or two of its speaker, never a listener nobody can
+  say the line was for, and
   never from rain or a quiet house (`DIN_DB` is the noise words' `din` rung,
   57 dB(A)). Replayed on every recorded line, it changes none: no corpus room
   holds a crowd, and every recorded line spoken in a din was addressed,
@@ -1580,9 +1585,11 @@ thunderous / catastrophic. The two expected failures are ordinary tests now.
 27.0 / 30.0 / 30.0 (a furnished room is 35-40 dB(A), which is why a normal
 voice is `full` across any room and a mutter carries three paces);
 `WEATHER_NOISE` and `WIND_NOISE` (heavy rain 37, a gale 40, against real
-55-70); and the impact ladder (`EVENT_POWER`), which now sits below the
-emission ladder at `loud` and `deafening` -- nothing compares the two, so
-no verdict turns on it. Each is one number with a known direction: rooms
+55-70; the wind raised to 60 / 70 by wave B2); and the impact ladder
+(`EVENT_POWER`), which sits below the emission ladder at `loud` -- nothing
+compares the two, so no verdict turns on it -- and since round 2 (lane B,
+2026-10-20) a few decibels over it at `deafening`, as at every other shared
+word. Each is one number with a known direction: rooms
 mask more, weather masks at all, a whisper's reach shortens by a pace.
 **The owner bears on the weather half (2026-09-26):** "Rain is not even that
 loud you could still call to someone across a street in rain and not really
@@ -2268,9 +2275,14 @@ heard only in pieces or as a voice. What it leaves, each the owner's
   sound within the beat is not perceived.
 - **A habituated sound is in no memory**: a character's soundscape -- its
   start, its stop -- is not filed (`_EPISODE_SOUND_TAGS`).
-- **The impact ladder**: a gunshot written `deafening` is 80 dB at its cell
-  and dulls nobody; only `thunderous` and `catastrophic` (or an authored
-  `db`) reach `BLAST_DB`.
+- ~~**The impact ladder**: a gunshot written `deafening` is 80 dB at its
+  cell and dulls nobody~~ RULED AND BUILT 2026-10-20 (round 2, lane B;
+  the note's § 16): impact `deafening` is 105 dB(A) a pace from the blow,
+  108 at its cell -- the loudest blow an ordinary thing gives or takes --
+  felt a pace or two off and heard through one wall; it still rings no ear,
+  because 105 dB(A) does not: a shot or a blast is `thunderous` or
+  `catastrophic` on this ladder. Open within it: whether the encoder's
+  `sensory_events` card should say so (a clause; a live run).
 - **The residue's `targeted` fragment at the outcome** ("something shifts
   you") still reads a LINE addressed to the sleeper, from anywhere, as being
   moved -- a sound question answered by a touch sentence.
@@ -2293,14 +2305,15 @@ told after the sight of a maker seen past 103 m, and the sky's thunder after
 its flash; loud sound is felt, on the touch channel, by distance and storey.
 What it leaves:
 
-- **A beat's own sound events are keyless in the outcome pass.** They land in
-  the view's background half, lowercase ("... You see a person of
-  unremarkable appearance. a flat crack of musket fire."), though
-  `composer.ambient_percepts` says a beat's sound is not standing state; the
-  establish pass keys them (`_AMBIENT_BEAT_BAND`), the outcome pass does
-  not. Found building § 14.3, which keys only a sound it holds after its
-  seen maker. Keying every one moves every sound of every outcome view into
-  the beat half: the owner's call, with a measurement.
+- **A far sound is standing state still.** Round 2 (lane B, the note's
+  § 16) keyed every sound a beat makes in the observer's own room or the
+  near field to the beat (`_AMBIENT_BEAT_BAND`, the act and outcome passes
+  as the establish pass); a bang beyond the near field
+  (`composer.distant_sound_percepts`, a bearing and a character) is still
+  minted keyless, so it reads as the air of the place and is deduped as
+  standing state. Measured on the corpus: 255 of 10,807 recorded outcome
+  views carried a beat's own near sound in the background half and now
+  carry it in the beat half; the far kind was not counted.
 - **Only the outcome pass orders a sound after its seen maker**; the act
   pass (the player's own act, seen by the cast) does not.
 - **A maker is matched by the event's `source` naming the body** that acted;
@@ -2317,12 +2330,17 @@ What it leaves:
   shake a body with the sky's own thunder; the HEARD thud through a floor is
   the bullet above.
 - **The wind bends the near field's signal, not its noise**: a running thing
-  upwind of a listener is heard over unbent; and a din from the wind spares
-  a line's addressee at any range (§ 12.1's rule, the note's § 14.7
-  question 5).
-- **Thunder indoors needs audible rain**: the sound bed's existing rule, now
-  the view's too (`weather.thunder_heard`), leaves a dry storm silent behind
-  walls.
+  upwind of a listener is heard over unbent. ~~A din from the wind spares a
+  line's addressee at any range~~ RULED AND BUILT 2026-10-20 (round 2, lane
+  B; the note's § 16): beyond conversational reach the din at the ear
+  decides for the addressee as for a bystander.
+- ~~**Thunder indoors needs audible rain**~~ RULED AND BUILT 2026-10-20
+  (round 2, lane B): thunder is heard in any room the map joins to the open
+  air within `THUNDER_REACH_LAYERS` that is not buried `THUNDER_BURIED_LEVEL`
+  storeys down, rain or none. Open within it: a ground-floor room the map
+  seals off by walls alone hears no thunder through its own roof, because
+  the graph cannot tell a roof from earth above it -- the storey can, and is
+  read only to exclude.
 
 Designed and built 2026-09-04 on `writers-room` (not yet on `main`;
 [`design/DESIGN_SOUND_FIELD.md`](design/DESIGN_SOUND_FIELD.md),

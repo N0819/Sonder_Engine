@@ -793,6 +793,63 @@ _THUNDER_BY_MUFFLING = {"": "thunder", "muffled": "distant thunder",
 def _thunder_words(muffling):
     return _THUNDER_BY_MUFFLING.get(str(muffling or ""), "muffled thunder")
 
+
+# THUNDER REACHES EVERY ROOM WITH THE SKY SOMEWHERE ABOVE IT, rain or none
+# (2026-10-20, round 2 lane B; DESIGN_SOUND_FIELD.md § 16, the owner's answer
+# to § 14.7's question 9). `thunder_heard` had required AUDIBLE RAIN indoors,
+# so a dry electrical storm was silent behind walls. Real: a clap is 100-120
+# dB(A) under the storm and 60-80 a few kilometres off, low-frequency, and an
+# ordinary roof or wall takes 30-45 dB of it, a shut interior door 15-25 more;
+# a quiet room is 25-35. So it is heard -- muffled -- through one, two and
+# three layers of building, and gone past that.
+#
+# How many muffling layers (`weather_depth`: shut doors, panes, curtains
+# between the room and the open air; an open doorway is none) a clap is still
+# heard through. Three: 110 less a roof's 40 and two doors' 20 each is 30, at
+# a quiet room's floor; a fourth door takes it under.
+THUNDER_REACH_LAYERS = 3
+# ...and the one typed fact that says a room is in the earth rather than
+# under a roof: its storey (`rooms[id].level`, else its site's `elev_m` in
+# storeys of `site_plan.STOREY_M`). A cellar (-1) has the house above it and
+# hears the clap through the house; two storeys down, six metres of earth and
+# structure stand between the room and the sky, more than a clap has to give.
+# The map's own `None` -- a room joined to the air by no way at all -- is the
+# other exclusion, as it is for the rain.
+THUNDER_BURIED_LEVEL = -2
+
+
+def _storeys_down(scene, room_id):
+    """The storey a room stands on: its `level`, else its site's elevation
+    in storeys, else 0 (the ground, which is what every room was before
+    levels existed). Read at call time through the facade, as
+    `_open_to_sound` reads it: three `world/spatial_*` siblings import this
+    module, so a module-scope import here would be an import cycle."""
+    from world.spatial import normalize_level
+    room = (((scene or {}).get("rooms") or {}).get(room_id) or {})
+    if not isinstance(room, dict):
+        return 0
+    level = normalize_level(room.get("level"))
+    if level is not None:
+        return int(level)
+    site = room.get("site")
+    if isinstance(site, dict) and site.get("elev_m") is not None:
+        try:
+            from world.site_plan import STOREY_M
+            return int(round(float(site["elev_m"]) / STOREY_M))
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def _thunder_muffling(layers):
+    """Thunder's muffling word for a room that many layers from the open
+    air: the rain's own ladder (`_MUFFLING`), and its deepest rung for every
+    layer past it to `THUNDER_REACH_LAYERS`."""
+    for limit, label, _gain in _MUFFLING:
+        if layers <= limit:
+            return label
+    return _MUFFLING[-1][1]
+
 # Places with hard surfaces and volume, where a sound arriving from outside
 # arrives with the room's own tail on it. Purely a hint for choosing the
 # RECORDING -- "echoing muffled rain" and "muffled rain" are different clips.
@@ -1023,6 +1080,9 @@ def weather_for_room(scene, room_id, subject=""):
         "audible": audible,
         "layers": layers,
         "muffling": muffling,
+        # In the earth rather than under a roof (`THUNDER_BURIED_LEVEL`):
+        # the one typed fact that shuts a room away from the sky's thunder.
+        "buried": _storeys_down(scene, room_id) <= THUNDER_BURIED_LEVEL,
         # Hard surfaces and volume: rain arriving into a cave comes with the
         # cave on it. Only a hint for which recording to choose, never a gate.
         "reverberant": bool(muffling) and _matches(scene, room_id, _REVERBERANT_WORDS),
@@ -1046,18 +1106,26 @@ def has_lightning(weather):
 
 def thunder_heard(scoped):
     """Where the sky's thunder reaches a room: its muffling -- "" under the
-    sky or a roof, else the muffling the room hears the weather at -- or
-    None where it does not reach at all. ONE definition, read by the sound
-    bed (`weather_words`) and by the view a mind is given
-    (`composer.weather_percepts`, wave B2), so the page and the ambience
-    cannot disagree about a storm."""
+    sky or a roof, else by the layers of building between the room and the
+    open air (`_thunder_muffling`: "muffled" one shut door in, "faint" two
+    and three) -- or None where it does not reach at all: a room the map
+    joins to the air by no way (`weather_depth` None), one past
+    `THUNDER_REACH_LAYERS`, or one buried `THUNDER_BURIED_LEVEL` storeys
+    under the ground. WHETHER OR NOT RAIN IS: until round 2 (2026-10-20)
+    this asked for audible rain, and a dry storm was silent behind walls.
+    ONE definition, read by the sound bed (`weather_words`) and by the view
+    a mind is given (`composer.weather_percepts`, wave B2), so the page and
+    the ambience cannot disagree about a storm."""
     if not has_lightning(scoped):
         return None
     if scoped.get("exposure") != "enclosed":
         return ""
-    if scoped.get("audible"):
-        return str(scoped.get("muffling") or "")
-    return None
+    if scoped.get("buried"):
+        return None
+    layers = scoped.get("layers")
+    if layers is None or int(layers) > THUNDER_REACH_LAYERS:
+        return None
+    return _thunder_muffling(int(layers))
 
 
 def weather_words(scoped, channel="sight"):

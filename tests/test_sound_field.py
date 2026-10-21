@@ -1302,7 +1302,11 @@ def test_an_event_reads_its_level_word_its_number_and_its_old_intensity():
     from world.spatial import FAR_FIELD_ENTRY_DB
     assert EVENT_DB["loud"] >= FAR_FIELD_ENTRY_DB > EVENT_DB["audible"]
     assert EVENT_DB["loud"] == pytest.approx(72.0)
-    assert EVENT_DB["deafening"] == pytest.approx(80.0)
+    # `deafening` RE-ANCHORED 2026-10-20 (round 2, lane B): 105 dB(A) a pace
+    # from the blow, 108 at its cell -- a steel door slammed, an anvil on
+    # stone -- where it had been 80 (`tests/test_the_impact_ladder_is_
+    # anchored_to_real_blows.py`).
+    assert EVENT_DB["deafening"] == pytest.approx(108.0)
     assert EVENT_DB["thunderous"] == SOUND_DB["thunderous"]
     assert EVENT_DB["catastrophic"] == SOUND_DB["catastrophic"]
     # A running `loud` thing is a household one since 2026-10-20 -- a

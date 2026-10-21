@@ -6726,7 +6726,7 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
                 percepts.extend(_gated_ambient_percepts(
                     gate, [{**event, "room": here, "room_id": here,
                             "source_room": here} for event, _level in afar],
-                    p.get("room")))
+                    p.get("room"), order_key=_AMBIENT_BEAT_BAND))
             # LOUD SOUND IS FELT (wave B2): what shakes the floor under this
             # body, on the touch channel, whatever it can hear
             # (`felt_vibrations`).
@@ -6983,10 +6983,12 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 prev_standing=prev_standing,
                 regions=regions)
             if act_sounds:
+                # THIS BEAT'S sounds are the beat's, not the air of the
+                # place (`_AMBIENT_BEAT_BAND`; round 2, lane B).
                 percepts.extend(_gated_ambient_percepts(
                     _authored_prose_gate(
                         ctx, "perception_act", name, known, identity_space),
-                    act_sounds, p.get("room")))
+                    act_sounds, p.get("room"), order_key=_AMBIENT_BEAT_BAND))
                 _afar = heard_events(
                     sc, name, act_sounds, room=p.get("room"),
                     turn_idx=getattr(ctx.turn, "idx", None),
@@ -6999,7 +7001,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                             identity_space),
                         [{**event, "room": _here, "room_id": _here,
                           "source_room": _here} for event, _level in _afar],
-                        p.get("room")))
+                        p.get("room"), order_key=_AMBIENT_BEAT_BAND))
             # LOUD SOUND IS FELT (wave B2), whatever this body can hear.
             percepts.extend(_felt_percepts_for(ctx, sc, name, p.get("room"),
                                                act_sounds))
@@ -8057,6 +8059,14 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     and str(e.get("room") or "") == str(p.get("room") or "")
                     and _reaches_this_ear(sc, name, p.get("room"), field,
                                           beat_sounds, e))
+                # KEYED TO THE BEAT (`_AMBIENT_BEAT_BAND`; round 2, lane B,
+                # UNBUILT_PERCEPTION § 2.36): a beat's own sound is not
+                # standing state, and keyless it rendered lowercase in the
+                # view's background half, after the furniture ("... You see
+                # a person of unremarkable appearance. a flat crack of
+                # musket fire."). Every sound the beat makes -- here, from
+                # the next room, or held after its seen maker -- lands in
+                # the beat half, after the acts that made it.
                 percepts.extend(
                     _gated_ambient_percepts(
                         gate,
@@ -8066,7 +8076,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                          # own room on the field first.
                          and _reaches_this_ear(sc, name, p.get("room"), field,
                                                beat_sounds, e)],
-                        p.get("room")))
+                        p.get("room"), order_key=_AMBIENT_BEAT_BAND))
                 # ...THEN THE NEAR FIELD: a sound in a room the listener's
                 # own composite grid places is a one-beat source on that
                 # room's centre, spread through the doorway it came by and
@@ -8102,7 +8112,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         else:
                             _kept.append(moved)
                     percepts.extend(_gated_ambient_percepts(
-                        gate, _kept, p.get("room")))
+                        gate, _kept, p.get("room"),
+                        order_key=_AMBIENT_BEAT_BAND))
                 # ...and beyond the near field it is a BEARING AND A
                 # CHARACTER, never a sentence and never a place. The rooms
                 # this listener's own composite already places are the near
@@ -8523,7 +8534,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 percepts.extend(_gated_ambient_percepts(
                     gate, [_event], p.get("room"),
                     **({"order_key": _at + 0.5, "after": _after}
-                       if _at is not None else {})))
+                       if _at is not None
+                       else {"order_key": _AMBIENT_BEAT_BAND})))
             # A BODY THAT WAS THERE WHEN YOU CAME IN DID NOT COME IN. An
             # observer who came into the room this beat, in the same causal
             # step as the mover -- the two walked it side by side -- or after

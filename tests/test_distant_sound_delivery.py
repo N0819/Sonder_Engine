@@ -29,6 +29,14 @@ from story.character_schema import default_character_data
 #: this rests on stops being a boundary.
 ROOMS = ("cellar", "stair", "gallery")
 DETAIL = "a long grinding collapse"
+# Read case-insensitively since round 2 lane B (2026-10-20): a beat's own
+# sound lands in the BEAT half of the view, where it leads a sentence and is
+# capitalised ("A long grinding collapse. You are in Cellar."); two rooms
+# away it is still the far field's lowercase background line.
+
+
+def _has(text, detail=DETAIL):
+    return detail in str(text or "").lower()
 
 #: `FAR_FIELD_ENTRY_DB` is 70; since the 2026-09-14 recalibration a `loud`
 #: standing source (83 at its cell) already clears it, and `catastrophic`
@@ -122,7 +130,7 @@ def _listener(views):
 
 def test_a_distant_event_reaches_a_listener_two_rooms_away(temp_db):
     view = _listener(_views(temp_db, events=[_crash()]))
-    assert DETAIL in view, (
+    assert _has(view), (
         "the far field graded this at three rooms and no view said so -- "
         "the whole of what was missing")
 
@@ -147,7 +155,7 @@ def test_no_key_but_the_notes_own_survives_the_normaliser(temp_db):
         _crash(quote="open the gate", speaker="The Stranger",
                heard_as="someone shouting open the gate")])
     both = views["player"] + _listener(views)
-    assert DETAIL in views["player"] and "open the gate" not in both
+    assert _has(views["player"]) and "open the gate" not in both
 
 
 def test_the_room_it_happened_in_hears_it_whole(temp_db):
@@ -155,8 +163,8 @@ def test_the_room_it_happened_in_hears_it_whole(temp_db):
     listener's own room by construction, so the two never answer the same
     room and nobody is told about one bang twice."""
     view = _views(temp_db, events=[_crash()])["player"]
-    assert DETAIL in view
-    assert view.count(DETAIL) == 1
+    assert _has(view)
+    assert view.lower().count(DETAIL) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -184,10 +192,10 @@ def test_an_event_too_quiet_to_travel_stays_where_it_happened(temp_db):
     and a `loud` one (a crowbar on a bulkhead, 72 dB against the old 56) now
     walks the room graph, which is the whole point of the ruling."""
     quiet = _views(temp_db, events=[_crash(level="audible")])
-    assert DETAIL in quiet["player"]
+    assert _has(quiet["player"])
     assert DETAIL not in _listener(quiet)
     carried = _views(temp_db, events=[_crash(level="loud")])
-    assert DETAIL in _listener(carried), (
+    assert _has(_listener(carried)), (
         "a hammer blow on steel is heard beyond the room that made it")
 
 

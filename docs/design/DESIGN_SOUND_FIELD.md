@@ -2442,3 +2442,357 @@ OpenRouter, about four seconds and a cent a call; harness in the job's
   illustration restored, 0 of 44 lines changed volume. The reduction dropped
   a case the children stated (CLAUDE.md: "an implied case is a dropped
   case"); it is back, in both packs, within the budget.
+
+## 16. Round 2, lane B: the ladder, the addressee in a din, the doorway, thunder, the beat's sounds (2026-10-20)
+
+The owner read §§ 11-14's open questions and ruled, the same day, that
+five of them be built: the impact ladder's `deafening` (§ 13.7 question
+10, § 14.7 question 10), the din at an addressee beyond conversational
+reach (§ 14.7 question 5), a voice leaving a building into the open air
+(§ 14.7 question 8, § 11.8 question 9), thunder indoors whether or not
+rain is (§ 14.7 question 9), and the outcome pass's keyless beat sounds
+(UNBUILT_PERCEPTION § 2.36). Each is a class stated in the engine's
+vocabulary with its real-world basis beside its constant, built
+failing-first (`tests/test_the_impact_ladder_is_anchored_to_real_blows.py`,
+`tests/test_a_din_reaches_an_addressee_beyond_reach.py`,
+`tests/test_a_voice_leaves_a_building_by_its_door.py`,
+`tests/test_thunder_is_heard_indoors_in_a_dry_storm.py`,
+`tests/test_a_beats_own_sound_lands_in_the_beat_half.py`), and measured
+read-only on the owner's `engine.db` and the four 2026-09-26 stories with
+no model call and every socket refused. The owner's standing lean where
+hearing is borderline, toward the voice carrying, decided nothing here:
+nothing in the five was borderline.
+
+### 16.1 The impact ladder's `deafening` is a real blow
+
+**The defect.** `EVENT_POWER["deafening"]` was 80 dB at the cell, authored
+on 2026-09-06 on the compressed scale and never moved: 43 under
+`thunderous` (123) and 23 under the emission ladder's own `deafening`
+(103). A blow the story called deafening was quieter a few paces off than
+a household machine, dulled no ear (`BLAST_DB` 120) and shook no floor
+(`FELT_DB` 100).
+
+**The world.** The loudest blow an ordinary thing gives or takes -- a steel
+door slammed, an anvil dropped on stone, a hammer on steel, a plank floor
+giving way -- is 100-110 dB(A) a metre off. A handgun or a rifle is 140-165
+dB(A) peak at the muzzle and 120-130 a few metres off; a small explosion,
+a shotgun, a stun grenade indoors the same or more.
+
+**As built.** `EVENT_POWER["deafening"]` = `power_of_db(108.0)`: 105 dB(A)
+one pace from the blow, 108 at its cell, the middle of the band the rung
+names. The three lower rungs (45 / 58 / 72) and the two far ones (shared
+with `SOUND_POWER`, 123 / 143) do not move; the ladder is monotone. What
+the figure buys, each a test: a `deafening` blow is felt by a body a pace
+or two from it and by one directly under it (105 against `FELT_DB` 100, 3
+dB a doubling: a tremor to about three paces), heard through one masonry
+wall into the next room as a hammer on steel is (108 less the wall's 45
+and the rooms' spans stands over a quiet room; a `loud` blow still does
+not cross), and it RINGS NOBODY'S EAR, because a 105 dB(A) blow does not
+in the world: `BLAST_DB` is 120 at the ear, and a shot, a blast or a stun
+grenade is not this rung but `thunderous` (123 at the cell: rings an ear a
+pace off, felt across a building) or `catastrophic` (143: rings the whole
+room, felt across a town). The owner's sentence "so that a close gunshot
+rings an ear within a pace or two" is satisfied by a gunshot written
+`thunderous`, and cannot be by one written `deafening` at any figure under
+the blast threshold -- which is the argument for not putting the rung
+there: 120 at a pace would make a slammed door a blast.
+
+**Why the two ladders differ at `deafening` (108 against 103) and are not
+made to agree.** Every word the two ladders share stands a few decibels
+higher on the impact ladder -- faint 45/43, audible 58/53, loud 72/68, and
+now deafening 108/103 -- because a blow is a PEAK and a running thing an
+average: the words name different things. The emission rung is a machine
+you cannot talk beside (95-110 dB(A) sustained, 100 the middle), measured
+against conversation and read by the masking budget; the impact rung is
+the top of what a thing can be struck at, measured by how far it went.
+Making them agree would move either the masking budget's one reading of a
+standing `deafening` or the step the three lower rungs already keep.
+
+**What else reads the rung.** A room's own `sound` is priced on the impact
+ladder by design ("a room's own voice is heard from somewhere else"), so a
+room written `deafening` is 28 dB louder than it was. A numeric
+`intensity` in [0, 1] is a fraction of this rung's power and moves with it;
+no recorded event in the five databases carries one. `blast_possible`
+still answers no for a beat whose loudest sound is a `deafening` blow, so
+the ordinary beat measures no ear.
+
+**Measured** (`scripts/measure_ladder.py` against HEAD 3f17b239 and this
+tree, 138 recorded beats carrying a sound event: faint 96, audible 88,
+loud 43, deafening 3, catastrophic 2, thunderous 1). The three `deafening`
+events are all chat 160/161's elevator fall: the shriek of the brakes in
+the shaft. Before, the car did not hear the shriek from the shaft at all
+(160 t11) or heard it `overwhelming` at 78.9 (160 t13); now 52.1 and 106.9
+`overwhelming`. On 161 t11, where the shriek is in the car itself, both
+riders now feel a tremor of it (+3.5 and +2.0 dB over `FELT_DB`) beside the
+shudder of the thunderous crash they already felt. Nobody is newly dulled:
+the exposures that already reached `BLAST_DB` came from the catastrophic
+crash. No beat without a `deafening` EVENT changed -- except 20 beats of
+chats 160/161 (turns 1-9 and 12) where the shaft's standing `deafening`
+ROOM sound ("groaning metal and snapping cables during the fall") reaches
+the car `overwhelming` at 77.8 where it had been `plain` at 49.8: the
+room-sound ladder is the impact ladder, and a shaft the story called
+deafening is now heard as one. The rooms hearing each event from afar are
+unchanged (the car, in each case); the 115 ordinary beats of the other
+chats and the four stories are byte-identical.
+
+### 16.2 The din reaches an addressee beyond conversational reach
+
+**The over-simplification.** § 12.1 spared a line's addressee at ANY
+range. In the world a shout to someone a hundred metres off in a gale is
+lost, and across a busy hall a line to someone nine paces off is lost too:
+being spoken to does not put a voice in your ear. What being spoken to
+does is put the two of you within reach -- people who talk in a din close
+up -- and that is the class.
+
+**As built.** `spatial_senses._in_a_din_beyond_reach` (was
+`_bystander_in_a_din`): a listener in a din (`din_db`) beyond
+`CONVERSATION_REACH_PACES` of the speaker, the line voiced, is graded by
+`din_level` whether the line was spoken to them (`addressed` True) or to
+somebody else (False); `addressed` None -- a reader that cannot say whom
+the line was for -- caps nothing, as § 14.8 ruled. The budget is the one
+they already had: the speaker's voice raised over the din at THEIR ear
+(`lombard_level_db`, to a shout), the free-field spreading over the
+field's path, an opening's loss, `AV_BENEFIT_DB` for a watched face; the
+head's shadow still never falls on the addressee (`_facing_its_addressee`).
+`hearing_reason` says `din_beyond_reach` for the one spoken to and
+`din_bystander` for anyone else. In a taproom of a few dozen (68 dB) a
+line spoken TO the far table nine paces off arrives in pieces however it
+is raised, and a watched raised voice whole; across a throng (75) an
+ordinary voice is lost to the one it is for and a shout caught in pieces.
+Under the sky in a gale (70 at the ear) a shout to someone 133 paces off is
+lost and its voice does not carry; a shout across a sixteen-pace street
+comes in pieces; six paces off, in pieces still; a pace off, whole. In a
+downpour in still air the call across the street is whole: rain is never a
+din, by construction.
+
+**Measured** (`scripts/regrade_r2.py`, wave B2's regrade with the stamps
+added, against HEAD and this tree): 2,408 of 2,408 recorded lines keep
+their grade, reason and voice; 2,405 keep the hypothetical
+`word_if_addressed` as well. Of 2,296 distinct lines 245 stand in a din at
+the listener's ear and 125 of those were spoken to the listener -- every
+one within conversational reach or loud enough over its din to stand. The
+three whose `word_if_addressed` moved: the harbour story's gale line (t19,
+Aldo sixteen paces up the wall: full -> fragment, had it been to him -- it
+names nobody, so nothing moves) and two rival lines from the stage-door
+corridor into the rehearsal room's `loud` room sound (8.8 paces, 72 dB:
+full -> none, had they been to Celestine; the record names nobody). Where
+the rule bites on the synthetic kitchen of `tests/test_a_household_loud_
+is_a_din.py`: the cook standing ON the whistling kettle's cell (64.5 dB(A)
+at her ear) has a normal voice spoken to her from four paces in pieces and
+a raised one whole; two paces from the kettle, nothing moves. Chat 176's
+own kitchen lines, Hinami and Mellisande at the table within reach, are
+untouched.
+
+**Merged onto wave B1 (the main session):** a running thing in the
+listener's own hands is the din the field stamps at their ear AND the
+own-noise the ear cap reads, and counted twice it took a normal line spoken
+to a driller across a workshop from pieces to nothing. Where
+`own_noise_db` is stamped the din cap is left to the ear's
+(`spatial_senses._capped_levels`): the ear's is the stricter reading of
+the same noise.
+
+### 16.3 A voice leaves a building by its door into the open air
+
+**The defect.** A speaker indoors heard by a listener under the sky through
+an open door, or the reverse, was graded by the opening row -- whole at any
+distance, the budget of a room's ring radiating through a doorway into the
+NEXT ROOM'S ring -- and under the sky there is no ring on the far side: a
+call from a doorway was whole across a yard and whole across a field.
+
+**The world.** What a doorway radiates spreads in the free field: the
+doorway is the source for the outdoor leg and the voice falls 6 dB a
+doubling from it (`spreading_loss_db`, the law the cell flood charges).
+Indoors nothing changes: a voice leaving reaches the door by the direct
+sound or the room's ring, whichever is louder; a voice coming in reaches a
+body at the door direct and the rest of the room by the door's spread over
+the room's absorption.
+
+**As built.** `spatial_sound_field.doorway_air_loss_db` (round 2),
+asked by `stamp_sound_relation` for a pair `_door_to_the_open` names --
+two neighbouring rooms joined by an opening, exactly one of them enclosed
+-- and stamped as `open_air_loss_db` with `doorway_air: True`, so every
+reader of the open-air budget has it: the table's opening row (`far_speech_
+level` against the listening room's quiet floor), the masking budget
+(`_voice_path_loss_db`), the tone rung (`voice_margin_db`), the listener's
+ear (`voice_at_ear_db`). The loss is the indoor leg plus the outdoor leg,
+by the widest doorway's nearest cell (`_door_cells`, the indoor room's
+doorway onto the outdoor room): leaving, `min(the flood from the speaker's
+cell to the door, _ONE_PACE_LOSS_DB + VOICE_ROOM_DROP_DB)` then the flood
+from the door's cell to the listener (the aperture charged once, on the
+crossing); coming in, the flood from the speaker's cell to the door, then
+`min(the flood from the door to the listener, ROOM_COUPLING_DB)`. The wind
+bends the outdoor leg alone (`wind_bend_db` over the field's path between
+the door and the body under the sky), stamped as `wind_bend_db` so
+`hearing_reason` can say `upwind`. A speaker indoors is not shadowed by
+facing -- the ring carries the voice to the door whichever way they face
+(`_speaker_turned_away` now asks whether the SPEAKER stands under the sky
+before reading the open-air stamp) -- and a speaker in the yard with their
+back to the door is, for a bystander at it. Never within one enclosed room
+(the ring's budget), never between two enclosed rooms (the opening row's),
+and a body with no station stands at its room's centre, a guess, so no
+stamp is made for it. `hearing_reason` keeps `open_air_distance`: it is the
+open air's distance that took the line.
+
+| the cottage (kitchen 8 x 6, an open door east onto a 96-pace yard) | normal | raised |
+|---|---|---|
+| A in the doorway, B ten paces out | full | full |
+| A in the doorway, B ninety paces out | fragment | full |
+| A at the back of the kitchen, B ten paces out | full | full |
+| A at the back of the kitchen, B ninety paces out | none | full |
+| B ten paces out, A at the door | full | full |
+| B ten paces out, A across the kitchen | full | full |
+| B forty paces out, A across the kitchen | fragment | full |
+| A in the doorway, B ninety paces out, an easterly gale, no addressee named | -- | fragment (upwind) |
+
+A barn's doorway onto a pasture is this pair too: § 14.2's "a barn's
+doorway onto the same pasture is still a room's opening" held an ordinary
+voice whole 84 paces out across the open pasture, and holds a shout now.
+
+**Measured:** 8 recorded lines are stamped `doorway_air` (all in the
+owner's chats) and none regrades -- every recorded doorway pair stood
+close. The far field still charges a street's open air as a room's length
+(§ 11.8 question 9's envelope term), registered.
+
+### 16.4 Thunder is heard indoors whether or not rain is
+
+**The defect.** `weather.thunder_heard` returned the rain's muffling only
+where the rain was audible, so a dry electrical storm was silent in every
+enclosed room, on the page and in the sound bed alike.
+
+**The world.** A clap is 100-120 dB(A) under the storm and 60-80 a few
+kilometres off, low-frequency; an ordinary roof or wall takes 30-45 dB of
+it and a shut interior door 15-25 more; a quiet room is 25-35. It is heard,
+muffled, in any room with the sky somewhere above it, and only a room shut
+away from the sky altogether does not hear it.
+
+**As built, and the typed exclusion.** `thunder_heard(scoped)` reads the
+layers of building between the room and the open air that `weather_depth`
+already counts (shut doors, panes, curtains; an open doorway is none):
+`""` under the sky or a roof open at its sides, `muffled` one layer in,
+`faint` two and three (`_thunder_muffling`, the rain's own ladder with its
+deepest rung carried to `THUNDER_REACH_LAYERS` = 3: 110 less a roof's 40
+and two doors' 20 each is at a quiet room's floor; a fourth door takes it
+under). None -- no thunder -- for the map's own `None` (a room joined to
+the open air by no way at all within `_DEPTH_LIMIT`, the one statement the
+graph makes that a room is sealed; an unmapped room is assumed one layer in
+and hears it, an unmapped deep-by-nature room is `_DEPTH_LIMIT` in and does
+not), and for a room BURIED: its storey (`rooms[id].level`, else its site's
+`elev_m` in storeys of `STOREY_M`) at or under `THUNDER_BURIED_LEVEL` = -2,
+stamped on the scoped record as `buried` (`_storeys_down`). A cellar (-1)
+has the house above it and hears the clap through the house; two storeys
+down, six metres of earth and structure stand between the room and the sky,
+more than a clap has to give. The sound bed (`weather_words`) and the view
+(`composer._storm_percepts`) read the one function, and say the same
+thing of every room: "Thunder rolls somewhere beyond the walls, muffled."
+one door in, "A faint roll of thunder reaches you from far beyond the
+walls." two and three in, nothing in the shaft. With rain the words are
+what they were (the rain's muffling and thunder's agree at every depth the
+rain reaches).
+
+**Measured:** no checkpoint scene in the five databases holds a flashing
+sky (`scripts/survey_storms.py`, 4,505 checkpoints; the two `storm` skies
+are snowing and not electrical), so no recorded beat moves.
+
+### 16.5 A beat's own sound lands in the beat half
+
+**The defect.** `composer.ambient_percepts` lands a sound in the beat half
+only when its caller keys it; the establish pass keyed its beat sounds
+(`perception._AMBIENT_BEAT_BAND`) and the act and outcome passes did not,
+so every sound a beat made -- in the observer's own room, heard from the
+next room by the near field, or held after its seen maker and then not
+placed -- rendered lowercase in the view's background half, after the
+furniture ("... You see a person of unremarkable appearance. a flat crack
+of musket fire."), as optional to the narrator as the colour of the floor.
+
+**As built.** Every `_gated_ambient_percepts` call in the act and outcome
+passes carries `order_key=_AMBIENT_BEAT_BAND` (the held after-sight sound
+falls back to it where its maker was seen doing nothing), and the
+establish pass's near-field call too. The sound is a sentence of its own,
+capitalised as the beat's events are, after the acts that made it; the
+player's own view, which does not narrate the player's act back, leads
+the beat with it. A sound beyond the near field
+(`composer.distant_sound_percepts`, a bearing and a character) is still
+minted keyless and reads as the air of the place; registered.
+
+**Measured** (`scripts/measure_beat_sounds.py`, no engine import): of
+10,807 recorded outcome views, 259 carry one of their beat's own sounds;
+255 carried it in the background half, lowercase (187 in the owner's
+chats, 68 in the four stories), and 2 in the beat half already. Three of
+them replayed through the engine's own single-stage rerun
+(`agents.runtime.run_pipeline(only_key="perception_outcome")` on a copy of
+the owner's database, every socket refused; `scripts/replay_outcome.py`):
+
+* Chat 157 turn 25, Hinami's view (the TARDIS console room; the HEAD
+  replay is the "before" -- the recorded views were composed by an older
+  engine and differ in other sentences). Before: "...toggle switches: all
+  toggles engaged in upright row. a door snicking shut, deliberate, like a
+  huff. Hinami leaves her place on the far side of the room and walks
+  around the central console..." After: "...Hinami leaves her place on the
+  far side of the room and walks around the central console, coming to a
+  stop near you at his side of the console. Hinami says under their
+  breath: "Are we going to explode?" A door snicking shut, deliberate, like
+  a huff." The player's view moves the same way: the door shuts after the
+  Doctor's line, not after the toggle switches.
+* Chat 154 turn 24, Hinami's view. Before: "...readout holds its last line
+  -- unclassified energy signature, origin console room far side, duration
+  0.7 seconds, status unresolved. a high, oscillating whine. Hinami moves
+  behind you at the door's threshold..." After: "...Hinami moves behind you
+  at the door's threshold, positioning herself at your back. Hinami looks
+  around the room, scanning the corners and shadows. Hinami says under
+  their breath: "Uhm... Theres no one else here doctor?" A high,
+  oscillating whine."
+* Chat 122 turn 7, Hinami's view (the TARDIS righted on a beach). Before:
+  "...The noise has died down. To the east, you can see a light high up. a
+  heavy thud and wet slap of displaced sand as the police box drops firmly
+  upright. The air carries brine and mineral silt." After: "...The air
+  carries brine and mineral silt. Hinami leans hard into the lower corner
+  of the box, digging her sandals into the wet sand and heaving with all
+  her weight. A heavy thud and wet slap of displaced sand as the police box
+  drops firmly upright." The player's view: the thud comes after the
+  Doctor's roar of effort, where it had come after the light to the east.
+
+In each the sound was the loudest thing in the beat and read as furniture;
+it reads as the beat's last event now, after the act that made it.
+
+### 16.6 Guards and clauses
+
+No new guard and no new clause. Every rule here only re-prices what a body
+already had a channel to -- a blow's level, a line's budget, a doorway's
+leg, a clap's muffling -- or re-orders a percept the observer already
+held. No prompt text was touched: the encoder's `sensory_events` card still
+says nothing of which rung a shot is, and whether it should (a clause,
+stating the class: a blow that leaves ears ringing is `thunderous` and up)
+is the owner's.
+
+### 16.7 The owner's questions, and what is left
+
+1. **105 dB(A) a pace for a `deafening` blow** -- the middle of the band
+   the rung names (100-110). At 110 it would be felt to five paces and
+   still ring nobody; nothing under `BLAST_DB` can, and that is the
+   physics, not a choice.
+2. **A shot is `thunderous`.** The encoder's card does not say so; the
+   model will go on writing a gunshot `deafening` and it will ring nobody.
+   One clause, en + ja, would state the class; a live run would show it.
+3. **A room's own `sound` at `deafening` moved 28 dB** with the rung it
+   reads, measured on chats 160/161's shaft. Right as fiction for a shaft
+   that is falling; the owner's to confirm.
+4. **The addressee in a household din.** The one recorded-corpus-silent
+   place the din now bites on the one spoken to is a body standing ON a
+   household `loud` thing's cell, four paces from the speaker. The
+   Lombard rise reads the din at the SPEAKER's ear only; in the world a
+   speaker also raises their voice to the noise they can see their
+   listener standing in. Not built: the owner's.
+5. **A shout across a sixteen-pace street in a GALE comes in pieces** to
+   the one it is called to (-9 dB at the ear against 70). In a strong
+   `wind` (60) it is whole. The rain ruling is untouched.
+6. **The doorway's indoor leg** reuses `VOICE_ROOM_DROP_DB` (6) leaving and
+   `ROOM_COUPLING_DB` (10) entering, the engine's own two numbers for a
+   room's ring and a doorway's spread; a street's open air in the FAR
+   field is still a room's length (§ 11.8 question 9).
+7. **Thunder's exclusion is the storey and the map's `None`.** A
+   ground-floor room the map joins to the air only by walls hears no
+   thunder through its own roof, because the graph cannot tell a roof
+   from earth; the storey can, and is read only to exclude. `-2` is the
+   buried storey; a cellar hears the clap.
+8. **A far sound is still standing state** (`distant_sound_percepts`); the
+   near field's are the beat's now.

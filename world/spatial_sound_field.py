@@ -427,20 +427,50 @@ SOUND_POWER = {level: one_pace_power(db)
 #: never hear anything a player did whatever the geometry said.
 #:
 #:   emission (cell)  faint 43.0 | audible 53.0 | loud 68.0 | deafening 103.0
-#:   impact   (cell)  faint 45.0 | audible 58.0 | loud 72.0 | deafening 80.0
+#:   impact   (cell)  faint 45.0 | audible 58.0 | loud 72.0 | deafening 108.0
 #:
-#: The impact ladder is UNTOUCHED by the 2026-09-14 recalibration: its four
-#: lower rungs were authored in dB on 2026-09-06 at the source cell, not at
-#: one pace, and are kept byte for byte -- and untouched again on 2026-10-20,
-#: when the emission `loud` came down to a household level (68 at the cell;
-#: it was 83). Two consequences are stated rather than hidden. The emission
-#: ladder sits ABOVE the impact ladder at `deafening` (103 against 80) and,
-#: since 2026-10-20, under it at `loud` (a television turned up against a
-#: hammer blow at 72); nothing in the model compares the two ladders to each
-#: other, so no verdict turns on it, and a real impact ladder (a slammed
-#: door is 80-90 at a metre, a hammer on steel over 100) is a separate
-#: recalibration registered in `docs/UNBUILT.md`. And the two far rungs are
-#: shared, so they moved with `SOUND_POWER`.
+#: The impact ladder's three lower rungs were authored in dB on 2026-09-06
+#: at the source cell, not at one pace, and are kept byte for byte -- untouched
+#: by the 2026-09-14 recalibration and again on 2026-10-20, when the emission
+#: `loud` came down to a household level (68 at the cell; it was 83). The
+#: emission ladder sits under the impact ladder at `loud` (a television
+#: turned up against a hammer blow at 72); nothing in the model compares the
+#: two ladders to each other, so no verdict turns on it. The two far rungs
+#: are shared, so they moved with `SOUND_POWER`.
+#:
+#: `deafening` RE-ANCHORED 2026-10-20 (round 2, lane B; the owner's ruling
+#: on DESIGN_SOUND_FIELD.md § 13.7's question 10 and § 14.7's 10): 105 dB(A)
+#: ONE PACE from the blow, 108 at its cell. It was 80 at the cell, which
+#: was 43 under `thunderous` and 23 under the emission ladder's own
+#: `deafening`: a blow the story called deafening was quieter a few paces
+#: off than a household machine, dulled no ear (`spatial_listener.BLAST_DB`
+#: 120) and shook no floor (`FELT_DB` 100). The rung names THE LOUDEST BLOW
+#: AN ORDINARY THING GIVES OR TAKES -- a steel door slammed, an anvil dropped
+#: on stone, a hammer on steel, a plank floor giving way: 100-110 dB(A) a
+#: metre off, 105 the band's middle. What that buys: it is felt by a body a
+#: pace or two from it (105 - 3 a doubling against 100), heard through one
+#: masonry wall into the next room as a hammer on steel is (108 - 45 and the
+#: rooms' spans, over a quiet room), and rings nobody's ear -- a 105 dB(A)
+#: blow does not, in the world. A SHOT, A BLAST, A STUN GRENADE ARE NOT
+#: THIS RUNG: 120-130 dB(A) a few metres off, 140-165 at the muzzle, they
+#: are `thunderous` (123 at the cell: rings an ear a pace off, felt across
+#: a building) and `catastrophic` (143: rings the whole room, felt across a
+#: town). The ladder below is monotone, as `_one_level_down` and the far
+#: field's growth rung by rung require.
+#:
+#: WHY THE TWO LADDERS DIFFER AT `deafening` (108 against 103) AND ARE
+#: NOT MADE TO AGREE: every word the two ladders share stands a few decibels
+#: higher on the impact ladder -- faint 45/43, audible 58/53, loud 72/68,
+#: and now deafening 108/103 -- because a BLOW IS A PEAK and a running
+#: thing an average: the words name different things. The emission rung is
+#: a machine you cannot talk beside (95-110 dB(A) sustained, 100 the
+#: middle), measured against conversation; the impact rung is the top of
+#: what a thing can be struck at, measured by how far it went. Making them
+#: agree would move either the one reader of a standing `deafening` (the
+#: masking budget: 100 at a pace is what stops a voice) or the pattern the
+#: three lower rungs already keep. A numeric `intensity` in [0, 1] is a
+#: fraction of THIS rung's power (`event_db`) and moves with it; no recorded
+#: event in the corpus carries one (measured 2026-10-20, five databases).
 #:
 #: `loud` at 72 clears `FAR_FIELD_ENTRY_DB` (70), which is the point: a
 #: hammer on a bulkhead walks the room graph and is heard across a level,
@@ -449,12 +479,12 @@ SOUND_POWER = {level: one_pace_power(db)
 EVENT_POWER = {"faint": power_of_db(45.0),
                "audible": power_of_db(58.0),
                "loud": power_of_db(72.0),
-               "deafening": power_of_db(80.0),
+               "deafening": power_of_db(108.0),
                "thunderous": SOUND_POWER["thunderous"],
                "catastrophic": SOUND_POWER["catastrophic"]}
 
 #: The impact ladder in dB at the cell -- faint 45.0 | audible 58.0 |
-#: loud 72.0 | deafening 80.0 | thunderous 123.0 | catastrophic 143.0.
+#: loud 72.0 | deafening 108.0 | thunderous 123.0 | catastrophic 143.0.
 EVENT_DB = {level: db_of_power(power) for level, power in EVENT_POWER.items()}
 
 #: The source ladder as a level AT THE CELL -- the one-pace table plus the
@@ -704,7 +734,7 @@ WEATHER_NOISE = {"light": 0.1, "moderate": 0.25, "heavy": 0.5}
 #: The owner's rain ruling stands untouched (`WEATHER_NOISE`, 37 dB at its
 #: heaviest, is never a din), and no wind reaches a line spoken TO a
 #: listener, or within conversational reach: noise never stops people
-#: talking to each other (`spatial_senses._bystander_in_a_din`).
+#: talking to each other (`spatial_senses._in_a_din_beyond_reach`).
 WIND_NOISE_DB = {"wind": 60.0, "gale": 70.0}
 #: The same as powers, which is what `_ambient_floor` adds. Derived.
 WIND_NOISE = {word: power_of_db(level) for word, level in WIND_NOISE_DB.items()}
@@ -979,9 +1009,14 @@ DIN_DB = VOICE_ONE_PACE_DB - FULL_SNR_DB
 #: the two bodies: the people around one table, or standing together -- a
 #: pace or two apart, the distance people in a noisy room close to when they
 #: talk (social distance begins about 1.2 m; in a din groups stand closer).
-#: Noise never stops people talking TO EACH OTHER: the line's addressee, and
-#: anyone this near the speaker, hear it as the rule's table says, din or
-#: none. Beyond it, in a din, a listener is a bystander.
+#: Noise never stops people talking TO EACH OTHER within this reach: the
+#: line's addressee, and anyone this near the speaker, hear it as the
+#: rule's table says, din or none. Beyond it, in a din, every listener is
+#: graded against the din at their ear -- a bystander, and since round 2
+#: (2026-10-20, lane B) the one the line is spoken to as well: a shout to
+#: someone a hundred metres off in a gale is lost, a line across a busy
+#: hall to someone nine paces off is lost too. Wave A had spared the
+#: addressee at any range (the note's § 14.7, question 5).
 CONVERSATION_REACH_PACES = 2.0
 
 #: TONE TRAVELS FARTHER THAN WORDS (2026-10-20, wave A; `voice_margin_db`,
@@ -1336,7 +1371,8 @@ def _masked_voice_db(rel, word, *, reach=None, level_db=None, seen=False):
 
 def _din_voice_db(rel, word, *, level_db=None, seen=False,
                   part="words") -> Optional[float]:
-    """What reaches a BYSTANDER in a din of a line spoken a few paces off, in
+    """What reaches a LISTENER BEYOND CONVERSATIONAL REACH in a din -- a
+    bystander, or the one spoken to -- of a line spoken a few paces off, in
     dB at their ear, or None where the relation carries no din or no paces.
 
     The voice is raised over the din where its SPEAKER stands
@@ -1370,17 +1406,23 @@ def _din_voice_db(rel, word, *, level_db=None, seen=False,
 
 
 def din_level(rel: dict, volume, *, level_db=None, seen=False) -> str:
-    """WHAT A DIN LEAVES A BYSTANDER OF A LINE: `full | fragment | none`, by
-    `_din_voice_db` against the din at the bystander's ear at the speech
-    margins (`quantise_speech_db`). `full` where the relation carries no din.
+    """WHAT A DIN LEAVES A LISTENER BEYOND REACH OF A LINE: `full | fragment
+    | none`, by `_din_voice_db` against the din at the listener's ear at
+    the speech margins (`quantise_speech_db`). `full` where the relation
+    carries no din.
 
-    Applied by `spatial_senses.hear_level` only to a listener the line was
-    not addressed to and who stands beyond `CONVERSATION_REACH_PACES` of the
-    speaker: noise never stops people talking to each other. In a tavern's
-    babble (68 dB) a raised conversational voice is followed whole a pace or
-    two off, caught in pieces from about three paces, and beyond about eight
-    a bystander has only the fact that people are talking
-    (`spatial_senses.voice_carries`)."""
+    Applied by `spatial_senses.hear_level` only to a listener who stands
+    beyond `CONVERSATION_REACH_PACES` of the speaker -- a bystander, or
+    since 2026-10-20's round 2 (lane B, the owner's answer to the note's
+    § 14.7 question 5) the one the line is spoken TO: being spoken to does
+    not put a voice in your ear, and across a busy hall a line to someone
+    nine paces off is lost. Noise never stops people talking to each other
+    WITHIN conversational reach, which is where people who talk in a din
+    stand; and a reader that cannot say whom a line was for caps nothing.
+    In a tavern's babble (68 dB) a raised conversational voice is followed
+    whole a pace or two off, caught in pieces from about three paces, and
+    beyond about eight a listener has only the fact that people are
+    talking (`spatial_senses.voice_carries`)."""
     from world.spatial_senses import UNVOICED_VOLUMES
     word = _speech_word(volume)
     voice = _din_voice_db(rel, word, level_db=level_db, seen=seen)
@@ -2615,6 +2657,95 @@ def _outdoors(scene, *rooms) -> bool:
                for room in rooms)
 
 
+def _door_to_the_open(scene, rel, a, b) -> bool:
+    """Are two NEIGHBOURING rooms a building and the open air, joined by an
+    opening (a doorless way, an open door or gate, a grille -- after the
+    material shift): exactly one of them enclosed, the other under the
+    sky. The pair `doorway_air_loss_db` prices (round 2, lane B)."""
+    from world.spatial_senses import OPEN_BARRIERS, rooms_adjacent
+    if not a or not b or a == b or not rooms_adjacent(scene, a, b):
+        return False
+    barrier = _material_shifted_barrier(normalize_barrier(rel.get("barrier")),
+                                        rel.get("material"))
+    return barrier in OPEN_BARRIERS and _outdoors(scene, a) != _outdoors(scene, b)
+
+
+def doorway_air_loss_db(scene, sound, listener, speaker, l_room, s_room
+                        ) -> Optional[tuple]:
+    """A VOICE LEAVING A BUILDING INTO THE OPEN AIR, OR COMING IN FROM IT
+    (2026-10-20, round 2 lane B; DESIGN_SOUND_FIELD.md § 16): `(loss_db,
+    wind_bend_db)` for two bodies one of which stands in an enclosed room
+    and the other under the sky, the two rooms joined by an opening -- or
+    None where the rule has no geometry to read: a body the scene does not
+    place, a doorway with no placed cells, a room off the listener's field.
+
+    THE DOORWAY IS THE SOURCE FOR THE OUTDOOR LEG. The opening row's budget
+    -- a room's ring radiating through a doorway into the next room's ring,
+    whole at any distance -- has nothing to stand on under the sky, where
+    there is no ring to hold a voice up; so a call from a doorway across a
+    yard was whole, and across a field it was whole too. Real: what a
+    doorway radiates falls 6 dB a doubling from the door (the free-field law
+    the cell flood charges, `spreading_loss_db`), and a normal voice at the
+    door is followed some forty paces out against an open place's floor,
+    a raised one past a hundred.
+
+    THE INDOOR LEG IS WHAT IT WAS. A voice leaving: the direct sound from
+    the speaker's cell to the door, or the room's ring there (the one-pace
+    level less `VOICE_ROOM_DROP_DB`), whichever is the louder -- a speaker
+    at the door sends it out at nearly its own level, one at the back of
+    the room at the ring's. A voice coming in: the door's own spread into
+    the room (the flood from the door's cell), or the spread over the
+    receiving room's absorption (`ROOM_COUPLING_DB`), whichever is the
+    louder -- the body at the door has the direct sound, the body across
+    the room the room's. The aperture is charged once, on the flood's
+    crossing of the edge (`_crossing_pass`). The widest doorway's nearest
+    cell is the one the voice goes by.
+
+    The wind bends the outdoor leg and only that leg (`wind_bend_db`, over
+    the field's path between the door and the body under the sky).
+    Returned apart, so the caller can stamp it and `hearing_reason` can say
+    `upwind`."""
+    if body_cell(scene, listener) is None or body_cell(scene, speaker) is None:
+        return None
+    here = sound.locate(listener, l_room)
+    there = sound.locate(speaker, s_room)
+    if here is None or there is None:
+        return None
+    speaker_inside = not _outdoors(scene, s_room)
+    inside, outside = (s_room, l_room) if speaker_inside else (l_room, s_room)
+    cells, _bearing = _door_cells(scene, inside, outside, derive=True)
+    doors = [sound.grid.cell_of(inside, tuple(cell)) for cell in cells or ()]
+    doors = [door for door in doors if door in sound.grid.inside]
+    if not doors:
+        return None
+    best = None
+    for door in doors:
+        if speaker_inside:
+            indoor = min(loss_db_at(sound.spread_from(there), door),
+                         _ONE_PACE_LOSS_DB + VOICE_ROOM_DROP_DB)
+            outdoor = loss_db_at(sound.spread_from(door), here)
+            leg = (here, door)              # the voice goes door -> listener
+        else:
+            outdoor = loss_db_at(sound.spread_from(there), door)
+            indoor = min(loss_db_at(sound.spread_from(door), here),
+                         ROOM_COUPLING_DB)
+            leg = (door, there)             # the voice goes speaker -> door
+        total = indoor + outdoor
+        if math.isinf(total):
+            continue
+        if best is None or total < best[0]:
+            best = (total, leg)
+    if best is None:
+        return None
+    total, (to_cell, from_cell) = best
+    bend = 0.0
+    if _scene_wind(scene)[1]:
+        metres, bearing = _field_path(sound, to_cell, from_cell)
+        if metres is not None and bearing:
+            bend = wind_bend_db(scene, bearing, metres)
+    return total, bend
+
+
 def _field_path(sound, here, there):
     """`(metres, bearing)` of the field's own path from the cell `there` to
     the cell `here` on one composite: the flood's length, in metres, and the
@@ -2757,7 +2888,9 @@ def _speaker_turned_away(scene, sound, listener, speaker, l_room, s_room,
     Never within conversational reach (a standing contact, or
     `CONVERSATION_REACH_PACES` of the field's path): the one at the
     speaker's shoulder hears a turned head whole. Only where the voice's
-    budget is its direct sound: under the open sky (`open_air_loss_db`), a
+    budget is its direct sound: under the open sky (`open_air_loss_db`,
+    from a speaker standing under it -- a speaker INDOORS whose voice
+    leaves by the door, `doorway_air`, sends it to the door on the ring), a
     din at the listener's ear (the ring is under it), or rooms away from a
     speaker standing under the sky. Everywhere else the room's ring carries
     the voice -- across the room, through an opening, to a door nobody
@@ -2770,10 +2903,10 @@ def _speaker_turned_away(scene, sound, listener, speaker, l_room, s_room,
     paces = rel.get("paces")
     if paces is not None and float(paces) <= CONVERSATION_REACH_PACES:
         return False
-    direct = (rel.get("open_air_loss_db") is not None
+    under_the_sky = _weather.room_exposure(scene, s_room) != "enclosed"
+    direct = ((rel.get("open_air_loss_db") is not None and under_the_sky)
               or rel.get("din_db") is not None
-              or (rel.get("far_loss_db") is not None
-                  and _weather.room_exposure(scene, s_room) != "enclosed"))
+              or (rel.get("far_loss_db") is not None and under_the_sky))
     if not direct:
         return False
     facing = effective_facing(scene, speaker)
@@ -3083,8 +3216,14 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
         noise that decides speech for everyone (`masked_level`);
       * `din_db`, `speaker_din_db` -- where the field places both bodies
         and the noise at the listener's ear is a din (`DIN_DB`): what a
-        BYSTANDER beyond conversational reach follows of the line
-        (`din_level`, 2026-10-20 wave A) -- never its addressee.
+        listener beyond conversational reach follows of the line
+        (`din_level`, 2026-10-20 wave A; its addressee too since round 2,
+        lane B -- a reader that cannot say whom the line was for caps
+        nothing);
+      * `open_air_loss_db` with `doorway_air` -- a voice leaving a building
+        by an opening into the open air, or coming in by one: the doorway
+        is the source for the outdoor leg (`doorway_air_loss_db`, round 2
+        lane B).
 
     RESTATED 2026-10-20. It stamped the cell path's gain and the listener's
     whole noise floor -- a kettle, rain, a crowd -- and the verdict was their
@@ -3123,13 +3262,30 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
         if loss is not None:
             rel["open_air_loss_db"] = loss
             rel["floor_db"] = db_of_power(quiet_floor(scene, o_room))
+    elif _door_to_the_open(scene, rel, o_room, t_room):
+        # A VOICE LEAVING A BUILDING INTO THE OPEN AIR, or coming in from
+        # it (round 2, lane B; `doorway_air_loss_db`): the doorway is the
+        # source for the outdoor leg, and the free-field law runs from it.
+        # Stamped as the open air's loss, so every reader of that budget --
+        # the table's opening row, the masking budget, the tone rung, the
+        # ear -- has it; `doorway_air` says which leg it came by. The wind
+        # on the outdoor leg is folded in here, as below.
+        leg = doorway_air_loss_db(scene, sound, observer, target, o_room,
+                                  t_room)
+        if leg is not None:
+            loss, bend = leg
+            rel["open_air_loss_db"] = loss - bend
+            rel["doorway_air"] = True
+            rel["floor_db"] = db_of_power(quiet_floor(scene, o_room))
+            if bend:
+                rel["wind_bend_db"] = bend
     # THE WIND ON THE PATH (wave B2, `wind_bend_db`): outdoors, a voice
     # going with the wind is carried and one going against it swallowed.
     # Folded into the open air's loss, or the far field's, so every reader
     # of the budget has it; stamped as well, so `hearing_reason` can say so.
-    if rel.get("open_air_loss_db") is not None or (
+    if not rel.get("doorway_air") and (rel.get("open_air_loss_db") is not None or (
             rel.get("far_loss_db") is not None
-            and not math.isinf(float(rel["far_loss_db"]))):
+            and not math.isinf(float(rel["far_loss_db"])))):
         bend = _wind_on_the_path(scene, sound, observer, target, o_room,
                                  t_room, far)
         if bend:
@@ -3140,13 +3296,15 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     paces = _pair_paces(scene, sound, observer, target, o_room, t_room, rel)
     if paces is not None:
         rel["paces"] = paces
-        # A DIN AT THE LISTENER'S EAR (`DIN_DB`): what a bystander in it
-        # follows of a conversation a few paces off is the din's to decide
-        # (`din_level`, applied by `spatial_senses.hear_level` only to a
-        # listener the line was not addressed to, beyond conversational
-        # reach). Stamped only where the field places both bodies -- the
-        # paces are the budget's distance -- and with the noise where the
-        # SPEAKER stands, which their voice rises over.
+        # A DIN AT THE LISTENER'S EAR (`DIN_DB`): what a listener beyond
+        # conversational reach -- a bystander, or since round 2 the one the
+        # line is spoken to -- follows of a line a few paces off is the
+        # din's to decide (`din_level`, applied by `spatial_senses.
+        # hear_level`; never within conversational reach, never where the
+        # caller cannot say whom the line was for). Stamped only where the
+        # field places both bodies -- the paces are the budget's distance
+        # -- and with the noise where the SPEAKER stands, which their
+        # voice rises over.
         din = sound.noise_at(observer, room=o_room)
         if din is not None and _at_least(db_of_power(din), DIN_DB):
             rel["din_db"] = db_of_power(din)

@@ -76,9 +76,11 @@ def test_a_heavy_blow_is_felt_by_distance_and_through_the_floor():
     """A `thunderous` blow in the loft: a body two paces from it, and the
     smith in the forge under the boards, feel the floor shudder; a body
     twenty paces out in the yard, a storey down, feels a tremor through the
-    ground; the far end of the yard, a hundred paces off, nothing. An
-    ordinary crash -- the impact ladder's `deafening`, a slammed door or a
-    dropped tray -- is heard and felt by nobody, and a catastrophe is felt
+    ground; the far end of the yard, a hundred paces off, nothing. The
+    heaviest ordinary blow -- the impact ladder's `deafening`, 105 dB(A) a
+    pace off since round 2 (2026-10-20, lane B; it was 80 at its cell and
+    felt by nobody) -- is a tremor to the body two paces from it and to the
+    smith right under it, and nothing in the yard; a catastrophe is felt
     across the whole yard."""
     sc = _smithy({"A": ("loft", (5, 2)), "S": ("forge", (3, 2)),
                   "C": ("yard", (17, 2)), "D": ("yard", (95, 2))})
@@ -86,7 +88,9 @@ def test_a_heavy_blow_is_felt_by_distance_and_through_the_floor():
     assert _felt(sc, "S", _blow("thunderous")) == ["shudder"]
     assert _felt(sc, "C", _blow("thunderous")) == ["tremor"]
     assert _felt(sc, "D", _blow("thunderous")) == []
-    for who in ("A", "S", "C", "D"):
+    assert _felt(sc, "A", _blow("deafening")) == ["tremor"]
+    assert _felt(sc, "S", _blow("deafening")) == ["tremor"]
+    for who in ("C", "D"):
         assert _felt(sc, who, _blow("deafening")) == [], who
     assert _felt(sc, "S", _blow("catastrophic")) == ["jolt"]
     assert _felt(sc, "D", _blow("catastrophic")) == ["shudder"]

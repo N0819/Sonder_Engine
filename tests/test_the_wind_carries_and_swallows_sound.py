@@ -84,9 +84,12 @@ DOWNPOUR = {"precipitation": "rain", "precipitation_kind": "liquid",
 
 def test_a_strong_wind_is_a_din_at_the_ear():
     """In a gale a bystander six paces off catches pieces of a conversation
-    not meant for them; the one it is said to, and the body at the speaker's
-    elbow, follow it whole. A strong wind is a din too, and heavy rain in
-    still air is still never one (the owner's rain ruling)."""
+    not meant for them; the body at the speaker's elbow follows it whole,
+    and so does the one it is said to -- within conversational reach. Six
+    paces off, since round 2 (2026-10-20, lane B), the one it is said to
+    meets the gale at their ear as the bystander does: in pieces. A strong
+    wind is a din too, and heavy rain in still air is still never one (the
+    owner's rain ruling)."""
     cells = {"A": (10, 3), "E": (12, 3), "B": (16, 3)}
     gale = _field(cells, GALE)
     at_b = sound_field(gale, "B").noise_at("B")
@@ -96,7 +99,12 @@ def test_a_strong_wind_is_a_din_at_the_ear():
     assert rel.get("din_db") is not None
     assert hear_level(rel, "normal", addressed=False) == "fragment"
     assert hearing_reason(rel, "normal", addressed=False) == "din_bystander"
-    assert {v: hear_level(rel, v, addressed=True) for v in VOLUMES} == \
+    assert hear_level(rel, "normal", addressed=True) == "fragment"
+    assert hearing_reason(rel, "normal", addressed=True) == "din_beyond_reach"
+    assert {v: hear_level(rel, v, addressed=None) for v in VOLUMES} == \
+        {v: "full" for v in VOLUMES}
+    beside = _rel(_field({"A": (10, 3), "B": (11, 3)}, GALE))
+    assert {v: hear_level(beside, v, addressed=True) for v in VOLUMES} == \
         {v: "full" for v in VOLUMES}
     elbow = _rel(gale, "E")
     assert {v: hear_level(elbow, v, addressed=False) for v in VOLUMES} == \
@@ -111,19 +119,26 @@ def test_a_strong_wind_is_a_din_at_the_ear():
 def test_two_places_under_the_sky_are_one_stretch_of_air():
     """A hundred and forty paces from the meadow into the pasture through
     the gap: an ordinary voice is in pieces, as it is across one field of
-    that length; a barn's doorway onto the same pasture is still a room's
-    opening, and its ring carries a voice through whole."""
+    that length. A barn's doorway onto the same pasture is a room's
+    opening -- and since round 2 (2026-10-20, lane B) the doorway is the
+    source for the pasture's leg, so a voice from the back of the barn is
+    lost eighty-odd paces out across the open pasture where the opening
+    row had carried it whole (`doorway_air`,
+    `tests/test_a_voice_leaves_a_building_by_its_door.py`)."""
     across = _rel(_two_fields(("meadow", (40, 3)), ("pasture", (84, 3))))
     assert across.get("paces") == 140.0
     assert across.get("open_air_loss_db") is not None
+    assert "doorway_air" not in across
     one_field = _rel(_field({"A": (1, 3), "B": (95, 3)}))
     assert hear_level(across, "normal") == hear_level(one_field, "normal") \
         == "fragment"
     assert hearing_reason(across, "normal") == "open_air_distance"
     barn = _rel(_two_fields(("meadow", (40, 3)), ("pasture", (84, 3)),
                             meadow="enclosed"))
-    assert "open_air_loss_db" not in barn
-    assert hear_level(barn, "normal") == "full"
+    assert barn.get("doorway_air") is True
+    assert barn.get("open_air_loss_db") is not None
+    assert hear_level(barn, "normal") == "none"
+    assert hear_level(barn, "shout") == "full"
 
 
 def test_the_wind_carries_a_voice_downwind_and_swallows_it_upwind():
@@ -131,7 +146,14 @@ def test_the_wind_carries_a_voice_downwind_and_swallows_it_upwind():
     going east, with the wind, is followed whole; the same voice coming
     west, into it, is caught in pieces; with the wind blowing across the
     path, or no quarter named, nothing bends. A street's width upwind is
-    too short a path to bend at all: a call across it carries."""
+    too short a path to bend at all: a call across it carries.
+
+    Graded for a listener nobody can say the line was for (`addressed`
+    None), which the gale's din caps nothing of: since round 2 (2026-10-20,
+    lane B) the gale at the ear takes a raised voice from the one it is
+    spoken to a hundred metres off as it does from a bystander, bend or no
+    bend (`tests/test_a_din_reaches_an_addressee_beyond_reach.py`), so the
+    bend is shown on the line the din spares."""
     westerly = dict(GALE, **{WIND_FROM_KEY: "w"})
     downwind = _rel(_two_fields(("meadow", (40, 3)), ("pasture", (84, 3)),
                                 westerly))
@@ -139,22 +161,28 @@ def test_the_wind_carries_a_voice_downwind_and_swallows_it_upwind():
                               westerly))
     assert downwind.get("wind_bend_db", 0.0) > 0.0
     assert upwind.get("wind_bend_db", 0.0) < 0.0
-    assert hear_level(downwind, "loud", addressed=True) == "full"
-    assert hear_level(upwind, "loud", addressed=True) == "fragment"
-    assert hearing_reason(upwind, "loud", addressed=True) == "upwind"
-    assert hear_level(upwind, "shout", addressed=True) == "full"
+    assert hear_level(downwind, "loud", addressed=None) == "full"
+    assert hear_level(upwind, "loud", addressed=None) == "fragment"
+    assert hearing_reason(upwind, "loud", addressed=None) == "upwind"
+    assert hear_level(upwind, "shout", addressed=None) == "full"
+    assert hear_level(downwind, "loud", addressed=True) == "none"
+    assert hearing_reason(downwind, "loud", addressed=True) == "din_beyond_reach"
     across = _rel(_two_fields(("meadow", (40, 3)), ("pasture", (84, 3)),
                               dict(GALE, **{WIND_FROM_KEY: "n"})))
     assert "wind_bend_db" not in across
     nameless = _rel(_two_fields(("pasture", (84, 3)), ("meadow", (40, 3)),
                                 GALE))
     assert "wind_bend_db" not in nameless
-    assert hear_level(nameless, "loud", addressed=True) == "full"
+    assert hear_level(nameless, "loud", addressed=None) == "full"
     street = _rel(_field({"A": (20, 3), "B": (4, 3)}, westerly))
     assert wind_bend_db(_field({}, westerly), "w", 12.0) == 0.0
     assert "wind_bend_db" not in street
-    assert {v: hear_level(street, v, addressed=True) for v in VOLUMES} == \
+    assert {v: hear_level(street, v, addressed=None) for v in VOLUMES} == \
         {v: "full" for v in VOLUMES}
+    # ...and to the one it is called to, sixteen paces off in a gale, a
+    # shout across the street comes in pieces (round 2): the gale is at
+    # their ear whoever the line was for.
+    assert hear_level(street, "shout", addressed=True) == "fragment"
 
 
 def _open_chain(weather):

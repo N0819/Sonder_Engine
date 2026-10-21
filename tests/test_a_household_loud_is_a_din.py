@@ -31,8 +31,9 @@ import copy
 import pytest
 
 from world.spatial import (NOISE_WORDS, SOUND_ONE_PACE_DB, far_field_sources,
-                           hear_level, noise_word, room_noise_word,
-                           sound_field, sound_shape, spatial_rel_between)
+                           hear_level, hearing_reason, noise_word,
+                           room_noise_word, sound_field, sound_shape,
+                           spatial_rel_between)
 
 _ORDER = {word: n for n, word in enumerate(NOISE_WORDS)}   # quiet < din < drowned
 
@@ -157,15 +158,22 @@ def test_a_household_loud_is_heard_next_door_and_never_rooms_away():
 
 
 def test_no_spoken_line_moves_with_the_household_level():
-    """`loud` decides no line: below `deafening` nothing masks speech, so
-    every volume between every pair in the kitchen grades the same with the
-    kettle loud, audible or gone."""
+    """`loud` MASKS no line: below `deafening` nothing masks speech
+    (`masking_db` is never stamped), so every volume between the two in the
+    kitchen grades the same with the kettle loud, audible or gone -- for
+    everyone within conversational reach, and for the one standing clear of
+    the thing. The one exception is the round-2 class (2026-10-20, lane B):
+    the cook standing AT the whistling kettle, on its own cell, is in its
+    din (some 64 dB(A) at her ear), and a normal voice spoken TO her from
+    four paces off comes in pieces, a raised one whole -- the din at the
+    listener's ear decides beyond conversational reach, whoever the line
+    was for (`tests/test_a_din_reaches_an_addressee_beyond_reach.py`). The
+    kettle at `audible` is no din anywhere."""
     volumes = ("ear", "whisper", "mutter", "normal", "loud", "shout")
 
-    def graded(sc):
+    def graded(sc, pairs=(("Mellisande", "Hinami"), ("Hinami", "Mellisande"))):
         out = {}
-        for listener, speaker in (("Mellisande", "Hinami"),
-                                  ("Hinami", "Mellisande")):
+        for listener, speaker in pairs:
             rel = spatial_rel_between(sc, listener, speaker)
             assert "masking_db" not in rel
             out[(listener, speaker)] = {
@@ -173,11 +181,29 @@ def test_no_spoken_line_moves_with_the_household_level():
         return out
 
     base = graded(_kitchen())
-    assert graded(_kitchen(kettle="audible")) == base
+    # Hinami, four paces from the range, hears the cook as she would in a
+    # quiet kitchen; the cook at the kettle has Hinami's ordinary voice in
+    # pieces and her raised voice whole.
+    assert base[("Hinami", "Mellisande")] == graded(
+        _kitchen(kettle="audible"))[("Hinami", "Mellisande")]
+    at_the_kettle = base[("Mellisande", "Hinami")]
+    assert at_the_kettle["normal"] == "fragment"
+    assert at_the_kettle["loud"] == at_the_kettle["shout"] == "full"
+    rel = spatial_rel_between(_kitchen(), "Mellisande", "Hinami")
+    assert rel.get("din_db") is not None and float(rel["paces"]) > 2.0
+    assert hearing_reason(rel, "normal", addressed=True) == "din_beyond_reach"
+    # Two paces from the kettle (within reach of the speaker beside her)
+    # the din takes nothing; and with the kettle audible or gone nothing
+    # anywhere moves.
+    assert graded(_kitchen(cook=(2, 3)))[("Mellisande", "Hinami")] == \
+        graded(_kitchen(kettle="audible", cook=(2, 3)))[("Mellisande", "Hinami")]
+    quieter = graded(_kitchen(kettle="audible"))
     quiet = _kitchen()
     quiet = copy.deepcopy(quiet)
     del quiet["entities"]["the kettle"]["sound_source"]
-    assert graded(quiet) == base
+    assert graded(quiet) == quieter
+    assert quieter[("Mellisande", "Hinami")] == {
+        v: at_the_kettle[v] for v in volumes if v != "normal"} | {"normal": "full"}
 
 
 _CLASS = {"en": "stops conversation outright", "ja": "会話をまるごと止める"}

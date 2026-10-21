@@ -1471,12 +1471,13 @@ def hear_level(
     listener sees the speaker's face, which is worth several decibels where
     noise decides.
 
-    And where a DIN reaches a BYSTANDER (`_bystander_in_a_din`, § 12 of the
-    note): `addressed` is whether the line was spoken TO this listener --
-    False for a line meant for somebody else, None where the caller does not
-    know, which caps nothing. Noise never stops people talking to each
-    other; it keeps a far table's talk from a bystander
-    (`spatial_sound_field.din_level`).
+    And where a DIN reaches a listener BEYOND CONVERSATIONAL REACH
+    (`_in_a_din_beyond_reach`, § 12 of the note, and § 16 since round 2):
+    `addressed` is whether the line was spoken TO this listener -- True,
+    False for a line meant for somebody else, None where the caller does
+    not know, which caps nothing. Noise never stops people talking to each
+    other within reach; beyond it the din at the ear decides for the one
+    spoken to as for a bystander (`spatial_sound_field.din_level`).
 
     `addressed` is whether this listener is the body the line is spoken TO.
     Only the ear rung reads it (`EAR_VOLUME`): a line breathed into an ear
@@ -1515,8 +1516,17 @@ def _capped_levels(rel, word, vouched, proximity, level_db, seen, addressed):
             rel, word, reach=_reach(rel, proximity), level_db=level_db,
             seen=seen))
     dinned = masked
-    if masked != "none" and _bystander_in_a_din(rel, word, proximity,
-                                                addressed):
+    # A LISTENER'S OWN NOISE IS THE EAR'S, NEVER A DIN AS WELL. A running
+    # thing in the listener's hands sits at their own cell, so it is the din
+    # the field stamps at their ear AND the own-noise the ear cap reads
+    # (`spatial_listener.own_noise_db`); read twice it took a normal line
+    # spoken to a driller across a workshop from pieces to nothing (the
+    # merge of round 2 lane B's addressee-in-a-din rule onto wave B1,
+    # 2026-10-20). The ear cap is the stricter reading of the same noise --
+    # it stands at the ear, with the covering and the dulling -- so where it
+    # is stamped the din is left to it.
+    if masked != "none" and not rel.get("own_noise_db") \
+            and _in_a_din_beyond_reach(rel, word, proximity, addressed):
         from world.spatial_sound_field import din_level
         dinned = _weaker_hearing(masked, din_level(
             rel, word, level_db=level_db, seen=seen))
@@ -1536,20 +1546,26 @@ def _capped_levels(rel, word, vouched, proximity, level_db, seen, addressed):
     return table, masked, dinned, eared
 
 
-def _bystander_in_a_din(rel, word, proximity, addressed) -> bool:
-    """Is this listener a BYSTANDER IN A DIN for this line: not the one it
-    was spoken to (`addressed` is False -- None, unknown, is never a
-    bystander), standing in a din (`din_db`, stamped where the field places
-    both bodies), beyond conversational reach of the speaker
+def _in_a_din_beyond_reach(rel, word, proximity, addressed) -> bool:
+    """Is this listener IN A DIN BEYOND CONVERSATIONAL REACH for this line:
+    standing in a din (`din_db`, stamped where the field places both
+    bodies), beyond conversational reach of the speaker
     (`spatial_sound_field.CONVERSATION_REACH_PACES` of the field's own path,
-    or across the room by the measured tier), and the line voiced -- breath
-    is private beyond reach already, din or none.
+    or across the room by the measured tier), the line voiced -- breath is
+    private beyond reach already, din or none -- and the caller able to say
+    whom it was spoken to (`addressed` True or False; None, unknown, caps
+    nothing).
 
-    The class (§ 12 of the note, the owner's "noise never stops people
-    talking TO EACH OTHER"): a line's addressee, and anyone within a pace or
-    two of its speaker, hear it as the table says; a din keeps the talk of
-    a far table from everyone else."""
-    if addressed is not False or not isinstance(rel, dict):
+    The class (§ 12 of the note, restated by the owner in round 2, § 16):
+    noise never stops people talking TO EACH OTHER within conversational
+    reach -- the distance people who talk in a din close to. Beyond it the
+    din at the ear decides for everyone alike: a bystander at the far
+    table, and the one the line is spoken to as well, since being spoken
+    to does not put a voice in your ear -- a shout to someone a hundred
+    metres off in a gale is lost, and across a busy hall a line to someone
+    nine paces off is lost too. Wave A had spared the addressee at any
+    range (the note's § 14.7, question 5)."""
+    if addressed is None or not isinstance(rel, dict):
         return False
     if rel.get("din_db") is None or rel.get("paces") is None:
         return False
@@ -1565,9 +1581,9 @@ def spoken_to(names_this, names_anyone):
     """WHOM A LINE IS SPOKEN TO, as every hearing reader asks it: True when
     the line names this listener, False when it names somebody else, and
     None when it names NOBODY -- unknown, which no bystander rule caps (the
-    din's, `_bystander_in_a_din`; the head's shadow, `_facing_its_addressee`)
-    and which the ear rung refuses all the same (`EAR_VOLUME` fails toward
-    no).
+    din's, `_in_a_din_beyond_reach`; the head's shadow,
+    `_facing_its_addressee`) and which the ear rung refuses all the same
+    (`EAR_VOLUME` fails toward no).
 
     A line that names nobody is not a line to somebody else. Measured
     2026-10-20: the addressee field is on nearly every recorded line and
@@ -1591,8 +1607,9 @@ def _facing_its_addressee(rel, addressed):
     they talk to. So the head's shadow falls on a BYSTANDER behind the
     speaker (`addressed` False: a line spoken to somebody else), never on
     the line's own addressee, and never where the caller cannot say whom
-    the line was for (None). The din's own class (`_bystander_in_a_din`):
-    nothing about a speaker stops people talking TO EACH OTHER.
+    the line was for (None). Nothing about a SPEAKER stops people talking
+    TO EACH OTHER; the din at the LISTENER's ear is another matter
+    (`_in_a_din_beyond_reach`, round 2).
 
     Measured before this (2026-10-20, the harbour story's turns 1-3):
     seven lines between two people on a quay, naming no addressee, fell to
@@ -1637,7 +1654,7 @@ def voice_carries(rel: dict, volume: str, proximity: str | None = None,
     from world.spatial_sound_field import VOICE_TONE_SNR_DB, voice_margin_db
     margin = voice_margin_db(
         rel, word, reach=_reach(rel, proximity), level_db=level_db,
-        seen=seen, din=_bystander_in_a_din(rel, word, proximity, addressed))
+        seen=seen, din=_in_a_din_beyond_reach(rel, word, proximity, addressed))
     if margin is not None:
         # ...AND THROUGH THE LISTENER'S OWN EAR (wave B1): the voice a
         # covered or dulled ear, or one beside its own machine, still
@@ -1827,10 +1844,13 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
     `breath_beyond_reach`, `open_air_distance`, `breath_through_a_door`,
     `shut_door_from_farther_off`, `heavy_door_or_glass`, `wall`,
     `rooms_away`, `rooms_away_muffled`, `deafening`, `din_bystander`,
-    `ears_covered`, `own_noise`, `hearing_dulled` (the listener's own ear,
-    wave B1), `no_air`, `conducted`. Read by the speech replay and by perception's
-    decision notes, so a hearing complaint is answered with the clause
-    that decided it.
+    `din_beyond_reach` (the din took it from the one it was spoken to,
+    beyond conversational reach -- round 2), `ears_covered`, `own_noise`,
+    `hearing_dulled` (the listener's own ear, wave B1), `no_air`,
+    `conducted`. Read by the speech replay and by perception's decision
+    notes, so a hearing complaint is answered with the clause that decided
+    it. `open_air_distance` covers a voice leaving a building by its door
+    into the open air as well (`doorway_air`, round 2).
 
     `speaker_turned_away` (wave B2) names a line that would have arrived
     whole had its speaker faced the listener (`facing_loss_db`), and
@@ -1856,7 +1876,7 @@ def hearing_reason(rel: dict, volume: str, proximity: str | None = None,
     if table != masked:
         return "deafening"
     if masked != dinned:
-        return "din_bystander"
+        return "din_bystander" if addressed is False else "din_beyond_reach"
     if dinned != level:
         from world.spatial_listener import ear_reason
         return ear_reason(rel)

@@ -88,10 +88,13 @@ def test_a_bystander_across_a_busy_tavern_catches_pieces():
 
 
 def test_noise_never_stops_people_talking_to_each_other():
-    """The one spoken to follows the line in the loudest crowd -- beside the
-    speaker or across the room -- and so does the body at the speaker's
-    elbow it was not spoken to. Only a bystander beyond conversational
-    reach loses it."""
+    """The one spoken to follows the line in the loudest crowd beside the
+    speaker, and so does the body at the speaker's elbow it was not spoken
+    to: within conversational reach the din takes nothing. Across the room
+    the din at the ear decides -- for a bystander, and since round 2
+    (2026-10-20, lane B) for the one spoken to as well: being spoken to
+    does not put a voice in your ear
+    (`tests/test_a_din_reaches_an_addressee_beyond_reach.py`)."""
     for band in ("a dozen or so", "a few dozen", "a throng"):
         sc = _tavern()
         to_b = _rel(sc, "B", crowds=_crowd(band))
@@ -100,7 +103,8 @@ def test_noise_never_stops_people_talking_to_each_other():
         assert elbow.get("din_db") is not None
         assert _heard(elbow, False) == {v: "full" for v in VOLUMES}, band
         far = _rel(sc, "C", crowds=_crowd(band))
-        assert _heard(far, True) == {v: "full" for v in VOLUMES}, band
+        assert _heard(far, True) == _heard(far, False), band
+        assert _heard(far, None) == {v: "full" for v in VOLUMES}, band
         assert _heard(far, False)["normal"] != "full", band
     # The complement, the owner's rain ruling: the same room empty, and a
     # street in a downpour -- a far bystander follows every word, as the
@@ -130,13 +134,18 @@ def test_noise_never_stops_people_talking_to_each_other():
 def test_music_is_a_din_by_its_level():
     """A room's own sound at a level that makes the room a din -- a band
     playing, a soprano and a piano -- keeps a far conversation from a
-    bystander standing in it, and not from the one it is for."""
+    bystander standing in it; and, since round 2 (2026-10-20, lane B), from
+    the one it is for at the same distance, five paces across the music.
+    Beside the speaker the one it is for has it whole."""
     music = {"level": "loud", "detail": "a fiddle and a drum"}
     sc = _tavern({"A": (1, 1), "B": (2, 1), "C": (5, 4)}, room_sound=music)
     rel = _rel(sc, "C")
     assert rel.get("din_db") is not None
     assert hear_level(rel, "normal", addressed=False) != "full"
-    assert hear_level(rel, "normal", addressed=True) == "full"
+    assert hear_level(rel, "normal", addressed=True) \
+        == hear_level(rel, "normal", addressed=False)
+    assert hear_level(rel, "normal", addressed=None) == "full"
+    assert hear_level(_rel(sc, "B"), "normal", addressed=True) == "full"
 
 
 def test_a_watched_speaker_is_followed_further():
