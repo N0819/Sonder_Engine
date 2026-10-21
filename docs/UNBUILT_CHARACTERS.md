@@ -546,14 +546,50 @@ verb 207 to 21, quoted spans changed 0. What it leaves:
   しまう. Then I communicated ネルに." (0 such rows recorded). The words
   belong to the packs; a Japanese attempt frame needs either a conjugator
   (しようとした) or a noun frame (試みたこと：…) -- the owner's call.
-- **An observed act keeps its first verb's turn only**: the witnessed episode's
-  "I saw Rhona Carrick dig into her jacket and brings out a sealed letter"
-  (`composer._episode_sentence`'s act branch de-inflects the first word
-  alone). The same verb rule would put it right; not built.
 - **`emotional_context` stays in the second person** ("frustration (You held
   back from: ...)"): checked, recall does not hand it to the mind
   (`memory_context`'s projection carries no affect field); it reaches the
   embedding document and the consolidation summarizer's input.
+
+**2026-10-21, the watched act -- BUILT, residuals open.** A witnessed act
+was filed with its first verb alone in the base form: "I saw Rhona Carrick
+dig into her jacket and brings out a sealed letter." and "... keep the letter
+held out and waits." (the lighthouse probe, chat 2 row 40). The witnessed
+line now turns every verb of the actor's own phrases by the rule the mind's
+own attempt is turned by (`composer._verbs_in_base`, shared with
+`own_attempt`), and keeps today's line where that rule cannot turn the phrase
+exactly; an -s word ending the act after "and" is a verb where what stands
+before "and" ends a verb phrase -- the actor's own verb, an object pronoun, a
+particle the engine owns ("held out and wait") -- and is left a noun anywhere
+else ("cheeks and ears") (`Design.md`: "A memory speaks in its own first
+person"). Over 621 stored witnessed act lines in the owner's bank and the
+three probe stories: 115 changed, every changed word read; "I saw X <verb>
+... and <third-person -s form>" 135 to 31, of which 18 are nouns or another
+subject's verbs rightly left; quoted spans changed 0. What it leaves:
+
+- **13 of the actor's verbs keep their -s.** Six follow a body noun and are
+  read as one more part of a list, as "feet and calves against" is ("raise a
+  hand and points toward", "her cheeks and glances away", "shift weight and
+  begins to roll"). Seven lines keep today's form whole, the phrase not
+  turnable exactly: a lone verb between commas ("the desk, lands, and
+  strides"), a bare object ("presses thumb against"), a participle straight
+  after ("and begins walking"), a particle outside the engine's prepositions
+  ("lays aside three envelopes"), and a noun before a final "and" ("the
+  hearth fire and drinks", "the mattress and pillows" -- which also leaves the
+  "relaxes" before it).
+- **One misread, and a new shape of it.** A plural noun after "and" with a
+  word of its own phrase after it reads as a verb, as the own act's rule
+  already named: "walk down through the landing and stairs to the kitchen" is
+  filed "... and stair to the kitchen" (the owner's bank, row 31067). And an
+  object pronoun or a particle before "and" now turns an -s word ending the
+  act ("between him and others." would file "other"; 0 in the corpus).
+- **An act whose subject is the actor's own body part is filed as if the
+  part were the verb**: "I saw Hinami tail bristle.", "I saw the young woman
+  ear droop, remains flushed." (34 of the 621 lines, 33 of them the owner's
+  bank; the surface was "tails bristle"). The first-verb path de-inflects the
+  noun; the shared rule declines it (a body noun with no object after it is a
+  clause's subject), so the fallback keeps today's line. "I saw Hinami's
+  tails bristle" is the line it means; not built.
 
 ## 2. Roadmap
 

@@ -13,7 +13,7 @@
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/character_tools.py` | 732 |  | `core.db` |
 | `agents/common.py` | 12969 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
-| `agents/composer.py` | 7611 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
+| `agents/composer.py` | 7678 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 7987 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 611 |  | `agents.common`, `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 4107 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
@@ -337,14 +337,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_render_view_english()` | 6672 | 290 lines |
-| `speech_percept()` | 4687 | 289 lines |
-| `compose_landscape_line()` | 3652 | 229 lines |
+| `_render_view_english()` | 6725 | 290 lines |
+| `speech_percept()` | 4740 | 289 lines |
+| `compose_landscape_line()` | 3705 | 229 lines |
 | `presence_percepts()` | 1380 | 181 lines |
-| `own_attempt()` | 2450 | 181 lines |
-| `pose_percepts()` | 2633 | 178 lines |
-| `act_percept()` | 5334 | 166 lines |
-| `_render_episode_english()` | 7225 | 139 lines |
+| `pose_percepts()` | 2686 | 178 lines |
+| `_verbs_in_base()` | 2450 | 166 lines |
+| `act_percept()` | 5387 | 166 lines |
+| `_render_episode_english()` | 7292 | 139 lines |
 
 ### `agents/director.py`
 

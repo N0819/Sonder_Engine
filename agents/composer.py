@@ -2447,6 +2447,174 @@ def _pronoun_forms(pronouns):
     return frozenset(forms)
 
 
+def _verbs_in_base(act):
+    """A predicate written as a watcher sees it -- third person, its subject
+    left out ("takes the letter and tucks it into the pocket") -- with every
+    verb of its own doer's coordinated verb phrases in the base form ("take
+    the letter and tuck it into the pocket"), or "" where that cannot be done
+    exactly. ONE RULE for every frame that puts a predicate after its doer in
+    the base form: the mind's own attempt ("I tried to ...", `own_attempt`)
+    and the act it watched ("I saw Rhona Carrick ...", `_episode_sentence`).
+
+    Read only from the closed classes the engine owns: the first word is the
+    verb (a third-person form is turned to its base; a base form stays where
+    its object follows it; a body noun or an auxiliary there is not turned);
+    only the first sentence is the predicate's; a later third-person form
+    opens a verb phrase of the same doer where a coordinator, a sequencer or
+    a comma stands before it -- never inside a clause a subordinating or
+    relative word, or a dash, opened for its own subject -- and is turned
+    where its object follows it, or a coordinator stands before it with a
+    word of its phrase after it or with the end of a verb phrase before the
+    coordinator (the doer's own verb, an object pronoun, a particle: "held
+    out and waits"); a body noun, a list of the body's parts, a plural ending
+    a list and an absolute phrase's head are left as nouns, and anything
+    uncertain is not turned at all. Quoted spans stay as said.
+    """
+    from language_runtime import referring
+    act = str(act or "").strip().rstrip(".").strip()
+    if not act or referring.unspaced(act):
+        return ""
+    breath = {str(w).casefold()
+              for w in linguistic("agents.common", "_BREATH_CONJUNCTIONS")}
+    body = {str(w).casefold()
+            for w in linguistic("agents.common", "_OWN_BODY_NOUNS")}
+    agreement = linguistic("agents.common", "_YOU_AGREEMENT")
+    quoted = linguistic("agents.common", "_QUOTED_SPAN_RE")
+    # ONLY THE FIRST SENTENCE IS THE ATTEMPT'S. "I tried to" governs the
+    # sentence it opens; a later one stands as the act wrote it -- the owner's
+    # bank, row 22342: "Lowers to one knee before the table. Takes Hinami's
+    # nearest foot ... Lifts it slightly and presses", whose later sentences
+    # open with their own verbs. Sentences by the engine's own splitter (a
+    # title's period is not a full stop), over the text with its quotations
+    # masked so a quoted full stop ends nothing.
+    from .common import split_sentences
+    masked = quoted.sub(lambda m: "x" * len(m.group(0)), act)
+    parts = split_sentences(masked)
+    cut = len(act)
+    if len(parts) > 1 and parts[1]:
+        cut = masked.find(parts[1], max(0, len(parts[0]) - 1))
+        cut = len(act) if cut < 0 else cut
+    act, rest = act[:cut], act[cut:]
+    segments = quoted.split(act)
+    if not segments[0].strip():
+        return ""                       # opens with a quotation: no verb first
+    # The words that end a verb phrase and never a noun phrase, before a
+    # coordinator: a particle or a preposition the engine owns (a preposition
+    # needs its object, so one standing before "and" is a particle) -- the
+    # pack's phrase openers and the prepositions of `_OBJECT_PRONOUN_FOLLOWERS`,
+    # less the subordinating words and the participles among them: a
+    # participle ends a phrase inside a noun's as readily ("a man sitting and
+    # others standing").
+    particles = {
+        w for w in set(referring.phrase_openers()) | _OBJECT_PRONOUN_FOLLOWERS
+        if w not in breath and not _participle(w)}
+    first, foreign, subordinate = True, False, False
+    for s in range(0, len(segments), 2):
+        tokens = re.split(r"(\s+|[,;—–])", segments[s])
+        at = [k for k, t in enumerate(tokens) if t and not t.isspace()]
+        words = [tokens[k] for k in at]
+        verbs = set()                   # where the doer's own verbs stand
+        for i, word in enumerate(words):
+            if not _WORD_TOKEN.fullmatch(word):
+                continue
+            if first:
+                first = False
+                if word.casefold() in agreement:
+                    return ""
+                if word.casefold() in body and not _opens_an_object(
+                        words, i, reach=1):
+                    return ""           # a clause's subject: "hips lock forward"
+                base = _base_from_third_person_s(word)
+                if base is not None:
+                    tokens[at[i]] = base
+                elif not _opens_an_object(words, i):
+                    return ""
+                verbs.add(i)
+                continue
+            base = _base_from_third_person_s(word)
+            low = word.casefold()
+            prior = words[i - 1].casefold() if i else ""
+            joins = referring.coordinator(low) or low in _SEQUENCERS
+            if prior in (",", ";", "—", "–"):
+                subordinate = False             # a clause stop ends one
+            if prior in (";", "—", "–"):
+                # A SPAN AFTER A DASH OR A SEMICOLON that opens with no verb of
+                # the doer's is a clause of its own subject -- "intensify the
+                # rhythm -- tongue presses deeper ..., then withdraws" (the
+                # owner's bank, row 23519): "withdraws" is the tongue's.
+                foreign = not ((base is not None and word[:1].islower())
+                               or joins)
+            if low in breath and not joins:
+                # A SUBORDINATING OR RELATIVE WORD opens a clause of its own
+                # subject that runs to the next stop: "as my own release breaks
+                # and soaks through" (the owner's bank, row 28256), "before
+                # things get warm" (row 25673), "all that lies between them" --
+                # none of its verbs is the doer's.
+                subordinate = True
+                continue
+            if base is None or not word[:1].islower() or subordinate:
+                continue
+            after_breath = referring.coordinator(prior) or prior in _SEQUENCERS
+            after_stop = prior in (",", ";", "—", "–")
+            if not (after_breath or after_stop):
+                continue
+            if low in agreement:
+                return ""
+            if low in body:
+                # A BODY NOUN IS A VERB ONLY WITH ITS OBJECT STRAIGHT AFTER IT
+                # ("eyes the door"): a phrase after it follows a noun as
+                # readily -- "draw her torso and shoulders into the passage".
+                nxt = words[i + 1].casefold() if i + 1 < len(words) else ""
+                if _opens_an_object(words, i, reach=1):
+                    tokens[at[i]] = base
+                    verbs.add(i)
+                elif nxt in referring.phrase_openers():
+                    return ""
+                continue                        # a noun: "hands and knees"
+            if foreign:
+                return ""                       # whose verb, nobody can say
+            if (referring.coordinator(prior) and i >= 2
+                    and words[i - 2].casefold() in body
+                    and not _opens_an_object(words, i, reach=1)):
+                # A LIST OF THE BODY'S PARTS: after "feet and", "calves
+                # against the folds" is one more part (the owner's bank, row
+                # 26690, filed "feet and calve").
+                continue
+            if _opens_an_object(words, i):
+                tokens[at[i]] = base
+                verbs.add(i)
+            elif after_breath:
+                # A verb by its place and form -- but after "and"/"or" only
+                # with a word of its own phrase after it, or where what stands
+                # before the coordinator ends a VERB phrase: a plural noun ends
+                # its own coordination as readily ("brushing grit from coat
+                # and trousers.", "gauges and keys,", the owner's bank rows
+                # 27836 and 28637), where a verb before a stop is intransitive.
+                # What stands before "and" settles it: the doer's own verb
+                # ("pause and sighs."), an object pronoun ("turns to her and
+                # waits"), or a particle ("keeps the letter held out and
+                # waits.", the lighthouse probe, chat 2 row 40); a noun there
+                # ("cheeks and ears", "corners and shadows") leaves it a noun.
+                # After a sequencer ("then", "but") a noun phrase is not
+                # coordinated, so the verb stands there whatever follows it.
+                nxt = words[i + 1] if i + 1 < len(words) else ""
+                left = words[i - 2] if i >= 2 else ""
+                ends_a_verb = (i - 2 in verbs
+                               or left.casefold() in _OBJECT_PRONOUNS
+                               or left.casefold() in particles)
+                if referring.coordinator(prior) and not ends_a_verb and (
+                        not _WORD_TOKEN.fullmatch(nxt) or _participle(nxt)):
+                    return ""
+                tokens[at[i]] = base
+                verbs.add(i)
+            elif i + 1 < len(words) and _participle(words[i + 1]):
+                continue                        # an absolute phrase's head
+            else:
+                return ""
+        segments[s] = "".join(tokens)
+    return "".join(segments) + rest
+
+
 def own_attempt(act, *, self_forms=(), pronouns=None, pronouns_mine=False,
                 keep_pronouns=False):
     """A mind's own act, written as a watcher sees it ("takes the letter and
@@ -2487,124 +2655,9 @@ def own_attempt(act, *, self_forms=(), pronouns=None, pronouns_mine=False,
     first person with them as written ("I tried to shift her posture"), which
     keeps them so and turns the rest. Quoted spans are what was said and stay.
     """
-    from language_runtime import referring
-    act = str(act or "").strip().rstrip(".").strip()
-    if not act or referring.unspaced(act):
+    text = _verbs_in_base(act)
+    if not text:
         return ""
-    breath = {str(w).casefold()
-              for w in linguistic("agents.common", "_BREATH_CONJUNCTIONS")}
-    body = {str(w).casefold()
-            for w in linguistic("agents.common", "_OWN_BODY_NOUNS")}
-    agreement = linguistic("agents.common", "_YOU_AGREEMENT")
-    quoted = linguistic("agents.common", "_QUOTED_SPAN_RE")
-    # ONLY THE FIRST SENTENCE IS THE ATTEMPT'S. "I tried to" governs the
-    # sentence it opens; a later one stands as the act wrote it -- the owner's
-    # bank, row 22342: "Lowers to one knee before the table. Takes Hinami's
-    # nearest foot ... Lifts it slightly and presses", whose later sentences
-    # open with their own verbs. Sentences by the engine's own splitter (a
-    # title's period is not a full stop), over the text with its quotations
-    # masked so a quoted full stop ends nothing.
-    from .common import split_sentences
-    masked = quoted.sub(lambda m: "x" * len(m.group(0)), act)
-    parts = split_sentences(masked)
-    cut = len(act)
-    if len(parts) > 1 and parts[1]:
-        cut = masked.find(parts[1], max(0, len(parts[0]) - 1))
-        cut = len(act) if cut < 0 else cut
-    act, rest = act[:cut], act[cut:]
-    segments = quoted.split(act)
-    if not segments[0].strip():
-        return ""                       # opens with a quotation: no verb first
-    first, foreign, subordinate = True, False, False
-    for s in range(0, len(segments), 2):
-        tokens = re.split(r"(\s+|[,;—–])", segments[s])
-        at = [k for k, t in enumerate(tokens) if t and not t.isspace()]
-        words = [tokens[k] for k in at]
-        for i, word in enumerate(words):
-            if not _WORD_TOKEN.fullmatch(word):
-                continue
-            if first:
-                first = False
-                if word.casefold() in agreement:
-                    return ""
-                if word.casefold() in body and not _opens_an_object(
-                        words, i, reach=1):
-                    return ""           # a clause's subject: "hips lock forward"
-                base = _base_from_third_person_s(word)
-                if base is not None:
-                    tokens[at[i]] = base
-                elif not _opens_an_object(words, i):
-                    return ""
-                continue
-            base = _base_from_third_person_s(word)
-            low = word.casefold()
-            prior = words[i - 1].casefold() if i else ""
-            joins = referring.coordinator(low) or low in _SEQUENCERS
-            if prior in (",", ";", "—", "–"):
-                subordinate = False             # a clause stop ends one
-            if prior in (";", "—", "–"):
-                # A SPAN AFTER A DASH OR A SEMICOLON that opens with no verb of
-                # the doer's is a clause of its own subject -- "intensify the
-                # rhythm -- tongue presses deeper ..., then withdraws" (the
-                # owner's bank, row 23519): "withdraws" is the tongue's.
-                foreign = not ((base is not None and word[:1].islower())
-                               or joins)
-            if low in breath and not joins:
-                # A SUBORDINATING OR RELATIVE WORD opens a clause of its own
-                # subject that runs to the next stop: "as my own release breaks
-                # and soaks through" (the owner's bank, row 28256), "before
-                # things get warm" (row 25673), "all that lies between them" --
-                # none of its verbs is the doer's.
-                subordinate = True
-                continue
-            if base is None or not word[:1].islower() or subordinate:
-                continue
-            after_breath = referring.coordinator(prior) or prior in _SEQUENCERS
-            after_stop = prior in (",", ";", "—", "–")
-            if not (after_breath or after_stop):
-                continue
-            if low in agreement:
-                return ""
-            if low in body:
-                # A BODY NOUN IS A VERB ONLY WITH ITS OBJECT STRAIGHT AFTER IT
-                # ("eyes the door"): a phrase after it follows a noun as
-                # readily -- "draw her torso and shoulders into the passage".
-                nxt = words[i + 1].casefold() if i + 1 < len(words) else ""
-                if _opens_an_object(words, i, reach=1):
-                    tokens[at[i]] = base
-                elif nxt in referring.phrase_openers():
-                    return ""
-                continue                        # a noun: "hands and knees"
-            if foreign:
-                return ""                       # whose verb, nobody can say
-            if (referring.coordinator(prior) and i >= 2
-                    and words[i - 2].casefold() in body
-                    and not _opens_an_object(words, i, reach=1)):
-                # A LIST OF THE BODY'S PARTS: after "feet and", "calves
-                # against the folds" is one more part (the owner's bank, row
-                # 26690, filed "feet and calve").
-                continue
-            if _opens_an_object(words, i):
-                tokens[at[i]] = base
-            elif after_breath:
-                # A verb by its place and form -- but after "and"/"or" only
-                # with a word of its own phrase after it: a plural noun ends
-                # its own coordination as readily ("brushing grit from coat
-                # and trousers.", "gauges and keys,", the owner's bank rows
-                # 27836 and 28637), where a verb before a stop is intransitive.
-                # After a sequencer ("then", "but") a noun phrase is not
-                # coordinated, so the verb stands there whatever follows it.
-                nxt = words[i + 1] if i + 1 < len(words) else ""
-                if referring.coordinator(prior) and (
-                        not _WORD_TOKEN.fullmatch(nxt) or _participle(nxt)):
-                    return ""
-                tokens[at[i]] = base
-            elif i + 1 < len(words) and _participle(words[i + 1]):
-                continue                        # an absolute phrase's head
-            else:
-                return ""
-        segments[s] = "".join(tokens)
-    text = "".join(segments) + rest
     # The doer's own pronouns, and nobody else's.
     def _seen(t):
         outside = " ".join(
@@ -7139,11 +7192,25 @@ def _episode_sentence(p):
         if words:
             base = _base_from_third_person_s(words[0])
             if base:
-                rest = " ".join(words[1:]).rstrip(".")
+                # EVERY VERB OF THE ACTOR'S OWN PHRASES after "I saw X" takes
+                # the base form, by the one rule the mind's own attempt is
+                # turned by (`_verbs_in_base`): only the first verb was, and the
+                # lighthouse probe's keeper filed "I saw Rhona Carrick dig into
+                # her jacket and brings out a sealed letter" (2026-10-20, chat 2
+                # row 40). Where the rule cannot turn the phrase exactly, the
+                # first verb alone is turned, as before.
+                turned = _verbs_in_base(surface).split()
+                if turned:
+                    head = turned[0]
+                    action = (head if head.isupper() and len(head) > 1
+                              else head[:1].lower() + head[1:])
+                    rest = " ".join(turned[1:]).rstrip(".")
+                else:
+                    action, rest = base, " ".join(words[1:]).rstrip(".")
                 ending = f" {rest}." if rest else "."
                 return _en(
                     "episode_act", label=p.source_label,
-                    action=base, ending=ending)
+                    action=action, ending=ending)
         sentence = _observable_predicate(p.source_label, surface)
         return sentence or ""
     if p.kind == "cue":
