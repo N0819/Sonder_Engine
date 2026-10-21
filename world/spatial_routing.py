@@ -52,6 +52,27 @@ _DISTANCE_UNIT_METERS = {
 _DISTANCE_NUMBER = re.compile(r"^~?\s*(\d+(?:\.\d+)?)\s*([a-z]+)?\.?$")
 
 
+def _distance_text(value) -> str:
+    """An authored `distance` as the text both readers below parse.
+
+    A MEASUREMENT IS A MEASUREMENT IN EITHER SHAPE IT IS WRITTEN. A string or
+    a bare number is read as written; a `{value, unit}` record -- the shape
+    the room author gave the control story's channel (2026-10-21, chat 2 idx
+    4: `{"value": 13, "unit": "km"}` to the mainland, `{"value": 1.5, "unit":
+    "km"}` to the landing) -- is that number in that unit. Before this, both
+    readers took `str()` of the record, matched nothing, and read thirteen
+    kilometres of open water as `near`: one doorway, to sound, to a walk and
+    to the price of the boat's crossing. Measured over every stored scene
+    (the owner's database, the three probe stories and the 2026-09-26
+    stories): those two edges are the only records of this shape."""
+    if isinstance(value, dict) and "value" in value:
+        number = value.get("value")
+        if isinstance(number, bool) or not isinstance(number, (int, float, str)):
+            return ""
+        return ("%s %s" % (number, value.get("unit") or "")).strip()
+    return str(value if value is not None else "")
+
+
 def edge_metres(value):
     """An authored edge `distance` as METRES, or None when it states no
     length -- a tier word ("far"), an alias ("short"), nothing, or a unit
@@ -59,10 +80,11 @@ def edge_metres(value):
     into a tier and throws away, kept for the one reader that needs it:
     the far layer measures a path only where every step of it was measured
     (`world/landscape.py`; DESIGN_METRIC_SPACE's "keep the number"). Takes
-    the value or the edge that carries it."""
-    if isinstance(value, dict):
+    the value or the edge that carries it; a value may be a `{value, unit}`
+    record (`_distance_text`)."""
+    if isinstance(value, dict) and "value" not in value:
         value = value.get("distance")
-    raw = str(value if value is not None else "").strip().casefold()
+    raw = _distance_text(value).strip().casefold()
     matched = _DISTANCE_NUMBER.match(raw) if raw else None
     if not matched:
         return None
@@ -78,9 +100,10 @@ def normalize_edge_distance(value) -> str:
     edge that used to read as `near` by raw passthrough). Absent or
     unparseable answers `near`, which is exactly the default every consumer
     already assumed -- the default can never masquerade as a measurement
-    because only authored values can reach the other three tiers.
+    because only authored values can reach the other three tiers. A
+    `{value, unit}` record is its measurement (`_distance_text`).
     """
-    raw = str(value if value is not None else "").strip().casefold()
+    raw = _distance_text(value).strip().casefold()
     if not raw:
         return "near"
     if raw in _DISTANCE_ALIASES:

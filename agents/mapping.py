@@ -164,10 +164,11 @@ def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
     """A room need for every vehicle moving toward no room, and one for
     every vehicle moving THROUGH no room.
 
-    A transit that names no `destination_room`, or names one the scene does
-    not hold and no plan reserves, can never dock (`mechanics` schedules an
-    arrival only for a named destination). The need makes the journey's end
-    a place somebody has to plan; the vehicle keeps moving meanwhile.
+    A transit that names no `destination_room` can never dock (`mechanics`
+    times an arrival only for a named destination), and one that names a
+    place the scene does not hold and no plan reserves comes in at a name
+    and no room when its way is done (below). The need makes the journey's
+    end a place somebody has to plan; the vehicle keeps moving meanwhile.
 
     AND THE SPACE IT MOVES THROUGH (`transit_route_unplanned`, 2026-10-20).
     Under way a vehicle stands in its route room or, when the world holds no
@@ -183,9 +184,16 @@ def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
     mainland street as route AND destination; refused as no between, the
     route left her in no room, and nothing asked for the water. A vehicle
     with no inside (a coach, a boat the story never boarded) is a thing in
-    no room, and asks for nothing."""
+    no room, and asks for nothing.
+
+    AND THE PLACE A VESSEL CAME IN AT, while the world does not hold it
+    (2026-10-21). A journey whose way is done docks at its end even when
+    nobody built it -- off the map, in no room, its `destination_room` the
+    place's name (`spatial.docked_off_the_map`, `mechanics._fire_due_events`)
+    -- and stands there the beat the place is a room, so that place is one
+    somebody has to plan, as it was while the vessel was under way."""
     from world.planning_needs import planning_need
-    from world.spatial import room_of_record
+    from world.spatial import docked_off_the_map, room_of_record
     needs = []
     rooms = (scene or {}).get("rooms") or {}
     for eid, ent in ((scene or {}).get("entities") or {}).items():
@@ -194,7 +202,8 @@ def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
         if not isinstance(transit, dict):
             continue
         phase = str(transit.get("phase") or "").strip().casefold()
-        if phase not in ("in_transit", "arriving"):
+        off_map = phase == "docked" and docked_off_the_map(scene, eid, ent)
+        if phase not in ("in_transit", "arriving") and not off_map:
             continue
         destination = str(transit.get("destination_room") or "").strip()
         label = str(ent.get("name") or eid)
@@ -208,6 +217,8 @@ def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
                          "route_room": route,
                          "eta_seconds": str(transit.get("eta_seconds") or "")},
                 turn_idx=turn_idx, frame_id=frame_id))
+        if off_map:
+            continue                        # docked: no space it moves through
         here = room_of_record(scene, eid, ent)
         if here and here in rooms:
             continue                        # in its route, or (D2) where it set off

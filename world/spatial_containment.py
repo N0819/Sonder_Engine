@@ -2925,8 +2925,10 @@ def place_enclosed_bodies(scene: dict) -> list:
 # split ("short means conduit") would have to invent a constant no fact
 # supplies. Three precedents in this tree already decide the same way:
 # `world.mechanics._tick_interval` makes a condition act SOLELY by carrying a
-# parseable positive interval, `_schedule_new_arrivals` schedules SOLELY on a
-# parseable positive eta, and news latency derives SOLELY when none is stated.
+# parseable positive interval, `_schedule_new_arrivals` times a journey by a
+# parseable positive eta or, where none is written, by the length of the way
+# the world itself measured (2026-10-21) -- a magnitude either way, never a
+# kind -- and news latency derives SOLELY when none is stated.
 # A chamber is therefore a large magnitude or no magnitude at all: a place
 # that kneads its occupant for hours authors 25200 and IS crossed, slowly.
 

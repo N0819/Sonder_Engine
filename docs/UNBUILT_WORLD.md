@@ -2550,6 +2550,65 @@ offered and then taken ends with the taker"). What the fix leaves:
   holder"; it no longer can. The instruction (a transfer is the whole
   possession change) still holds, and the model broke it here anyway.
 
+<a id="unbuilt-1-225"></a>
+
+### 1.225 A boat under way with no written eta never arrived -- BUILT 2026-10-21, residuals open
+
+The control probe story (2026-10-21, chat 2, idx 4-9; F18 of the round's
+probe findings): the Mary Ann, bound for the mainland through the channel
+with no `eta_seconds`, sat in the channel for 77.7 story hours, because the
+timed arrival scheduled on a written eta and nothing else (`Design.md`: "A
+journey under way toward a place arrives when its way is done"). What the fix
+leaves:
+
+- **The pace is a walk.** Nothing types a vehicle's speed -- no transit,
+  entity or card field carries one in any stored scene -- so a journey with
+  no written time is priced at the charter's walking pace
+  (`charter_move.WALK_PACES_PER_SECOND`, 1.3 paces a second): the channel's
+  thirteen kilometres take 2.8 hours, where a motor workboat would take about
+  one, and a measured sea crossing of hundreds of kilometres would take days.
+  A written `eta_seconds` stands over the price. The owner's: a typed speed
+  (on the transit, or the vehicle's record), a default per kind, or the walk.
+- **A body written into the route room is not aboard.** The probe's encoder
+  put the boatman inside the boat (`containment: inside mary_ann`, which the
+  merge reads as her inside) and, one event later in the same beat, wrote his
+  position as the channel; the merge applied the steps in order and he was
+  left standing on the water, his containment gone. When the boat comes in
+  only the bodies in its rooms (or contained in it) go with it, so he stays in
+  the channel, dormant. Its own class -- the encoder's position for someone
+  aboard a vessel under way, against the transit card's "its occupants keep
+  their interior positions and go with it". Across every stored committed
+  state (the owner's database, the control and homecoming stories) it is 1
+  of 17 bodies that left with a vessel; the other 16 stood in its rooms.
+- **A journey with no destination still waits for the prose.** The transit
+  card leaves out an end still to be built, and a journey with no end has no
+  way to price: the owner's database holds nine such journeys since chat 153
+  (the TARDIS, the freight elevator; 1 to 9 beats, at most 364 story
+  seconds), the homecoming story two (the Tern for 14 and 16 beats across its
+  two runs, the coach for 6 and 8). The `transit_destination_unplanned` need
+  asks for the end.
+- **Priced from the beat's end.** The departure beat's sweep times the
+  arrival from that beat's end clock, so a beat that sets off and then skips
+  hours lands it up to one skip late, on the next beat; and a journey stored
+  under way before this landed is timed from the first sweep after it, not
+  from when it left.
+- **A planned end the scene has not materialised** docks the vessel off the
+  map until a stub stands there: `structure.materialize_planned_fringe`
+  materialises a planned room's neighbours, never the planned room a vessel
+  stands at, and a docked vessel in no room occupies nothing.
+- **A built end under another id.** `settle_departures`' docked rule stands
+  an off-map vessel at its `destination_room` by exact id; a place later built
+  under a different id that answers to the same name (`scene_room_id`) does
+  not take it.
+- **Plan joins written `{value, unit}`.** `layout_bridge._authored_apart`
+  still stringifies a plan edge's distance, so such a join reads as nothing
+  written; plans write strings today.
+- **The probe's far field moved with the reading.** The channel's two edges
+  now read `remote` (13 km, 1.5 km): no sound crosses between the channel and
+  the landing or the mainland, where the `{value, unit}` record had read as a
+  doorway -- the rule for any measured way over 75 m. Sight across a `remote`
+  edge was not measured.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

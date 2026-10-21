@@ -7,7 +7,9 @@ prepare_scene_commit's tail:
     (a) fire due scheduled_events for THIS frame (transit_arrival moves
         the entity and docks it; news_arrival stages latency-gated
         awareness -- see the news note below);
-    (b) schedule new arrivals from entity.state.transit eta declarations;
+    (b) time every journey toward a destination: a written eta, else the
+        engine's price of the way (`spatial.journey_seconds`) -- something
+        under way arrives when its way is done;
     (c1) fire due world_conditions ticks -- a condition that declares a
         cadence ACTS while it lasts (see the pass (c1) block below), and
         (c2) expire due world_conditions;
@@ -64,8 +66,9 @@ import hashlib
 import json
 
 from core import jobs
-from world.spatial import (apply_transit_dock_edges, room_of_record,
-                           scene_names_body)
+from world.spatial import (apply_transit_dock_edges, journey_seconds,
+                           room_of_record, scene_names_body, scene_room_id,
+                           stand_in_no_room)
 from world.spatial_frames import infer_vehicle_zones
 
 
@@ -696,7 +699,9 @@ def _era_stamp(payload):
 def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
                      player_room=None, surface_consequences=True,
                      town=None, presence_rooms=()):
-    """Pass (a). Returns (event_ops, notices, counts, pending_entity_ids).
+    """Pass (a). Returns (event_ops, notices, counts, pending_arrivals):
+    the last is `{entity id: row}` for this frame's transit arrivals not yet
+    due, which pass (b) reads to time each journey once.
 
     ``town`` is how a TOWN event is placed when the era has more than one
     frame running (`commit_mechanics.town_for_sweep`): `frames`, every frame
@@ -734,7 +739,7 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
     event_ops = []
     notices = []
     fired = news_fired = consequences_fired = 0
-    pending_entity_ids = set()
+    pending_arrivals = {}
     entities = scene.get("entities") or {}
     positions = scene.setdefault("positions", {})
 
@@ -796,7 +801,7 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
         if payload.get("frame_id") != frame_id:
             continue
         if row["due_at"] > elapsed:
-            pending_entity_ids.add(eid)
+            pending_arrivals[eid] = row
             continue
         ent = entities.get(eid)
         state = ent.get("state") if isinstance(ent, dict) else None
@@ -807,10 +812,47 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
             # the event is moot, not fireable.
             event_ops.append(("status", row["event_id"], "cancelled"))
             continue
-        destination = str(payload.get("destination_room")
-                          or transit.get("destination_room") or "")
+        bound_now = str(transit.get("destination_room") or "").strip()
+        destination = str(payload.get("destination_room") or bound_now or "")
+        # A JOURNEY THAT NAMES ANOTHER END IS NOT THIS ARRIVAL'S (2026-10-21).
+        # The payload's end stands over a transit that names none -- a later
+        # write that leaves the destination out is silence about it (review
+        # B1) -- but a transit that names a different place has turned for
+        # it: this arrival is moot, and pass (b) times the journey it is on.
+        # Before every journey had an arrival, a turned vessel docked at the
+        # end it had given up.
+        if bound_now and destination and not _same_place(scene, bound_now, destination):
+            event_ops.append(("status", row["event_id"], "cancelled"))
+            continue
+        label = (ent.get("name") if isinstance(ent, dict) else "") or eid
+        held = scene_room_id(scene, destination) if destination else ""
+        if destination and not held:
+            # NOTHING ARRIVES NOWHERE, AND NOTHING WAITS FOREVER (2026-10-21).
+            # Its way is done and its end is a place the world does not hold:
+            # it comes in AT that place, off the map -- docked, in no room,
+            # its `destination_room` naming where it is -- and stands there the
+            # beat the place is a room (`spatial_transit.settle_departures`'
+            # docked rule); until then its doorway opens onto nothing
+            # (`apply_transit_dock_edges`, pass (d)), and the bodies in its
+            # rooms are with it. Code never builds the place: the compiler
+            # asks the Room for it (`mapping._transit_destination_needs`).
+            # This replaced writing the name into `positions`, which stood the
+            # vessel in a room that does not exist.
+            stand_in_no_room(scene, eid, ent)
+            transit["phase"] = "docked"
+            transit["destination_room"] = destination
+            for key in ("eta_seconds", "route_room", "departed_from"):
+                transit.pop(key, None)
+            event_ops.append(("status", row["event_id"], "fired"))
+            fired += 1
+            notices.append(
+                f"{label} has come to the end of its way, at {destination}: "
+                "a place the world does not hold yet. It is docked there, off "
+                "the map, with whoever is in its rooms, and stands there the "
+                "beat the place is built.")
+            continue
         if destination:
-            positions[eid] = destination
+            positions[eid] = held
         transit["phase"] = "docked"
         transit.pop("eta_seconds", None)
         transit.pop("destination_room", None)
@@ -818,26 +860,88 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
         transit.pop("departed_from", None)
         event_ops.append(("status", row["event_id"], "fired"))
         fired += 1
-        label = (ent.get("name") if isinstance(ent, dict) else "") or eid
         notices.append(
             f"{label} has arrived at "
-            f"{destination or 'its destination'} and is docked there."
+            f"{held or 'its destination'} and is docked there."
         )
 
     return event_ops, notices, \
         {"fired": fired, "news_fired": news_fired,
          "consequences_fired": consequences_fired}, \
-        pending_entity_ids
+        pending_arrivals
 
 
-def _schedule_new_arrivals(scene, elapsed, frame_id, pending_entity_ids,
+def _same_place(scene, a, b) -> bool:
+    """Two spellings of one destination: equal folded, or the same room the
+    scene holds (`spatial.scene_room_id`)."""
+    a, b = str(a or "").strip(), str(b or "").strip()
+    if not a or not b:
+        return False
+    if a.casefold() == b.casefold():
+        return True
+    held = scene_room_id(scene, a)
+    return bool(held) and held == scene_room_id(scene, b)
+
+
+#: The payload key an arrival timed by the ENGINE'S price of the way carries
+#: (the seconds priced), beside the three every arrival carries. Its absence
+#: is a time somebody wrote, which a later write never moves; its presence is
+#: an estimate, which the first time anybody writes replaces
+#: (`_schedule_new_arrivals`).
+PRICED_ARRIVAL_KEY = "priced_seconds"
+
+
+def _written_eta(transit):
+    """The positive `eta_seconds` a transit carries, else None. A positive
+    number is a time somebody wrote; nothing, zero, a negative or a word is
+    no time written -- the rule pass (b) always had, which scheduled on a
+    parseable positive eta and nothing else. No stored journey with a
+    destination carries a zero (the owner's database, the probe and the
+    2026-09-26 stories)."""
+    try:
+        eta = float(transit.get("eta_seconds"))
+    except (TypeError, ValueError):
+        return None
+    return eta if eta > 0 else None
+
+
+def _schedule_new_arrivals(scene, elapsed, frame_id, pending_arrivals,
                            chat_id, turn_id, turn_idx):
-    """Pass (b): any entity whose transit state carries eta_seconds +
-    destination_room and has no pending event yet gets a deterministic
-    arrival event (stable id, so a rerun cannot double-schedule)."""
+    """Pass (b): every journey toward a destination is timed, once, with a
+    deterministic arrival event (stable id, so a rerun cannot
+    double-schedule).
+
+    SOMETHING UNDER WAY TOWARD A DESTINATION ARRIVES WHEN ITS WAY IS DONE,
+    whether or not anyone wrote down a time (2026-10-21). This pass used to
+    schedule on a written `eta_seconds` and nothing else, and the transit
+    card names that field without ever asking for it: since the prose encoder
+    (2026-09-27) not one stored journey with a destination carried one, so
+    none of them could arrive. The control story (chat 2, idx 4-9): the Mary
+    Ann sat in the channel 77.7 story hours, bound for a mainland the world
+    measured at thirteen kilometres.
+
+    * A POSITIVE `eta_seconds` IS A TIME SOMEBODY WROTE, and it stands: due
+      that many seconds from this sweep's clock, as it always was.
+    * WITHOUT ONE, THE ENGINE PRICES THE WAY (`spatial.journey_seconds`: the
+      world's own edges from the space it moves through to where it is bound,
+      at the charter's walking pace) for a journey under way -- `in_transit`
+      or `arriving`; a vehicle `sealed` and not yet away has not begun one --
+      and the payload carries the price (`PRICED_ARRIVAL_KEY`). A vessel
+      already standing where it is bound is not timed again: its way is done.
+    * ONE ARRIVAL PER JOURNEY. A pending arrival for the same end stands --
+      a time restated each beat never slips -- unless it was the engine's
+      price and a time has since been written, which replaces it once. A
+      pending arrival for an end the journey no longer names is cancelled
+      and the journey it is on is timed (`_fire_due_events` cancels one that
+      comes due so, too).
+
+    ``pending_arrivals`` is `_fire_due_events`' `{entity id: row}`; a plain
+    collection of ids is read as rows unknown, which are left standing."""
     event_ops = []
     scheduled = 0
     entities = scene.get("entities") or {}
+    pending = pending_arrivals if isinstance(pending_arrivals, dict) else {
+        str(eid): None for eid in (pending_arrivals or ())}
 
     for eid, ent in entities.items():
         if not isinstance(ent, dict):
@@ -846,15 +950,35 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_entity_ids,
         transit = state.get("transit") if isinstance(state, dict) else None
         if not isinstance(transit, dict):
             continue
-        if str(transit.get("phase") or "").strip().casefold() == "docked":
+        phase = str(transit.get("phase") or "").strip().casefold()
+        if phase == "docked":
             continue
-        try:
-            eta = float(transit.get("eta_seconds"))
-        except (TypeError, ValueError):
+        destination = str(transit.get("destination_room") or "").strip()
+        if not destination:
             continue
-        destination = str(transit.get("destination_room") or "")
-        if eta <= 0 or not destination or str(eid) in pending_entity_ids:
-            continue
+        written = _written_eta(transit)
+        if str(eid) in pending:
+            row = pending[str(eid)]
+            if row is None:
+                continue
+            booked = _payload_of(row)
+            same_end = _same_place(scene, booked.get("destination_room"), destination)
+            if same_end and not (written is not None and PRICED_ARRIVAL_KEY in booked):
+                continue
+            event_ops.append(("status", row["event_id"], "cancelled"))
+        priced = None
+        if written is not None:
+            eta = written
+        else:
+            # Under way toward a place, or nothing to price (`journey_seconds`).
+            eta = journey_seconds(scene, eid, ent)
+            if not eta:
+                continue        # nothing to price, or already where it is bound
+            priced = eta
+        payload = {"entity_id": eid, "destination_room": destination,
+                   "frame_id": frame_id}
+        if priced is not None:
+            payload[PRICED_ARRIVAL_KEY] = round(float(priced), 1)
         event_id = stable_event_key(
             "transit_arrival", chat_id, frame_id, eid, turn_id)
         event_ops.append(("schedule", {
@@ -866,10 +990,7 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_entity_ids,
             # `positions.get(eid)` filed the arrival event at no location
             # whenever the row was keyed by the vehicle's display name.
             "location_id": room_of_record(scene, eid, ent),
-            "payload": json.dumps({"entity_id": eid,
-                                   "destination_room": destination,
-                                   "frame_id": frame_id},
-                                  ensure_ascii=False),
+            "payload": json.dumps(payload, ensure_ascii=False),
             "seed": f"transit:{chat_id}:{turn_idx}",
             "status": "pending",
         }))
@@ -1447,7 +1568,7 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
     # could only ever hide a fact the world had already committed. The ladder is
     # retired; the telling is not a setting.
     surface_consequences = True
-    event_ops, notices, counts, pending_entity_ids = _fire_due_events(
+    event_ops, notices, counts, pending_arrivals = _fire_due_events(
         scene, elapsed, frame_id, pending or [],
         turn_idx=turn_idx, player_room=player_room,
         surface_consequences=surface_consequences,
@@ -1455,7 +1576,7 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
 
     # (b) schedule new arrivals.
     schedule_ops, scheduled = _schedule_new_arrivals(
-        scene, elapsed, frame_id, pending_entity_ids,
+        scene, elapsed, frame_id, pending_arrivals,
         chat_id, turn_id, turn_idx)
     event_ops.extend(schedule_ops)
 

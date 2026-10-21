@@ -114,6 +114,8 @@ from world.spatial_transit import (
     infer_body_enclosures, MOVING_KINDS, settle_departures, sync_entity_interior_rooms,
     fold_body_id, LINK_CONDITIONS, LINK_STEP_SECONDS, link_condition,
     settle_link_conditions,
+    # A journey under way arrives when its way is done (2026-10-21).
+    docked_off_the_map, journey_seconds, stand_in_no_room,
 )
 
 

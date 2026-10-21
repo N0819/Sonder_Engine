@@ -7,7 +7,7 @@ from typing import Optional
 
 from world.spatial_barriers import (_AMBIENT_BARRIERS, neighbor_map,
                                     normalize_barrier)
-from world.spatial_identity import _ci_get, PositionsIndex, room_of_record
+from world.spatial_identity import _ci_get, PositionsIndex, room_of_record, scene_room_id
 
 
 # ---------------------------------------------------------------------------
@@ -859,9 +859,14 @@ def apply_transit_dock_edges(scene: dict) -> bool:
         # it is under way like one in transit, and the doorway onto the port
         # it left stood open behind it -- walked by the bubble's range and by
         # any body stepping off a ship at sea (review of 2026-10-13).
+        # ...and a vessel DOCKED AT A PLACE THE WORLD DOES NOT HOLD
+        # (`docked_off_the_map`): its way is done and it stands at a name, not
+        # a room, so its doorway opens onto nothing until the place is built
+        # -- never onto the water it has finished crossing (2026-10-21).
         if target is None and phase not in _TRANSIT_CLOSED_PHASES \
                 and not (phase == "arriving"
-                         and str((transit or {}).get("departed_from") or "").strip()):
+                         and str((transit or {}).get("departed_from") or "").strip()) \
+                and not docked_off_the_map(scene, eid, ent):
             continue
 
         for rid in interior_ids:
@@ -1219,6 +1224,207 @@ def settle_departures(before: dict, merged: dict) -> bool:
             stations.pop(key, None)
             changed = True
     return changed
+
+
+# ---------------------------------------------------------------------------
+# A journey's length (2026-10-21): a vessel under way toward a place arrives
+# when its way is done, whether or not anyone wrote down a time. The timed
+# arrival (`world.mechanics`, passes (a) and (b)) was the only thing that ever
+# brought a vessel in, and it ran only on an `eta_seconds` a model wrote; the
+# transit card names the field and never asks for it, and since the prose
+# encoder (2026-09-27) not one stored journey with a destination has carried
+# one. The control story (chat 2, idx 4-9): the Mary Ann cast off from the
+# lighthouse landing bound for the mainland through the channel, and sat in
+# the channel for 77.7 story hours, five beats and two days, on a crossing the
+# world itself measured at thirteen kilometres.
+# ---------------------------------------------------------------------------
+
+
+def _way_paces(edges, walk_prices) -> float:
+    """What the way between two rooms covers, in paces, priced as the charter
+    prices a body walking it (`charter_move.edge_seconds`): the edge's own
+    measurement where one is written (a pace being about the metre the charter
+    walks), else the length of its tier word (`walk_prices`, the charter's
+    `WALK_EDGE_PACES`). `edges` are every edge either room declares toward the
+    other; only an AUTHORED distance is a claim, and where both rooms write
+    one the shorter stands -- the reading `spatial_sound_field.
+    far_field_way_paces` takes. An edge that says nothing is a doorway."""
+    from world.spatial_routing import edge_metres, normalize_edge_distance
+
+    def price(edge):
+        metres = edge_metres(edge)
+        if metres is not None:
+            return float(metres)
+        return float(walk_prices.get(normalize_edge_distance(edge.get("distance")),
+                                     walk_prices["near"]))
+
+    authored = [e for e in edges if str(e.get("distance") or "").strip()]
+    return min(price(e) for e in authored) if authored else price({})
+
+
+def _shortest_way_paces(scene, rooms, start, destination, skip, walk_prices):
+    """The paces of the shortest chain of the world's own edges from `start`
+    to `destination` -- every room crossed charged its span
+    (`spatial_sound_field.room_span`, the charter's measure of a room) and
+    every way between its `_way_paces` -- through no room in `skip`; None
+    when no chain reaches it. Any edge joins its two rooms, as a vessel's
+    way is a length and not a doorway it must find open."""
+    import heapq
+
+    from world.spatial_sound_field import room_span
+
+    joins: dict = {}
+    for rid, room in rooms.items():
+        if not isinstance(room, dict) or rid in skip:
+            continue
+        for edge in room.get("adjacent") or ():
+            if not isinstance(edge, dict):
+                continue
+            other = str(edge.get("to") or "")
+            if other == rid or other in skip or not isinstance(rooms.get(other), dict):
+                continue
+            joins.setdefault(rid, {}).setdefault(other, []).append(edge)
+            joins.setdefault(other, {}).setdefault(rid, []).append(edge)
+    spans: dict = {}
+
+    def span(rid):
+        if rid not in spans:
+            try:
+                spans[rid] = float(room_span(scene, rid))
+            except Exception:
+                spans[rid] = 0.0
+        return spans[rid]
+
+    best = {start: 0.0}
+    queue = [(0.0, start)]
+    while queue:
+        paces, rid = heapq.heappop(queue)
+        if rid == destination:
+            return paces
+        if paces > best.get(rid, float("inf")):
+            continue
+        for other in sorted(joins.get(rid) or ()):
+            step = paces + span(rid) + _way_paces(joins[rid][other], walk_prices)
+            if step < best.get(other, float("inf")):
+                best[other] = step
+                heapq.heappush(queue, (step, other))
+    return None
+
+
+def journey_seconds(scene: dict, eid, entity=None) -> Optional[float]:
+    """How long what remains of a journey under way takes, in story seconds,
+    priced from what the world already holds; None when there is no journey
+    to price, 0.0 when the vessel already stands where it is bound.
+
+    A JOURNEY IS `in_transit` OR `arriving` WITH A `destination_room`. One
+    with no destination is bound for nowhere the world could measure a way
+    to, and stays under way until the prose brings it in, as the transit card
+    says; a vehicle `sealed` and not yet away has not begun one.
+
+    THE WAY IS THE WORLD'S OWN, from where the vessel is: its route room --
+    the space it moves through -- else, in no room, the room it set off from.
+    It is the shortest chain of the world's edges from there to the room it
+    is bound for, never back through the room it left (a journey under way
+    has that behind it) nor through the vessel's own inside, each step priced
+    as the charter prices a body walking it (`_way_paces`, `charter_move.
+    edge_seconds`'s terms without its town ceiling, which bounds a street and
+    not a crossing). The control story's channel: its own edge to the
+    mainland is thirteen kilometres, and the planned stub of the mainland
+    also hangs a door with no distance off the landing behind the boat,
+    which is not the boat's way.
+
+    A PLACE NO CHAIN REACHES, OR ONE THE WORLD DOES NOT HOLD, IS ONE WAY THAT
+    COVERS GROUND THE WORLD HAS NOT MEASURED: `far`, the charter's 240 paces
+    and the far field's (fa244418), on top of the span of where it is. Never
+    nothing, and never forever: a journey with a destination arrives.
+
+    THE PACE IS THE CHARTER'S WALK, `charter_move.WALK_PACES_PER_SECOND`,
+    read where it is kept: nothing in the world types a vehicle's speed --
+    no transit, entity or card field carries one, in any stored scene -- so
+    the one pace the engine owns for covering ground is the only one it can
+    honestly use. A written `eta_seconds` is a typed speed for one journey,
+    and it stands over this price (`world.mechanics`)."""
+    record = entity if isinstance(entity, dict) else (
+        ((scene or {}).get("entities") or {}).get(eid))
+    transit = _transit_state(record)
+    if transit is None:
+        return None
+    if str(transit.get("phase") or "").strip().casefold() not in _UNDER_WAY_PHASES:
+        return None
+    bound = str(transit.get("destination_room") or "").strip()
+    if not bound:
+        return None
+    rooms = (scene or {}).get("rooms")
+    rooms = rooms if isinstance(rooms, dict) else {}
+    # Under the world's own id when it holds the place under that spelling.
+    destination = scene_room_id(scene, bound) or bound
+    here = room_of_record(scene, eid, record)
+    if _same_room(here, destination):
+        return 0.0
+    own = set(_interior_rooms_of(scene, eid))
+    origin = str(transit.get("departed_from") or "").strip()
+    start = None
+    for candidate in (here, origin):
+        candidate = str(candidate or "").strip()
+        if candidate and candidate not in own and isinstance(rooms.get(candidate), dict):
+            start = candidate
+            break
+    from world.charter_move import WALK_EDGE_PACES, WALK_PACES_PER_SECOND
+    paces = None
+    if start and isinstance(rooms.get(destination), dict):
+        skip = set(own)
+        if origin and origin != start:
+            skip.add(origin)
+        paces = _shortest_way_paces(scene, rooms, start, destination, skip,
+                                    WALK_EDGE_PACES)
+    if paces is None:
+        span = 0.0
+        if start:
+            from world.spatial_sound_field import room_span
+            try:
+                span = float(room_span(scene, start))
+            except Exception:
+                span = 0.0
+        paces = span + float(WALK_EDGE_PACES["far"])
+    return max(0.0, paces) / float(WALK_PACES_PER_SECOND)
+
+
+def stand_in_no_room(scene: dict, eid, entity=None) -> bool:
+    """Take a vessel out of every room: every `positions` and `stations` key
+    that files it under any of its spellings (`_keys_filing`), the removal
+    `settle_departures` makes for a vessel under way in no room. Returns True
+    when anything was removed. Mutates."""
+    record = entity if isinstance(entity, dict) else (
+        ((scene or {}).get("entities") or {}).get(eid))
+    changed = False
+    for table in ("positions", "stations"):
+        rows = (scene or {}).get(table)
+        if not isinstance(rows, dict):
+            continue
+        for key in _keys_filing(rows, eid, record):
+            rows.pop(key, None)
+            changed = True
+    return changed
+
+
+def docked_off_the_map(scene: dict, eid, entity=None) -> bool:
+    """A vessel docked AT a place the world does not hold: `docked`, standing
+    in no room, its `destination_room` naming where it came in -- a name and
+    no room yet. The timed arrival leaves a vessel so when its way is done
+    and its end was never built (`world.mechanics`); it stands there the beat
+    the place is a room (`settle_departures`), and until then its doorway
+    opens onto nothing (`apply_transit_dock_edges`)."""
+    record = entity if isinstance(entity, dict) else (
+        ((scene or {}).get("entities") or {}).get(eid))
+    transit = _transit_state(record)
+    if transit is None:
+        return False
+    if str(transit.get("phase") or "").strip().casefold() != "docked":
+        return False
+    destination = str(transit.get("destination_room") or "").strip()
+    if not destination or scene_room_id(scene, destination):
+        return False
+    return not room_of_record(scene, eid, record)
 
 
 # ---------------------------------------------------------------------------
