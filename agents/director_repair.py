@@ -62,6 +62,7 @@ import copy
 import json
 import re
 import time
+import unicodedata
 from itertools import groupby
 
 from core.db import get_setting
@@ -239,6 +240,38 @@ def _holds(event_text, sentence):
     match = SequenceMatcher(None, sentence, event_text, autojunk=False).find_longest_match(
         0, len(sentence), 0, len(event_text))
     return match.size / len(sentence) >= ATTRIBUTION_HOLDS
+
+
+def quotes_whole(event_text, sentence):
+    """Does the event's text hold the whole sentence? An event whose text is
+    the sentence is that sentence's event: nothing the sentence tells can
+    be missing from it, so the missing-event check has nothing to ask
+    (`battery`). Judged on the words alone -- case, spacing, punctuation
+    and the sentence addresses set aside -- and only in full. A sentence
+    with words OUTSIDE what the event holds is still asked, its attribution
+    included ("Mara says, X" against the event X): the words past a
+    quotation may be an act of their own ("she says X and goes in"), and
+    telling a frame from an act would take a word list.
+
+    Measured on the owner's chats 175-178 (2026-10-20, 52 turns, the
+    battery replayed on the 67 recorded stages that sent missing-event
+    jobs): 58 of 870 sentences were held whole by a citing event; the 12
+    jobs built on them were every one declined by the repair call
+    ("already recorded in draft event e4", the same words), and none of
+    the 51 jobs it acted on was such a sentence. Jev had answered
+    "missing" at 0.5-0.9 while shown the quoting event word for word."""
+    a = _words(sentence)
+    b = _words(event_text)
+    return bool(a) and bool(b) and a in b
+
+
+def _words(text):
+    """The text as words only: case folded, punctuation and the sentence
+    addresses gone, one space between words."""
+    text = unicodedata.normalize("NFKC", str(text or "")).casefold()
+    text = _MARKER.sub(" ", text)
+    text = re.sub(r"[^\w\s]", " ", text)
+    return " ".join(text.split())
 
 
 def attribute(events, units):
@@ -643,6 +676,15 @@ def battery(units, events, channels, language=None, identities=None, parts=None)
         if not re.search(r"\w", unit["text"]):
             continue
         own, near = _neighbours(cited, units, unit["id"])
+        # A SENTENCE AN EVENT QUOTES WHOLE IS NOT ASKED. The event that is
+        # the sentence is its event, a fact code holds (`quotes_whole`);
+        # asked anyway, Jev said "missing" for 58 such sentences on chats
+        # 175-178 (12 repair jobs) and the repair declined every one. The
+        # ledger checks on that event are unchanged: what it WRITES is still
+        # judged below.
+        if any(quotes_whole(events[i].get("event") if isinstance(events[i], dict) else "",
+                            unit["text"]) for i in own):
+            continue
         shown = "; ".join(_event_line(refs[i], events[i], identities)
                           for i in own + near) or "none"
         key = f"ev:{unit['id']}"
