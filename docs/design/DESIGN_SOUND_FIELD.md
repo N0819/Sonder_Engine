@@ -2443,6 +2443,27 @@ OpenRouter, about four seconds and a cent a call; harness in the job's
   a case the children stated (CLAUDE.md: "an implied case is a dropped
   case"); it is back, in both packs, within the budget.
 
+**Whole turns, the harbour story (the main session, later the same day).**
+The story's own encoder calls were never captured, so its turns 1-3 (from a
+branch after the opening) and 19 (from a branch after 18) were replayed
+through the whole pipeline on two copies -- the old card (0e1a7a7b) and the
+final round-2 tree (1341627a) -- under the story's own routing (GLM 5.2 for
+the Director and the cast, Gemini 3.8 Flash for the encoder, all on
+OpenRouter; about two minutes and half a dollar a turn; harness in the
+job's `fixes/turn_replay/`). Under BOTH cards every spoken line names its
+listener: 18 of 18 old, 17 of 17 new, and every dialogue row carries an
+addressee. So the 51% of that story's recorded lines that named nobody
+came from the encoder model of 2026-09-26, not from the card, exactly as
+the 31% of the owner's lines came from the deleted causal Director: with
+this routing the clause has nothing left to recover and costs nothing.
+The typed affect appeared on 15 of 17 lines -- `neutral` on most, which
+renders nothing, `anger` on Wren's "I've asked you four times", `fear` on
+Finn's "You're not really going, then" -- and one volume read better:
+Jonah's "lowers his voice" line to Wren is `pitched` under the new card
+where the old card read `mutter`. One oddity, harmless: a resolve line
+named an entity uid beside its listener. Not measured here: the waking
+clause (no sleeper in these beats) and the Japanese pack.
+
 ## 16. Round 2, lane B: the ladder, the addressee in a din, the doorway, thunder, the beat's sounds (2026-10-20)
 
 The owner read §§ 11-14's open questions and ruled, the same day, that
