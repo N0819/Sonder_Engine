@@ -123,7 +123,7 @@
 | `story/dialogue_colors.py` | 268 |  | — |
 | `story/greetings.py` | 1340 |  | `agents.runtime`, `core`, `core.db`, `core.logging_utils`, `llm.llm_quality`, `llm.prompts`, `mind.affect_pass`, `mind.memory`, `mind.theory_of_mind`, `persist.steps`, `story.character_schema`, `story.importers`, `world.charter_runtime` |
 | `story/history_routing.py` | 215 |  | — |
-| `story/importers.py` | 3268 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
+| `story/importers.py` | 3300 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 487 |  | — |
 | `story/location_design.py` | 577 |  | `core.db` |
 | `story/lore_structure.py` | 248 |  | — |
@@ -1587,14 +1587,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_lorebook_plan()` | 2958 | 214 lines |
-| `import_lorebook()` | 1757 | 212 lines |
+| `apply_lorebook_plan()` | 2990 | 214 lines |
+| `import_lorebook()` | 1789 | 212 lines |
 | `draft_promoted_character()` | 810 | 172 lines |
-| `_reinterpret_entries()` | 1630 | 126 lines |
-| `_lore_gen_entry_batch()` | 2598 | 119 lines |
-| `fill_appearance()` | 1201 | 115 lines |
-| `fill_body_interior()` | 1386 | 114 lines |
-| `_run_lore_gen_job()` | 2721 | 112 lines |
+| `_reinterpret_entries()` | 1662 | 126 lines |
+| `_lore_gen_entry_batch()` | 2630 | 119 lines |
+| `fill_appearance()` | 1233 | 115 lines |
+| `fill_body_interior()` | 1418 | 114 lines |
+| `_run_lore_gen_job()` | 2753 | 112 lines |
 
 ### `story/journey_history.py`
 

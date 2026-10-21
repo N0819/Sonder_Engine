@@ -510,12 +510,12 @@ def import_character(payload, reinterpret=False):
                 # character_schema.repair_character_shape).
                 max_tokens = max(AUTHORING_MAX_TOKENS,
                                  int(len(payload_json) / 2))
-                raw = chat_complete(
+                raw = _ask_whole(lambda: chat_complete(
                     "utility",
                     get_prompt("import_character_reinterpret"),
                     payload_json,
                     max_tokens=max_tokens,
-                )
+                ))
                 parsed = _jparse_salvage(raw)
                 if not parsed:
                     raise RuntimeError(
@@ -625,12 +625,12 @@ def import_persona(payload, reinterpret=False):
     elif reinterpret:
         with _silent_provider_stream():
             try:
-                raw = chat_complete(
+                raw = _ask_whole(lambda: chat_complete(
                     "utility",
                     get_prompt("import_persona_reinterpret"),
                     json.dumps(source_payload, ensure_ascii=False),
                     max_tokens=AUTHORING_MAX_TOKENS,
-                )
+                ))
                 parsed = _jparse_salvage(raw)
                 if not parsed:
                     raise RuntimeError(
@@ -892,13 +892,13 @@ def draft_promoted_character(chat_id, name):
         sheet_pack["seen"] = seen
 
     with _silent_provider_stream():
-        raw = chat_complete(
+        raw = _ask_whole(lambda: chat_complete(
             "utility",
             get_prompt("promote_character"),
             json.dumps(sheet_pack, ensure_ascii=False),
             temperature=0.4,
             max_tokens=AUTHORING_MAX_TOKENS,
-        )
+        ))
 
     parsed = _jparse_salvage(raw)
     if not parsed or not isinstance(parsed.get("sheet"), dict):
@@ -983,13 +983,13 @@ def draft_promoted_character(chat_id, name):
 def generate_character(brief, language="en"):
     authoring = language_pack(language).card("authoring")
     with _silent_provider_stream():
-        raw = chat_complete(
+        raw = _ask_whole(lambda: chat_complete(
             "utility",
             get_prompt("generator_character", language),
             brief or authoring["create_character_brief"],
             temperature=0.9,
             max_tokens=AUTHORING_MAX_TOKENS,
-        )
+        ))
     
     parsed = _jparse_salvage(raw)
     if not parsed:
@@ -1115,13 +1115,13 @@ def fill_character_psychology(char_id, brief, chat_id=None):
         "character": normalized,
     }
     with _silent_provider_stream():
-        raw = chat_complete(
+        raw = _ask_whole(lambda: chat_complete(
             "utility",
             get_prompt("fill_character_psychology"),
             json.dumps(payload, ensure_ascii=False),
             temperature=0.65,
             max_tokens=AUTHORING_MAX_TOKENS,
-        )
+        ))
     proposed = _jparse_salvage(raw)
     if not proposed:
         raise RuntimeError(
@@ -1176,6 +1176,38 @@ def _json_arrived_whole(text):
     except Exception:
         return False
     return True
+
+
+#: How many times one whole-document authoring call is ASKED before its
+#: answer is refused: the first, and two more. Named because it is a ceiling
+#: (each attempt is a full card's tokens -- about $0.01-0.02 on the owner's
+#: routing in 2026-10). Measured 2026-10-20 on a probe story's setup: GLM 5.2
+#: stopped a character card after its reasoning at `"simulation": {`, 874
+#: characters of JSON at 6,828 response tokens against a 20,000 ceiling, and
+#: the card was refused at its first attempt -- where every pipeline stage
+#: asks again (`complete_validated_json`'s ladder), the authoring calls did
+#: not, so one cut-off answer failed a whole story's setup.
+AUTHORING_ATTEMPTS = 3
+
+
+def _ask_whole(call, attempts=None):
+    """The answer to one whole-document authoring call, ASKED AGAIN while it
+    comes back unreadable or cut off.
+
+    `call` makes the one model call and returns its text. The answer is kept
+    the first time it parses AND arrived whole (`_json_arrived_whole`); else
+    the call is made again, up to `AUTHORING_ATTEMPTS`. The last answer is
+    returned either way, and the caller's own checks -- `_jparse_salvage`'s
+    "no usable data" and `_require_whole_json`'s refusal -- stay the final
+    word, so an answer that never arrives whole fails exactly as it always
+    did, and nothing half-written is ever kept. A provider error is not an
+    answer and is not caught here (`chat_complete` has its own retries)."""
+    raw = None
+    for _ in range(max(1, int(attempts or AUTHORING_ATTEMPTS))):
+        raw = call()
+        if _json_arrived_whole(raw) and _jparse_salvage(raw):
+            return raw
+    return raw
 
 
 def _require_whole_json(raw):
@@ -1239,7 +1271,7 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None,
         },
     }
     with _silent_provider_stream():
-        raw = chat_complete(
+        raw = _ask_whole(lambda: chat_complete(
             "utility",
             get_prompt("fill_appearance"),
             json.dumps(payload, ensure_ascii=False),
@@ -1250,7 +1282,7 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None,
             # and the call returns an EMPTY string -- see the same finding in
             # llm_quality.complete_validated_json (maze arm A11).
             max_tokens=None,
-        )
+        ))
     proposed = _jparse_salvage(raw)
     if not proposed:
         # Distinguish the two failures: nothing came back at all, versus
@@ -1442,7 +1474,7 @@ def fill_body_interior(char_id, brief, draft=None, chat_id=None):
         "author_draft": {"interior": list(authored)},
     }
     with _silent_provider_stream():
-        raw = chat_complete(
+        raw = _ask_whole(lambda: chat_complete(
             "utility",
             get_prompt("fill_body_interior"),
             json.dumps(payload, ensure_ascii=False),
@@ -1453,7 +1485,7 @@ def fill_body_interior(char_id, brief, draft=None, chat_id=None):
             # None means the configured ceiling, not a hardcoded budget --
             # `fill_appearance`'s reasoning-model finding, unchanged.
             max_tokens=None,
-        )
+        ))
     proposed = _jparse_salvage(raw)
     if not proposed:
         if not str(raw or "").strip():
@@ -1502,13 +1534,13 @@ def fill_body_interior(char_id, brief, draft=None, chat_id=None):
 def generate_persona(brief, language="en"):
     authoring = language_pack(language).card("authoring")
     with _silent_provider_stream():
-        raw = chat_complete(
+        raw = _ask_whole(lambda: chat_complete(
             "utility",
             get_prompt("generator_persona", language),
             brief or authoring["create_persona_brief"],
             temperature=0.9,
             max_tokens=AUTHORING_MAX_TOKENS,
-        )
+        ))
     
     parsed = _jparse_salvage(raw)
     if not parsed:
