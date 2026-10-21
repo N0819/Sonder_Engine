@@ -3975,7 +3975,7 @@ are not yet emitted on every action surface.
 
 <a id="unbuilt-1-166"></a>
 
-### 1.166 A beat that passes over time moves the clock — BUILT 2026-10-20, residuals open
+### 1.166 A beat that passes over time moves the clock — BUILT 2026-10-20, extended 2026-10-21, residuals open
 
 **Found:** 2026-09-20 as "`state_diff.time.mode` has two readers and no
 writer", moving the beat's span from the spatial hand to the prose author's
@@ -4014,9 +4014,43 @@ What is left:
   the label, and the charter runs it under the beat budget and catches up on
   the next advance.
 - **A part of the day already reached passes nothing.** "Later that
-  afternoon" said in the afternoon solves to now. The `time` part tells the
-  encoder a whole day on is a length; a later point inside the part of the
-  day the clock already stands in has no reading but a length either.
+  afternoon" said in the afternoon solves to now. The same part of a LATER
+  day is a count of days with it (`{days, until_phase}`, 2026-10-21); a later
+  point inside the part of the day the clock already stands in still has no
+  reading but a length.
 - **The decision model's answers are unmeasured.** The question was written
   and pinned offline, never asked of the live model; the live replay owes the
   probe beat and the owner's skip beats (`Design.md`'s row names them).
+
+Extended 2026-10-21 (the probe story, control chat 2 idx 8, "Two days later
+... all morning", which landed at 22:00): a count of days lands on a part of
+the day (`{days, until_phase}`); every reader of where a stage begins reads
+one clock, the anchor plus the elapsed seconds, never the display-rounded
+stamp; and at a resolve whose input passed over time the world's account
+passes over none of its own (`Design.md`'s row, `AGENTS.md`'s time row).
+What that leaves:
+
+- **The encoder's use of the count is unmeasured.** The part teaches
+  `{days, until_phase}`; whether the live encoder writes it for "Two days later
+  ... all morning" -- rather than the 48 hours it wrote -- is the live replay's
+  first question. Offline, the 48 hours now land in the afternoon two days on
+  (15:06), where its account does not; only the new shape lands in the morning
+  (08:33).
+- **The Director's prose can still narrate past the writer's time.** The
+  prose author is shown no clock (the owner's ruling of 2026-10-04), and on
+  the probe beat it ran the weather into the evening and full dark. The clock
+  no longer follows it (`director_prose.time_is_the_inputs`), and the page the
+  player read was built from what she perceived -- a morning -- but an account
+  whose evening reaches a perceiver would put an evening on the page beside a
+  morning clock. One beat measured; a clause to the resolve's prose card ("the
+  input set this beat's time; answer inside it") is the candidate if it
+  recurs, and it would be read by every resolve.
+- **A resolve's own stretch in a beat whose input passed none is still the
+  world's.** "The better part of half an hour passes as stores are hauled up
+  the ladder" (the same chat, idx 1: 1,500 s at resolve, no input skip) stands.
+  Whether the writer sets the time there too -- the world passing time only
+  when the input's ladder rung refused a skip -- is the owner's call; one such
+  beat is on record and it was benign.
+- **The cast stay where they stood across a skip** (the probe's F16, §1.99d):
+  "That night, when Elias comes down from the first watch ..." is a walk the
+  input may not declare for him.

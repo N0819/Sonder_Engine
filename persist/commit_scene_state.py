@@ -107,8 +107,9 @@ def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening,
     """
     from story.scene import style_guide
     from world.day_cycle import (
-        anchor_from_hour, clock_anchor, clock_reading_hour, hour_of_day,
-        label_hour, label_phase, phase_bounds_hours, phase_of_hour)
+        ANCHOR_DECIMALS, anchor_from_hour, clock_anchor, clock_reading_hour,
+        display_hour, hour_of_day, label_hour, label_phase, phase_bounds_hours,
+        phase_of_hour)
 
     cid = ctx.chat.id
     style = style_guide(cid)
@@ -166,6 +167,18 @@ def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening,
                 anchor = anchor_from_hour(target, elapsed, length)
     if anchor is None:
         return clock
+    # ONE CLOCK, READ AT ONE PRECISION. The hour every later reader takes is
+    # the stored anchor plus the elapsed seconds (`day_cycle.clock_hour`), so
+    # this beat's phase is read from the anchor exactly as stored, and the
+    # anchor is stored finely enough (`day_cycle.ANCHOR_DECIMALS`) that a
+    # clock re-anchored onto the start of a part of the day still reads that
+    # part within `day_cycle.SPAN_RESOLUTION_SECONDS`; four decimals moved it
+    # up to 0.18 seconds. The stamped hour is for showing, rounded on its
+    # own side of a boundary (`display_hour`): the probe story's clock
+    # (2026-10-21, control chat 2 idx 8) was stamped 22.0 beside the phase
+    # "evening", and the next beat's decision model, told the time of day
+    # from the stamp, was told night.
+    anchor = round(anchor, ANCHOR_DECIMALS)
     hour = hour_of_day(elapsed, anchor, length)
     phase = phase_of_hour(hour, length)
     sc["day_phase"] = phase
@@ -174,9 +187,9 @@ def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening,
         sc["time_of_day"] = phase
     if clock is None:
         clock = copy.deepcopy(prev_clock or {})
-    clock["anchor_hour"] = round(anchor, 4)
+    clock["anchor_hour"] = anchor
     clock["day_length_hours"] = length
-    clock["hour_of_day"] = round(hour, 2)
+    clock["hour_of_day"] = display_hour(hour, length)
     clock["phase"] = phase
     clock["display"] = sc.get("time_of_day") or ""
     return clock

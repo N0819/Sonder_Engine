@@ -574,6 +574,30 @@ def addressed_house(ctx, names, cap=40):
         return {}
 
 
+def _time_of_day_beside(sc, clock):
+    """The time-of-day label the spatial owner is shown beside `clock`: the
+    scene's standing label, unless it names a part of the day other than
+    the one the shown clock stands in -- then the clock's own label.
+
+    TWO STATEMENTS OF ONE FACT IN ONE PAYLOAD. The commit writes the label
+    and the clock's phase together, so beside the stored clock they agree;
+    beside the clock the input's stretch moved (`director_prose.onset_clock`,
+    the resolve after "That evening ..." or "Two days later ... all
+    morning") the stored label is the part of the day the beat LEFT, and an
+    encoder told "a part of the day simulation_clock already stands in is
+    reached now" was shown two answers. A label the cycle cannot read (a
+    stardate) is shown as written."""
+    label = sc.get("time_of_day") or ""
+    if not isinstance(clock, dict) or not clock.get("phase"):
+        return label
+    from world.day_cycle import day_length_hours, label_phase
+    named = label_phase(label, day_length_hours(
+        {"day_length_hours": clock.get("day_length_hours")}))
+    if named is not None and named != clock["phase"]:
+        return clock.get("display") or clock["phase"]
+    return label
+
+
 def _specialist_payload(name, ctx, sc, view, extras):
     """One channel owner's world slice: its standing ledgers and the minimal
     indexes needed to address them. The encoder's payload is the union of the
@@ -815,8 +839,10 @@ def _specialist_payload(name, ctx, sc, view, extras):
             "weather": sc.get("weather") or {},
             # The clock normally repeats this label in display. Older scenes
             # may have the label without a clock; show the stored fact without
-            # manufacturing elapsed time or modifying the clock record.
-            "time_of_day": sc.get("time_of_day") or "",
+            # manufacturing elapsed time or modifying the clock record. Beside
+            # a clock the input's stretch moved (`director_prose.onset_clock`)
+            # it is that clock's own label (`_time_of_day_beside`).
+            "time_of_day": _time_of_day_beside(sc, extras.get("clock")),
             # Every record, as the keeper of the graph holds it. The ENCODER
             # is handed the rooms in play whole and the rest as their map
             # entries (`director_prose.rooms_in_play`); the room author,

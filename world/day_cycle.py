@@ -63,6 +63,36 @@ PHASES = (
 )
 PHASE_NAMES = tuple(name for name, _start, _end in PHASES)
 
+#: WHERE ONE OF THE STORY'S DAYS TURNS INTO THE NEXT, as a fraction of the
+#: day: where its night ends. The night belongs to the day before it -- "the
+#: next morning" said at one in the morning is the one a few hours off, not
+#: the one a day and a few hours off -- so a count of days (`seconds_until`'s
+#: `days`) starts each day where `PHASES` ends the night. Derived from the
+#: table rather than restated, so a table that moved the night would move it.
+DAY_TURNS_AT = max(end for _name, _start, end in PHASES) % 1.0
+
+#: THE RESOLUTION THE ENGINE PRICES A SPAN OF THE DAY TO, in seconds:
+#: `seconds_until` rounds to it. A skip solved to where a part of the day
+#: begins lands within half of it either side of that boundary, and the sum a
+#: commit adds it into carries floating-point noise besides, so a reading this
+#: close SHORT of where a part of the day begins is read as having reached it
+#: (`phase_of_hour`). Measured (2026-10-21) on 17,545 skips to a part of the
+#: day solved from random clocks (a 4-decimal anchor, a whole number of
+#: elapsed seconds): 7,291 landed a fraction of a second short and the clock
+#: read the part of the day before the one the beat was sent to; with this,
+#: none. A tenth of a second is no time a story tells.
+SPAN_RESOLUTION_SECONDS = 0.1
+
+#: HOW FINELY A CLOCK'S ANCHOR IS STORED, in decimal places of an hour. Every
+#: reader of where a stage begins takes the stored anchor plus the elapsed
+#: seconds (`clock_hour`), and the commit reads its own phase from the anchor
+#: as stored, so a clock re-anchored onto the start of a part of the day must
+#: still read that part: a millionth of an hour is 0.0036 seconds, well
+#: inside `SPAN_RESOLUTION_SECONDS`, where the four decimals it was stored to
+#: until 2026-10-21 carried such a clock up to 0.18 seconds back across the
+#: boundary.
+ANCHOR_DECIMALS = 6
+
 #: What the sun gives an outdoor room to see by in each phase, on the light
 #: ladder `world/spatial_light.LIGHT_LEVELS` reads. Dark from the end of
 #: evening to first light, dim at the two edges, lit through the day. Never
@@ -163,7 +193,11 @@ def phase_at(fraction) -> str:
 
 
 def phase_of_hour(hour, day_length=DAY_LENGTH_HOURS_DEFAULT) -> str:
-    return phase_at(day_fraction(hour, day_length))
+    """The phase an hour of this world's day falls in, read at the
+    resolution the engine prices spans to (`SPAN_RESOLUTION_SECONDS`): an
+    hour within it short of where a part of the day begins has reached it."""
+    return phase_at(day_fraction(
+        float(hour) + SPAN_RESOLUTION_SECONDS / 3600.0, day_length))
 
 
 def phase_midpoint_hour(phase, day_length=DAY_LENGTH_HOURS_DEFAULT):
@@ -358,8 +392,74 @@ def describe(clock, style_guide=None):
     except (TypeError, ValueError, AttributeError):
         elapsed = 0.0
     hour = hour_of_day(elapsed, anchor, length)
-    return {"hour_of_day": round(hour, 2), "phase": phase_of_hour(hour, length),
+    return {"hour_of_day": display_hour(hour, length),
+            "phase": phase_of_hour(hour, length),
             "day_length_hours": length}
+
+
+def clock_hour(clock, style_guide=None):
+    """``(hour, day_length)``: the hour of the day a stored clock record
+    stands at, TO THE SECOND -- its anchor plus everything it has run, the
+    arithmetic the commit's day cycle stamps the record from
+    (`persist.commit_scene_state._advance_day_cycle`) -- or ``(None,
+    day_length)`` when the record cannot be anchored.
+
+    NOT THE RECORD'S `hour_of_day`. That is this reading rounded for showing
+    (`display_hour`: a hundredth of an hour, 36 seconds), and a part of the
+    day solved from it lands up to 18 seconds from where it was sent.
+    Measured (the probe story, 2026-10-21, control chat 2 idx 8): the
+    resolve's "until full dark" was solved from a stamped 13.55 against a
+    clock standing at 13.5461, landed at 21:59:46, and the beat committed in
+    the evening beside a stamp of 22.0 -- so the next beat's decision model,
+    told the time of day from that stamp, was told it was night while the
+    clock and the scene said evening. A record carrying a stamp and no anchor
+    (written by hand, or before the day cycle) is read as stamped.
+
+    ``style_guide`` None reads the day's length off the record (the commit
+    stamps it there from the author's dial); a caller holding the story's
+    style guide passes it, and the dial wins, as it does at the commit."""
+    record = clock if isinstance(clock, dict) else {}
+    if style_guide is None:
+        style_guide = {"day_length_hours": record.get("day_length_hours")}
+    anchor, length = clock_anchor(record, style_guide)
+    if anchor is None:
+        stamped = record.get("hour_of_day")
+        if stamped is None or isinstance(stamped, bool):
+            return None, length
+        try:
+            return float(stamped) % length, length
+        except (TypeError, ValueError):
+            return None, length
+    try:
+        elapsed = float(record.get("elapsed_seconds") or 0.0)
+    except (TypeError, ValueError):
+        elapsed = 0.0
+    return hour_of_day(elapsed, anchor, length), length
+
+
+def display_hour(hour, day_length=DAY_LENGTH_HOURS_DEFAULT):
+    """An hour rounded for showing -- to a hundredth -- that still reads the
+    part of the day the hour itself is in.
+
+    THE STAMP AND THE PHASE BESIDE IT ARE ONE ANSWER. The nearest hundredth
+    moves a reading up to 18 seconds, which carries it across a boundary:
+    21.9961 is evening and rounds to 22.0, which reads night -- the clock
+    record the probe story's beat left (2026-10-21, control chat 2 idx 8:
+    `hour_of_day` 22.0 beside `phase` "evening"), and every reader that took
+    a part of the day from the number disagreed with every reader that took
+    the word. Where the nearest hundredth crosses, the hundredth on the
+    hour's own side is shown."""
+    length = max(1e-9, float(day_length))
+    value = float(hour) % length
+    phase = phase_of_hour(value, length)
+    shown = round(value, 2)
+    if phase_of_hour(shown, length) == phase:
+        return shown
+    for candidate in (math.floor(value * 100.0) / 100.0,
+                      math.ceil(value * 100.0) / 100.0):
+        if phase_of_hour(candidate, length) == phase:
+            return round(candidate, 2)
+    return round(value, 4)
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +510,7 @@ def charter_hour(charter, at_hours):
 UNTIL_LIGHTS = ("dark", "dim", "lit")
 
 
-def seconds_until(hour_now, *, light=None, hour=None, phase=None,
+def seconds_until(hour_now, *, light=None, hour=None, phase=None, days=0,
                   day_length=DAY_LENGTH_HOURS_DEFAULT):
     """How many story seconds until the sky's light next becomes `light`
     (one of `UNTIL_LIGHTS`), the clock next reads `hour`, or the day next
@@ -435,7 +535,22 @@ def seconds_until(hour_now, *, light=None, hour=None, phase=None,
     of the day the clock already stands in is reached now (0): "that
     evening" said in the evening passes nothing. Measured (the probe story,
     2026-10-20, chat 1 turn 5): "That evening ..." against a clock at 15:50
-    moved it 44 seconds, and the keeper lit the lamp in the afternoon."""
+    moved it 44 seconds, and the keeper lit the lamp in the afternoon.
+
+    A COUNT OF DAYS LANDS ON A PART OF THE DAY. `days` (a whole number, with
+    `phase`) puts that part of the day that many of the story's days on: the
+    day the clock stands in is day 0, each day turns where its night ends
+    (`DAY_TURNS_AT`), and the span runs to where the part `phase` names
+    begins -- or the reading it carries -- on the day counted. "Two days
+    later ... all morning" said in the afternoon is the morning of the
+    second day on: not the afternoon two days on, which a length of two
+    days lands on, and not the morning of the third, which two whole days
+    and then the next morning would be. Measured (the probe story,
+    2026-10-21, control chat 2 idx 8): the part could say the two days or
+    the morning, never both, and a beat set in the morning landed in the
+    afternoon. With no count a part of the day is the next to begin, as
+    above -- "the next morning" said in the evening -- and a count that is
+    not a whole number of days is nothing this reader can solve (None)."""
     length = max(1e-9, float(day_length))
     now = float(hour_now) % length
     if hour is not None and not isinstance(hour, bool):
@@ -446,16 +561,29 @@ def seconds_until(hour_now, *, light=None, hour=None, phase=None,
         if target is not None:
             return round(((target - now) % length) * 3600.0, 1)
     if str(phase or "").strip():
+        if isinstance(days, bool) or not isinstance(days, int) or days < 0:
+            return None
         reading = clock_reading_hour(phase, length)
+        named = None if reading is not None else label_phase(phase, length)
+        if reading is None and named is None:
+            return None
+        target = reading if reading is not None \
+            else phase_bounds_hours(named, length)[0] % length
+        if days:
+            # Hours since the day the clock stands in turned, read at the
+            # resolution `phase_of_hour` reads the part of the day at, so the
+            # day counted from and the part of the day the clock reads agree
+            # within that tenth of a second too.
+            turn = DAY_TURNS_AT * length
+            margin = SPAN_RESOLUTION_SECONDS / 3600.0
+            since_turn = (now + margin - turn) % length - margin
+            span = days * length + (target - turn) % length - since_turn
+            return round(span * 3600.0, 1)
         if reading is not None:
             return round(((reading - now) % length) * 3600.0, 1)
-        named = label_phase(phase, length)
-        if named is None:
-            return None
         if phase_of_hour(now, length) == named:
             return 0.0
-        start = phase_bounds_hours(named, length)[0] % length
-        return round(((start - now) % length) * 3600.0, 1)
+        return round(((target - now) % length) * 3600.0, 1)
     word = str(light or "").strip().casefold()
     if word not in UNTIL_LIGHTS:
         return None

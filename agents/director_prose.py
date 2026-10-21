@@ -643,12 +643,21 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
     51 of 54 right, no walk stopped that carried on (the highest carrying-on
     score 0.31), and the one miss a cart overturned across the lane."""
     candidates = candidate_channels(stage, facts)
+    # THE WRITER SET THIS BEAT'S TIME (`time_is_the_inputs`): at a resolve
+    # whose players' input passed over time, the time is not the world's
+    # account's to pass, so it is not asked and its part does not ship.
+    set_by = the_input_set_the_time(getattr(ctx, "director_interpret", None)) \
+        if stage == "resolve" and "time" in candidates else None
+    if set_by is not None:
+        candidates = [channel for channel in candidates if channel != "time"]
     parts = parts_of(candidates, ctx.language)
     questions = jev_channel_questions(candidates + parts, ctx.language)
     extension = {spec["channel"]: spec["question"]
                  for spec in _extension_channels(stage)}
     planned = planned if isinstance(planned, dict) else {}
     record = {"candidates": candidates, "threshold": _threshold()}
+    if set_by is not None:
+        record["time_set_by_input"] = dict(set_by)
     if extension:
         record["extension_candidates"] = list(extension)
     t0 = time.time()
@@ -2552,24 +2561,111 @@ def skip_is_authorship(events, event_inputs, warn=None):
         for block in blocks:
             refused.append({"claim_id": "time", "kind": "world", "mode": denied,
                             "channel": "time", "time": dict(block)})
-        transforms = []
-        for transform in event.get("transforms") or []:
-            patch = transform.get("patch") if isinstance(transform, dict) else None
-            if isinstance(patch, dict):
-                patch = {k: v for k, v in patch_as_written(patch).items() if k != "time"}
-                if not patch:
-                    continue
-                transform = dict(transform, patch=patch)
-            transforms.append(transform)
-        if transforms or str(event.get("observable") or "").strip() \
-                or event.get("speech") or event.get("movement"):
-            kept.append(dict(event, transforms=transforms))
+        rest = _without_time(event)
+        if rest is not None:
+            kept.append(rest)
     if refused and warn:
         warn("passing time is authorship: refused %d time skip(s) the input's "
              "authority mode does not let it set (%s); the resolving Director "
              "decides whether the time passes"
              % (len(refused), ", ".join(sorted({row["mode"] for row in refused}))))
     return kept, refused
+
+
+def _without_time(event):
+    """`event` with every `time` patch taken out of its transforms, or None
+    when nothing of it is left: no other transform, nothing observable, no
+    speech, no movement -- an event that was only the stretch."""
+    transforms = []
+    for transform in event.get("transforms") or []:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        if isinstance(patch, dict):
+            patch = {k: v for k, v in patch_as_written(patch).items() if k != "time"}
+            if not patch:
+                continue
+            transform = dict(transform, patch=patch)
+        transforms.append(transform)
+    if transforms or str(event.get("observable") or "").strip() \
+            or event.get("speech") or event.get("movement"):
+        return dict(event, transforms=transforms)
+    return None
+
+
+#: The keys of a `time` block that say the input passed over time: a
+#: length, a part of the day, a count of days (`encoder.time`).
+_SKIP_KEYS = ("duration_seconds", "until_phase", "days")
+
+
+def the_input_set_the_time(interp):
+    """The `time` block the players' input passed over this beat -- the
+    interpret stage's skip as the authority ladder kept it
+    (`skip_is_authorship`) -- or None when it passed over no time, or the
+    ladder refused the skip. A block placing the beat on the clock is the
+    retired contract's and passes over nothing here."""
+    from world.mechanics import POSITION_KEYS
+    interp = interp if isinstance(interp, dict) else {}
+    block = (interp.get("state_assertions") or {}).get("time")
+    if not isinstance(block, dict) or any(
+            block.get(key) is not None for key in POSITION_KEYS):
+        return None
+    if any(block.get(key) not in (None, "") for key in _SKIP_KEYS):
+        return block
+    return None
+
+
+def _skip_words(block):
+    """A time block as a debug log reads it: what it was asked to pass."""
+    return ", ".join("%s=%s" % (key, block.get(key)) for key in _SKIP_KEYS
+                     if isinstance(block, dict) and block.get(key) not in (None, ""))
+
+
+def time_is_the_inputs(events, interp, warn=None):
+    """`(kept, held)`: at resolve, in a beat whose players' input passed over
+    time, every stretch the world's account passes over of its own is taken
+    out of its events -- the input set the beat's time.
+
+    THE WRITER SETS THE TIME. A skip kept at interpret is authorship the
+    ladder has already ruled on (`skip_is_authorship`): it says where this
+    beat stands on the clock, and the world's account answers INSIDE it --
+    its steps take what they take, priced like any beat's -- and never
+    carries the story on to a later time of its own. Measured (the probe
+    story, 2026-10-21, control chat 2 idx 8): "Two days later ... all
+    morning. Rhona keeps to the kitchen ..." -- the resolve's account ran the
+    weather on "by early afternoon", "into the evening" and "until full
+    dark", its encoder filed two stretches (4.4 h and 2.5 h), and the beat
+    committed at 22:00 while the page the player read, built from what Rhona
+    perceived, was a morning; the player's next beat, "That night, when
+    Elias comes down from the first watch ...", found the night already
+    reached and passed nothing. At such a resolve the decision model is not
+    asked the time question (`select_channels`); this takes out what an
+    encoder writes anyway, and says so.
+
+    Where the ladder REFUSED the input's skip (`explicit_outcomes`,
+    `actor_only`) the input passed over nothing, and the resolve's account
+    decides whether the time passes: its stretch stands. A beat whose input
+    passed over no time is not this rule's either. Nothing else of an event
+    goes; an event that was only the stretch goes with it
+    (`_without_time`). `held` is the blocks taken out."""
+    events = list(events or [])
+    set_by = the_input_set_the_time(interp)
+    if set_by is None:
+        return events, []
+    kept, held = [], []
+    for event in events:
+        blocks = _skip_patches(event)
+        if not blocks:
+            kept.append(event)
+            continue
+        held.extend(dict(block) for block in blocks)
+        rest = _without_time(event)
+        if rest is not None:
+            kept.append(rest)
+    if held and warn:
+        warn("the input set this beat's time (%s): the world's account passes "
+             "over no time of its own, and %d stretch(es) it wrote were not "
+             "filed (%s)" % (_skip_words(set_by), len(held),
+                             "; ".join(_skip_words(block) for block in held)))
+    return kept, held
 
 
 #: How many characters a copied id may get wrong and still be read as that
@@ -3643,8 +3739,22 @@ def solve_skip(block, hour_now, day_length):
     length is stated, so the two never add. None when the block passes
     over nothing this reader can price -- no time of day to solve from, a
     label that names no part of the day (`day_cycle.label_phase`), a length
-    that is not a number -- and the block is left as written."""
+    that is not a number -- and the block is left as written.
+
+    A COUNT OF DAYS IS SOLVED WITH THE PART OF THE DAY IT LANDS IN, as one
+    span: `{days, until_phase}` is that part of the day `days` of the
+    story's days on (`day_cycle.seconds_until(days=)`), and `{days}` alone
+    is that many whole days of this world's day. Measured (the probe story,
+    2026-10-21, control chat 2 idx 8): "Two days later the wind gets up ...
+    all morning" was written as `{duration_seconds: 172800}` -- the part
+    could carry the two days or the morning, never both -- and the beat
+    landed in the afternoon two days on. Where the part of the day cannot
+    be solved (no time of day to solve from, a label naming none) the days
+    still pass, and the part of the day is said where the solve was tried
+    (`unsolved_skips`); a count that is not a whole number of days is said
+    there too, and the part of the day is solved without it."""
     from world.day_cycle import seconds_until
+    from world.mechanics import skip_days
     if not isinstance(block, dict):
         return None
     if "duration_seconds" in block:
@@ -3654,9 +3764,13 @@ def solve_skip(block, hour_now, day_length):
             return None
         return max(0.0, value) if value == value else None
     phase = str(block.get("until_phase") or "").strip()
-    if not phase or hour_now is None:
-        return None
-    until = seconds_until(float(hour_now), phase=phase, day_length=day_length)
+    count = skip_days(block)[1] or 0
+    until = None
+    if phase and hour_now is not None:
+        until = seconds_until(float(hour_now), phase=phase, days=count,
+                              day_length=day_length)
+    if until is None and count:
+        until = round(count * float(day_length) * 3600.0, 1)
     if until is None:
         return None
     block["duration_seconds"] = until
@@ -3672,20 +3786,34 @@ def _own_stretch(block):
     return value if 0.0 <= value < float("inf") else None
 
 
-def unsolved_skips(events):
+def unsolved_skips(events, anchored=True):
     """What this stage's events pass over that could not be priced, in event
     order: a part of the day `solve_skip` left without a length, or a length
-    that is not a number -- each as the account wrote it."""
+    that is not a number -- each as the account wrote it. A skip can carry
+    a count of days as well, so also: a count that is not a whole number of
+    days, and a part of the day whose days were charged but which could not
+    itself be reached -- ``anchored`` False (the story's day has no time of
+    day to solve from) or a label naming no part of the day."""
+    from world.day_cycle import seconds_until
+    from world.mechanics import skip_days
     out = []
     for event in events or ():
         for block in _skip_patches(event):
+            phase = str(block.get("until_phase") or "").strip()
+            present, count = skip_days(block)
+            if present and count is None:
+                out.append("%s days" % (block.get("days"),))
             if "duration_seconds" in block:
                 try:
                     float(block.get("duration_seconds"))
                 except (TypeError, ValueError):
                     out.append(str(block.get("duration_seconds")))
-            elif str(block.get("until_phase") or "").strip():
-                out.append(str(block["until_phase"]).strip())
+                    continue
+                if phase and count and (
+                        not anchored or seconds_until(0.0, phase=phase) is None):
+                    out.append(phase)
+            elif phase:
+                out.append(phase)
     return out
 
 
@@ -3715,30 +3843,31 @@ def stage_start_hour(ctx, stage):
     its steps named by their end are solved from it (`_spans_until`), and
     the resolve's encoder is shown it (`onset_clock`). Two of them
     disagreeing is how a part of the day named against a stale clock lands
-    a day late."""
+    a day late.
+
+    AND A FOURTH, THE COMMIT: the hour is the clock's anchor plus its
+    elapsed seconds (`day_cycle.clock_hour`), the arithmetic the commit's
+    day cycle reads the beat's end from -- never the record's stamped
+    `hour_of_day`, which is that reading rounded for showing. Solved from
+    the stamp, a part of the day lands up to 18 seconds from where it was
+    sent. Measured (the probe story, 2026-10-21, control chat 2 idx 8): the
+    resolve's "until full dark" was solved from a stamped 13.55 against a
+    clock at 13.5461 and committed at 21:59:46 -- the clock and the scene
+    said evening, the stamp 22.0 -- and the next beat's decision model was
+    told it was night. A record with no anchor and only a stamp is read as
+    stamped, and one with neither may still be anchored by its own label or
+    the author's dial, as at the commit."""
     from story.scene import simulation_clock, style_guide
-    from world.day_cycle import day_length_hours, describe
+    from world.day_cycle import clock_hour
     chat = getattr(ctx, "chat", None)
     if not chat:
         return None, 24.0
     cid = chat["id"]
     clock = simulation_clock(cid)
-    clock = clock if isinstance(clock, dict) else {}
-    try:
-        length = float(clock.get("day_length_hours") or 0.0)
-    except (TypeError, ValueError):
-        length = 0.0
-    if length <= 0.0:
-        length = day_length_hours(style_guide(cid))
-    hour = clock.get("hour_of_day")
-    if hour is None:
-        # A clock whose hour was never stamped may still be anchored by its
-        # own label or the author's dial -- the answer the commit's day
-        # cycle reaches from the same record (`_advance_day_cycle`).
-        hour = (describe(clock, style_guide(cid)) or {}).get("hour_of_day")
+    hour, length = clock_hour(clock if isinstance(clock, dict) else {},
+                              style_guide(cid))
     if hour is None:
         return None, length
-    hour = float(hour)
     if stage == "resolve":
         hour += interpret_elapsed(getattr(ctx, "director_interpret", None)) / 3600.0
     return hour, length
@@ -3751,19 +3880,27 @@ def onset_clock(clock, interp):
     input passed over time -- an ordinary beat's payload is the stored clock,
     unchanged. Display only: every reader that does arithmetic on the clock
     reads the stored record and the beat's own `time` block, which already
-    carries the input's stretch, so moving those too would count it twice."""
+    carries the input's stretch, so moving those too would count it twice.
+
+    The hour moved is the clock's own reading to the second
+    (`day_cycle.clock_hour`), as `stage_start_hour` reads it, and it is
+    shown rounded on its own side of a boundary (`day_cycle.display_hour`):
+    a skip to where a part of the day begins lands on that boundary, and
+    the stamp the encoder reads beside the phase must not name the part
+    before it."""
     from world.mechanics import clock_elapsed, skip_seconds
-    from world.day_cycle import label_phase, phase_of_hour
+    from world.day_cycle import clock_hour, display_hour, label_phase, phase_of_hour
     interp = interp if isinstance(interp, dict) else {}
     if not isinstance(clock, dict) or not skip_seconds(
             (interp.get("state_assertions") or {}).get("time")):
         return clock
     moved = interpret_elapsed(interp)
     out = dict(clock, elapsed_seconds=clock_elapsed(clock) + moved)
-    if clock.get("hour_of_day") is not None:
-        length = float(clock.get("day_length_hours") or 24.0)
-        hour = (float(clock["hour_of_day"]) + moved / 3600.0) % length
-        out.update(hour_of_day=round(hour, 2), phase=phase_of_hour(hour, length))
+    base, length = clock_hour(clock)
+    if base is not None:
+        hour = (base + moved / 3600.0) % length
+        out.update(hour_of_day=display_hour(hour, length),
+                   phase=phase_of_hour(hour, length))
         if label_phase(out.get("display"), length) != out["phase"]:
             out["display"] = out["phase"]
     return out
@@ -4201,6 +4338,14 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             identities, warn=ctx.add_warning)
         events, time_refused = skip_is_authorship(
             events, model_payload.get("event_inputs") or [], warn=ctx.add_warning)
+    # THE WRITER SET THIS BEAT'S TIME: at a resolve whose players' input
+    # passed over time, the world's account passes over none of its own
+    # (`time_is_the_inputs`); its steps still take what they take.
+    time_held = []
+    if stage == "resolve":
+        events, time_held = time_is_the_inputs(
+            events, getattr(ctx, "director_interpret", None),
+            warn=ctx.add_warning)
     channels = list(encoder_channels) + [
         c for c in ROOM_AUTHOR_CHANNELS
         if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)
@@ -4225,7 +4370,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     # records and does not act on (`TIME_METADATA_KEYS`). In a story whose
     # day was never anchored the commit makes a part of the day the time of
     # day instead (`commit_scene_state._unanchored_phase`).
-    for _what in unsolved_skips(events):
+    for _what in unsolved_skips(events, anchored=_start_hour is not None):
         ctx.add_warning(
             f"{stage}: the account passes over time to {_what!r}, which "
             + ("this engine cannot read as a length or a part of the day"
@@ -4263,6 +4408,10 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     if voices_refused:
         record["voices_refused"] = [{"speaker": who, "sound": dict(row)}
                                     for who, row in voices_refused]
+    # ...and, at resolve, a stretch the world's account wrote in a beat whose
+    # input had already set the time (`time_is_the_inputs`).
+    if time_held:
+        record["time_held"] = time_held
     # AN EXTENSION'S CHANNEL IS COLLECTED FOR ITS EXTENSION, never split to
     # an owner: no engine owner holds it and no engine domain reads it
     # (`api.add_director_channel`; `attach_record` files what is collected).

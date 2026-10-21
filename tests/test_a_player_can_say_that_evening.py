@@ -51,6 +51,22 @@ PROBE_CLOCK = {"elapsed_seconds": 338.0,
 TO_EVENING = round((19.5 - 15.84) * 3600.0, 1)
 
 
+def _to_evening(clock):
+    """The same stretch solved from the clock the engine KEEPS -- its anchor
+    plus its elapsed seconds -- rather than from the hundredth of an hour it
+    is stamped and shown at: what `director_prose.stage_start_hour` reads
+    since 2026-10-21 (`day_cycle.clock_hour`). For the probe's clock that is
+    15.8439 rather than 15.84, and the 14 seconds between them are the class
+    `tests/test_two_days_later_all_morning.py` closes: solved from a stamp,
+    the probe story's "until full dark" landed at 21:59:46, in the evening."""
+    return round((19.5 - (clock["anchor_hour"]
+                          + clock["elapsed_seconds"] / 3600.0)) * 3600.0, 1)
+
+
+#: The probe beat's evening as the Director stages solve it.
+ON_THE_CLOCK = _to_evening(PROBE_CLOCK)
+
+
 def _skip(until_phase=None, duration=None, *, source_event_id=""):
     """The skip event the encoder's `time` part asks for: no actor, no
     observable, no seconds of its own, its item the account's words."""
@@ -356,20 +372,20 @@ class TestThroughTheDirector:
             _step("Eleven years out here?", 8, speech=True, observable=""),
         ], 'Evening at the tower. She asks, "Eleven years out here?"', "interpret")
         assert interp["state_assertions"]["time"] == {
-            "until_phase": "evening", "duration_seconds": TO_EVENING}
+            "until_phase": "evening", "duration_seconds": ON_THE_CLOCK}
         ctx.director_interpret = interp
         out, calls = _stage(temp_db, monkeypatch, ctx, [
             _step("Mara climbs to the lamp room.", 36, source="character:1"),
         ], "Mara climbs to the lamp room.", "resolve")
         block = out["state_diff"]["time"]
-        assert block["skipped_seconds"] == TO_EVENING
+        assert block["skipped_seconds"] == ON_THE_CLOCK
         assert block["mode"] == "time_skip"
-        assert block["duration_seconds"] == TO_EVENING + 8 + 36
+        assert block["duration_seconds"] == ON_THE_CLOCK + 8 + 36
         # The resolve's encoder is shown the evening, not the afternoon the
         # input left: a part of the day its clock already stands in is now.
         payload = next(c["payload"] for c in calls if c["step_key"] == "director_specialist")
         assert payload["simulation_clock"]["phase"] == "evening"
-        assert payload["simulation_clock"]["elapsed_seconds"] == 338.0 + TO_EVENING + 8
+        assert payload["simulation_clock"]["elapsed_seconds"] == 338.0 + ON_THE_CLOCK + 8
         stored = temp_db.wget(ctx.chat["id"], "simulation_clock", {})
         assert stored["elapsed_seconds"] == 338.0   # nothing moved before commit
 
@@ -530,7 +546,7 @@ class TestTheCommit:
         block, _ = _resolved_time(temp_db, monkeypatch, PROBE_CLOCK)
         cid, ctx = _commit(temp_db, {"time": block})
         clock = temp_db.wget(cid, "simulation_clock", {})
-        assert clock["elapsed_seconds"] == 338.0 + TO_EVENING + 44.0
+        assert clock["elapsed_seconds"] == 338.0 + ON_THE_CLOCK + 44.0
         assert clock["phase"] == "evening"
         assert temp_db.wget(cid, "scene", {})["time_of_day"] == "evening"
         assert not [w for w in ctx.warnings if "state_diff.time" in w]
@@ -547,7 +563,7 @@ class TestTheCommit:
         moved, _ = _commit(temp_db, {"time": block}, clock=clock,
                            scene=_scene(weather=dict(weather)))
         assert temp_db.wget(moved, "scene", {})["weather"]["drift_step"] == int(
-            (3700.0 + TO_EVENING + 44.0) // 3600)
+            (3700.0 + _to_evening(clock) + 44.0) // 3600)
 
     def test_a_condition_tick_comes_due_inside_the_stretch(self, temp_db, monkeypatch):
         hunger = ("pangs", "Mara", "hunger", 0.0, None, 338.0 + 600.0,
@@ -561,14 +577,14 @@ class TestTheCommit:
         moved, _ = _commit(temp_db, {"time": block}, conditions=[hunger])
         row = temp_db.q("SELECT next_tick FROM world_conditions WHERE chat_id=?",
                         (moved,), one=True)
-        end = 338.0 + TO_EVENING + 44.0
+        end = 338.0 + ON_THE_CLOCK + 44.0
         assert row["next_tick"] > end >= row["next_tick"] - 3600.0
 
     def test_a_body_is_as_hungry_as_the_stretch_made_it(self, temp_db, monkeypatch):
         block, _ = _resolved_time(temp_db, monkeypatch, PROBE_CLOCK)
         cid, _ = _commit(temp_db, {"time": block},
                          scene=_scene(vitals={"Mara": {"nourishment": 1.0}}))
-        hours = (TO_EVENING + 44.0) / 3600.0
+        hours = (ON_THE_CLOCK + 44.0) / 3600.0
         vitals = temp_db.wget(cid, "scene", {})["vitals"]["Mara"]
         assert vitals["nourishment"] == round(1.0 - 0.02 * hours, 4)
 
@@ -583,7 +599,7 @@ class TestTheCommit:
                               "state": {"level": "asleep", "cause": "the night"}}), 1)
         cid, _ = _commit(temp_db, {"time": block}, conditions=[asleep],
                          scene=_scene(vitals={"Mara": {"stamina": 0.2}}))
-        hours = (TO_EVENING + 44.0) / 3600.0
+        hours = (ON_THE_CLOCK + 44.0) / 3600.0
         stamina = temp_db.wget(cid, "scene", {})["vitals"]["Mara"]["stamina"]
         assert stamina == round(min(1.0, 0.2 + 0.14 * hours), 4)
 

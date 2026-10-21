@@ -150,6 +150,13 @@ TIME_METADATA_KEYS = frozenset({
     # Recorded, never acted on here: this reader holds no time of day, and
     # one that cannot be solved is reported where the solve was tried.
     "until_phase",
+    # A COUNT OF THE STORY'S DAYS a beat passes over ("two days later", "a
+    # week on"), alone or with the part of the day it lands in
+    # ("two days later ... all morning"): written by the same tool and
+    # solved the same way, into `duration_seconds`
+    # (`director_prose.solve_skip`, `day_cycle.seconds_until(days=)`).
+    # Recorded, never acted on here.
+    "days",
     # The stretch the beat PASSED OVER, apart from its steps -- written
     # beside the total it is part of (`beat_time_block`), so a reader of the
     # stored diff can tell a skipped evening from a long scene. Recorded,
@@ -404,14 +411,35 @@ def skip_seconds(block):
     return value if 0.0 < value < float("inf") else 0.0
 
 
+def skip_days(block):
+    """`(present, count)` for a `time` block's `days`: whether it carries a
+    count of the story's days, and that count as a whole number -- None for
+    a count that is not one (a fraction, a word, a negative), which states
+    nothing this reader can solve. A null `days` is no count at all."""
+    if not isinstance(block, dict) or block.get("days") is None:
+        return False, None
+    raw = block.get("days")
+    if isinstance(raw, bool):
+        return True, None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return True, None
+    if not (0.0 <= value < float("inf")) or value != int(value):
+        return True, None
+    return True, int(value)
+
+
 def _states_a_length(block):
     """Did the block STATE a length -- the encoder's readable
-    `duration_seconds`, not one the engine solved from a part of the day?
-    A stated zero is a claim (no time passed), which a solved zero is not:
-    "that evening" said in the evening is the engine's arithmetic arriving
-    at now. A length that is not a number states nothing."""
+    `duration_seconds`, not one the engine solved from a part of the day or
+    a count of days? A stated zero is a claim (no time passed), which a
+    solved zero is not: "that evening" said in the evening is the engine's
+    arithmetic arriving at now. A length that is not a number states
+    nothing."""
     if (not isinstance(block, dict) or "duration_seconds" not in block
-            or str(block.get("until_phase") or "").strip() or _positioned(block)):
+            or str(block.get("until_phase") or "").strip()
+            or skip_days(block)[0] or _positioned(block)):
         return False
     try:
         value = float(block.get("duration_seconds"))
@@ -463,7 +491,16 @@ def beat_time_block(steps, onset=None, resolve=None):
     block = {key: value for key, value in (resolve or {}).items()
              if key not in ("duration_seconds", "skipped_seconds")} \
         if isinstance(resolve, dict) else {}
-    for key in ("until_phase", "display_advance", "display"):
+    # Where the input's stretch landed is ONE record -- a count of days and
+    # the part of the day it landed in -- so it is taken whole or not at
+    # all: a resolve's own part of the day beside the input's days would
+    # read as a landing nobody wrote.
+    if isinstance(onset, dict) and "until_phase" not in block \
+            and "days" not in block:
+        for key in ("until_phase", "days"):
+            if onset.get(key) not in (None, ""):
+                block[key] = onset[key]
+    for key in ("display_advance", "display"):
         if key not in block and isinstance(onset, dict) and onset.get(key):
             block[key] = onset[key]
     stepped = (steps or {}).get("duration_seconds") \
