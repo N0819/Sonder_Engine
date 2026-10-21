@@ -1028,7 +1028,22 @@ Owner questions left:
    need a Jev probe in each pack; an unresolved addressee there (the
    speaker's own description of a stranger, UNBUILT_CHARACTERS § 6.19) loses
    an `ear` line the same way.
+   **Probed 2026-10-20** (the main session; the exact read-back question,
+   `character_jev._choice("line_volume")` with each pack's options, asked of
+   the owner's decision model -- `typesafe/jev-1.13` on OpenRouter -- for
+   nine cases in three phrasings each, 21 questions a pack): English 20 of
+   21, Japanese 21 of 21. Every lips-at-the-ear phrasing answered `ear`
+   (a hiss into an ear as a patrol passes included), every whisper
+   `whisper`, every mutter, ordinary voice, raised voice and shout its own
+   rung, and "quietly, my head beside hers so the magistrate cannot hear"
+   `whisper` in both packs. The one miss: English "softly" with no listener
+   named read as `mutter` (Japanese 「やわらかく」 read as `whisper`) -- a
+   defensible reading of a line said softly to nobody in particular, not a
+   defect. Closed. Script and results in the job's
+   `fixes/jev_volume_probe/`.
+
 4. **Derivation from contacts**, declined above, is the owner's to reopen.
+
 ## 12. Wave A: four real-world concepts (2026-10-20)
 
 The owner's go, the same day as § 11: "I guess go ahead". § 11 restated the
