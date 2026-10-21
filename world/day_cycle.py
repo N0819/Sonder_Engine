@@ -410,11 +410,12 @@ def charter_hour(charter, at_hours):
 UNTIL_LIGHTS = ("dark", "dim", "lit")
 
 
-def seconds_until(hour_now, *, light=None, hour=None,
+def seconds_until(hour_now, *, light=None, hour=None, phase=None,
                   day_length=DAY_LENGTH_HOURS_DEFAULT):
     """How many story seconds until the sky's light next becomes `light`
-    (one of `UNTIL_LIGHTS`) or the clock next reads `hour`, from `hour_now`
-    -- or None when neither names something this reader knows.
+    (one of `UNTIL_LIGHTS`), the clock next reads `hour`, or the day next
+    reaches the part of it `phase` names, from `hour_now` -- or None when
+    none of them names something this reader knows.
 
     A SPAN NAMED BY ITS END IS ARITHMETIC THE ENGINE OWNS. "We stay up
     talking until it is fully dark" names where the day gets to, not how
@@ -423,7 +424,18 @@ def seconds_until(hour_now, *, light=None, hour=None,
     at an hour, the clock stood at 16:48 in the afternoon, and the page
     said full dark. A light already reached is reached now (0); an hour is
     the next time the clock reads it, so `hour` equal to now is a full day
-    away only when the caller says it is not now -- here, 0."""
+    away only when the caller says it is not now -- here, 0.
+
+    A PART OF THE DAY IS READ THE SAME WAY, and by the one reader of
+    written labels this module has (`clock_reading_hour`, `label_phase`),
+    so a skip lands exactly where `_advance_day_cycle`'s landing rule would
+    put it: on the reading a label carries, else at the START of the phase
+    it names -- never a midpoint nobody stated, on `time_diff_duration`'s
+    doctrine that under-ageing is recoverable and over-ageing is not. A part
+    of the day the clock already stands in is reached now (0): "that
+    evening" said in the evening passes nothing. Measured (the probe story,
+    2026-10-20, chat 1 turn 5): "That evening ..." against a clock at 15:50
+    moved it 44 seconds, and the keeper lit the lamp in the afternoon."""
     length = max(1e-9, float(day_length))
     now = float(hour_now) % length
     if hour is not None and not isinstance(hour, bool):
@@ -433,6 +445,17 @@ def seconds_until(hour_now, *, light=None, hour=None,
             target = None
         if target is not None:
             return round(((target - now) % length) * 3600.0, 1)
+    if str(phase or "").strip():
+        reading = clock_reading_hour(phase, length)
+        if reading is not None:
+            return round(((reading - now) % length) * 3600.0, 1)
+        named = label_phase(phase, length)
+        if named is None:
+            return None
+        if phase_of_hour(now, length) == named:
+            return 0.0
+        start = phase_bounds_hours(named, length)[0] % length
+        return round(((start - now) % length) * 3600.0, 1)
     word = str(light or "").strip().casefold()
     if word not in UNTIL_LIGHTS:
         return None

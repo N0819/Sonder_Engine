@@ -547,11 +547,19 @@ def aim_by_their_view(inputs, prose, places, people, perceived, ask,
 
 # ---- 2. the decision model picks the tools -------------------------------
 
-def _jev_state(prose, model_payload, owed=None):
+def _jev_state(prose, model_payload, owed=None, before=None):
     """What Jev judges: the passage, plus the facts a channel question can
     turn on and prose alone may not settle -- who the people are, which
-    places already exist (a room question asks about a NEW place), and what
-    is already OWED.
+    places already exist (a room question asks about a NEW place), what is
+    already OWED, and the part of the day it was before the passage
+    (``before``, a `day_cycle.PHASE_NAMES` word; absent when the story's day
+    has no anchor).
+
+    The time question asks whether the passage moves on to a LATER part of
+    the day, and "Evening at the tower" is a skip only against an afternoon:
+    the probe story's interpretation (2026-10-20, chat 1 turn 5) opened that
+    way against a clock at 15:50, and nothing in the passage alone says
+    which.
 
     The obligations question asks whether someone "fulfil[s] or refuse[s]
     one already owed", and nothing told Jev what was: the miller's "slap it
@@ -570,6 +578,8 @@ def _jev_state(prose, model_payload, owed=None):
              if isinstance(row, dict) and row.get("who") and row.get("what")]
     if debts:
         lines.append("ALREADY OWED: " + "; ".join(debts))
+    if before:
+        lines.append("TIME OF DAY BEFORE THE PASSAGE: " + str(before))
     return "\n".join(lines)
 
 
@@ -657,8 +667,19 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
                             destination=walk["destination"])
         if text:
             battery[WALK_PREFIX + walk["subject"]] = {"type": "noul", "instructions": text}
+    # The part of the day the passage begins in, for the time question
+    # (`_jev_state`); recorded so a replay can read what it was told. Fails
+    # open like the rest of this call: no line, never a lost beat.
+    from world.day_cycle import phase_of_hour
     try:
-        answers = decisions.decide(_jev_state(prose, model_payload, owed), battery)
+        _hour, _length = stage_start_hour(ctx, stage)
+        before = phase_of_hour(_hour, _length) if _hour is not None else None
+    except Exception:  # noqa: BLE001 -- the question is asked without it
+        before = None
+    if before:
+        record["before"] = before
+    try:
+        answers = decisions.decide(_jev_state(prose, model_payload, owed, before), battery)
     except Exception as exc:
         record.update(failed=str(exc), seconds=round(time.time() - t0, 3))
         ctx.add_warning(f"{stage}: decision model unavailable, every channel "
@@ -2481,6 +2502,76 @@ def standing_is_authorship(events, event_inputs, identity_index, warn=None):
     return kept, refused
 
 
+def skip_is_authorship(events, event_inputs, warn=None):
+    """`(kept, refused)`: at interpret, a stretch the input passes over --
+    the `time` an event writes ("that evening", "hours later") -- stands
+    only where that input's authority mode grants `world`.
+
+    PASSING TIME IS AUTHORSHIP, NOT CONDUCT. Where the world's clock stands
+    is a fact about how things stand that no body's act makes, the class
+    `standing_is_authorship` holds above, so it is the ladder's `world`
+    grant (`story.scene.PLAYER_AUTHORITY_GRANTS`): the default
+    `world_author` holds it, `explicit_outcomes` and `actor_only` do not.
+    Under those the skip is taken out here, before it is a row -- so no
+    step, receipt or preview carries it -- and handed to the resolving
+    Director as a declaration it answers this beat
+    (`director.director_interpret` puts each `refused` record beside the
+    ladder's own downgrades): its own account may pass the time, in its own
+    `time`, or not. Nothing else of the event goes; an event that was only
+    the skip goes with it.
+
+    The input the skip follows from is the one its `source_event_id`
+    names; a skip that names none is the beat's inputs' together, and
+    stands only where every one of them grants `world`. `refused` rows are
+    the downgrade records the resolve payload carries:
+    `{claim_id: "time", kind: "world", mode, channel: "time", time}`."""
+    from story.scene import PLAYER_AUTHORITY_GRANTS, normalize_player_authority
+    mode_of_event, modes = {}, []
+    for entry in event_inputs or []:
+        if not isinstance(entry, dict):
+            continue
+        mode = normalize_player_authority(entry.get("authority_mode"))
+        modes.append(mode)
+        for event in entry.get("events") or []:
+            if isinstance(event, dict) and str(event.get("event_id") or "").strip():
+                mode_of_event[str(event["event_id"]).strip()] = mode
+    kept, refused = [], []
+    for event in events or []:
+        blocks = _skip_patches(event)
+        if not blocks:
+            kept.append(event)
+            continue
+        source = str(event.get("source_event_id") or "").strip()
+        mode = mode_of_event.get(source)
+        candidates = [mode] if mode else (modes or ["world_author"])
+        denied = next((m for m in candidates
+                       if "world" not in PLAYER_AUTHORITY_GRANTS[m]), None)
+        if denied is None:
+            kept.append(event)
+            continue
+        for block in blocks:
+            refused.append({"claim_id": "time", "kind": "world", "mode": denied,
+                            "channel": "time", "time": dict(block)})
+        transforms = []
+        for transform in event.get("transforms") or []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if isinstance(patch, dict):
+                patch = {k: v for k, v in patch_as_written(patch).items() if k != "time"}
+                if not patch:
+                    continue
+                transform = dict(transform, patch=patch)
+            transforms.append(transform)
+        if transforms or str(event.get("observable") or "").strip() \
+                or event.get("speech") or event.get("movement"):
+            kept.append(dict(event, transforms=transforms))
+    if refused and warn:
+        warn("passing time is authorship: refused %d time skip(s) the input's "
+             "authority mode does not let it set (%s); the resolving Director "
+             "decides whether the time passes"
+             % (len(refused), ", ".join(sorted({row["mode"] for row in refused}))))
+    return kept, refused
+
+
 #: How many characters a copied id may get wrong and still be read as that
 #: id (`entity_keys_name_held_things`). Named per ask-before-limiting.
 ID_COPY_SLIPS = 3
@@ -3423,16 +3514,206 @@ _ROW_FIELDS =("source_entity_id", "source_event_id", "event", "act",
                "seconds", "ability", "difficulty")
 
 
+def _skip_patches(event):
+    """The `time` patches an event carries -- the stretch the account passes
+    over at this step (`encoder.time`) -- as the dicts themselves, so a
+    solve writes into what the owner split will fold. Read through
+    `patch_as_written`, which keeps each channel's value by reference, so a
+    wrapped patch is found too."""
+    out = []
+    if not isinstance(event, dict):
+        return out
+    for transform in event.get("transforms") or []:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        block = patch_as_written(patch).get("time") if isinstance(patch, dict) else None
+        if isinstance(block, dict):
+            out.append(block)
+    return out
+
+
+def solve_skip(block, hour_now, day_length):
+    """The seconds a `time` block passes over, a later part of the day
+    solved against the clock as it stands at `hour_now` and written into
+    the block as `duration_seconds`. THE PHASE IS SOLVED WHERE THE CLOCK IS
+    AT HAND -- here, where the stage knows the hour its account begins at
+    and every step before this one -- so what reaches the commit is a span,
+    which survives every translation a position does not
+    (`world.mechanics.read_time_diff`), and the three readers of a beat's
+    end clock land on one number. `until_phase` stays on the block as the
+    record of what the account asked.
+
+    A stated length is kept as written, and a phase is solved only where no
+    length is stated, so the two never add. None when the block passes
+    over nothing this reader can price -- no time of day to solve from, a
+    label that names no part of the day (`day_cycle.label_phase`), a length
+    that is not a number -- and the block is left as written."""
+    from world.day_cycle import seconds_until
+    if not isinstance(block, dict):
+        return None
+    if "duration_seconds" in block:
+        try:
+            value = float(block.get("duration_seconds") or 0.0)
+        except (TypeError, ValueError):
+            return None
+        return max(0.0, value) if value == value else None
+    phase = str(block.get("until_phase") or "").strip()
+    if not phase or hour_now is None:
+        return None
+    until = seconds_until(float(hour_now), phase=phase, day_length=day_length)
+    if until is None:
+        return None
+    block["duration_seconds"] = until
+    return float(until)
+
+
+def _own_stretch(block):
+    """The stretch a cumulative reading carries as its own, or None."""
+    try:
+        value = float(block.get("skipped_seconds"))
+    except (TypeError, ValueError):
+        return None
+    return value if 0.0 <= value < float("inf") else None
+
+
+def unsolved_skips(events):
+    """What this stage's events pass over that could not be priced, in event
+    order: a part of the day `solve_skip` left without a length, or a length
+    that is not a number -- each as the account wrote it."""
+    out = []
+    for event in events or ():
+        for block in _skip_patches(event):
+            if "duration_seconds" in block:
+                try:
+                    float(block.get("duration_seconds"))
+                except (TypeError, ValueError):
+                    out.append(str(block.get("duration_seconds")))
+            elif str(block.get("until_phase") or "").strip():
+                out.append(str(block["until_phase"]).strip())
+    return out
+
+
+def interpret_elapsed(interp):
+    """How far the players' input moved the clock before the resolve's
+    account begins: every step the interpret stage priced (a contestable one
+    is the resolve's to price) and the stretch its input passed over."""
+    from world.mechanics import skip_seconds
+    interp = interp if isinstance(interp, dict) else {}
+    steps = sum(float(r.get("seconds") or 0.0)
+                for r in (interp.get("causal_ledger") or [])
+                if isinstance(r, dict) and isinstance(r.get("seconds"), (int, float))
+                and not isinstance(r.get("seconds"), bool)
+                and str(r.get("commitment") or "").casefold() != "contestable")
+    return steps + skip_seconds((interp.get("state_assertions") or {}).get("time"))
+
+
+def stage_start_hour(ctx, stage):
+    """`(hour, day_length)`: the hour of the story's day at which this
+    stage's account begins -- the clock's own, and at resolve after the
+    players' input (`interpret_elapsed`). `hour` is None when the story's
+    day has no anchor (`day_cycle.clock_anchor`), and then nothing named by
+    a part of the day can be solved.
+
+    ONE ANSWER FOR THREE READERS: the decision model is told the part of
+    the day the passage begins in (`_jev_state`), the encoder's skips and
+    its steps named by their end are solved from it (`_spans_until`), and
+    the resolve's encoder is shown it (`onset_clock`). Two of them
+    disagreeing is how a part of the day named against a stale clock lands
+    a day late."""
+    from story.scene import simulation_clock, style_guide
+    from world.day_cycle import day_length_hours, describe
+    chat = getattr(ctx, "chat", None)
+    if not chat:
+        return None, 24.0
+    cid = chat["id"]
+    clock = simulation_clock(cid)
+    clock = clock if isinstance(clock, dict) else {}
+    try:
+        length = float(clock.get("day_length_hours") or 0.0)
+    except (TypeError, ValueError):
+        length = 0.0
+    if length <= 0.0:
+        length = day_length_hours(style_guide(cid))
+    hour = clock.get("hour_of_day")
+    if hour is None:
+        # A clock whose hour was never stamped may still be anchored by its
+        # own label or the author's dial -- the answer the commit's day
+        # cycle reaches from the same record (`_advance_day_cycle`).
+        hour = (describe(clock, style_guide(cid)) or {}).get("hour_of_day")
+    if hour is None:
+        return None, length
+    hour = float(hour)
+    if stage == "resolve":
+        hour += interpret_elapsed(getattr(ctx, "director_interpret", None)) / 3600.0
+    return hour, length
+
+
+def onset_clock(clock, interp):
+    """The story clock as the resolve's account begins, FOR SHOWING IT: the
+    stored clock advanced by what the players' input moved it
+    (`interpret_elapsed`), with its hour, phase and label. Only when the
+    input passed over time -- an ordinary beat's payload is the stored clock,
+    unchanged. Display only: every reader that does arithmetic on the clock
+    reads the stored record and the beat's own `time` block, which already
+    carries the input's stretch, so moving those too would count it twice."""
+    from world.mechanics import clock_elapsed, skip_seconds
+    from world.day_cycle import label_phase, phase_of_hour
+    interp = interp if isinstance(interp, dict) else {}
+    if not isinstance(clock, dict) or not skip_seconds(
+            (interp.get("state_assertions") or {}).get("time")):
+        return clock
+    moved = interpret_elapsed(interp)
+    out = dict(clock, elapsed_seconds=clock_elapsed(clock) + moved)
+    if clock.get("hour_of_day") is not None:
+        length = float(clock.get("day_length_hours") or 24.0)
+        hour = (float(clock["hour_of_day"]) + moved / 3600.0) % length
+        out.update(hour_of_day=round(hour, 2), phase=phase_of_hour(hour, length))
+        if label_phase(out.get("display"), length) != out["phase"]:
+            out["display"] = out["phase"]
+    return out
+
+
 def _spans_until(events, start_hour, day_length):
     """Each event's `seconds`, with a step named by its end -- `until_light`
     or `until_hour` -- priced from the clock as it stands when that step
-    begins: the beat's start hour plus every earlier step's seconds. A step
-    with neither keeps what it wrote. Returns a list parallel to `events`."""
+    begins: the beat's start hour plus every earlier step's seconds, plus
+    every stretch an earlier step PASSED OVER. A step with neither keeps
+    what it wrote. Returns a list parallel to `events`.
+
+    A `time` patch on an event is the stretch the account passes over AT
+    that step, before the step itself (`solve_skip`): "That evening, Rhona
+    sits ..." reaches the evening and then sits, so the skip moves the
+    running clock first, a step of hers named by its end is priced from
+    the evening, and her own seconds are hers. The skip is never added to
+    the step's `seconds`: the owner split folds it into `state_diff.time`,
+    and `world.mechanics.beat_time_block` adds the two there.
+
+    A SECOND SKIP IN ONE ACCOUNT IS WRITTEN AS A CUMULATIVE READING: its
+    `duration_seconds` is the account's stretches so far, its own beside it
+    as `skipped_seconds`. A time patch in a program is a cumulative reading
+    (`spatial_merge` pays only what is new) and the fold keeps the last
+    (`causality.ATOMIC_CHANNELS`), so a stretch written alone would replace
+    the one before it and the clock would land short by it."""
     from world.day_cycle import seconds_until
     out = []
     running = 0.0
+    passed = 0.0
     for event in events or ():
         seconds = event.get("seconds") if isinstance(event, dict) else None
+        for block in _skip_patches(event):
+            here = (float(start_hour) + running / 3600.0) % max(1e-9, day_length) \
+                if start_hour is not None else None
+            # A block already written as a cumulative reading carries its
+            # own stretch beside it, so solving the same events twice (a
+            # repair re-reading them) never counts the earlier stretches
+            # into this one.
+            skipped = _own_stretch(block) if "skipped_seconds" in block \
+                else solve_skip(block, here, day_length)
+            if skipped:
+                running += skipped
+                if passed:
+                    block.update(skipped_seconds=skipped,
+                                 duration_seconds=passed + skipped)
+                passed += skipped
         if isinstance(event, dict) and start_hour is not None and (
                 str(event.get("until_light") or "").strip()
                 or event.get("until_hour") is not None):
@@ -3805,7 +4086,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     # undeclared conduct and lost, where it is the world's and stands.
     events = a_signal_elsewhere_is_nobodys_act(events, sc, identities,
                                                warn=ctx.add_warning)
-    conduct_refused, standing_refused = [], []
+    conduct_refused, standing_refused, time_refused = [], [], []
     # A SILENT BEAT IS THE EMPTY-INPUT GUARD'S, WHOLE
     # (`director.director_interpret`): on no input the stage's prose is the
     # Director restating stale conduct, and the guard discards everything it
@@ -3821,6 +4102,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         events, standing_refused = standing_is_authorship(
             events, model_payload.get("event_inputs") or [],
             identities, warn=ctx.add_warning)
+        events, time_refused = skip_is_authorship(
+            events, model_payload.get("event_inputs") or [], warn=ctx.add_warning)
     channels = list(encoder_channels) + [
         c for c in ROOM_AUTHOR_CHANNELS
         if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)
@@ -3829,21 +4112,26 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     events = quoted_lines_keep_their_words(events, quoting)
     events = spoken_words_are_the_quotation(events, quoting, warn=ctx.add_warning)
     # WHERE THE CLOCK STANDS WHEN THIS STAGE'S FIRST STEP BEGINS, for a step
-    # named by its end ("until it is fully dark"): the beat's start hour,
-    # and at resolve every step the interpret stage already priced.
-    from story.scene import simulation_clock
-    _clock = simulation_clock(ctx.chat["id"]) if getattr(ctx, "chat", None) else {}
-    _start_hour = _clock.get("hour_of_day") if isinstance(_clock, dict) else None
-    if _start_hour is not None and stage == "resolve":
-        _before = sum(float(r.get("seconds") or 0.0)
-                      for r in ((getattr(ctx, "director_interpret", None) or {})
-                                .get("causal_ledger") or [])
-                      if isinstance(r, dict) and isinstance(r.get("seconds"), (int, float))
-                      and str(r.get("commitment") or "").casefold() != "contestable")
-        _start_hour = float(_start_hour) + _before / 3600.0
+    # named by its end ("until it is fully dark") and a part of the day the
+    # account passes over to ("that evening"): the beat's start hour, and at
+    # resolve after everything the players' input moved it -- so a part of
+    # the day the resolve names again is reached now, never skipped to twice.
+    _start_hour, _day_length = stage_start_hour(ctx, stage)
     rows, transforms = ledger_from_events(
-        events, start_hour=_start_hour,
-        day_length=float((_clock or {}).get("day_length_hours") or 24.0))
+        events, start_hour=_start_hour, day_length=_day_length)
+    # A STRETCH NOTHING COULD PRICE IS SAID HERE, where the solve was tried:
+    # the stored block keeps the label alone, which the clock's reader
+    # records and does not act on (`TIME_METADATA_KEYS`). In a story whose
+    # day was never anchored the commit makes a part of the day the time of
+    # day instead (`commit_scene_state._unanchored_phase`).
+    for _what in unsolved_skips(events):
+        ctx.add_warning(
+            f"{stage}: the account passes over time to {_what!r}, which "
+            + ("this engine cannot read as a length or a part of the day"
+               if _start_hour is not None else
+               "cannot be measured: the story's day has no time of day to "
+               "measure from")
+            + "; no stretch was charged for it")
     record = {
         "stage": stage,
         "prose": prose,
@@ -3868,6 +4156,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         record["conduct_refused"] = conduct_refused
     if standing_refused:
         record["standing_refused"] = standing_refused
+    if time_refused:
+        record["time_refused"] = time_refused
     # AN EXTENSION'S CHANNEL IS COLLECTED FOR ITS EXTENSION, never split to
     # an owner: no engine owner holds it and no engine domain reads it
     # (`api.add_director_channel`; `attach_record` files what is collected).

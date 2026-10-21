@@ -327,7 +327,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.155 — A fixture is two records with two owners and no link, so the player was not told what his own hands had just done](UNBUILT_WORLD.md#unbuilt-1-155)
 - [§1.157 — A room in a chat with no lorebook is never registered, and the escape route died of it](UNBUILT_WORLD.md#unbuilt-1-157)
 - [§1.162 — The doorway cone reads no cell, so a body a pace from the door is graded by the room's size — CLOSED 2026-10-20](UNBUILT_WORLD.md#unbuilt-1-162)
-- [§1.166 — `state_diff.time.mode` has two readers and no writer](UNBUILT_WORLD.md#unbuilt-1-166)
+- [§1.166 — A beat that passes over time moves the clock — BUILT 2026-10-20, residuals open](UNBUILT_WORLD.md#unbuilt-1-166)
 - [§1.168 — A crossing written at the resolve was refused at every shut door — FIXED 2026-09-26, residuals open](UNBUILT_WORLD.md#unbuilt-1-168)
 - [§1.169 — A player one open stair away is neither seen nor seen to leave — a lead, unclassified](UNBUILT_WORLD.md#unbuilt-1-169)
 - [§1.193 — A declared follow carries the player — BUILT 2026-10-09, residuals open](UNBUILT_WORLD.md#unbuilt-1-193)

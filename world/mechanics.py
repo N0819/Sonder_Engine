@@ -143,6 +143,18 @@ TIME_METADATA_KEYS = frozenset({
     "display_advance",    # the beat's own phrase for its passage; recorded
     "display",            # the same phrase under the clock's own name
     "time_scale",         # the clock's own scale, echoed back
+    # A LATER PART OF THE DAY a beat passes over to ("that evening", "by
+    # morning"): written by the encoder's `time` tool, and SOLVED into
+    # `duration_seconds` where the story clock is at hand
+    # (`director_prose.solve_skip`), so what reaches this reader is a span.
+    # Recorded, never acted on here: this reader holds no time of day, and
+    # one that cannot be solved is reported where the solve was tried.
+    "until_phase",
+    # The stretch the beat PASSED OVER, apart from its steps -- written
+    # beside the total it is part of (`beat_time_block`), so a reader of the
+    # stored diff can tell a skipped evening from a long scene. Recorded,
+    # never acted on: `duration_seconds` carries it.
+    "skipped_seconds",
 })
 
 # Everything the vocabulary contains. A key outside it has no meaning to any
@@ -363,6 +375,106 @@ def beat_time_from_spans(spans):
     # play (agents/narration.py), and separating those by a cutoff on this
     # number would be a threshold nobody chose.
     return {"duration_seconds": total}
+
+
+#: The keys that PLACE a beat on the story clock, as opposed to measuring a
+#: stretch of it. A block carrying one is the retired contract's whole-beat
+#: reading (`read_time_diff` reads it as it always has); a block carrying
+#: none is a span.
+POSITION_KEYS = ("start_seconds", "end_seconds", "elapsed_seconds")
+
+
+def _positioned(block):
+    return isinstance(block, dict) and any(
+        block.get(key) is not None for key in POSITION_KEYS)
+
+
+def skip_seconds(block):
+    """The stretch a `time` block PASSES OVER, in story seconds: the
+    `duration_seconds` it states or was solved to
+    (`director_prose.solve_skip`). 0.0 for no block, a block that places the
+    beat on the clock instead, and anything unreadable -- a stretch this
+    reader cannot measure is never guessed at."""
+    if not isinstance(block, dict) or _positioned(block):
+        return 0.0
+    try:
+        value = float(block.get("duration_seconds") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if 0.0 < value < float("inf") else 0.0
+
+
+def _states_a_length(block):
+    """Did the block STATE a length -- the encoder's readable
+    `duration_seconds`, not one the engine solved from a part of the day?
+    A stated zero is a claim (no time passed), which a solved zero is not:
+    "that evening" said in the evening is the engine's arithmetic arriving
+    at now. A length that is not a number states nothing."""
+    if (not isinstance(block, dict) or "duration_seconds" not in block
+            or str(block.get("until_phase") or "").strip() or _positioned(block)):
+        return False
+    try:
+        value = float(block.get("duration_seconds"))
+    except (TypeError, ValueError):
+        return False
+    return 0.0 <= value < float("inf")
+
+
+def beat_time_block(steps, onset=None, resolve=None):
+    """`state_diff.time` for a resolved beat: the stretches its accounts
+    PASSED OVER, then its steps. None when the beat says nothing about time,
+    which `beat_end_elapsed` charges the floor for.
+
+    TWO HALVES, AND NO SUM OF ONE CAN CARRY THE OTHER. `steps` is
+    `beat_time_from_spans`' answer: how long the beat's own events took, each
+    priced by the agent that cut it. What it cannot hold is time the account
+    passes over BETWEEN them -- "that evening", "hours later" -- which is in
+    no step, so the encoder writes it as the `time` channel (`encoder.time`)
+    at whichever stage the account passes over it: `onset` is the
+    interpret stage's (the players' input passed the time; the ladder has
+    already ruled on it, `agents.common.refuse_ungranted_time_skip`) and
+    `resolve` the resolve's (the world's account did). Measured, the probe
+    story (2026-10-20, chat 1 turn 5): "That evening, with the lamp lit ..."
+    against a clock at 15:50 summed to 44 seconds of steps, and the owner's
+    chats 101, 102, 112 and 113 at idx 70 ("a few hours later") moved the
+    clock on 0 of 4.
+
+    THE SAME STRETCH TOLD TWICE COUNTS ONCE. The resolve is handed the
+    input's account as `already_happened`, and a part of the day it names
+    again was solved from where the input's stretch landed, so it arrives
+    as 0 by construction. A LENGTH it restates equal to the one the input
+    stated is that stretch again, and counts once; a different length is a
+    different stretch, and both happened.
+
+    A block carrying a POSITION is the retired contract's whole-beat reading
+    and is kept as written; the steps are added only where it made no claim
+    `read_time_diff` can act on, exactly as before.
+    """
+    if _positioned(resolve):
+        if steps and not time_diff_claims(resolve):
+            return dict(resolve, **steps)
+        return resolve
+    onset_s = skip_seconds(onset)
+    resolve_s = skip_seconds(resolve)
+    if (onset_s and resolve_s == onset_s
+            and _states_a_length(onset) and _states_a_length(resolve)):
+        resolve_s = 0.0
+    skipped = onset_s + resolve_s
+    block = {key: value for key, value in (resolve or {}).items()
+             if key not in ("duration_seconds", "skipped_seconds")} \
+        if isinstance(resolve, dict) else {}
+    for key in ("until_phase", "display_advance", "display"):
+        if key not in block and isinstance(onset, dict) and onset.get(key):
+            block[key] = onset[key]
+    stepped = (steps or {}).get("duration_seconds") \
+        if isinstance(steps, dict) else None
+    if skipped > 0 or stepped is not None \
+            or _states_a_length(onset) or _states_a_length(resolve):
+        block["duration_seconds"] = skipped + float(stepped or 0.0)
+        if skipped > 0:
+            block["skipped_seconds"] = skipped
+            block["mode"] = "time_skip"
+    return block or None
 
 
 def time_diff_claims(time_diff) -> bool:

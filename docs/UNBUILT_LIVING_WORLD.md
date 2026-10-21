@@ -1327,6 +1327,12 @@ own wants rather than being restated; and what happens when the institution's
 simulation contradicts the stated intent, which is the interesting case and
 probably the point.
 
+**2026-10-20: the skip now reaches the clock.** A beat that passes over time
+moves the story clock by the stretch (`Design.md`, "A beat that passes over
+time moves the clock by it"), so the charter's own population is carried
+through it, under the `time_skip` budget. A registered character is not: it
+wakes into the evening where it stood, which is the half this entry asks for.
+
 <a id="unbuilt-1-99e"></a>
 
 ### 1.99e The three tiers, and the chatter already being thrown away

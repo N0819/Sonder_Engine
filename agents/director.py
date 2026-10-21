@@ -58,7 +58,7 @@ from story.scene import (
     style_guide,
 )
 from llm.providers import Aborted, generation_event_sink, token_sink
-from world.mechanics import beat_time_from_spans, time_diff_claims
+from world.mechanics import beat_time_block, beat_time_from_spans
 from llm import schemas
 from llm.schemas import validate_llm_output
 from world.survival import survival_enabled, vitals_of
@@ -2573,6 +2573,15 @@ def director_interpret(ctx, nonce):
     # nobody has changed the dial for.
     _authority_mode = player_authority(chat["id"])["mode"]
     _downgrades = apply_player_authority(out, _authority_mode, p_name)
+    # A SKIP IS AUTHORSHIP (`director_prose.skip_is_authorship`): the input's
+    # time skip, refused by the stage for the same rung before it became a
+    # row, goes in front of the Director with the rest, so the resolve can
+    # answer it this beat -- pass the time in its own account, or not. It
+    # cites no sequence position (`claim_id` "time"), so it voids no span.
+    _time_refused = ((((out.get("orchestration") or {}).get("prose_contract"))
+                      or {}).get("time_refused") or [])
+    if _time_refused:
+        _downgrades = list(_downgrades or []) + list(_time_refused)
     if _downgrades:
         # A REFUSED ASSERTION MUST NOT SILENTLY VANISH. The player wrote it for
         # a reason, and dropping their text is the one thing this engine's
@@ -5376,6 +5385,16 @@ def director_resolve(ctx, nonce, _corrections=None):
     world = ctx.world_context()
     fm = fiction_model(chat["id"])
     clock = simulation_clock(chat["id"])
+    # THE CLOCK AS THIS ACCOUNT BEGINS, for the encoder's payload (its owner
+    # blocks print `simulation_clock`, `director_fanout`): after a stretch
+    # the players' input passed over, the resolve's skips are solved from
+    # where it landed (`director_prose.stage_start_hour`), and its `time`
+    # part tells it a part of the day that clock already stands in is
+    # reached now -- told the afternoon the input left, it would send the
+    # evening a day on. Display only: `clock` stays the stored record for
+    # every reader that does arithmetic on it, since the beat's `time`
+    # already carries the input's stretch.
+    shown_clock = director_prose.onset_clock(clock, interp)
 
     dice = []
     for d in _dict_list(flow.get("dice")):
@@ -6184,7 +6203,7 @@ def director_resolve(ctx, nonce, _corrections=None):
 
     _orch_extras = {
         "nonce": nonce,
-        "clock": clock,
+        "clock": shown_clock,
         "active_awareness": payload.get("active_awareness"),
         "active_restraints": payload.get("active_restraints"),
         "active_conditions": payload.get("active_conditions"),
@@ -6544,8 +6563,18 @@ def director_resolve(ctx, nonce, _corrections=None):
          and str(row.get("commitment") or "").casefold() != "contestable"
          and str(row.get("chrono_id") or "") not in _waiting_rows]
         + list(out.get("causal_ledger") or []))
-    if _beat_time and not time_diff_claims(sd.get("time")):
-        sd["time"] = dict(sd.get("time") or {}, **_beat_time)
+    # THE TIME THE BEAT PASSES OVER IS THE OTHER HALF, AND NO SUM OF ITS
+    # STEPS CAN CARRY IT. "That evening" and "hours later" are in no step:
+    # the encoder writes them as the spatial owner's `time` at whichever
+    # stage the account passes over them (`encoder.time`), a length or a
+    # later part of the day solved where the clock was at hand
+    # (`director_prose.solve_skip`), and `beat_time_block` adds the
+    # stretches to the steps. Measured, the probe story (2026-10-20, chat 1
+    # turn 5): "That evening, with the lamp lit ..." summed to 44 seconds of
+    # steps against a clock at 15:50 and the clock moved 44 seconds.
+    sd["time"] = beat_time_block(
+        _beat_time, (interp.get("state_assertions") or {}).get("time"),
+        sd.get("time"))
 
     # WHAT WAS SAID, COMPILED LIKE EVERYTHING ELSE THAT HAPPENED.
     #
@@ -6627,8 +6656,13 @@ def director_resolve(ctx, nonce, _corrections=None):
         report=lambda note: ctx.add_warning(f"character material: {note}"),
     )
     if onset_state:
+        # `time` is already the beat's whole: the stretch the input passed
+        # over was added above, with the resolve's and the steps, so the
+        # onset's block is not merged again (its keys would only be reported
+        # as restated, and a label it alone carried would re-enter beside a
+        # total that already counted it).
         sd.update(merge_player_state_assertions(
-            onset_state, sd, p_name,
+            {k: v for k, v in onset_state.items() if k != "time"}, sd, p_name,
             report=lambda note: ctx.add_warning(f"player state: {note}"),
         ))
         # The onset's follow ops are the declaration's too, and come first

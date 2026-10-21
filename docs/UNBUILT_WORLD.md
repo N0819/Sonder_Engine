@@ -3938,41 +3938,48 @@ are not yet emitted on every action surface.
 
 <a id="unbuilt-1-166"></a>
 
-### 1.166 `state_diff.time.mode` has two readers and no writer
+### 1.166 A beat that passes over time moves the clock — BUILT 2026-10-20, residuals open
 
-**Found:** 2026-09-20, moving the beat's span from the spatial hand to the
-prose author's rows.
+**Found:** 2026-09-20 as "`state_diff.time.mode` has two readers and no
+writer", moving the beat's span from the spatial hand to the prose author's
+rows. **Built:** 2026-10-20, from the probe story's "That evening, ..." (chat
+1 turn 5), which moved the clock 44 seconds.
 
-`time` left the spatial specialist's grant because a hand is handed
-`_specialist_span_slice` -- the rows selected for it, never the beat -- so the
-sum its chunk asked for ("the time is the sum of its parts") was over terms it
-could not see. The beat's span is now `world.mechanics.beat_time_from_spans`
-over each ledger row's own `seconds`, which is arithmetic and needs no model.
+`mode` has its writer, and it is not a threshold. The entry's own closing
+said the author knows the answer and the repair is one more thing asked, not
+a rule in code -- and that is what was built: the encoder states that the
+account PASSES OVER time it does not show (`encoder.time`, granted by
+`jev_questions.time`), and `world.mechanics.beat_time_block` writes `mode:
+time_skip` exactly when it did. The narrator is told a skip is a span to
+summarise (`agents/narration.py`'s `beat_time`) and the charter's catch-up
+runs under its `time_skip` budget (`offscreen._beat_context`). The stretch
+itself is the clock's: `Design.md`, "A beat that passes over time moves the
+clock by it".
 
-`mode` is not arithmetic. It says whether the beat is a SPAN TO SUMMARISE or a
-SCENE TO PLAY, and two readers want it: `agents/narration.py` passes it to the
-narrator as `beat_time.mode` (D9, review 2026-09-07 -- four consecutive beats
-of one bare corridor were written at full scene length because the page had no
-idea how long the beat it was writing covered), and
-`world.charter_runtime.CHARTER_BUDGET_SECONDS` keys the off-screen wall-clock
-budget on it (`beat` 10.0s, `time_skip` 60.0s).
+What is left:
 
-It has never had a writer on the causal contract: measured across 3,000 stored
-`director_resolve` variants, 0 carry a `time` block written by a current hand
-at all, so both readers have been reading an absent field for as long as the
-fan-out has existed. Nothing REGRESSED here -- the engine now supplies the
-duration those readers wanted beside it, which is strictly more than they had.
-
-**Not closed, because the obvious closure is a threshold nobody chose.** The
-engine could call a beat a skip past some number of seconds, and that number
-would be a cutoff invented to satisfy a field rather than a fact anyone
-measured. The author knows the answer -- it wrote the prose and cut the spans
--- so the repair is one more thing asked of the row, not a rule in code. That
-is an owner's call on the author's contract, and the sheet is under a stated
-size bound (`tests/test_causal_director.py`), so it is an argument to have and
-not a line to slip in.
-
-Until then: the narrator receives `duration_seconds` without `mode`, and a
-genuine time skip is budgeted as a beat (10.0s) rather than as a skip (60.0s)
--- which is what happens today, so the effect is a bound that has never been
-lifted rather than one that was lowered.
+- **The skip beat's own characters and perception read the stored clock.**
+  The input's stretch moves the clock at commit. The beat's character turns
+  are built on the committed scene and `simulation_clock`
+  (`character.py`'s `_sim_clock`, the shared `character_turn_snapshot`), and
+  perception's light reads the same clock, so the keeper who answers "That
+  evening, ..." answers in the afternoon the input left -- on that beat only.
+  The resolve's encoder alone is shown the moved clock
+  (`director_prose.onset_clock`), because it solves parts of the day against
+  it. Previewing the input's stretch for the beat's other readers, the way its
+  other asserted state is previewed, is an owner's call: it reaches the
+  character payload and perception's light, and every reader that does
+  arithmetic on the clock must stay on the stored record or the stretch is
+  counted twice.
+- **A long step the account SHOWS is a scene, not a skip.** "Hours pass as I
+  comb the archive" (chat 20 idx 17) is that step's own `seconds`: the clock
+  moves by it, `mode` stays unwritten, the narrator gets the duration without
+  the label, and the charter runs it under the beat budget and catches up on
+  the next advance.
+- **A part of the day already reached passes nothing.** "Later that
+  afternoon" said in the afternoon solves to now. The `time` part tells the
+  encoder a whole day on is a length; a later point inside the part of the
+  day the clock already stands in has no reading but a length either.
+- **The decision model's answers are unmeasured.** The question was written
+  and pinned offline, never asked of the live model; the live replay owes the
+  probe beat and the owner's skip beats (`Design.md`'s row names them).

@@ -139,26 +139,34 @@ class TestTheBeatIsBothLedgers:
         assert beat_time_from_spans(kept) is None
 
 
-class TestNoHandIsAskedForIt:
-    """One writer. The channel left the hand that could not compute it."""
+class TestNoHandIsAskedForTheSum:
+    """The steps are summed by code; the channel came back for the one claim
+    a sum of steps cannot carry (2026-10-20).
 
-    def test_no_specialist_owns_time(self):
-        for name, spec in SPECIALISTS.items():
-            assert "time" not in spec["channels"], name
-        assert "time" not in _DELEGATED_CHANNELS
-        assert "time" not in schemas.SPECIALIST_CHANNELS["director_spatial"]
+    `time` left the spatial hand on 2026-09-20 because the hand was asked for
+    a total over rows it was never shown. Since 2026-09-27 one encoder sees
+    the beat whole, and on 2026-10-20 the spatial owner holds `time` again --
+    but only for the stretch an account PASSES OVER ("that evening", "hours
+    later"), which is in no step and so in no sum
+    (`tests/test_a_player_can_say_that_evening.py`). What must never come back
+    is the sheet asking for the beat's length."""
 
-    def test_no_spatial_sheet_still_teaches_the_channel(self):
-        """The chunk went with the grant. A sheet that still asked for a
-        duration would be instructing a hand to write a channel the
-        orchestrator now drops from it -- the inverse of the defect.
+    def test_time_is_owned_for_the_stretch_passed_over(self):
+        assert "time" in SPECIALISTS["spatial"]["channels"]
+        assert "time" in _DELEGATED_CHANNELS
+        assert "time" in schemas.SPECIALIST_CHANNELS["director_spatial"]
 
-        Since 2026-09-27 the sheet is the encoder's card: no `time` chunk on
-        it, and `time` in no owner's channel order."""
+    def test_no_sheet_asks_for_the_beats_own_length(self):
+        """The chunk asks for the stretch passed over and says the steps are
+        code's to add; the old chunk's "the time is the sum of its parts" is
+        nowhere, and the sum stays `beat_time_from_spans`'."""
         for language in ("en", "ja"):
             card = prompts._prompt_card(language)
-            assert "time" not in card["encoder"], language
-            assert "time" not in card["specialists"]["spatial"]["order"], language
+            assert "time" in card["specialists"]["spatial"]["order"], language
+            assert "sum of its parts" not in card["encoder"]["time"], language
+        chunk = prompts._prompt_card("en")["encoder"]["time"]
+        assert "never for how long its own steps take" in chunk
+        assert "code adds up" in chunk
 
 
 class TestTheAuthorIsAsked:

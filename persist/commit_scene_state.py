@@ -182,6 +182,31 @@ def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening,
     return clock
 
 
+def _unanchored_phase(time_block, prev_clock, cid):
+    """The part of the day a beat's `time` passed over to, when the story's
+    day has no anchor to have measured it from -- else "".
+
+    A PART OF THE DAY NOTHING COULD SOLVE IS STILL THE DAY'S. A skip to a
+    later part of the day is solved into a span where the clock is at hand
+    (`director_prose.solve_skip`); a story whose opening named no readable
+    time has no hour to solve from, and the beat has just said what part of
+    the day it is. So it is the time of day, declared: the cycle anchors on
+    it (`_advance_day_cycle`'s bootstrap), and no stretch is charged,
+    because none could be measured -- the stage that tried said so. An
+    anchored story never reaches this: its skip arrived as a span."""
+    if not isinstance(time_block, dict):
+        return ""
+    phase = normalize_time_of_day(time_block.get("until_phase"))
+    if not phase:
+        return ""
+    from story.scene import style_guide
+    from world.day_cycle import clock_anchor, label_phase
+    anchor, length = clock_anchor(prev_clock, style_guide(cid))
+    if anchor is not None or label_phase(phase, length) is None:
+        return ""
+    return phase
+
+
 def _anchor_current_room(sc, entity_id):
     """The anchor entity's current exterior room, tolerating positions
     keyed by entity id, display name, or alias (the same read tolerance
@@ -2521,7 +2546,8 @@ def prepare_scene_commit(ctx):
     # NOT A CLEAR: a standing world property is not deleted by a beat that
     # said nothing about it, which is the erasure branch above in its other
     # spelling.
-    _declared_time_of_day = normalize_time_of_day(diff.get("time"))
+    _declared_time_of_day = (normalize_time_of_day(diff.get("time"))
+                             or _unanchored_phase(diff.get("time"), prev_clock, cid))
     if _declared_time_of_day:
         sc["time_of_day"] = _declared_time_of_day
 

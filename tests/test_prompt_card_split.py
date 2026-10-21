@@ -49,7 +49,11 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 288   # +1 (2026-10-20): `prose_contract.encoder_interpret`,
+PART_COUNT = 290   # +2 (2026-10-20): `jev_questions.time` and
+                   # `encoder.time`, the stretch a beat's account passes
+                   # over ("that evening", "hours later"), owned again
+                   # by the spatial owner (`world.mechanics.beat_time_block`).
+                   # +1 (2026-10-20): `prose_contract.encoder_interpret`,
                    # the encoder's interpret-stage piece: only a change is an
                    # event, another mind's act is not one, and a fact the
                    # input sets about how things stand is `standing`

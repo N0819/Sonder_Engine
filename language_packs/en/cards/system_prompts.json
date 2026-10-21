@@ -224,7 +224,8 @@
         "comms_ops",
         "following_ops",
         "location",
-        "weather"
+        "weather",
+        "time"
       ],
       "chunks": {
         "rooms": {
@@ -413,6 +414,9 @@
     "weather": {
       "$text": "jev_questions/weather.txt"
     },
+    "time": {
+      "$text": "jev_questions/time.txt"
+    },
     "walk_stopped": {
       "$text": "jev_questions/walk_stopped.txt"
     },
@@ -597,6 +601,9 @@
     },
     "weather": {
       "$text": "encoder/weather.txt"
+    },
+    "time": {
+      "$text": "encoder/time.txt"
     }
   },
   "affect_appraisal": {

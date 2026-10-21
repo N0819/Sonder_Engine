@@ -4949,7 +4949,7 @@ SPECIALIST_CHANNELS = {
                          "artifact_ops", "destruction", "sensory_events"),
     "director_spatial": ("positions", "rooms", "remove_rooms",
                          "remove_adjacent", "stations", "poses", "comms_ops",
-                         "following_ops", "location", "weather"),
+                         "following_ops", "location", "weather", "time"),
 }
 
 # Read compatibility for retired Director categories. These remain valid

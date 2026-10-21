@@ -467,7 +467,7 @@ def delegated_channels() -> list[str]:
 
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
-    def test_the_engine_owns_thirty_seven(self):
+    def test_the_engine_owns_thirty_eight(self):
         """A channel owner that gains a channel moves this count, and the
         encoder's card and the decision model's questions have to move in the
         same commit (the causal Director's sheets had to until 2026-09-27,
@@ -495,8 +495,14 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         itself (the owner: everything is recorded onto rooms, and the
         Writers' Room reads the lorebooks). Its ledger held 87 facts across
         25 chats that no payload read, and its needs were 95 of the 102 on
-        record."""
-        assert len(delegated_channels()) == 37
+        record.
+        38 on 2026-10-20: `time` came back to the spatial owner, for the one
+        claim a sum of steps cannot carry -- the stretch a beat's account
+        PASSES OVER ("that evening", "hours later"). The steps stay engine
+        arithmetic; the encoder sees the beat whole, so the slice objection
+        that sent the channel away no longer holds (`encoder.time`,
+        `jev_questions.time`, `world.mechanics.beat_time_block`)."""
+        assert len(delegated_channels()) == 38
 
 # ---------------------------------------------------------------------------
 # (h) entities[].ubiquitous -- the flag that says a thing has no place at all

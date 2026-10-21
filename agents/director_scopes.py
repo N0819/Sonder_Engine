@@ -78,18 +78,27 @@ SPECIALISTS = {
     # the last word on them.
     "spatial": {
         "step_key": "director_spatial",
-        # No `time`: a hand receives the rows selected for it, never the
-        # beat, so the sum its sheet asked for ("a beat that holds several
-        # things in sequence spans all of them") was over terms it could not
-        # see. Measured 2026-09-20: in scope on 38 of 60 playerless beats and
-        # 50 of 118 live beats since 2026-09-15, written on 0 of either, and
-        # the author routed the category 0 times in 3,000 resolve variants,
-        # so no time work item ever reached it. The beat's span is now
-        # engine arithmetic over the author's per-row `seconds`
-        # (`world.mechanics.beat_time_from_spans`).
+        # `time` is THE TIME THE BEAT PASSES OVER, never the beat's own
+        # length. The channel left this hand on 2026-09-20 because a hand
+        # received the rows selected for it, never the beat, so the sum its
+        # sheet asked for ("a beat that holds several things in sequence
+        # spans all of them") was over terms it could not see; it declined
+        # on every measured beat (in scope on 38 of 60 playerless and 50 of
+        # 118 live beats, written on 0). The beat's own span stayed engine
+        # arithmetic over each event's `seconds`
+        # (`world.mechanics.beat_time_from_spans`) and still is. What came
+        # back on 2026-10-20 is the other claim a beat can make, which no
+        # sum of its steps can carry: that time passed BEYOND them -- a
+        # stretch skipped over, or a later part of the day moved to. The ONE
+        # encoder sees the beat whole, so the slice objection no longer
+        # holds, and the chunk asks for the skip alone (`encoder.time`, its
+        # decision question `jev_questions.time`). Measured: the probe story
+        # (2026-10-20, chat 1 turn 5) "That evening ..." moved the clock 44
+        # seconds and the lamp was lit at 15:50; the owner's chats 101, 102,
+        # 112 and 113 at idx 70 ("a few hours later") moved it on 0 of 4.
         "channels": ("positions", "rooms", "remove_rooms",
                      "remove_adjacent", "stations", "poses", "comms_ops",
-                     "following_ops", "location", "weather"),
+                     "following_ops", "location", "weather", "time"),
     },
 }
 

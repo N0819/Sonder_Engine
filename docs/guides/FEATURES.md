@@ -595,7 +595,10 @@ legitimately perceive, learn, remember or infer.
 - **A story clock** — In-story time in seconds with a readable label, so a beat
   covering three seconds and one covering three hours cost the world
   differently.
-- **Assert time** — Declare that hours pass and the world advances.
+- **Assert time** — Declare that hours pass, or that it is now evening, and the
+  world advances: the clock, the day, hunger, ticks, weather and the town's
+  own life all move by the stretch (the player-authority ladder decides who
+  may say so).
 - **Things that arrive later** — Journeys, expiries and delayed consequences
   fire on the turn they are due, identically on a reroll.
 - **News travels** — Word of a distant event reaches an audience after a delay
