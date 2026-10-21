@@ -107,14 +107,17 @@ class TestTheDeclarationTravelsOnAChannel:
     def test_a_line_heard_below_full_arrives_without_its_words(self, temp_db):
         """Same ladder as `_beat_for_presence`, for the reason recorded there:
         a line dropped only at "none" handed over the whole quote, so the
-        presence half-heard it and could quote it back verbatim."""
+        presence half-heard it and could quote it back verbatim. What arrives
+        is the pieces that carried, as the cast is given them (2026-10-21),
+        and never the sentence."""
+        line = "Leave the cellar door unbarred tonight."
         scene = _decl_scene({"Doc": "cellar"})
         ctx = _ctx(temp_db, {"sequence": [
-            {"type": "speech", "text": "Evening.", "visibility": "overt",
+            {"type": "speech", "text": line, "visibility": "overt",
              "volume": "shout"}]}, positions={"Doc": "cellar"})
         got = _filtered_player_declaration(ctx, scene, "Doc", "cellar")
-        assert got
-        assert "Evening." not in got
+        assert got.startswith("an indistinct remark")
+        assert line not in got
 
     def test_an_unplaced_presence_receives_nothing(self, temp_db):
         ctx, scene = self._speaking(temp_db)
@@ -261,18 +264,30 @@ def test_a_known_station_in_another_room_is_not_a_vantage_on_the_beat():
     station was KNOWN but elsewhere received the full omniscient prose --
     deterministically computed as out of earshot, then handed strictly MORE
     than an in-earshot presence. Chat 65's Vendor (fountain_plaza) received
-    eastern_market prose through exactly this path on t2147."""
+    eastern_market prose through exactly this path on t2147.
+
+    Since 2026-10-21 the prose reaches no presence at all, co-located or
+    not (the tavern probe, chat 2 turn 7: standing in the beat's room was
+    the gate, and the prose carried a street outside). A bystander in the
+    bar sees the act the beat's typed row records, by sight."""
     sc = {
         "rooms": {"bar": {"name": "bar", "adjacent": [{"to": "yard", "barrier": "wall"}]},
                   "yard": {"name": "yard", "adjacent": [{"to": "bar", "barrier": "wall"}]}},
-        "positions": {}, "entities": {}, "attire": {}, "overlays": {},
+        "positions": {"Mags": "bar"}, "entities": {}, "attire": {}, "overlays": {},
     }
     dr = {"resolved_event": "In the bar, coins change hands over the counter.",
-          "dialogue_log": []}
+          "dialogue_log": [],
+          "ledgers": [{"chrono_id": 1, "source_entity_id": "Mags",
+                       "event": "Mags pays for the round.",
+                       "observable": "counts coins out onto the counter",
+                       "targets": [], "visibility": "overt",
+                       "conceal_from": [], "categories": ["inventory"]}]}
     assert _beat_for_presence(dr, sc, "yard", "Doc", beat_room="bar") == ""
-    # The same station co-located with the beat keeps its bystander's view.
-    assert "coins change hands" in _beat_for_presence(
-        dr, sc, "bar", "Doc", beat_room="bar")
+    # The same station co-located with the beat keeps its bystander's view:
+    # the act it sees, never the prose.
+    beat = _beat_for_presence(dr, sc, "bar", "Doc", beat_room="bar")
+    assert "counts coins out onto the counter" in beat
+    assert "coins change hands" not in beat
 
 
 def test_an_unknown_beat_room_fails_closed():

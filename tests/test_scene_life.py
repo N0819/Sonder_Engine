@@ -429,14 +429,23 @@ def _open_scene():
     return sc
 
 
-def _run_scene_life(temp_db, monkeypatch, presences, positions):
+def _run_scene_life(temp_db, monkeypatch, presences, positions, dialogue=()):
     sc = _open_scene()
     sc["positions"] = positions
     ctx = _make_ctx(temp_db, presences=presences, scene=sc)
     ctx.director_resolve = {
         "resolved_event": "By the fire, the stranger empties a purse of "
                           "foreign coins onto the table.",
-        "dialogue_log": [],
+        "dialogue_log": list(dialogue),
+        # The beat as its typed rows record it: what a presence is shown is
+        # what its body perceived of these, never the prose above.
+        "ledgers": [{"chrono_id": 1,
+                     "source_entity_id": "persona:%s" % ctx.chat.persona_id,
+                     "event": "Kessa empties her purse.",
+                     "observable": "empties a purse of foreign coins onto "
+                                   "the table",
+                     "targets": [], "visibility": "overt",
+                     "conceal_from": [], "categories": ["inventory"]}],
     }
     captured = {}
     import agents.background as background
@@ -452,24 +461,34 @@ def _run_scene_life(temp_db, monkeypatch, presences, positions):
 
 def test_shared_prose_reaches_a_uniformly_co_present_roster(temp_db, monkeypatch):
     """The common case must keep working: everyone in the beat's room shares
-    the beat, and the prose is legitimately one context."""
+    the beat, and what they all perceived alike is legitimately one context
+    -- the act each of them sees, never the omniscient prose (2026-10-21)."""
     captured = _run_scene_life(
         temp_db, monkeypatch,
         _blurbed_presences({"The Barkeep": COMMON, "Thin Local": COMMON}),
         {"Kessa Vane": COMMON, "barkeep": COMMON, "local_1": COMMON})
     (payload,) = captured["scene_life"]
-    assert "foreign coins" in payload["beat"]["resolved_event"]
+    assert "empties a purse of foreign coins" in payload["beat"]["resolved_event"]
+    assert "By the fire" not in payload["beat"]["resolved_event"]
 
 
 def test_divergent_roster_withholds_the_omniscient_prose(temp_db, monkeypatch):
     """The batched call is ONE shared context. With the cellarman managed from
     the next room, admitting the beat prose hands HIS voicing what only the
     common room perceived -- the field beside the per-presence audience tags
-    nullified them. Layer 1 demands non-admission, not annotation."""
+    nullified them. Layer 1 demands non-admission, not annotation.
+
+    Since 2026-10-21 the prose is admitted to no roster, and what is
+    admitted is the beat each presence perceived, only where all of them
+    perceived it alike: a line muttered at the bar reaches the barkeep whole
+    and the cellarman, a doorway off, in pieces, so the beat is withheld."""
     captured = _run_scene_life(
         temp_db, monkeypatch,
         _blurbed_presences({"The Barkeep": COMMON, "The Cellarman": CELLAR}),
-        {"Kessa Vane": COMMON, "barkeep": COMMON, "cellarman": CELLAR})
+        {"Kessa Vane": COMMON, "barkeep": COMMON, "cellarman": CELLAR},
+        dialogue=[{"speaker": "Kessa Vane", "exact_quote": '"Another, and quick."',
+                   "volume": "mutter", "visibility": "overt",
+                   "conceal_from": [], "intended_target": None}])
     (payload,) = captured["scene_life"]
     rooms = {c["room"] for c in payload["cast"]}
     assert rooms == {COMMON, CELLAR}, (

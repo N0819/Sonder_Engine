@@ -90,10 +90,10 @@ from world.background_claims import (
 
 from story.scene import persona_of
 
-from .common import (_agent_json, _recognizes, _unknown_actor_label,
-                     character_room, character_scene_keys,
-                     communication_surface, observable_action_text,
-                     player_room_in, scene_figures)
+from .common import (_agent_json, _recognizes, _scrub_unknown_identities,
+                     _unknown_actor_label, character_room,
+                     character_scene_keys, communication_surface,
+                     observable_action_text, player_room_in, scene_figures)
 
 _log = logging.getLogger(__name__)
 
@@ -114,10 +114,406 @@ def _beat_scene(ctx, dr=None):
                       else (ctx.get("director_resolve") or {}))
 
 
-def _filtered_player_declaration(ctx, sc, name, here):
+# ---------------------------------------------------------------------------
+# WHAT A PRESENCE'S BODY PERCEIVED OF THE BEAT -- THE CAST'S OWN GATES
+# ---------------------------------------------------------------------------
+#
+# A background presence is a mind like any other: it may know what reached it
+# through a channel, and nothing else. So every line reaches it as a line
+# reaches the cast -- `composer.speech_percept` on the body-to-body relation
+# stamped from THIS presence's sound field for the beat (the crowd ledger, the
+# beat's own sounds, the turn index), with whom the line was spoken to
+# (`spoken_to`), whether it sees the speaker and how near they stand -- and
+# every act by sight, through `composer.act_percept` and the outcome pass's own
+# grader (`perception._sight_detail`). What it gets of a line is what the
+# percept holds: the words whole, the pieces that carried, or only that a
+# voice spoke; never the sentence it did not hear.
+#
+# Measured on the tavern probe (2026-10-20, chat 2): these readers built the
+# relation with no field of the beat at all (`spatial_rel_between`, sound=None,
+# which stamps a field from the scene alone -- no crowd), so a taproom's din
+# reached the cast and not the barman. Turn 6: the player asked Davey across
+# their table, at an ordinary level, about "the woman with the scar through
+# her eyebrow"; on the turn's own checkpoint scene the cast's gate gives the
+# barman, 7.2 paces off in a 68 dB din, `fragment` (`din_bystander`), and the
+# scene-only relation gave him the sentence -- which he quoted back. Turn 7:
+# with no line he could hear, his payload fell through to the beat's
+# omniscient prose, which carried "a customs galley puts in at Saltreach Quay
+# and two revenue men ... walk up Market Strand" -- an event out in the street
+# that no view in the taproom held -- and he spoke of the revenue men.
+
+def _ctx_get(ctx, key):
+    """One stage output off a pipeline context, or None -- whether the
+    context is the pipeline's own (a mapping) or a caller's plain
+    namespace."""
+    getter = getattr(ctx, "get", None)
+    if callable(getter):
+        try:
+            return getter(key)
+        except Exception:
+            return None
+    return getattr(ctx, key, None)
+
+
+def _beat_sound_records(ctx, sc, dr=None):
+    """The beat's own one-off sounds, as the outcome pass grades its
+    listeners against them (`normalize_sensory_event`, `desc` beside
+    `detail`): the resolve's diff where the beat has one, the interpret's
+    before it. The outcome pass adds three more of its own -- the charter's
+    noises, the beat's footfalls and its doors -- that are not read here.
+    None of them says it drowns a voice, which is what an event must say to
+    mask one (`spatial_sound_field._masks`); what they can add is a little
+    to the floor a far line is heard against (`UNBUILT_PERCEPTION.md`
+    § 1.221). The din a presence mostly stands in is the crowd ledger's and
+    the standing sources', which the field reads itself."""
+    from world.spatial import normalize_sensory_event
+    diff = (dr or {}).get("state_diff")
+    rows = diff.get("sensory_events") if isinstance(diff, dict) else None
+    if not rows:
+        interp = _ctx_get(ctx, "director_interpret") or {}
+        onset = interp.get("state_assertions")
+        rows = onset.get("sensory_events") if isinstance(onset, dict) else None
+    out = []
+    for event in rows if isinstance(rows, list) else ():
+        if not isinstance(event, dict):
+            continue
+        try:
+            record = normalize_sensory_event(event, rooms=(sc or {}).get("rooms") or {})
+        except Exception:
+            record = None
+        if record and record.get("detail"):
+            out.append(dict(record, desc=record["detail"]))
+    return out
+
+
+def _presence_field(ctx, sc, name, here, dr=None):
+    """This presence's sound field for the beat: the one every cast view
+    grades its lines on (`perception._sound_field_for` -- the crowd ledger,
+    the beat's sounds, the turn index), built for this body. None where its
+    room carries no geometry, and the relation is then the edge model's,
+    exactly as it is for the cast. `dr` is the beat the sounds are read
+    from: given, that one (the provisional beat before the resolve); else
+    the resolve's own output where this turn has one."""
+    if ctx is None or not sc or not here:
+        return None
+    if dr is None:
+        dr = _ctx_get(ctx, "director_resolve") or None
+    try:
+        from agents.perception import _sound_field_for
+        return _sound_field_for(ctx, sc, name, here,
+                                events=_beat_sound_records(ctx, sc, dr) or None)
+    except Exception:
+        return None
+
+
+def _presence_line(sc, name, here, entry, *, addressed, field=None,
+                   label=None):
+    """One spoken line as this presence's body caught it: the cast's own
+    percept of it (`composer.speech_percept`), or None where nothing of it
+    reached. The relation is body to body from where the presence stands,
+    stamped from its field for the beat; a live channel between the two
+    rooms is consulted as the cast's views consult it; `addressed` is
+    `spoken_to`'s answer for this listener (the din spares no one beyond
+    conversational reach, the ear rung reaches its addressee alone). A
+    speaker it cannot see and does not know is a voice it cannot place,
+    never a description of someone it did not see."""
+    speaker = str(entry.get("speaker") or "").strip()
+    here = str(here or "").strip()
+    if not sc or not here or not speaker:
+        return None
+    sp_room = str(entry.get("speaker_room") or "").strip() or _room_of(sc, speaker)
+    if not sp_room:
+        return None
+    from world.spatial import measured_proximity_rel, visual_level_between
+    from agents import composer
+    from agents.perception import (_in_plain_view, _unseen_voice_label,
+                                   _with_comm_channel)
+    rel = spatial_rel_between(sc, name, speaker, observer_room=here,
+                              target_room=sp_room, sound=field)
+    rel = _with_comm_channel(sc, rel, speaker=speaker, observer=name,
+                             observer_room=here, speaker_room=sp_room)
+    try:
+        seen = visual_level_between(sc, name, speaker) != "none"
+    except Exception:
+        seen = False
+    can_see = _in_plain_view(rel, seen)
+    shown = label(speaker) if label else speaker
+    if not can_see and shown != speaker:
+        shown = _unseen_voice_label()
+    return composer.speech_percept(
+        entry, rel, name, display=shown, can_see=can_see,
+        proximity=measured_proximity_rel(sc, name, speaker),
+        addressed=addressed)
+
+
+def _caught(percept):
+    """`full` | `fragment` | `voice` | `none`: how much of a line a
+    presence's percept of it holds. A body seen speaking whose words did not
+    carry, and a voice heard without words, both hold the fact that someone
+    spoke and nothing of what."""
+    if percept is None:
+        return "none"
+    if percept.fidelity == "full":
+        return "full"
+    if percept.fidelity == "fragment" and \
+            (percept.data or {}).get("level") == "fragment":
+        return "fragment"
+    return "voice"
+
+
+def _presence_act(sc, name, here, actor, event, surface, *, label=None,
+                  actor_room=None):
+    """One act as this presence's body saw it: the cast's own act percept
+    (`composer.act_percept` -- concealment, the rear arc, the sight grade
+    `perception._sight_detail` gives it), or None. A happening no body
+    performs is placed by its targets (`perception._sourceless_event_rel`)
+    and seen only where the outcome pass would show it to a body standing
+    here; one its targets place nowhere is nobody's to see. `actor_room` is
+    where the caller has already placed the actor (the player's room, read
+    alias-tolerantly), else the scene says."""
+    actor = str(actor or "").strip()
+    here = str(here or "").strip()
+    surface = str(surface or "").strip()
+    if not sc or not here or not actor or not surface:
+        return None
+    from world.spatial import visual_level_between
+    from agents import composer
+    from agents.perception import (_in_plain_view, _sight_detail,
+                                   _source_is_a_body, _sourceless_event_rel,
+                                   _thing_label)
+    a_room = str(actor_room or "").strip() or _room_of(sc, actor)
+    sourceless = not a_room
+    if sourceless:
+        rel = _sourceless_event_rel(sc, name, (event or {}).get("targets"), here)
+        seen = False
+    else:
+        rel = spatial_rel_between(sc, name, actor, observer_room=here,
+                                  target_room=a_room)
+        try:
+            seen = visual_level_between(sc, name, actor) != "none"
+        except Exception:
+            seen = False
+    if rel is None:
+        return None
+    if sourceless:
+        display = ""
+    elif not _source_is_a_body(sc, actor):
+        display = _thing_label(sc, actor)
+    else:
+        display = label(actor) if label else actor
+    return composer.act_percept(
+        sc, event or {}, name, actor, rel, display=display,
+        can_see=_in_plain_view(rel, seen),
+        sight=_sight_detail(sc, name, actor, rel), surface=surface)
+
+
+def _seen_act(percept, surface, *, labelled=True):
+    """`(grade, text)` of an act percept for a presence's payload: `full`
+    with the act's outward surface, `shapes` with only that a body moved, or
+    ("", "") -- an act behind it is a movement it heard and nothing of what
+    it was, and an act it cannot see is nothing; this payload carries
+    neither. `labelled` puts the doer's label in front, as the beat names
+    who did each thing; the player's own declaration is one body's beat and
+    leaves it off."""
+    if percept is None or percept.channel != "sight":
+        return "", ""
+    who = str(percept.source_label or "").strip() if labelled else ""
+    if percept.fidelity == "shapes":
+        text = "moves, too little of it to make out"
+        return "shapes", ("%s %s" % (who, text) if who else
+                          ("a body " + text if labelled else text))
+    text = str((percept.data or {}).get("surface") or surface or "").strip()
+    return "full", ("%s %s" % (who, text) if who else text)
+
+
+def _presence_identity_floor(ctx, *presence_names):
+    """`scrub(text) -> text`: the identity floor every act surface passes
+    at admission to a cast view (`perception._composer_scrub_surface`), for
+    these presences: a name of the player's or a cast member's that they
+    have no `known` row for becomes the label they would call that body by
+    (`_presence_label_fn`), outside quotation. Several presences sharing one
+    payload share the intersection of what they recognise. An act surface is
+    the encoder's outward form, and it names the bodies it involves -- on
+    the tavern probe (chat 2 turn 7) "angles his shoulder between Corwin and
+    Tamsin" -- which a barman who has met neither sees, and cannot name."""
+    if ctx is None:
+        return lambda text: text
+    recognized = _presence_recognizes(ctx, *presence_names)
+    label = _presence_label_fn(ctx, *presence_names)
+    own = {str(n or "").strip().casefold() for n in presence_names}
+    bodies = []
+    for row in getattr(ctx, "cast", None) or ():
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
+            continue
+        bodies.append((character_name(sheet), character_appearance(sheet),
+                       character_scene_keys(sheet)[1:]))
+    try:
+        pers = persona_of(ctx.chat)
+        p_name = persona_name(pers)
+    except Exception:
+        pers, p_name = None, None
+    if p_name:
+        bodies.append((p_name, persona_appearance(pers),
+                       list((pers.get("identity") or {}).get("aliases") or [])))
+    unknown, labels = [], {}
+    for body, appearance, aliases in bodies:
+        if not body or body.casefold() in own or _recognizes(body, recognized):
+            continue
+        unknown.append({"name": body, "appearance": appearance,
+                        "aliases": list(aliases or [])})
+        labels[body] = label(body)
+    allowed = [*presence_names, *recognized]
+
+    def scrub(text):
+        if not text or not unknown:
+            return text
+        out, _leaked = _scrub_unknown_identities(
+            text, allowed_forms=allowed, unknown_sources=unknown, labels=labels)
+        return out
+    return scrub
+
+
+def presence_hearing(ctx, sc, name, here, dr=None, *, field=None):
+    """`hears(entry, addressed=None) -> "full" | "fragment" | "voice" |
+    "none"`: how much of one dialogue line this presence's body caught, by
+    the cast's own gate (`_presence_line`), for the readers that ask only
+    whether the words reached it -- an address it must answer
+    (`_character_address_of`, `_room_address_of`, and the debt the commit
+    writes from them). `addressed` overrides whom the line was spoken to
+    where the caller has matched the line to this presence itself; left
+    None, the line's own addressee field decides (`spoken_to`). The field is
+    built for the first line that needs it, so a ledger of presences no
+    line touches costs nothing."""
+    held = {}
+
+    def hears(entry, addressed=None):
+        if not isinstance(entry, dict):
+            return "none"
+        if "field" not in held:
+            held["field"] = field if field is not None \
+                else _presence_field(ctx, sc, name, here, dr)
+        if addressed is None:
+            target = str(entry.get("intended_target") or "").strip()
+            addressed = spoken_to(
+                bool(target) and _background_name_named_exactly(name, target),
+                bool(target))
+        return _caught(_presence_line(sc, name, here, entry,
+                                      addressed=addressed,
+                                      field=held["field"]))
+    return hears
+
+
+def _identity_names(ctx):
+    """`{identity key: name}` for the beat's authored minds -- the player,
+    every extra player and every cast member -- the keys a causal ledger
+    row is filed under (`source_entity_id`)."""
+    out = {}
+    try:
+        p_name = persona_name(persona_of(ctx.chat))
+    except Exception:
+        p_name = None
+    if p_name:
+        out["persona:primary"] = p_name
+        pid = getattr(ctx.chat, "persona_id", None) if ctx.chat is not None else None
+        if pid is not None:
+            out[f"persona:{pid}"] = p_name
+    for extra in getattr(ctx, "extra_players", None) or ():
+        if isinstance(extra, dict) and extra.get("persona_id") is not None:
+            out[f"persona:{extra['persona_id']}"] = str(extra.get("name") or "")
+    for row in getattr(ctx, "cast", None) or ():
+        try:
+            sheet = normalized_character_of_row(row)
+            out[f"character:{int(row['id'])}"] = character_name(sheet)
+        except Exception:
+            continue
+    return out
+
+
+def _beat_stream(ctx, dr):
+    """The beat as typed events in the order they happened:
+    `[("line", entry) | ("act", actor, event, surface)]`.
+
+    A provisional beat built before the resolve carries its own
+    (`_provisional_beat`'s `stream`). A resolved one is read off its causal
+    ledger: a spoken row is the dialogue-log line it carried (matched by
+    speaker and words -- the log is the authority on what was said, so a
+    row whose line it does not hold gives nothing), any other row with an
+    outward surface is an act by the body its key names. A line the ledger
+    cites nowhere -- the player's own, said at interpret, or one the
+    Director's log holds alone -- keeps its place in the log: it goes before
+    the first cited line that follows it there, and the rest after the
+    ledger. A beat with no ledger is its dialogue log alone: the prose
+    beside it is the omniscient account, never what anybody perceived."""
+    stream = dr.get("stream") if isinstance(dr, dict) else None
+    if isinstance(stream, list):
+        return stream
+    dialogue = [d for d in ((dr or {}).get("dialogue_log") or ())
+                if isinstance(d, dict) and str(d.get("exact_quote") or "").strip()]
+    rows = (dr or {}).get("ledgers") or (dr or {}).get("causal_ledger") or []
+    names = _identity_names(ctx) if ctx is not None else {}
+    used, out = set(), []
+
+    def _words(text):
+        return " ".join(re.findall(r"\w+", str(text or "").casefold()))
+
+    def _lines_until(k):
+        for i in range(k):
+            if i not in used:
+                used.add(i)
+                out.append(("line", dialogue[i]))
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("source_entity_id") or "").strip()
+        actor = names.get(key) or key
+        if "speech" in (row.get("categories") or ()):
+            said = _words(row.get("event"))
+            match = next((i for i, d in enumerate(dialogue) if i not in used
+                          and _words(_quote_body(d.get("exact_quote"))) == said
+                          and str(d.get("speaker") or "").strip().casefold()
+                          == str(actor).casefold()), None)
+            if match is not None:
+                _lines_until(match)
+                used.add(match)
+                out.append(("line", dialogue[match]))
+            continue
+        surface = observable_action_text(row)
+        if surface:
+            out.append(("act", actor, dict(
+                row, event_id=str(row.get("event_id") or "ledger:%s"
+                                  % row.get("chrono_id"))), surface))
+    _lines_until(len(dialogue))
+    return out
+
+
+def _filtered_player_declaration(ctx, sc, name, here, field=None):
     """The player's beat as THIS background presence may legitimately receive
     it: overt sequence elements only -- never a concealed line, never the
-    private thought -- and only across a channel that reaches `here`.
+    private thought -- and only what its own body caught of them
+    (`_player_declaration_caught`), joined."""
+    return " ".join(text for _kind, _grade, text in _player_declaration_caught(
+        ctx, sc, name, here, field=field) if text).strip()
+
+
+def player_words_caught(ctx, sc, name, here, field=None):
+    """`(heard_whole, text)` for the commit's reply debt: whether a line of
+    the player's beat reached this presence in FULL, and the presence's own
+    `player_declaration` -- what of the beat its body caught. An unstructured
+    declaration counts as heard where it is delivered at all (standing in
+    the room it happened in, the one channel it can be graded by)."""
+    parts = _player_declaration_caught(ctx, sc, name, here, field=field)
+    whole = any(kind in ("speech", "communication", "raw") and grade == "full"
+                for kind, grade, _text in parts)
+    return whole, " ".join(text for _k, _g, text in parts if text).strip()
+
+
+def _player_declaration_caught(ctx, sc, name, here, field=None):
+    """`[(kind, grade, text)]`: each overt element of the player's beat as
+    THIS presence's body caught it -- `kind` the element's type, `grade`
+    what of it arrived (`full` | `fragment` | `voice` for a line, `full` |
+    `shapes` for an act), `text` what the payload says of it.
 
     background_react used to pass ctx.input raw, leaking whispered or
     silently-sent content (and any private thought the player typed) straight
@@ -136,159 +532,221 @@ def _filtered_player_declaration(ctx, sc, name, here):
     the per-presence path, a presence `_beat_for_presence` had just failed
     closed on three separate ways.
 
-    Same ladder as `_beat_for_presence`, for the same reason: only a FULL
-    hearing delivers the words, anything audible below that is an indistinct
-    exchange, and an act is delivered only to a presence standing in the room
-    it happened in -- as its outward surface, since a bystander sees what a
-    body does and never what it meant by it. Unknown rooms deliver nothing.
+    THE CAST'S OWN GATES since 2026-10-21 (see the block above
+    `_beat_sound_records`). A line is the cast's percept of it for this
+    body (`_presence_line`): only a FULL hearing delivers the words, a
+    fragment delivers the pieces that carried ("an indistinct remark:
+    ...through... eyebrow..."), a voice without words is an indistinct
+    remark. An act is the cast's act percept (`_presence_act`): its outward
+    surface where the presence sees it -- a bystander sees what a body does
+    and never what it meant by it -- that a body moved where it sees only a
+    shape, nothing where it cannot see it. Unknown rooms deliver nothing.
+    The relation was built with no field of the beat and the act was
+    delivered to anyone standing in the room; measured on the tavern probe
+    (chat 2 turn 6), the barman was handed a question asked across a table
+    he stood 7.2 paces from in a 68 dB din, which the cast's gate gives him
+    in pieces.
     """
     here = str(here or "").strip()
     p_room = str(_player_room(ctx, sc) or "").strip()
     if not here or not p_room:
-        return ""
+        return []
     p_name = persona_name(persona_of(ctx.chat))
     # What is OVERT is decided once, in `overt_declaration`, because the
     # deterministic gate that picks who reacts reads the same answer; this
     # function adds only the channel to each presence.
     elements, raw = overt_declaration(ctx)
+    if not elements:
+        # An unstructured declaration has no volume to grade it by, so the
+        # only channel that can still be established is standing where it
+        # happened.
+        return [("raw", "full", raw)] if raw and here == p_room else []
+    held = {}
 
-    def _hearing(volume, element=None):
-        """This presence's hearing of the player, or "none". An unnameable
-        speaker has no body to build a relation from, so co-location is all
-        that can be established and anything else fails closed. A line
-        breathed into an ear is this presence's only where the element
-        names it by its whole name (`_background_name_named_exactly`, the
-        precise grade -- never a shared word; `EAR_VOLUME`)."""
-        refs = [ref for ref in ((element or {}).get("targets") or ())
-                if str(ref or "").strip()]
+    def _field():
+        if "field" not in held:
+            held["field"] = field if field is not None \
+                else _presence_field(ctx, sc, name, here)
+        return held["field"]
+
+    def _line(e, words):
+        """How much of one of the player's lines reached this presence. An
+        unnameable speaker has no body to build a relation from, so
+        co-location is all that can be established and anything else fails
+        closed. A line breathed into an ear is this presence's only where
+        the element names it by its whole name (`_background_name_named_
+        exactly`, the precise grade -- never a shared word; `EAR_VOLUME`)."""
+        refs = [ref for ref in (e.get("targets") or ()) if str(ref or "").strip()]
         aimed = any(_background_name_named_exactly(name, ref) for ref in refs)
+        volume = e.get("volume") or "normal"
         if not p_name:
-            if into_another_ear(volume or "normal", aimed):
-                return "none"
-            return "full" if here == p_room else "none"
-        return hear_level(
-            spatial_rel_between(sc, name, p_name,
-                                observer_room=here, target_room=p_room),
-            volume or "normal", addressed=spoken_to(aimed, bool(refs)))
+            if into_another_ear(volume, aimed):
+                return "none", None
+            return ("full" if here == p_room else "none"), None
+        percept = _presence_line(
+            sc, name, here,
+            {"speaker": p_name, "speaker_room": p_room,
+             "exact_quote": '"%s"' % words, "volume": volume,
+             "level_db": e.get("level_db"), "tone": e.get("tone") or "",
+             "vocal_affect": e.get("vocal_affect") or "",
+             "visibility": e.get("visibility") or "overt",
+             "conceal_from": list(e.get("conceal_from") or []),
+             "intended_target": next((str(r) for r in refs), None)},
+            addressed=spoken_to(aimed, bool(refs)), field=_field())
+        return _caught(percept), percept
 
-    if elements:
-        parts = []
-        for e in elements:
-            if e.get("type") == "speech" and e.get("text"):
-                level = _hearing(e.get("volume"), e)
-                if level == "none":
-                    continue
-                if level != "full":
-                    parts.append("an indistinct remark")
-                    continue
-                parts.append('"%s"' % e["text"])
-            elif e.get("type") == "communication":
-                level = _hearing(e.get("volume"), e)
-                if level == "none":
-                    continue
-                parts.append(
-                    communication_surface(e) if level == "full"
-                    else "an indistinct remark")
-            elif e.get("type") == "action":
-                if here != p_room:
-                    continue
-                surface = observable_action_text(e)
-                if surface:
-                    parts.append(str(surface))
-        return " ".join(parts).strip()
-    # An unstructured declaration has no volume to grade it by, so the only
-    # channel that can still be established is standing where it happened.
-    return raw if here == p_room else ""
+    scrub = _presence_identity_floor(ctx, name)
+    parts = []
+    for e in elements:
+        kind = e.get("type")
+        # CONCEALED FROM THIS BODY BY NAME, whatever its `visibility` says
+        # (register X3): models half-comply, and every other reader in this
+        # file fails closed on `conceal_from` alone.
+        if any(_background_name_mentioned(name, str(c))
+               for c in (e.get("conceal_from") or [])):
+            continue
+        if kind == "speech" and e.get("text"):
+            grade, percept = _line(e, e["text"])
+            if grade == "none":
+                continue
+            if grade == "full":
+                parts.append((kind, grade, '"%s"' % e["text"]))
+            elif grade == "fragment":
+                parts.append((kind, grade, "an indistinct remark: %s"
+                              % (percept.data or {}).get("fragment")))
+            else:
+                parts.append((kind, grade, "an indistinct remark"))
+        elif kind == "communication":
+            surface = communication_surface(e)
+            if not surface:
+                continue
+            grade, _percept = _line(e, surface)
+            if grade == "none":
+                continue
+            parts.append((kind, grade, surface if grade == "full"
+                          else "an indistinct remark"))
+        elif kind == "action":
+            surface = scrub(str(observable_action_text(e) or "").strip())
+            if not surface:
+                continue
+            if not p_name:
+                if here == p_room:
+                    parts.append((kind, "full", surface))
+                continue
+            percept = _presence_act(sc, name, here, p_name, e, surface,
+                                    actor_room=p_room)
+            grade, text = _seen_act(percept, surface, labelled=False)
+            if grade:
+                parts.append((kind, grade, text))
+    return parts
 
 
 def _beat_for_presence(dr, sc, station_room, name, beat_room=None,
-                       label=None):
-    """What the presence objectively perceives of the beat. Prefer the audible
-    dialogue at its station room over the raw resolved_event: resolved_event is
-    authored from the omniscient objective frame and can narrate content a
-    bystander in one room never sensed. Concealed lines (globally, or concealed
-    FROM this presence) are dropped, and any concealed quote body that bled into
-    the objective prose is redacted as a backstop.
+                       label=None, *, ctx=None, field=None, scrub=None):
+    """What the presence's body perceived of the beat, in the order it
+    happened (`_beat_stream`): each line as it caught it, each act as it saw
+    it. Concealed lines (globally, or concealed FROM this presence) are never
+    delivered, at any grade.
 
-    ``beat_room`` is the room the beat resolved in (the player's room). The
-    prose fallback at the bottom is only a bystander's view when the bystander
-    is STANDING THERE: without the gate, a presence whose station was known but
-    elsewhere received the omniscient frame precisely when the dialogue filter
-    above had just delivered them nothing -- deterministically computed as out
-    of earshot, then handed strictly more than an in-earshot presence."""
-    resolved = str(dr.get("resolved_event") or "")
-    audible = []
-    for d in (dr.get("dialogue_log") or []):
-        quote = str(d.get("exact_quote") or "").strip()
-        if not quote:
+    THE OMNISCIENT PROSE IS NEVER DELIVERED. `resolved_event` is authored
+    from the objective frame and narrates what no bystander in one room
+    sensed; it was this presence's view whenever no line reached it, gated
+    only on standing in the room the beat resolved in -- so on the tavern
+    probe (chat 2 turn 7) the barman, hearing nothing of two whispers, was
+    handed the whole resolve, a customs galley at the quay and two revenue
+    men walking up the street outside among it, and spoke of them. Acts
+    now come from the beat's typed rows through sight (`_presence_act`),
+    and a happening no body performs reaches it only where the cast's gate
+    would show it to a body standing where it stands. `beat_room` is
+    accepted and no longer read: the vantage is the presence's own room.
+
+    With `ctx` the lines are the cast's own percepts for this body
+    (`_presence_line`, on its field for the beat); without one -- a caller
+    holding no turn -- they are graded on the relation alone, as they were.
+    A line caught in pieces gives the pieces; a voice without words gives
+    that someone spoke. An act's surface passes the identity floor
+    (`scrub`, by default this presence's own -- `_presence_identity_floor`)
+    before it is admitted, as a cast view's does."""
+    out = []
+    own = str(name or "").strip().casefold()
+    if scrub is None:
+        scrub = _presence_identity_floor(ctx, name)
+    for item in _beat_stream(ctx, dr):
+        if item[0] == "line":
+            d = item[1]
+            quote = str(d.get("exact_quote") or "").strip()
+            if not quote:
+                continue
+            if str(d.get("visibility") or "").casefold() == "concealed" or any(
+                    _background_name_mentioned(name, str(c))
+                    for c in (d.get("conceal_from") or [])):
+                continue
+            speaker = str(d.get("speaker") or "").strip()
+            if speaker.casefold() == own:
+                continue                # its own words are its own record
+            # X1: the hearing check used to run only `if station_room and sc`,
+            # so a presence tracked from a dialogue_log speaker alone -- which
+            # has no station room -- fell straight through it and received
+            # every audible quote of the beat verbatim, then spoke a reply that
+            # became public canon. Co-presence is not the default; not knowing
+            # where a presence stands is a reason to deliver nothing, and the
+            # scene-manager path already fails closed on exactly this
+            # uncertainty.
+            if not sc or not station_room:
+                continue
+            sp_room = _room_of(sc, speaker)
+            if not sp_room:
+                continue
+            target = str(d.get("intended_target") or "").strip()
+            addressed = spoken_to(
+                bool(target) and _background_name_named_exactly(name, target),
+                bool(target))
+            shown = label(speaker) if label else speaker
+            if ctx is not None:
+                percept = _presence_line(sc, name, station_room, d,
+                                         addressed=addressed, field=field,
+                                         label=label)
+                grade = _caught(percept)
+                if percept is not None and percept.source_label:
+                    shown = percept.source_label
+            else:
+                # Body-to-body builder, so an enclosure around the speaker
+                # muffles the line for a background ear exactly as it does
+                # for the cast (L2).
+                percept = None
+                grade = hear_level(
+                    spatial_rel_between(sc, name, speaker,
+                                        observer_room=station_room,
+                                        target_room=sp_room),
+                    d.get("volume") or "normal", addressed=addressed)
+                grade = "voice" if grade not in ("full", "none") else grade
+            if grade == "none":
+                continue
+            if grade == "full":
+                out.append("%s: %s" % (shown, quote) if shown else quote)
+                continue
+            # X2: a line dropped only at "none" meant `fragment` handed over
+            # the whole exact_quote -- the presence "half-heard" it and could
+            # then quote it back verbatim. What carried is the pieces, and
+            # only those (`composer.speech_percept`'s fragment).
+            pieces = (percept.data or {}).get("fragment") \
+                if grade == "fragment" and percept is not None else ""
+            out.append("an indistinct exchange%s%s" % (
+                f" from {shown}" if shown else "",
+                f": {pieces}" if pieces else ""))
             continue
-        concealed = (
-            str(d.get("visibility") or "").casefold() == "concealed"
-            or any(_background_name_mentioned(name, str(c))
-                   for c in (d.get("conceal_from") or []))
-        )
-        if concealed:
-            body = _quote_body(quote)
-            if body:
-                resolved = resolved.replace(body, "")
-            continue
-        speaker = str(d.get("speaker") or "").strip()
-        # X1: the hearing check used to run only `if station_room and sc`, so a
-        # presence tracked from a dialogue_log speaker alone -- which has no
-        # station room -- fell straight through it and received every audible
-        # quote of the beat verbatim, then spoke a reply that became public
-        # canon. Co-presence is not the default; not knowing where a presence
-        # stands is a reason to deliver nothing, and the scene-manager path
-        # already fails closed on exactly this uncertainty.
+        _kind, actor, event, surface = item
         if not sc or not station_room:
             continue
-        sp_room = _room_of(sc, speaker)
-        if not sp_room:
+        if str(actor or "").strip().casefold() == own:
             continue
-        # Body-to-body builder, so an enclosure around the speaker muffles the
-        # line for a background ear exactly as it does for the cast (L2).
-        level = hear_level(
-            spatial_rel_between(sc, name, speaker,
-                                observer_room=station_room,
-                                target_room=sp_room),
-            d.get("volume") or "normal",
-            addressed=spoken_to(
-                bool(str(d.get("intended_target") or "").strip())
-                and _background_name_named_exactly(name, d.get("intended_target")),
-                bool(str(d.get("intended_target") or "").strip())),
-        )
-        if level == "none":
-            continue
-        if level != "full":
-            # X2: a line dropped only at "none" meant `fragment` handed over the
-            # whole exact_quote -- the presence "half-heard" it and could then
-            # quote it back verbatim. commit._character_address_of already
-            # requires "full" to count a line as addressed; these two paths
-            # reading the same level differently is the bug.
-            audible.append(
-                "an indistinct exchange%s"
-                % (f" from {label(speaker) if label else speaker}"
-                   if speaker else ""))
-            continue
-        audible.append("%s: %s" % (label(speaker) if label else speaker,
-                                   quote) if speaker else quote)
-    if audible:
-        return " ".join(audible).strip()
-    # No audible line: fall back to the beat's prose ONLY for a presence whose
-    # station is known. Without a station there is no vantage from which any of
-    # it was perceived, and resolved_event is the omniscient frame -- returning
-    # it here would hand an unplaced presence MORE than the dialogue gate above
-    # just withheld.
-    if not station_room:
-        return ""
-    # And only for a presence standing in the room the beat resolved in. A
-    # known station in ANOTHER room is a vantage on that other room, not on
-    # this beat; chat 65's Vendor (fountain_plaza) received eastern_market
-    # prose through exactly this fall-through. An unknown beat_room fails
-    # closed for the same reason an unknown station does.
-    if str(station_room) != str(beat_room or ""):
-        return ""
-    return re.sub(r"\s{2,}", " ", resolved).strip()
+        surface = scrub(surface)
+        percept = _presence_act(sc, name, station_room, actor, event, surface,
+                                label=label)
+        grade, text = _seen_act(percept, surface)
+        if grade:
+            out.append(text)
+    return re.sub(r"\s{2,}", " ", " ".join(out)).strip()
 
 
 def _result(selected, reactions, mode="background_react", agent_calls=None,
@@ -1224,7 +1682,7 @@ def _demanded_presences(ctx, dr, managed, ceiling):
     return [tup for _key, tup, _loose, _why in ranked[:slots]]
 
 
-def _audience_map(sc, entry, managed, level):
+def _audience_map(sc, entry, managed, level, ears=None):
     """Deterministic per-presence perception annotation (§3.11 layer 2).
 
     Returns None when the event must not be ADMITTED to the manager's context
@@ -1232,6 +1690,12 @@ def _audience_map(sc, entry, managed, level):
     line concealed from every managed presence, or -- at `ambient` -- any line
     directed at one managed presence, which is divergent content by definition
     and is left to the per-presence path instead.
+
+    `ears` maps each managed name to its own ear for the beat
+    (`presence_hearing`, the cast's gate on its sound field); a presence
+    without one is graded on the relation alone, as before. A voice whose
+    words did not carry is `none` here: the tag says what of the WORDS each
+    presence has.
     """
     if str(entry.get("visibility") or "").casefold() == "concealed":
         return None
@@ -1246,14 +1710,19 @@ def _audience_map(sc, entry, managed, level):
             audience[name] = "none"
             continue
         if sp_room and room:
-            lvl = hear_level(
-                spatial_rel_between(sc, name, speaker,
-                                    observer_room=room, target_room=sp_room),
-                volume, addressed=spoken_to(
-                    bool(str(entry.get("intended_target") or "").strip())
-                    and _background_name_named_exactly(
-                        name, entry.get("intended_target")),
-                    bool(str(entry.get("intended_target") or "").strip())))
+            hears = (ears or {}).get(name)
+            if hears is not None:
+                lvl = hears(entry)
+                lvl = lvl if lvl in ("full", "fragment") else "none"
+            else:
+                lvl = hear_level(
+                    spatial_rel_between(sc, name, speaker,
+                                        observer_room=room, target_room=sp_room),
+                    volume, addressed=spoken_to(
+                        bool(str(entry.get("intended_target") or "").strip())
+                        and _background_name_named_exactly(
+                            name, entry.get("intended_target")),
+                        bool(str(entry.get("intended_target") or "").strip())))
         else:
             # FAIL CLOSED. This used to be `"full"` with a comment claiming it
             # matched `_beat_for_presence` -- which does the opposite: X1
@@ -1272,18 +1741,25 @@ def _audience_map(sc, entry, managed, level):
     return audience
 
 
-def _manager_events(ctx, dr, sc, managed, level):
+def _manager_events(ctx, dr, sc, managed, level, ears=None):
     """Admitted events with per-presence audience tags. The hard filter runs
-    here, before the model sees anything."""
+    here, before the model sees anything. A line NO managed presence heard
+    whole is carried as the pieces that reached them
+    (`common._muffled_fragment`, the cast's own), never as its words: the
+    tags beside a quote are an annotation, and one context read by every
+    voice in it holds whatever is admitted to it."""
+    from .common import _muffled_fragment
     events = []
     label = _presence_label_fn(ctx, *[n for _t, n, _r, _rm in managed])
     for d in (dr.get("dialogue_log") or []):
         quote = str(d.get("exact_quote") or "").strip()
         if not quote:
             continue
-        aud = _audience_map(sc, d, managed, level)
+        aud = _audience_map(sc, d, managed, level, ears=ears)
         if aud is None:
             continue
+        if "full" not in aud.values():
+            quote = _muffled_fragment(_quote_body(quote))
         events.append({
             "speaker": label(str(d.get("speaker") or "").strip()),
             "quote": quote,
@@ -1312,7 +1788,13 @@ def scene_life(ctx, nonce, level, cfg):
 
     sc = _beat_scene(ctx, dr)
     names = [n for _, n, _r, _rm in managed]
-    events = _manager_events(ctx, dr, sc, managed, level)
+    # EACH MANAGED PRESENCE'S OWN EARS FOR THE BEAT (the cast's gate on its
+    # sound field), built once and read by every field below.
+    fields = {n: _presence_field(ctx, sc, n, room, dr)
+              for _t, n, _r, room in managed}
+    ears = {n: presence_hearing(ctx, sc, n, room, dr, field=fields[n])
+            for _t, n, _r, room in managed}
+    events = _manager_events(ctx, dr, sc, managed, level, ears=ears)
 
     place = _place_block(ctx, p_room)
     minted = _mint_blurbs(ctx, managed)
@@ -1341,14 +1823,26 @@ def scene_life(ctx, nonce, level, cfg):
     # non-admission, not annotation. This is the field that nullified
     # _audience_map's work: the tags said "none" while the prose beside them
     # said everything.
-    _prose_shared = bool(p_room) and all(
-        room == p_room for _, _n, _r, room in managed)
-    _declarations = {_filtered_player_declaration(ctx, sc, n, room)
+    #
+    # And never the omniscient prose itself (2026-10-21): what is admitted is
+    # each presence's OWN perceived beat (`_beat_for_presence`, the cast's
+    # gates), and only where every managed presence perceived it alike.
+    # Standing in the room the beat resolved in made the prose uniformly
+    # perceivable to nobody -- it narrates what happened in the street
+    # outside and what was done behind them (the tavern probe, chat 2 turn
+    # 7, on the per-presence path).
+    _label = _presence_label_fn(ctx, *names)
+    _scrub = _presence_identity_floor(ctx, *names)
+    _beats = {_beat_for_presence(dr, sc, room, n, label=_label, ctx=ctx,
+                                 field=fields[n], scrub=_scrub)
+              for _t, n, _r, room in managed} if p_room else {""}
+    _declarations = {_filtered_player_declaration(ctx, sc, n, room,
+                                                  field=fields[n])
                      for _t, n, _r, room in managed}
     payload = {
         "place": place,
         "beat": {
-            "resolved_event": _redacted_resolved_event(dr) if _prose_shared else "",
+            "resolved_event": _beats.pop() if len(_beats) == 1 else "",
             # One context read by every voice in it, so the declaration is
             # admitted only where it is uniformly perceivable -- the same rule
             # `_prose_shared` applies to the beat prose two lines up. Any
@@ -1991,12 +2485,30 @@ def _post_of(row):
     return body.split(":", 1)[0].replace("_", " ").strip() if body else ""
 
 
-def _thread_heard(ctx, beat, participants):
+def _thread_heard(ctx, beat, participants, rooms=None, sc=None):
     """What was said aloud in the room this beat, as the thread's people may
     know the speakers: overt lines only, each speaker labelled by what ALL the
     participants recognise (`_presence_label_fn`'s intersection), so nobody's
-    private acquaintance reaches the shared payload."""
+    private acquaintance reaches the shared payload.
+
+    AND ONLY WHAT EVERY ONE OF THEM HEARD (2026-10-21). Each line is graded
+    for each participant by the cast's gate (`presence_hearing`, on its own
+    sound field), and the shared payload holds the WEAKEST of their
+    catches: the words where all of them heard it whole, the pieces where
+    the best that all of them share is pieces, nothing where any one of them
+    caught none of its words -- one context read by every voice in it holds
+    whatever is admitted to it. Every overt line of the beat went in whole
+    before, wherever and however quietly it was said. `rooms` maps each
+    participant to where it stands; a participant the caller cannot place
+    hears nothing, and so admits nothing."""
+    from .common import _muffled_fragment
     label = _presence_label_fn(ctx, *participants)
+    rooms = rooms if isinstance(rooms, dict) else {}
+    scene = sc if sc is not None else _beat_scene(
+        ctx, _ctx_get(ctx, "director_resolve") or {})
+    ears = {n: presence_hearing(ctx, scene, n, rooms.get(n), beat)
+            for n in participants}
+    order = {"none": 0, "voice": 0, "fragment": 1, "full": 2}
     out = []
     for d in (beat or {}).get("dialogue_log") or ():
         if not isinstance(d, dict) or d.get("conceal_from"):
@@ -2006,7 +2518,16 @@ def _thread_heard(ctx, beat, participants):
         words = str(d.get("exact_quote") or "").strip()
         if not words:
             continue
-        out.append({"speaker": label(str(d.get("speaker") or "")),
+        speaker = str(d.get("speaker") or "").strip()
+        listeners = [n for n in participants
+                     if n.casefold() != speaker.casefold()]
+        caught = min((order[ears[n](d)] for n in listeners), default=2) \
+            if all(rooms.get(n) for n in listeners) else 0
+        if caught == 0:
+            continue
+        if caught == 1:
+            words = _muffled_fragment(_quote_body(words))
+        out.append({"speaker": label(speaker),
                     "words": words,
                     "to": label(str(d.get("intended_target") or ""))})
     return out
@@ -2031,7 +2552,10 @@ def _voice_thread(ctx, beat, thread, rows, nonce):
         "participants": [{"name": n, "post": _post_of(r),
                           "look": str(r.get("appearance") or "")}
                          for n, r in zip(names, rows)],
-        "heard": _thread_heard(ctx, beat, names),
+        "heard": _thread_heard(
+            ctx, beat, names,
+            rooms={n: str(r.get("room") or "") for n, r in zip(names, rows)},
+            sc=(beat or {}).get("scene")),
         "last": list(thread.get("last") or [])[-THREAD_LINES_PER_EXCHANGE:],
         "lines_at_most": THREAD_LINES_PER_EXCHANGE,
         "variant_seed": nonce,
@@ -2105,7 +2629,8 @@ def _exchange_declarations(ctx, tid, index, thread, exchange, names):
     return out
 
 
-def _thread_declarations(ctx, beat, figure_rows, addressed, own_rooms, nonce):
+def _thread_declarations(ctx, beat, figure_rows, addressed, own_rooms, nonce,
+                         sc=None):
     """`(declarations, voiced names)`: one exchange for each open thread held
     in a room the beat's people stand in -- someone is there to hear it --
     whose people still stand there together. A thread one of whose people
@@ -2128,7 +2653,11 @@ def _thread_declarations(ctx, beat, figure_rows, addressed, own_rooms, nonce):
                 if n in rows and str(rows[n].get("room") or "") == room]
         if len(here) < 2 or any(n.casefold() in addressed for n in here):
             continue
-        exchange = _voice_thread(ctx, beat, thread, [rows[n] for n in here], nonce)
+        # The scene the beat's people stand in rides the beat, so what the
+        # thread's people heard is graded where they stand (`_thread_heard`).
+        exchange = _voice_thread(
+            ctx, dict(beat, scene=sc) if sc is not None else beat, thread,
+            [rows[n] for n in here], nonce)
         if not exchange:
             continue
         decls = _exchange_declarations(ctx, tid, index, thread, exchange, here)
@@ -2153,12 +2682,18 @@ def _provisional_beat(ctx, interp, decls, p_name):
     """The declared beat, in the shape `_react_one` reads a RESOLVED beat.
 
     Before resolve there is no `resolved_event`; what the world holds is what
-    the player and the cast declared. `_beat_for_presence` prefers the
-    audible dialogue at the presence's room and falls back to the prose
-    only for a presence standing in the beat's room, so the prose here is
-    the observables, each led by its actor's name (the label function
-    rewrites names the presence may not use)."""
-    dialogue, observables = [], []
+    the player and the cast declared. `stream` is that beat as typed events
+    in declared order (`_beat_stream`'s shape): the interpret's rows -- the
+    player's lines and acts, and a happening filed under the world, placed
+    by its own targets -- then each declaration's lines and acts. Every one
+    reaches a presence through its own channel (`_beat_for_presence`): a
+    line by the hearing rule, an act by sight, never all of them to anyone
+    standing in the room. An act's surface is its outward form
+    (`observable_action_text`), never the declarer's `attempt` where the
+    declaration gave the act no outward form. `resolved_event` keeps the
+    observables as a summary no presence is handed."""
+    dialogue, observables, stream = [], [], []
+    names = _identity_names(ctx) if ctx is not None else {}
     rows = interp.get("ledgers") or interp.get("causal_ledger") or []
     for row in rows:
         if not isinstance(row, dict):
@@ -2166,7 +2701,7 @@ def _provisional_beat(ctx, interp, decls, p_name):
         if "speech" in (row.get("categories") or []) and row.get("event"):
             targets = [str(t) for t in (row.get("targets") or [])
                        if isinstance(t, str)]
-            dialogue.append({
+            entry = {
                 "speaker": p_name,
                 "exact_quote": '"%s"' % str(row["event"]).strip().strip('"'),
                 "volume": row.get("volume") or "normal", "tone": "",
@@ -2175,9 +2710,18 @@ def _provisional_beat(ctx, interp, decls, p_name):
                 "intended_target": next(
                     (t for t in targets
                      if t != p_name and ":" not in t), None),
-            })
+            }
+            dialogue.append(entry)
+            stream.append(("line", entry))
         elif row.get("observable"):
             observables.append("%s %s" % (p_name, str(row["observable"])))
+            key = str(row.get("source_entity_id") or "").strip()
+            actor = p_name if (not key or key.startswith("persona:")) \
+                else (names.get(key) or key)
+            stream.append(("act", actor, dict(
+                row, event_id=str(row.get("event_id") or "interpret:%s"
+                                  % row.get("chrono_id"))),
+                str(row["observable"])))
     for d in decls or ():
         name = str((d or {}).get("name") or "").strip()
         for e in (d or {}).get("sequence") or ():
@@ -2185,7 +2729,7 @@ def _provisional_beat(ctx, interp, decls, p_name):
                 continue
             if e.get("type") == "speech" and e.get("text"):
                 targets = [str(t) for t in (e.get("targets") or [])]
-                dialogue.append({
+                entry = {
                     "speaker": name,
                     "exact_quote": '"%s"' % str(e["text"]).strip().strip('"'),
                     "volume": e.get("volume") or "normal",
@@ -2193,14 +2737,19 @@ def _provisional_beat(ctx, interp, decls, p_name):
                     "visibility": e.get("visibility") or "overt",
                     "conceal_from": list(e.get("conceal_from") or []),
                     "intended_target": targets[0] if targets else None,
-                })
+                }
+                dialogue.append(entry)
+                stream.append(("line", entry))
             elif e.get("type") == "action" and (
                     e.get("observable") or e.get("attempt")):
                 observables.append("%s %s" % (
                     name, e.get("observable") or e.get("attempt")))
+                surface = str(observable_action_text(e) or "").strip()
+                if surface:
+                    stream.append(("act", name, e, surface))
     flow = interp.get("flow") if isinstance(interp.get("flow"), dict) else {}
     return {"resolved_event": " ".join(observables).strip(),
-            "dialogue_log": dialogue, "public_evidence": [],
+            "dialogue_log": dialogue, "stream": stream, "public_evidence": [],
             "state_diff": {}, "flow": flow, "routed_to_background": []}
 
 
@@ -2302,7 +2851,7 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
     # PEOPLE ALREADY TALKING TO EACH OTHER are voiced together, one exchange
     # a beat (`_thread_declarations`); they are not asked again one by one.
     thread_decls, threaded = _thread_declarations(
-        ctx, beat, figure_rows, addressed, own_rooms, nonce)
+        ctx, beat, figure_rows, addressed, own_rooms, nonce, sc=sc)
     names = [n for n in names if n not in threaded]
     refs_of = {str(r.get("name") or ""): (str(r.get("charter") or ""),
                                           str(r.get("body") or ""))
@@ -2493,13 +3042,18 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
     # room it had left, and one who has walked in was refused the beat it was
     # standing in.
     here = presence_room(sc, name, rec)
+    # ITS EARS FOR THE BEAT, built once: the field every line below is
+    # graded on, and the reader every address source asks (the cast's own
+    # gate, `presence_hearing`).
+    field = _presence_field(ctx, sc, name, here, dr)
+    hears = presence_hearing(ctx, sc, name, here, dr, field=field)
 
     # If a registered character (or the player) spoke directly TO this presence
     # -- this beat, or last beat with the gate spent elsewhere -- surface that
     # line so the reaction can answer it. `beats_ago` marks fresh (0) vs owed
     # (1). The line already rendered; the reply is appended after it, no chain.
     addressed_by = None
-    fresh = _character_address_of(dr, name, roster, sc, here)
+    fresh = _character_address_of(dr, name, roster, sc, here, hears=hears)
     if fresh:
         addressed_by = {"speaker": fresh.get("speaker"),
                         "exact_quote": fresh.get("exact_quote", ""),
@@ -2522,7 +3076,7 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
         # already has (same overt/hearing filter as the payload field
         # below); what was missing is only the engine's own finding that it
         # was aimed HERE.
-        quote = _filtered_player_declaration(ctx, sc, name, here)
+        quote = _filtered_player_declaration(ctx, sc, name, here, field=field)
         if quote:
             addressed_by = {"speaker": persona_name(persona_of(ctx.chat)),
                             "exact_quote": quote, "tone": "", "beats_ago": 0}
@@ -2539,7 +3093,7 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
         # innkeeper, a tapster, a cook and an ostler. The gate picked a body
         # and `_react_one` returned None, because it had been given an
         # unremarkable woman and silence to answer.
-        unaimed = _room_address_of(dr, name, roster, sc, here)
+        unaimed = _room_address_of(dr, name, roster, sc, here, hears=hears)
         if unaimed:
             addressed_by = {"speaker": unaimed.get("speaker"),
                             "exact_quote": unaimed.get("exact_quote", ""),
@@ -2617,13 +3171,14 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
                if sketch.get("appearance") else {}),
         },
         "beat": {
+            # What ITS body perceived of the beat and of the player's words
+            # (the cast's own gates), never the omniscient account.
             "resolved_event": _beat_for_presence(
                 dr, sc, here, name,
-                beat_room=_player_room(ctx, sc),
-                label=_presence_label_fn(ctx, name)),
+                label=_presence_label_fn(ctx, name), ctx=ctx, field=field),
             "addressed_by": addressed_by,
             "player_declaration": _filtered_player_declaration(
-                ctx, sc, name, here),
+                ctx, sc, name, here, field=field),
             "present_others": [p for p in present_others if p != name],
             # Exact, already-delivered exchange fragments from this
             # presence's own bounded record.  Counters such as

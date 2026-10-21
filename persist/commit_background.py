@@ -1224,7 +1224,7 @@ def _background_name_named_exactly(name, text):
 
 
 def _character_address_of(dr_output, presence_name, roster, scene=None,
-                          station_room=None):
+                          station_room=None, hears=None):
     """Return the last hearable dialogue_log entry in which a roster speaker
     (a registered character or the player) aimed a line at this background
     presence, or None -- so a character speaking directly TO an extra can
@@ -1241,6 +1241,15 @@ def _character_address_of(dr_output, presence_name, roster, scene=None,
     address is allowed through on the same co-presence assumption
     background_react already makes about resolved_event -- the check
     self-tightens as sketch coverage grows.
+
+    `hears` is this presence's own ear for the beat (`agents.background.
+    presence_hearing`: the cast's gate, on its sound field for the beat),
+    and where a caller holds one it decides -- where both rooms are known,
+    as the read it replaces did -- instead of the room-to-room read below,
+    which knows no body, no distance and no din. Measured on the tavern
+    probe (2026-10-20, chat 2): the room-level read gives a normal line FULL
+    to anyone in the same room, where the cast's gate gives a bystander 7.2
+    paces off in the taproom's 68 dB din only pieces.
     """
     found = None
     for d in (dr_output.get("dialogue_log") or []):
@@ -1265,12 +1274,19 @@ def _character_address_of(dr_output, presence_name, roster, scene=None,
         if station_room and scene:
             sp_room = _room_of(scene, speaker)
             if sp_room:
-                rel = spatial_rel(scene, sp_room, station_room)
-                # `addressed`: the target matched this presence above, so a
-                # line breathed into its ear is its own (`EAR_VOLUME`).
-                if hear_level(rel, d.get("volume") or "normal",
-                              addressed=True) != "full":
-                    continue
+                if hears is not None:
+                    # The target matched this presence above: the line is
+                    # its own, graded by its own ear.
+                    if hears(d, True) != "full":
+                        continue
+                else:
+                    rel = spatial_rel(scene, sp_room, station_room)
+                    # `addressed`: the target matched this presence above,
+                    # so a line breathed into its ear is its own
+                    # (`EAR_VOLUME`).
+                    if hear_level(rel, d.get("volume") or "normal",
+                                  addressed=True) != "full":
+                        continue
         found = d  # last hearable address wins
     return found
 
@@ -1312,7 +1328,7 @@ def _authored_arrival_rooms(before, after, roster):
 
 
 def _room_address_of(dr_output, presence_name, roster, scene=None,
-                     station_room=None):
+                     station_room=None, hears=None):
     """The last hearable line an authored mind spoke INTO this body's room
     without naming anybody, or None.
 
@@ -1338,7 +1354,8 @@ def _room_address_of(dr_output, presence_name, roster, scene=None,
     ways, and where rooms are known the line must be FULLY hearable, because
     a fragment cannot be coherently replied to. The only dropped requirement
     is that the line name its listener -- which is the whole point, since
-    "small ale" names nobody and is still an order.
+    "small ale" names nobody and is still an order. `hears` is the
+    presence's own ear, as `_character_address_of` takes it.
     """
     found = None
     for d in (dr_output.get("dialogue_log") or []):
@@ -1357,9 +1374,13 @@ def _room_address_of(dr_output, presence_name, roster, scene=None,
         if station_room and scene:
             sp_room = _room_of(scene, speaker)
             if sp_room:
-                rel = spatial_rel(scene, sp_room, station_room)
-                if hear_level(rel, d.get("volume") or "normal") != "full":
-                    continue
+                if hears is not None:
+                    if hears(d) != "full":
+                        continue
+                else:
+                    rel = spatial_rel(scene, sp_room, station_room)
+                    if hear_level(rel, d.get("volume") or "normal") != "full":
+                        continue
         found = d               # last hearable line wins
     return found
 
@@ -2125,6 +2146,34 @@ def _mint_missing_presence_names(cid, presences, scene, reserved=()):
     return minted
 
 
+def _presence_ear(ctx, scene, name, record, res):
+    """This presence's own ear for the beat (`agents.background.
+    presence_hearing`: the cast's hearing gate on its sound field), or None
+    where the scene places it nowhere -- and the address readers then keep
+    their room-to-room read, as they always have for an unplaced body."""
+    here = presence_room(scene, name, record)
+    if not here:
+        return None
+    try:
+        from agents.background import presence_hearing
+    except Exception:
+        return None
+    return presence_hearing(ctx, scene, name, here, res)
+
+
+def _player_words_reaching(ctx, scene, name, here):
+    """`(heard_whole, text)`: whether a line of the player's beat reached
+    this presence in FULL -- the bar a reply debt has always needed, since a
+    fragment cannot be coherently replied to -- and what of the beat its
+    body caught, as its own payload carries it
+    (`agents.background.player_words_caught`)."""
+    try:
+        from agents.background import player_words_caught
+        return player_words_caught(ctx, scene, name, here)
+    except Exception:
+        return False, ""
+
+
 def track_background_presences(ctx, nonce, *, prepared=None):
     """Deterministic, LLM-free tracking of named entities the director
     keeps writing into resolved_event/dialogue_log who are NOT a
@@ -2802,7 +2851,8 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 # this beat. That mind is the one waiting.
                 _asker = _character_address_of(
                     res, name, roster, sc,
-                    (record.get("sketch") or {}).get("station_room"))
+                    (record.get("sketch") or {}).get("station_room"),
+                    hears=_presence_ear(ctx, sc, name, record, res))
                 record["pending_act"] = {
                     "what": " ".join(str(owes.get("what")).split()),
                     "to": " ".join(str(owes.get("to") or "").split()),
@@ -2821,8 +2871,14 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         if name.casefold() in answered_names:
             record.pop("pending_reply", None)  # answered, by word or by act
         else:
+            # THE DEBT CARRIES ONLY WHAT REACHED THIS BODY. Its quote is
+            # handed to the presence next beat as the address it owes an
+            # answer to (`background._react_one`, `beats_ago: 1`), so the
+            # line is graded by the presence's own ear for this beat -- the
+            # cast's gate on its sound field -- where the scene places it.
             entry = _character_address_of(
-                res, name, roster, sc, (record.get("sketch") or {}).get("station_room"))
+                res, name, roster, sc, (record.get("sketch") or {}).get("station_room"),
+                hears=_presence_ear(ctx, sc, name, record, res))
             if entry:
                 addressed = True
                 record["pending_reply"] = {
@@ -2848,15 +2904,22 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                     for n in _presence_names(key, record))
                 if _player_precise and player_input and _p_name:
                     _here = presence_room(sc, name, record)
-                    _hearable = True
+                    _hearable, _quote = True, player_input
                     if _here and _p_room:
-                        _hearable = hear_level(
-                            spatial_rel(sc, _p_room, _here),
-                            "normal") == "full"
-                    if _hearable:
+                        # WHAT OF THE PLAYER'S BEAT THIS BODY CAUGHT, and
+                        # nothing else: the debt's quote is the presence's
+                        # own `player_declaration` (the cast's gates), never
+                        # the whole overt text -- which carried every line
+                        # the player said to anyone this beat, and an act's
+                        # raw `attempt` where it had no outward form, past a
+                        # room-level read that gives a normal voice FULL
+                        # anywhere in the same room.
+                        _hearable, _quote = _player_words_reaching(
+                            ctx, sc, name, _here)
+                    if _hearable and _quote:
                         addressed = True
                         record["pending_reply"] = {
-                            "from": _p_name, "quote": player_input,
+                            "from": _p_name, "quote": _quote,
                             "tone": "", "turn": turn_idx,
                             "expires_turn": turn_idx + 2,
                         }

@@ -546,9 +546,17 @@ things were deliberately left.
   depend on a model cooperating — but a presence handed a line it made out
   only in part has no way to say so, and currently either answers it whole or
   is not picked at all. The engine has the number; the packet drops it.
+  *Partly answered 2026-10-21 (§ 1.221):* the beat and the player's
+  declaration now carry what of a line the presence caught -- the words, its
+  pieces, or that a voice spoke -- by the cast's own percept; `addressed_by`
+  still carries a line heard whole or nothing.
 
-* **`agents/background._filtered_player_declaration` and
-  `_beat_for_presence` grade a line without proximity**, while every cast
+* **LANDED 2026-10-21 (§ 1.221).** ~~`agents/background._filtered_player_declaration` and
+  `_beat_for_presence` grade a line without proximity~~ -- both now grade by
+  the cast's own percept (`background._presence_line`: the measured
+  proximity, the presence's field for the beat, sight of the speaker, the
+  addressee). The original text: they graded a line without proximity,
+  while every cast
   path (`agents/loops.py`, `composer.line_hear_level`) passes it. So a
   background presence across a large room from a whispered line receives it
   in full where a registered mind would get a fragment. Not a cross-room
@@ -1909,6 +1917,79 @@ What it leaves:
   repeated the ears and tails on every page.
 
 
+<a id="unbuilt-1-221"></a>
+
+### 1.221 A line reaches a mind through the hearing rule alone; a background presence perceives through its own body -- BUILT 2026-10-21, residuals open
+
+**Built 2026-10-21** (lane l21, from the tavern probe, chat 2; `Design.md`
+"A spoken line reaches a mind through the hearing rule alone" and "A
+background presence perceives the beat through its own body"):
+
+- A sound the encoder files on a SPOKEN event, made by that event's own
+  speaker, is the line's voice and is dropped at the merge
+  (`director_prose.a_line_is_heard_never_sounded`): 5 such rows of 8 sounds on
+  890 recorded spoken events (the owner's chats 159-178, the 2026-09-26
+  stories, the probes), three carrying the line's words.
+- A background presence's payload is built by the cast's own gates
+  (`background._presence_line`, `_presence_act`, `_beat_stream`,
+  `presence_hearing`, `_presence_identity_floor`), never from the beat's
+  prose; the address readers, the commit's reply debt, the scene manager and
+  a conversation thread's shared payload read the same ear. Judged with the
+  cast's gates on the recorded checkpoints: the tavern's 6 of 9 payloads
+  carried something the presence's body could not have perceived, the
+  "betrayal" story's 1; the owner's 153 none attributable to the presence
+  path.
+
+These remain:
+
+- **A body's own wordless vocal sound reaches its own view unattributed --
+  an owner's call.** A cough, a moan, a sound in the throat filed on the
+  body's own ACT is a sound, and stays (the class above is a spoken event
+  only); the outcome pass hands it to its maker as an unattributed ambient
+  sentence. In the owner's chats 159-178 six such sounds reached their
+  maker's view; on chat 178 idx 25 ("a short, involuntary sound in her
+  throat", the player's own) the narrator wrote "Something surfaces in
+  Mellisande's throat" -- the player's sound given to the woman she was
+  kissing. No typed field tells a cough from a musket's report filed under
+  the player (round 2 pins the report leading her own view). Options: (a) an
+  own sound below `loud` is no news to its maker, as a walker's own treads
+  are not (`perception._here_sounds`) -- a level threshold the owner would
+  set; (b) the composer marks a sound whose `source` is the observer as the
+  observer's own, though its `detail` keeps whatever pronouns the encoder
+  wrote; (c) the encoder card says a body's own wordless sound rides its
+  act's observable.
+- **No rear-arc movement and no sound events reach a presence.** The cast
+  hear "something moves behind you" (`composer.act_percept`'s rear arc,
+  where a body's movement carries over the noise at the ear -- 2026-10-21)
+  and every sound of the beat their ear reaches; a presence's payload
+  carries neither -- it subtracts, so a presence never learns of a crash in
+  the next room it could have heard.
+- **An unplaced presence, or an unplaced speaker, is still fail-open for an
+  address.** `_character_address_of` and `_room_address_of` grade a line by
+  the presence's ear only where both rooms are known, as the room-level read
+  they replace did; where the scene places neither, an address aimed at the
+  presence is delivered whole, as before (their own docstring's
+  "self-tightens as sketch coverage grows").
+- **Names the identity floor does not cover.** `_presence_identity_floor`
+  scrubs the player's and the cast's names out of act surfaces; another
+  presence's name in a surface, a typed communicative act's surface
+  (`communication_surface`) and a heard line's words are not scrubbed (a
+  line is words heard, and keeps them).
+- **The presence's field reads the Director's own sounds of the beat only.**
+  The outcome pass also adds the charter's noises, the beat's footfalls and
+  its doors (`perception._composer_outcome_views`); none of them says it
+  drowns a voice, so none decides a line, but a charter creature's loud
+  voice adds to the floor the cast hear against and the presence does not.
+- **`scene_life` at `full` still annotates.** A line one managed presence
+  heard whole and another in pieces enters the shared context whole with its
+  audience tags (the opted-in `full` level's accepted risk); only a line no
+  managed presence heard whole is carried as pieces.
+- **What the payload holds that is not the beat.** `place` falls back to
+  the player's room where the presence's own is unknown; `present_others` is
+  who stands in its room, not whom it sees; `institutional_context`'s
+  `answers` preview the charter's ledger for every act the beat aimed at the
+  body (`presence_view(evidence=)`), heard or not.
+
 <a id="unbuilt-1-217"></a>
 
 ### 1.217 What the stranger-label rule leaves (2026-10-20)
@@ -2586,10 +2667,16 @@ found no live room uneven for sound).
 
 ### 3.2 Concealment gates not applied everywhere
 
-- **X3 — `conceal_from` without `visibility: "concealed"` bypasses the
-  background declaration filter**, which consults `visibility` only. Every other
-  guard in `agents/background.py` fail-closes on `conceal_from` independently,
-  precisely because models half-comply. *Latent, no test.*
+- ~~**X3 — `conceal_from` without `visibility: "concealed"` bypasses the
+  background declaration filter**, which consults `visibility` only.~~
+  **Closed 2026-10-21 (§ 1.221):** `background._player_declaration_caught`
+  withholds an element whose `conceal_from` names the presence, whatever its
+  `visibility`, as every other guard in `agents/background.py` already did
+  (`tests/test_a_background_presence_perceives_only_what_reached_it.py::
+  test_a_line_kept_from_it_by_name_is_kept_from_it`). `overt_declaration`
+  itself still reads `visibility` alone, so the deterministic GATE that picks
+  who reacts can still pick a body for an element concealed from it by name;
+  it is handed nothing of it.
 - **X7 — half closed.** The player-input half is fixed: `pick_background_reactors`
   now qualifies a presence from `overt_declaration_text(ctx)` rather than
   `ctx.input`, with the reason at the call site (*"a whispered name used to

@@ -118,7 +118,12 @@ def test_the_group_call_is_handed_only_what_is_common(monkeypatch, temp_db):
          "intended_target": KEEPER, "visibility": "overt"},
         {"speaker": "Iris Vale", "exact_quote": '"Keep it from him."',
          "intended_target": KEEPER, "visibility": "concealed",
-         "conceal_from": [HAND]}]}
+         "conceal_from": [HAND]}],
+        # Where the beat's people stand: what the thread's people heard is
+        # graded from there (`_thread_heard`, 2026-10-21).
+        "scene": {**beat.SC, "positions": {"Iris Vale": "scullery",
+                                          KEEPER: "scullery",
+                                          HAND: "scullery"}}}
     rows = [{"name": KEEPER, "room": "scullery", "body": "keeper:0001",
              "appearance": "a broad woman in an apron"},
             {"name": HAND, "room": "scullery", "body": "tap_hand:0002"}]

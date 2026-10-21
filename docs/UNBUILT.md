@@ -266,6 +266,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.200 — What a body reads does not reach it — BUILT 2026-10-11, residuals open](UNBUILT_PERCEPTION.md#unbuilt-1-200)
 - [§1.206 — Words in the view that break (2026-10-12)](UNBUILT_PERCEPTION.md#unbuilt-1-206)
 - [§1.217 — What the stranger-label rule leaves (2026-10-20)](UNBUILT_PERCEPTION.md#unbuilt-1-217)
+- [§1.221 — A line reaches a mind through the hearing rule alone; a background presence perceives through its own body -- built 2026-10-21, residuals open](UNBUILT_PERCEPTION.md#unbuilt-1-221)
 
 **2. Roadmap**
 

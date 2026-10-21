@@ -2663,6 +2663,103 @@ def a_signal_elsewhere_is_nobodys_act(events, scene, identities, warn=None):
     return out
 
 
+def a_line_is_heard_never_sounded(events, identities, scene=None, warn=None):
+    """`(events, refused)`: a SPOKEN LINE REACHES A MIND THROUGH THE HEARING
+    RULE AND THROUGH NOTHING ELSE, so a sound filed on a spoken event, made by
+    that event's own speaker, is the line's voice a second time -- and it is
+    dropped here, at the merge, before any owner folds it into the diff.
+
+    A spoken event (`speech: true`) is graded for each listener by
+    `spatial_senses.hear_level` -- whole, in pieces, as a voice, or not at
+    all, by the walls, the din and whom it was spoken to. The same voice
+    filed as a `sensory_events` row is carried by the sound field instead:
+    its `detail` is received whole by everyone in the room and as a
+    character beyond it, so a wall or a din that stopped the words lets the
+    sound's description of them through, and the speaker's own view is
+    handed her voice back as a stranger's. Measured on the tavern probe
+    (2026-10-20, chat 2 turn 8): the player called "Hollis! Two more of the
+    dark, when you've a minute!" across the taproom and the encoder filed,
+    on her speech event, {source: "Tamsin Reed", level: loud, detail: "a
+    woman's voice calling out across the taproom over the fiddle for two
+    more dark ales"}; her own outcome view read "A woman's voice calling out
+    ... for two more dark ales", and Davey, beside her, got her line and
+    then the stranger's voice saying it again.
+
+    Typed, and read off the event alone: the event is spoken, and the row's
+    `source` is that event's speaker (`source_entity_id`, by its key or the
+    name `identities` gives it, or a spelling `same_subject` holds for the
+    same body). Measured over every sound filed on a spoken event in the
+    owner's chats 159-178, the four 2026-09-26 stories and the three probe
+    stories (8 distinct rows on 890 recorded spoken events): 5 were the
+    speaker's own -- four the voice itself, three of them carrying the
+    line's words ("Haaa~", "declaring Kit Sawyer is in the back hall", "for
+    two more dark ales"), and one an act's sound the encoder had also filed
+    on the act event the line came beside (chat 161 turn 12, sandals
+    scraping); the other 3 were made by something else (a gas jet hissing
+    under a line, the wind and sea, another body's gasp) and are kept. So is
+    every sound filed on an ACT -- a shot, a slammed door, a cough, a moan, a
+    laugh that is not a line -- which no hearing rule carries: a vocal sound
+    with no words in it, filed on its own event, is a sound, and the sound
+    field is the only channel it has (9 such in the same records, all kept).
+
+    `refused` is `[(speaker, row)]`, said in a warning per row."""
+    from world.spatial import same_subject
+    identities = identities if isinstance(identities, dict) else {}
+
+    def _spoken_by(source, key, name):
+        source = str(source or "").strip()
+        if not source:
+            return False
+        folded = source.casefold()
+        if folded in {key.casefold(), name.casefold()}:
+            return True
+        return isinstance(scene, dict) and bool(name) \
+            and same_subject(scene, source, name)
+
+    out, refused = [], []
+    for event in events or []:
+        if not isinstance(event, dict) or not event.get("speech"):
+            out.append(event)
+            continue
+        key = str(event.get("source_entity_id") or "").strip()
+        name = str(identities.get(key) or key).strip()
+        if not key:
+            out.append(event)
+            continue
+        changed, kept = False, []
+        for transform in event.get("transforms") or []:
+            patch = patch_as_written(transform.get("patch")) \
+                if isinstance(transform, dict) else None
+            signals = patch.get("sensory_events") if isinstance(patch, dict) else None
+            if not signals:
+                kept.append(transform)
+                continue
+            rows = signals if isinstance(signals, list) else [signals]
+            stays = []
+            for row in rows:
+                if isinstance(row, dict) and _spoken_by(row.get("source"), key, name):
+                    refused.append((name, row))
+                else:
+                    stays.append(row)
+            if len(stays) == len(rows):
+                kept.append(transform)
+                continue
+            changed = True
+            rest = {channel: value for channel, value in patch.items()
+                    if channel != "sensory_events"}
+            if stays:
+                rest["sensory_events"] = stays
+            if rest:
+                kept.append(dict(transform, patch=rest))
+        out.append(dict(event, transforms=kept) if changed else event)
+    if warn:
+        for name, row in refused:
+            warn(f"a sound filed on {name}'s spoken line is that line's own "
+                 "voice, which the hearing rule carries to each listener; "
+                 f"dropped: {str(row.get('detail') or '')[:100]!r}")
+    return out, refused
+
+
 def _slipped_copy(key, eid):
     """Is `key` the id `eid` copied with a few characters wrong?"""
     return (len(key) == len(eid) and key != eid
@@ -4111,6 +4208,10 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     quoting = quotation_authority(ctx, stage, prose)
     events = quoted_lines_keep_their_words(events, quoting)
     events = spoken_words_are_the_quotation(events, quoting, warn=ctx.add_warning)
+    # A LINE'S VOICE IS THE HEARING RULE'S, after the split above has given a
+    # framed line's outward step -- and any sound of it -- an event of its own.
+    events, voices_refused = a_line_is_heard_never_sounded(
+        events, identities, sc, warn=ctx.add_warning)
     # WHERE THE CLOCK STANDS WHEN THIS STAGE'S FIRST STEP BEGINS, for a step
     # named by its end ("until it is fully dark") and a part of the day the
     # account passes over to ("that evening"): the beat's start hour, and at
@@ -4158,6 +4259,10 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         record["standing_refused"] = standing_refused
     if time_refused:
         record["time_refused"] = time_refused
+    # ...and a line's own voice filed as a sound (`a_line_is_heard_never_sounded`).
+    if voices_refused:
+        record["voices_refused"] = [{"speaker": who, "sound": dict(row)}
+                                    for who, row in voices_refused]
     # AN EXTENSION'S CHANNEL IS COLLECTED FOR ITS EXTENSION, never split to
     # an owner: no engine owner holds it and no engine domain reads it
     # (`api.add_director_channel`; `attach_record` files what is collected).
