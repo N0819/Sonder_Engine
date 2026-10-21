@@ -62,8 +62,12 @@ def _shrine(**positions):
 
 
 def _line(n=8):
+    """A line of places under the sky -- a road, a run of fields -- so the
+    radius alone decides: a line of rooms under one roof is one building
+    whatever its length (2026-10-20, `spatial_routing.rooms_under_one_roof`;
+    `tests/test_a_sleeper_upstairs_stays_in_the_house.py`)."""
     ids = [f"r{i}" for i in range(n)]
-    rooms = {rid: {"name": rid, "adjacent": []} for rid in ids}
+    rooms = {rid: {"name": rid, "exposure": "open", "adjacent": []} for rid in ids}
     for a, b in zip(ids, ids[1:]):
         rooms[a]["adjacent"].append(_edge(b))
         rooms[b]["adjacent"].append(_edge(a))
@@ -112,10 +116,16 @@ class TestAWholeStairIsOneRoom:
         assert "tamamo_roost" not in rooms_walked_within(_shrine(), {"hinami_room"}, 2)
 
     def test_without_a_made_stair_the_same_rooms_are_four(self):
+        from world.spatial import rooms_walked_within
         scene = _shrine(Tamamo="tamamo_roost")
         for room in scene["rooms"].values():
             room.pop("made_by_layout", None)
-        assert _decide(scene)["characters"] == ["Tamamo"]
+        assert "tamamo_roost" not in rooms_walked_within(scene, {"hinami_room"}, 3)
+        assert "tamamo_roost" in rooms_walked_within(scene, {"hinami_room"}, 4)
+        # Four rooms walked is past the radius, and the roost is still inside
+        # the shrine, which is one bubble however far she walks in it
+        # (2026-10-20, `spatial_routing.rooms_under_one_roof`).
+        assert _decide(scene) is None
 
     def test_a_stair_is_one_room_however_many_storeys_it_climbs(self):
         from world.spatial import rooms_walked_within

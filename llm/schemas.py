@@ -2288,6 +2288,15 @@ class DirectorEstablish(LenientModel):
     # Complete current body-pose snapshots: posture/support plus optional
     # relative body arrangement. Separate from room/station and contact.
     poses: dict[str, PoseEntry] = Field(default_factory=dict)
+    # WHAT STANDS ON A BODY AS PLAY BEGINS -- above all a mind that is not
+    # awake (`kind: 'awareness'`, a gated `state.level`). The same table
+    # `StateDiff.conditions` carries, routed into the opening's diff by the
+    # establish tail, so the commit writes it as any beat's and every gate
+    # reads it from the first beat. Declared 2026-10-20: the house probe
+    # (chat 1, turn 0) placed a grandmother the scenario had "asleep in the
+    # room directly above the kitchen" lying in her bed, posed and described
+    # asleep, and nothing gated her -- the opening had no field to say so.
+    conditions: dict[str, list[dict]] = Field(default_factory=dict)
     # Voice channels opened, closed or installed this beat (spatial.comms).
     comms_ops: list[CommsOp] = Field(default_factory=list)
     # Holds the opening passage leaves standing -- same op shape as
@@ -2330,6 +2339,9 @@ class DirectorEstablish(LenientModel):
 
     _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
         lambda cls, v: _coerce_station_table(v)
+    )
+    _coerce_list_maps = validator("conditions", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_list_valued_map(v)
     )
 
 class AttireDiff(LenientModel):
@@ -5671,9 +5683,13 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
         _lift_swallowed_siblings(step_key, result, "entities", "rooms")
         # Establishment has no `state_diff` field: its channels ARE the
         # output, so the diff-shaped half of the preparation below runs on
-        # the top-level object. The sibling hoist and the `time`/`conditions`
-        # coercions are deliberately not applied -- establish declares
-        # neither field and its sibling set is its own, not StateDiff's.
+        # the top-level object. The sibling hoist and the `time` coercion are
+        # deliberately not applied -- establish declares no `time` diff and
+        # its sibling set is its own, not StateDiff's. `conditions` IS
+        # declared (2026-10-20: a body the opening finds not awake) and is
+        # the same table, so it takes the same recovery `state_diff` gets.
+        if "conditions" in result:
+            result["conditions"] = _coerce_conditions(result["conditions"])
         for field in _STATE_DIFF_DICT_FIELDS:
             if field in result:
                 result[field] = _coerce_empty_list_to_dict(result[field])
@@ -5974,6 +5990,11 @@ OUTPUT_EXAMPLES = {
         "crowd_ops": [],
         "comms_ops": [],
         "world_pressure": [],
+        # Shown for the same reason, empty for the same one: both people on
+        # the quay are awake. A body the passage leaves not awake is one
+        # entry, `{condition_id: [{condition_id, subject_id, kind:
+        # 'awareness', state: {level, cause}}]}`.
+        "conditions": {},
         "fiction_frame": {},
         "simulation_clock": {
             "elapsed_seconds": 0.0,

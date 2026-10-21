@@ -551,6 +551,10 @@ def director_establish(ctx, nonce):
         "comms_ops": (out.get("comms_ops")
                       if isinstance(out.get("comms_ops"), list) else []),
         "attire": out.get("attire") if isinstance(out.get("attire"), dict) else {},
+        # What stands on a body as play begins -- a mind not awake above all
+        # -- through the same commit every later beat's conditions take
+        # (`_opening_conditions`).
+        "conditions": _opening_conditions(ctx, out, player_name),
         "time": None,
     }
     out["resolved_event"] = out.get("scene_description", "")
@@ -1056,6 +1060,51 @@ def _present_figure_rows(figures, answers=None, cap=24):
         if len(rows) >= cap:
             break
     return rows
+
+
+def _opening_conditions(ctx, out, player_name):
+    """The opening's `conditions`, as the state diff carries them.
+
+    A BODY THE OPENING FINDS NOT AWAKE BEGINS SO. The establish card asks
+    for it (A BODY THE OPENING FINDS NOT AWAKE), the schema keeps it
+    (`DirectorEstablish.conditions`), and from here it is any beat's
+    condition: the opening's perception gates the mind on it
+    (`perception_establish`, `apply_awareness_diff`), the commit writes it
+    (`commit_entities.commit_world_entities`), and every later beat reads it
+    through `awareness_map` -- no character step, no loop call, a residue
+    for a view. Before 2026-10-20 the opening had no field for it: the house
+    probe (chat 1, turn 0) posed a grandmother "asleep on her back under the
+    blankets" whom nothing gated, and her first beat called her as a speaker.
+
+    Each entry's `subject_id` is spelled as `positions` spells that body
+    (`canonicalize_positions`; a name off the cast is left as written).
+    Every gate keys a mind by its name, so a sleeper filed under her uid
+    would be read awake by all of them. Entries that are not objects are
+    the schema's to drop and are not passed on."""
+    raw = out.get("conditions")
+    if not isinstance(raw, dict):
+        return {}
+
+    def spelled(name):
+        name = str(name or "").strip()
+        if not name:
+            return name
+        return next(iter(canonicalize_positions(
+            {name: ""}, ctx.cast, player_name=player_name)), name)
+
+    kept = {}
+    for cond_id, entries in raw.items():
+        rows = []
+        for entry in (entries if isinstance(entries, list) else [entries]):
+            if not isinstance(entry, dict):
+                continue
+            entry = dict(entry)
+            if entry.get("subject_id"):
+                entry["subject_id"] = spelled(entry["subject_id"])
+            rows.append(entry)
+        if rows:
+            kept[str(cond_id)] = rows
+    return kept
 
 
 def _opening_conduct(ctx, out, player_name):

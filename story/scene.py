@@ -2348,7 +2348,9 @@ def normalize_offscreen_life(value):
 # Hinami -- three with the ladder as one -- while her voice reached Hinami at
 # full strength. The floor is one room -- not the old rule, which took one step
 # over ANY edge, a window included; the ceiling keeps a story from being one
-# thread by accident.
+# thread by accident. The owner's first sentence is a rule of its own beside
+# this number (2026-10-20): the building the party stands in is in range
+# whatever the radius (`spatial_routing.rooms_under_one_roof`).
 BUBBLE_RADIUS_DEFAULT = 3
 BUBBLE_RADIUS_FLOOR = 1
 BUBBLE_RADIUS_CEILING = 12

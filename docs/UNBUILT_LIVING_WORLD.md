@@ -2496,11 +2496,14 @@ first path teaches the player a rule the second does not keep.
 
 <a id="unbuilt-1-213"></a>
 
-### 1.213 The bubble radius -- built 2026-10-13, residuals open
+### 1.213 The bubble radius -- built 2026-10-13; the building and the sleeper upstairs -- built 2026-10-20; residuals open
 
-Design.md: "A causality bubble opens at a radius of rooms walked". A body
-leaves the player's thread past the story's `bubble_radius` (three rooms
-walked, a stair one) and comes back inside it. What that does not reach:
+Design.md: "A causality bubble opens at a radius of rooms walked", "The
+building the player stands in is one bubble, whatever its room count" and "A
+body the opening finds not awake begins so". A body leaves the player's
+thread past the story's `bubble_radius` (three rooms walked, a stair one) and
+outside the building the party stands in, and comes back inside either. What
+that does not reach:
 
 - **A bubble's own beat can walk through the radius and out again.** The
   split and the rejoin read where a beat LEAVES a body, so a beat that brings
@@ -2515,7 +2518,9 @@ walked, a stair one) and comes back inside it. What that does not reach:
   but more than the radius away by those edges gets a thread. Home 9's
   garden is one edge through Hinami's window and six steps. A floor between
   two stacked rooms carries a shout and is no edge at all, so a body
-  overhead can be in earshot and past the radius.
+  overhead can be in earshot and past the radius -- unless a walk under the
+  roof joins the two rooms, which an indoor stair does (2026-10-20); a flat
+  over a shop reached by an outside stair is still two buildings.
 - **A live channel's far end carries the whole radius.** The range walks
   from every seed, a channel's far end included, so a body within three
   rooms of the far end of a live channel stays in the player's thread (it was
@@ -2540,6 +2545,52 @@ walked, a stair one) and comes back inside it. What that does not reach:
   both frames at once.
 - **Flapping at the boundary** (a body pacing between three and four rooms
   off) is unmeasured.
+- **A building has no size limit** (`spatial_routing.rooms_under_one_roof`,
+  the owner's "same building", 2026-10-20). A sublevel shelter, a ship below
+  decks, a cave system read as indoors are each one thread, so a cast body
+  anywhere in one lives only through the player's beats -- planned when the
+  Director's flow names it or something reaches it -- never its own. Measured
+  read-only on the 140 stored scenes with a placed player: the building
+  reaches past the radius in 13, the largest is 18 rooms (chat 115), and one
+  cast body moves into range (chat 10, a ship's cargo hold four rooms from a
+  TARDIS corridor through the market dome both stand in). Whether a large
+  building wants a ceiling, and what, is the owner's ruling; nothing caps it.
+- **Undeclared rooms read as indoors.** `weather.room_exposure`'s keyword
+  fallback calls a room enclosed when its text names nothing it knows, so a
+  run of undeclared rooms is one building: 16 of chat 115's 18. The weather
+  and the light already read them so; an authored `exposure` (every room the
+  establish card and the layout tier write since E28) decides all three. The
+  same fallback reads two of chat 14's rooms as open (their text names a
+  garden), which cuts that house where the author meant a wall.
+- **An open room inside a building cuts it**: a courtyard, a cloister garth,
+  a light well between two wings makes two buildings, and the radius decides
+  across it.
+- **The opening's clause is unproven live.** Whether the establish model
+  writes `conditions` for a body the scenario has asleep -- and only then --
+  needs a live opening (the house probe rerolled is the case).
+- **A card cannot say "asleep as the night begins" in a typed field.** The
+  establish payload reads a present character's `public_history` and
+  `opening.first_message` (`opening_context`); the probe's generated card put
+  its brief's "Asleep as the night begins" in `initial_state.mood.label` and
+  in trait prose, neither of which the opening is handed. Only the scenario
+  said it, and the clause reads that. A typed opening state on a card was not
+  invented; whether one is wanted is a schema question for the owner.
+- **A `loud` impact below does not reach a sleeper above.** Measured on the
+  house's own committed scene: a `loud` event in the kitchen is 72 dB at its
+  cell, about 54 in the kitchen's flood, and 30 under that through her timber
+  floor -- inaudible in her room; a `deafening` one arrives at 55.7 dB, the
+  residue's wordless intrusion, under `WAKING_DB` 60; a shout below does not
+  wake her either; her name called loud below does. A one-beat impact is
+  priced as airborne sound through a floor, and impact transmission ("thuds")
+  is not built (`docs/design/DESIGN_SOUND_FIELD.md` § 12.4).
+- **A woken sleeper's pose still says she sleeps.** Replaying the probe's
+  opening, the woken view ended "You are lying on the agnes bed -- asleep on
+  her back under the blankets, nightcap on": the pose detail the opening
+  wrote outlives the sleep a sound ended, in the third person, and the anchor
+  id reads as a name. With no acquaintances seeded, her own room ("old Mrs
+  Hale's room") rendered as "old Mrs the unfamiliar person's room" -- the
+  name scrub took her own surname for the two strangers who share it. Neither
+  is this round's fix.
 
 ## 2. Roadmap
 

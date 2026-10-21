@@ -1587,9 +1587,12 @@ def _bubble_rejoined(chat_id, parent_id, parent_scene, child_id, child_scene):
     it forever because nobody had labelled anything.
 
     So: the bubble ends when one of its bodies is standing within the story's
-    radius of the party -- the split's own range, at the split's own radius
-    (`spatial_bubbles.bubble_radius`): a body leaves past the radius and comes
-    back inside it, never on two numbers. `in_range_rooms` is computed on the
+    radius of the party, or anywhere in the building the party stands in --
+    the split's own range, at the split's own radius
+    (`spatial_bubbles.bubble_radius`, `bubble_reach`): a body leaves past the
+    radius and out of the building and comes back inside either, never on two
+    rules. A thread the radius alone opened for a body in the party's own
+    building (before 2026-10-20) therefore ends at the parent's next beat. `in_range_rooms` is computed on the
     PARENT's scene (which keeps every room, so it can name hers) and her
     position is read from her OWN scene (which is the only place it exists
     after the split) -- each side asked about the half it actually holds.
@@ -2598,8 +2601,8 @@ def detect_and_reconcile(ctx, nonce):
         split from, whether the away party is a player's or a bubble's. The
         voice needs somewhere both parties exist to be spoken in.
       * A BUBBLE OPENS for cast standing more than the story's `bubble_radius`
-        of rooms walked (a stair one room) from every human, with no voice
-        reaching them. Last, because every cheaper answer above
+        of rooms walked (a stair one room) from every human, outside the
+        building every human stands in, with no voice reaching them. Last, because every cheaper answer above
         is a reason it should not: a channel that still carries makes the
         bubble's sixth refusal fire, and that refusal lifting by itself on a
         later beat is the whole of the uncouple driver.

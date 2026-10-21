@@ -43,10 +43,11 @@ the split is taken at the story's `bubble_radius` (three by default,
 2026-10-13), counted across every edge an ordinary voice walks
 (`spatial_senses._SOUND_WALK_BARRIERS`) as well as every way a body takes, so
 from a radius of two up nobody a raised voice reaches by those edges
-(`earshot_rooms`, two rooms) is split off. At the old one-doorway range it
-was false: Home 10's split put Tamamo in a frame of her own while her voice
-reached Hinami at full strength. Everything else `comms_link`
-needs is in `positions` and `comms`. The room dicts -- the expensive,
+(`earshot_rooms`, two rooms) is split off -- and nobody in the building the
+party stands in is split off at all (`rooms_under_one_roof`, 2026-10-20). At
+the old one-doorway range it was false: Home 10's split put Tamamo in a frame
+of her own while her voice reached Hinami at full strength. Everything else
+`comms_link` needs is in `positions` and `comms`. The room dicts -- the expensive,
 collision-prone half -- would have to be fused to ACT on the answer, which
 is why the room-id collision check below is a refusal rather than a merge
 strategy.
@@ -201,21 +202,31 @@ def bubble_reach(scene, rooms, *, radius, names=(), channels=True):
     """THE BUBBLE'S RANGE, defined once: every room within `radius` rooms
     walked of `rooms`, a whole stair one room (`spatial.rooms_walked_within`),
     with the far end of any live two-way channel and a body's inside along
-    with the body (`spatial.attended_rooms`, `walked=True`). The split, the
-    rejoin at commit, the merge before a beat and the town's claims all ask
-    this, so a body leaves and returns on one rule; the sibling meeting asks
-    it without the channels (`channels=False`). `radius` has no default: a
-    caller that forgot the story's setting must fail, not quietly use 3."""
-    from world.spatial import attended_rooms
+    with the body (`spatial.attended_rooms`, `walked=True`) -- AND every room
+    of the building `rooms` stand in, whatever its room count (`spatial.
+    rooms_under_one_roof`: a walk that never goes out under the sky). The
+    split, the rejoin at commit, the merge before a beat, the grouping of
+    away bodies into threads and the town's claims all ask this, so a body
+    leaves and returns on one rule; the sibling meeting asks it without the
+    channels (`channels=False`). `radius` has no default: a caller that
+    forgot the story's setting must fail, not quietly use 3.
 
-    return set(attended_rooms(scene, {str(r) for r in (rooms or ()) if r},
-                              hops=radius, walked=True, channels=channels,
-                              names=[str(n) for n in (names or ()) if n]))
+    The building is taken from where the bodies STAND (`rooms`), never from
+    a channel's far end: a voice over a wire carries a voice, not a house
+    (the far end's own radius is UNBUILT_LIVING_WORLD § 1.213's residual)."""
+    from world.spatial import attended_rooms, rooms_under_one_roof
+
+    centers = {str(r) for r in (rooms or ()) if r}
+    reach = set(attended_rooms(scene, centers, hops=radius, walked=True,
+                               channels=channels,
+                               names=[str(n) for n in (names or ()) if n]))
+    return reach | set(rooms_under_one_roof(scene, centers))
 
 
 def in_range_rooms(scene, party_names, *, radius):
     """The rooms the player's beat reaches -- the PLAYER'S CAUSALITY BUBBLE:
-    `bubble_reach` from where the human party stands.
+    `bubble_reach` from where the human party stands, the story's radius and
+    the whole of the building they stand in.
 
     Not the payload's rooms, any more (2026-10-13). A stage payload walks one
     plain doorway from every cast member's own room (`agents/common.
@@ -286,6 +297,29 @@ def bubble_split_decision(scene, *, party_names, cast_names, radius,
     the beat that brought her back to the court two rooms off kept her away.
     Every bubble the owner's database had opened (chats 163-173) was that
     story's opening, two or three rooms off; none opens at three.
+
+    AND THE BUILDING THE PARTY STANDS IN, WHATEVER ITS ROOM COUNT -- the
+    owner's first sentence, built 2026-10-20 beside the radius rather than
+    instead of it (`spatial.rooms_under_one_roof`, inside `bubble_reach`). A
+    walk that never goes out under the sky reaches every room of it:
+    `weather.room_exposure` is not `open`, so a covered porch and a stair hall
+    are inside and an open yard is not. Outside the building the radius
+    decides as before. Measured on the house probe (2026-10-20, its own
+    database, chat 1): the stair the plan laid put every bedroom of a
+    two-storey farmhouse four rooms walked from its kitchen, one past the
+    radius, and the opening split the grandmother asleep over the kitchen
+    into a thread of her own; under the building rule she stays in the
+    kitchen's, and the thread the radius opened rejoins at the player's next
+    beat. Replayed read-only on the eight bubbles the owner's database opened
+    (chats 163-173, each Tamamo split off at the opening, two or three rooms
+    walked through rooms all under one roof): neither rule opens one now.
+    Across the 140 stored scenes with a placed player, one cast body stands
+    past the radius under the player's roof (chat 10: a ship's cargo hold
+    four rooms from a TARDIS corridor, through the market dome both stand
+    in), the building reaches past the radius in 13, and the largest is 18
+    rooms (chat 115, a sublevel shelter; 16 of them declare no exposure and
+    read as indoors by `room_exposure`'s fallback, as they already do for
+    the weather and the light).
 
     ZONES ARE NO LONGER THE TRIGGER (owner ruling, 2026-09-17: "whenever they
     are outside the player causality bubble"). A declared `zone` was the

@@ -461,7 +461,8 @@ def attended_rooms(scene: dict, centers, *, hops: int = 1, names=(),
       across -- a way a body takes or a voice carries at full -- and a whole
       stair is one room), because it asks whether two people are near enough
       to be one story (owner, 2026-10-13). `spatial_bubbles.bubble_reach` is
-      the one caller.
+      the one caller, and adds the building the bodies stand in beside it
+      (`rooms_under_one_roof`, 2026-10-20).
 
     They used to be one walk, and the docstring here said what the Director
     is shown and what the engine calls in range "cannot drift apart". What
@@ -732,8 +733,87 @@ def rooms_walked_within(scene: dict, center_room_ids, radius: int) -> dict:
       hall to the next along a flight costs nothing, so a stair is one room
       however many storeys it climbs. Home 10 (chat 173): Tamamo's roost was
       four rooms from Hinami's by plain steps and three with the ladder as one.
+
+    The owner's first sentence is its own walk, beside this one:
+    `rooms_under_one_roof` -- the same steps, no radius, never out under the
+    sky (2026-10-20).
     """
     from collections import deque
+
+    rooms = (scene or {}).get("rooms") or {}
+    neighbors, flights = _walk_steps(scene)
+    limit = max(0, int(radius))
+    dist = {str(r): 0 for r in (center_room_ids or ()) if r}
+    queue = deque(sorted(dist))
+    while queue:                          # a 0-1 walk: a flight costs nothing
+        here = queue.popleft()
+        for there in sorted(neighbors.get(here, ())):
+            step = 0 if frozenset((here, there)) in flights else 1
+            walked = dist[here] + step
+            if walked > limit or walked >= dist.get(there, limit + 1):
+                continue
+            dist[there] = walked
+            (queue.appendleft if step == 0 else queue.append)(there)
+    return {rid: rooms[rid] for rid in dist if rid in rooms}
+
+
+def rooms_under_one_roof(scene: dict, center_room_ids) -> dict:
+    """Every room a walk reaches from center_room_ids WITHOUT GOING OUT UNDER
+    THE SKY: the building those rooms stand in, whatever its room count.
+
+    The owner, 2026-10-13: "same building should probably be the same
+    bubble". The radius was the second sentence ("maybe it should be a radius
+    of rooms?") and was built alone, so a building had no part in the range:
+    a two-storey farmhouse put every bedroom four rooms walked from its
+    kitchen, one past the radius, and the house probe of 2026-10-20 split a
+    grandmother asleep two metres over the kitchen into a thread of her own --
+    out of the kitchen's air, where no dropped pan and no name called up the
+    stair could reach her.
+
+    A STEP IS `rooms_walked_within`'s (`_walk_steps`: an edge two people are
+    together across), and there is no radius. A ROOM IS UNDER THE ROOF while
+    the sky does not reach it: `weather.room_exposure` is not `open` -- the
+    one reader the weather, the light and the ground already ask, so a room
+    the engine rains on is never inside a building here and one it keeps dry
+    always is. A covered porch, an archway, a stair hall are under it; a
+    yard, a street, open ground are not, and an open yard between a house and
+    its byre makes them two buildings. A centre the sky reaches stands in no
+    building and contributes nothing: outside, the radius alone decides
+    (`spatial_bubbles.bubble_reach`). A body's inside is as near as the body
+    (`_body_enclosure_rooms`), as in `attended_rooms`.
+    """
+    # At call time, as every spatial sibling reads weather (its import note).
+    from world.weather import room_exposure
+
+    rooms = (scene or {}).get("rooms") or {}
+    if not isinstance(rooms, dict) or not rooms:
+        return {}
+
+    def roofed(rid):
+        return rid in rooms and room_exposure(scene, rid) != "open"
+
+    seeds = {str(r) for r in (center_room_ids or ()) if r}
+    seeds |= _body_enclosure_rooms(scene, seeds)
+    found = {rid for rid in seeds if roofed(rid)}
+    if not found:
+        return {}
+    neighbors, _flights = _walk_steps(scene)
+    frontier = sorted(found)
+    while frontier:
+        here = frontier.pop()
+        for there in sorted(neighbors.get(here, ())):
+            if there not in found and roofed(there):
+                found.add(there)
+                frontier.append(there)
+    found |= {rid for rid in _body_enclosure_rooms(scene, found) if roofed(rid)}
+    return {rid: rooms[rid] for rid in sorted(found)}
+
+
+def _walk_steps(scene: dict):
+    """`(neighbors, flights)`: the steps `rooms_walked_within` and
+    `rooms_under_one_roof` walk -- `{room: {room, ...}}`, undirected, and the
+    `frozenset` pairs that are one flight of a layout-made stair (a step that
+    costs nothing). One definition of a step, read by both walks."""
     from world.spatial_senses import _SOUND_WALK_BARRIERS
     from world.structure import LAYOUT_MADE_KEY   # structure imports spatial
 
@@ -793,19 +873,7 @@ def rooms_walked_within(scene: dict, center_room_ids, radius: int) -> dict:
             if (target == str(where)) if where else (
                     normalize_barrier(edge.get("barrier")) == _closed_enclosure_barrier(ent)):
                 join(str(rid), target)
-    limit = max(0, int(radius))
-    dist = {str(r): 0 for r in (center_room_ids or ()) if r}
-    queue = deque(sorted(dist))
-    while queue:                          # a 0-1 walk: a flight costs nothing
-        here = queue.popleft()
-        for there in sorted(neighbors.get(here, ())):
-            step = 0 if frozenset((here, there)) in flights else 1
-            walked = dist[here] + step
-            if walked > limit or walked >= dist.get(there, limit + 1):
-                continue
-            dist[there] = walked
-            (queue.appendleft if step == 0 else queue.append)(there)
-    return {rid: rooms[rid] for rid in dist if rid in rooms}
+    return neighbors, flights
 
 
 def rooms_adjacent(scene, room_a, room_b):

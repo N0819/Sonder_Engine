@@ -291,7 +291,8 @@ $("#b-dlg").onclick = async () => {
                                    value: c.max_bubbles ?? 3 });
   // HOW FAR A CHARACTER MAY WALK BEFORE THEIR LIFE GOES ON IN A THREAD OF ITS
   // OWN (`bubble_radius`, owner 2026-10-13): rooms walked from you, a whole
-  // stair counting as one. An emptied field saves what it showed, never 0 --
+  // stair counting as one; the building you stand in is in range whatever it
+  // says (2026-10-20). An emptied field saves what it showed, never 0 --
   // the server would clamp that to its floor of one room and split everyone
   // two rooms off.
   const bubbleRadius = el("input", { type: "number", min: "1", max: "12",
@@ -422,7 +423,9 @@ $("#b-dlg").onclick = async () => {
           + "walked, a character may go from you before their life carries on "
           + "in a thread of its own. A stair counts as one room however many "
           + "floors it climbs. Nearer than that they stay in your scene, and "
-          + "what they do happens in your turns. 3 by default."),
+          + "what they do happens in your turns; so does anyone in the same "
+          + "building as you, however many rooms off, wherever they can be "
+          + "walked to without going out under the sky. 3 by default."),
         el("div", { style: "margin-top:4px" },
           "At the limit, the next character to walk away simply does not get a "
           + "thread — they are off screen the way everyone was before threads "

@@ -1,0 +1,1182 @@
+{
+ "location": "Hallow Farm, a stone farmhouse on the upper moor road",
+ "time": "night",
+ "weather": {
+  "sky": "a full moon behind cloud",
+  "air": "clear",
+  "cloud": "covered",
+  "electrical": false,
+  "precipitation": "rain",
+  "precipitation_kind": "liquid",
+  "intensity": "light",
+  "wind": "wind",
+  "wind_from": "sw",
+  "temperature": "cold"
+ },
+ "scene_description": "A stone farmhouse on the moor road, two storeys under a slate roof, timber floors upstairs. Rain has begun and the wind is rising; a full moon stands behind the cloud. In the kitchen the fire is banked for the night, the wall clock ticks loudly, and a traveller sits on the edge of the box bed with his boots off. Nell Hale is at the hearth, mending. Old Mrs Hale sleeps in the room directly above the kitchen. Gideon Hale is out in the byre with a lamp.",
+ "rooms": {
+  "hallow_kitchen": {
+   "from_event": 0,
+   "name": "the kitchen",
+   "desc": "The farmhouse's living room, floored in flagstone and roofed with dark beams, its lime-washed walls smoke-darkened above the hearth. A box bed is built into the west wall, its curtain half drawn on a rail. A stone hearth with a blackened iron crane stands in the north wall, and a scrubbed pine table with a bench along one side stands under the small east window. A wall clock hangs above the table. A plank door in the south wall gives on the yard, a door in the north wall on the back kitchen. Peat and split wood are stacked beside the hearth.",
+   "adjacent": [
+    {
+     "to": "hallow_back_kitchen",
+     "barrier": "closed_door",
+     "dir": "n",
+     "name": "the door to the back kitchen",
+     "material": "wood",
+     "desc": "a low plank door, painted once and gone grey, with a wooden latch worn smooth by hands"
+    },
+    {
+     "to": "hallow_yard",
+     "barrier": "closed_door",
+     "dir": "s",
+     "name": "the plank door to the yard",
+     "material": "wood",
+     "desc": "a heavy plank door with an iron sneck and a bar across it, draught coming under it"
+    }
+   ],
+   "notes": "",
+   "light": "lit",
+   "exposure": "enclosed",
+   "windows": [
+    "e"
+   ],
+   "level": 0,
+   "floor": "stone",
+   "anchors": {
+    "box_bed": {
+     "desc": "a box bed built into the west wall, its panels painted a dull green gone chalky at the edges, a curtain on a rail half drawn; the mattress is straw and the blankets are grey wool, worn thin",
+     "height": "waist"
+    },
+    "fire": {
+     "desc": "a stone hearth set into the north wall, its lintel soot-black, an iron crane and a pair of firedogs standing on a bed of grey ash; the flagstones before it are scorched and hollowed",
+     "height": "waist"
+    },
+    "table": {
+     "desc": "a scrubbed pine table bleached pale and scored by years of knives, with a bench along its south side and a bread board and a knife left on it",
+     "dir": "e",
+     "cell": [
+      3,
+      3
+     ],
+     "extent": {
+      "w": 3,
+      "d": 2
+     },
+     "height": "waist",
+     "footprint": "large"
+    },
+    "hearth_stool": {
+     "desc": "a low three-legged stool of dark oak, its seat worn hollow in the middle, standing on the flags before the hearth",
+     "dir": "n",
+     "cell": [
+      5,
+      2
+     ],
+     "extent": {
+      "w": 1,
+      "d": 1
+     },
+     "height": "floor",
+     "footprint": "small"
+    }
+   },
+   "size": "large",
+   "extent": {
+    "w": 7.0,
+    "d": 6.0
+   },
+   "shape": "rectangle"
+  },
+  "hallow_agnes_room": {
+   "from_event": 0,
+   "name": "old Mrs Hale's room",
+   "desc": "A small bedroom under the slate, its timber floor laid over the kitchen's ceiling beams. An iron bedstead stands against the north wall with a wooden chair beside it holding a jug and a folded shawl; a rag rug lies on the boards and a small window sits in the east wall. The room is cold and smells of camphor and old wool.",
+   "adjacent": [
+    {
+     "to": "hallow_landing",
+     "barrier": "closed_door",
+     "dir": "n",
+     "name": "the door to the landing",
+     "material": "wood",
+     "desc": "a thin panelled door that does not sit true in its frame, with a gap of a finger's width under it"
+    }
+   ],
+   "notes": "",
+   "light": "dark",
+   "exposure": "enclosed",
+   "windows": [
+    "e"
+   ],
+   "level": 1,
+   "over": [
+    "hallow_kitchen"
+   ],
+   "floor": "timber",
+   "anchors": {
+    "agnes_bed": {
+     "desc": "a low iron bedstead against the north wall, its paint chipped down to rust, with a flock mattress, a heap of grey blankets and a bolster",
+     "height": "waist"
+    }
+   },
+   "size": "small",
+   "extent": {
+    "w": 5.0,
+    "d": 4.0
+   },
+   "shape": "rectangle"
+  },
+  "hallow_byre": {
+   "from_event": 0,
+   "name": "the byre",
+   "desc": "A long stone shed across the yard, roofed with slate and floored with cobbles, its walls whitewashed to shoulder height and dark above. Wooden stalls run along the east wall with a stone gutter before them; hay and a bin of bruised oats are kept against the north wall. The air is thick with the smell of cattle, dung and damp straw.",
+   "adjacent": [
+    {
+     "to": "hallow_yard",
+     "barrier": "closed_door",
+     "dir": "w",
+     "name": "the byre door",
+     "material": "wood",
+     "desc": "a wide half-door of boards, the lower leaf shut and the upper leaf hooked back"
+    }
+   ],
+   "notes": "",
+   "light": "dim",
+   "exposure": "enclosed",
+   "level": 0,
+   "floor": "stone",
+   "surface": "bare",
+   "anchors": {
+    "byre_stalls": {
+     "desc": "a row of wooden stalls along the east wall, the boards dark with dung and rubbed smooth at the rails, with a stone gutter running before them and iron ties set in the posts",
+     "dir": "e",
+     "cell": [
+      6,
+      0
+     ],
+     "extent": {
+      "w": 2,
+      "d": 6
+     },
+     "height": "waist",
+     "footprint": "run"
+    },
+    "byre_fodder": {
+     "desc": "a stack of hay and a wooden bin of bruised oats against the north wall, the hay musty and warm, a pitchfork leaning in it",
+     "dir": "n",
+     "cell": [
+      0,
+      0
+     ],
+     "extent": {
+      "w": 3,
+      "d": 2
+     },
+     "height": "head",
+     "footprint": "large"
+    }
+   },
+   "size": "large",
+   "extent": {
+    "w": 8.0,
+    "d": 6.0
+   },
+   "shape": "rectangle"
+  },
+  "hallow_back_kitchen": {
+   "from_event": 0,
+   "name": "the back kitchen",
+   "desc": "",
+   "adjacent": [
+    {
+     "to": "hallow_kitchen",
+     "barrier": "closed_door",
+     "dir": "s",
+     "name": "the kitchen door",
+     "material": "wood",
+     "desc": "a low plank door with a wooden latch"
+    },
+    {
+     "to": "hallow_back_kitchen__hallow_landing_stair_0",
+     "barrier": "open",
+     "dir": "n",
+     "name": "the foot of the stair"
+    }
+   ],
+   "notes": "",
+   "exposure": "enclosed",
+   "planned": true,
+   "purpose": "the room behind the kitchen, where the stair to the upper floor rises",
+   "level": 0,
+   "floor": "stone"
+  },
+  "hallow_back_kitchen__hallow_landing_stair_0": {
+   "from_event": 0,
+   "name": "stair",
+   "desc": "",
+   "adjacent": [
+    {
+     "to": "hallow_back_kitchen",
+     "barrier": "open",
+     "dir": "s",
+     "name": "the back kitchen"
+    },
+    {
+     "to": "hallow_back_kitchen__hallow_landing_stair_1",
+     "barrier": "open",
+     "dir": "n",
+     "vertical": "up",
+     "way": "stair",
+     "name": "the stair"
+    }
+   ],
+   "notes": "",
+   "exposure": "enclosed",
+   "planned": true,
+   "purpose": "the lower flight of the stair rising from the back kitchen",
+   "level": 0
+  },
+  "hallow_back_kitchen__hallow_landing_stair_1": {
+   "from_event": 0,
+   "name": "stair",
+   "desc": "",
+   "adjacent": [
+    {
+     "to": "hallow_back_kitchen__hallow_landing_stair_0",
+     "barrier": "open",
+     "dir": "n",
+     "vertical": "down",
+     "way": "stair",
+     "name": "the stair"
+    },
+    {
+     "to": "hallow_landing",
+     "barrier": "open",
+     "dir": "s",
+     "name": "the head of the stair"
+    }
+   ],
+   "notes": "",
+   "exposure": "enclosed",
+   "planned": true,
+   "purpose": "the upper flight of the stair arriving at the landing",
+   "level": 1
+  },
+  "hallow_landing": {
+   "from_event": 0,
+   "name": "the landing",
+   "desc": "",
+   "adjacent": [
+    {
+     "to": "hallow_agnes_room",
+     "barrier": "closed_door",
+     "dir": "s",
+     "name": "old Mrs Hale's door",
+     "material": "wood",
+     "desc": "a thin panelled door, ill-fitting in its frame"
+    },
+    {
+     "to": "hallow_nell_room",
+     "barrier": "closed_door",
+     "dir": "e",
+     "name": "Nell's door",
+     "material": "wood",
+     "desc": "a plank door with a wooden latch"
+    },
+    {
+     "to": "hallow_gideon_room",
+     "barrier": "closed_door",
+     "dir": "e",
+     "name": "Gideon's door",
+     "material": "wood",
+     "desc": "a plank door with a wooden latch"
+    },
+    {
+     "to": "hallow_back_kitchen__hallow_landing_stair_1",
+     "barrier": "open",
+     "dir": "n",
+     "name": "the stair"
+    }
+   ],
+   "notes": "",
+   "exposure": "enclosed",
+   "planned": true,
+   "purpose": "the upstairs passage at the head of the stair, with the doors of the three bedrooms off it",
+   "level": 1,
+   "floor": "timber"
+  },
+  "hallow_nell_room": {
+   "from_event": 0,
+   "name": "Nell's room",
+   "desc": "",
+   "adjacent": [
+    {
+     "to": "hallow_landing",
+     "barrier": "closed_door",
+     "dir": "w",
+     "name": "the door to the landing",
+     "material": "wood",
+     "desc": "a plank door with a wooden latch"
+    }
+   ],
+   "notes": "",
+   "exposure": "enclosed",
+   "planned": true,
+   "purpose": "Nell Hale's bedroom, off the landing",
+   "level": 1,
+   "floor": "timber"
+  },
+  "hallow_gideon_room": {
+   "from_event": 0,
+   "name": "Gideon's room",
+   "desc": "",
+   "adjacent": [
+    {
+     "to": "hallow_landing",
+     "barrier": "closed_door",
+     "dir": "w",
+     "name": "the door to the landing",
+     "material": "wood",
+     "desc": "a plank door with a wooden latch"
+    }
+   ],
+   "notes": "",
+   "exposure": "enclosed",
+   "planned": true,
+   "purpose": "Gideon Hale's bedroom, off the landing",
+   "level": 1,
+   "floor": "timber"
+  },
+  "hallow_yard": {
+   "from_event": 0,
+   "name": "the yard",
+   "desc": "",
+   "adjacent": [
+    {
+     "to": "hallow_kitchen",
+     "barrier": "closed_door",
+     "dir": "n",
+     "name": "the plank door",
+     "material": "wood",
+     "desc": "a heavy plank door barred from within"
+    },
+    {
+     "to": "hallow_byre",
+     "barrier": "closed_door",
+     "dir": "e",
+     "name": "the byre door",
+     "material": "wood",
+     "desc": "a wide half-door of boards"
+    },
+    {
+     "to": "hallow_moor_road",
+     "barrier": "closed_door",
+     "dir": "s",
+     "name": "the gate",
+     "material": "wood",
+     "desc": "a five-bar wooden gate hung on stone posts"
+    }
+   ],
+   "notes": "",
+   "exposure": "open",
+   "planned": true,
+   "purpose": "the flagged ground between the house and the byre, with the gate onto the road",
+   "level": 0
+  },
+  "hallow_moor_road": {
+   "from_event": 0,
+   "name": "the moor road",
+   "desc": "",
+   "adjacent": [
+    {
+     "to": "hallow_yard",
+     "barrier": "closed_door",
+     "dir": "n",
+     "name": "the gate",
+     "material": "wood",
+     "desc": "a five-bar wooden gate hung on stone posts"
+    }
+   ],
+   "notes": "",
+   "exposure": "open",
+   "planned": true,
+   "purpose": "the road that runs past the farm gate and away over the moor",
+   "level": 0
+  }
+ },
+ "entities": {
+  "ash_penrose": {
+   "from_event": 0,
+   "name": "Ash Penrose",
+   "kind": "person",
+   "description": "A lean, weather-tanned figure in the late twenties, medium height, with ink-stained fingers and steady grey eyes.",
+   "aliases": [
+    "Ash",
+    "Mr. Penrose"
+   ],
+   "portable": false,
+   "container": false,
+   "interior_rooms": [],
+   "state": {},
+   "ubiquitous": false
+  },
+  "gideon_hale": {
+   "from_event": 0,
+   "name": "Gideon Hale",
+   "kind": "person",
+   "description": "A big man grown thick through the shoulders and chest, hands like shovels, face lined deep by weather and loss; moves slowly, as though calculating the cost of every step.",
+   "aliases": [
+    "Gideon",
+    "Mr. Hale"
+   ],
+   "portable": false,
+   "container": false,
+   "interior_rooms": [],
+   "state": {},
+   "ubiquitous": false
+  },
+  "nell_hale": {
+   "from_event": 0,
+   "name": "Nell Hale",
+   "kind": "person",
+   "description": "A lean, quick-moving girl of nineteen, brown-haired and grey-eyed, with wind-chapped hands and a brisk, watchful carriage; pretty in an unfussed way, the sort of face that looks younger until it opens its mouth.",
+   "aliases": [
+    "Nell",
+    "Miss Hale"
+   ],
+   "portable": false,
+   "container": false,
+   "interior_rooms": [],
+   "state": {},
+   "ubiquitous": false
+  },
+  "agnes_hale": {
+   "from_event": 0,
+   "name": "Agnes Hale",
+   "kind": "person",
+   "description": "A frail old woman, small and narrow, with a sharp-boned face and a thin querulous mouth. White hair hidden under a nightcap. Pale, lined skin, papery and loose over the knuckles and collarbones. Hands knotted with arthritis. Moves slowly and with effort.",
+   "aliases": [
+    "Ma",
+    "Mrs. Hale",
+    "old Mrs Hale"
+   ],
+   "portable": false,
+   "container": false,
+   "interior_rooms": [],
+   "state": {},
+   "ubiquitous": false
+  },
+  "kitchen_fire": {
+   "from_event": 0,
+   "name": "the kitchen fire",
+   "kind": "fixture",
+   "description": "A low fire of peat and split wood on the hearth's ash bed, red at the heart with a thin flame, the turfs glowing at the edges.",
+   "aliases": [
+    "the fire",
+    "the hearth fire"
+   ],
+   "portable": false,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "lit": true,
+    "burning": "low and steady, banked for the night"
+   },
+   "ubiquitous": false,
+   "light_source": "lit",
+   "light_shape": "all_round",
+   "light_height": "waist",
+   "sound_source": "audible",
+   "steadiness": "steady"
+  },
+  "kitchen_clock": {
+   "from_event": 0,
+   "name": "the kitchen clock",
+   "kind": "fixture",
+   "description": "A wall clock in a dark wooden case, its face yellowed and its hands thin as wire, hung on the wall above the table.",
+   "aliases": [
+    "the clock"
+   ],
+   "portable": false,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "running": true,
+    "wound": true,
+    "ticking": "loud and even"
+   },
+   "ubiquitous": false,
+   "sound_source": "audible"
+  },
+  "ash_lantern": {
+   "from_event": 0,
+   "name": "the tin lantern",
+   "kind": "object",
+   "description": "A tin lantern with a horn pane, soot-darkened, hanging by a wire hook from the pack.",
+   "aliases": [
+    "the lantern"
+   ],
+   "portable": true,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "lit": false,
+    "fuel": "no oil burning",
+    "temperature": "cold"
+   },
+   "ubiquitous": false,
+   "held_by": "Ash Penrose"
+  },
+  "ash_chain": {
+   "from_event": 0,
+   "name": "the surveyor's chain",
+   "kind": "object",
+   "description": "A surveyor's chain of iron links, oiled and coiled, looped over the shoulder.",
+   "aliases": [
+    "the chain"
+   ],
+   "portable": true,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "condition": "oiled and ready for use"
+   },
+   "ubiquitous": false,
+   "held_by": "Ash Penrose"
+  },
+  "ash_notebook": {
+   "from_event": 0,
+   "name": "the leather notebook",
+   "kind": "object",
+   "description": "A leather-bound notebook, half filled with surveys and sketches in pencil and ink.",
+   "aliases": [
+    "the notebook"
+   ],
+   "portable": true,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "filled": "half"
+   },
+   "ubiquitous": false,
+   "held_by": "Ash Penrose"
+  },
+  "ash_brandy": {
+   "from_event": 0,
+   "name": "the bottle of brandy",
+   "kind": "object",
+   "description": "A bottle of brandy wrapped in cloth and tied with a ribbon, packed as a gift.",
+   "aliases": [
+    "the brandy",
+    "the bottle"
+   ],
+   "portable": true,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "sealed": true,
+    "intended": "a gift"
+   },
+   "ubiquitous": false,
+   "held_by": "Ash Penrose"
+  },
+  "gideon_lamp": {
+   "from_event": 0,
+   "name": "Gideon's lamp",
+   "kind": "object",
+   "description": "A tin oil lamp with a sooty glass chimney and a wire handle.",
+   "aliases": [
+    "the lamp"
+   ],
+   "portable": true,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "lit": true
+   },
+   "ubiquitous": false,
+   "light_source": "dim",
+   "light_shape": "cone",
+   "light_height": "waist",
+   "steadiness": "steady",
+   "held_by": "Gideon Hale"
+  },
+  "the_red_cow": {
+   "from_event": 0,
+   "name": "the red cow",
+   "kind": "animal",
+   "description": "A red-and-white cow standing in the stalls, head down over the fodder, breath steaming.",
+   "aliases": [],
+   "portable": false,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "stalled": true,
+    "standing": true
+   },
+   "ubiquitous": false
+  },
+  "the_yearling": {
+   "from_event": 0,
+   "name": "the yearling",
+   "kind": "animal",
+   "description": "A shorthorn yearling in the far stall, lying on the straw with its legs tucked.",
+   "aliases": [],
+   "portable": false,
+   "container": false,
+   "interior_rooms": [],
+   "state": {
+    "stalled": true,
+    "lying": true
+   },
+   "ubiquitous": false
+  }
+ },
+ "positions": {
+  "Ash Penrose": "hallow_kitchen",
+  "Nell Hale": "hallow_kitchen",
+  "Agnes Hale": "hallow_agnes_room",
+  "Gideon Hale": "hallow_byre",
+  "kitchen_fire": "hallow_kitchen",
+  "kitchen_clock": "hallow_kitchen",
+  "ash_lantern": "hallow_kitchen",
+  "ash_chain": "hallow_kitchen",
+  "ash_notebook": "hallow_kitchen",
+  "ash_brandy": "hallow_kitchen",
+  "gideon_lamp": "hallow_byre",
+  "the_red_cow": "hallow_byre",
+  "the_yearling": "hallow_byre"
+ },
+ "crowd_ops": [],
+ "attire": {
+  "Ash Penrose": {
+   "wearing": [
+    "a waxed cotton coat with a hood",
+    "a plain linen shirt",
+    "a surveyor's chain looped over the shoulder",
+    "a leather notebook in a coat pocket",
+    "a tin lantern, unlit, hanging from the pack",
+    "a bottle of brandy wrapped in cloth, packed as a gift",
+    "wool trousers",
+    "sturdy leather walking boots"
+   ],
+   "state": [
+    "waxed coat is rain-darkened and dripping at the hem",
+    "boots are mud-caked to the ankle",
+    "shirt and trousers are dry beneath the coat",
+    "chain is oiled and ready for use",
+    "notebook is half-filled with surveys and sketches",
+    "lantern is cold, no oil burning",
+    "brandy bottle is sealed and ribbon-tied, meant as a gift"
+   ],
+   "regions": {
+    "head": {
+     "garments": [
+      {
+       "name": "a waxed cotton coat with a hood",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "head",
+        "torso",
+        "arms",
+        "waist"
+       ]
+      }
+     ],
+     "beneath": ""
+    },
+    "torso": {
+     "garments": [
+      {
+       "name": "a waxed cotton coat with a hood",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "head",
+        "torso",
+        "arms",
+        "waist"
+       ]
+      },
+      {
+       "name": "a plain linen shirt",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      },
+      {
+       "name": "a surveyor's chain looped over the shoulder",
+       "attaches": true,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      },
+      {
+       "name": "a leather notebook in a coat pocket",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "torso",
+        "arms",
+        "waist"
+       ]
+      },
+      {
+       "name": "a tin lantern, unlit, hanging from the pack",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      },
+      {
+       "name": "a bottle of brandy wrapped in cloth, packed as a gift",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      }
+     ],
+     "beneath": ""
+    },
+    "arms": {
+     "garments": [
+      {
+       "name": "a waxed cotton coat with a hood",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "head",
+        "torso",
+        "arms",
+        "waist"
+       ]
+      },
+      {
+       "name": "a leather notebook in a coat pocket",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "torso",
+        "arms",
+        "waist"
+       ]
+      }
+     ],
+     "beneath": ""
+    },
+    "waist": {
+     "garments": [
+      {
+       "name": "a waxed cotton coat with a hood",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "head",
+        "torso",
+        "arms",
+        "waist"
+       ]
+      },
+      {
+       "name": "a leather notebook in a coat pocket",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "torso",
+        "arms",
+        "waist"
+       ]
+      }
+     ],
+     "beneath": ""
+    },
+    "feet": {
+     "garments": [
+      {
+       "name": "sturdy leather walking boots",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      }
+     ],
+     "beneath": ""
+    },
+    "legs": {
+     "garments": [
+      {
+       "name": "wool trousers",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "groin",
+        "legs"
+       ]
+      }
+     ],
+     "beneath": ""
+    },
+    "groin": {
+     "garments": [
+      {
+       "name": "wool trousers",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "groin",
+        "legs"
+       ]
+      }
+     ],
+     "beneath": ""
+    }
+   }
+  },
+  "Gideon Hale": {
+   "wearing": [
+    "{'item'"
+   ],
+   "state": [
+    "the jumper is worn soft at the elbows and shoulders",
+    "the trousers carry dried mud at the cuffs",
+    "the cap is pushed back from the forehead"
+   ],
+   "regions": {
+    "torso": {
+     "garments": [
+      {
+       "name": "{'item'",
+       "attaches": false,
+       "description": "'heavy woollen jumper', 'region': 'torso', 'layer': 'base'}",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      }
+     ],
+     "beneath": ""
+    }
+   }
+  },
+  "Nell Hale": {
+   "wearing": [
+    "{'item'"
+   ],
+   "state": [
+    "dress is mended at the left elbow, seams showing honest wear",
+    "shawl pulled close against the draught from the kitchen door",
+    "apron has ash smudges at the hem",
+    "hands red-knuckled from cold and lye"
+   ],
+   "regions": {
+    "torso": {
+     "garments": [
+      {
+       "name": "{'item'",
+       "attaches": false,
+       "description": "'faded blue work dress', 'covers': ['torso', 'legs', 'upper arms']}",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      }
+     ],
+     "beneath": ""
+    }
+   }
+  },
+  "Agnes Hale": {
+   "wearing": [
+    "a thin cotton cap, white, covering hair entirely, tied under the chin",
+    "a flannel nightgown, long-sleeved, faded blue, buttoned to the throat",
+    "wool bed socks, grey, worn thin at the heels"
+   ],
+   "state": [
+    "nightgown is wrinkled from sleeping",
+    "bed socks bunched around the ankles"
+   ],
+   "regions": {
+    "torso": {
+     "garments": [
+      {
+       "name": "a flannel nightgown, long-sleeved, faded blue, buttoned to the throat",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "torso",
+        "waist",
+        "groin",
+        "legs"
+       ]
+      }
+     ],
+     "beneath": ""
+    },
+    "waist": {
+     "garments": [
+      {
+       "name": "a flannel nightgown, long-sleeved, faded blue, buttoned to the throat",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "torso",
+        "waist",
+        "groin",
+        "legs"
+       ]
+      }
+     ],
+     "beneath": ""
+    },
+    "groin": {
+     "garments": [
+      {
+       "name": "a flannel nightgown, long-sleeved, faded blue, buttoned to the throat",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "torso",
+        "waist",
+        "groin",
+        "legs"
+       ]
+      }
+     ],
+     "beneath": ""
+    },
+    "legs": {
+     "garments": [
+      {
+       "name": "a flannel nightgown, long-sleeved, faded blue, buttoned to the throat",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": [
+        "torso",
+        "waist",
+        "groin",
+        "legs"
+       ]
+      }
+     ],
+     "beneath": ""
+    },
+    "feet": {
+     "garments": [
+      {
+       "name": "wool bed socks, grey, worn thin at the heels",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      }
+     ],
+     "beneath": ""
+    },
+    "head": {
+     "garments": [
+      {
+       "name": "a thin cotton cap, white, covering hair entirely, tied under the chin",
+       "attaches": false,
+       "description": "",
+       "state": "worn",
+       "condition": "",
+       "covers": []
+      }
+     ],
+     "beneath": ""
+    }
+   }
+  }
+ },
+ "entity_states": {
+  "Ash Penrose": {
+   "posture": "seated on the edge of the box bed",
+   "activity": "resting after the day's walk, boots off",
+   "held_items": [
+    "a surveyor's chain",
+    "a leather notebook",
+    "a tin lantern",
+    "a bottle of brandy"
+   ],
+   "visible_conditions": [
+    "coat rain-darkened and dripping at the hem",
+    "boots mud-caked to the ankle"
+   ]
+  },
+  "Nell Hale": {
+   "posture": "seated at the hearth",
+   "activity": "mending by the fire",
+   "held_items": [
+    "needle and thread",
+    "a garment being mended"
+   ],
+   "visible_conditions": []
+  },
+  "Agnes Hale": {
+   "posture": "lying in bed",
+   "activity": "asleep",
+   "held_items": [],
+   "visible_conditions": []
+  },
+  "Gideon Hale": {
+   "posture": "standing",
+   "activity": "tending the cattle in the byre",
+   "held_items": [
+    "a tin oil lamp"
+   ],
+   "visible_conditions": []
+  }
+ },
+ "stations": {
+  "Ash Penrose": {
+   "at": "box_bed"
+  },
+  "Nell Hale": {
+   "at": "hearth_stool"
+  },
+  "Agnes Hale": {
+   "at": "agnes_bed"
+  },
+  "Gideon Hale": {
+   "at": "byre_stalls"
+  }
+ },
+ "poses": {
+  "Ash Penrose": {
+   "from_event": 0,
+   "posture": "seated",
+   "support": "box_bed",
+   "relative_to": "",
+   "relation": "",
+   "constraint": "",
+   "detail": "sitting on the edge of the box bed with his boots off on the floor beside him, coat still on and dripping"
+  },
+  "Nell Hale": {
+   "from_event": 0,
+   "posture": "seated",
+   "support": "hearth_stool",
+   "relative_to": "",
+   "relation": "",
+   "constraint": "",
+   "detail": "bent forward over her mending, hands close to the firelight"
+  },
+  "Agnes Hale": {
+   "from_event": 0,
+   "posture": "lying",
+   "support": "agnes_bed",
+   "relative_to": "",
+   "relation": "",
+   "constraint": "",
+   "detail": "asleep on her back under the blankets, nightcap on"
+  },
+  "Gideon Hale": {
+   "from_event": 0,
+   "posture": "standing",
+   "support": "",
+   "relative_to": "",
+   "relation": "",
+   "constraint": "",
+   "detail": "on his feet at the stalls with the lamp in one hand"
+  }
+ },
+ "comms_ops": [],
+ "contact_ops": [],
+ "contact_action_ops": [],
+ "substance_ops": [
+  {
+   "op": "add",
+   "source": "the rain",
+   "source_part": "",
+   "substance": "rainwater",
+   "target": "Ash Penrose",
+   "placement": "surface",
+   "target_interior": "",
+   "target_part": "the waxed cotton coat",
+   "amount": "a soaking, dripping at the hem",
+   "detail": "the waxed coat is rain-darkened and running off at the hem"
+  },
+  {
+   "op": "add",
+   "source": "the moor road",
+   "source_part": "",
+   "substance": "mud",
+   "target": "Ash Penrose",
+   "placement": "surface",
+   "target_interior": "",
+   "target_part": "the leather walking boots",
+   "amount": "caked to the ankle",
+   "detail": "moor mud dried and cracked on the boots"
+  }
+ ],
+ "sensory_events": [
+  {
+   "kind": "sound",
+   "description": "the kitchen clock ticking, loud and even, on the wall above the table",
+   "source_room": "hallow_kitchen",
+   "distance": "close",
+   "intensity": "audible"
+  },
+  {
+   "kind": "sound",
+   "description": "wind rising and rain beginning, driving against the roof and the walls of the house",
+   "source_room": "",
+   "distance": "near",
+   "intensity": "audible"
+  }
+ ],
+ "sequence": [],
+ "fiction_frame": {
+  "frame_id": "hallow_farm_opening",
+  "world_id": "hallow_farm",
+  "location_id": "hallow_farm",
+  "scale": "domestic",
+  "temporal_mode": "realtime",
+  "causal_regime_ids": []
+ },
+ "simulation_clock": {
+  "elapsed_seconds": 0,
+  "display": "night",
+  "time_scale": 1
+ },
+ "world_pressure": [
+  {
+   "op": "open",
+   "subject": "the rising storm over the moor",
+   "note": "the wind is rising and rain has begun; through the night it will worsen, cutting the moor road and keeping everyone in the house until it blows over"
+  }
+ ]
+}

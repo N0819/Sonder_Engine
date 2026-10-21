@@ -1378,8 +1378,9 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
     # other end of a radio was outside every payload -- and a body's inside
     # goes where the body goes. The WALK under it differs from the causality
     # bubble's since 2026-10-13: a payload walks `hops` plain doorways, the
-    # bubble the story's `bubble_radius` in rooms walked
-    # (`spatial_bubbles.bubble_reach`). What keeps the two from disagreeing
+    # bubble the story's `bubble_radius` in rooms walked and the whole of the
+    # building the party stands in (`spatial_bubbles.bubble_reach`, the
+    # building since 2026-10-20). What keeps the two from disagreeing
     # where it matters is that every cast member's own room is a centre here:
     # a body inside the bubble's range is never missing from a payload, though
     # the rooms between it and the player need not be in one.

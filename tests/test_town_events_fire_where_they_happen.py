@@ -137,14 +137,20 @@ class TestItLandsWhereSomebodyStands:
         assert ops == [("status", "e", "fired")]
 
 
+# The lane, the bridge and the market are under the sky, so a frame's claims
+# reach along them by the radius alone; the mill is one building
+# (2026-10-20, `spatial_routing.rooms_under_one_roof`).
 ROOMS = {"mill_race": {"adjacent": [{"to": "mill_floor", "barrier": "open"}]},
          "mill_floor": {"adjacent": [{"to": "mill_race", "barrier": "open"},
                                      {"to": "lane", "barrier": "open"}]},
-         "lane": {"adjacent": [{"to": "mill_floor", "barrier": "open"},
+         "lane": {"exposure": "open",
+                  "adjacent": [{"to": "mill_floor", "barrier": "open"},
                                {"to": "bridge", "barrier": "open"}]},
-         "bridge": {"adjacent": [{"to": "lane", "barrier": "open"},
+         "bridge": {"exposure": "open",
+                    "adjacent": [{"to": "lane", "barrier": "open"},
                                  {"to": "market", "barrier": "open"}]},
-         "market": {"adjacent": [{"to": "bridge", "barrier": "open"}]},
+         "market": {"exposure": "open",
+                    "adjacent": [{"to": "bridge", "barrier": "open"}]},
          "weir": {"adjacent": []}}
 
 
