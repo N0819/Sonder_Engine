@@ -4058,3 +4058,54 @@ What that leaves:
   cast member what they do over the skip, run their answers as the charter
   runs a day, place them where it leaves them, write their memories after.
   Proposed, not built.
+
+Extended again 2026-10-21 (the probe's F20, "a skip moves the sky one
+rung"): the clock moved by a skip and the weather did not follow it.
+`advance_weather` took ONE drift per beat however many windows the beat
+crossed, a declared sky was placed in the window that first observed it, and
+the floor took one step per COMMIT, so the world over N hours depended on how
+many beats the hours were told in. The sky now walks once per drift window
+crossed, each step seeded by its own window (`weather.weather_course`); a
+declared sky stands in the window it was written in; the floor lies one window
+at a time under the sky that stood in it (`weather.ground_through`); and
+nothing moves inside one window (`Design.md`, "The sky and the ground follow
+the hours"). What that leaves:
+
+- **The moon is carried and never moves with the days.** The drift carries
+  `moon` verbatim (it must not lose it, `Design.md`'s "The weather drift
+  carries the moon"), so a full moon is full a fortnight later. Whether a
+  story's moon waxes and wanes on its clock -- by what cycle, when a fiction's
+  world need not have one moon or a 29.5-day month, and whether `none` means
+  "no moon tonight" or "no moon at all" -- is the owner's question.
+- **The floor's rates were tuned per beat and are read per window.**
+  `_GROUND_GAIN` and `_GROUND_DRAIN` are unchanged, so heavy rain on open
+  ground now reads damp after one hour, wet after two, standing puddles after
+  three and churned mud after four, and churned mud takes twelve dry hours to
+  go. The module's own aim ("hours of heavy rain should leave a yard muddy, a
+  night of snow should leave it deep") is met; whether faster or slower is
+  wanted is the owner's call.
+- **Lying snow drains at any temperature.** `_GROUND_DRAIN` asks nothing of
+  the temperature, so a night of snow under a freezing sky is gone twelve dry
+  hours later. A frozen floor that holds while the air is freezing would be one
+  clause in `ground_after`; the owner rules on rates.
+- **A fall declared mid-window reaches the floor when the window closes.** The
+  floor answers whole windows, so a downpour declared a minute into an hour
+  wets nothing until the hour turns (an opening's own sky is laid
+  `OPENING_GROUND_WINDOWS` deep). Presentational only: the floor is read by the
+  ambience query and the backdrop's keys, never by a mind.
+- **A fall's name restated without its kind reads `other`.** Found on the same
+  beat: the resolve declared `{"precipitation": "spray", "intensity": "heavy"}`
+  over a sky already carrying `spray` / `liquid`, and `normalize_weather` read
+  the restated name as a fall it had never heard of -- kind `other`, so nothing
+  more landed on the rock. A name the engine cannot fold, restated identically
+  over the record that carries its kind, is the same fall; the repair is to
+  carry the base's kind there (`normalize_weather`'s `elif not stated_fall`
+  branch). Not taken in the clock's lane.
+- **Mud on open water.** The probe's `the_channel` -- the open water the boat
+  crosses -- held "churned mud" by checkpoint 8: the floor ledger knows a
+  room's exposure, never whether it has a floor.
+- **A sky with no window of its own reads it from the previous commit's
+  clock.** A reunion of bubbles (`spatial_frames`) moves a frame's clock to the
+  later of two without a commit, so a declared sky in that frame stands in the
+  later window and the reunion's gap is not walked. A stamped sky is
+  unaffected.

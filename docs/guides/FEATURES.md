@@ -559,11 +559,13 @@ legitimately perceive, learn, remember or infer.
 - **Hearing a storm you cannot see** — A cellar hears a downpour it cannot see,
   fading from present to muffled to faint as you go deeper, with thunder
   carrying furthest.
-- **The sky moves on its own** — Weather drifts about once an hour of story
-  time, and a reroll cannot produce a different sky.
-- **What weather leaves behind** — Rain leaves damp ground, then puddles, then
-  churned mud; snow piles into drifts; a freeze turns wet ground to ice. It
-  stays after the sky clears and dries more slowly than it arrived.
+- **The sky moves on its own** — Weather drifts once for every hour of story
+  time, however many turns the hours pass in: two days skipped in one turn
+  leave the sky two days told an hour at a time would. A reroll cannot
+  produce a different sky.
+- **What weather leaves behind** — Hour by hour, rain leaves damp ground, then
+  puddles, then churned mud; snow piles into drifts; a freeze turns wet ground
+  to ice. It stays after the sky clears and dries more slowly than it arrived.
 - **Weather severity** — Set how far a story's weather may go: calm (scenery
   only, nothing accumulates), seasonal, harsh, or catastrophic.
 - **Light** — A room can be dark, dim, lit or bright, and going dark is a real

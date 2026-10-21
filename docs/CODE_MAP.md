@@ -109,7 +109,7 @@
 | `persist/commit_memory_write.py` | 367 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 620 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 3017 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.landscape`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.structure`, `world.weather` |
+| `persist/commit_scene_state.py` | 3068 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.landscape`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.structure`, `world.weather` |
 | `persist/llm_capture.py` | 604 |  | `core.db` |
 | `persist/pipeline_trace.py` | 635 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `persist/steps.py` | 150 |  | `core.db` |
@@ -257,7 +257,7 @@
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
 | `world/vistas.py` | 391 |  | — |
-| `world/weather.py` | 1547 |  | — |
+| `world/weather.py` | 1709 |  | — |
 
 ## Largest top-level functions
 
@@ -1425,14 +1425,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compose_beat_scene()` | 1644 | 750 lines |
-| `prepare_scene_commit()` | 2396 | 501 lines |
-| `_fold_duplicate_mints()` | 822 | 135 lines |
-| `_advance_day_cycle()` | 72 | 124 lines |
-| `derive_borne_containment()` | 992 | 124 lines |
-| `_refuse_unheld_transfers()` | 1118 | 103 lines |
-| `_place_orphan_mints()` | 1223 | 70 lines |
-| `_merge_overlays()` | 592 | 68 lines |
+| `compose_beat_scene()` | 1663 | 750 lines |
+| `prepare_scene_commit()` | 2415 | 533 lines |
+| `_fold_duplicate_mints()` | 841 | 135 lines |
+| `_advance_day_cycle()` | 74 | 124 lines |
+| `derive_borne_containment()` | 1011 | 124 lines |
+| `_refuse_unheld_transfers()` | 1137 | 103 lines |
+| `_place_orphan_mints()` | 1242 | 70 lines |
+| `_merge_overlays()` | 611 | 68 lines |
 
 ### `persist/llm_capture.py`
 
@@ -3204,14 +3204,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_weather()` | 433 | 170 lines |
-| `advance_weather()` | 1287 | 90 lines |
-| `weather_for_room()` | 1002 | 89 lines |
-| `weather_depth()` | 871 | 57 lines |
-| `ground_after()` | 1457 | 51 lines |
-| `weather_sound_words()` | 1168 | 38 lines |
-| `weather_words()` | 1131 | 35 lines |
-| `_derive_exposure()` | 703 | 32 lines |
+| `normalize_weather()` | 436 | 170 lines |
+| `weather_for_room()` | 1005 | 89 lines |
+| `weather_course()` | 1376 | 77 lines |
+| `weather_depth()` | 874 | 57 lines |
+| `ground_after()` | 1591 | 52 lines |
+| `weather_sound_words()` | 1171 | 38 lines |
+| `weather_words()` | 1134 | 35 lines |
+| `_derive_exposure()` | 706 | 32 lines |
 
 ## FastAPI routes
 

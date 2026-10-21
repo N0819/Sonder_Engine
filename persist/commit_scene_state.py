@@ -16,7 +16,9 @@ from story.provenance_text import strip_engine_provenance
 from world.beat_ledger import record_beat_events
 from world.landscape import WRITTEN_LOOKS_KEY
 from world.structure import LAID_LOOKS_KEY
-from world.weather import advance_weather, normalize_weather
+from world.weather import (DRIFT_WINDOW_LIMIT, OPENING_GROUND_WINDOWS,
+                           drift_window, normalize_weather,
+                           weather_course)
 from world.spatial import (BEARING_MANNERS, contradictory_sight_edges, derived_room_name,
                            guessed_room_sizes,
                            layout_warning, merge_scene_with_diff,
@@ -365,19 +367,25 @@ def _guard_occupied_mover_removal(prev_scene, diff, doomed=None):
             )
 
 
-def _advance_ground(cid, sc):
-    """What the sky has left on each room's floor, after this beat.
+def _advance_ground(cid, sc, skies=()):
+    """What the sky has left on each room's floor, after the drift windows
+    this beat closed.
 
+    ONE STEP PER WINDOW, under the sky that stood in it (`skies`, oldest
+    first: `weather.weather_course`'s `closed`, handed in by the commit), and
+    none for a beat inside one window -- so the floor follows the story's
+    hours rather than its beat count (`weather.ground_through`; the probe
+    story's measurement is in `world/weather.py` above `GROUND_LADDERS`).
     Deterministic and idempotent, like the weather drift it follows: same
-    scene, same result, so a reroll does not re-mud a yard. Written to its own
-    scene key rather than into `overlays`, which the Director authors -- engine
-    bookkeeping and authored world-state should not be able to overwrite each
-    other. Both the acoustic and the visual cache keys read it, so a yard that
-    has turned to mud sounds and looks like one.
+    scene, same windows, same result, so a reroll does not re-mud a yard.
+    Written to its own scene key rather than into `overlays`, which the
+    Director authors -- engine bookkeeping and authored world-state should
+    not be able to overwrite each other. Both the acoustic and the visual
+    cache keys read it, so a yard that has turned to mud sounds and looks
+    like one.
     """
     from story.scene import weather_severity
-    from world.weather import (ground_after, is_falling, normalize_weather,
-                               room_exposure, weather_for_room)
+    from world.weather import ground_through, is_falling, room_exposure
 
     if not isinstance(sc, dict):
         return
@@ -385,24 +393,35 @@ def _advance_ground(cid, sc):
     if not rooms:
         return
     previous = sc.get("ground") if isinstance(sc.get("ground"), dict) else {}
-    weather = sc.get("weather") if isinstance(sc.get("weather"), dict) else {}
+    skies = [sky for sky in (skies or ()) if isinstance(sky, dict)]
     # `is_falling` rather than the precipitation name (A88): a sky keeps the
     # name of what it drops through a dry spell, so the name alone no longer
     # answers "is anything coming down".
-    if not previous and not is_falling(normalize_weather(weather)):
-        # Nothing has fallen and nothing is on any floor: every room's
-        # answer is {} and the per-room exposure walk (a BFS over the graph
-        # per room) would only prove it. The common case on most beats.
+    if not previous and not any(is_falling(sky) for sky in skies):
+        # Nothing fell in any window and nothing is on any floor: every
+        # room's answer is {} and the per-room exposure read would only prove
+        # it. The common case on most beats.
         sc.pop("ground", None)
         return
+    if not skies:
+        # No window closed: every floor stands exactly as it was.
+        return
     severity = weather_severity(cid)
-    ground = {}
+    ground, answered = {}, {}
     for room_id in rooms:
-        state = ground_after(
-            previous.get(room_id), weather_for_room(sc, room_id), severity,
-            exposed=room_exposure(sc, room_id) == "open")
-        if state:
-            ground[room_id] = state
+        exposed = room_exposure(sc, room_id) == "open"
+        before = previous.get(room_id)
+        if not exposed and not before:
+            continue                # nothing lands here and nothing drains
+        # Rooms with the same exposure and the same floor walk the same
+        # windows to the same floor; answer each such pair once.
+        key = (exposed, repr(sorted(before.items()))
+               if isinstance(before, dict) else "")
+        if key not in answered:
+            answered[key] = ground_through(before, skies, severity,
+                                           exposed=exposed)
+        if answered[key]:
+            ground[room_id] = dict(answered[key])
     if ground:
         sc["ground"] = ground
     else:
@@ -2608,17 +2627,33 @@ def prepare_scene_commit(ctx):
     # who said "blizzard, heavy snow, severe, gale-force, sub-zero" -- every term
     # a synonym this vocabulary could not read -- cleared the sky it was trying
     # to describe. See `_SYNONYMS` in weather.py.
-    declared = normalize_weather(diff.get("weather"), sc.get("weather"))
-    if declared:
-        sc["weather"] = declared
-    elif sc.get("weather"):
+    #
+    # ONE WINDOW AT A TIME, HOWEVER MANY THE BEAT CROSSES (2026-10-21). The
+    # sky this beat began under walks every drift window between the one it
+    # stands in and the one the beat ends in, and the ground lies under each
+    # of those skies in turn, so two days told in one beat leave the world
+    # forty-eight hourly beats leave (`weather.weather_course`). The walk is
+    # taken on a declared beat too, because the hours before the declaration
+    # are the ground's: the declaration replaces the sky the beat ENDS under,
+    # never the ones the floor already lay under.
+    #
+    # `written_at` is the clock this scene was last committed at: the window
+    # a sky with no stamp of its own was written in -- a declaration (its
+    # `DECLARED_STEP`) or the opening's. A declared sky used to be placed in
+    # whatever window first observed it, so a skip right after a declaration
+    # walked none of its hours (`weather.DECLARED_STEP`).
+    before = sc.get("weather")
+    declared = normalize_weather(diff.get("weather"), before)
+    elapsed = float((clock or wget(cid, "simulation_clock", {}) or {})
+                    .get("elapsed_seconds") or 0.0)
+    closed = []
+    if before:
         # Only a scene that HAS weather drifts. An earlier draft drifted
         # whenever no opening ran, which quietly gave every pre-existing chat a
         # sky on its next beat -- including the ones the prompt tells the
         # Director to leave weatherless (deep space, a sealed interior). A
         # story acquires weather when its fiction says so, never by default.
-        elapsed = float((clock or wget(cid, "simulation_clock", {}) or {})
-                        .get("elapsed_seconds") or 0.0)
+        #
         # `severity` is the story's authored ceiling. Passed here and nowhere
         # else on purpose: the drift is the only thing that moves a sky the
         # story did not ask to move, so it is the only thing a ceiling on how
@@ -2626,12 +2661,28 @@ def prepare_scene_commit(ctx):
         # downpour has said what the beat is, and is not capped.
         from story.scene import weather_severity
         # No `cold=` (review 2026-09-07 A88): it re-asked, here, the question
-        # `advance_weather` asks of the same record one line into its own body.
-        sc["weather"] = advance_weather(
-            sc.get("weather"), elapsed, seed="chat:%s" % cid,
-            severity=weather_severity(cid))
+        # the drift asks of the same record one line into its own body.
+        closed, drifted = weather_course(
+            before, elapsed, seed="chat:%s" % cid,
+            severity=weather_severity(cid),
+            written_at=clock_elapsed(prev_clock))
+        sc["weather"] = declared or drifted
+    elif declared:
+        sc["weather"] = declared
+    elif sc.get("ground"):
+        # A floor with no sky over it at all -- a host can delete a scene's
+        # weather and leave its mud -- still dries, one window at a time.
+        crossed = (drift_window(elapsed) or 0) - (
+            drift_window(clock_elapsed(prev_clock)) or 0)
+        closed = [{}] * max(0, min(crossed, DRIFT_WINDOW_LIMIT))
+    if est and not closed and sc.get("weather"):
+        # THE OPENING'S FLOOR. The opening passes no time, so no window
+        # closes in it; the sky it establishes was falling before the story
+        # began, and lays the floor it would have laid over
+        # `OPENING_GROUND_WINDOWS` -- a blizzard story opens on snow.
+        closed = [normalize_weather(sc["weather"])] * OPENING_GROUND_WINDOWS
 
-    _advance_ground(cid, sc)
+    _advance_ground(cid, sc, closed)
 
     if destruction:
         base_clock = clock or wget(

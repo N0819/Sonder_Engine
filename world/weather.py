@@ -51,8 +51,11 @@ Director writes is a field that changes about once a story: it has no reason to
 touch weather on a beat that was about a conversation. So `advance_weather` is
 a seeded, idempotent progression on the simulation clock, in the same spirit as
 `mechanics.py` -- same chat, same elapsed time, same result, so a reroll or a
-resumed turn cannot produce a different sky. The Director still overrides it
-outright whenever a beat says the storm breaks.
+resumed turn cannot produce a different sky. And the same however many beats
+the time passed in: the sky walks once per drift window crossed and the ground
+lies one window at a time (`weather_course`, `ground_through`), so two days
+told in one beat leave the world two days of hourly beats leave. The Director
+still overrides it outright whenever a beat says the storm breaks.
 
 Most consumers are presentational (`backdrops.py`, `ambience.py`); one is not,
 and it is `room_exposure` rather than the sky that crossed over -- see rule 2.
@@ -1216,17 +1219,41 @@ def weather_sound_words(scoped):
 # sky move, slow enough that it is not weather-as-strobe.
 DRIFT_SECONDS = 3600
 
+#: The most drift windows ONE beat walks (2026-10-21; a cap, so the owner's
+#: to rule on). A beat crossing more windows than this walks only the last of
+#: them, each still seeded by its own window, from the sky the beat began
+#: under; the ground lies under the same windows (`ground_through`). 168 is a
+#: week of hours.
+#:
+#: WHY IT CHANGES NOTHING. One window's walk is monotone on every ladder it
+#: moves: one roll moves every start the same way, and no rung can pass
+#: another. So a copy started on the lowest rungs and a copy started on the
+#: highest squeeze every other start between them, and once the two have met
+#: the windows before that point cannot change where the walk ends (coupling
+#: from the past). Measured on the exact chain of that pair -- cloud, wind and
+#: fall together, the three moves of a roll taken as equally likely, which is
+#: what `_roll % 3` is built to be: P(not yet met) is 0.077 after 17 windows,
+#: 1.2e-3 after 36, 4.7e-7 after 72, and under 1e-14 -- the arithmetic's own
+#: floor -- by 168; over 3,000 runs on `_roll` itself the longest took 49. And
+#: the floor under the same windows (`ground_through`): 10,000 random beats of
+#: twice the limit -- random skies, seeds, severities, floors and exposures --
+#: walked whole and walked from the limit left the same sky and the same floor
+#: in every one. A beat of a year therefore lands where 8,760 one-hour beats
+#: land, and costs what a week costs (about 5 ms).
+DRIFT_WINDOW_LIMIT = 168
+
 #: The drift window a weather record belongs to, stamped on the record itself
 #: (`advance_weather`). Present only once a record has been placed in a
 #: window, so a scene whose sky has never been drifted or declared hashes and
 #: archives exactly as it did before this field existed.
 DRIFT_STEP_KEY = "drift_step"
 
-#: A sky a BEAT declared, waiting to be placed. The drift is the world's own
-#: cycle and a declaration is an authored fact, so a declaration outranks the
-#: roll for as long as it stands: the next drift check stamps it with the
-#: window it is observed in and returns it unchanged, and only the window
-#: AFTER that rolls on from it.
+#: A sky a BEAT declared, with no window of its own yet. The drift is the
+#: world's own cycle and a declaration is an authored fact, so a declaration
+#: outranks the roll for as long as it stands: it stands in the window it was
+#: WRITTEN in -- the clock the commit that wrote it left, which the next
+#: commit passes as `written_at` -- for the rest of that window, and every
+#: window after it walks on from it.
 #:
 #: Measured 2026-09-05 ("The Long Road to Ambry", turns 10-13): `step =
 #: elapsed // DRIFT_SECONDS` is CUMULATIVE and was used only as a roll salt,
@@ -1237,6 +1264,15 @@ DRIFT_STEP_KEY = "drift_step"
 #: overcast/drizzle/breeze, and the next beat put the gale back. Fifteen
 #: seconds of story time, and the invented storm went on to raise the
 #: clearing's noise floor to 2.8 and silence a conversation.
+#:
+#: WRITTEN, NOT OBSERVED (2026-10-21). A declared sky used to be placed in
+#: whatever window first OBSERVED it, which is the next beat's -- so a skip
+#: right after a declaration walked none of its hours. Measured, the probe
+#: story (control chat 2): "That evening" (idx 5) declared a sky in window 3,
+#: "The next morning" (idx 6) observed it in window 15, and twelve windows
+#: passed with the sky exactly as declared (checkpoint 7). A caller that does
+#: not know the clock a record was written at still gets the old answer:
+#: placed where it is observed.
 DECLARED_STEP = "declared"
 
 # THE DRIFT MOVES AXES, AND IT NEVER MOVES A NAME.
@@ -1284,18 +1320,151 @@ def _roll(seed, step, salt):
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:8], 16)
 
 
-def advance_weather(weather, elapsed_seconds, seed, severity=None):
-    """The sky after `elapsed_seconds`, drifted deterministically.
+def drift_window(elapsed_seconds):
+    """The drift window a clock stands in -- `elapsed // DRIFT_SECONDS`,
+    never below 0 -- or None for a clock that is not a number."""
+    try:
+        return int(max(0.0, float(elapsed_seconds)) // DRIFT_SECONDS)
+    except (TypeError, ValueError):
+        return None
+
+
+def _standing_window(weather, now, written_at):
+    """The drift window a sky stands in.
+
+    Its own stamp where it has one (`DRIFT_STEP_KEY`). A sky with none -- one
+    a beat declared (`DECLARED_STEP`), or the opening's, which nothing stamps
+    -- stands in the window of the clock it was WRITTEN at: `written_at`, the
+    clock the commit that wrote the scene left. A caller that does not know
+    that clock gets the answer each record gives on its own: a declared sky
+    is placed where it is observed (`now`), and an unstamped one is the
+    opening's, written at the start of the story's clock -- window 0, where
+    every unstamped sky on the owner's database stands (survey 2026-10-21:
+    387 checkpoints and 38 live scenes, all in window 0).
+    """
+    stamped = weather.get(DRIFT_STEP_KEY)
+    if isinstance(stamped, int) and not isinstance(stamped, bool):
+        return stamped
+    if written_at is not None:
+        written = drift_window(written_at)
+        if written is not None:
+            return written
+    return now if stamped == DECLARED_STEP else 0
+
+
+def _drift_one_window(cloud, wind, intensity, kind, seed, window, severity):
+    """ONE window's drift of the three walked axes, seeded by that window
+    and nothing else -- which is what makes a long beat the same as many
+    short ones: window 40 rolls the same whether the beat that crossed it
+    began in window 39 or in window 2."""
+    cloud = _walk(CLOUDS, cloud, _roll(seed, window, "cloud"))
+    wind = _walk(WINDS, wind, _roll(seed, window, "wind"))
+    if kind == "none":
+        # Nothing has ever fallen from this sky. The drift does not get to
+        # decide that something does -- that is the whole of A88.
+        intensity = "none"
+    elif cloud == "covered":
+        intensity = _walk(INTENSITIES, intensity, _roll(seed, window, "fall"))
+    else:
+        # A sky opening up puts its fall down. Stated as the axis rather than
+        # as a fall table: whatever a story's weather is made of, it does not
+        # come out of a sky that has cleared.
+        intensity = _walk(INTENSITIES, intensity, 2)
+    return cloud, wind, _capped_intensity(intensity, severity)
+
+
+def weather_course(weather, elapsed_seconds, seed, severity=None,
+                   written_at=None):
+    """The sky through every drift window from the one it stands in to the
+    one `elapsed_seconds` falls in, as `(closed, now)`.
+
+    `now` is the sky in the clock's window -- `advance_weather`'s answer.
+    `closed` is the sky that stood in each window the clock has LEFT, oldest
+    first, beginning with the record as it stands: what the ground lay under,
+    one window at a time (`ground_through`). Inside one window it is `[]` and
+    `now` is the sky unchanged, so an ordinary conversational beat moves
+    nothing.
+
+    THE WORLD OVER N HOURS IS THE SAME HOWEVER MANY BEATS THEY PASSED IN
+    (2026-10-21). The sky walks once for every window it crosses, each step
+    seeded by its own window (`_drift_one_window`), so one beat crossing
+    forty-three windows lands exactly where forty-three beats of one window
+    each land. It used to take ONE walk per beat, seeded by the window it
+    landed in. Measured, the probe story (control chat 2 idx 8, replayed
+    through the commit from checkpoint 8 with the beat's time alone): "Two
+    days later ..." crossed windows 21 to 64 and walked the sky once, heavy
+    spray to moderate under a standing gale, where forty-four one-hour beats
+    on the same chat walk it forty-three times and end with the spray
+    stopped and the wind down. Past `DRIFT_WINDOW_LIMIT` windows only the
+    last of them are walked, which changes nothing (see there).
+
+    Every rule is a rule of ONE window's step, so each holds at every window
+    of a long beat: a fall's name and kind are the story's and carried, and a
+    sky that has never dropped anything stays dry; the story's severity
+    ceiling caps each window's fall; the sky is renamed only while it wears a
+    word this engine minted (`_engine_sky_name`, which then follows the cloud
+    of the window it ends in); air, temperature, lightning, the moon and the
+    wind's quarter are carried and never walked. A declared sky stands in the
+    window it was written in (`DECLARED_STEP`, `written_at`).
+    """
+    weather = normalize_weather(weather) or dict(_DEFAULT)
+    now = drift_window(elapsed_seconds)
+    if now is None:
+        return [], weather
+    at = _standing_window(weather, now, written_at)
+    if now <= at:
+        if 0 < now == at and weather.get(DRIFT_STEP_KEY) != now:
+            # A sky with no window of its own, in the window it was written
+            # in: placed there, unmoved. Window 0 keeps no stamp, so a story's
+            # opening sky serializes exactly as it always has.
+            return [], dict(weather, **{DRIFT_STEP_KEY: now})
+        return [], weather
+    # The sky is still wearing a word this engine wrote, so this engine may
+    # keep it in step with the axes it moves. An authored name is left
+    # exactly as the story wrote it.
+    renamed = _fold_legacy(weather["sky"], "sky") == \
+        weather["sky"].strip().casefold()
+    cloud, wind, intensity = (weather["cloud"], weather["wind"],
+                              weather["intensity"])
+    closed, stood = [weather], weather
+    for window in range(max(at + 1, now - DRIFT_WINDOW_LIMIT + 1), now + 1):
+        cloud, wind, intensity = _drift_one_window(
+            cloud, wind, intensity, weather["precipitation_kind"], seed,
+            window, severity)
+        stood = dict(weather, **{
+            "sky": (_engine_sky_name(weather["air"], cloud,
+                                     weather["electrical"])
+                    if renamed else weather["sky"]),
+            "cloud": cloud, "wind": wind, "intensity": intensity,
+            # Everything else is carried from the record, never walked:
+            # the fall's name and kind; air, temperature and lightning,
+            # which a beat declares; the wind's QUARTER, so a strength the
+            # drift moves is still blowing from where the story said; and
+            # the MOON, which once was not carried (found 2026-10-20 adding
+            # the quarter; UNBUILT_WORLD 1.217, closed) -- `normalize_weather`
+            # given no base reads the moon off the sky's own words or falls
+            # to `none`, so a record declaring `moon: full` under a sky named
+            # only "clear night" came out of its first window moonless and
+            # the night went from `dim` to `dark`.
+            DRIFT_STEP_KEY: window})
+        if window < now:
+            closed.append(stood)
+    return closed, normalize_weather(stood)
+
+
+def advance_weather(weather, elapsed_seconds, seed, severity=None,
+                    written_at=None):
+    """The sky after `elapsed_seconds`, drifted deterministically: the sky
+    in the clock's window from `weather_course`, which says what the drift
+    does and why one long beat lands where many short ones do.
 
     IT MOVES AXES AND CARRIES NAMES (review 2026-09-07 A88). `cloud` and
-    `wind` walk one rung; `intensity` walks one rung too, but only while the
-    sky is shut in, and only for a fall the story has already established --
-    so a sky that has never dropped anything stays dry, and a sky dropping ash
-    goes on dropping ash. The drift renames a sky only when the name it is
-    carrying is one this engine minted itself (`_engine_sky_name`); a story's
-    own word for its own sky is never rewritten. Returns the input unchanged
-    inside one drift window, so an ordinary conversational beat does not move
-    the weather at all.
+    `wind` walk one rung a window; `intensity` walks one rung a window too,
+    but only while the sky is shut in, and only for a fall the story has
+    already established -- so a sky that has never dropped anything stays
+    dry, and a sky dropping ash goes on dropping ash. Returns the input
+    unchanged inside one drift window, so an ordinary conversational beat
+    does not move the weather at all.
 
     `severity` is the story's authored ceiling (see `severity_intensity_cap`).
     A caller that does not know it passes nothing and gets an uncapped drift,
@@ -1303,82 +1472,22 @@ def advance_weather(weather, elapsed_seconds, seed, severity=None):
     fall back to.
 
     ONE DRIFT PER WINDOW, AND A DECLARED SKY OUTRANKS THE ROLL. `elapsed` is
-    cumulative, so `step` names the window rather than counting hops; the
-    window is stamped on the record (`DRIFT_STEP_KEY`) and the sky moves only
-    when it ADVANCES. A sky a beat declared carries `DECLARED_STEP` instead:
-    it is placed in whatever window first observes it and returned unchanged,
-    so it stands for the rest of that window and the NEXT one drifts from it.
-    Without the stamp every commit past the first in-story hour took a fresh
-    hop from the current sky and reverted the Director's declaration the beat
-    after it landed -- see `DECLARED_STEP` for the measurement.
+    cumulative, so it names a window rather than counting hops; the window is
+    stamped on the record (`DRIFT_STEP_KEY`) and the sky moves only when it
+    ADVANCES -- once for every window it advances by. A sky a beat declared
+    carries `DECLARED_STEP` instead and stands in the window of `written_at`,
+    the clock the commit that wrote it left. Without the stamp every commit
+    past the first in-story hour took a fresh hop from the current sky and
+    reverted the Director's declaration the beat after it landed -- see
+    `DECLARED_STEP` for the measurement.
     """
-    weather = normalize_weather(weather) or dict(_DEFAULT)
-    try:
-        step = int(max(0.0, float(elapsed_seconds)) // DRIFT_SECONDS)
-    except (TypeError, ValueError):
-        return weather
-    if step <= 0:
-        return weather
-    stamped = weather.get(DRIFT_STEP_KEY)
-    if stamped == DECLARED_STEP:
-        return dict(weather, **{DRIFT_STEP_KEY: step})
-    if stamped == step:
-        return weather
-
-    cloud = _walk(CLOUDS, weather["cloud"], _roll(seed, step, "cloud"))
-    wind = _walk(WINDS, weather["wind"], _roll(seed, step, "wind"))
-    kind = weather["precipitation_kind"]
-    if kind == "none":
-        # Nothing has ever fallen from this sky. The drift does not get to
-        # decide that something does -- that is the whole of A88.
-        intensity = "none"
-    elif cloud == "covered":
-        intensity = _walk(INTENSITIES, weather["intensity"],
-                          _roll(seed, step, "fall"))
-    else:
-        # A sky opening up puts its fall down. Stated as the axis rather than
-        # as a fall table: whatever a story's weather is made of, it does not
-        # come out of a sky that has cleared.
-        intensity = _walk(INTENSITIES, weather["intensity"], 2)
-    intensity = _capped_intensity(intensity, severity)
-    sky = weather["sky"]
-    if _fold_legacy(sky, "sky") == sky.strip().casefold():
-        # The sky is still wearing a word this engine wrote, so this engine
-        # may keep it in step with the axes it just moved. An authored name
-        # is left exactly as the story wrote it.
-        sky = _engine_sky_name(weather["air"], cloud, weather["electrical"])
-    return normalize_weather({
-        "sky": sky,
-        "air": weather["air"],
-        "cloud": cloud,
-        "electrical": weather["electrical"],
-        "precipitation": weather["precipitation"],
-        "precipitation_kind": kind,
-        "intensity": intensity,
-        "wind": wind,
-        # The wind's QUARTER is carried, never walked: a strength the drift
-        # moves is still blowing from where the story said it did.
-        WIND_FROM_KEY: weather.get(WIND_FROM_KEY),
-        # The MOON is carried too. It was not (found 2026-10-20 adding the
-        # quarter; UNBUILT_WORLD 1.217, closed): `normalize_weather` given no
-        # base reads the moon off the sky's own words or falls to `none`, so
-        # a record declaring `moon: full` under a sky named only "clear
-        # night" came out of its first drift window moonless and the night
-        # went from `dim` to `dark`. Measured on the owner's checkpoints
-        # before the fix: every one of the 8 frames that named a moon also
-        # named it in the sky's words, so no recorded night had lost it.
-        "moon": weather.get("moon"),
-        # Temperature is authored, not drifted: a beat that says the night
-        # turns bitter is the Director's to write, and guessing it here would
-        # fight that.
-        "temperature": weather["temperature"],
-        DRIFT_STEP_KEY: step,
-    })
+    return weather_course(weather, elapsed_seconds, seed, severity,
+                          written_at)[1]
 
 
 # --- what the weather leaves behind ----------------------------------------
 #
-# Weather that changes nothing is scenery. An hour of heavy rain should leave a
+# Weather that changes nothing is scenery. Hours of heavy rain should leave a
 # yard muddy, a night of snow should leave it deep, and both should still be
 # there once the sky clears -- because that is what the reader will expect to
 # walk through, and because the room SOUNDS and LOOKS different afterwards.
@@ -1388,6 +1497,14 @@ def advance_weather(weather, elapsed_seconds, seed, severity=None):
 # when it stops; the label is read off a ladder chosen by what fell. That makes
 # it deterministic, cheap, idempotent under reroll, and legible in the scene
 # blob a host can open and edit.
+#
+# ONE STEP PER DRIFT WINDOW, under the sky that stood in it (2026-10-21,
+# `ground_through`), never one per beat. It was one per COMMIT, so the floor
+# ran on the story's beat count rather than its hours. Measured, the probe
+# story (control chat 2): three beats of talk inside four and a half minutes
+# of story (idx 2-4, elapsed 1720 -> 1993 s) took the rock landing from "damp
+# ground" to "churned mud" (levels 2, 4, 7, 10), and the beat that passed
+# fifty-six hours (idx 8) drained it one level (12 -> 11).
 
 # Each ladder is ordered by depth: level 1 takes the first rung, and the last
 # rung is the floor for anything deeper.
@@ -1422,13 +1539,30 @@ def _ground_ladder(kind, temperature):
     # asserts nothing about the floor. Silence, not a guess at mud.
     return ""
 
-# How fast it piles up, per beat, by intensity.
+# How fast it piles up, per drift window (an in-story hour), by intensity.
+# These were tuned as rates PER BEAT and are read per window since
+# 2026-10-21 unchanged, which is a rate the owner has not yet ruled on: at
+# three levels a rung, heavy rain over open ground now reads damp after one
+# hour, wet after two, standing puddles after three and churned mud after
+# four; a dusting of snow under a moderate fall takes two hours.
 _GROUND_GAIN = {"light": 1, "moderate": 2, "heavy": 3}
-# ...and how fast it goes away once nothing is falling. Slower than it arrives:
-# ground dries and snow lingers, and a puddle that vanished the moment the rain
-# stopped would read as a bug.
+# ...and how fast it goes away once nothing is falling, per window. Slower
+# than it arrives: ground dries and snow lingers, and a puddle that vanished
+# the moment the rain stopped would read as a bug. Read per window, churned
+# mud takes twelve dry hours to go -- and so does lying snow, whatever the
+# temperature, since nothing here asks it.
 _GROUND_DRAIN = 1
 _GROUND_MAX = 12
+
+#: How long the sky a story OPENS under is taken to have been falling before
+#: its first beat, in drift windows: the floor the opening is laid with. The
+#: opening passes no time, so no window closes in it, and without this a
+#: story that opens in a blizzard opens on bare ground. One window is what
+#: every opening laid while the floor took a step per commit, the opening's
+#: included -- the owner's chat 46 opened its snowy clearing on "a dusting
+#: of snow" (level 3) -- so the start of a story reads as it always has. How
+#: deep an opening's floor should be is the owner's call.
+OPENING_GROUND_WINDOWS = 1
 
 
 def ground_kind(weather, ground=None):
@@ -1455,7 +1589,8 @@ def _ground_of(weather, ground=None):
 
 
 def ground_after(previous, scoped, severity=None, exposed=True):
-    """The state of one room's floor after this beat.
+    """The state of one room's floor after ONE drift window under `scoped`
+    (`ground_through` takes as many as a beat crossed).
 
     `scoped` is that room's own weather (`weather_for_room`), so a cellar under
     a downpour stays dry: what matters is whether anything is landing HERE, not
@@ -1507,9 +1642,35 @@ def ground_after(previous, scoped, severity=None, exposed=True):
     return out
 
 
+def ground_through(previous, skies, severity=None, exposed=True):
+    """One room's floor after each sky in `skies` has stood over it for its
+    drift window, oldest first: `ground_after` once a window
+    (`weather_course`'s `closed`), so one beat crossing N windows leaves the
+    floor N one-window beats leave. `[]` -- a beat inside one window -- leaves
+    it exactly as it was.
+
+    `exposed` is the room's own `room_exposure == "open"`, read once by the
+    caller: for such a room `weather_for_room`'s `falls_on_you` is the sky's
+    own `is_falling`, and the sky's own fields are all `ground_after` reads
+    of the rest, so the room's weather is not re-derived window by window.
+
+    Past `DRIFT_WINDOW_LIMIT` windows the caller hands only the last of them.
+    A floor forgets where it started as the sky does -- any floor is empty
+    after `_GROUND_MAX` dry windows and full after four heavy ones -- and,
+    measured 2026-10-21, 10,000 random beats of twice the limit walked whole
+    and walked from the limit left the same floor in every one.
+    """
+    state = previous if isinstance(previous, dict) else {}
+    for sky in skies or ():
+        landing = bool(exposed) and is_falling(sky)
+        state = ground_after(state, dict(sky, falls_on_you=landing),
+                             severity, exposed=exposed)
+    return state
+
+
 def _ground_state(kind, level, name=""):
     ladder = GROUND_LADDERS.get(kind) or GROUND_LADDERS["wet"]
-    # Three beats of accumulation per rung, so a floor passes through its
+    # Three windows of accumulation per rung, so a floor passes through its
     # states rather than jumping to the deepest one in a single downpour.
     rung = min(len(ladder) - 1, max(0, (level - 1) // 3))
     text = ladder[rung]
@@ -1527,8 +1688,9 @@ def severity_intensity_cap(severity):
     to the Director (`agents/director.py:293`) and to mapping, which is the
     surface that reads a permission.
 
-    Read by `advance_weather`, which is the only thing that drifts a sky
-    unattended; a declared beat is the Director's and is not capped.
+    Read by the drift (`weather_course`, once per window it walks), which is
+    the only thing that moves a sky unattended; a declared beat is the
+    Director's and is not capped.
     """
     return "light" if severity == "calm" else "heavy"
 

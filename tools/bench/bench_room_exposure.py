@@ -10,9 +10,11 @@ scans roughly 110 keywords over the result.
 This measures the two halves the finding names, on a REAL stored scene:
 
   * `room_exposure` calls and wall clock for one `weather_for_room` pass over
-    every room in the scene (the shape `_advance_ground` produces on a wet
-    beat, and the shape the backdrop/ambience readers produce on any beat);
-  * the same for `persist.commit._advance_ground` itself.
+    every room in the scene (the shape the backdrop/ambience readers produce
+    on any beat);
+  * the same for `persist.commit._advance_ground` itself, over one drift
+    window (since 2026-10-21 it asks each room `room_exposure` once and
+    steps the floor once per window a beat closes).
 
 It also dumps the derived answers, so a speed-up can be proved to be one:
 run with `--dump before.json`, change the code, run with `--dump after.json`,
@@ -127,15 +129,19 @@ def main():
                for _ in range(args.repeats))
     print("weather_for_room over every room: %.2f ms" % (best * 1000))
 
+    # One drift window under the scene's own sky: `_advance_ground` steps the
+    # floor once per window a beat closes, and none inside one.
     ground = dict(scene)
-    best = min(_time(lambda: _advance_ground(args.chat, dict(ground)))
+    best = min(_time(lambda: _advance_ground(args.chat, dict(ground),
+                                             [ground.get("weather") or {}]))
                for _ in range(args.repeats))
-    print("_advance_ground on the same scene: %.2f ms" % (best * 1000))
+    print("_advance_ground on the same scene, one window: %.2f ms" % (best * 1000))
 
     dry = dict(scene)
     dry["weather"] = {"precipitation": "none"}
     dry.pop("ground", None)
-    best = min(_time(lambda: _advance_ground(args.chat, dict(dry)))
+    best = min(_time(lambda: _advance_ground(args.chat, dict(dry),
+                                             [dry["weather"]]))
                for _ in range(args.repeats))
     print("_advance_ground, dry and no ground ledger: %.3f ms" % (best * 1000))
 
