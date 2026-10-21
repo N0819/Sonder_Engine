@@ -2332,6 +2332,10 @@ def merge_scene_with_diff(
     # ordering the contact cancellation needs, and for the same reason.
     containment_broken_by_scale_change(merged, previous_scales)
     incoming_contained = diff.get("containment")
+    # The subjects this diff RELEASED, which a transfer in it completes rather
+    # than contradicts (`derive_inventory_placements`, "a release is a
+    # departure, never a destination").
+    released = set()
     if isinstance(incoming_contained, dict):
         for subject, raw in incoming_contained.items():
             label = str(subject or "").strip()
@@ -2343,6 +2347,7 @@ def merge_scene_with_diff(
             record = canonical_enclosure_mode(merged, record)
             if record is None:
                 # Released: out of the pocket, off the shoulder, out of the jar.
+                released.add(label)
                 for key in [k for k in merged["contained"]
                             if str(k).strip().casefold() == label.casefold()]:
                     merged["contained"].pop(key, None)
@@ -2384,7 +2389,7 @@ def merge_scene_with_diff(
                   if isinstance(g, str) and g.strip()])
     derive_inventory_placements(
         merged, diff.get("inventory_ops"),
-        declared=set(diff.get("containment") or {}),
+        declared=set(diff.get("containment") or {}), released=released,
         positions=incoming_positions, stations=incoming_stations,
         report=inventory_report, carriers=carriers)
     # ...AND A BODY THAT HANDED A THING OVER IS NO LONGER HOLDING IT, in the

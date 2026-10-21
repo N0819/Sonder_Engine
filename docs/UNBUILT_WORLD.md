@@ -2513,6 +2513,43 @@ a doorway"; DESIGN_SOUND_FIELD § 19). What they leave:
 - **The ring** carries the lamp room's normal voice to the street as a
   fragment even at a street's length; the coupling lane's.
 
+<a id="unbuilt-1-224"></a>
+
+### 1.224 A thing offered and then taken ended with nobody -- BUILT 2026-10-21, residuals open
+
+The control probe story (2026-10-20/21): the second play's take of the
+player's sealed letter (chat 2 turn idx 3) and the first play's handover of
+the Board's letter by the player herself (chat 1 turn idx 2). Each span wrote
+a release beside its own transfer; the release refused the transfer, the
+thing stayed with nobody (or went back to her by bearing), and the span's
+failed receipts withheld the act from every view (`Design.md`: "A thing
+offered and then taken ends with the taker"). What the fix leaves:
+
+- **A release and a placement with no transfer still resolve by listing
+  order.** `compile_transforms` reduces one span's containment writes for one
+  thing last-write-wins, by hand order then response order -- no chronology,
+  since a span's patches are complementary. With a transfer in the span the
+  merge now places the thing whichever write the reduction kept; a span that
+  writes `{in: holder}` and `null` for one thing and NO transfer keeps the
+  one listed last, and its placement receipt fails when that is the release.
+  0 of 5,871 recorded spans do it (the one span that wrote both carried a
+  transfer: the probe's).
+- **A refused transfer leaves its release standing.** When
+  `_refuse_unheld_transfers` refuses a hand-off (the giver neither holds the
+  thing nor stands in its room), the same span's release still pops the
+  thing's record, so whoever really held it drops it where they stand. 0
+  recorded cases. The release is the departure of the hand-off that was
+  refused, so refusing one could refuse both; that is a guard, and the
+  owner's to rule on.
+- **The taker's reach is not checked.** `_refuse_unheld_transfers` reads the
+  giver's side only; a transfer to a body in another room is accepted and
+  the thing changes rooms with it.
+- **The encoder card's reason went stale.** The containment chunk
+  (`encoder/containment.txt`, en + ja) still says a transfer's own
+  containment must not be cleared because "a null clear can erase the new
+  holder"; it no longer can. The instruction (a transfer is the whole
+  possession change) still holds, and the model broke it here anyway.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

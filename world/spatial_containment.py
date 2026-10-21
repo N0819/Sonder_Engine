@@ -1684,7 +1684,7 @@ def mint_transferred_objects(scene: dict, inventory_ops, shedding=()) -> list:
 
 
 def derive_inventory_placements(scene: dict, inventory_ops,
-                                *, declared=(), report=None,
+                                *, declared=(), released=(), report=None,
                                 carriers=None, positions=None,
                                 stations=None) -> list:
     """Place what a transfer op moved, from the ledger the objects hand fills.
@@ -1735,6 +1735,27 @@ def derive_inventory_placements(scene: dict, inventory_ops,
     Compatible explicit `positions` and `stations` supplement a transfer;
     a conflicting room refuses it rather than preserving contradictory ledgers.
 
+    A RELEASE IS A DEPARTURE, NEVER A DESTINATION. `released` names the
+    subjects of `declared` whose write this span was a release
+    (`containment: {thing: null}`), and a release says only that the
+    carriage standing when the span began has ended -- the containment
+    card's "{subject:null} when it ends". That is what a transfer's `from`
+    says too, so within one span the two are one hand-off: the release
+    never refuses the transfer, and the transfer places the thing. A span
+    is complementary patches, never a sequence (`world/causal_program`),
+    so the order the hands listed them in decides nothing; a release in a
+    LATER span still lets go of what an earlier span handed over, because
+    spans run in event order. Measured (the lighthouse probe, 2026-10-21,
+    chat 2 turn idx 3): "Pell takes the sealed letter from Rhona Carrick's
+    hand and tucks it into his inside pocket" carried a transfer to his
+    pocket and the giver's release in one span; the release was read as the
+    span's explicit containment, the transfer was refused, the take was
+    withheld from every view, and the boat left without the letter. Its
+    first play lost the player's own "puts it in Elias's open hand" the same
+    way (chat 1 turn idx 2). With no destination the scene can vouch for,
+    a released thing is NOT kept with the body it left (rule 4's fallback):
+    the release says it left that hand, and nothing says where it went.
+
     `report` is a list the refusal in rule 4 appends a Director-facing
     sentence to.
 
@@ -1757,8 +1778,12 @@ def derive_inventory_placements(scene: dict, inventory_ops,
     """
     if not isinstance(inventory_ops, list) or not inventory_ops:
         return []
+    let_go = {str(name).strip().casefold()
+              for name in (released or []) if str(name).strip()}
+    # Only a write that says where the thing IS speaks for it against a
+    # transfer; a release says where it was (see the docstring).
     spoken_for = {str(name).strip().casefold()
-                  for name in (declared or []) if str(name).strip()}
+                  for name in (declared or []) if str(name).strip()} - let_go
 
     placed = []
     for op in inventory_ops:
@@ -1799,7 +1824,12 @@ def derive_inventory_placements(scene: dict, inventory_ops,
             # wherever it lay: Saltmarsh Crossing's letter, minted loose on
             # the far bank at the opening, stayed there through every beat
             # it was handled on.
-            keeper = _kept_by(scene, op, subject)
+            #
+            # ...UNLESS THIS SPAN RELEASED IT. Then the beat says the one
+            # thing more -- it left that hand -- and handing it back would
+            # undo the release (the tavern probe's ale "set down on the next
+            # table", a table the room does not keep, 2026-10-21).
+            keeper = None if labels & let_go else _kept_by(scene, op, subject)
             _report_unvouched_destination(
                 report, op, kept_with=str(op.get("from_id")).strip() if keeper else None)
             if keeper is None or _ci_get(scene.get("contained") or {}, subject):

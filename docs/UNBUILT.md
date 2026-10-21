@@ -342,6 +342,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.211 — A window onto a room is a window — fixed 2026-10-12, residuals open](UNBUILT_WORLD.md#unbuilt-1-211)
 - [§1.216 — Home 11's layout — ten findings, three landed 2026-10-13, the rest open](UNBUILT_WORLD.md#unbuilt-1-216)
 - [§1.219 — A boat bound for the mainland stood in a mainland street -- built 2026-10-20, residuals open](UNBUILT_WORLD.md#unbuilt-1-219)
+- [§1.224 — A thing offered and then taken ended with nobody — built 2026-10-21, residuals open](UNBUILT_WORLD.md#unbuilt-1-224)
 
 **2. Roadmap**
 

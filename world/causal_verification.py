@@ -76,6 +76,23 @@ def _record(scene, channel, subject):
     return matches[0] if len(matches) == 1 else _AMBIGUOUS if matches else _MISSING
 
 
+def _arrives_in_span(before, after, context, subject):
+    """Whether this span's own patch says where `subject` went: a transfer
+    of it, or a containment record placing it. Read off the typed channels
+    only, against either adjacent world's spellings."""
+    def same(name):
+        return _same(after, name, subject) or _same(before, name, subject)
+
+    patch = context if isinstance(context, dict) else {}
+    for op in patch.get("inventory_ops") or []:
+        if isinstance(op, dict) and same(op.get("object_id")):
+            return True
+    records = patch.get("containment")
+    return isinstance(records, dict) and any(
+        isinstance(record, dict) and record.get("in") and same(key)
+        for key, record in records.items())
+
+
 def _known(scene, subject, here=None):
     """Whether the scene holds `subject`: an entity, a body in a ledger, or
     one room's own fixture.
@@ -293,7 +310,41 @@ def _map_receipts(before, after, channel, changes, context=None):
         elif channel == "containment":
             valid = _known(after, subject) or (desired is None and _known(before, subject))
             if desired is None:
-                check = lambda world: _record(world, "contained", subject) is _MISSING
+                # A RELEASE IS THE DEPARTURE OF ITS SPAN'S HAND-OFF, NEVER A
+                # DESTINATION. On its own it is met only when nothing holds
+                # the thing. Beside an arrival of the same thing in the same
+                # span -- a transfer of it, or a record placing it -- it ends
+                # the carriage that stood when the span began ("{subject:null}
+                # when it ends") and the arrival says where the thing went
+                # (`derive_inventory_placements`), so it is met when THAT
+                # carriage is gone: another holder has it, or the same holder
+                # carries it a new way the span wrote (out of the pocket into
+                # the hand). A record the merge re-derived from evidence that
+                # stood before (`by`: a hand still bearing it, a wardrobe still
+                # wearing it) is the old carriage, still standing. Read as
+                # "held by nobody" beside its own transfer, the giver's release
+                # failed every take that landed, the span verified unexecuted
+                # and perception withheld the act from every view (the
+                # lighthouse probe, 2026-10-21, chat 2 turn idx 3: "He hadn't
+                # taken it").
+                prior = _record(before, "contained", subject)
+                handed_on = _arrives_in_span(before, after, context, subject)
+
+                def check(world, prior=prior, subject=subject,
+                          handed_on=handed_on):
+                    actual = _record(world, "contained", subject)
+                    if actual is _MISSING:
+                        return True
+                    if not handed_on or not isinstance(actual, dict):
+                        return False
+                    if prior is _MISSING:
+                        return True
+                    if not isinstance(prior, dict):
+                        return False
+                    if not _same(world, actual.get("in"), prior.get("in")):
+                        return True
+                    return (actual.get("mode") != prior.get("mode")
+                            and not actual.get("by"))
             else:
                 from world.spatial import _clean_containment
                 expected = _clean_containment(desired, subject)
