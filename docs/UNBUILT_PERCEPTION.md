@@ -2238,8 +2238,15 @@ reach. What wave A leaves, each registered here rather than built:
   live replay.
 - **`known` is recognition, not having heard a voice**: a listener who
   learned a name without meeting its owner would know the voice.
-- **A persona has no voice field**, and no card carries a voice's sex, rough
-  age or accent as a fact about sound: `embodiment.voice` is proposed.
+- ~~**A persona has no voice field**, and no card carries a voice's sex, rough
+  age or accent as a fact about sound: `embodiment.voice` is proposed.~~
+  BUILT 2026-10-20 (round 2, lane D; the note's § 18): `embodiment.voice`
+  on both card shapes, read first by `composer.speech_percept` for a
+  listener in the dark, the register as the fallback; the player's through
+  the persona. What it leaves: every recorded card is empty (0 of 102
+  characters, 23 personas, 24 overrides), so the field is live only where
+  an author or a fill writes it -- the fill and the generators are told in
+  one clause each, and the clause's effect needs a live run.
 - **The din's informational masking is not modelled apart**: babble masks a
   bystander some few decibels more than steady noise of the same level; the
   margins are the speech margins.
@@ -2276,8 +2283,18 @@ heard only in pieces or as a voice. What it leaves, each the owner's
   story's yard) -- the hearing percept guards it, the other two do not.
 - **The listener's own speech is not self-masking**: lines in a beat take
   turns and nothing typed says two overlapped.
-- **A garment over the ears is not read**: the attire ledger has a `head`
-  region and no `ears` zone, so a hood, a helmet or earmuffs cover nothing.
+- ~~**A garment over the ears is not read**: the attire ledger has a `head`
+  region and no `ears` zone, so a hood, a helmet or earmuffs cover nothing.~~
+  BUILT 2026-10-20 (round 2, lane D; the note's § 18): the head's `ears`
+  zone, covered only by a garment that names it (`attire.OPT_IN_ZONES`),
+  takes `GARMENT_OVER_EARS_DB` (10) at `ear_cover_db`, the larger of the
+  two ledgers. What it leaves: no typed garment fact SEALS an ear, so a
+  helmet and a wool scarf take the same 10 and a garment that should take
+  the hands' 20 is a contact to write; no recorded garment names the ears
+  yet (50 worn head garments on 5 bodies), so the clause the encoder and
+  the fill were given needs a live run; and a whisper at arm's reach is
+  lost whole through a hood (the ear budget's margins make 10 dB a cliff
+  for a whisper), which the owner may want as a fragment.
 - **Own noise is a HELD running thing only**: a tap a body operates, chewing,
   a hammer's one-beat blows are not read.
 - **A voice through a body's mass wakes a sleeper by name only**, and a

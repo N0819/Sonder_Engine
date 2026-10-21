@@ -187,9 +187,15 @@ def _pack_words(name):
 def _lower_lead(text):
     """Sentence case off an authored phrase about to be spliced mid-sentence:
     the first letter is lowered when it is the ONLY capital in its word, so
-    an acronym or a capitalised name inside the phrase keeps its case."""
+    an acronym or a capitalised name inside the phrase keeps its case. A
+    one-letter first word is that case too -- the article of "A woman's,
+    past fifty" (a card's `embodiment.voice`, 2026-10-20) is lowered, where
+    the test on the second character alone kept it, and the page read "The
+    voice is A woman's"; an initial with its stop ("A. Smith") is not."""
     text = str(text or "").strip()
-    if len(text) > 1 and text[0].isupper() and text[1].islower():
+    if len(text) > 1 and text[0].isupper() and (
+            text[1].islower()
+            or (text[1] == " " and len(text) > 2 and text[2].islower())):
         return text[0].lower() + text[1:]
     return text
 
@@ -4190,7 +4196,7 @@ def _one_voice_each(percepts):
 def speech_percept(entry, rel, observer_name, *, display, can_see,
                    proximity=None, order_key=0, observer_id=None,
                    senses=None, voice="", prev_standing=None, bearing="",
-                   addressed=None, name_forms=()):
+                   addressed=None, name_forms=(), voice_sound=""):
     """Admit one spoken line for one observer, or None.
 
     A VOICE IS ESTABLISHED ONCE (D2; Wood -- theatre gives a vocal quality
@@ -4200,6 +4206,10 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     in the observer's standing ledger; every later line renders a manner
     only where the line's own `tone` names a departure. The declared `tone`
     stays in `data["tone"]` regardless -- what renders is `data["manner"]`.
+    `voice_sound` is the card's `embodiment.voice` -- what the voice carries
+    to a stranger's ear -- said once, after the line, to a listener who
+    hears the body and cannot see it (`voice_apart`), ahead of the register
+    (DESIGN_SOUND_FIELD § 18); a seen speaker keeps the register's slot.
     Measured before this: "in a flat, hushed monotone voice, she said" on
     63-98 of 79 lines in one story and 6 of 7 on the descent copy, because a
     speaker's ordinary voice was re-declared as tone on every line and the
@@ -4337,13 +4347,20 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     # as the manner slot expects, or the page reads "in a Clinical, deadpan,
     # and strictly monotone voice" (descent copy, beat 119).
     register = _lower_lead(_strip_sentence_ends(voice))
+    # The voice's SOUND (`embodiment.voice`), said whole after a line heard
+    # unseen -- never spliced into the manner slot, which is the register's.
+    sound = _lower_lead(_strip_sentence_ends(voice_sound))
     # Keyed on the sheet's OWN text, not the spliced rendering: the key names
     # the voice, and a change to how the manner is worded must not make a
     # known voice new again (measured: one renderer change between two
     # beats re-established Sarah's voice on the descent copy, beat 120).
+    # The sound is part of the key only where a card has one, so a card
+    # without it keys exactly as it did before the field existed.
     voice_key = standing_key(
         "voice", (body_key(str(entry.get("speaker") or "")),),
-        (str(voice or "").strip(),)) if register else ""
+        (str(voice or "").strip(),)
+        + ((str(voice_sound or "").strip(),) if sound else ())) \
+        if register or sound else ""
     established = bool(voice_key) and voice_key in (prev_standing or ())
     data = {
         "level": level,
@@ -4364,12 +4381,15 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         _speaker and _label.casefold() == _speaker.casefold())
     # A STRANGER'S VOICE IS DESCRIBED BY WHAT A VOICE CARRIES (§ 12): a
     # listener who cannot see the speaker and does not know the voice is
-    # given the speaker's own register from their card -- "low contralto,
-    # warm and unhurried" -- said once after the line, as a seen line says
-    # it in its manner slot; never a name (`_register_heard_unseen`). Over a
-    # live channel too, and through a body's mass the voice is the mass's,
-    # so not there.
-    _unseen_register = _register_heard_unseen(register, _speaker)
+    # given the card's own account of the voice's sound (`embodiment.voice`,
+    # § 18: what a body is recognised by when it speaks unseen) and, where
+    # the card has none, the speaker's register -- "low contralto, warm and
+    # unhurried" -- said once after the line, as a seen line says it in its
+    # manner slot; never a name (`_voice_sound_heard_unseen`,
+    # `_register_heard_unseen`). Over a live channel too, and through a
+    # body's mass the voice is the mass's, so not there.
+    _unseen_register = _voice_sound_heard_unseen(sound, _speaker) \
+        or _register_heard_unseen(register, _speaker)
     if voice_key and not established and not can_see \
             and not _knows_the_voice and not rel.get("inside_source") \
             and _unseen_register:
@@ -4575,16 +4595,45 @@ def _register_heard_unseen(register, speaker):
     does not -- holding no word of the speaker's own name
     (`common._identity_token_set`). Anything else is withheld whole: the
     listener has "a voice", as before."""
-    from story.character_schema import _UNSPACED_SCRIPT
     register = str(register or "").strip()
     if not register or not _fits_the_manner_slot(register):
         return ""
-    folded = register.casefold()
+    return "" if _names_the_speaker(register, speaker) else register
+
+
+def _voice_sound_heard_unseen(sound, speaker):
+    """The card's account of the voice's sound (`embodiment.voice`) as it
+    may be said to a listener who can neither see the speaker nor knows
+    the voice, or "".
+
+    The NAME GUARD is the register's (`_names_the_speaker`): sheet text can
+    name the body it belongs to, and a name is the one thing a voice in the
+    dark must not hand over -- that is the firewall's floor, so it stays
+    code. The register's SHAPE floor (`_fits_the_manner_slot`) is not
+    applied: that floor exists because a register is authored for the
+    manner slot and a clause there is prose about anything, where this
+    field is authored FOR this sentence -- "The voice is {sound}." -- and a
+    sound like "a woman's, past fifty, with the clipped vowels of the
+    coast" is exactly what it is for, and four words to a part. A guard
+    that fires on the field's own valid output is cut before it is built
+    (the owner, 2026-09-06)."""
+    sound = str(sound or "").strip()
+    if not sound or _names_the_speaker(sound, speaker):
+        return ""
+    return sound
+
+
+def _names_the_speaker(text, speaker):
+    """Does this sheet text hold a word of the speaker's own name
+    (`common._identity_token_set`)? Review round 4's first reason
+    (2026-10-05), shared by every account of a voice said in the dark."""
+    from story.character_schema import _UNSPACED_SCRIPT
+    folded = str(text or "").casefold()
     for token in _identity_token_set(speaker):
         if len(token) >= (1 if _UNSPACED_SCRIPT.search(token) else 3) \
                 and token in folded:
-            return ""
-    return register
+            return True
+    return False
 
 
 def own_name_forms(name, aliases=()):

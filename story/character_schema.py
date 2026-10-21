@@ -765,6 +765,17 @@ def default_character_data(name: str = "Unnamed") -> dict:
             # it during play (`scene.substances`). Empty means no smell worth
             # a percept, which is every card written before the field existed.
             "scent": "",
+            # What this body's VOICE carries to a stranger's ear, as a short
+            # phrase: what a body is recognised by when it speaks unseen --
+            # its sex, rough age, timbre, accent. The hearing sibling of
+            # `visible.summary` and `scent`, and distinct from
+            # `social.voice.register`, which is how the voice is USED and is
+            # said in the manner slot of a line seen; this is said once to a
+            # listener who hears the body and cannot see it
+            # (`composer.speech_percept`'s `voice_apart`, DESIGN_SOUND_FIELD
+            # § 18). Empty means nothing is said of the voice beyond the
+            # register, which is every card written before the field existed.
+            "voice": "",
             "latent": [],
             # Structured extra body parts -- see _normalize_extra_parts.
             "extra_parts": [],
@@ -893,6 +904,11 @@ def default_persona_data(name: str = "Player") -> dict:
                 "regions": {},
             },
             "scent": "",
+            # The player's voice as a stranger's ear takes it -- see
+            # `default_character_data`. A persona had no voice field at all
+            # until 2026-10-20, so the player's voice was nothing to anyone
+            # who heard it unseen.
+            "voice": "",
             "latent": [],
             "extra_parts": [],
         },
@@ -1763,6 +1779,10 @@ def normalize_persona_data(value: dict) -> dict:
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
             "extra_parts": _normalize_extra_parts(value.get("extra_parts")
                                                   or embodied.get("extra_parts")),
+            # The body's voice kept where the schema keeps one, as the senses
+            # and the parts are; a flat card has no voice field of its own
+            # (`voice_setting` is the narration's).
+            "voice": str(embodied.get("voice") or ""),
         },
         "competence": {"abilities": _legacy_abilities(value.get("abilities"))},
         "knowledge": {
@@ -2115,6 +2135,21 @@ def character_scent(sheet: dict) -> str:
                .get("scent") or "").strip()
 
 
+def character_voice_sound(sheet: dict) -> str:
+    """What this body's voice carries to a stranger's ear, or "" when the
+    card says nothing.
+
+    The hearing sibling of `character_appearance` and `character_scent`:
+    said once to a listener who hears the body and cannot see it, and never
+    to one who can -- the seen speaker keeps `social.voice.register` in the
+    manner slot (`character_voice`), which is how the voice is used, not
+    what it is. Empty by default on purpose, as the scent is: silence must
+    never become a voice, and every card written before the field existed
+    reads as before -- a stranger described by their register alone."""
+    return str(normalize_character_data(sheet).get("embodiment", {})
+               .get("voice") or "").strip()
+
+
 def character_initial_outfit(sheet: dict) -> dict:
     return copy.deepcopy(
         normalize_character_data(sheet).get(
@@ -2374,6 +2409,13 @@ def persona_scent(sheet: dict) -> str:
                .get("scent") or "").strip()
 
 
+def persona_voice_sound(sheet: dict) -> str:
+    """What the player's voice carries to a stranger's ear -- see
+    character_voice_sound. The player is a body other minds hear."""
+    return str(normalize_persona_data(sheet).get("embodiment", {})
+               .get("voice") or "").strip()
+
+
 def persona_initial_outfit(sheet: dict) -> dict:
     return copy.deepcopy(
         normalize_persona_data(sheet).get(
@@ -2564,6 +2606,13 @@ def character_card_warnings(sheet):
     # through every normalize and every archive, and read only by
     # `_prose_names_a_part`, so an author who fills it has every reason to
     # believe the story can see it (`docs/UNBUILT.md` 1.78).
+    # AN EMPTY EMBODIMENT FIELD IS SILENT. `visible.summary` empty is
+    # defaulted ("A person of unremarkable appearance.") and said nothing
+    # about; `scent` empty is no smell; `voice` empty (2026-10-20) is a
+    # stranger described by their register alone, as every card written
+    # before the field existed. Warning on any of them would fire on every
+    # one of the owner's cards on all ten surfaces, which is how a warning
+    # teaches people to stop reading warnings (`attire.spans_guessed`).
     visible = (sheet.get("embodiment") or {}).get("visible") or {}
     if visible.get("distinctive_features"):
         warnings.append(

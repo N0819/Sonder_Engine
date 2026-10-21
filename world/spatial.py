@@ -284,10 +284,11 @@ from world.spatial_listener import (  # noqa: E402
     # wakes one (DESIGN_SOUND_FIELD.md section 13).
     BLAST_DB, DULLED_GONE_DB, DULLED_HELD_SECONDS, DULLED_RECOVERY_SECONDS,
     DULLED_SHIFT_AT_BLAST_DB, DULLED_SHIFT_MAX_DB, EAR_SPEECH_THRESHOLD_DB,
-    EARS_COVERED_DB, EARS_STOPPED_DB, HEARING_KEY, RINGING_DB, SOUND_WAKES,
+    EARS_COVERED_DB, EARS_STOPPED_DB, GARMENT_OVER_EARS_DB, HEARING_KEY,
+    RINGING_DB, SOUND_WAKES,
     WAKING_DB, WAKING_EMERGENCE_DB, WAKING_SOUNDS,
     blast_possible, blast_shift_db, dulled_shift_db, ear_adjusted_db,
-    ear_cover_db,
+    ear_cover_db, garment_over_ears_db,
     ear_is_changed, ear_level, ear_margin_db, ear_noise_db, ear_reason,
     heard_at_ear, loudest_at_ear, next_hearing_ledger, own_noise_db,
     recovered_shift_db, stamp_listener_ear, started_sources,

@@ -1972,6 +1972,11 @@ def bootstrap() -> dict:
         "attire_regions": list(attire.REGIONS),
         "attire_region_zones": {region: list(zones)
                                 for region, zones in attire.REGION_ZONES.items()},
+        # The zones a garment covers only when it names them (the ears under
+        # a hood): unticked by default in the picker, where a region's own
+        # zones are ticked (`story/attire.py`'s OPT_IN_ZONES).
+        "attire_opt_in_zones": {region: list(zones)
+                                for region, zones in attire.OPT_IN_ZONES.items()},
         # Which face of a body region an extra part emerges from
         # (`story/character_schema.py`, validated there on save).
         "extra_part_aspects": list(EXTRA_PART_ASPECTS),

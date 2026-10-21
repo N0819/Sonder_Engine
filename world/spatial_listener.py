@@ -7,7 +7,9 @@ and a listener. This module prices the one thing every path ends at -- the
 listener's EAR -- from typed state only, never from prose:
 
   * an ear that is COVERED: a settled contact over both of the listener's
-    ears (`ear_cover_db`);
+    ears, or a worn garment the attire ledger says is over them -- the
+    larger of the two, never their sum (`ear_cover_db`,
+    `garment_over_ears_db`);
   * the listener's OWN NOISE: a running thing in their own hands, at their
     own ear (`own_noise_db`);
   * an ear DULLED by a blast, recovering with the story clock
@@ -60,6 +62,19 @@ EARS_COVERED_DB = 20.0
 #: dB at speech frequencies (foam earplugs as worn, and a fingertip pressed
 #: into the canal). The middle, 27.
 EARS_STOPPED_DB = 27.0
+
+#: A GARMENT OVER THE EARS -- a hood up, a scarf wound over them, a helmet,
+#: a pair of earmuffs -- takes about 5-15 dB from speech (measured
+#: insertion loss of cloth and knit over the pinna; a lined hood or a thick
+#: wool wrap at the upper end, a thin cotton one at the lower). The middle,
+#: 10. ONE number, because the attire ledger carries no typed fact that
+#: SEALS the ear: a garment's record is its name, description, ladder
+#: state, condition prose, regions and zones (`story/attire.py`) -- nothing
+#: says "rigid", "lined" or "closed over", and reading those out of a name
+#: or a description is the word list this engine refuses. The seal's 20
+#: (`EARS_COVERED_DB`) stays the hands' and a held thing's, through the
+#: contact ledger; a garment that should seal is a contact to write.
+GARMENT_OVER_EARS_DB = 10.0
 
 
 # ---------------------------------------------------------------------------
@@ -115,11 +130,61 @@ def ear_cover_db(scene: dict, listener: str) -> float:
     most -- a plural part ("ears"), or a left and a right. A moving contact
     -- a hand rubbing an ear -- seals nothing.
 
-    WHAT IS NOT READ, and why. A hood, a helmet, earmuffs: the attire ledger
-    knows a garment covers the `head`, never whether it covers the ears (a
-    hat and a hood are one region), and a garment's NAME is prose -- reading
-    "hood" out of it is the word list this engine refuses. Registered
-    (§ 13 of the sound note)."""
+    AND A GARMENT (`garment_over_ears_db`): a worn garment the attire ledger
+    records over the listener's `ears` -- the head region's opt-in zone,
+    covered only by a record that names it (`attire.OPT_IN_ZONES`) -- takes
+    `GARMENT_OVER_EARS_DB`. THE LARGER OF THE TWO COVERINGS, NEVER THEIR
+    SUM: hands pressed over a hood are the hands' 20, not 30 -- each
+    covering is measured against an open ear, and the second lies under the
+    first (§ 18 of the sound note, 2026-10-20). Until then the ledger knew a
+    garment covered the `head`, never whether it covered the ears, and a
+    garment's NAME is prose -- reading "hood" out of it is the word list
+    this engine refuses; it still is, and only the typed zone is read."""
+    return max(_contact_cover_db(scene, listener),
+               garment_over_ears_db(scene, listener))
+
+
+def garment_over_ears_db(scene: dict, listener: str) -> float:
+    """What a worn garment over this listener's ears takes, or 0.0.
+
+    TYPED STATE ONLY: the listener's own entry in the scene's attire ledger
+    (`attire.entry_for`, the one case-tolerant reader of a wardrobe), and in
+    it a head garment still worn -- not `removed`, not merely attached --
+    whose `covered_zones` names the `ears` (`attire.garments_over_zone`).
+    Both ears by construction: a garment is over both or it is not over
+    them. A hat, a ribbon, a mask, a pair of spectacles name nothing and
+    take nothing; a hood thrown back (`{"head": []}`) covers nothing."""
+    from story import attire
+    from world.spatial_identity import same_subject
+    if not listener or not isinstance(scene, dict):
+        return 0.0
+    ledger = scene.get("attire")
+    if not isinstance(ledger, dict) or not ledger:
+        return 0.0
+    entry = attire.entry_for(ledger, listener)
+    if not entry:
+        # The ledger is keyed on the identity name; the listener may be
+        # named by any handle the scene resolves to the same body.
+        for key, value in ledger.items():
+            if isinstance(value, dict) and same_subject(scene, key, listener):
+                entry = value
+                break
+    if not entry:
+        return 0.0
+    # Through the ledger's own normalisation, as every reader of a wardrobe
+    # is (`scene.visible_body_text`, `common.attire_view`): the stored dict
+    # may hold a flat list or a stale override, and the rule reads what the
+    # ledger means.
+    regions = (attire.rederive_entry(entry) or {}).get("regions")
+    if not isinstance(regions, dict):
+        return 0.0
+    return GARMENT_OVER_EARS_DB if attire.garments_over_zone(
+        regions, "head", "ears") else 0.0
+
+
+def _contact_cover_db(scene: dict, listener: str) -> float:
+    """`ear_cover_db`'s contact half: what a settled contact over both ears
+    takes, by the rule the docstring there states, or 0.0."""
     from world.spatial_contacts import (CONTACT_MOMENTARY_MANNERS,
                                         _contact_motion_from_text,
                                         _normalize_contact_motion)
@@ -659,11 +724,12 @@ __all__ = [
     "BLAST_DB", "blast_possible", "DULLED_GONE_DB", "DULLED_HELD_SECONDS",
     "DULLED_RECOVERY_SECONDS", "DULLED_SHIFT_AT_BLAST_DB",
     "DULLED_SHIFT_MAX_DB", "EAR_SPEECH_THRESHOLD_DB", "EARS_COVERED_DB",
-    "EARS_STOPPED_DB", "HEARING_KEY", "RINGING_DB", "SOUND_WAKES",
-    "WAKING_DB", "WAKING_EMERGENCE_DB", "WAKING_SOUNDS",
+    "EARS_STOPPED_DB", "GARMENT_OVER_EARS_DB", "HEARING_KEY", "RINGING_DB",
+    "SOUND_WAKES", "WAKING_DB", "WAKING_EMERGENCE_DB", "WAKING_SOUNDS",
     "blast_shift_db", "dulled_shift_db", "ear_adjusted_db", "ear_cover_db",
     "ear_is_changed", "ear_level", "ear_margin_db", "ear_noise_db",
-    "ear_reason", "heard_at_ear", "loudest_at_ear", "next_hearing_ledger",
+    "ear_reason", "garment_over_ears_db", "heard_at_ear", "loudest_at_ear",
+    "next_hearing_ledger",
     "own_noise_db", "recovered_shift_db", "stamp_listener_ear",
     "started_sources", "voice_at_ear_db", "wakes_sleeper",
 ]

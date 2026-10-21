@@ -1,10 +1,10 @@
 Convert this player persona into a native simulation-first persona. Do not assume a setting, genre, pre-existing NPC relationships, or special narrative role unless explicitly supplied.
 
-Separate visible embodiment from latent capabilities AND from clothing. embodiment.visible is stable BODY appearance only; every starting garment/accessory belongs in initial_outfit.wearing and must not be repeated in the appearance summary. narration.voice_setting is private narrator guidance and is never available to NPCs.
+Separate visible embodiment from latent capabilities AND from clothing. embodiment.visible is stable BODY appearance only; every starting garment/accessory belongs in initial_outfit.wearing and must not be repeated in the appearance summary. embodiment.voice is what the player's voice carries to a stranger's ear -- what a body is recognised by when it speaks unseen: its sex, rough age, timbre, accent -- as one short phrase, taken from the card where it says; it is the voice's sound and never anything the voice says. narration.voice_setting is private narrator guidance and is never available to NPCs.
 
 {{fragment:extra_parts_note}}
 
 {{fragment:senses_note}}
 
 Output STRICT JSON matching the native persona schema:
-{"identity":{"uid":"","name":"","aliases":[],"pronouns":{"subject":"they","object":"them","possessive":"their"}},"initial_outfit":{"wearing":[],"state":[]},"embodiment":{"senses":[{"channel":"vision","acuity":"ordinary","range":"ordinary","needs_light":true,"equivalent":"","notes":""}],"visible":{"summary":"","build":"","face":"","hair":"","eyes":"","distinctive_features":[]},"extra_parts":[],"latent":[]},"competence":{"abilities":[{"name":"","level":"competent","scope":"","limits":"","notes":""}]},"knowledge":{"public_history":"","private_history":[{"fact_id":"","content":"","about_entity":"self","known_by":[]}]},"narration":{"voice_setting":""}}.
+{"identity":{"uid":"","name":"","aliases":[],"pronouns":{"subject":"they","object":"them","possessive":"their"}},"initial_outfit":{"wearing":[],"state":[]},"embodiment":{"senses":[{"channel":"vision","acuity":"ordinary","range":"ordinary","needs_light":true,"equivalent":"","notes":""}],"visible":{"summary":"","build":"","face":"","hair":"","eyes":"","distinctive_features":[]},"voice":"","extra_parts":[],"latent":[]},"competence":{"abilities":[{"name":"","level":"competent","scope":"","limits":"","notes":""}]},"knowledge":{"public_history":"","private_history":[{"fact_id":"","content":"","about_entity":"self","known_by":[]}]},"narration":{"voice_setting":""}}.

@@ -4571,6 +4571,39 @@ def _voice_register_for(ctx, speaker):
     return ""
 
 
+def _voice_sound_for(ctx, speaker):
+    """What the speaker's voice carries to a stranger's ear -- the card's
+    `embodiment.voice` (DESIGN_SOUND_FIELD § 18) -- or "". Read through the
+    cast row as the register is, so a per-story card override wins; and,
+    where the speaker is the PLAYER (`is_player_speaker`), through their
+    persona, which since 2026-10-20 carries the field too -- the player is a
+    body other minds hear. A background presence has no sheet and answers
+    "". The persona is read once a turn (`_persona_voice_sound` on ctx)."""
+    from story.character_schema import character_voice_sound, persona_voice_sound
+    target = str(speaker or "").strip()
+    if not target:
+        return ""
+    for row in (getattr(ctx, "cast", None) or []):
+        try:
+            sheet, _active, _stance = sheet_state(row)
+        except Exception:
+            continue
+        if not same_subject(ctx.get("scene") or {}, character_name(sheet), target) \
+                and str(character_name(sheet) or "").strip().casefold() != target.casefold():
+            continue
+        return character_voice_sound(sheet)
+    try:
+        if is_player_speaker(target, ctx.chat):
+            cached = ctx.get("_persona_voice_sound")
+            if cached is None:
+                cached = persona_voice_sound(persona_of(ctx.chat))
+                ctx["_persona_voice_sound"] = cached
+            return cached
+    except Exception:
+        return ""
+    return ""
+
+
 def _manifest_percepts(sc, manifest, observer, display_map, recognized,
                        unknown, order, sense_card=None):
     """Tells and surface demeanor as percepts, from the manifest
@@ -6678,6 +6711,7 @@ def _opening_line_percept(ctx, sc, p, pid, name, entry, order, *, field,
         proximity=measured_proximity_rel(sc, name, speaker),
         order_key=order, observer_id=pid, senses=senses,
         voice=_voice_register_for(ctx, speaker),
+        voice_sound=_voice_sound_for(ctx, speaker),
         bearing=_speech_bearing(sc, name, speaker, can_see, rel),
         name_forms=_own_name_forms(ctx, name))
 
@@ -7230,6 +7264,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         order_key=idx, observer_id=pid,
                         senses=p.get("sense_card"),
                         voice=_voice_register_for(ctx, event_actor),
+                        voice_sound=_voice_sound_for(ctx, event_actor),
                         prev_standing=prev_standing,
                         bearing=_speech_bearing(event_scene, name, event_actor,
                                                 said_seen, speech_rel),
@@ -8520,6 +8555,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         order_key=order, observer_id=pid,
                         senses=p.get("sense_card"),
                         voice=_voice_register_for(ctx, speaker),
+                        voice_sound=_voice_sound_for(ctx, speaker),
                         prev_standing=prev_standing,
                         bearing=_speech_bearing(event_scene, name, speaker,
                                                 can_see, rel),

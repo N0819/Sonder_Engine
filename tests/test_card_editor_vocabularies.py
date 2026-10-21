@@ -82,9 +82,9 @@ def test_the_editors_read_the_shipped_vocabularies():
     """Every menu an editor renders from a closed set reads the bootstrap."""
     for source, keys, frozen_names in (
         (COMPONENTS,
-         ("attire_regions", "attire_region_zones",
+         ("attire_regions", "attire_region_zones", "attire_opt_in_zones",
           "extra_part_aspects", "interior_lights"),
-         ("ATTIRE_REGIONS", "ATTIRE_REGION_ZONES",
+         ("ATTIRE_REGIONS", "ATTIRE_REGION_ZONES", "ATTIRE_OPT_IN_ZONES",
           "EXTRA_PART_ASPECTS", "INTERIOR_LIGHTS")),
         (LOREBOOKS,
          ("lorebook_inheritance_modes", "knowledge_tags", "knowledge_ranges"),
@@ -126,6 +126,8 @@ def test_the_editor_fallbacks_still_agree_with_the_engine():
     assert _js_array(COMPONENTS, "ATTIRE_REGIONS_FALLBACK") == list(attire.REGIONS)
     assert _js_object(COMPONENTS, "ATTIRE_REGION_ZONES_FALLBACK") == {
         region: list(zones) for region, zones in attire.REGION_ZONES.items()}
+    assert _js_object(COMPONENTS, "ATTIRE_OPT_IN_ZONES_FALLBACK") == {
+        region: list(zones) for region, zones in attire.OPT_IN_ZONES.items()}
     assert _js_array(COMPONENTS, "EXTRA_PART_ASPECTS_FALLBACK") == list(EXTRA_PART_ASPECTS)
     assert _js_array(COMPONENTS, "INTERIOR_LIGHTS_FALLBACK") == list(LIGHT_LEVELS)
     assert (_js_array(LOREBOOKS, "LORE_INHERITANCE_MODES_FALLBACK")
@@ -161,6 +163,8 @@ def test_the_bootstrap_ships_every_vocabulary_the_editors_render(temp_db):
     assert boot["attire_regions"] == list(attire.REGIONS)
     assert boot["attire_region_zones"] == {
         region: list(zones) for region, zones in attire.REGION_ZONES.items()}
+    assert boot["attire_opt_in_zones"] == {
+        region: list(zones) for region, zones in attire.OPT_IN_ZONES.items()}
     assert boot["extra_part_aspects"] == list(EXTRA_PART_ASPECTS)
     assert boot["interior_lights"] == list(LIGHT_LEVELS)
     assert boot["lorebook_inheritance_modes"] == list(LORE_INHERITANCE_MODES)

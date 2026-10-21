@@ -132,6 +132,63 @@ VISIBLE_ZONES = {
     "head": ("face", "hair", "eyes"),
 }
 
+# A ZONE A GARMENT COVERS ONLY WHEN IT SAYS SO. The coverage axis reads
+# absence as the mildest answer -- a garment with no `covered_zones` covers
+# every zone of every region it occupies -- and the ears invert that default:
+# nearly everything that sits on a head leaves them open, and the exception
+# (whatever closes over them) is the thing worth a typed fact. An `ears` zone
+# in `REGION_ZONES` would therefore have put every hat in every recorded
+# ledger over its wearer's ears, and would have made the ears NAKEDNESS,
+# which the bareness readers (`zone_concealing_garments`,
+# `partially_exposed_regions`) report as exposure; so the head stays out of
+# that table, and the ears are a zone a garment carries in `covered_zones`
+# by naming it: `{"head": ["head", "ears"]}` for one over the head and the
+# ears both, `{"head": ["ears"]}` for one over the ears alone. Read by the
+# hearing floor (`world/spatial_listener.garment_over_ears_db`), which is
+# why it exists: a listener's garment over the ears was the one covering
+# the floor could not read (DESIGN_SOUND_FIELD § 13.7 item 7, built § 18).
+OPT_IN_ZONES = {
+    "head": ("ears",),
+}
+
+
+def zone_vocabulary(region):
+    """Every zone `covered_zones[region]` may name, in order: the region's
+    own zones (`zones_of`, covered by default) and then the ones a garment
+    covers only when it names them (`OPT_IN_ZONES`)."""
+    return tuple(zones_of(region)) + tuple(OPT_IN_ZONES.get(region, ()))
+
+
+def zones_named(garment, region):
+    """The opt-in zones of `region` this garment covers -- those its
+    `covered_zones` names -- as a tuple, () for a garment that names none.
+    The one reader of `OPT_IN_ZONES` beside the validators: ask this, never
+    the garment's name or description, which are prose."""
+    opt_in = OPT_IN_ZONES.get(region) or ()
+    if not opt_in:
+        return ()
+    covered = covered_zones_for(garment, region)
+    return tuple(zone for zone in opt_in if zone in covered)
+
+
+def garments_over_zone(regions, region, zone):
+    """The garments of this body still over one zone of a region: worn (not
+    `removed`), covering rather than merely attached, and covering `zone`
+    by the coverage axis -- an opt-in zone only where the record names it.
+    Names, outermost first, each once; [] for an open zone."""
+    out = []
+    for garment in ((regions or {}).get(region) or {}).get("garments") or []:
+        if not isinstance(garment, dict):
+            continue
+        if garment.get("state") == "removed" or garment.get("attaches"):
+            continue
+        if zone not in covered_zones_for(garment, region):
+            continue
+        name = " ".join(str(garment.get("name") or "").split()) or "?"
+        if name not in out:
+            out.append(name)
+    return out
+
 
 def zones_of(region):
     """Every region is coverable-or-not; the torso is finer.
@@ -541,7 +598,7 @@ def _clean_covered_zones(value):
     for region in REGIONS:
         if region not in value:
             continue
-        allowed = zones_of(region)
+        allowed = zone_vocabulary(region)
         raw = value.get(region)
         raw = raw if isinstance(raw, (list, tuple, set)) else [raw]
         supplied = [str(zone or "").strip().casefold()
@@ -550,20 +607,27 @@ def _clean_covered_zones(value):
         if supplied and not selected:
             continue  # unreadable assertion of coverage: keep the default
         picked = [zone for zone in allowed if zone in selected]
-        # Full coverage is the default and needs no stored override.
-        if tuple(picked) != tuple(allowed):
+        # DEFAULT coverage -- the region's own zones, never an opt-in one --
+        # needs no stored override; an opt-in zone named is the fact itself.
+        if tuple(picked) != tuple(zones_of(region)):
             out[region] = picked
     return out
 
 
 def covered_zones_for(garment, region):
-    """The zones of ``region`` this garment currently covers."""
-    zones = zones_of(region)
+    """The zones of ``region`` this garment currently covers.
+
+    Without an override, the region's own zones (`zones_of`) -- never an
+    opt-in zone, which is covered only by a record that names it. With one,
+    whatever of the whole vocabulary (`zone_vocabulary`) the record names,
+    so a hood written `{"head": ["head", "ears"]}` covers both and one
+    written `{"head": ["ears"]}` covers the ears and nothing of the head
+    proper -- still a covering, not a displaced garment."""
     overrides = garment.get("covered_zones")
     if not isinstance(overrides, dict) or region not in overrides:
-        return zones
+        return zones_of(region)
     selected = set(overrides.get(region) or [])
-    return tuple(zone for zone in zones if zone in selected)
+    return tuple(zone for zone in zone_vocabulary(region) if zone in selected)
 
 
 def rehome_region(region, parts=None):
@@ -995,7 +1059,7 @@ def apply_coverage_changes(regions, changes):
                     "which is not a body region; the garment ladder moves "
                     "through remove/decisive acts, never through coverage.")
                 continue
-            allowed = zones_of(region)
+            allowed = zone_vocabulary(region)
             raw_zones = (raw_zones if isinstance(raw_zones, (list, tuple, set))
                          else [raw_zones])
             supplied = [str(zone or "").strip().casefold()
@@ -1025,8 +1089,9 @@ def apply_coverage_changes(regions, changes):
                 found = True
                 overrides = dict(garment.get("covered_zones") or {})
                 for changed_region, picked in valid.items():
-                    allowed = zones_of(changed_region)
-                    if tuple(picked) == tuple(allowed):
+                    # The region's DEFAULT coverage clears the override; a
+                    # named opt-in zone (the ears) is kept as the fact it is.
+                    if tuple(picked) == tuple(zones_of(changed_region)):
                         overrides.pop(changed_region, None)
                     else:
                         overrides[changed_region] = picked
@@ -2764,6 +2829,12 @@ def describe(regions, beneath_visible=False, body=""):
                     # still ON the body; the marker is what stops the
                     # Director reading its presence as coverage.
                     text += " [displaced; not covering this region]"
+                elif not zones and zones_named(garment, region):
+                    # An opt-in zone the record names (the ears under a
+                    # hood): said on the ledger line so the encoder, which
+                    # rewrites coverage from what it is shown, can keep it.
+                    text += " [over the %s]" % ", ".join(
+                        zones_named(garment, region))
                 if anchored and garment.get("description"):
                     text += " — %s" % garment["description"]
                 pieces.append(text)
@@ -2995,7 +3066,11 @@ def displaced_by(previous, garment, placement=None):
     covers = {}
     for region in (where or regions_covered(name)):
         if region in REGIONS:
-            covers[region] = set(zones_of(region))
+            # The WHOLE vocabulary, opt-in zones included: a newcomer takes
+            # the place a garment holds at region grain, so a hat put on in
+            # place of a hood still puts the hood off even though the hood
+            # names the ears and the hat does not.
+            covers[region] = set(zone_vocabulary(region))
     if not covers:
         return []
     key = name.casefold()

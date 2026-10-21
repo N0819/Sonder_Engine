@@ -1243,6 +1243,9 @@ SIDE_CHANNELS = {
     "_sound_crowds": "memo: the chat's crowd ledger from world state",
     "_own_name_forms": "memo: the names each body's card says others call "
                        "it by (`perception._own_name_forms`), read once a turn",
+    "_persona_voice_sound": "memo: the player's `embodiment.voice` off their "
+                            "persona (`perception._voice_sound_for`), read "
+                            "once a turn",
     "_beat_movers": "memo: {name: pace} read off the resolve's travel record "
                     "and the beat's room changes",
     "_background_beats_cache": "memo: derived from the hydrated "

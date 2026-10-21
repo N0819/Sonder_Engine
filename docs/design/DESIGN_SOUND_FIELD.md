@@ -3044,3 +3044,175 @@ and the `unheard_ceasing` filter on the episode. `sound_fill` and
    view in English, and double the intensity word on a record whose name
    carries it ("light light snow is landing on you") -- registered in
    UNBUILT_PERCEPTION § 2.36.
+
+## 18. Round 2, lane D: a voice on the card, and ears under the hood (2026-10-20)
+
+The owner, the same day, on §§ 12.6 question 9 and 13.7 item 7: build
+both. Two items, each a typed fact the hearing rule lacked, each stated
+once in the engine's vocabulary and carried through every surface that
+writes it.
+
+### 18.1 `embodiment.voice`: what a voice carries to a stranger's ear
+
+**The world.** A stranger's voice through a door tells you what a body is
+recognised by when it speaks -- a woman's or a man's, young or old, its
+timbre, its accent -- before you know whose it is.
+
+**What existed** (§ 12.3): an unseen stranger was described by
+`social.voice.register`, which is how a voice is USED ("clinical, deadpan,
+and strictly monotone"; 61 of the owner's 70 characters fill it) and is
+authored for the manner slot of a line SEEN; a persona had no voice field
+at all, so the player's voice was nothing to anyone who heard it unseen;
+and nothing on either card carried a voice's sex, rough age or accent as a
+fact about sound.
+
+**The class.** A card carries what its body's voice carries to a stranger's
+ear, as a short phrase, and a listener who hears the body and cannot see
+it is told that once -- never a name.
+
+**As built.**
+
+* `embodiment.voice` on BOTH card shapes (`character_schema.
+  default_character_data`, `default_persona_data`): the hearing sibling
+  of `visible.summary` and `scent`, empty by default like them. Readers
+  `character_voice_sound` and `persona_voice_sound`; a flat persona keeps
+  its voice where the schema keeps one, as it keeps its senses and parts.
+* Every surface a card comes from carries it: the blank card; the
+  normalizer; AI generation, import and promotion (`generator_character`,
+  `generator_persona`, `import_character_reinterpret`,
+  `import_persona_reinterpret`, `promote_character`: one clause each and
+  the schema key, en + ja); hand edit (a row beside the scent in both
+  editors, a label in both UI catalogs); the per-story override
+  (`chat_chars.sheet`, a whole card, which cannot rekey the identity --
+  verified, not changed); the appearance fill (`importers.fill_appearance`
+  merges a voice the model wrote and leaves silence alone; the editor's
+  unsaved voice rides `author_draft.voice`); the greeting launch, which
+  reads the card as stored; and the portable archive, whole cards both
+  ways (verified by a round trip, `tests/test_a_voice_on_the_card_is_
+  heard_unseen.py`).
+* THE COMPOSER reads it first: `speech_percept(voice_sound=)`, said as
+  `voice_apart` -- "The voice is a woman's, past fifty, with the clipped
+  vowels of the coast." -- to a listener who neither sees the speaker nor
+  knows the voice, the register as the fallback where the card has none,
+  and nothing where it has neither (§ 12.3's behaviour, byte for byte).
+  The voice key carries the sound beside the register only where a card
+  has one, so a card without it keys exactly as before. The player's
+  voice reaches the cast through the persona (`perception.
+  _voice_sound_for`, `is_player_speaker`; read once a turn,
+  `_persona_voice_sound` in `runtime.SIDE_CHANNELS`).
+* THE NAME GUARD stays and the SHAPE FLOOR does not apply. Review round
+  4's two reasons (§ 12.3) split: sheet text can name the body it belongs
+  to -- that is the firewall's floor, `_names_the_speaker`, shared by both
+  accounts of a voice said in the dark -- and a register that is a clause
+  is prose about anything, which was true of a field authored for the
+  manner slot and is not true of one authored for this sentence.
+  `_fits_the_manner_slot` admits three words to a part; "with the clipped
+  vowels of the coast" is four, and is exactly what the field is for. A
+  guard that fires on the field's own valid output is cut before it is
+  built (the owner, 2026-09-06).
+* `_lower_lead` lowers a one-letter first word: the article of "A
+  woman's, past fifty" was kept by the test on the second character alone,
+  and the page read "The voice is A woman's".
+* The card warnings stay silent on an empty voice, as they are on an empty
+  `visible.summary` (defaulted, never warned) and an empty `scent`: a
+  warning on any of the three fires on every card on all ten surfaces.
+
+### 18.2 `ears`: a zone a garment covers only when it names it
+
+**The world.** A hood drawn up, a scarf wound over the ears, a helmet, a
+pair of earmuffs take some 5-15 dB from speech -- less than hands pressed
+over the ears (15-25), and never on top of them.
+
+**What existed** (§ 13.2): `ear_cover_db` read the contact ledger alone;
+the attire ledger knew a garment covered the `head` and never whether it
+covered the ears, and a garment's name is prose.
+
+**The class.** The ears are a zone of the head a garment covers ONLY WHEN
+IT NAMES IT. The coverage axis reads absence as "covers every zone", and
+that default is wrong for the ears: nearly everything on a head leaves them
+open. An `ears` zone in `REGION_ZONES` would have put every hat in every
+recorded ledger over its wearer's ears and made the ears nakedness (the
+bareness readers report a zone nothing covers as exposed). So the head
+stays out of that table and the ears are a third kind of zone
+(`attire.OPT_IN_ZONES`): `{"head": ["head", "ears"]}` a hood drawn up,
+`{"head": ["ears"]}` one over the ears alone, `{"head": []}` pushed back.
+
+**As built.**
+
+* `attire.zone_vocabulary(region)` is everything `covered_zones[region]`
+  may say; `zones_of(region)` is what it says by default; the
+  default-clears-the-override rule (`_clean_covered_zones`,
+  `apply_coverage_changes`) compares against the default, never the
+  vocabulary. `covered_zones_for` returns the named opt-in zones with the
+  rest, so a garment over the ears alone is a covering and never
+  "[displaced]"; `zones_named` and `garments_over_zone` are the readers;
+  `displaced_by` lets a newcomer take the whole vocabulary, so a hat put
+  on in place of a hood still puts the hood off; `describe` says `[over
+  the ears]` on the ledger line, so the encoder, which rewrites coverage
+  from what it is shown, can keep it.
+* `spatial_listener.garment_over_ears_db`: the listener's wardrobe through
+  the ledger's own normalisation (`attire.entry_for`, `rederive_entry`),
+  a worn head garment (not removed, not attached) naming the ears, at
+  `GARMENT_OVER_EARS_DB` = 10 (the middle of cloth's 5-15). `ear_cover_db`
+  is THE LARGER of the contact ledger's covering and this one, never
+  their sum: hands over a hood are the hands' 20.
+* ONE NUMBER, because no typed garment fact seals an ear. A garment's
+  record is its name, description, ladder state, condition prose, regions
+  and zones (`story/attire.py`; there is no `material`), and reading
+  "helmet" or "lined" out of a name or a description is the word list this
+  engine refuses. A garment that should take the hands' 20 is a contact to
+  write; a second number was not built.
+* One vocabulary on every surface: the card's authored outfit seeds it
+  (`seed_initial_attire` through `_clean_covered_zones`); the encoder's
+  `coverage` channel names and clears it (the attire chunk's displacement
+  clause, en + ja: a hood drawn up is `coverage:{'hood':{head:['head',
+  'ears']}}`, the head's full list `['head']` un-names the ears); the
+  appearance fill is told under its zones paragraph; the picker offers
+  the ears unticked (`attire_opt_in_zones` on the bootstrap,
+  `ATTIRE_OPT_IN_ZONES_FALLBACK`) and stores a record only where the
+  ticks differ from the region's own zones.
+
+| through a hood (10 dB) | open ear | hood | hands (20) |
+|---|---|---|---|
+| a whisper at arm's reach | full | none | none |
+| a mutter at arm's reach | full | full | none |
+| a normal voice through an open doorway | full | full | fragment |
+
+### 18.3 Measured
+
+Offline, read-only (`mode=ro`), no model call and every socket refused, on
+the owner's `engine.db` and copies of the four 2026-09-26 stories (deleted
+after); the script in the lane's directory (`scripts/measure.py`).
+
+* **Cards with a voice: 0** of 102 characters (70 the owner's, 32 the
+  stories'), 0 of 23 personas, 0 of 24 per-story overrides -- by
+  construction, the field is new. 93 characters carry a register and 36
+  of those registers pass the floor and are said in the dark today.
+* **A stranger's voice: 38 recorded hearing decisions** (29 distinct
+  speaker, listener and beat) reach a listener who neither sees nor
+  recognises the speaker, of 2,273 heard: 32 from a body with no sheet (a
+  persona or a presence), 4 with the register withheld by the floor, 2
+  said. Every one would read `embodiment.voice` first once a card carries
+  one; the 32 are exactly the persona's case.
+* **Head garments: 50 worn, on 5 bodies, across 4,817 recorded scenes**
+  (every checkpoint and live world, every frame); none carries a head
+  override and none names the ears -- the ceiling until a garment is
+  written with the zone.
+
+### 18.4 The owner's questions, and what is left
+
+1. **A garment over the ears takes 10 dB**, the middle of cloth's 5-15; a
+   helmet and a wool scarf take the same, for want of a typed seal.
+2. **The larger of the two coverings, never the sum.**
+3. **A whisper at arm's reach is lost whole through a hood**: the ear
+   budget's speech margins make 10 dB a cliff for a whisper (open: full;
+   hood: none; a mutter: full). The owner may want a fragment there.
+4. **An empty voice warns nothing**, as the summary and the scent do; a
+   one-line warning on the three is the owner's.
+5. **The voice field has no shape floor**, only the name guard; whether a
+   voice sound that is a whole clause should be withheld is the owner's.
+6. **The clauses need a live run**: the generators, the fill and the
+   promotion writing `embodiment.voice`; the encoder naming the ears when a
+   hood goes up and un-naming them when it comes down.
+
+What is left is registered in `docs/UNBUILT_PERCEPTION.md` § 2.36.

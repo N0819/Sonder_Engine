@@ -698,6 +698,12 @@ function fStrList(label, vals) {
 const ATTIRE_REGIONS_FALLBACK = ["head", "torso", "arms", "hands", "waist", "groin",
                                  "legs", "feet"];
 const ATTIRE_REGION_ZONES_FALLBACK = { torso: ["chest", "midriff"] };
+// The zones a garment covers ONLY WHEN IT NAMES THEM (attire.py's
+// OPT_IN_ZONES): a region's own zones are ticked by default and an opt-in
+// one is unticked, because nearly everything on a head leaves the ears open
+// and a hood, a helmet or a scarf wound over them is the exception worth a
+// typed fact -- the hearing floor reads it.
+const ATTIRE_OPT_IN_ZONES_FALLBACK = { head: ["ears"] };
 
 function attireRegions() {
   const shipped = S.boot && S.boot.attire_regions;
@@ -707,6 +713,11 @@ function attireRegions() {
 function attireRegionZones() {
   const shipped = S.boot && S.boot.attire_region_zones;
   return shipped && typeof shipped === "object" ? shipped : ATTIRE_REGION_ZONES_FALLBACK;
+}
+
+function attireOptInZones() {
+  const shipped = S.boot && S.boot.attire_opt_in_zones;
+  return shipped && typeof shipped === "object" ? shipped : ATTIRE_OPT_IN_ZONES_FALLBACK;
 }
 
 // Coverage presets, offered as one-click shortcuts inside the picker. Not the
@@ -739,11 +750,16 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
   // field the editor cannot express is a field the editor will silently
   // erase.
   const zonesFor = region => attireRegionZones()[region] || [region];
+  // The whole vocabulary a region's override may name: its own zones, then
+  // the opt-in ones. Default coverage is the OWN zones alone -- an opt-in
+  // zone (the ears) is ticked only by a record that names it.
+  const optInFor = region => attireOptInZones()[region] || [];
+  const vocabularyFor = region => zonesFor(region).concat(optInFor(region));
   const zoneBoxes = new Map();
   attireRegions().forEach(region => {
-    const zones = zonesFor(region);
+    const zones = vocabularyFor(region);
     const explicit = Object.prototype.hasOwnProperty.call(coveredZones || {}, region);
-    const selected = explicit ? (coveredZones[region] || []) : zones;
+    const selected = explicit ? (coveredZones[region] || []) : zonesFor(region);
     zoneBoxes.set(region, new Map(zones.map(zone => [zone, el("input", {
       type: "checkbox", ...(selected.includes(zone) ? { checked: "" } : {})
     })])));
@@ -807,9 +823,13 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
       const result = {};
       zoneBoxes.forEach((zoneMap, region) => {
         if (autoBox.checked || !boxes.get(region).checked) return;
-        const all = zonesFor(region);
-        const selected = all.filter(zone => zoneMap.get(zone).checked);
-        if (selected.length !== all.length) result[region] = selected;
+        const own = zonesFor(region);
+        const selected = vocabularyFor(region).filter(zone => zoneMap.get(zone).checked);
+        // Default coverage -- the region's own zones, no opt-in one -- needs
+        // no stored override; anything else is the record's own statement.
+        const isDefault = selected.length === own.length
+          && selected.every(zone => own.includes(zone));
+        if (!isDefault) result[region] = selected;
       });
       return result;
     },

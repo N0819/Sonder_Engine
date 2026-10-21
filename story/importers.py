@@ -1230,6 +1230,8 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None,
         "card": normalized,
         "author_draft": {
             "appearance": draft.get("appearance") or {},
+            # The voice as typed and not yet saved, beside the body.
+            "voice": str(draft.get("voice") or ""),
             "initial_outfit": draft.get("initial_outfit") or {},
             # The unsaved parts list too, or a fill run right after typing
             # "tail" proposes a second one.
@@ -1276,6 +1278,16 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None,
             merged["embodiment"] = {}
         merged["embodiment"]["visible"] = {
             **(merged["embodiment"].get("visible") or {}), **visible}
+    # The voice as a stranger's ear takes it (`embodiment.voice`), part of
+    # the body this fill describes. Taken only when the model wrote one:
+    # silence is not a deletion, as for the parts below.
+    voice = ((proposed.get("embodiment") or {}).get("voice")
+             if isinstance(proposed.get("embodiment"), dict) else None)
+    if isinstance(voice, str) and voice.strip():
+        merged.setdefault("embodiment", {})
+        if not isinstance(merged["embodiment"], dict):
+            merged["embodiment"] = {}
+        merged["embodiment"]["voice"] = voice.strip()
     # Structured extra parts, taken only when the model actually returned a
     # list. Silence is not a deletion: this fill is allowed to REPLACE body
     # and clothing (see the docstring), but a model that simply omitted the
