@@ -634,7 +634,7 @@ class JapaneseRenderer:
             return _compose_residue_view(
                 data.get("level"), targeted=data.get("targeted", False),
                 loud_event=data.get("loud_event", False), pain=data.get("pain", False),
-                woke=data.get("woke", ""))
+                woke=data.get("woke", ""), episode=bool(prefix))
         return ""
 
     # -- whole views --------------------------------------------------------
@@ -844,14 +844,17 @@ class JapaneseRenderer:
         from agents.composer import _first_person
         residue = [p for p in percepts if p.kind == "residue"]
         if residue:  # the same floor as render_view
-            sentences = [s for s in (_full_stop(self._sentence(p, episode=True))
-                                     for p in residue) if s]
+            # The residue is the mind's own memory too, woken or not (the
+            # English renderer's rule): in the first person either way.
+            sentences = [s for s in (
+                _full_stop(_first_person(self._sentence(p, episode=True)))
+                for p in residue) if s]
             rest = [p for p in percepts if p.kind != "residue"]
             if (residue[0].data or {}).get("woke") and rest and sentences:
                 # The woken mind remembers the rest of the beat (§ 17): the
                 # waking in the first person, then what it perceived from
                 # that moment on, as any awake mind's episode.
-                woke = _first_person(sentences[0])
+                woke = sentences[0]
                 content, gist, entities = self._render_episode(
                     rest, prev_standing=prev_standing,
                     prev_described=prev_described)
@@ -892,11 +895,20 @@ class JapaneseRenderer:
         # An episode is the character's own memory, so second person becomes
         # first. The English renderer does this and the adapter did not, so a
         # Japanese memory mixed 「あなたは立っている。」 with 「私は中庭にいた。」
-        near_sentences = [s for s in (_full_stop(_first_person(self._sentence(p, episode=True)))
-                                      for p in near) if s]
+        #
+        # WHAT WAS SAID IS FILED AS IT WAS HEARD. A speech line's episode
+        # templates are already the mind's own (「…の言葉を聞いた」), and its
+        # words are the speaker's: a fragment carries no 「」 for the swap to
+        # stop at, so 「……あなたの……手紙……」 was filed 「……私の……手紙……」
+        # -- a line nobody said (2026-10-21). English never turns a speech
+        # sentence (`composer._episode_sentence`); neither does this.
+        def _mine(p):
+            sentence = self._sentence(p, episode=True)
+            return sentence if p.kind == "speech" else _first_person(sentence)
+
+        near_sentences = [s for s in (_full_stop(_mine(p)) for p in near) if s]
         far_sentences = [s for s, _names in far_lines] + [
-            s for s in (_full_stop(_first_person(self._sentence(p, episode=True)))
-                        for p in horizon) if s]
+            s for s in (_full_stop(_mine(p)) for p in horizon) if s]
         sentences = near_sentences + far_sentences
         content = "".join(dict.fromkeys(sentences))
         # Generic labels are descriptors, not entities. Indexing "a voice" or

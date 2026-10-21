@@ -152,5 +152,5 @@ def test_a_mind_remembers_what_it_said_and_did_at_the_opening(temp_db, monkeypat
     selves = [m for m in captured["memories"] if "What I did:" in m["content"]]
     assert [(m["char_id"], m["content"]) for m in selves] == [
         (ids["Reya"], "What I did: I said 'The ferry left an hour ago.' Then I tried to bar the door.\n"
-                      "What happened: You are in the hall.")]
+                      "What happened: I am in the hall.")]
     assert selves[0]["turn_idx"] == 0

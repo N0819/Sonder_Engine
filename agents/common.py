@@ -9862,7 +9862,7 @@ def _normalise_views(raw_views, perceivers):
     return clean
 
 def _compose_residue_view(level, *, targeted=False, loud_event=False, pain=False,
-                          woke=""):
+                          woke="", episode=False):
     """The content-free perception RESIDUE for a non-awake mind (asleep /
     sedated / unconscious). An unconscious mind integrates no channel into
     scene, identity, or words -- so this NEVER carries speech content, a name, a
@@ -9879,7 +9879,14 @@ def _compose_residue_view(level, *, targeted=False, loud_event=False, pain=False
     a voice, a noise (`spatial_listener.WAKING_SOUNDS`) -- and nothing else:
     no word of the line but the fact of the name, no speaker, no room. The
     rest of the beat happened while they slept; from the next beat they
-    perceive as anyone awake does."""
+    perceive as anyone awake does.
+
+    `episode` asks for the memory's own words where the view's second person
+    cannot be turned by the swap (`composer._first_person`): the pain is felt
+    "in a body you can't quite feel", a subject inside a relative clause that
+    no mark in the text names as the subject, so the pack carries its first
+    person (`residue.pain_episode`). Every other fragment is turned by the
+    swap, which reads the role each of them marks."""
     residue = compositor_value("residue")
     woke_text = (residue.get("woke") or {}).get(str(woke or ""))
     if woke_text:
@@ -9887,7 +9894,7 @@ def _compose_residue_view(level, *, targeted=False, loud_event=False, pain=False
     lead = residue["lead"].get(level, residue["lead"]["default"])
     frag = []
     if pain:
-        frag.append(residue["pain"])
+        frag.append(residue["pain_episode" if episode else "pain"])
     if targeted:
         frag.append(residue["targeted"])
     if loud_event:

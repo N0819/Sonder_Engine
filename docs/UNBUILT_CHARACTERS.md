@@ -448,6 +448,67 @@ Still open:
 - On the 2026-10-10 replies three of ten, all served by one provider, padded `sequence` with empty steps (two stopped at 66 and 68 steps, one ran to the 5,000-token cap); the step reader drops empty steps. Round one's four runaways were in `note`, on two other providers.
 - ~~A reaction-loop character's demeanor (§6.18, never delivered) is still filed as its `carriage`.~~ FIXED 2026-10-08: `_delivered_manifest` reads both behaviour paths (`_settled_character_result`), so the carriage filed is the carriage shown.
 
+<a id="unbuilt-1-226"></a>
+
+### 1.226 A memory said "me can hear" -- BUILT 2026-10-21, residuals open
+
+The lighthouse probe (2026-10-20, chat 2 rows 46 and 50): "Through the walls,
+me can hear the heavy rain, muffled." The episode's second-to-first swap
+turned every lowercase "you" into "me" whatever its role (12 rows across the
+three probe stories, and "where me stand" in one more; 27 rows of the owner's
+composer-era episodes carry a subordinate "as me turn"); a sleeper's residue
+was never turned at all ("What I witnessed: You are under, below waking.",
+6 rows on the farmhouse probe, 16 in the owner's bank); the opening's memory
+was its establishing view verbatim (16 probe rows, 13 of the owner's); and a
+Japanese episode ran its swap over speech, filing an overheard
+「……あなたの……手紙……」 as 「……私の……手紙……」 (0 such rows recorded).
+Built: the swap reads the role the text marks, the two engine templates with
+a subject in a relative clause are rendered in the first person at the
+source, the rewrites that put a perceiver's own name and pronouns into the
+second person also write the first person (kept only when it says what the
+view said), the residue and the opening are turned, and a speech line is
+filed as heard in both packs (`Design.md`: "A memory speaks in its own first
+person"). What the fix leaves:
+
+- **A subject the text does not mark and no rewrite wrote is still "me".**
+  The swap's default for an unmarked "you" is the object. Two shapes reach
+  it: a perceiver's name straight after a verb that is not its own ("says
+  Pell stands guard" -- the word-order rule that keeps "hands Pell letters"
+  an object reads it as one), and a name before a verb with no
+  third-person mark ("as Pell stood", "where Pell can see"). 0 left in the
+  three probe stories' replays.
+- **An act that arrives in the second person names the wrong body.** Chat
+  111 turn 31 (the owner's, replayed): the resolve wrote the player's own
+  self-narration into her act's surface as written, "demeanor shifts as you
+  giggle between moans", so the observing character's view says "you" for
+  the player and the memory files "as me giggle" -- the four subordinate
+  subjects left in the eight replayed turns. Upstream of memory: an act's
+  surface is the actor's third person, and this one was not.
+- **The view's own agreement repair reads a plural noun after the
+  perceiver's name as a verb** (`common._fix_you_agreement`: "hands Pell
+  letters" is "hands you letter" in the view). The memory follows the view's
+  words and keeps the object ("hands me letter"); the view's defect is older.
+- **The opening's memory is the whole establishing view, now in the first
+  person and the present tense; every later beat files the IR episode.**
+  Whether the opening should mint its episode from the percepts as the
+  outcome stage does -- a content change: the room's description becomes "I
+  was in The Tower Foot." -- is the owner's call.
+- **A steady sound's line keeps the view's present tense inside a
+  past-tense memory** ("Through the walls, I can hear the heavy rain,
+  muffled." beside "Rhona Carrick was seated ..."), where the authored
+  episode templates are past ("I could see"). Pinned present by
+  `tests/test_a_steady_sound_is_remembered.py`; the owner's call.
+- **Two other writers still file the second person into memory rows.** An
+  inference's evidence is quoted from the view ("I based that on: You are in
+  the Gull and Anchor ...": 36 of the three probe stories' 67 inference
+  rows), and the affect pass's
+  `emotional_context` quotes its own prompt ("frustration (You held back
+  from: ...)").
+- **A Japanese episode files no distant sound** (`language_adapters/japanese.py`
+  `_sentence`: the distant branch is `and not prefix`), where the English
+  episode files one (`_EPISODE_SOUND_TAGS`). Found here; not a person
+  defect.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-2"></a>

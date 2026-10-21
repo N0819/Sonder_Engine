@@ -2045,7 +2045,8 @@ def _reads_as_possessive(tail) -> bool:
     return match.group(1).casefold() not in _OBJECT_PRONOUN_FOLLOWERS
 
 
-def _pose_owner_second_person(text, pronouns, other_forms=()):
+def _pose_owner_second_person(text, pronouns, other_forms=(), *,
+                              person="second"):
     """Rewrite pronouns whose referent is known from a pose's ownership.
 
     A pose is stored under the body it describes.  Its ``posture``,
@@ -2059,7 +2060,16 @@ def _pose_owner_second_person(text, pronouns, other_forms=()):
     This is what turns ``settled on her heels ... Mara`` into ``settled on
     your heels ... Mara`` without turning the later ``steady her`` (after
     Mara has been named) into ``steady you``. Quoted spans are untouched.
+
+    ``person="first"`` is the same rewrite into the owner's OWN first person,
+    for the episode (`_said_as_mine`): the third person still says which role
+    each pronoun had -- "she" the subject, "her" the object or the possessive
+    -- and English's second person no longer does, so "as she turns her
+    attention" is "as I turn my attention" here, where the swap of "as you
+    turn your attention" could only guess (chat 152 turn 14 filed "as me
+    turn my attention").
     """
+    first = person == "first"
     text = str(text or "")
     if not text or not isinstance(pronouns, dict):
         return text
@@ -2103,18 +2113,27 @@ def _pose_owner_second_person(text, pronouns, other_forms=()):
             word = match.group(1)
             low = word.casefold()
             if reflexive and low == reflexive.casefold():
-                replacement = "yourself"
+                replacement = "myself" if first else "yourself"
             elif ((low == possessive.casefold()
                    and low != obj.casefold()) or
                   (low == possessive.casefold() == obj.casefold()
                    and _reads_as_possessive(prefix[match.end():]))):
-                replacement = "your"
-            else:
+                replacement = "my" if first else "your"
+            elif not first:
                 replacement = "you"
+            elif low == subject.casefold() and (
+                    low != obj.casefold()
+                    or _reads_as_subject(prefix[match.end():])):
+                # The subject's own case -- or, for a pronoun spelled alike
+                # in both ("it"), the verb that agrees with it.
+                return "I"
+            else:
+                replacement = "me"
             return replacement.capitalize() if word[:1].isupper() else replacement
 
         rewritten = pronoun_re.sub(replace, prefix)
-        return _fix_you_agreement(rewritten) + suffix
+        return (_fix_i_agreement(rewritten) if first
+                else _fix_you_agreement(rewritten)) + suffix
 
     quoted = linguistic("agents.common", "_QUOTED_SPAN_RE").split(text)
     for index in range(0, len(quoted), 2):
@@ -2126,8 +2145,11 @@ def _pose_owner_second_person(text, pronouns, other_forms=()):
 
 
 def _action_target_second_person(text, target_forms, target_pronouns,
-                                 other_forms=()):
+                                 other_forms=(), *, owner="your"):
     """Repair target-owned body pronouns after an explicit target name.
+
+    `owner` is the word the owned body part takes: the observer's "your" in
+    the view, its own "my" in the episode's first person (`act_percept`).
 
     Character observables are predicates whose omitted subject is the actor.
     When actor and target share pronouns, models commonly write a target once
@@ -2191,10 +2213,161 @@ def _action_target_second_person(text, target_forms, target_pronouns,
                 if match:
                     cutoff = min(cutoff, match.start())
             owned, remainder = suffix[:cutoff], suffix[cutoff:]
-            suffix = owned_body_re.sub("your", owned) + remainder
+            suffix = owned_body_re.sub(owner, owned) + remainder
             sentences[sentence_index] = prefix + suffix
         quoted[index] = "".join(sentences)
     return "".join(quoted)
+
+
+# --------------------------------------------------------------------------
+# The first person of an authored line, where the rewrite knows the role
+# --------------------------------------------------------------------------
+
+def _reads_as_subject(tail) -> bool:
+    """Does the word after a name or pronoun agree with it as its SUBJECT?
+
+    The same judgment `common._fix_you_agreement` acts on when it re-inflects
+    the verb after a "you" that replaced a third-person subject: the next
+    word is a third-person-singular form -- an auxiliary in the pack's
+    agreement table, or a regular present verb's -s. A name followed by
+    anything else (a noun phrase, a preposition, the end) is not the subject
+    of that word."""
+    match = re.match(r"\s+([A-Za-z][\w'’-]*)", str(tail or ""))
+    if not match:
+        return False
+    word = match.group(1)
+    return (word.casefold() in linguistic("agents.common", "_YOU_AGREEMENT")
+            or _base_from_third_person_s(word) is not None)
+
+
+def _fix_i_agreement(text):
+    """Re-inflect the verb after an "I" that replaced a third-person subject
+    -- the first-person twin of `common._fix_you_agreement`, and read from
+    it rather than from a table of its own: the second person's form of the
+    verb ("is" -> "are"), turned by the swap's own be row ("you are" -> "I
+    am"). "I is", "I isn't" and "I turns" are never English, so this is as
+    safe over prose that already held an "I" as its twin is."""
+    def _sub(m):
+        i, gap, word = m.group(1), m.group(2), m.group(3)
+        second = linguistic(
+            "agents.common", "_YOU_AGREEMENT").get(word.casefold())
+        if second is None:
+            base = _base_from_third_person_s(word)
+            if base is None:
+                return m.group(0)
+            fixed = base
+        else:
+            turned = _first_person("you " + second)
+            fixed = turned.split(" ", 1)[1] if " " in turned else second
+        if word[:1].isupper():
+            fixed = fixed[:1].upper() + fixed[1:]
+        return f"{i}{gap}{fixed}"
+
+    return re.sub(r"(?<![\w'’])(I)(\s+)([A-Za-z’']+)", _sub,
+                  str(text or ""))
+
+
+def _self_first_person(text, forms):
+    """`common._self_second_person` into the perceiver's OWN first person,
+    for the episode: a possessive name is "my", a name its next word agrees
+    with as subject is "I" (the verb re-inflected for it), any other name is
+    "me" -- the judgment the second-person rewrite makes when it re-inflects
+    the verb after its "you", made here while the name still says which.
+
+    Measured: "turns from the crag toward the tie-up where Pell stands" was
+    rewritten "where you stand" for Pell and remembered "where me stand"
+    (the lighthouse probe, 2026-10-20, chat 2 row 37)."""
+    text = str(text or "")
+    if not text:
+        return text
+    patterns = []
+    for form in sorted({str(f or "").strip() for f in (forms or [])
+                        if str(f or "").strip()}, key=len, reverse=True):
+        flags = 0 if form.casefold() in linguistic(
+            "agents.common", "_COMMON_WORD_NAMES") else re.I
+        patterns.append(name_occurrence_pattern(form, flags=flags))
+    if not patterns:
+        return text
+
+    def _sub(m):
+        before = m.string[:m.start()].rstrip()
+        opens = not before or before[-1] in ".!?\n"
+        if m.group(1):
+            return "My" if opens else "my"
+        # A name between two verbs is the first one's object: English puts
+        # the object straight after its verb. Without this, "hands Pell
+        # letters" -- which the view's own agreement repair already reads as
+        # "hands you letter" -- came back "hands I letter".
+        prior = re.search(r"([A-Za-z][\w'’-]*)$", before)
+        after_a_verb = bool(prior) and (
+            prior.group(1).casefold() in linguistic(
+                "agents.common", "_YOU_AGREEMENT")
+            or _base_from_third_person_s(prior.group(1)) is not None)
+        if not after_a_verb and _reads_as_subject(m.string[m.end():]):
+            return "I"
+        return "Me" if opens else "me"
+
+    segments = linguistic("agents.common", "_QUOTED_SPAN_RE").split(text)
+    for i in range(0, len(segments), 2):
+        before = segments[i]
+        after = before
+        for pattern in patterns:
+            after = pattern.sub(_sub, after)
+        segments[i] = _fix_i_agreement(after) if after != before else before
+    return "".join(segments)
+
+
+#: One word of the person -- a pronoun of the first or the second person,
+#: with its contracted auxiliary and the be form that agrees with it -- for
+#: `_same_but_for_person`, which compares two renderings of one line with
+#: the person taken out.
+_PERSON_WORDS_RE = re.compile(
+    r"(?<![\w'’])(?:I|me|my|mine|myself|you|your|yours|yourself)"
+    r"(?:['’](?:m|re|ve|ll|d))?"
+    r"(?:\s+(?:am|are|was|were)(?:n['’]t)?(?:\s+not)?)?"
+    r"(?![\w'’])", re.I)
+
+
+def _same_but_for_person(mine, view):
+    """Do two renderings of one line say the same thing, the person aside?
+
+    THE EPISODE NEVER OUTRUNS THE VIEW (rule 03 § 5.2): a first person
+    carried beside a view's text is that text in another person or nothing.
+    Quoted spans must match exactly; outside them every word of the person
+    is set aside and the rest must match."""
+    def _flat(text):
+        segments = linguistic(
+            "agents.common", "_QUOTED_SPAN_RE").split(str(text or ""))
+        for i in range(0, len(segments), 2):
+            segments[i] = _PERSON_WORDS_RE.sub("\x00", segments[i])
+        return " ".join("".join(segments).split())
+    return bool(str(mine or "").strip()) and _flat(mine) == _flat(view)
+
+
+def _said_as_mine(data, field):
+    """A percept's text `field` in the episode's first person.
+
+    The rewrite that put the observer's own name or pronouns into the
+    second person also wrote them into the first (`<field>_mine`), where the
+    third person still said which role each had; that rendering is kept when
+    it says what the view said, person aside, and the swap turns whatever
+    the rewrite did not write. Otherwise the swap reads the view's text."""
+    data = data or {}
+    text = str(data.get(field) or "").strip()
+    mine = str(data.get(field + "_mine") or "").strip()
+    if mine and _same_but_for_person(mine, text):
+        return _first_person(mine)
+    return _first_person(text)
+
+
+def _mine_if_it_matters(mine, view):
+    """The first-person rendering worth carrying beside `view`: only one that
+    passes `_same_but_for_person` and differs from what the swap would make
+    of the view -- every other line is the swap's, and carries nothing."""
+    mine, view = str(mine or "").strip(), str(view or "").strip()
+    if not mine or mine == view or not _same_but_for_person(mine, view):
+        return ""
+    return mine if _first_person(mine) != _first_person(view) else ""
 
 
 def pose_percepts(scene, observer_name, co_present, display_map,
@@ -2293,9 +2466,16 @@ def pose_percepts(scene, observer_name, co_present, display_map,
                     for f in pose}
         data = {"posture": _self_second_person(
             pose["posture"], self_forms) if self_forms else pose["posture"]}
+        # The observer's own first person of the same words, for its memory
+        # (`_said_as_mine`): written while the third person still says which
+        # role each of its names and pronouns had.
+        mine = {"posture": _self_first_person(pose["posture"], self_forms)
+                if self_forms else pose["posture"]}
         if level == "full":
             for f in ("support", "relation", "constraint", "detail"):
                 data[f] = (_self_second_person(pose[f], self_forms)
+                           if self_forms else pose[f])
+                mine[f] = (_self_first_person(pose[f], self_forms)
                            if self_forms else pose[f])
             if is_self and self_pronouns:
                 other_forms = []
@@ -2310,6 +2490,9 @@ def pose_percepts(scene, observer_name, co_present, display_map,
                 for f in ("posture", "constraint", "detail"):
                     data[f] = _pose_owner_second_person(
                         data.get(f), self_pronouns, other_forms)
+                    mine[f] = _pose_owner_second_person(
+                        mine.get(f), self_pronouns, other_forms,
+                        person="first")
             # Support is a referent too, and took the same raw string onto
             # the page: "on chair_interview" is an entity id being read to
             # the player. Both fields go through the same resolver.
@@ -2348,12 +2531,15 @@ def pose_percepts(scene, observer_name, co_present, display_map,
                     data["relative_to"] = ref
         if not any(data.values()):
             continue
+        firsts = {f + "_mine": m for f in ("posture", "relation",
+                                           "constraint", "detail")
+                  if (m := _mine_if_it_matters(mine.get(f), data.get(f)))}
         out.append(Percept(
             kind="pose",
             channel="interoception" if is_self else "sight",
             source_label=label,
             fidelity="full" if level == "full" else "degraded",
-            data={**data, "directed_at_self": is_self},
+            data={**data, **firsts, "directed_at_self": is_self},
             salience=0.3,
             dedupe_key=standing_key(
                 "pose", (body_key(name),),
@@ -2760,16 +2946,22 @@ def distant_sound_percepts(records):
     return out
 
 
-def render_distant_sound(distant):
+def render_distant_sound(distant, *, episode=False):
     """One distant sound as the reader meets it: how loud against this
-    room's own quiet, which way, and what it sounded like."""
+    room's own quiet, which way, and what it sounded like.
+
+    `episode` is the memory's wording of a sound with no character of its
+    own: "a sound you cannot place" puts its subject inside a relative
+    clause, which the second-to-first swap cannot see is a subject, so the
+    pack carries the first person ("a sound I cannot place")."""
     distant = distant if isinstance(distant, dict) else {}
     level = str(distant.get("level") or "")
     where = str(distant.get("where") or "")
     if level not in DISTANT_SOUND_LEVELS or not where:
         return ""
     character = (str(distant.get("character") or "").strip()
-                 or _en("sound_distant_character_none"))
+                 or _en("sound_distant_character_none"
+                        + ("_episode" if episode else "")))
     return _cap(_en("sound_distant_" + level, where=where,
                     character=character))
 
@@ -5014,14 +5206,24 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
         or str(target or "").strip().casefold() in {
             str(form or "").strip().casefold() for form in self_forms or ()}
         for target in event.get("targets") or ())
+    # THE SAME REWRITE INTO THE OBSERVER'S OWN FIRST PERSON, for its memory
+    # of the beat (`_said_as_mine`): the third person still says whether the
+    # observer's name is the subject of its clause, and the second person
+    # does not.
+    mine = surface
     if targets_self and self_forms and self_pronouns:
         surface = _action_target_second_person(
             surface, self_forms, self_pronouns, other_forms)
+        mine = _action_target_second_person(
+            mine, self_forms, self_pronouns, other_forms, owner="my")
     if self_forms:
         surface = _self_second_person(surface, self_forms)
+        mine = _self_first_person(mine, self_forms)
+    mine = _mine_if_it_matters(mine, surface) if self_forms else ""
     return Percept(
         kind="act", channel="sight", source_label=display,
         data={"surface": surface,
+              **({"surface_mine": mine} if mine else {}),
               "directed_at_self": bool(
                   re.search(r"\byou\b|\byour\b", surface, re.I))},
         salience=0.65,
@@ -5748,8 +5950,9 @@ def _render_pose(p, *, past=False):
         # Episode prose is first person whether the pose belongs to the mind
         # or to somebody it watched.  Thus another body's ``astride you`` is
         # remembered as ``astride me``, while the owner's ``your heels`` is
-        # remembered as ``my heels``.
-        return _first_person(text) if past else text
+        # remembered as ``my heels`` -- and the owner's "as you turn" as "as
+        # I turn", from the rewrite that still knew "she" was the subject.
+        return _said_as_mine(p.data, field) if past else text
 
     parts = [value("posture")]
     support = value("support")
@@ -6047,8 +6250,9 @@ def carried_voices(prev_standing):
             if str(k).startswith(VOICE_KEY_PREFIX)}
 
 
-def _render_ambient(p):
-    """An ambient percept's sentence, standing or ordered alike."""
+def _render_ambient(p, *, episode=False):
+    """An ambient percept's sentence, standing or ordered alike -- in the
+    episode's own words where a typed renderer carries them (`episode`)."""
     if p.data.get("landscape"):
         lines = landscape_lines([p])
         return render_landscape_line(lines[0][1]) if lines else ""
@@ -6064,7 +6268,7 @@ def _render_ambient(p):
     if p.data.get("soundscape"):
         return render_sound_shape(p.data.get("soundscape"))
     if p.data.get("distant"):
-        return render_distant_sound(p.data["distant"])
+        return render_distant_sound(p.data["distant"], episode=episode)
     desc = str(p.data.get("desc") or "").strip()
     if desc and desc[-1:] not in ".!?":
         desc += "."
@@ -6574,7 +6778,30 @@ def _second_to_first_rules():
 
 def _first_person(text):
     """Second person -> first person, outside quoted spans (a quoted 'you'
-    is what was said and stays verbatim)."""
+    is what was said and stays verbatim).
+
+    A MEMORY'S FIRST PERSON FOLLOWS THE WORDS' GRAMMATICAL ROLES. English
+    spells the second person's subject and object alike, so the pack's rules
+    (`second_to_first`) read the role from what the text itself marks, and
+    from nothing else -- no list of verbs or prepositions: a "you" after the
+    punctuation that opens a clause is its subject ("Through the walls, I can
+    hear ..."), as are the contracted forms and the be row ("you're", "you
+    aren't"); every other "you" is an object ("me") -- the first word of the
+    text included, because the swap is applied to fragments as well as to
+    sentences and a pose's referent alone ("you", the sentence's "astride
+    you") is an object, while every rewrite capitalises the "You" that opens
+    a sentence. The possessive, independent and reflexive forms keep their
+    own. Measured: the rule that made every lowercase "you"
+    "me" filed "Through the walls, me can hear the heavy rain, muffled." in
+    the lighthouse probe's memories (2026-10-20, chat 2 rows 46 and 50);
+    twelve rows across the three probe stories carried such a "me".
+
+    What the text cannot mark -- a subject inside a relative or subordinate
+    clause -- is given its first person where the role is known: an engine
+    template's own episode wording (`render_distant_sound`, the residue's
+    `pain_episode`), or the first person an authored line was rewritten into
+    beside its second person (`_said_as_mine`). Japanese marks the role with
+    a particle, so its rules map the pronoun alone."""
     segments = linguistic(
         "agents.common", "_QUOTED_SPAN_RE").split(str(text or ""))
     rules = _second_to_first_rules()
@@ -6642,7 +6869,7 @@ def _episode_sentence(p):
                            label=_cap(p.source_label),
                            where=_en("presence_in_room", room=room))
             return _en("episode_act_shapes", label=_cap(p.source_label))
-        surface = _first_person(str(p.data.get("surface") or "").strip())
+        surface = _said_as_mine(p.data, "surface")
         words = surface.split()
         if words:
             base = _base_from_third_person_s(words[0])
@@ -6680,10 +6907,16 @@ def _episode_sentence(p):
     if p.kind == "scent":
         return _render_scent(p, episode=True)
     if p.kind == "residue":
-        return _compose_residue_view(
+        # A MEMORY IS THE MIND'S OWN, ASLEEP AS AWAKE: the residue is turned
+        # into the first person like every other line of an episode. It was
+        # turned only when a waking had more of the beat after it, so the
+        # farmhouse probe's sleeper filed "You are under, below waking." five
+        # beats running (2026-10-20, chat 2).
+        return _first_person(_compose_residue_view(
             p.data.get("level"), targeted=p.data.get("targeted", False),
             loud_event=p.data.get("loud_event", False),
-            pain=p.data.get("pain", False), woke=p.data.get("woke", ""))
+            pain=p.data.get("pain", False), woke=p.data.get("woke", ""),
+            episode=True))
     if p.kind == "ambient":
         # What was seen far off and what was heard this beat: a vista line,
         # what a look at one found, a beat's own sound. The view rendered
@@ -6692,7 +6925,7 @@ def _episode_sentence(p):
         if p.data.get("landscape"):
             lines = landscape_lines([p])
             return render_landscape_line(lines[0][1], episode=True) if lines else ""
-        return _first_person(_render_ambient(p))
+        return _first_person(_render_ambient(p, episode=True))
     return ""
 
 
@@ -6746,8 +6979,9 @@ def _render_episode_english(percepts, *, prev_standing=frozenset(),
             # THE WOKEN MIND REMEMBERS THE REST OF THE BEAT (§ 17): the
             # waking as the residue tells it, in the first person, then
             # what it perceived from that moment on, filed as any awake
-            # mind's episode is.
-            woke = _first_person(sentence)
+            # mind's episode is. (`_episode_sentence` has already put the
+            # residue into the first person.)
+            woke = sentence
             content, gist, entities = _render_episode_english(
                 rest, prev_standing=prev_standing,
                 prev_described=prev_described)

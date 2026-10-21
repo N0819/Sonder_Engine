@@ -168,6 +168,7 @@
       "default": "闇。"
     },
     "pain": "遠く、感覚の薄い身体に鈍い痛みがある",
+    "pain_episode": "遠く、感覚の薄い身体に鈍い痛みがある",
     "targeted": "何かに動かされ、方向も分からないまま世界が傾く",
     "loud_event": "巨大で言葉にならない音が沈んだ意識まで届き、消える",
     "closing": {
@@ -287,6 +288,7 @@
     "sound_distant_plain": "{where}、{character}が響いてくる。",
     "sound_distant_overwhelming": "{where}、{character}が何もかもをかき消すほどの大音量で響いてくる。",
     "sound_distant_character_none": "何かの音",
+    "sound_distant_character_none_episode": "何かの音",
     "sound_ceased": "騒音が止んだ。",
     "sound_subsided": "騒音が和らいだ。",
     "sound_even_quiet": "{origin}の音が部屋じゅうに低く続いている。その上から話はできる。",

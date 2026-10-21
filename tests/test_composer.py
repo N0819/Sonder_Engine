@@ -546,7 +546,11 @@ def test_residue_is_the_whole_output_for_a_non_awake_mind():
     assert "Darkness." in rendered.text
     assert "shifts you" in rendered.text or "sound" in rendered.text
     content, gist, entities = composer.render_episode(percepts)
-    assert content == rendered.text
+    # The residue's own words, and nothing else -- in the mind's own first
+    # person, as every episode is (2026-10-21; it was filed as the view
+    # said it, "Something shifts you").
+    assert content == composer._first_person(rendered.text)
+    assert "Something shifts me;" in content
     assert entities == []
 
 

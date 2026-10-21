@@ -420,6 +420,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.99g — Memories the player owns, and the one thing that must be true first](UNBUILT_CHARACTERS.md#unbuilt-1-99g)
 - [§1.107 — `generalization_tags` promises a mechanism that does not exist](UNBUILT_CHARACTERS.md#unbuilt-1-107)
 - [§1.184 — The tell and carriage changes: quiet beats measured (2026-10-09), and what is still open](UNBUILT_CHARACTERS.md#unbuilt-1-184)
+- [§1.226 — A memory said "me can hear" — built 2026-10-21, residuals open](UNBUILT_CHARACTERS.md#unbuilt-1-226)
 
 **2. Roadmap**
 

@@ -106,6 +106,30 @@
   },
   "second_to_first": [
     [
+      "(?<![\\w'’])[Yy]ou(['’])re(?![\\w'’])",
+      "I\\1m"
+    ],
+    [
+      "(?<![\\w'’])[Yy]ou(['’])ve(?![\\w'’])",
+      "I\\1ve"
+    ],
+    [
+      "(?<![\\w'’])[Yy]ou(['’])ll(?![\\w'’])",
+      "I\\1ll"
+    ],
+    [
+      "(?<![\\w'’])[Yy]ou(['’])d(?![\\w'’])",
+      "I\\1d"
+    ],
+    [
+      "(?<![\\w'’])[Yy]ou aren['’]t(?![\\w'’])",
+      "I am not"
+    ],
+    [
+      "(?<![\\w'’])[Yy]ou weren(['’])t(?![\\w'’])",
+      "I wasn\\1t"
+    ],
+    [
       "\\byou are\\b",
       "I am"
     ],
@@ -152,6 +176,10 @@
     [
       "\\bYour\\b",
       "My"
+    ],
+    [
+      "([.!?;:—–(]\\s*|,\\s*)you(?![\\w'’])",
+      "\\1I"
     ],
     [
       "\\byou\\b",
@@ -320,6 +348,7 @@
       "default": "Darkness."
     },
     "pain": "a dull pain, far off, in a body you can't quite feel",
+    "pain_episode": "a dull pain, far off, in a body I can't quite feel",
     "targeted": "something shifts you; the world tilts without a direction",
     "loud_event": "a sound, huge and wordless, reaches down and is gone",
     "closing": {
@@ -430,6 +459,7 @@
     "sound_distant_plain": "{where}, {character}.",
     "sound_distant_overwhelming": "{where}, {character} — loud enough to drown everything.",
     "sound_distant_character_none": "a sound you cannot place",
+    "sound_distant_character_none_episode": "a sound I cannot place",
     "sound_ceased": "The noise has stopped.",
     "sound_subsided": "The noise has died down.",
     "sound_even_quiet": "{origin} can be heard all through the room, low enough to talk over.",

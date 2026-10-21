@@ -154,6 +154,7 @@ comp.update({
         "lead": {"unconscious": "闇。", "sedated": "濃く漂う闇。",
                  "asleep": "意識は眠りの底にある。", "default": "闇。"},
         "pain": "遠く、感覚の薄い身体に鈍い痛みがある",
+        "pain_episode": "遠く、感覚の薄い身体に鈍い痛みがある",
         "targeted": "何かに動かされ、方向も分からないまま世界が傾く",
         "loud_event": "巨大で言葉にならない音が沈んだ意識まで届き、消える",
         "closing": {"unconscious": "何も届かない。", "sedated": "何も形を保てない。",

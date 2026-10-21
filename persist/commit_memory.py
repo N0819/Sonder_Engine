@@ -1180,12 +1180,14 @@ def prepare_memory_commit(ctx, *, scene=None):
             if _witnessed:
                 witnessed_signals.append((ccid, _witnessed))
             episode_content = v
+            _filed_from_view = True
             # IR-minted episode (see the top of this function): the composer
             # already rendered this mind's episode from the same gated,
             # fidelity-degraded percepts its view rendered -- never richer --
             # with typed entities instead of names scraped back out of prose
             # (memory.py's `_extract_entities` fallback).
             if _composed_episodes is not None and str(ccid) in _composed_episodes:
+                _filed_from_view = False
                 episode_content = str(_composed_episodes.get(str(ccid)) or "")
                 _meta = _composed_episode_meta.get(str(ccid)) or {}
                 _episode_entities = [
@@ -1212,6 +1214,17 @@ def prepare_memory_commit(ctx, *, scene=None):
             # marker check below is the backstop, not the mechanism.
             if _is_empty_view(episode_content):
                 episode_content = ""
+            elif _filed_from_view and episode_content:
+                # A VIEW FILED AS A MEMORY IS THE MIND'S OWN, IN ITS OWN FIRST
+                # PERSON -- the composer's episode is, and the view is the
+                # fallback where no episode was composed: the opening above
+                # all, whose establish stage mints none. The three probe
+                # stories' openings were filed "What happened: You are in The
+                # Tower Foot. ..." (2026-10-20, 16 rows), read back to the mind
+                # addressed to it. After the marker check, which reads the
+                # view's second person.
+                from agents.composer import _first_person
+                episode_content = _first_person(episode_content)
         _episode_key = ""
         _episode_row = None
         # What this mind witnessed BEFORE it acted, minted by the act stage;
