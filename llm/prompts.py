@@ -442,6 +442,12 @@ def encoder_definition(channel, language=None):
     return head[:cut + 1] if cut > 0 else head
 
 
+#: The encoder sheet's stage pieces, by the `stage` it is assembled for: the
+#: `prose_contract` text that follows the core there. A closed table of the
+#: card's own pieces -- a stage with none reads the core alone.
+ENCODER_STAGE_PIECES = {"interpret": "encoder_interpret", "skip": "encoder_skip"}
+
+
 def unified_specialist_prompt(channels, language=None, parts=None, *,
                               extensions=(), stage=None):
     """The prose contract's encoder sheet, from its own card.
@@ -470,7 +476,10 @@ def unified_specialist_prompt(channels, language=None, parts=None, *,
     sheet carries the card's interpret piece (`prose_contract.
     encoder_interpret`) after the core: there the beat is the players' input
     entering the world, and what the account says already stands, or what
-    another mind does, is not an event of it."""
+    another mind does, is not an event of it. At `skip` -- no Director
+    stage: the skip stage asking what one mind's own work in a skip did to
+    the things it worked on (`agents/skip_work.py`) -- it carries the skip
+    piece (`prose_contract.encoder_skip`, `ENCODER_STAGE_PIECES`)."""
     sections, overlay = _encoder_pieces(channels, language, parts,
                                         extensions=extensions, stage=stage)
     sheet = "\n\n".join(text.strip("\n") for _key, text in sections) + "\n"
@@ -497,9 +506,9 @@ def _encoder_pieces(channels, language=None, parts=None, *, extensions=(),
         return str(override if override is not None else encoder[key])
 
     sections = [("core", piece("core"))]
-    if stage == "interpret":
-        sections.append(("encoder_interpret",
-                         str(card["prose_contract"]["encoder_interpret"])))
+    if stage in ENCODER_STAGE_PIECES:
+        sections.append((ENCODER_STAGE_PIECES[stage],
+                         str(card["prose_contract"][ENCODER_STAGE_PIECES[stage]])))
     hands = []
     for name, spec in card["specialists"].items():
         shipped = [channel for channel in spec["order"] if channel in granted]

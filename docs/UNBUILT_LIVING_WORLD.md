@@ -1359,7 +1359,8 @@ design note answers them: one call per mind; the projection of projects and
 intentions is the answer itself, never a second copy in the charter; a stretch
 the world cannot carry out fails with a typed reason the mind's log keeps.
 Still open here: crediting the projects and intentions a stretch served, the
-body's vitals and affect over the span, things moved in a skip, and bubble
+body's vitals and affect over the span, things moved in a skip by anything but
+a mind's own completed work (that is built, 2026-10-22, below), and bubble
 cast (whose frames keep their own clocks).
 
 **2026-10-21, later: the memories are built** (`mind/skip_memories.py`,
@@ -1509,6 +1510,39 @@ walk; the stage lays the holding check (`skip_itinerary.Reach`, a fetch inside
 the row among it since fix lane B4, its trip taken out of the row's start, and
 only a thing a body can carry ever missing since fix lane B5) and what a
 failed row says (`missing`, `meant`) over the town's rows.
+
+**2026-10-22: a mind's own work moves things** (`agents/skip_work.py`;
+`Design.md`, "A mind's own work in a skip changes the things it worked on";
+the design note's phase 2, "things moved in a skip"). The lighthouse replayed
+on 8e3c60f2 (job tmp `fixes/live_skip6`, chat 3, turns 25 and 26) moved every
+mind and no thing: the lamp the keeper put out at dawn and lit at dusk, the
+mail he sorted and the seawater he mopped stood as the stretch found them,
+while his memories said he had done it all. Now each mind's `done` rows on the
+map are told to the engine's encoder once per mind, and what it types for the
+things the mind had to hand lands at the far end, in time order across minds,
+through the beat's own floors. What it leaves:
+- **A `not_known` row changes nothing, and the owner's own example is one.**
+  The keeper's two days on the new clockwork were `not_known` both times --
+  turn 25's beside the player (`with`), turn 26's told as far as it went
+  without the toolkit the player carried -- so the clockwork stands where it
+  stood while his memories say he examined it and laid it beside the old.
+  Whether a `not_known` row's own part -- what the mind did whatever the other
+  answered, or without what was missing -- changes things is the owner's call;
+  it would be told from the same account, its outcome beside it.
+- **What work makes, destroys or consumes is not built.** `entities__new`,
+  `remove_entities` and `destruction` are not granted, and a change naming a
+  thing the world does not hold is dropped and counted (`out_of_reach`).
+- **A thing the row's own stretch used is in reach wherever it lies** (a
+  fetch, `skip_itinerary.Reach.fetch`): the keeper's evening entry lands in
+  the station log one floor down from the lamp room. A thing set down is held
+  to the row's own room or what is in it.
+- **A refused change leaves the row `done`.** A transfer the floor refuses
+  (`unheld`), or a write past the mind's reach, is the encoder's slip more
+  than the world's; it is said on the step and in the beat's warnings, and
+  nothing feeds it back to the log the memory job reads.
+- **Unmeasured live:** what the encoder types for these accounts, whether it
+  files every change under its row's event id (an unfiled change is dropped
+  and counted, `unfiled`), and how often the reach floor drops a write.
 
 <a id="unbuilt-1-99e"></a>
 

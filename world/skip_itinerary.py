@@ -1125,9 +1125,10 @@ class Reach:
         for as long as what the round trips add up to leaves the mind back
         before the stretch ends (`until`); what lies further stays missing.
         Off the map nothing is fetched: the world holds no way from a place
-        it does not hold. Nothing is moved -- the skip writes where minds
-        end, never where things lie -- so a thing fetched by one stretch is
-        fetched again by the next that needs it."""
+        it does not hold. The fetch moves nothing -- a thing lies where it
+        lay unless the mind's own told work moves it (`agents/skip_work.py`)
+        -- so a thing fetched by one stretch is fetched again by the next
+        that needs it."""
         if self.ways is None or away or not room or t is None or until is None:
             return [], 0.0
         room = str(room)

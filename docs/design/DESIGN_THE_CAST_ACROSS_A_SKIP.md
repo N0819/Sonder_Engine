@@ -5,8 +5,10 @@ walk the floor refuses offered to its mind (`UNBUILT_PIPELINE.md` § 1.227);
 the stage -- the question, the itinerary, the executor, the far end and its
 commit -- `agents/skip_stage.py`, `world/skip_itinerary.py` and
 `persist/commit_skip.py` (`Design.md`, "The cast live through a time skip");
-the town's run of a body it holds, § 4.4 (a) (`world/charter_skip.py`); and
-the memories, § 4.6 (`mind/skip_memories.py`). What follows is the design as
+the town's run of a body it holds, § 4.4 (a) (`world/charter_skip.py`); the
+memories, § 4.6 (`mind/skip_memories.py`); and, of phase 2, things moved by a
+mind's own work, § 4.4's "Things" (`agents/skip_work.py`, 2026-10-22). What
+follows is the design as
 proposed and probed. This note brings together
 three earlier owner designs and the owner's restatement of the same day:
 - the timeskip half of `docs/UNBUILT_LIVING_WORLD.md` § 1.99d (2026-08-27);
@@ -398,6 +400,25 @@ typed events).
   the boatman's letter would have.
 - **Phase 2:** moving things during a skip.
 
+*Phase 2 built 2026-10-22 for a mind's own work (`agents/skip_work.py`;
+`Design.md`, "A mind's own work in a skip changes the things it worked on").
+The lighthouse replayed on 8e3c60f2 (chat 3, turns 25 and 26) moved every body
+and no thing: the lamp the keeper put out at dawn and lit at dusk, the mail he
+sorted, the seawater he mopped stood as the stretch had found them. A stretch
+a mind lived and carried out -- `done`, in a room the world holds, awake --
+is told, in time order and from its `doing` and its room alone, to the
+engine's encoder, ONCE per mind with such rows, holding only the channels
+that change things (entity state, inventory and containment, matter where the
+story keeps a ledger); what it types for the things the mind had to hand is
+applied at the far end beside the placements, in time order across minds,
+through the beat's own floors (the transfer floor, the merge's containment
+rules, and a reach floor of its own: a thing where the row was spent, on the
+mind, or used by its stretch, never a body), under the beat's own diff. A
+`failed`, `not_known`, off-map or asleep row changes nothing; no body is
+placed by it; the memories read the same rows. What a mind's work makes,
+destroys or consumes, and a `not_known` row's own part, are not built
+(`docs/UNBUILT_LIVING_WORLD.md` § 1.99d).*
+
 **Weather.** Each stretch carries the sky where the mind stood, from the
 weather model stepped once per drift window (F20's fix).
 
@@ -520,7 +541,9 @@ the past. What it leaves is `docs/UNBUILT_LIVING_WORLD.md`
 - **Phase 2:**
   - the town charter (case (a)): per-body `simulate_bound`, the itinerary its
     planners yield to, the hand-back;
-  - things moved in a skip;
+  - things moved in a skip -- built 2026-10-22 for a mind's own completed work on
+    the map (`agents/skip_work.py`, § 4.4's "Things"); what work makes,
+    destroys or consumes, and a `not_known` row's own part, remain;
   - crediting projects and intentions;
   - dormant cast at every skip;
   - bubbles.

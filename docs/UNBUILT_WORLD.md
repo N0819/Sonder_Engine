@@ -4271,6 +4271,14 @@ What that leaves:
     would have left her away and dormant. A card clause asking for a place's
     name, or the engine's knowledge of where a mind sleeps beside that
     option, would close it; neither is built (the owner's call).
+  - **The things a mind worked on are changed (fix lane B6, 2026-10-22).** The
+    lighthouse replayed on 8e3c60f2 moved every mind and no thing: the lamp
+    the keeper put out and lit, the mail he sorted, the seawater he mopped
+    stood as the stretch found them. A `done` row on the map is now told to
+    the encoder once per mind, and what it types for the things the mind had
+    to hand lands at the far end in time order, under the beat's own floors
+    (`agents/skip_work.py`; `Design.md`, "A mind's own work in a skip changes
+    the things it worked on"). Its residuals are §1.99d's.
   - **The body over the span is not lived.** The commit's survival tick and
     affect decay still read the beat as one stretch from the stored
     awareness (§3's arithmetic in the design note): a mind's sleep stretches

@@ -54,6 +54,11 @@ this stage runs between `compile_world_context` and `perception_act`:
      of `commit_scene_state.compose_beat_scene`).
   e. **The far-end payload.** Each asked mind's character call in this beat
      carries its own log as `the_stretch_just_passed` (`stretch_for_payload`).
+  f. **What its own work changed.** Each mind's `done` rows on the map are
+     told to the encoder once, and what it types for the things the mind
+     had to hand is settled in time order across minds under the beat's own
+     floors (`agents/skip_work.py`, `minds[*].worked`); the far end lays it
+     before it places the minds (`FarEnd`).
 
 The step's output is provisional like every stage's; its shape is fixed by
 the build spec, because the out-of-band memory job reads `minds[*].log` and
@@ -699,7 +704,7 @@ def skip_lives(ctx, nonce):
     # world for every mind asked.
     ways = itin.Ways(scene, joins=itin.frontier_joins(frontier_stubs(chat_id)))
     under_way = itin.journeys(scene, span.from_s)
-    logs, minds = {}, {}
+    logs, minds, named = {}, {}, {}
     for row in rows:
         cid = int(row["id"])
         name = _row_name(row)
@@ -733,6 +738,9 @@ def skip_lives(ctx, nonce):
         # A thing the mind can walk to and back for inside a stretch is to
         # hand (`Reach.fetch`), in either executor.
         fetch_from = holding.fetch if holding is not None else None
+        # ...and what its stretches use, as the resolution named it: among
+        # the things its own work may change (`skip_work.to_hand`).
+        named[name] = dict(holding.named) if holding is not None else {}
         if hasattr(ctx, "note_decision"):
             ctx.note_decision("skip_places", name, source,
                               json.dumps(record, ensure_ascii=False)[:400])
@@ -805,6 +813,27 @@ def skip_lives(ctx, nonce):
                          "reason": None}]
     _share(ctx, logs, rows, scene)
     out["minds"] = minds
+    # WHAT EACH MIND'S OWN WORK CHANGED: its `done` rows on the map, told to
+    # the encoder once per mind and settled in time order against the stored
+    # world (`agents/skip_work.py`); the far end lays what passed (`FarEnd`).
+    # A mind with no such row is asked nothing, and one whose work cannot be
+    # typed leaves the things as the stretch found them -- said, never the
+    # beat's failure.
+    from agents import skip_work
+    from llm.providers import Aborted
+    try:
+        skip_work.type_the_work(
+            ctx, minds, scene,
+            {_fold(_row_name(r)): int(r["id"]) for r in rows if _row_name(r)},
+            named=named, nonce=nonce)
+    except Aborted:
+        raise
+    except Exception as exc:  # noqa: BLE001 -- the far end stands without it
+        ctx.add_warning(f"skip: what the minds' own work changed was not typed "
+                        f"({type(exc).__name__}: {str(exc)[:160]}); the things "
+                        "stand as the stretch found them")
+        for mind in minds.values():
+            mind["worked"] = None
     return out
 
 
@@ -864,7 +893,11 @@ class FarEnd:
     its holds on others and theirs on it, its being carried, and its facing
     are the skip's, not the ones it had when the stretch began. Its
     awareness: a sleep that ran on unbroken keeps its row; one it woke from
-    ends; one it fell into starts when it began."""
+    ends; one it fell into starts when it began. And the THINGS its own work
+    changed -- what its `done` rows on the map did to the things it had to
+    hand, as the stage settled them (`minds[*].worked`, `agents/skip_work.py`)
+    -- laid first, every mind's in time order, so the minds are placed among
+    the things as their days left them."""
 
     def __init__(self, chat_id, output, turn_id=None):
         self.chat_id = chat_id
@@ -879,10 +912,26 @@ class FarEnd:
 
     # -- the scene -----------------------------------------------------------
 
+    def _things(self, stored):
+        """What the minds' own work changed in the things they worked on
+        (`skip_work.things_at_far_end`), computed once like the placements:
+        {} when no mind's work changed anything -- or when it cannot be
+        laid, which leaves the things as the stretch found them and the far
+        end standing without them."""
+        try:
+            from agents import skip_work
+            return skip_work.things_at_far_end(stored, self.minds)
+        except Exception:  # noqa: BLE001 -- the placements stand without it
+            from core.logging_utils import logger
+            logger.exception("the skip's work could not be laid on chat %s", self.chat_id)
+            return {}
+
     def _compute(self, stored):
+        from agents import skip_work
         from world.spatial import inside_the_door, landing_cell
         rooms = stored.get("rooms") or {}
-        work = copy.deepcopy(stored)
+        things = self._things(stored)
+        work = skip_work.lay_things(copy.deepcopy(stored), things)
         place, away, cells = {}, set(), {}
         for name in sorted(self.minds):
             far = (self.minds[name] or {}).get("far_end") or {}
@@ -908,14 +957,19 @@ class FarEnd:
                 away.add(name)
         asleep = {name for name in self.minds
                   if ((self.minds[name] or {}).get("far_end") or {}).get("asleep")}
-        self._delta = {"place": place, "away": away, "cells": cells, "asleep": asleep}
+        self._delta = {"place": place, "away": away, "cells": cells, "asleep": asleep,
+                       "things": things}
         return self._delta
 
     def apply_scene(self, chat_id, sc):
-        """The far end laid onto a scene read from the store, in place."""
+        """The far end laid onto a scene read from the store, in place: the
+        things the minds' work changed, then the minds."""
         if chat_id != self.chat_id or not isinstance(sc, dict) or not self.minds:
             return sc
         delta = self._delta or self._compute(copy.deepcopy(sc))
+        if delta.get("things"):
+            from agents import skip_work
+            skip_work.lay_things(sc, delta["things"])
         positions = sc.setdefault("positions", {})
         for name in sorted(self.minds):
             key = next((k for k in positions if _fold(k) == _fold(name)), name)

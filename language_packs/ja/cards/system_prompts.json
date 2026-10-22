@@ -282,6 +282,9 @@
     "encoder_interpret": {
       "$text": "prose_contract/encoder_interpret.txt"
     },
+    "encoder_skip": {
+      "$text": "prose_contract/encoder_skip.txt"
+    },
     "encoder_repair": {
       "$text": "prose_contract/encoder_repair.txt"
     },

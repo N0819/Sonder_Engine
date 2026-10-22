@@ -1137,7 +1137,11 @@ def test_the_step_output_has_the_build_specs_shape(story, monkeypatch):
     assert out["span"]["until_s"] - out["span"]["from_s"] == pytest.approx(
         _skip_block()["duration_seconds"])
     for name, mind in out["minds"].items():
-        assert set(mind) == {"source", "answer", "itinerary", "log", "far_end"}
+        # ...and what its own work changed (`agents/skip_work.py`): None for a
+        # mind with no row to tell, else what was told, what it typed, and
+        # what was set aside. The memory job reads none of it.
+        assert set(mind) == {"source", "answer", "itinerary", "log", "far_end", "worked"}
+        assert mind["worked"] is None or set(mind["worked"]) == {"told", "changes", "record"}
         assert mind["source"] in ("asked", "default")
         assert all(set(s) == STRETCH_KEYS for s in mind["itinerary"])
         assert all(set(r) == LOG_KEYS for r in mind["log"])
