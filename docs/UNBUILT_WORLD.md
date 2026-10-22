@@ -4159,7 +4159,8 @@ What that leaves:
   probe of it: `docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md` -- ask each
   cast member what they do over the skip, run their answers as the charter
   runs a day, place them where it leaves them, write their memories after.
-  Proposed, not built.
+  Proposed. Its phase 0 is built: the walk `a_walk_is_its_owners` refuses is
+  offered to its mind (`UNBUILT_PIPELINE.md` § 1.227).
 
 Extended again 2026-10-21 (the probe's F20, "a skip moves the sky one
 rung"): the clock moved by a skip and the weather did not follow it.

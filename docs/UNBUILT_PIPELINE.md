@@ -2178,6 +2178,58 @@ interpret and resolve clauses stop authored conduct (175 t4/t9/t10, 176 t4/t7,
 new offers; whether the encoder writes 177 t19's door once it holds `rooms`;
 and the encoder's new clauses.
 
+<a id="unbuilt-1-227"></a>
+
+### 1.227 A walk the floor refuses is offered to its mind -- BUILT 2026-10-21, residuals open
+
+Phase 0 of `docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md` (§ 4.3.1), found
+on the lighthouse probe's F16 beat (control chat 2 idx 9, "That night, when
+Elias comes down ..."): `director_prose.a_walk_is_its_owners` refused the
+keeper's walk and recorded nothing, so no offer was made and the resolve was
+told he had come down. It now records every mind it keeps in its room on
+the stage's `conduct_refused`, and at interpret the cast member is offered
+the walk in the event's own surface (`Design.md`, "A mind goes only where
+its own declaration takes it"). The skip stage reads those offers as they
+are (`director_interpret.authorial_offers`).
+
+**Waiting on the owner's ruling.**
+- A pose written into another's act now leaves the event with the walk it
+  rode on. This widens a floor; it adds none. Four of the six such walks
+  measured carried a pose that would have stood the body in a room it never
+  reached.
+- The conduct floor offers an act's `event` sentence ("Mellisande bears down
+  over Hinami on the spare room bed, pinning her beneath her weight."); this
+  floor offers the `observable`, which carries no motive and no name of the
+  mind's own. One rule for both is a one-line change to
+  `conduct_is_its_owners`. It is not made, because it would change what
+  every refused act offers.
+
+**Residuals.**
+- At resolve the floor sees only the minds that declared. The resolve's
+  identity index lists the player, the cast who declared and the figures,
+  so a cast member who declared nothing and is walked by another's
+  declaration is read as a figure, and walks. Stored: 0 (81 cast moves at
+  resolve carried from a declaration, every one the mover's own).
+- A follow written for a mind into another's act is refused and offered
+  nothing (0 stored firings). The walk beside it, when it is written too,
+  is offered.
+- An event recorded as a cast member's own conduct is dropped whole, and
+  a walk the player declared inside it goes with it. The conduct floor does
+  the same.
+- A departure written into another's act is no walk to this floor: a
+  `cast_changes` row to dormant (control chat 1 idx 4: the boatman made
+  dormant on the player's watching him go).
+- The floor still refuses, and warns about, a position that only restates
+  where a mind stands (chat 177 idx 21, Mellisande "going into" the room she
+  stood in). It now offers nothing there.
+- An offer can name a place the mind has not learned of: the room's own name,
+  or the encoder's words for it. What makes it legitimate is that it is about
+  the mind's own conduct, and that the mind decides.
+
+**Needs a live replay**: whether a character takes up a walk offered
+mid-scene (the probe tested the skip question only), and the lighthouse
+from idx 8 with its idx 9 input.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

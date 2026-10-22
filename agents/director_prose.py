@@ -251,11 +251,14 @@ def already_happened(ctx):
     waiting = _waiting_spans(interp)
     record = ((interp.get("orchestration") or {}).get("prose_contract") or {})
     prose = record.get("prose")
-    # NOR HAS AN ACT THE STAGE REFUSED (`conduct_is_its_owners`): the prose
-    # still tells another mind's step the interpretation wrote for it, and
-    # that mind has not taken it -- it was handed to them as an offer, or was
-    # only the standing scene said again. Told from the kept rows, as a
-    # waiting walk is.
+    # NOR HAS AN ACT THE STAGE REFUSED (`conduct_is_its_owners`, and a walk
+    # `a_walk_is_its_owners` refused): the prose still tells another mind's
+    # step the interpretation wrote for it, and that mind has not taken it --
+    # it was handed to them as an offer, or was only the standing scene said
+    # again. Told from the kept rows, as a waiting walk is. The lighthouse
+    # probe (idx 9) is what a walk refused and not recorded costs: the
+    # resolve was told the keeper had come down to the table, and wrote him
+    # down the stair and back up again.
     if prose and not waiting and not record.get("conduct_refused"):
         return str(prose)
     lines = []
@@ -2018,6 +2021,11 @@ def bodies_stand_in_rooms(events, scene, built=None, warn=None):
 #: and the registered cast (`a_walk_is_its_owners`). A figure is the
 #: world's to move.
 _MIND_KEY = re.compile(r"^(persona|character):\d+$")
+#: ...and of the minds among them an offer can reach: the cast, whose own
+#: agent is handed it (`character.character_step`, `decision.comes_to_you`).
+#: A player's walk is never offered -- not to the player, whose body goes
+#: where the player's own input takes it, and not to anyone else.
+_CAST_KEY = re.compile(r"^character:\d+$")
 #: The `authority_mode`s of inputs the world sets in motion rather than a
 #: mind declares (`director._causal_event_inputs`).
 WORLD_AUTHORITY = frozenset({"world", "mechanical"})
@@ -2059,7 +2067,7 @@ def _linked(scene, events, a, b):
 
 
 def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
-                         warn=None):
+                         warn=None, refusals=None):
     """A MIND GOES ONLY WHERE ITS OWN DECLARATION TAKES IT -- the player's
     included (owner ruling, 2026-10-07).
 
@@ -2098,7 +2106,42 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
     span start the player following the pilot. Measured before it landed:
     every one of the 19 stored interpret follows made the player the
     follower, and no stored resolve encoder wrote one, so on the stored
-    beats it refuses nothing."""
+    beats it refuses nothing.
+
+    WHAT IT KEEPS FROM A MIND IS OFFERED TO IT (2026-10-21). A mind's conduct
+    another's declaration wrote is never enacted, and never lost either: the
+    walk refused here, and the conduct riding with it in that event, is that
+    mind's to take up or let pass, as a player-authored thought is
+    (`director_views._route_authorial_npc_beat`). It was dropped and told to
+    nobody. The lighthouse probe (job tmp `fixes/stories/control.db`, chat 2,
+    idx 9): "That night, when Elias comes down from the first watch and sits
+    across the table from her with his tea, Rhona looks up ...". The encoder
+    filed the keeper's walk as his own conduct carried out from the player's
+    declaration, and this floor dropped it whole -- before
+    `conduct_is_its_owners`, which makes every other act a mind did not
+    declare an offer, ever saw it. He answered from upstairs; and with no
+    refusal on the record, `already_happened` handed the resolve the
+    interpret's prose, keeper walked down and seated, and the resolve walked
+    him down the stair and back up again. Every mind kept in its room is a
+    row in `refusals`: the conduct floor's `{mind, name, event, offer}`, plus
+    `to`, the place the walk was taking it. `run` records them where that
+    floor records its own, which is where `director.director_interpret`
+    takes its offers from and `already_happened` looks for a refusal.
+
+    The words offered are the event's own surface about that mind, never
+    the player's text. An event that is the mind's own conduct, dropped
+    whole, gives its `observable` -- the outward motion alone, without
+    motive -- else its `event`. A walk written into ANOTHER's act gives what
+    the event says of that mind's body there, its pose's `detail`, else the
+    place it was taking it: the act itself is the other's, and is offered to
+    no one. That pose leaves the event with the walk, being the conduct
+    riding with it: left behind, it stood the body in a room it never
+    reached (idx 6, the player "finds Elias already in the lamp room": his
+    own view, in the kitchen, told him "standing in the lamp room beside the
+    crate and clockwork"). An offer is made only to a cast member, and only
+    of what would change how things stand -- never of a player's walk, which
+    is that player's alone to declare, and never of a body said again to be
+    where it already is."""
     owner = {}
     declarers = set()
     for entry in event_inputs or []:
@@ -2124,7 +2167,7 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
         key = key_of.get(str(label or "").strip().casefold())
         return key if key and _MIND_KEY.match(key) else None
 
-    out, kept_out, refused_all, unfollowed = [], [], set(), []
+    out, kept_out, refused_all, unfollowed, rows = [], [], set(), [], []
     for event in events or []:
         if not isinstance(event, dict):
             out.append(event)
@@ -2167,9 +2210,27 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             continue
         kept_out.extend(sorted(names.get(k) or k for k in refused))
         refused_all |= refused
-        if mind(event.get("source_entity_id")) in refused:
+        own = mind(event.get("source_entity_id"))
+        walks = {key: _walk_of(scene, event, _forms_of(key, names),
+                               names.get(key) or key) for key in refused}
+        for key in sorted(refused):
+            place, moves = walks[key]
+            if key == own:
+                words = _event_surface(event)
+                changes = not _restates_how_things_stand(scene, event)
+            else:
+                words = (_posed_words(event, _forms_of(key, names))
+                         or _place_words(scene, place))
+                changes = moves
+            rows.append(_refusal_row(key, names, words, place, changes))
+        if own in refused:
             continue
         forms = {f.casefold() for k in refused for f in (k, names.get(k) or k)}
+        # The pose a walk written into another's act gives the body at its
+        # end goes with the walk -- where it was one: a room said again
+        # places the body nowhere new.
+        posed = {f.casefold() for k in refused if walks[k][1]
+                 for f in (k, names.get(k) or k)}
         event = dict(event)
         if isinstance(movement, dict) and (mind(movement.get("mover")) in refused):
             event["movement"] = None
@@ -2178,10 +2239,11 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             patch = transform.get("patch") if isinstance(transform, dict) else None
             if isinstance(patch, dict):
                 patch = dict(patch)
-                for channel in ("positions", "stations", "containment"):
-                    if isinstance(patch.get(channel), dict):
+                for channel in ("positions", "stations", "containment", "poses"):
+                    gone = posed if channel == "poses" else forms
+                    if gone and isinstance(patch.get(channel), dict):
                         patch[channel] = {k: v for k, v in patch[channel].items()
-                                          if str(k).strip().casefold() not in forms}
+                                          if str(k).strip().casefold() not in gone}
                         if not patch[channel]:
                             patch.pop(channel)
                 if not patch:
@@ -2190,6 +2252,14 @@ def a_walk_is_its_owners(events, event_inputs, identity_index, scene=None,
             transforms.append(transform)
         event["transforms"] = transforms
         out.append(event)
+    if refusals is not None:
+        # One row a mind per proposition: an encoder that writes one walk
+        # over two events has refused one walk.
+        said = set()
+        for row in rows:
+            if (row["mind"], row["event"]) not in said:
+                said.add((row["mind"], row["event"]))
+                refusals.append(row)
     if refused_all and isinstance(scene, dict):
         out = _near_the_kept(out, scene, {names.get(k) or k for k in refused_all})
     if kept_out and warn:
@@ -2235,6 +2305,98 @@ def _follows_of_the_declarer(event, declarer, mind):
     if not changed:
         return event, []
     return dict(event, transforms=transforms), refused
+
+
+def _forms_of(key, names):
+    """The folded spellings a refused mind goes by in an event: its key and
+    its name."""
+    return {_fold(key), _fold(names.get(key) or key)}
+
+
+def _event_surface(event):
+    """An event's own outward surface: its `observable` -- the outward motion
+    or change alone, without motive (the encoder card's own definition) --
+    else its `event`."""
+    return (" ".join(str(event.get("observable") or "").split())
+            or " ".join(str(event.get("event") or "").split()))
+
+
+def _walk_of(scene, event, forms, name):
+    """`(place, moves)`: where `event` takes the body `forms` names -- a room
+    by its `movement` or `positions`, a holder by its `containment` -- and
+    whether that is anywhere but where the body stands. An unplaced body, or
+    no scene at all, moves wherever it is taken: it fails toward a walk,
+    which only ever costs an offer."""
+    from world.spatial import room_of
+    sc = scene if isinstance(scene, dict) else {}
+    here = room_of(sc, name) if sc else None
+    held = _record_of(sc.get("contained"), name)
+    held = _fold(held.get("in") if isinstance(held, dict) else held)
+    place, moves = "", False
+    movement = event.get("movement")
+    if isinstance(movement, dict):
+        to = str(movement.get("to_room") or "").strip()
+        if to and _fold(movement.get("mover")
+                        or event.get("source_entity_id")) in forms:
+            place, moves = to, to != here
+    for transform in event.get("transforms") or []:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        if not isinstance(patch, dict):
+            continue
+        positions = patch.get("positions")
+        for who, room in positions.items() if isinstance(positions, dict) else ():
+            room = str(room or "").strip()
+            if room and _fold(who) in forms:
+                place, moves = room, moves or room != here
+        containment = patch.get("containment")
+        for who, record in containment.items() if isinstance(containment, dict) else ():
+            holder = str((record or {}).get("in") or "").strip() \
+                if isinstance(record, dict) else ""
+            if holder and _fold(who) in forms:
+                place, moves = place or holder, moves or _fold(holder) != held
+    return place, moves
+
+
+def _posed_words(event, forms):
+    """What `event` says of the body `forms` names, where it says anything:
+    the `detail` of the pose it gives that body."""
+    for transform in event.get("transforms") or []:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        poses = patch.get("poses") if isinstance(patch, dict) else None
+        for who, pose in poses.items() if isinstance(poses, dict) else ():
+            if _fold(who) in forms and isinstance(pose, dict):
+                detail = " ".join(str(pose.get("detail") or "").split())
+                if detail:
+                    return detail
+    return ""
+
+
+def _place_words(scene, place):
+    """A place as an offer names it: the room's own name (the thing's, for a
+    holder), in the pack's `presence_in_room` frame; "" for no place."""
+    place = str(place or "").strip()
+    if not place:
+        return ""
+    from language_runtime import compositor_text
+    from world.spatial import room_display_name
+    sc = scene if isinstance(scene, dict) else {}
+    room = (sc.get("rooms") or {}).get(place)
+    thing = (sc.get("entities") or {}).get(place)
+    name = (str(thing.get("name") or "").strip()
+            if not isinstance(room, dict) and isinstance(thing, dict) else "")
+    return compositor_text("presence_in_room",
+                           room=name or room_display_name(room, place))
+
+
+def _refusal_row(key, names, words, place, changes):
+    """One mind `a_walk_is_its_owners` kept in its room, in the conduct
+    floor's row shape (`conduct_is_its_owners`) plus `to`: an offer only to
+    a cast member, of words that say something, about what would change how
+    things stand."""
+    text = " ".join(str(words or "").split())
+    return {"mind": key, "name": names.get(key) or key, "event": text,
+            "offer": bool(text and changes and _CAST_KEY.match(key)),
+            "to": str(place or "")}
 
 
 def _near_the_kept(events, scene, kept):
@@ -2405,7 +2567,9 @@ def conduct_is_its_owners(events, event_inputs, identity_index, scene=None,
     `director_views._route_authorial_npc_beat` already gives a player who
     authors a character's response -- so its own agent takes it up or lets it
     pass. One that only restates the standing records
-    (`_restates_how_things_stand`) offers nothing and is simply refused.
+    (`_restates_how_things_stand`) offers nothing and is simply refused. The
+    walks `a_walk_is_its_owners` refused before this floor ran are recorded
+    beside these rows (`run`), so they reach their minds the same way.
 
     A figure (no registered mind) is the world's and is kept; so is any event
     whose source is a declarer. `refused` rows are `{mind, name, event,
@@ -4311,9 +4475,10 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     events = bodies_stand_in_rooms(events, sc, ((rooms_answer or {}).get("rooms") or {}),
                                    warn=ctx.add_warning)
     identities = identities_with_figures(model_payload, extras)
+    walks_refused = []
     events = a_walk_is_its_owners(
         events, model_payload.get("event_inputs") or [],
-        identities, sc, warn=ctx.add_warning)
+        identities, sc, warn=ctx.add_warning, refusals=walks_refused)
     # A happening no body performs is re-filed under the world BEFORE the
     # interpret stage refuses another mind's acts: filed under a mind, a hen
     # clucking down the lane would otherwise be refused as that mind's
@@ -4333,6 +4498,13 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         events, conduct_refused = conduct_is_its_owners(
             events, model_payload.get("event_inputs") or [],
             identities, sc, warn=ctx.add_warning)
+        # A WALK REFUSED IS CONDUCT REFUSED (`a_walk_is_its_owners`), and it
+        # is recorded where the rest is: there `director.director_interpret`
+        # hands its offer to the mind, and `already_happened` sees that the
+        # prose tells a step nobody took. Inside this branch for the reason
+        # above -- a silent beat's walks are the stale invention the
+        # empty-input guard discards, never an offer.
+        conduct_refused = walks_refused + conduct_refused
         events, standing_refused = standing_is_authorship(
             events, model_payload.get("event_inputs") or [],
             identities, warn=ctx.add_warning)
@@ -4346,6 +4518,12 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         events, time_held = time_is_the_inputs(
             events, getattr(ctx, "director_interpret", None),
             warn=ctx.add_warning)
+        # AT RESOLVE A REFUSED WALK IS THE RECORD ALONE. Every character
+        # step of the beat ran before this stage and nothing after it reads
+        # an offer, so none is made. Nor is there one to make: the resolve's
+        # identity index lists the minds that declared this beat, which keep
+        # their own walks, so the only mind it can refuse is the player.
+        conduct_refused = [dict(row, offer=False) for row in walks_refused]
     channels = list(encoder_channels) + [
         c for c in ROOM_AUTHOR_CHANNELS
         if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)
@@ -4395,9 +4573,11 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     if repair_record is not None:
         record["repair"] = repair_record
     # What the interpretation wrote that the stage did not keep, on the
-    # record the step stores: another mind's conduct (`conduct_is_its_owners`,
-    # whose offers `director.director_interpret` hands on) and a fact about
-    # how things stand the input's mode may not set (`standing_is_authorship`).
+    # record the step stores: another mind's conduct (`conduct_is_its_owners`
+    # and the walks `a_walk_is_its_owners` refused, whose offers
+    # `director.director_interpret` hands on -- at resolve, the walks alone,
+    # offered to nobody) and a fact about how things stand the input's mode
+    # may not set (`standing_is_authorship`).
     if conduct_refused:
         record["conduct_refused"] = conduct_refused
     if standing_refused:

@@ -208,6 +208,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.214 — An answer is never cut at its first brace — built 2026-10-13, residuals open](UNBUILT_PIPELINE.md#unbuilt-1-214)
 - [§1.215 — Home 10's fifteen failings — what is built, what waits on a ruling (2026-10-13)](UNBUILT_PIPELINE.md#unbuilt-1-215)
 - [§1.216 — Chats 175-178: the fix round of 2026-10-20 — what is built, what waits on a ruling](UNBUILT_PIPELINE.md#unbuilt-1-216)
+- [§1.227 — A walk the floor refuses is offered to its mind — built 2026-10-21, residuals open](UNBUILT_PIPELINE.md#unbuilt-1-227)
 
 **2. Roadmap**
 
