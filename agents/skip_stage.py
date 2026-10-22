@@ -22,13 +22,20 @@ this stage runs between `compile_world_context` and `perception_act`:
      (`world/charter_skip.live_in_charter`), with what only this stage knows
      laid over its rows -- the weather, the holding check, a sleep's true
      start (`skip_itinerary.lay_over`, `carry_sleep`) -- and otherwise by the
-     mind's own executor, in pure code (`skip_itinerary.live_through`); both
-     write one outcome rule and one reason vocabulary. Company with the
-     other asked minds and the player is shared afterwards, per observer
-     (`share_company`).
+     mind's own executor, in pure code (`skip_itinerary.live_through`): over
+     the ways a body walks, never a frontier stub's join and never across
+     water (`skip_itinerary.Ways`, the stub joins read from the registry by
+     `frontier_stubs`), back onto the map by where it left it, and on with a
+     vessel already under way (`skip_itinerary.journeys`); both write one
+     outcome rule and one reason vocabulary, and a stretch's `uses` are met
+     by what the mind carries and what is within its reach where the stretch
+     finds it (`skip_itinerary.Reach`, its names resolved in `resolve_mind`).
+     Company with the other asked minds and the player is shared afterwards,
+     per observer (`share_company`).
   d. **The far end.** Each mind ends where its last stretch left it -- a move
      of its own declaration. One whose day ends somewhere the world does not
-     hold is AWAY there: dormant, with a typed whereabouts. One asleep at the
+     hold is AWAY there: dormant, with a typed whereabouts that keeps the room
+     it left the map by (`left_from`). One asleep at the
      far end is asleep from when that sleep began. The rest of the beat reads
      all of it as an ONSET PREVIEW (`FarEnd`, read through `story.scene`'s
      `get_scene` and `awareness_conditions` while a stage after this one
@@ -371,6 +378,18 @@ def _standing_place(chat_id, name, row):
     return None, None
 
 
+def _left_the_map_from(chat_id, name):
+    """The room an away mind left the map by, as its whereabouts keep it
+    (`left_from`), when the world still holds it: where it comes back by
+    (`skip_itinerary.live_through`'s `start_exit`). None where nothing kept
+    one -- a whereabouts written before the record carried it."""
+    scene = _stored_scene(chat_id)
+    record = next((v for k, v in _whereabouts(chat_id).items()
+                   if _fold(k) == _fold(name) and isinstance(v, dict)), None)
+    room = str((record or {}).get("left_from") or "").strip()
+    return room if room and room in (scene.get("rooms") or {}) else None
+
+
 def known_places(scene, state, here=None):
     """`{room_id: name}` -- the places this mind knows, as its own words are
     resolved against them: the rooms its own map holds (`place_graph`,
@@ -431,12 +450,19 @@ def held_things(scene, name):
     return out
 
 
-def resolve_mind(name, stretches, scene, state, here, held, language=None):
-    """`(stretches, uses_held, record)`: the mind's stretches with their
-    places resolved, a reader for whether a thing a stretch uses is on it,
-    and what was asked. Exact first, then ONE decision-model request for
-    everything exact left -- places and things together -- and what neither
-    answers is an off-map label, or a thing not on it."""
+def resolve_mind(name, stretches, scene, state, here, held, language=None,
+                 *, under_way=None):
+    """`(stretches, missing_from, record)`: the mind's stretches with their
+    places resolved, a reader of what a stretch uses that is out of the
+    mind's reach where the stretch finds it (`missing_from(uses, room, away,
+    t) -> [words]`, `skip_itinerary.Reach.missing`), and what was asked.
+    Exact first, then ONE decision-model request for everything exact left --
+    places and things together, a thing over what the mind has on it
+    (`held`) and the things and fixtures of the world it may mean (`Reach.
+    options`) -- and what neither answers is an off-map label, or words that
+    name no thing the world holds (never missing: `Reach`). `under_way` is
+    `skip_itinerary.journeys`: a vessel under way stands where its journey
+    has brought it."""
     from llm import decisions
     texts = []
     for item in stretches:
@@ -456,14 +482,19 @@ def resolve_mind(name, stretches, scene, state, here, held, language=None):
             resolved[text] = rid
         else:
             unresolved.append(text)
+    reach = itin.Reach(scene, name, carried=held, journeys=under_way)
     things = []
     for item in stretches:
         for thing in item.get("uses") or ():
-            if thing not in things and not itin.held_exactly(thing, held):
+            if thing not in things:
                 things.append(thing)
+    named = {thing: reach.named(thing) for thing in things}
+    unnamed = [thing for thing in things if not named[thing]]
+    first = [room for room in [here, *resolved.values()] if room]
+    offered = reach.options(first=first, known=sorted(known))
     options = place_options(scene, known)
     questions = {**itin.place_questions(name, unresolved, options, language),
-                 **itin.thing_questions(name, things, held, language)}
+                 **itin.thing_questions(name, unnamed, offered, language)}
     record = {"known": sorted(known), "exact": dict(resolved), "asked": len(questions)}
     answers = {}
     if questions:
@@ -475,13 +506,37 @@ def resolve_mind(name, stretches, scene, state, here, held, language=None):
         except Exception as exc:  # noqa: BLE001 -- unanswered is off the map
             record["jev_failed"] = f"{type(exc).__name__}: {str(exc)[:120]}"
     resolved.update(itin.read_place_answers(answers, unresolved, options))
-    found = itin.read_thing_answers(answers, things, held)
+    for thing, key in itin.read_thing_picks(answers, unnamed, offered).items():
+        named[thing] = {key}
     record["resolved"] = dict(resolved)
+    record["things"] = {thing: sorted(keys) for thing, keys in named.items()}
 
-    def uses_held(thing):
-        return itin.held_exactly(thing, held) or thing in found
+    def missing_from(uses, room, away=None, t=None):
+        return reach.missing(uses, named, room, away, t)
 
-    return itin.place_stretches(stretches, resolved), uses_held, record
+    return itin.place_stretches(stretches, resolved), missing_from, record
+
+
+def frontier_stubs(chat_id):
+    """`{stub room id: holder room id}` -- every space the plan holds open
+    (`structure.mint_frontier`'s `provisional` stub, by its `frontier_of`
+    room): the joins `skip_itinerary.Ways` does not walk. Read from the
+    shared registry parse; empty where it cannot be read."""
+    try:
+        from world.structure import registry_rows
+        rows = registry_rows(chat_id)
+    except Exception:  # noqa: BLE001 -- no registry, no frontier
+        return {}
+    out = {}
+    for uid, entry in (rows or {}).items():
+        spec = (entry or {}).get("planned")
+        if not isinstance(spec, dict) or not spec.get("provisional"):
+            continue
+        origin = spec.get("frontier_of")
+        holder = str(origin.get("room") or "").strip() if isinstance(origin, dict) else ""
+        if holder:
+            out[str(uid)] = holder
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -561,6 +616,10 @@ def skip_lives(ctx, nonce):
     skies = itin.Skies(scene, span, seed="chat:%s" % chat_id,
                        severity=weather_severity(chat_id),
                        written_at=clock_elapsed(simulation_clock(chat_id)))
+    # The ways a body walks, and the journeys the world has under way: one
+    # world for every mind asked.
+    ways = itin.Ways(scene, joins=itin.frontier_joins(frontier_stubs(chat_id)))
+    under_way = itin.journeys(scene, span.from_s)
     logs, minds = {}, {}
     for row in rows:
         cid = int(row["id"])
@@ -580,17 +639,18 @@ def skip_lives(ctx, nonce):
             stretches = itin.default_day(span)
         state = _cast_state(row)
         here, away = _standing_place(chat_id, name, row)
+        left_by = _left_the_map_from(chat_id, name) if away else None
         try:
-            stretches, uses_held, record = resolve_mind(
+            stretches, missing_from, record = resolve_mind(
                 name, stretches, scene, state, here, held_things(scene, name),
-                ctx.language)
+                ctx.language, under_way=under_way)
         except Exception as exc:  # noqa: BLE001 -- one mind, not the beat
             ctx.add_warning(f"skip: {name}'s places could not be read "
                             f"({type(exc).__name__}: {str(exc)[:120]}); the "
                             "default day stands for them, where they stand")
             source, answer = "default", answer if isinstance(answer, dict) else None
             stretches = itin.place_stretches(itin.default_day(span), {})
-            uses_held, record = None, {"failed": str(exc)[:120]}
+            missing_from, record = None, {"failed": str(exc)[:120]}
         if hasattr(ctx, "note_decision"):
             ctx.note_decision("skip_places", name, source,
                               json.dumps(record, ensure_ascii=False)[:400])
@@ -610,13 +670,20 @@ def skip_lives(ctx, nonce):
             result = None
         if result is not None:
             log, far_end = result
-            log = itin.lay_over(log, stretches, uses_held=uses_held, skies=skies)
+            log = itin.lay_over(log, stretches, missing_from=missing_from, skies=skies)
             far_end = itin.carry_sleep(far_end, span.from_s, asleep_since)
         else:
             log, far_end = itin.live_through(
                 stretches, scene=scene, start_room=here, start_away=away,
-                asleep_since=asleep_since, uses_held=uses_held, skies=skies)
+                start_exit=left_by, asleep_since=asleep_since,
+                missing_from=missing_from, skies=skies, ways=ways,
+                journey=itin.journey_under_way(scene, here, under_way, ways))
         log = itin.place_words(log, scene)
+        # Where a day that ends off the map left it, kept on its whereabouts:
+        # the next skip brings it back by there (`persist/commit_skip.py`).
+        far_end = dict(far_end, left_from=(
+            itin.left_the_map_from(log, here, left_by)
+            if far_end.get("away") and not far_end.get("room") else None))
         logs[name] = log
         minds[name] = {"source": source,
                        "answer": answer if isinstance(answer, dict) else None,
@@ -945,9 +1012,10 @@ def widen_reactors_to_skip_far_end(chat_id, cast_rows, reactors, output, interp)
 def stretch_for_payload(ctx, name):
     """This mind's own log, in its own terms, for its far-end call --
     `[{day, from, until, where, doing, asleep, seen, weather, outcome,
-    reason}]`, the last `SKIP_PAYLOAD_ROWS` -- or None when the beat carried
-    it through no skip. Its own and nobody else's: the rows are its log, and
-    `seen` is already what it saw, named as it knows them."""
+    reason, meant, missing}]` (the last three only on a row that failed), the
+    last `SKIP_PAYLOAD_ROWS` -- or None when the beat carried it through no
+    skip. Its own and nobody else's: the rows are its log, and `seen` is
+    already what it saw, named as it knows them."""
     output = ctx.get(STEP_KEY) if hasattr(ctx, "get") else None
     minds = (output or {}).get("minds") if isinstance(output, dict) else None
     if not isinstance(minds, dict):
@@ -974,9 +1042,14 @@ def stretch_for_payload(ctx, name):
                  "weather": row.get("weather") or "",
                  "outcome": row.get("outcome") or itin.OUTCOME_DONE}
         if row.get("reason"):
+            # What failed, as the row says it (`skip_itinerary._row`): where
+            # it meant to be, in its own words, for a way it never made; what
+            # was not to hand, as it named them, for a thing out of reach.
             entry["reason"] = row["reason"]
-            if row.get("where_text") and row.get("where_text") != where:
-                entry["meant"] = row["where_text"]
+            if row.get("meant"):
+                entry["meant"] = str(row["meant"])
+            if row.get("missing"):
+                entry["missing"] = [str(thing) for thing in row["missing"]]
         rows.append(entry)
     return rows
 

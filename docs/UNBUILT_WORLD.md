@@ -4200,6 +4200,41 @@ What that leaves:
     unmeasured live.** Offline a word-overlap stand-in answered the place
     questions; whether the decision model reads "bedroom" as the keeper's
     room and "the harbour" as `The Mainland` is the live replay's to show.
+  - **What a skip lets a body do, fixed 2026-10-21 (fix lane B2).** The lighthouse
+    replayed on that day's code (chat 3 turn 25) showed the stage's own executor
+    failing `not_held` what lay within reach -- the keeper's lamp, the boatman's
+    boat -- and walking the boatman home across thirteen kilometres of channel and
+    the mainland's frontier stub, ten minutes a leg. It now meets a stretch's `uses`
+    by reach (`skip_itinerary.Reach`), walks only walkable ways (`Ways`), brings an
+    away mind back by where it left the map (`left_from` on its whereabouts),
+    carries a body under way with its vessel, and every LOG row says what failed
+    (`missing`, `meant`; `Design.md`'s row). What that leaves:
+    - **A crossing of the mind's own by vessel is not built.** Every such stretch
+      fails `no_crossing`, so a boatman whose day is a run to the rock stays on the
+      mainland. It plugs in where `Ways.route` finds a way only through a medium
+      and the mind has a vessel within reach: the crossing priced at the vessel's
+      own pace (`spatial.journey_seconds`'s terms) takes the walk's place, and the
+      vessel's move goes to the far end beside the mind's.
+    - **The town's charter walks the same ways the stage no longer walks**
+      (`charter_space.people_neighbors`: a frontier join and water are ways there),
+      and brings an away body back with no walk (`charter_skip._arrive_or_leave`).
+    - **Nothing typed tells a frontier across the sea from one across a gate.** The
+      farmhouse probe's home pasture hangs off its byre exactly as the mainland
+      hangs off the landing (`provisional`, an open door, no distance), so a skip
+      walks to neither; the plan's axis carries no way across, and the floor word
+      (`MEDIUM_FLOORS`, a guard on a typed field's value) is the only trace of the
+      water. The owner's call: type the medium on the plan, or rule the guard.
+    - **One place, resolved two ways.** The decision model put "the mainland quay
+      and the harbour" on the mainland's stub and "the mainland quay" off the map,
+      so the boatman's last morning on the quay failed `not_held` for the Mary Ann
+      docked at the stub, beside the post bag that truly lay on the rock.
+    - **A stretch with one thing out of reach fails whole.** `missing` names the
+      part; whether a stretch whose other uses were met reads `not_known` instead
+      is the owner's call. Words naming no thing the world holds never fail one.
+    - **The vessel's own arrival can land after the skip.** In the replay the
+      Mary Ann's arrival was first booked after the skip (due 292,174 s, the span
+      ended 251,266 s), so the boat stays in the channel in the stored world while
+      the executor carries the boatman ashore by the journey's own price.
   - **A `doing` that carries intent reaches whoever shares the room.** The
     card says `doing` is only what a watcher sees (a clause); the probe's
     answers, written before it, put "watching the weathered woman's pouch"

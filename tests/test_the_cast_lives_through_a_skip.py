@@ -624,10 +624,12 @@ def test_a_walk_takes_its_time_from_the_start_of_the_stretch_it_walks_to():
 
 
 def test_a_stretch_the_world_cannot_carry_out_fails_with_its_reason():
-    """No way there: `no_route`, and the mind stays where it stood. A way
-    only past a fastened door: `shut_way`. A thing the stretch uses that the
-    mind does not have on it: `not_held` -- it went, and the thing was not on
-    it."""
+    """No way there: `no_route`, and the mind stays where it stood -- its row
+    says where it meant to be in `meant`, and leaves `where_text` for
+    `place_words` to say where it WAS. A way only past a fastened door:
+    `shut_way`. A thing the stretch uses that the mind does not have on it:
+    `not_held` -- it went, and the thing was not on it, named in
+    `missing`."""
     scene = _scene()
     stretches = [_placed(0.0, 100.0, room="skerry", kind=itin.KIND_PLAN),
                  _placed(100.0, 200.0, room="store", kind=itin.KIND_PLAN),
@@ -644,7 +646,9 @@ def test_a_stretch_the_world_cannot_carry_out_fails_with_its_reason():
         ("failed", "shut_way", "kitchen"),
         ("failed", "not_held", "hall"),
         ("not_known", None, "hall")]
-    assert log[0]["where_text"] == "skerry"
+    assert log[0]["meant"] == "skerry" and log[0]["where_text"] == ""
+    assert itin.place_words(log, scene)[0]["where_text"] == "The Kitchen"
+    assert log[2]["missing"] == ["the sealed letter"] and log[2]["meant"] is None
     assert far["room"] == "hall"
 
 
@@ -726,6 +730,13 @@ def test_the_towns_rows_carry_what_only_the_stage_knows(story, monkeypatch):
                      "asleep_since_s": span["from_s"]})
         return None
     monkeypatch.setattr(charter_skip, "live_in_charter", runner)
+    # A lantern the world holds, locked away in the store: out of reach on
+    # the landing (a thing the world holds nowhere is never missing).
+    from core.db import wget, wset
+    scene = wget(story["chat"], "scene")
+    scene["entities"]["lantern"] = {"name": "a storm lantern", "kind": "light"}
+    scene["positions"]["lantern"] = "store"
+    wset(story["chat"], "scene", scene)
     answer = {"plan": [
         {"day": 0, "from": "afternoon", "until": "dusk", "where": "The Landing",
          "doing": "watches the channel", "uses": ["a storm lantern"]},
@@ -742,7 +753,7 @@ def test_the_towns_rows_carry_what_only_the_stage_knows(story, monkeypatch):
     elias = out["minds"][ELIAS]["log"]
     landing = [r for r in elias if r["room"] == "landing"]
     assert landing and all((r["outcome"], r["reason"]) == ("failed", "not_held")
-                           for r in landing)
+                           and r["missing"] == ["a storm lantern"] for r in landing)
     assert all(r["weather"] for r in landing)          # the sky it stood under
     lamp = [r for r in elias if r["room"] == "lamp_room"]
     assert lamp and all({"who": "a fisherman", "doing": "passing through"} in r["seen"]
@@ -1104,7 +1115,7 @@ def test_a_mind_at_the_far_end_carries_its_own_stretch_as_payload(story, monkeyp
 STRETCH_KEYS = {"from_s", "until_s", "room", "away", "where_text", "doing",
                 "asleep", "with", "why", "uses"}
 LOG_KEYS = {"from_s", "until_s", "room", "away", "where_text", "doing",
-            "asleep", "seen", "weather", "outcome", "reason"}
+            "asleep", "seen", "weather", "outcome", "reason", "missing", "meant"}
 
 
 def test_the_step_output_has_the_build_specs_shape(story, monkeypatch):
@@ -1123,7 +1134,8 @@ def test_the_step_output_has_the_build_specs_shape(story, monkeypatch):
         assert all(set(r) == LOG_KEYS for r in mind["log"])
         assert all(set(s) == {"who", "doing"} for r in mind["log"] for s in r["seen"])
         assert all(r["outcome"] in ("done", "failed", "not_known") for r in mind["log"])
-        assert set(mind["far_end"]) == {"room", "away", "asleep", "asleep_since_s"}
+        assert set(mind["far_end"]) == {"room", "away", "asleep", "asleep_since_s",
+                                        "left_from"}
     assert json.loads(json.dumps(out)) == out
     # ...and the memory job's own reader takes it as it stands
     # (`mind/skip_memories`): every mind with a log is one to remember, and

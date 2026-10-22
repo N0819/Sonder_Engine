@@ -116,6 +116,8 @@ from world.spatial_transit import (
     settle_link_conditions,
     # A journey under way arrives when its way is done (2026-10-21).
     docked_off_the_map, journey_seconds, stand_in_no_room,
+    # ...and a skip's walk never crosses the space it moves through.
+    _UNDER_WAY_PHASES,
     # ...at the vessel's own speed, where the story gave it one (2026-10-21).
     journey_pace, SPEED_UNIT_METRES_PER_SECOND, SPEED_UNITS, vessel_speed,
 )

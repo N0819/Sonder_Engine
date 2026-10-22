@@ -36,7 +36,7 @@
 | `agents/offscreen_beat.py` | 490 |  | — |
 | `agents/perception.py` | 9299 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 2180 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents`, `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.skip_stage`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
-| `agents/skip_stage.py` | 989 |  | `core.db`, `world` |
+| `agents/skip_stage.py` | 1062 |  | `core.db`, `world` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 3485 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -112,7 +112,7 @@
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 620 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
 | `persist/commit_scene_state.py` | 3082 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.landscape`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.structure`, `world.weather` |
-| `persist/commit_skip.py` | 120 |  | `core.db` |
+| `persist/commit_skip.py` | 126 |  | `core.db` |
 | `persist/llm_capture.py` | 604 |  | `core.db` |
 | `persist/pipeline_trace.py` | 635 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `persist/steps.py` | 150 |  | `core.db` |
@@ -230,8 +230,8 @@
 | `world/routines.py` | 256 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 206 |  | — |
 | `world/site_plan.py` | 1689 |  | — |
-| `world/skip_itinerary.py` | 1017 |  | — |
-| `world/spatial.py` | 454 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_listener`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_pack`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
+| `world/skip_itinerary.py` | 1577 |  | — |
+| `world/spatial.py` | 456 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_listener`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_pack`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
 | `world/spatial_barriers.py` | 960 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 674 |  | `story.scene`, `world.spatial`, `world.spatial_frames` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
@@ -632,14 +632,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `skip_lives()` | 532 | 105 lines |
-| `resolve_mind()` | 434 | 51 lines |
-| `stretch_for_payload()` | 945 | 37 lines |
-| `ask()` | 290 | 34 lines |
-| `widen_reactors_to_skip_far_end()` | 913 | 30 lines |
-| `_share()` | 651 | 25 lines |
-| `asked_rows()` | 211 | 21 lines |
-| `player_span_place()` | 509 | 21 lines |
+| `skip_lives()` | 587 | 117 lines |
+| `resolve_mind()` | 453 | 65 lines |
+| `stretch_for_payload()` | 1012 | 43 lines |
+| `ask()` | 297 | 34 lines |
+| `widen_reactors_to_skip_far_end()` | 980 | 30 lines |
+| `_share()` | 718 | 25 lines |
+| `asked_rows()` | 218 | 21 lines |
+| `player_span_place()` | 564 | 21 lines |
 
 ### `agents/storage.py`
 
@@ -1471,9 +1471,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commit_skip_lives()` | 37 | 69 lines |
-| `_since_away()` | 108 | 13 lines |
-| `_fold()` | 33 | 2 lines |
+| `commit_skip_lives()` | 39 | 73 lines |
+| `_since_away()` | 114 | 13 lines |
+| `_fold()` | 35 | 2 lines |
 
 ### `persist/llm_capture.py`
 
@@ -2879,14 +2879,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `live_through()` | 826 | 53 lines |
-| `expand_itinerary()` | 428 | 39 lines |
-| `share_company()` | 982 | 36 lines |
-| `default_day()` | 357 | 31 lines |
-| `_placed_in_order()` | 390 | 26 lines |
-| `rooms_named_in()` | 528 | 23 lines |
-| `resolve_exact()` | 553 | 21 lines |
-| `lay_over()` | 881 | 21 lines |
+| `live_through()` | 1297 | 106 lines |
+| `lay_over()` | 1421 | 41 lines |
+| `expand_itinerary()` | 474 | 39 lines |
+| `share_company()` | 1542 | 36 lines |
+| `journeys()` | 1098 | 32 lines |
+| `default_day()` | 403 | 31 lines |
+| `_placed_in_order()` | 436 | 26 lines |
+| `journey_under_way()` | 1132 | 26 lines |
 
 ### `world/spatial_barriers.py`
 

@@ -22,17 +22,24 @@ THREE PARTS, each a pure function of its inputs:
   * **The executor** (`live_through`, `share_company`): the stretches run in
     time order. A walk between rooms takes its route's edge seconds out of the
     start of the stretch it walks to (`charter_move.edge_seconds`, the walk
-    every charter body takes); a stretch the world cannot carry out fails with
-    a typed reason; two minds in the same room, or at the same off-map label,
-    over overlapping time each receive the other's `doing` -- never the
-    other's `why`, and named only as the observer knows them; each stretch
-    carries the sky where the mind stood, the weather walked once per drift
-    window (`weather.weather_course`).
+    every charter body takes), over the ways a body WALKS (`Ways`: never a
+    frontier stub's join, never across water or the space a vessel moves
+    through); a body off the map comes back by where it left it; a body
+    under way with a vessel goes where the vessel goes (`journey_under_way`);
+    what a stretch uses is met by what the mind carries and what is within
+    its reach where the stretch finds it (`Reach`); a stretch the world
+    cannot carry out fails with a typed reason, and its row says what failed
+    (`missing`, `meant`); two minds in the same room, or at the same off-map
+    label, over overlapping time each receive the other's `doing` -- never
+    the other's `why`, and named only as the observer knows them; each
+    stretch carries the sky where the mind stood, the weather walked once per
+    drift window (`weather.weather_course`).
 
 Nothing here reads or writes the database: the stage hands in the scene, the
-mind's known places, what it holds, the decision model's answers and the
-labels each observer may use, and takes back the log and the far end. The
-shapes are fixed by the build spec (`STRETCH`, `LOG`, the far end).
+mind's known places, what it holds, the decision model's answers, the
+frontier joins the plan holds open and the labels each observer may use, and
+takes back the log and the far end. The shapes are fixed by the build spec
+(`STRETCH`, `LOG`, the far end), with `missing` and `meant` on every LOG row.
 """
 
 from __future__ import annotations
@@ -102,15 +109,54 @@ OUTCOME_NOT_KNOWN = "not_known"
 #: charter's too (`charter_skip.FAILURE_REASONS`): no way through the world
 #: from where the mind stood to where it meant to be; a way that exists only
 #: past a fastened door (`spatial.barrier_fastening`); a way so long the
-#: stretch was spent walking it. The last is this stage's alone, laid over
-#: either executor's rows: a thing the stretch uses that the mind does not
-#: have on it.
+#: stretch was spent walking it. The last two are this stage's alone: a way
+#: there only across what a vessel crosses -- water, or the space a vessel
+#: moves through -- and no crossing was made (`Ways`; a crossing of the
+#: mind's own inside a skip is not built, so every such stretch fails so); and,
+#: laid over either executor's rows, a thing the stretch uses that the world
+#: holds neither on the mind nor within its reach (`Reach`).
 REASON_NO_ROUTE = "no_route"
 REASON_SHUT_WAY = "shut_way"
 REASON_TOO_FAR = "too_far"
+REASON_NO_CROSSING = "no_crossing"
 REASON_NOT_HELD = "not_held"
 FAILURE_REASONS = (REASON_NO_ROUTE, REASON_SHUT_WAY, REASON_TOO_FAR,
-                   REASON_NOT_HELD)
+                   REASON_NO_CROSSING, REASON_NOT_HELD)
+
+#: The reasons that say the body never got where it meant to be. A row
+#: failed for one of them says where the body WAS in `where_text` (filled in
+#: words by `place_words`) and where it meant to be in `meant`, the mind's
+#: own words; a row failed `not_held` got there, and says what was not to
+#: hand in `missing`. Every row carries both fields, empty where they say
+#: nothing, so a reader never mistakes the place it meant for the place it
+#: stood (the memory writer reads `where_text` as where the stretch was).
+ROUTE_REASONS = (REASON_NO_ROUTE, REASON_SHUT_WAY, REASON_TOO_FAR,
+                 REASON_NO_CROSSING)
+
+#: A FLOOR NO BODY STANDS ON, as a room's own `floor` word says it: the
+#: room author writes what a floor is made of in one word
+#: (`prose_contract/layout_sort`), and this is the one such word that is no
+#: footing. Read as `spatial_sound_field.FLOOR_IMPACT_DB` reads a floor
+#: word, and like that table a word it does not hold is footing -- a room it
+#: misses is walked as it always was. Measured (2026-10-21): the control
+#: story's channel (`floor: water`, edges of 13 and 1.5 km) is the only room
+#: of the owner's 144 stored scenes and the three probe stories whose floor
+#: is not footing. A guard on a typed field's value; the owner rules on it.
+MEDIUM_FLOORS = frozenset({"water"})
+
+#: How many things one decision-model question about a thing offers: what
+#: the mind has on it first, then the things and fixtures of the place it
+#: stands in and the places its words name exactly, then of the rest of the
+#: places it knows, then the world's other things. A choice over a whole
+#: town's furniture is not a question. Named per the owner's rule on caps.
+SKIP_THING_OPTIONS = 64
+
+#: How much of a thing's or a fixture's own description rides beside its
+#: name when the decision model is asked which thing a mind's words mean:
+#: "the old lamp mechanism" meets a pedestal only through what the pedestal
+#: carries, and "her sealed letter" a letter only through whose hand
+#: addressed it. Named per the owner's rule on caps.
+SKIP_THING_DESC_CHARS = 120
 
 #: Which part of an answer a stretch came from. Internal: the build spec's
 #: STRETCH has no field for it (`as_stretch` drops it); it says only how the
@@ -627,8 +673,9 @@ def _choice(answer, threshold):
 
 def thing_questions(name, texts, held, language=None):
     """`{key: question}` -- one `choice` per thing a stretch uses that no
-    held thing's name answered exactly, over the things this mind has on it
-    plus "none of these". `held` is `{key: label}`."""
+    thing's name answered exactly, over the things offered plus "none of
+    these". `held` is `{key: label}`: what the mind has on it and the things
+    of the world it may mean (`Reach.options`)."""
     from llm.prompts import jev_question
     if not held:
         return {}
@@ -657,6 +704,21 @@ def read_thing_answers(answers, texts, held,
     return out
 
 
+def read_thing_picks(answers, texts, offered,
+                     threshold=SKIP_THING_MIN_PROBABILITY):
+    """`{text: key}` -- each thing a stretch uses that the decision model
+    found among the things offered (`{key: label}`, as `thing_questions`
+    numbered them), picked at or above `threshold`. A text it found no
+    thing for is absent: the world holds nothing those words name."""
+    keys = {f"t{i}": key for i, key in enumerate(sorted(offered))}
+    out = {}
+    for n, text in enumerate(texts):
+        choice = _choice((answers or {}).get(f"thing:{n}"), threshold)
+        if choice and choice in keys:
+            out[text] = keys[choice]
+    return out
+
+
 def held_exactly(text, held):
     """Does `text` name one of the held things (`{key: label}`) exactly?"""
     folded = _fold(text)
@@ -681,29 +743,418 @@ def place_stretches(stretches, resolved):
 
 
 # --------------------------------------------------------------------------
+# The things within reach
+# --------------------------------------------------------------------------
+
+#: How many containers deep a thing is followed to the room or the body that
+#: holds it -- a letter in a satchel in a chest. Named per the owner's rule
+#: on caps.
+SKIP_CONTAINED_DEPTH = 8
+
+#: The key a room's fixture (one of its `anchors`) is offered and judged
+#: under: `fixture:<room id>:<anchor id>`, so two rooms' pedestals are two.
+FIXTURE_PREFIX = "fixture:"
+
+
+def _humane(identifier):
+    return " ".join(str(identifier or "").replace("_", " ").split())
+
+
+def _cut(text, limit):
+    text = " ".join(str(text or "").split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:.")
+
+
+class Reach:
+    """What a mind can lay a hand on, where and when a stretch finds it.
+
+    WHAT A STRETCH USES IS MET BY WHAT THE MIND CARRIES AND BY WHAT IS WITHIN
+    ITS REACH in the room the stretch finds it in: the room's things (each
+    thing the scene stands there, and what lies inside them), its fixtures
+    (the room's `anchors`), and a vessel it stands in -- one of the vessel's
+    own rooms -- or beside, in the room the vessel stands in. A vessel is
+    never held: one is aboard it or at it, and a vessel under way stands
+    where its journey has brought it (`journeys`). A thing on another body is
+    that body's, never the room's; and off the map nothing is within reach
+    that the mind does not carry, because the world holds nothing there.
+    Measured on the lighthouse (chat 3 turn 25, 2026-10-21): the keeper's
+    first three stretches -- at the pedestal, lighting the lamp, keeping the
+    watch -- all failed `not_held` in the lamp room with the lamp standing in
+    it, and every stretch of the boatman's that used his boat failed so.
+
+    ONLY A THING THE WORLD HOLDS, AND HOLDS ELSEWHERE, IS MISSING. Words that
+    name no thing the world holds -- a prop nobody minted -- are not this
+    executor's to deny: the world never said the thing was not there, so the
+    stretch stays the world's to judge (`not_known`, by `stretch_outcome`),
+    and nothing is put in the mind's hands either. The same turn: "the
+    logbook" was no thing the world held, and the brass shim only a sound
+    (`sensory_events`, source "shim"), with no thing behind it.
+
+    `carried` is `{key: label}` of what the mind has on it
+    (`skip_stage.held_things`); everything else is read from the scene."""
+
+    def __init__(self, scene, name, carried=None, journeys=None):
+        from world.spatial import _interior_rooms_of, _is_body_entity
+        self.scene = scene if isinstance(scene, dict) else {}
+        self.name = str(name or "")
+        self.journeys = dict(journeys or {})
+        rooms = self.scene.get("rooms") or {}
+        entities = self.scene.get("entities") or {}
+        positions = self.scene.get("positions") or {}
+        contained = self.scene.get("contained") or {}
+        self.carried = {str(k): str(v) for k, v in (carried or {}).items()}
+        self.labels = {}         # key -> [spellings], for an exact match
+        self.option = {}         # key -> the words the decision model is shown
+        self.where = {}          # key -> the room it stands in
+        self.outer = {}          # key -> the thing it lies inside, outermost
+        self.inside = {}         # vessel key -> its own rooms
+        self.fixture_room = {}   # fixture key -> its room
+        people = {str(k) for k, e in entities.items()
+                  if not isinstance(e, dict) or _is_body_entity(self.scene, k, e)}
+
+        def body_name(ref):
+            """A body's name, where a ledger keyed it by its entity id."""
+            record = entities.get(ref)
+            return str(record.get("name") or ref) if isinstance(record, dict) else ref
+
+        def holder(eid):
+            """`(kind, where, outer)`: where a thing is held -- `("room",
+            room id)`, `("body", name)` or `(None, None)` -- followed through
+            the things it lies inside, and the outermost of those things
+            (itself when it lies inside nothing)."""
+            seen, here = set(), str(eid)
+            for _ in range(SKIP_CONTAINED_DEPTH):
+                record = contained.get(here)
+                into = str(record.get("in") or "").strip() \
+                    if isinstance(record, dict) else ""
+                if into:
+                    if into in rooms:
+                        return "room", into, here
+                    if into in entities and into not in people and into not in seen:
+                        seen.add(into)
+                        here = into
+                        continue
+                    return "body", body_name(into), here
+                held_by = str((entities.get(here) or {}).get("held_by") or "").strip() \
+                    if isinstance(entities.get(here), dict) else ""
+                if held_by:
+                    return "body", body_name(held_by), here
+                room = positions.get(here)
+                return (("room", str(room), here) if room in rooms
+                        else (None, None, here))
+            return None, None, here
+
+        for eid in sorted(entities):
+            ent = entities[eid]
+            if str(eid) in people or not isinstance(ent, dict):
+                continue
+            key = str(eid)
+            name_ = str(ent.get("name") or key)
+            self.labels[key] = [name_, key] + [str(a) for a in ent.get("aliases") or ()
+                                               if str(a or "").strip()]
+            described = _cut(ent.get("description"), SKIP_THING_DESC_CHARS)
+            self.option[key] = "%s (%s)" % (name_, described) if described else name_
+            inside = [str(r) for r in _interior_rooms_of(self.scene, key)]
+            if inside:
+                self.inside[key] = inside
+            kind, where, outer = holder(key)
+            if outer != key:
+                self.outer[key] = outer
+            if kind == "room":
+                self.where[key] = where
+            elif kind == "body" and _fold(where) == _fold(self.name):
+                self.carried.setdefault(key, name_)
+        for rid in sorted(rooms):
+            anchors = (rooms[rid] or {}).get("anchors") if isinstance(rooms[rid], dict) else None
+            for aid in sorted(anchors or {}) if isinstance(anchors, dict) else ():
+                key = "%s%s:%s" % (FIXTURE_PREFIX, rid, aid)
+                said = (anchors.get(aid) or {}) if isinstance(anchors.get(aid), dict) else {}
+                described = _cut(said.get("desc"), SKIP_THING_DESC_CHARS)
+                self.labels[key] = [_humane(aid)]
+                self.option[key] = "%s (%s)" % (_humane(aid), described) \
+                    if described else _humane(aid)
+                self.fixture_room[key] = str(rid)
+
+    def named(self, text):
+        """`{key}` -- every thing whose own name, an alias or its key the
+        words ARE, case and punctuation folded: identifier recognition, never
+        prose reading (`resolve_exact`'s rule for places)."""
+        folded = _fold(text)
+        if not folded:
+            return set()
+        out = {key for key, label in self.carried.items()
+               if folded in (_fold(key), _fold(label))}
+        out |= {key for key, spellings in self.labels.items()
+                if any(folded == _fold(s) for s in spellings)}
+        return out
+
+    def options(self, first=(), known=()):
+        """`{key: words}` for the decision model, at most
+        `SKIP_THING_OPTIONS`: what the mind has on it, then the things and
+        fixtures of the rooms in `first` (where it stands, where its words
+        put it), then of the places it `known`s, then the rest of the world's
+        things -- a thing it means may be anywhere the world holds it."""
+        out = {}
+
+        def add(key, words):
+            if key not in out and len(out) < SKIP_THING_OPTIONS:
+                out[key] = words
+
+        for key in sorted(self.carried):
+            add(key, self.carried[key])
+        for rooms in (list(first), list(known)):
+            for rid in rooms:
+                for key in sorted(self.where):
+                    if self.where[key] == rid:
+                        add(key, self.option[key])
+                for key in sorted(self.inside):
+                    if rid in self.inside[key]:
+                        add(key, self.option[key])
+                for key in sorted(self.fixture_room):
+                    if self.fixture_room[key] == rid:
+                        add(key, self.option[key])
+        for key in sorted(self.option):
+            if not key.startswith(FIXTURE_PREFIX):
+                add(key, self.option[key])
+        return out
+
+    def room_at(self, key, t):
+        """The room a thing stands in at story second `t`: a vessel whose
+        journey has ended by then stands where it ended (None off the map)."""
+        journey = self.journeys.get(key)
+        if journey and t is not None and float(t) >= float(journey["until_s"]):
+            return journey.get("room")
+        return self.where.get(key)
+
+    def in_reach(self, key, room, away=None, t=None):
+        """Is the thing `key` names on the mind, or within its reach in
+        `room` at story second `t`? A thing lying inside another is within
+        reach wherever the outermost thing holding it is -- a vessel's cargo
+        goes where the vessel goes."""
+        if key in self.carried:
+            return True
+        key = self.outer.get(key, key)
+        if key in self.carried:
+            return True
+        if away or not room:
+            return False
+        if key in self.fixture_room:
+            return self.fixture_room[key] == room
+        if room in self.inside.get(key, ()):
+            return True                         # aboard it
+        return self.room_at(key, t) == room     # beside it, or it lies here
+
+    def missing(self, uses, named, room, away=None, t=None):
+        """The words of each thing `uses` names that the world holds and
+        holds out of reach -- neither on the mind nor where the stretch finds
+        it -- as the mind wrote them. `named` is `{words: {key}}` from the
+        resolution; words naming no thing the world holds are never
+        missing."""
+        out = []
+        for text in uses or ():
+            keys = (named or {}).get(text) or ()
+            if keys and not any(self.in_reach(k, room, away, t) for k in keys):
+                out.append(text)
+        return out
+
+
+# --------------------------------------------------------------------------
 # The executor
 # --------------------------------------------------------------------------
 
-def _route(scene, here, there):
-    """`(route, reason)`: the rooms a person walks from `here` to `there`,
-    inclusive, on the graph a person walks over hours -- open ways and the
-    doors a hand opens (`charter_space.people_neighbors`) -- or None with
-    why there is none: a way that exists only past a fastened door, or no
-    way at all."""
-    from world.charter_space import _route_on, people_neighbors
-    from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
-    if not here or not there:
+def _transit_of(entity):
+    state = entity.get("state") if isinstance(entity, dict) else None
+    transit = state.get("transit") if isinstance(state, dict) else None
+    return transit if isinstance(transit, dict) else None
+
+
+def media(scene):
+    """`{room id}` -- the rooms a body does not walk into, across or out of:
+    the space a vessel under way moves through (its transit's `route_room`,
+    the medium the engine names it -- the water, the sky, the shaft; see
+    `planning_needs`' `transit_route_unplanned`), and a room whose own floor
+    is water (`MEDIUM_FLOORS`). A way across either is a vessel's."""
+    from world.spatial import _UNDER_WAY_PHASES, scene_room_id
+    scene = scene if isinstance(scene, dict) else {}
+    rooms = scene.get("rooms") or {}
+    out = set()
+    for rid, room in rooms.items():
+        if isinstance(room, dict) and \
+                " ".join(str(room.get("floor") or "").split()).casefold() in MEDIUM_FLOORS:
+            out.add(str(rid))
+    for ent in (scene.get("entities") or {}).values():
+        transit = _transit_of(ent)
+        if not transit or str(transit.get("phase") or "").strip().casefold() \
+                not in _UNDER_WAY_PHASES:
+            continue
+        route = str(transit.get("route_room") or "").strip()
+        route = route if route in rooms else scene_room_id(scene, route)
+        if route in rooms:
+            out.add(str(route))
+    return out
+
+
+def frontier_joins(stubs):
+    """`{frozenset((stub, holder))}` -- the joins the plan's frontier drew
+    between a room and the space it holds open beside it. `stubs` is
+    `{stub room id: holder room id}`: every live planned room the registry
+    marks `provisional`, by its `frontier_of.room` (`structure.mint_frontier`;
+    the stage reads the registry, `skip_stage.frontier_stubs`)."""
+    return {frozenset((str(stub), str(holder)))
+            for stub, holder in (stubs or {}).items() if stub and holder}
+
+
+class Ways:
+    """The ways a body walks over a skip's hours, and why there is none.
+
+    A BODY WALKS ONLY A WALKABLE WAY. The graph a person walks over hours --
+    open ways and the doors a hand opens (`charter_space.people_neighbors`)
+    -- less two kinds of join that are no walk:
+
+      * A FRONTIER STUB'S JOIN IS NOT A WAY. Where the plan holds a space open
+        (`provisional`, minted from an axis by `structure.mint_frontier`), the
+        join it drew says what lies that way and never what stands between
+        -- the mint's own words: "an opening, not a door". Measured on the
+        lighthouse (chat 3 turn 25): the mainland's stub hangs an open door
+        with no distance off the rock's landing, the channel's own ways to
+        either shore are measured at 13 and 1.5 km, and the boatman's day
+        walked him between the two shores in ten minutes a leg.
+      * A WAY ACROSS WATER IS A VESSEL'S. Into, across or out of the space a
+        vessel moves through, or a room whose floor is water (`media`), a body
+        goes only by vessel; and a crossing of the mind's own inside a skip
+        is not built, so the stretch fails `no_crossing` and the body stays
+        where its last stretch that could happen left it. A body already
+        under way with a vessel goes where the vessel goes
+        (`journey_under_way`).
+
+    A way only past a fastened door is `shut_way`, as it was; no way at all
+    is `no_route`. A `remote` way over ground is walked: the tavern story's
+    quay is a `remote` way from its market (2026-10-21), and the owner's two
+    `remote` edges are a village lane's.
+
+    A CROSSING PLUGS IN HERE: where `route` finds the way only through a
+    medium, a crossing the mind's own vessel can make -- a vessel within its
+    reach (`Reach`), a way priced at the vessel's own pace
+    (`spatial.journey_seconds`'s terms) -- is the walk's place in
+    `live_through`, and the vessel's own move goes to the far end beside the
+    mind's."""
+
+    def __init__(self, scene, *, joins=()):
+        from world.charter_space import people_neighbors
+        from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
+        self.scene = scene if isinstance(scene, dict) else {}
+        self.media = media(self.scene)
+        self.frontier = {frozenset(str(r) for r in join) for join in joins or ()}
+        people = people_neighbors(self.scene)
+        fastened = neighbor_map(self.scene, _ROUTE_MEMORY_BARRIERS, directional=True)
+        self.walk = self._less(people, through_media=False)
+        self.fastened = self._less(fastened, through_media=False)
+        self.crossing = self._less(people, through_media=True)
+
+    def _less(self, graph, *, through_media):
+        out = {}
+        for here, nexts in (graph or {}).items():
+            here = str(here)
+            if not through_media and here in self.media:
+                continue
+            out[here] = {str(n) for n in nexts or ()
+                         if frozenset((here, str(n))) not in self.frontier
+                         and (through_media or str(n) not in self.media)}
+        return out
+
+    @staticmethod
+    def _with(graph, extra):
+        if not extra:
+            return graph
+        out = {k: set(v) for k, v in graph.items()}
+        for a, b in extra:
+            out.setdefault(str(a), set()).add(str(b))
+            out.setdefault(str(b), set()).add(str(a))
+        return out
+
+    def route(self, here, there, extra=()):
+        """`(route, reason)`: the rooms a body walks from `here` to `there`,
+        inclusive, or None with why there is none. `extra` are joins standing
+        for this walk alone -- a vessel's door onto the place its journey
+        brought it."""
+        from world.charter_space import _route_on
+        if not here or not there:
+            return None, REASON_NO_ROUTE
+        here, there = str(here), str(there)
+        if here == there:
+            return [here], None
+        route = _route_on(self._with(self.walk, extra), here, there, SKIP_ROUTE_ROOMS)
+        if route:
+            return route, None
+        if _route_on(self._with(self.fastened, extra), here, there, SKIP_ROUTE_ROOMS):
+            return None, REASON_SHUT_WAY
+        if _route_on(self._with(self.crossing, extra), here, there, SKIP_ROUTE_ROOMS):
+            return None, REASON_NO_CROSSING
         return None, REASON_NO_ROUTE
-    if str(here) == str(there):
-        return [str(here)], None
-    route = _route_on(people_neighbors(scene), str(here), str(there),
-                      SKIP_ROUTE_ROOMS)
-    if route:
-        return route, None
-    fastened = neighbor_map(scene, _ROUTE_MEMORY_BARRIERS, directional=True)
-    if _route_on(fastened, str(here), str(there), SKIP_ROUTE_ROOMS):
-        return None, REASON_SHUT_WAY
-    return None, REASON_NO_ROUTE
+
+
+def journeys(scene, span_from):
+    """`{vessel key: journey}` -- every vessel under way toward a place as
+    the span opens: `until_s`, when its way is done (the price the mechanics
+    book for what remains of it, `spatial.journey_seconds`, from the span's
+    first moment); `room`, the room it docks in, or None when the world does
+    not hold its end, and `away`, then, the words of that end; `inside`, its
+    own rooms; `at`, the room it stands in now; `dock`, the room of its own a
+    body steps out of."""
+    from world.spatial import (_interior_entry_room, _interior_rooms_of,
+                               journey_seconds, room_of_record, scene_room_id)
+    scene = scene if isinstance(scene, dict) else {}
+    rooms = scene.get("rooms") or {}
+    out = {}
+    for eid, ent in sorted((scene.get("entities") or {}).items()):
+        if not isinstance(ent, dict):
+            continue
+        try:
+            seconds = journey_seconds(scene, eid, ent)
+        except Exception:  # noqa: BLE001 -- an unpriceable journey carries nobody
+            seconds = None
+        if not seconds:
+            continue
+        bound = str((_transit_of(ent) or {}).get("destination_room") or "").strip()
+        dest = bound if bound in rooms else scene_room_id(scene, bound)
+        held = dest if isinstance(rooms.get(dest), dict) else None
+        out[str(eid)] = {
+            "until_s": float(span_from) + float(seconds), "room": held,
+            "away": None if held else (bound or None),
+            "inside": [str(r) for r in _interior_rooms_of(scene, eid)],
+            "at": room_of_record(scene, eid, ent),
+            "dock": _interior_entry_room(scene, eid, ent)}
+    return out
+
+
+def journey_under_way(scene, here, under_way, ways=None):
+    """The journey a body standing in `here` goes on as the span opens, or
+    None. A BODY UNDER WAY GOES WHERE ITS VESSEL GOES: aboard a vessel under
+    way -- `here` one of its rooms -- or beside it in the space it moves
+    through, it goes nowhere of its own until the vessel's way is done, and
+    then stands where the vessel docks: beside it, in the room the journey
+    ends in (off the map, at its words, when the world does not hold it);
+    aboard, still aboard, with the vessel's door now onto that room. Its own
+    crossing is not built; this is the journey the world already has under
+    way and the mechanics already price. Measured on the lighthouse (chat 3
+    turn 25): the boatman stood in the channel beside the Mary Ann, bound for
+    the mainland -- the encoder writes a passenger into the route room
+    (faba15b3's note) -- and his whole day was on the far shore.
+
+    `under_way` is `journeys(scene, ...)`."""
+    if not here:
+        return None
+    here = str(here)
+    in_medium = here in (ways.media if ways is not None else media(scene))
+    for key in sorted(under_way or {}):
+        journey = under_way[key]
+        if here in journey["inside"]:
+            return dict(journey, vessel=key, aboard=True)
+        if in_medium and here == str(journey.get("at") or ""):
+            return dict(journey, vessel=key, aboard=False)
+    return None
 
 
 def walk_seconds(scene, route):
@@ -823,81 +1274,190 @@ class Skies:
         return " → ".join(seen) if seen else None
 
 
+def _row(item, arrival, end, room, away, reason, missing, skies):
+    """One LOG row. A row failed for a reason in `ROUTE_REASONS` never got
+    where it meant to be: its `where_text` is left for `place_words` to say
+    where the body WAS, and `meant` keeps the mind's own words for where it
+    meant to be. A row failed `not_held` names what was not to hand in
+    `missing`, as the mind wrote it."""
+    where_text = item.get("where_text") or ""
+    meant = None
+    if reason in ROUTE_REASONS:
+        meant, where_text = (where_text or None), ""
+    return {
+        "from_s": arrival, "until_s": end, "room": room, "away": away,
+        "where_text": where_text, "doing": item.get("doing") or "",
+        "asleep": bool(item.get("asleep")), "seen": [],
+        "weather": (skies.over(arrival, end, room=room, away=away)
+                    if skies is not None else None),
+        "outcome": stretch_outcome(item, reason, away), "reason": reason,
+        "missing": list(missing or ()), "meant": meant}
+
+
 def live_through(stretches, *, scene, start_room=None, start_away=None,
-                 asleep_since=None, uses_held=None, skies=None):
+                 start_exit=None, asleep_since=None, uses_held=None,
+                 missing_from=None, skies=None, ways=None, journey=None):
     """`(log, far_end)`: one mind's stretches run in time order.
 
-    Each stretch moves the mind to its place: a room by the route a person
-    walks, the walk taking its edge seconds out of the stretch's start; an
-    off-map label with no arithmetic (the world holds no way there to
-    price); an empty place is where it stands. A stretch the world cannot
-    carry out FAILS with a typed reason and leaves the mind where it stood:
-    no route, or one only past a fastened door. A thing the stretch uses
-    that the mind does not have on it (`uses_held(text) -> bool`) fails the
-    stretch where it got to -- it went, and the thing was not on it.
+    Each stretch moves the mind to its place over the ways a body WALKS
+    (`Ways`): a room by its route, the walk taking its edge seconds out of
+    the start of the stretch it walks to; an off-map label with no
+    arithmetic -- the world holds no way there to price -- from anywhere but
+    the space a vessel moves through, whose every way out is a crossing; and
+    BACK ONTO THE MAP BY WHERE IT LEFT IT: from off the map a body walks from
+    the room it left by (`start_exit` for one that began the span away), and
+    only where the world knows no such room does it come back with no walk.
+    Measured on the lighthouse (chat 3 turn 25): off the map on the mainland,
+    the boatman's last stretches put him on the rock's landing with no way
+    walked at all. An empty place is where it stands.
+
+    A BODY UNDER WAY (`journey`, `journey_under_way`) goes where its vessel
+    goes: until the journey ends it moves only within the vessel, and a
+    stretch that meant anywhere else spent itself on the way (`too_far`);
+    the stretch the journey ends in begins where the journey brought it.
+
+    A stretch the world cannot carry out FAILS with a typed reason and leaves
+    the mind where its last stretch that could happen left it: no route, one
+    only past a fastened door, one only across what a vessel crosses, or a
+    way it was still on when the stretch ran out. A thing the stretch uses
+    that the world holds neither on the mind nor within its reach where the
+    stretch finds it (`missing_from(uses, room, away, t) -> [words]`, as
+    `Reach.missing` answers; or `uses_held(words) -> bool`, a reader of what
+    it has on it alone) fails the stretch where it got to: it went, and those
+    were not to hand. Each row says what failed (`_row`).
 
     `asleep_since` is when the mind's sleep began if it is asleep as the
     span opens, so a sleep that runs on into the span keeps its true start.
     """
-    room, away = start_room, start_away
+    ways = ways if ways is not None else Ways(scene)
+    room = str(start_room) if start_room else None
+    away = None if room else (start_away or None)
+    left_by = room or (str(start_exit) if start_exit else None)
+    carried = dict(journey) if journey else None
+    joins = []
     log = []
     for item in stretches:
         start, end = float(item["from_s"]), float(item["until_s"])
-        target_room, target_away = item.get("room"), item.get("away")
-        if not target_room and not target_away:
-            target_room, target_away = room, away
-        reason = None
         arrival = start
-        if target_room and room and target_room != room:
-            route, why_not = _route(scene, room, target_room)
-            if route is None:
-                reason = why_not
-                target_room, target_away = room, None
-            elif start + walk_seconds(scene, route) >= end:
-                # The way outlasts the stretch: it was spent walking, and the
-                # body is as far along the way as the stretch carried it.
-                reason = REASON_TOO_FAR
-                target_room, target_away = reached_by(scene, route, end - start), None
+        reason = None
+        under_way = carried is not None and float(carried["until_s"]) >= end
+        if carried is not None and not under_way:
+            # The journey ends inside this stretch: it begins where the
+            # vessel's way brought the body.
+            arrival = max(start, float(carried["until_s"]))
+            if carried.get("aboard"):
+                if carried.get("room") and carried.get("dock"):
+                    joins.append((str(carried["dock"]), str(carried["room"])))
+            elif carried.get("room"):
+                room, away = str(carried["room"]), None
             else:
-                arrival = start + walk_seconds(scene, route)
-        room, away = (target_room, None) if target_room else (None, target_away)
-        if reason is None and uses_held is not None:
-            missing = [thing for thing in item.get("uses") or ()
-                       if not uses_held(thing)]
+                room, away = None, carried.get("away") or away
+            carried = None
+        if room:
+            left_by = room
+        target_room = str(item["room"]) if item.get("room") else None
+        target_away = item.get("away") or None
+        if target_room and target_room != room:
+            begin = room or left_by
+            if begin is None:
+                # Off the map, left by nowhere the world knows: there is no
+                # way back to price.
+                room, away = target_room, None
+            else:
+                route, why_not = ways.route(begin, target_room, extra=joins)
+                if route is None:
+                    reason = why_not
+                else:
+                    seconds = walk_seconds(scene, route)
+                    if arrival + seconds >= end:
+                        # The way outlasts the stretch: it was spent walking,
+                        # and the body is as far along the way as the stretch
+                        # carried it.
+                        reason = REASON_TOO_FAR
+                        room, away = reached_by(scene, route, end - arrival), None
+                    else:
+                        arrival += seconds
+                        room, away = target_room, None
+        elif target_away and not target_room:
+            if under_way or (room and room in ways.media):
+                # Out of the space a vessel moves through is a crossing.
+                reason = REASON_NO_CROSSING
+            else:
+                room, away = None, target_away
+        if under_way and reason in ROUTE_REASONS:
+            # Still on its way with the vessel when the stretch ran out.
+            reason = REASON_TOO_FAR
+        missing = []
+        if reason is None:
+            uses = item.get("uses") or ()
+            if missing_from is not None:
+                missing = list(missing_from(uses, room, away, arrival) or ())
+            elif uses_held is not None:
+                missing = [thing for thing in uses if not uses_held(thing)]
             if missing:
                 reason = REASON_NOT_HELD
-        outcome = stretch_outcome(item, reason, away)
-        log.append({
-            "from_s": arrival, "until_s": end, "room": room, "away": away,
-            "where_text": item.get("where_text") or "",
-            "doing": item.get("doing") or "",
-            "asleep": bool(item.get("asleep")), "seen": [],
-            "weather": (skies.over(arrival, end, room=room, away=away)
-                        if skies is not None else None),
-            "outcome": outcome, "reason": reason})
+        if room:
+            left_by = room
+        log.append(_row(item, arrival, end, room, away, reason, missing, skies))
     return log, far_end_of(log, start_room, start_away, asleep_since)
 
 
-def lay_over(log, stretches, *, uses_held=None, skies=None):
+def left_the_map_from(log, start_room=None, start_exit=None):
+    """The room a body's day last stood in on the map before the off-map run
+    its log ends in -- where it left the map, and so where it comes back by
+    (`live_through`'s `start_exit`, kept on its whereabouts) -- or None when
+    the log does not end off the map."""
+    if log:
+        last = log[-1]
+        if last.get("room") or not last.get("away"):
+            return None
+        for row in reversed(log):
+            if row.get("room"):
+                return str(row["room"])
+    return (str(start_room) if start_room else None) or \
+        (str(start_exit) if start_exit else None)
+
+
+def lay_over(log, stretches, *, uses_held=None, missing_from=None, skies=None):
     """What only this stage knows, laid in place over a log another executor
     wrote (`world/charter_skip`, whose rows carry the town's residents and
-    nothing of these): the weather where each row stood (`Skies`), and the
-    holding check -- a row inside a stretch that uses a thing the mind does
-    not have on it fails `not_held`, as this stage's own executor fails it.
-    Company with the other asked minds and the player is shared over every
-    log at once afterwards (`share_company`), beside the residents already
-    there: ONE log a mind, either way."""
+    nothing of these): the weather where each row stood (`Skies`); the
+    holding check -- a row inside a stretch that uses a thing the world holds
+    neither on the mind nor within its reach fails `not_held` and names them
+    in `missing`, as this stage's own executor fails it
+    (`missing_from(uses, room, away, t)`, or `uses_held(words)`); and what a
+    failed row says of where it was and where it meant to be (`_row`'s
+    shape: `missing` and `meant` on every row). Company with the other asked
+    minds and the player is shared over every log at once afterwards
+    (`share_company`), beside the residents already there: ONE log a mind,
+    either way."""
     for row in log or ():
         if not isinstance(row, dict):
             continue
         if skies is not None and not row.get("weather"):
             row["weather"] = skies.over(row["from_s"], row["until_s"],
                                         room=row.get("room"), away=row.get("away"))
-        if uses_held is None or row.get("outcome") == OUTCOME_FAILED:
+        row.setdefault("missing", [])
+        row.setdefault("meant", None)
+        if row.get("outcome") == OUTCOME_FAILED:
+            if row.get("reason") in ROUTE_REASONS and not row.get("meant"):
+                row["meant"] = row.get("where_text") or None
+                row["where_text"] = ""
+            continue
+        if uses_held is None and missing_from is None:
             continue
         stretch = _stretch_under(stretches, row)
-        if stretch and any(not uses_held(t) for t in stretch.get("uses") or ()):
+        uses = (stretch or {}).get("uses") or ()
+        if not uses:
+            continue
+        if missing_from is not None:
+            missing = list(missing_from(uses, row.get("room"), row.get("away"),
+                                        row.get("from_s")) or ())
+        else:
+            missing = [t for t in uses if not uses_held(t)]
+        if missing:
             row["outcome"], row["reason"] = OUTCOME_FAILED, REASON_NOT_HELD
+            row["missing"] = missing
     return log
 
 

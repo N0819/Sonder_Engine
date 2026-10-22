@@ -9,7 +9,9 @@ that follows the skip keeps the last word on anyone it moves. What is here:
 
   * **The roster.** A mind whose day ends somewhere the world does not hold
     is AWAY there: dormant (`story.scene.CAST_STATUS_ABSENT`), with a typed
-    whereabouts (`skip_stage.WHEREABOUTS_KEY`, the frame's world key). A
+    whereabouts (`skip_stage.WHEREABOUTS_KEY`, the frame's world key) that
+    keeps the room it left the map by (`left_from`, the far end's), so the
+    next skip brings it back by there and not by wherever its words name. A
     dormant mind the far end puts in a room the world holds is back: active,
     its whereabouts gone.
   * **Awareness.** A sleep the far end ended is ended; a sleep it began is a
@@ -70,7 +72,11 @@ def commit_skip_lives(ctx, nonce=None):
                 "kind": WHEREABOUTS_OFF_MAP, "label": str(far["away"]),
                 "since_s": _since_away(minds[name], span),
                 "turn_idx": int(getattr(ctx.turn, "idx", 0) or 0),
-                "char_id": cid}
+                "char_id": cid,
+                # The room it left the map by: a later skip brings it back
+                # by there, over the ways a body walks
+                # (`skip_itinerary.live_through`'s `start_exit`).
+                "left_from": far.get("left_from") or None}
             if cid is not None:
                 set_char_status(chat_id, cid, CAST_STATUS_ABSENT, frame_id=frame_id)
             out["away"][name] = str(far["away"])

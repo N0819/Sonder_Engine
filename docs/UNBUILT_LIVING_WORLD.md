@@ -1436,7 +1436,12 @@ residents' talk among themselves can differ between two minds' records,
 each run alone; a creature registry's predation round is not stepped in the
 scratch run; and a mind's skip can reach only the institution graph it is
 enrolled in -- which on chat 114 is the world's own truth (its two
-structures are unjoined islands of rooms), not an artifact.
+structures are unjoined islands of rooms), not an artifact. And the town's
+walk still crosses what the stage's own executor no longer does (fix lane B2,
+2026-10-21, `UNBUILT_WORLD.md` § 1.166): a frontier stub's join and water are
+ways to `charter_space.people_neighbors`, and an away body comes back with no
+walk; the stage lays the holding check (`skip_itinerary.Reach`) and what a
+failed row says (`missing`, `meant`) over the town's rows.
 
 <a id="unbuilt-1-99e"></a>
 
