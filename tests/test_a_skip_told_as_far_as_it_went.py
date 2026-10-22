@@ -458,9 +458,16 @@ def test_the_stage_asks_once_per_mind_over_its_short_rows(temp_db, monkeypatch):
     out = skip_stage.skip_lives(ctx, 0)
     assert requests.count(["without"]) == 2           # one per mind, each its own
     elias, pell = out["minds"][ELIAS]["log"], out["minds"][PELL]["log"]
+    inspecting = next(r for r in elias if r["doing"].startswith("Pick up the brass shim"))
+    assert (inspecting["outcome"], inspecting["missing"]) == ("not_known", ["screwdriver"])
+    # The new clockwork lies one floor up from the log entry, and the keeper
+    # fetches it inside the stretch (fix lane B4, `Reach.fetch`): nothing is
+    # missing, and the row begins when he is back down with it.
     logging = next(r for r in elias if r["doing"].startswith("Log the failure"))
-    assert (logging["outcome"], logging["missing"]) == \
-        ("not_known", ["the new clockwork mechanism"])
+    assert (logging["outcome"], logging["missing"]) == ("not_known", [])   # `with` Rhona
+    down = itin.walk_seconds(T25["scene"], ["lamp_room", "kitchen"])
+    up = itin.walk_seconds(T25["scene"], ["kitchen", "lamp_room"])
+    assert logging["from_s"] == pytest.approx(99900.0 + down + up + down)
     posting = next(r for r in pell if r["doing"].startswith("Tie up at the harbour"))
     assert (posting["outcome"], posting["reason"]) == ("failed", "not_held")
     assert pell[0]["room"] == "the_channel" and pell[0]["outcome"] == "not_known"

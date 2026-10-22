@@ -30,10 +30,11 @@ this stage runs between `compile_world_context` and `perception_act`:
      vessel already under way (`skip_itinerary.journeys`), a stretch spent
      on its way being the ride itself (`skip_itinerary.rides`); both write
      one outcome rule and one reason vocabulary, and a stretch's `uses` are
-     met by what the mind carries and what is within its reach where the
-     stretch finds it (`skip_itinerary.Reach`, its names resolved in
-     `resolve_mind`) -- and what is not fails it only where it cannot be done
-     without (`judge_what_was_missing`, one decision request per mind).
+     met by what the mind carries, what is within its reach where the
+     stretch finds it, and what it can walk to and back for inside the
+     stretch (`skip_itinerary.Reach`, its names resolved in `resolve_mind`)
+     -- and what is not fails it only where it cannot be done without
+     (`judge_what_was_missing`, one decision request per mind).
      Company with the other asked minds and the player is shared afterwards,
      per observer (`share_company`).
   d. **The far end.** Each mind ends where its last stretch left it -- a move
@@ -468,13 +469,15 @@ def held_things(scene, name):
 
 
 def resolve_mind(name, stretches, scene, state, here, held, language=None,
-                 *, under_way=None):
-    """`(stretches, missing_from, record)`: the mind's stretches with their
-    places resolved, a reader of what a stretch uses that is out of the
-    mind's reach where the stretch finds it (`missing_from(uses, room, away,
-    t) -> [words]`, `skip_itinerary.Reach.missing`), and what was asked.
-    Exact first, then ONE decision-model request for everything exact left --
-    places and things together, a thing over what the mind has on it
+                 *, under_way=None, ways=None):
+    """`(stretches, holding, record)`: the mind's stretches with their
+    places resolved, its holding check (`skip_itinerary.Holding`: called as
+    `missing_from(uses, room, away, t) -> [words]`, what a stretch uses that
+    is out of the mind's reach where the stretch finds it, `Reach.missing`;
+    its `fetch(words, room, away, t, until) -> (got, seconds)`, what of that
+    it fetches inside the stretch over `ways`, `Reach.fetch`), and what was
+    asked. Exact first, then ONE decision-model request for everything exact
+    left -- places and things together, a thing over what the mind has on it
     (`held`) and the things and fixtures of the world it may mean (`Reach.
     options`) -- and what neither answers is an off-map label, or words that
     name no thing the world holds (never missing: `Reach`). `under_way` is
@@ -499,7 +502,7 @@ def resolve_mind(name, stretches, scene, state, here, held, language=None,
             resolved[text] = rid
         else:
             unresolved.append(text)
-    reach = itin.Reach(scene, name, carried=held, journeys=under_way)
+    reach = itin.Reach(scene, name, carried=held, journeys=under_way, ways=ways)
     things = []
     for item in stretches:
         for thing in item.get("uses") or ():
@@ -527,11 +530,7 @@ def resolve_mind(name, stretches, scene, state, here, held, language=None,
         named[thing] = {key}
     record["resolved"] = dict(resolved)
     record["things"] = {thing: sorted(keys) for thing, keys in named.items()}
-
-    def missing_from(uses, room, away=None, t=None):
-        return reach.missing(uses, named, room, away, t)
-
-    return itin.place_stretches(stretches, resolved), missing_from, record
+    return itin.place_stretches(stretches, resolved), itin.Holding(reach, named), record
 
 
 def judge_what_was_missing(name, log, language=None):
@@ -687,16 +686,19 @@ def skip_lives(ctx, nonce):
         here, away = _standing_place(chat_id, name, row)
         left_by = _left_the_map_from(chat_id, name) if away else None
         try:
-            stretches, missing_from, record = resolve_mind(
+            stretches, holding, record = resolve_mind(
                 name, stretches, scene, state, here, held_things(scene, name),
-                ctx.language, under_way=under_way)
+                ctx.language, under_way=under_way, ways=ways)
         except Exception as exc:  # noqa: BLE001 -- one mind, not the beat
             ctx.add_warning(f"skip: {name}'s places could not be read "
                             f"({type(exc).__name__}: {str(exc)[:120]}); the "
                             "default day stands for them, where they stand")
             source, answer = "default", answer if isinstance(answer, dict) else None
             stretches = itin.place_stretches(itin.default_day(span), {})
-            missing_from, record = None, {"failed": str(exc)[:120]}
+            holding, record = None, {"failed": str(exc)[:120]}
+        # A thing the mind can walk to and back for inside a stretch is to
+        # hand (`Reach.fetch`), in either executor.
+        fetch_from = holding.fetch if holding is not None else None
         if hasattr(ctx, "note_decision"):
             ctx.note_decision("skip_places", name, source,
                               json.dumps(record, ensure_ascii=False)[:400])
@@ -716,13 +718,14 @@ def skip_lives(ctx, nonce):
             result = None
         if result is not None:
             log, far_end = result
-            log = itin.lay_over(log, stretches, missing_from=missing_from, skies=skies)
+            log = itin.lay_over(log, stretches, missing_from=holding,
+                                fetch_from=fetch_from, skies=skies)
             far_end = itin.carry_sleep(far_end, span.from_s, asleep_since)
         else:
             log, far_end = itin.live_through(
                 stretches, scene=scene, start_room=here, start_away=away,
                 start_exit=left_by, asleep_since=asleep_since,
-                missing_from=missing_from, skies=skies, ways=ways,
+                missing_from=holding, fetch_from=fetch_from, skies=skies, ways=ways,
                 journey=itin.journey_under_way(scene, here, under_way, ways))
         log = itin.place_words(log, scene)
         # A thing not to hand fails a stretch only where the stretch cannot

@@ -1403,6 +1403,16 @@ and drops what still fails. What it leaves:
     needed was not to hand". On the live LOG, things in reach still counted as
     not held, so the keeper's own lamp-room stretches read as failures and
     the check holds his memories to them -- faithfully, to a wrong record.
+  - **A false failure is remembered faithfully** (the third replay, fix lane
+    B4, 2026-10-21): the keeper's lamp work was failed for want of paraffin
+    that lay two flights down in his own tower, the record told it so, and
+    the writer wrote "the paraffin was down to the dregs and there was none in
+    the stores" -- a cause no row gave, and it survived the check -- which
+    the next beat's narration spoke as fact. The reach is fixed where
+    the data first went wrong, the executor (`skip_itinerary.Reach.fetch`,
+    `UNBUILT_WORLD.md` § 1.166); nothing in the memory job can tell a false
+    failure from a true one, and a writer that explains a want ("none in the
+    stores") is still the outcome question's to catch, unmeasured live.
   - **`past` reads the mind's whole memory packet** beside the record (42,440
     characters for the keeper on the live copy), and its live false-positive
     rate is unmeasured; it is the first kind `SKIP_MEMORY_CHECKS` would drop.
@@ -1485,8 +1495,9 @@ structures are unjoined islands of rooms), not an artifact. And the town's
 walk still crosses what the stage's own executor no longer does (fix lane B2,
 2026-10-21, `UNBUILT_WORLD.md` § 1.166): a frontier stub's join and water are
 ways to `charter_space.people_neighbors`, and an away body comes back with no
-walk; the stage lays the holding check (`skip_itinerary.Reach`) and what a
-failed row says (`missing`, `meant`) over the town's rows.
+walk; the stage lays the holding check (`skip_itinerary.Reach`, a fetch inside
+the row among it since fix lane B4, its trip taken out of the row's start) and
+what a failed row says (`missing`, `meant`) over the town's rows.
 
 <a id="unbuilt-1-99e"></a>
 

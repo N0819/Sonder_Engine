@@ -4356,6 +4356,60 @@ What that leaves:
       it has lain in the hall since (checkpoints 4-9), so every skip that
       posts it fails. Where the two parted is idx 3's beat (the encoder's),
       not the skip's.
+  - **What the third live replay showed, fixed 2026-10-21 (fix lane B4).** The
+    lighthouse replayed on cb69070e (chat 3, turns 25 and 26) turned a false
+    failure of the executor into a story fact: the keeper's lamp work failed
+    `not_held` for want of "paraffin" for two nights while the paraffin crate
+    lay in the hall of his own tower, two flights down. His memories said
+    "there was none in the stores", and turn 26's narration gave him "The
+    paraffin's spent" -- through his memory packet, which that beat's skip
+    question and interaction call both carried. At home on the mainland, off
+    the map, the boatman's "kitchen table" was read as the lighthouse
+    kitchen's and counted missing; and his day-0 crossing and his post office,
+    written in his routine, ran again on day 1 and failed again. Now a thing
+    is to hand when the mind can walk to and back for it inside the stretch
+    (`Reach.fetch`); off the map only a thing that could have been brought
+    there can be missing (`Reach.could_be_brought`); and the card says a
+    routine holds only what repeats every day (`Design.md`'s row). What that
+    leaves:
+    - **A fetch borrows.** Nothing is moved: the crate stays in the hall and
+      the next stretch that needs it fetches it again. Each room is walked to
+      and back once, nearest first, never one tour, so summed trips can leave
+      a far second thing missing that one tour would have reached.
+    - **`portable` decides what can be fetched, and the record is not always
+      right.** 141 of the owner's 931 stored non-person things are an object,
+      item, container or device whose `portable` is false or absent; read by
+      hand, several are plainly carried things (a medical kit, a key ring, a
+      bowl of soup, an antiseptic wipe). Such a thing is never fetched -- the
+      stretch fails as it did before -- and, off the map, never missing. Where
+      the flag is minted is the encoder's and the establish card's, not the
+      skip's.
+    - **What is drawn from a thing too big to carry is not modelled.** Had the
+      decision model read "paraffin" as the pile of stores on the steps
+      (cargo, `portable: false`, "a sloshing drum of paraffin" in its
+      description), it would stay missing.
+    - **A vessel can be missing off the map.** The rule reads a moving kind as
+      a thing that could have been brought, so the boatman loading "aboard the
+      Mary Ann" on an off-map quay still fails for her while the world docked
+      her at the mainland's stub -- "one place, resolved two ways", above. The
+      brief said "only a PORTABLE thing"; reading a vessel as never missing off
+      the map is one line (the owner's call).
+    - **Which thing a word was read as is not on the live record.** The stage
+      notes its resolutions in one decision note, cut at 400 characters
+      (`PipelineContext.note_decision`): the keeper's "paraffin" lay past the
+      cut, and the picks behind this fix were reconstructed. The next live
+      replay should run with `decision_capture` on.
+    - **A one-off in the routine is a clause's to keep out.** Of the 44 routine
+      entries in the three replays' 10 recorded answers, 5 are one-offs (all
+      the boatman's, in 3 of the 6 answers that wrote a routine) and 7 more
+      carry a one-off errand inside a daily round; two were laid on two days
+      and failed on both. No deterministic floor is sound -- whether a doing
+      repeats is what it means, and a repeated identical failure is also what
+      a daily attempt that keeps failing looks like -- so the guard, if the
+      clause fails live, is one decision-model question per routine entry
+      ("does {name} do this on every day of the stretch?"), a no moving the
+      entry to the plan on the first day it lands (not built; the owner's
+      call).
   - **A `doing` that carries intent reaches whoever shares the room.** The
     card says `doing` is only what a watcher sees (a clause); the probe's
     answers, written before it, put "watching the weathered woman's pouch"
