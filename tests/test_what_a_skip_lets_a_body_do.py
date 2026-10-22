@@ -303,7 +303,7 @@ def test_off_the_map_a_body_comes_back_by_where_it_left():
          "with": [], "why": "", "uses": []}]
     log, far = itin.live_through(stretches, scene=scene, start_room="the_mainland", ways=ways)
     assert [(r["outcome"], r["reason"]) for r in log] == [
-        ("not_known", None), ("failed", itin.REASON_NO_CROSSING)]
+        ("done", None), ("failed", itin.REASON_NO_CROSSING)]   # away never makes a mind's own doing unknown (2026-10-22)
     assert (log[1]["room"], log[1]["away"], log[1]["meant"]) == \
         (None, "the harbour pub", "The Landing")
     assert far["away"] == "the harbour pub" and far["room"] is None

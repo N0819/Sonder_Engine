@@ -230,7 +230,7 @@
 | `world/routines.py` | 256 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 206 |  | — |
 | `world/site_plan.py` | 1689 |  | — |
-| `world/skip_itinerary.py` | 1995 |  | `world.spatial` |
+| `world/skip_itinerary.py` | 2003 |  | `world.spatial` |
 | `world/spatial.py` | 461 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_listener`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_pack`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
 | `world/spatial_barriers.py` | 1130 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 674 |  | `story.scene`, `world.spatial`, `world.spatial_frames` |
@@ -2879,14 +2879,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `live_through()` | 1546 | 183 lines |
-| `lay_over()` | 1755 | 50 lines |
+| `live_through()` | 1554 | 183 lines |
+| `lay_over()` | 1763 | 50 lines |
 | `journeys()` | 1301 | 41 lines |
 | `expand_itinerary()` | 495 | 39 lines |
-| `share_company()` | 1960 | 36 lines |
-| `judge_without()` | 1848 | 32 lines |
+| `share_company()` | 1968 | 36 lines |
+| `stretch_outcome()` | 1414 | 35 lines |
+| `judge_without()` | 1856 | 32 lines |
 | `default_day()` | 424 | 31 lines |
-| `stretch_outcome()` | 1414 | 27 lines |
 
 ### `world/spatial_barriers.py`
 

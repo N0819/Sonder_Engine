@@ -493,7 +493,7 @@ def test_what_a_stretch_uses_never_makes_it_unknown():
     rule = itin.stretch_outcome
     assert rule({"uses": ["the station log"]}) == "done"
     assert rule({"uses": ["the station log"], "with": [RHONA]}) == "not_known"
-    assert rule({"uses": ["a pint"]}, away="the harbour pub") == "not_known"
+    assert rule({"uses": ["a pint"]}, away="the harbour pub") == "done"   # away never makes a mind's own doing unknown (2026-10-22)
     assert rule({"uses": ["the station log"]}, partial=True) == "not_known"
     assert rule({"asleep": True, "uses": ["a blanket"]}) == "done"
     assert rule({"uses": ["x"]}, reason=itin.REASON_NOT_HELD) == "failed"

@@ -235,7 +235,7 @@ def test_the_mary_ann_named_off_the_map_is_never_missing():
     holds while the Mary Ann docked at the mainland: every stretch that named
     her failed "for want of the Mary Ann". A vessel is boarded or worked
     where it lies, never carried: none of them fails for her, and a stretch
-    at a place off the map nobody simulates is `not_known`."""
+    at a place off the map is the mind's own doing, `done` (away never makes a mind's own doing unknown (2026-10-22))."""
     assert T25["minds"][PELL]["decided"]["places"]["the harbour"]["room"] is None
     as_run = T25["minds"][PELL]["log_as_run"]
     for_her = [i for i, r in enumerate(as_run) if r["missing"] == ["the Mary Ann"]]
@@ -245,7 +245,7 @@ def test_the_mary_ann_named_off_the_map_is_never_missing():
     assert not any("the Mary Ann" in row["missing"] for row in log)
     for i in for_her:
         assert (log[i]["away"], log[i]["outcome"], log[i]["reason"]) == \
-            ("the harbour", itin.OUTCOME_NOT_KNOWN, None), log[i]["doing"][:40]
+            ("the harbour", itin.OUTCOME_DONE, None), log[i]["doing"][:40]
     assert itin.short_of(log) == []
     log26, _far = _live(T26, PELL)
     assert not any("the Mary Ann" in row["missing"] for row in log26)
@@ -263,7 +263,7 @@ def test_dinner_never_fails_for_want_of_a_boat():
     log, _far = _live(T26, PELL)
     dinner = log[1]
     assert (dinner["outcome"], dinner["reason"], dinner["missing"]) == \
-        (itin.OUTCOME_NOT_KNOWN, None, [])
+        (itin.OUTCOME_DONE, None, [])
     assert 1 not in itin.short_of(log)
 
 
@@ -341,7 +341,7 @@ def test_a_place_left_unanswered_never_fails_a_crossing():
     ashore = dict(stretch, unplaced=True, from_s=0.0, until_s=600.0)
     log, far = itin.live_through([ashore], scene=scene, start_room="kitchen")
     assert (log[0]["away"], log[0]["outcome"], far["away"]) == \
-        ("the harbour mouth", itin.OUTCOME_NOT_KNOWN, "the harbour mouth")
+        ("the harbour mouth", itin.OUTCOME_DONE, "the harbour mouth")
 
 
 def test_resolve_mind_marks_the_places_left_unanswered(monkeypatch):
@@ -602,3 +602,18 @@ def test_a_stage_that_cannot_judge_invents_no_failure(temp_db, monkeypatch):
                for i in (0, 4, 5, 6, 10, 11))
     assert _failed(out["minds"][PELL]["log"]) == [4, 9, 11, 12]
     assert any("could not be judged" in w for w in ctx.warnings)
+
+
+def test_being_away_never_makes_a_minds_own_doing_unknown():
+    """Off the map nobody simulates the world, but a meal, a walk or a
+    night's sleep there is the mind's own doing (2026-10-22): the boatman's
+    ordinary days ashore had read "set about it, and the rest was out of
+    Pell Hardacre's hands" seven times over. Another's response still waits
+    on the world, and a stretch that partly failed is still told as far as
+    it went."""
+    assert itin.stretch_outcome({"doing": "supper at the lodging"},
+                                away="the harbour") == itin.OUTCOME_DONE
+    assert itin.stretch_outcome({"doing": "a pint", "with": ["the landlord"]},
+                                away="the harbour pub") == itin.OUTCOME_NOT_KNOWN
+    assert itin.stretch_outcome({"doing": "loads the stores"}, away="the quay",
+                                partial=True) == itin.OUTCOME_NOT_KNOWN

@@ -1419,9 +1419,17 @@ def stretch_outcome(stretch, reason=None, away=None, partial=False):
     `judge_without`), or a place no answer placed that the body could not
     follow (`_row`'s `unplaced`) -- so it is told only as far as it went;
     else `done` for a sleep; else `not_known` when its
-    success is the world's to judge: another's response (`with`), or a world
-    off the map nobody simulates (`away`, where the body is as it runs); else
+    success is the world's to judge: another's response (`with`); else
     `done`.
+
+    BEING AWAY NEVER MAKES A MIND'S OWN DOING UNKNOWN (2026-10-22). Off the
+    map nobody simulates the world, but a meal, a walk or a night's sleep
+    there is the mind's own doing all the same. Measured on the lighthouse
+    replayed (fix lane B5's re-run of chat 3 turn 25): the boatman's ordinary
+    days ashore read "set about it, and the rest was out of Pell Hardacre's
+    hands" seven times over. `away` stays a parameter for the town executor's
+    call shape and decides nothing; another's response (`with`) still waits
+    on the world.
 
     WHAT A STRETCH USES NEVER MAKES IT UNKNOWN. A mind doing its own work
     with its own things did it: the holding check has already said whether
@@ -1435,7 +1443,7 @@ def stretch_outcome(stretch, reason=None, away=None, partial=False):
         return OUTCOME_NOT_KNOWN
     if stretch.get("asleep"):
         return OUTCOME_DONE
-    if away or stretch.get("with"):
+    if stretch.get("with"):
         return OUTCOME_NOT_KNOWN
     return OUTCOME_DONE
 

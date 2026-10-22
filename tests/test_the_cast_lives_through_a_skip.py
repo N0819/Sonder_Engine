@@ -695,7 +695,7 @@ def test_one_outcome_rule_and_one_reason_vocabulary_for_both_executors():
                  _placed(600.0, 700.0)]          # where it stands: still away
     log, far = itin.live_through(stretches, scene=scene, start_room="kitchen")
     assert [r["outcome"] for r in log] == [
-        "done", "not_known", "done", "done", "not_known", "done", "not_known"]
+        "done", "not_known", "done", "done", "done", "done", "done"]   # away never makes a mind's own doing unknown (2026-10-22)
     assert far == {"room": None, "away": "my rooms", "asleep": False,
                    "asleep_since_s": None, "left_from": "kitchen"}
     assert set(charter_skip.FAILURE_REASONS) <= set(itin.FAILURE_REASONS)
