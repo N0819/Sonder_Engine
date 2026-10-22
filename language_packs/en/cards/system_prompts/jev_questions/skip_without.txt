@@ -1,0 +1,1 @@
+Can {name} do "{doing}" without {missing}? Answer yes when what was missing is incidental to it, and what it says can still be done without. Answer no when it cannot be done without what was missing: what it is done with or done to, or what it is for.

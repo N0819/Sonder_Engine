@@ -25,11 +25,13 @@ THREE PARTS, each a pure function of its inputs:
     every charter body takes), over the ways a body WALKS (`Ways`: never a
     frontier stub's join, never across water or the space a vessel moves
     through); a body off the map comes back by where it left it; a body
-    under way with a vessel goes where the vessel goes (`journey_under_way`);
+    under way with a vessel goes where the vessel goes (`journey_under_way`),
+    and a stretch spent on that way is the ride itself (`rides`);
     what a stretch uses is met by what the mind carries and what is within
-    its reach where the stretch finds it (`Reach`); a stretch the world
-    cannot carry out fails with a typed reason, and its row says what failed
-    (`missing`, `meant`); two minds in the same room, or at the same off-map
+    its reach where the stretch finds it (`Reach`), and what is not fails it
+    only where it cannot be done without (`judge_without`); a stretch the
+    world cannot carry out fails with a typed reason, and its row says what
+    failed (`missing`, `meant`); two minds in the same room, or at the same off-map
     label, over overlapping time each receive the other's `doing` -- never
     the other's `why`, and named only as the observer knows them; each
     stretch carries the sky where the mind stood, the weather walked once per
@@ -39,7 +41,8 @@ Nothing here reads or writes the database: the stage hands in the scene, the
 mind's known places, what it holds, the decision model's answers, the
 frontier joins the plan holds open and the labels each observer may use, and
 takes back the log and the far end. The shapes are fixed by the build spec
-(`STRETCH`, `LOG`, the far end), with `missing` and `meant` on every LOG row.
+(`STRETCH`, `LOG`, the far end), with `missing` and `meant` on every LOG row
+-- `missing` kept on a row told as far as it went without them, too.
 """
 
 from __future__ import annotations
@@ -63,6 +66,14 @@ SKIP_PLACE_MIN_PROBABILITY = 0.5
 #: you" -- the same side the place threshold errs to: the world does not hand
 #: a body a thing it was not carrying.
 SKIP_THING_MIN_PROBABILITY = 0.5
+
+#: How sure the decision model must be that a stretch CAN be done without the
+#: things that were not to hand before it is told as far as it went
+#: (`judge_without`) rather than failed. Below it -- and wherever the
+#: question went unanswered -- the stretch fails `not_held`, as every such
+#: stretch did before the question was asked: the same side the thing
+#: threshold errs to. Named per the owner's rule on thresholds.
+SKIP_WITHOUT_MIN_PROBABILITY = 0.5
 
 #: `at_the_end` is where the stretch leaves the mind, and it is laid over the
 #: last this-many story seconds of the span: the mind's own word for where it
@@ -97,10 +108,12 @@ SKIP_WEATHER_CHANGES = 4
 
 #: The outcomes a LOG row carries, protocol tokens (build spec), by ONE rule
 #: for both executors -- this one and the town charter's
-#: (`world/charter_skip`): `failed`, with a typed reason; else `done` for a
-#: sleep; else `not_known` for a stretch whose success waits on somebody else
-#: (`with`), on a thing (`uses`) or on a world off the map nobody simulates
-#: (`away`); else `done` (`stretch_outcome`).
+#: (`world/charter_skip`): `failed`, with a typed reason; else `not_known`
+#: for a stretch that partly failed (a thing not to hand it could be done
+#: without, `judge_without`); else `done` for a sleep; else `not_known` for a
+#: stretch whose success is the world's to judge -- another's response
+#: (`with`) or a world off the map nobody simulates (`away`); else `done`
+#: (`stretch_outcome`). What a stretch USES never makes it unknown.
 OUTCOME_DONE = "done"
 OUTCOME_FAILED = "failed"
 OUTCOME_NOT_KNOWN = "not_known"
@@ -112,9 +125,11 @@ OUTCOME_NOT_KNOWN = "not_known"
 #: stretch was spent walking it. The last two are this stage's alone: a way
 #: there only across what a vessel crosses -- water, or the space a vessel
 #: moves through -- and no crossing was made (`Ways`; a crossing of the
-#: mind's own inside a skip is not built, so every such stretch fails so); and,
-#: laid over either executor's rows, a thing the stretch uses that the world
-#: holds neither on the mind nor within its reach (`Reach`).
+#: mind's own inside a skip is not built, so every such stretch fails so,
+#: while the ride a journey already under way makes is no crossing of its
+#: own, `rides`); and, laid over either executor's rows, a thing the stretch
+#: uses that the world holds neither on the mind nor within its reach
+#: (`Reach`) and that the stretch cannot be done without (`judge_without`).
 REASON_NO_ROUTE = "no_route"
 REASON_SHUT_WAY = "shut_way"
 REASON_TOO_FAR = "too_far"
@@ -127,7 +142,8 @@ FAILURE_REASONS = (REASON_NO_ROUTE, REASON_SHUT_WAY, REASON_TOO_FAR,
 #: failed for one of them says where the body WAS in `where_text` (filled in
 #: words by `place_words`) and where it meant to be in `meant`, the mind's
 #: own words; a row failed `not_held` got there, and says what was not to
-#: hand in `missing`. Every row carries both fields, empty where they say
+#: hand in `missing` -- as does a row told as far as it went without them
+#: (`judge_without`). Every row carries both fields, empty where they say
 #: nothing, so a reader never mistakes the place it meant for the place it
 #: stood (the memory writer reads `where_text` as where the stretch was).
 ROUTE_REASONS = (REASON_NO_ROUTE, REASON_SHUT_WAY, REASON_TOO_FAR,
@@ -787,10 +803,11 @@ class Reach:
     ONLY A THING THE WORLD HOLDS, AND HOLDS ELSEWHERE, IS MISSING. Words that
     name no thing the world holds -- a prop nobody minted -- are not this
     executor's to deny: the world never said the thing was not there, so the
-    stretch stays the world's to judge (`not_known`, by `stretch_outcome`),
-    and nothing is put in the mind's hands either. The same turn: "the
-    logbook" was no thing the world held, and the brass shim only a sound
-    (`sensory_events`, source "shim"), with no thing behind it.
+    stretch is not failed for it, and nothing is put in the mind's hands
+    either. The same turn: "the logbook" was no thing the world held, and the
+    brass shim only a sound (`sensory_events`, source "shim"), with no thing
+    behind it. And a thing that IS missing fails the stretch only where the
+    stretch cannot be done without it (`judge_without`).
 
     `carried` is `{key: label}` of what the mind has on it
     (`skip_stage.held_things`); everything else is read from the scene."""
@@ -1027,7 +1044,8 @@ class Ways:
         is not built, so the stretch fails `no_crossing` and the body stays
         where its last stretch that could happen left it. A body already
         under way with a vessel goes where the vessel goes
-        (`journey_under_way`).
+        (`journey_under_way`), and a stretch spent on that way is the ride
+        the journey makes, never a crossing of its own (`rides`).
 
     A way only past a fastened door is `shut_way`, as it was; no way at all
     is `no_route`. A `remote` way over ground is walked: the tavern story's
@@ -1101,12 +1119,15 @@ def journeys(scene, span_from):
     book for what remains of it, `spatial.journey_seconds`, from the span's
     first moment); `room`, the room it docks in, or None when the world does
     not hold its end, and `away`, then, the words of that end; `inside`, its
-    own rooms; `at`, the room it stands in now; `dock`, the room of its own a
-    body steps out of."""
+    own rooms; `at`, the room it stands in now; `route`, the space it moves
+    through on its way (its transit's `route_room`, else the room it stands
+    in when that is a medium); `dock`, the room of its own a body steps out
+    of."""
     from world.spatial import (_interior_entry_room, _interior_rooms_of,
                                journey_seconds, room_of_record, scene_room_id)
     scene = scene if isinstance(scene, dict) else {}
     rooms = scene.get("rooms") or {}
+    mediums = media(scene)
     out = {}
     for eid, ent in sorted((scene.get("entities") or {}).items()):
         if not isinstance(ent, dict):
@@ -1117,16 +1138,42 @@ def journeys(scene, span_from):
             seconds = None
         if not seconds:
             continue
-        bound = str((_transit_of(ent) or {}).get("destination_room") or "").strip()
+        transit = _transit_of(ent) or {}
+        bound = str(transit.get("destination_room") or "").strip()
         dest = bound if bound in rooms else scene_room_id(scene, bound)
         held = dest if isinstance(rooms.get(dest), dict) else None
+        at = room_of_record(scene, eid, ent)
+        way = str(transit.get("route_room") or "").strip()
+        way = way if way in rooms else scene_room_id(scene, way)
+        if way not in rooms:
+            way = at if at in mediums else None
         out[str(eid)] = {
             "until_s": float(span_from) + float(seconds), "room": held,
             "away": None if held else (bound or None),
             "inside": [str(r) for r in _interior_rooms_of(scene, eid)],
-            "at": room_of_record(scene, eid, ent),
+            "at": at, "route": (str(way) if way else None),
             "dock": _interior_entry_room(scene, eid, ent)}
     return out
+
+
+def rides(journey, room):
+    """Is a stretch placed in `room` the RIDE `journey` makes? A RIDE IS A
+    CROSSING MADE: a stretch whose place is the way a journey under way takes
+    the mind -- the space its vessel moves through toward its destination
+    (`route`), or one of the vessel's own rooms -- is the ride itself, and the
+    journey fulfils it. It is no crossing of the mind's own (`Ways`), which
+    is not built: the journey is the world's, already under way, priced by
+    the mechanics. Measured on the lighthouse replayed a second time (chat 3
+    turn 25, 2026-10-21): the boatman began the span beside the Mary Ann in
+    the channel, bound for the mainland, and his first stretch -- "Run the
+    Mary Ann east ahead of the squall", in "the channel" -- failed
+    `no_crossing` while the journey carried him across that very channel;
+    two of his three memories said he never got through."""
+    if not journey or not room:
+        return False
+    room = str(room)
+    return room == str(journey.get("route") or "") or \
+        room in [str(r) for r in journey.get("inside") or ()]
 
 
 def journey_under_way(scene, here, under_way, ways=None):
@@ -1179,17 +1226,29 @@ def reached_by(scene, route, seconds):
     return at
 
 
-def stretch_outcome(stretch, reason=None, away=None):
+def stretch_outcome(stretch, reason=None, away=None, partial=False):
     """A row's outcome, by the one rule both executors write
     (`charter_skip._TownRun._stretch_row` is the other): `failed` when it
-    failed; else `done` for a sleep; else `not_known` when its success waits
-    on somebody else, on a thing, or on a world off the map (`away`, where
-    the body is as it runs); else `done`."""
+    failed; else `not_known` when it PARTLY failed -- things not to hand that
+    it could be done without (`partial`, `judge_without`), so it is told only
+    as far as it went; else `done` for a sleep; else `not_known` when its
+    success is the world's to judge: another's response (`with`), or a world
+    off the map nobody simulates (`away`, where the body is as it runs); else
+    `done`.
+
+    WHAT A STRETCH USES NEVER MAKES IT UNKNOWN. A mind doing its own work
+    with its own things did it: the holding check has already said whether
+    the things were to hand, and nothing else waits on anyone. Measured on
+    the lighthouse replayed a second time (chat 3 turn 25, 2026-10-21): the
+    keeper's ordinary night watches were `not_known` for naming the station
+    log, and his memories of them read "did not know what came of it"."""
     if reason:
         return OUTCOME_FAILED
+    if partial:
+        return OUTCOME_NOT_KNOWN
     if stretch.get("asleep"):
         return OUTCOME_DONE
-    if away or stretch.get("with") or stretch.get("uses"):
+    if away or stretch.get("with"):
         return OUTCOME_NOT_KNOWN
     return OUTCOME_DONE
 
@@ -1315,6 +1374,11 @@ def live_through(stretches, *, scene, start_room=None, start_away=None,
     goes: until the journey ends it moves only within the vessel, and a
     stretch that meant anywhere else spent itself on the way (`too_far`);
     the stretch the journey ends in begins where the journey brought it.
+    A stretch placed on the journey's own way is THE RIDE (`rides`), and so
+    is one with no place of its own while the journey carries the body: it
+    is lived from its first moment where the body rides, and where the
+    journey ends inside it, the body steps off where the journey brought it
+    -- a row of its own, landed, with nothing declared.
 
     A stretch the world cannot carry out FAILS with a typed reason and leaves
     the mind where its last stretch that could happen left it: no route, one
@@ -1324,7 +1388,9 @@ def live_through(stretches, *, scene, start_room=None, start_away=None,
     stretch finds it (`missing_from(uses, room, away, t) -> [words]`, as
     `Reach.missing` answers; or `uses_held(words) -> bool`, a reader of what
     it has on it alone) fails the stretch where it got to: it went, and those
-    were not to hand. Each row says what failed (`_row`).
+    were not to hand -- until the decision model says the stretch could be
+    done without them (`judge_without`, the stage's, after this). Each row
+    says what failed (`_row`).
 
     `asleep_since` is when the mind's sleep began if it is asleep as the
     span opens, so a sleep that runs on into the span keeps its true start.
@@ -1336,10 +1402,50 @@ def live_through(stretches, *, scene, start_room=None, start_away=None,
     carried = dict(journey) if journey else None
     joins = []
     log = []
+
+    def short(item, where, off, t):
+        """What the stretch uses that is not to hand where it finds the body."""
+        uses = item.get("uses") or ()
+        if missing_from is not None:
+            return list(missing_from(uses, where, off, t) or ())
+        if uses_held is not None:
+            return [thing for thing in uses if not uses_held(thing)]
+        return []
+
     for item in stretches:
         start, end = float(item["from_s"]), float(item["until_s"])
         arrival = start
         reason = None
+        if carried is not None and float(carried["until_s"]) > start and (
+                rides(carried, item.get("room"))
+                or not (item.get("room") or item.get("away"))):
+            # THE RIDE: the stretch is spent where the body rides, from its
+            # first moment -- one placed on the journey's way, or one with no
+            # place of its own ("where I stand", which under way IS the way);
+            # where the journey ends inside it, the body is put off where the
+            # journey brought it.
+            done_at = float(carried["until_s"])
+            landing = None
+            if done_at < end:
+                if carried.get("aboard"):
+                    if carried.get("room") and carried.get("dock"):
+                        joins.append((str(carried["dock"]), str(carried["room"])))
+                else:
+                    landing = ((str(carried["room"]), None) if carried.get("room")
+                               else (None, carried.get("away") or away))
+                carried = None
+            missing = short(item, room, away, start)
+            reason = REASON_NOT_HELD if missing else None
+            if room:
+                left_by = room
+            log.append(_row(item, start, done_at if landing else end, room, away,
+                            reason, missing, skies))
+            if landing:
+                room, away = landing
+                if room:
+                    left_by = room
+                log.append(_row(_landed(item), done_at, end, room, away, None, (), skies))
+            continue
         under_way = carried is not None and float(carried["until_s"]) >= end
         if carried is not None and not under_way:
             # The journey ends inside this stretch: it begins where the
@@ -1389,17 +1495,21 @@ def live_through(stretches, *, scene, start_room=None, start_away=None,
             reason = REASON_TOO_FAR
         missing = []
         if reason is None:
-            uses = item.get("uses") or ()
-            if missing_from is not None:
-                missing = list(missing_from(uses, room, away, arrival) or ())
-            elif uses_held is not None:
-                missing = [thing for thing in uses if not uses_held(thing)]
+            missing = short(item, room, away, arrival)
             if missing:
                 reason = REASON_NOT_HELD
         if room:
             left_by = room
         log.append(_row(item, arrival, end, room, away, reason, missing, skies))
     return log, far_end_of(log, start_room, start_away, asleep_since)
+
+
+def _landed(item):
+    """The stretch a ride's journey ends inside, from the moment the body is
+    put off: where the journey brought it, with nothing of its own declared
+    (it keeps sleeping if it slept)."""
+    return {"where_text": "", "doing": "", "asleep": bool(item.get("asleep")),
+            "with": [], "uses": [], "why": ""}
 
 
 def left_the_map_from(log, start_room=None, start_exit=None):
@@ -1459,6 +1569,75 @@ def lay_over(log, stretches, *, uses_held=None, missing_from=None, skies=None):
             row["outcome"], row["reason"] = OUTCOME_FAILED, REASON_NOT_HELD
             row["missing"] = missing
     return log
+
+
+def short_of(log):
+    """`[index]` -- the rows a thing not to hand failed (`not_held`, naming
+    what in `missing`): the rows `judge_without` asks about."""
+    return [i for i, row in enumerate(log or ())
+            if isinstance(row, dict) and row.get("outcome") == OUTCOME_FAILED
+            and row.get("reason") == REASON_NOT_HELD and row.get("missing")]
+
+
+def listed(items, language=None):
+    """Words named one after another by the pack's own list: its `join`
+    (`compositor.join`, "{first} and {last}" / ", and {last}") and its
+    separator (`compositor.templates.skip_record_list_separator`)."""
+    from language_runtime import compositor_text, compositor_value
+    items = [str(item) for item in items if str(item or "").strip()]
+    if len(items) <= 1:
+        return "".join(items)
+    join = compositor_value("join", language)
+    if len(items) == 2:
+        return str(join["two"]).format(first=items[0], last=items[1])
+    separator = compositor_text("skip_record_list_separator", language)
+    return separator.join(items[:-1]) + str(join["many"]).format(last=items[-1])
+
+
+def without_questions(name, log, language=None):
+    """`{key: question}` -- ONE yes/no per row a thing not to hand failed
+    (`short_of`): can {name} do what the row says without what was missing
+    (`jev_questions.skip_without`)? Keys are stable per row
+    (`without:<index>`). Asked in ONE request per mind (`skip_stage.
+    judge_what_was_missing`), as the places and things are."""
+    from llm.prompts import jev_question
+    out = {}
+    for i in short_of(log):
+        row = log[i]
+        text = jev_question("skip_without", language, name=name,
+                            doing=_text(row.get("doing")),
+                            missing=listed(row.get("missing") or (), language))
+        if text:
+            out[f"without:{i}"] = {"type": "noul", "instructions": text}
+    return out
+
+
+def judge_without(log, answers, threshold=SKIP_WITHOUT_MIN_PROBABILITY):
+    """A THING NOT TO HAND FAILS A STRETCH ONLY WHERE THE STRETCH CANNOT BE
+    DONE WITHOUT IT. Each row a thing not to hand failed (`short_of`) that
+    the decision model says can be done without them (`without_questions`,
+    yes at or above `threshold`) partly failed: it is told as far as it went
+    -- `not_known` by the one rule (`stretch_outcome`'s `partial`), its
+    reason gone, `missing` kept to say what it went without. A row answered
+    no, or not answered at all, stays failed `not_held`. In place; returns
+    the indices of the rows it changed.
+
+    Measured on the lighthouse replayed a second time (chat 3 turn 25,
+    2026-10-21): the keeper's "Log the failure -- record the broken pinion
+    ... sit with the logbook" failed whole for want of "the new clockwork
+    mechanism", which stood one floor up; the boatman's walk to the post
+    office with a letter that lay on the rock must still fail."""
+    from llm.decisions import probability
+    changed = []
+    for i in short_of(log):
+        answer = (answers or {}).get(f"without:{i}")
+        if answer is None or probability(answer) < float(threshold):
+            continue
+        row = log[i]
+        row["outcome"] = stretch_outcome(row, None, row.get("away"), partial=True)
+        row["reason"] = None
+        changed.append(i)
+    return changed
 
 
 def _stretch_under(stretches, row):

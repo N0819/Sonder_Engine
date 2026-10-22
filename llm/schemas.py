@@ -4249,9 +4249,18 @@ class CharacterBareOutput(LenientModel):
 #: The keys of one stretch of a skip answer (`prompts/character_skip.txt`),
 #: and how each is read: a plain line, a flag, a whole day count, or a list of
 #: plain lines. `from` is a Python keyword, so a stretch stays a mapping
-#: rather than a model with a field of that name.
+#: rather than a model with a field of that name. EVERY entry of an answer --
+#: the routine's, the plan's and `at_the_end` -- says whom it is with, what it
+#: uses and what it is for: a routine day uses things as surely as a plan.
+#: Measured on the lighthouse replayed a second time (chat 3 turn 26,
+#: 2026-10-21): the boatman's routine posted a letter that lay on the rock,
+#: and nothing failed it -- a routine entry had no `uses` to check.
 _SKIP_STRETCH_LINES = ("from", "until", "where", "doing", "why")
 _SKIP_STRETCH_LISTS = ("with", "uses")
+#: What `at_the_end` keeps: where the stretch leaves the mind, what it is
+#: doing then, whether it sleeps, and whom it is with, what it uses and what
+#: for -- an offer taken up is taken up there (`skip.until.offers`).
+_SKIP_END_KEYS = ("where", "doing", "asleep", "why") + _SKIP_STRETCH_LISTS
 
 
 def _skip_flag(value):
@@ -4269,13 +4278,13 @@ def _skip_stretch(value, planned=False):
     for key in _SKIP_STRETCH_LINES:
         out[key] = " ".join(str(value.get(key) or "").split())
     out["asleep"] = _skip_flag(value.get("asleep"))
+    for key in _SKIP_STRETCH_LISTS:
+        out[key] = _bare_lines(value.get(key))
     if planned:
         try:
             out["day"] = max(0, int(float(value.get("day") or 0)))
         except (TypeError, ValueError):
             out["day"] = 0
-        for key in _SKIP_STRETCH_LISTS:
-            out[key] = _bare_lines(value.get(key))
     return out
 
 
@@ -4302,7 +4311,7 @@ class CharacterSkipOutput(LenientModel):
         lambda cls, v: _skip_stretches(v, planned=True))
     _coerce_end = validator("at_the_end", pre=True, allow_reuse=True)(
         lambda cls, v: {key: val for key, val in (_skip_stretch(v) or {}).items()
-                        if key in ("where", "doing", "asleep")})
+                        if key in _SKIP_END_KEYS})
 
 
 class CharacterDecisionContinuity(LenientModel):

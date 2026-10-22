@@ -36,7 +36,7 @@
 | `agents/offscreen_beat.py` | 490 |  | — |
 | `agents/perception.py` | 9299 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 2180 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents`, `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.skip_stage`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
-| `agents/skip_stage.py` | 1062 |  | `core.db`, `world` |
+| `agents/skip_stage.py` | 1124 |  | `core.db`, `world` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 3485 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -60,7 +60,7 @@
 | `llm/prompts.py` | 710 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 5849 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 6996 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 7005 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2600 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 282 |  | `llm`, `llm.prompts` |
@@ -89,7 +89,7 @@
 | `mind/memory_write.py` | 989 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/notebook.py` | 406 |  | `mind` |
 | `mind/psychology_runtime.py` | 873 |  | — |
-| `mind/skip_memories.py` | 1441 |  | `core.db`, `core.logging_utils`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory` |
+| `mind/skip_memories.py` | 1482 |  | `core.db`, `core.logging_utils`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory` |
 | `mind/theory_of_mind.py` | 861 |  | — |
 | `mind/thoughts.py` | 131 |  | `core.db` |
 | `persist/__init__.py` | 6 |  | — |
@@ -198,7 +198,7 @@
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1640 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
 | `world/charter_runtime.py` | 5866 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
-| `world/charter_skip.py` | 1092 |  | `core.logging_utils` |
+| `world/charter_skip.py` | 1096 |  | `core.logging_utils` |
 | `world/charter_social.py` | 865 |  | `world.charter_politics` |
 | `world/charter_space.py` | 337 |  | `world.spatial` |
 | `world/charter_surface.py` | 364 |  | — |
@@ -230,7 +230,7 @@
 | `world/routines.py` | 256 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 206 |  | — |
 | `world/site_plan.py` | 1689 |  | — |
-| `world/skip_itinerary.py` | 1577 |  | — |
+| `world/skip_itinerary.py` | 1756 |  | — |
 | `world/spatial.py` | 456 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_listener`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_pack`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
 | `world/spatial_barriers.py` | 960 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 674 |  | `story.scene`, `world.spatial`, `world.spatial_frames` |
@@ -632,14 +632,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `skip_lives()` | 587 | 117 lines |
-| `resolve_mind()` | 453 | 65 lines |
-| `stretch_for_payload()` | 1012 | 43 lines |
-| `ask()` | 297 | 34 lines |
-| `widen_reactors_to_skip_far_end()` | 980 | 30 lines |
-| `_share()` | 718 | 25 lines |
-| `asked_rows()` | 218 | 21 lines |
-| `player_span_place()` | 564 | 21 lines |
+| `skip_lives()` | 633 | 130 lines |
+| `resolve_mind()` | 470 | 65 lines |
+| `stretch_for_payload()` | 1071 | 46 lines |
+| `ask()` | 314 | 34 lines |
+| `widen_reactors_to_skip_far_end()` | 1039 | 30 lines |
+| `skip_block()` | 277 | 29 lines |
+| `judge_what_was_missing()` | 537 | 27 lines |
+| `_share()` | 777 | 25 lines |
 
 ### `agents/storage.py`
 
@@ -873,13 +873,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 5664 | 294 lines |
+| `preprocess_llm_output()` | 5673 | 294 lines |
 | `_lenient_coerce()` | 946 | 159 lines |
-| `validate_llm_output_strict()` | 6858 | 139 lines |
-| `semantic_output_errors()` | 6487 | 128 lines |
-| `canonicalize_prose_markup()` | 5430 | 102 lines |
+| `validate_llm_output_strict()` | 6867 | 139 lines |
+| `semantic_output_errors()` | 6496 | 128 lines |
+| `canonicalize_prose_markup()` | 5439 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
-| `_uncross_concealed_speech()` | 5554 | 69 lines |
+| `_uncross_concealed_speech()` | 5563 | 69 lines |
 | `_coerce_list_valued_map()` | 168 | 57 lines |
 
 ### `mind/affect.py`
@@ -1211,14 +1211,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `record_rows()` | 426 | 71 lines |
-| `check_and_mend()` | 1079 | 62 lines |
-| `run_skip_memories()` | 1340 | 61 lines |
-| `ask_model()` | 972 | 52 lines |
-| `_compose()` | 757 | 41 lines |
-| `sentences()` | 852 | 37 lines |
-| `episodes_of()` | 623 | 35 lines |
-| `number_support()` | 817 | 33 lines |
+| `record_rows()` | 425 | 77 lines |
+| `check_and_mend()` | 1113 | 68 lines |
+| `run_skip_memories()` | 1380 | 61 lines |
+| `ask_model()` | 977 | 52 lines |
+| `_compose()` | 762 | 41 lines |
+| `sentences()` | 857 | 37 lines |
+| `episodes_of()` | 628 | 35 lines |
+| `how_it_went()` | 390 | 33 lines |
 
 ### `mind/theory_of_mind.py`
 
@@ -2479,7 +2479,7 @@
 | `skip_windows()` | 316 | 43 lines |
 | `_body_of_mind()` | 251 | 36 lines |
 | `_stretches()` | 196 | 31 lines |
-| `_a_way_exists()` | 1061 | 22 lines |
+| `_a_way_exists()` | 1065 | 22 lines |
 | `_char_id_of()` | 229 | 20 lines |
 | `_charter_naming()` | 302 | 12 lines |
 | `_charter_places()` | 289 | 11 lines |
@@ -2879,14 +2879,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `live_through()` | 1297 | 106 lines |
-| `lay_over()` | 1421 | 41 lines |
-| `expand_itinerary()` | 474 | 39 lines |
-| `share_company()` | 1542 | 36 lines |
-| `journeys()` | 1098 | 32 lines |
-| `default_day()` | 403 | 31 lines |
-| `_placed_in_order()` | 436 | 26 lines |
-| `journey_under_way()` | 1132 | 26 lines |
+| `live_through()` | 1356 | 149 lines |
+| `journeys()` | 1116 | 41 lines |
+| `lay_over()` | 1531 | 41 lines |
+| `expand_itinerary()` | 490 | 39 lines |
+| `share_company()` | 1721 | 36 lines |
+| `default_day()` | 419 | 31 lines |
+| `_placed_in_order()` | 452 | 26 lines |
+| `journey_under_way()` | 1179 | 26 lines |
 
 ### `world/spatial_barriers.py`
 

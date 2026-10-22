@@ -108,14 +108,16 @@ def _live(name, scene=None):
 def test_the_keepers_lamp_is_within_his_reach_and_lighting_it_is_not_failed():
     """The lamp is the lamp room's own: "Light the lamp" (uses the lamp and
     the logbook) is no longer failed `not_held`. The live run failed it, and
-    the keeper's two stretches beside it, with the lamp standing in the room."""
+    the keeper's two stretches beside it, with the lamp standing in the room.
+    It is `done`: what a stretch uses never makes it unknown (fix lane B3,
+    the second replay's keeper's watches)."""
     log, _far, _here = _live(ELIAS)
     as_run = LIVE["minds"][ELIAS]["log_as_run"]
     assert [(r["outcome"], r["reason"]) for r in as_run[:3]] == [("failed", "not_held")] * 3
     lighting = log[1]
     assert lighting["doing"].startswith("Light the lamp")
     assert (lighting["outcome"], lighting["reason"], lighting["missing"]) == \
-        ("not_known", None, [])
+        ("done", None, [])
 
 
 def test_a_rooms_things_and_fixtures_are_within_reach_and_elsewhere_is_not():
@@ -153,8 +155,9 @@ def test_a_thing_on_another_body_is_theirs_and_out_of_reach():
 def test_words_that_name_no_thing_the_world_holds_are_never_missing():
     """The brass shim was a sound with no thing behind it and "the logbook"
     nothing at all: the executor does not deny what the world never said was
-    absent, so the stretch stays the world's to judge (`not_known`) -- and
-    nothing is put in the mind's hands either."""
+    absent, so the stretch is not failed for them -- and nothing is put in
+    the mind's hands either. Its own work with its own things is `done`
+    (fix lane B3: what a stretch uses never makes it unknown)."""
     scene = _scene()
     assert not any(e.get("name", "").casefold().endswith("shim")
                    for e in scene["entities"].values())
@@ -166,7 +169,7 @@ def test_words_that_name_no_thing_the_world_holds_are_never_missing():
     stretch = dict(_itinerary(ELIAS)[1], uses=["the brass shim", "the logbook"])
     log, _far = itin.live_through([stretch], scene=scene, start_room="lamp_room",
                                   missing_from=_judge(reach, named))
-    assert (log[0]["outcome"], log[0]["reason"]) == ("not_known", None)
+    assert (log[0]["outcome"], log[0]["reason"]) == ("done", None)
 
 
 def test_a_vessel_is_never_held_one_is_aboard_it_or_beside_it():

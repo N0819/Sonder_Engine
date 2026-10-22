@@ -49,7 +49,10 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 304   # +4 (2026-10-21): the outcome and past questions that
+PART_COUNT = 305   # +1 (2026-10-21, fix lane B3): `jev_questions.skip_without`,
+                   # can a mind do a stretch without the things that were
+                   # not to hand (agents/skip_stage.judge_what_was_missing).
+                   # +4 (2026-10-21): the outcome and past questions that
                    # check a skip memory and their sentence forms,
                    # `jev_questions.skip_memory_outcome`,
                    # `skip_memory_outcome_sentence`, `skip_memory_past`

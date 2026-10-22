@@ -327,11 +327,14 @@ def test_one_call_per_asked_mind_and_the_player_is_never_asked(story, monkeypatc
     skip = payload["skip"]
     assert skip["length"] == {"days": 1, "hours": 17}
     assert skip["now"] == "afternoon"
-    assert skip["until"] == {"day": 2, "part_of_day": "morning"}
+    # The offers sit under the stretch's END: the account's events happen at
+    # the far end (fix lane B3, the second replay's turn 26).
+    assert skip["until"] == {"day": 2, "part_of_day": "morning", "offers": [
+        "you come down from the first watch and sit across the kitchen table "
+        "from Rhona with your tea"]}
+    assert "offers" not in skip
     assert skip["parts_of_day"][0] == "night" and "evening" in skip["parts_of_day"]
-    assert skip["offers"] == ["you come down from the first watch and sit across "
-                              "the kitchen table from Rhona with your tea"]
-    assert by_name[PELL]["payload"]["skip"]["offers"] == []
+    assert by_name[PELL]["payload"]["skip"]["until"]["offers"] == []
     assert by_name[NELL]["payload"]["skip"]["asleep_now"] is True
     assert skip["asleep_now"] is False
     assert skip["where_you_are"] == "The Lamp Room"
@@ -629,7 +632,8 @@ def test_a_stretch_the_world_cannot_carry_out_fails_with_its_reason():
     `place_words` to say where it WAS. A way only past a fastened door:
     `shut_way`. A thing the stretch uses that the mind does not have on it:
     `not_held` -- it went, and the thing was not on it, named in
-    `missing`."""
+    `missing`. A thing it has: `done` (what a stretch uses never makes it
+    unknown, fix lane B3)."""
     scene = _scene()
     stretches = [_placed(0.0, 100.0, room="skerry", kind=itin.KIND_PLAN),
                  _placed(100.0, 200.0, room="store", kind=itin.KIND_PLAN),
@@ -645,7 +649,7 @@ def test_a_stretch_the_world_cannot_carry_out_fails_with_its_reason():
         ("failed", "no_route", "kitchen"),
         ("failed", "shut_way", "kitchen"),
         ("failed", "not_held", "hall"),
-        ("not_known", None, "hall")]
+        ("done", None, "hall")]
     assert log[0]["meant"] == "skerry" and log[0]["where_text"] == ""
     assert itin.place_words(log, scene)[0]["where_text"] == "The Kitchen"
     assert log[2]["missing"] == ["the sealed letter"] and log[2]["meant"] is None
@@ -675,10 +679,10 @@ def test_a_way_longer_than_its_stretch_is_too_far_and_ends_on_the_way():
 
 def test_one_outcome_rule_and_one_reason_vocabulary_for_both_executors():
     """`failed` with its reason; else a sleep is `done`; else a stretch whose
-    success waits on somebody (`with`), on a thing (`uses`) or on a world off
-    the map nobody simulates is `not_known`; else `done` -- the rule the town
-    charter's executor writes (`world/charter_skip`), whose reasons are all
-    the stage's too."""
+    success waits on somebody (`with`) or on a world off the map nobody
+    simulates is `not_known`; else `done` -- what it uses never makes it
+    unknown (fix lane B3) -- the rule the town charter's executor writes
+    (`world/charter_skip`), whose reasons are all the stage's too."""
     from world import charter_skip
     scene = _scene()
     stretches = [_placed(0.0, 100.0, room="kitchen", kind=itin.KIND_PLAN),
@@ -691,7 +695,7 @@ def test_one_outcome_rule_and_one_reason_vocabulary_for_both_executors():
                  _placed(600.0, 700.0)]          # where it stands: still away
     log, far = itin.live_through(stretches, scene=scene, start_room="kitchen")
     assert [r["outcome"] for r in log] == [
-        "done", "not_known", "not_known", "done", "not_known", "done", "not_known"]
+        "done", "not_known", "done", "done", "not_known", "done", "not_known"]
     assert far == {"room": None, "away": "my rooms", "asleep": False,
                    "asleep_since_s": None}
     assert set(charter_skip.FAILURE_REASONS) <= set(itin.FAILURE_REASONS)

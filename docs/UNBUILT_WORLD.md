@@ -4228,13 +4228,55 @@ What that leaves:
       and the harbour" on the mainland's stub and "the mainland quay" off the map,
       so the boatman's last morning on the quay failed `not_held` for the Mary Ann
       docked at the stub, beside the post bag that truly lay on the rock.
-    - **A stretch with one thing out of reach fails whole.** `missing` names the
-      part; whether a stretch whose other uses were met reads `not_known` instead
-      is the owner's call. Words naming no thing the world holds never fail one.
+    - ~~**A stretch with one thing out of reach fails whole.**~~ Ruled and built
+      2026-10-21 (fix lane B3, below): it fails only where it cannot be done
+      without what is missing. Words naming no thing the world holds never fail one.
     - **The vessel's own arrival can land after the skip.** In the replay the
       Mary Ann's arrival was first booked after the skip (due 292,174 s, the span
       ended 251,266 s), so the boat stays in the channel in the stored world while
       the executor carries the boatman ashore by the journey's own price.
+  - **What the second live replay showed, fixed 2026-10-21 (fix lane B3).** The
+    lighthouse replayed on add08c91 (chat 3, turns 25 and 26) told five things
+    past what was lived: an offer taken up hours before the moment it was for
+    (the keeper upstairs on the night watch when "That night, when Elias comes
+    down ..." took the story up); the boatman's run across the channel, which
+    the journey under way made, failed `no_crossing`; a log entry failed whole
+    for a mechanism one floor up; the keeper's routine watches `not_known` for
+    naming a station log; and a letter that lay on the rock posted in a
+    routine, which had no `uses` to check. Now an offer sits under the
+    stretch's end (`skip.until.offers`) and is taken up in `at_the_end`; a
+    stretch on a journey's way is the ride (`skip_itinerary.rides`); a thing
+    not to hand fails a stretch only where it cannot be done without -- one
+    decision-model request per mind (`jev_questions.skip_without`,
+    `skip_stage.judge_what_was_missing`) -- and a stretch done without it is
+    `not_known` with `missing` kept; what a stretch uses never makes it
+    unknown, in both executors; and every entry of an answer carries `with`,
+    `uses` and `why` (`Design.md`'s row). What that leaves:
+    - **Whether the minds take it up is the live replay's.** Offline the
+      recorded answers were stubbed in: the keeper's turn-26 answer still
+      takes the offer up as his plan's first stretch, and the boatman's
+      routine still names no `uses` -- the fixes are a clause and a field the
+      model must read and fill. Only a variant answer shaped as the card now
+      asks shows the far end in the kitchen and the post failed.
+    - **An offer the model takes up at the wrong time is not caught.** Nothing
+      reads which entry took an offer up; a decision-model question per offer
+      over the answer's entries could, and could move it to the end. A guard,
+      the owner's call.
+    - **The `without` answers are unmeasured.** Offline they were a hand
+      reading: the keeper's inspection, lamp-lighting and two log entries done
+      without what was missing, the swap without the clockmaker's tools and
+      the post without the letter not. An unanswered question leaves the row
+      failed (`SKIP_WITHOUT_MIN_PROBABILITY`, the owner's).
+    - **The account's offers carry no time of their own.** `authorial_offers`
+      holds `{subject_id, proposition, source}`; every offer is read as the far
+      end's, which an account that frames a mind's doing DURING the stretch
+      ("after a morning at the lamp ...") would contradict.
+    - **The letter's place is the world's, not the boatman's memory's.** He
+      took it from Rhona's hand on the landing and pocketed it (his own memory
+      of idx 3); idx 3's commit put the letter on the steps, not on him, and
+      it has lain in the hall since (checkpoints 4-9), so every skip that
+      posts it fails. Where the two parted is idx 3's beat (the encoder's),
+      not the skip's.
   - **A `doing` that carries intent reaches whoever shares the room.** The
     card says `doing` is only what a watcher sees (a clause); the probe's
     answers, written before it, put "watching the weathered woman's pouch"

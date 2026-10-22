@@ -426,8 +426,11 @@ class TestTheCount:
 
     def test_the_writer_is_asked_up_to_the_count_and_kept_to_it(self, story, monkeypatch):
         _no_decisions(monkeypatch)
-        many = _answer(*[_episode("I tended the lamp on the %s watch." % w, rows=[0])
-                         for w in ("first", "second", "third", "fourth", "fifth", "sixth")])
+        # Each its own occasion -- its own row -- since two memories built
+        # from the same rows are one (fix lane B3).
+        many = _answer(*[_episode("I tended the lamp on the %s watch." % w, rows=[n])
+                         for n, w in enumerate(("first", "second", "third", "fourth",
+                                                "fifth", "sixth"))])
         writer = _Writer({"Elias Thorne": many, "Pell Hardacre": PELL_PLAIN})
         monkeypatch.setattr(sm, "chat_complete", writer)
         result = sm.run_skip_memories(story["cid"], story["turn"])
@@ -1087,16 +1090,20 @@ class TestTheRecordSaysHowItWent:
         assert "lantern" not in got["how_it_went"]
         assert "did not come off" in got["how_it_went"]
 
-    def test_not_known_says_the_mind_does_not_know_and_done_says_no_more(self):
+    def test_not_known_says_the_mind_set_about_it_and_done_that_it_did_it(self):
+        # Said as the mind would remember it, never as a note about the
+        # record (fix lane B3: the old words were written into the memories
+        # as they stood, "and did not know what came of it", row after row).
         unknown = self._one(_live_row(0, 4, "supper at the pub", "not_known",
                                       away="the harbour pub", where_text="the harbour pub"))
-        # The doing happened; what came of it is the world's, unknown to him.
-        assert unknown["how_it_went"] == ("Pell Hardacre did this, but does not know what "
-                                          "came of it.")
+        assert unknown["how_it_went"] == ("Pell Hardacre set about it, and the rest was "
+                                          "out of Pell Hardacre's hands.")
         done = self._one(_live_row(0, 4, "testing the clockwork", "done", room="lamp_room",
                                    where_text="The Lamp Room"))
-        assert "Pell Hardacre did this" in done["how_it_went"]
-        assert "nothing more" in done["how_it_went"]
+        assert done["how_it_went"] == "Pell Hardacre did it."
+        for row in (unknown, done):
+            assert "record" not in row["how_it_went"]
+            assert "what came of it" not in row["how_it_went"]
 
     def test_the_words_are_the_packs_in_japanese(self):
         row = self._one(_pell_post_row(missing=["リアナの封をした手紙"]), language="ja")
@@ -1340,9 +1347,9 @@ def _scoped_judge(results):
 class TestTheOutcomeCheckReachesEveryRow:
     """The coordinator's ruling, 2026-10-21, on the live measurement: a result
     told past ANY row's `how_it_went` goes beyond the record -- the `done`
-    words say "did this; the record holds nothing more of how it turned
-    out" -- so the outcome check is keyed to `how_it_went`, never to the
-    `failed`/`not_known` codes. A routine doing told as done stays clean."""
+    words say only that the mind did it (fix lane B3: "did it") -- so the
+    outcome check is keyed to `how_it_went`, never to the `failed`/`not_known`
+    codes. A routine doing told as done stays clean."""
 
     @pytest.mark.parametrize("doing, memory, after, results, flagged, clean", [
         (AT_THE_END_DOING, ELIAS_MESHED, ELIAS_MESHED_AFTER,

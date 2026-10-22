@@ -30,12 +30,12 @@ dormancy ruling of 2026-09-17), and where each is kept:
 THE RECORD SAYS HOW IT WENT. A LOG row's `doing` is what the mind set
 about, and its `outcome` a code; the record hands the writer the first as
 `set_about` and the second IN WORDS as well (`how_it_went`, the pack's
-templates): what did not come off and why, that the mind did it but does not
-know what came of it, or that it did it and the record holds no more. A code alone was
-read as success -- the lighthouse replayed 2026-10-21 (chat 3, turn 25): the
-boatman's `failed`/`not_held` post-office stretch came back "So I did ...
-into the box", where the probe's record, which said it in words, got the
-loss written.
+templates), said as the mind would remember it: what did not come off and
+why; that it set about it and the rest was out of its hands; that it did it
+as far as it would go without the things not to hand; or that it did it. A code alone was read as success -- the lighthouse replayed
+2026-10-21 (chat 3, turn 25): the boatman's `failed`/`not_held` post-office
+stretch came back "So I did ... into the box", where the probe's record,
+which said it in words, got the loss written.
 
 THE CHECK. The probe's writer invented (`DESIGN_THE_CAST_ACROSS_A_SKIP.md`
 § 2.2: 8 of 15 memories on the first card; 3-4 of 15, all mild, for the cheap
@@ -55,7 +55,9 @@ gives in a third. So the check is narrow things:
     neither `memory` nor the card holds -- each localized to its sentences
     by the same question asked of each.
 A flagged memory is rewritten once, its flags named; if it still fails, its
-flagged sentences go, and a memory with nothing left goes with them.
+flagged sentences go, and a memory with nothing left goes with them. Then two
+memories built from the same rows are one, the better-checked kept
+(`one_memory_per_occasion`).
 """
 
 from __future__ import annotations
@@ -178,10 +180,12 @@ OUTCOMES = ("done", "failed", "not_known")
 #: with two templates: its words, and its words naming what failed -- the
 #: `missing` things for `not_held`, the place `meant` for a way that failed
 #: -- used when the row names it. A reason with no words of its own reads as
-#: the plain failure.
+#: the plain failure. A `not_known` row that names `missing` partly failed
+#: (`skip_itinerary.judge_without`) and has words of its own naming them.
 RECORD_WORDS = {
     "done": "skip_record_done",
     "not_known": "skip_record_not_known",
+    "not_known_without": "skip_record_not_known_without",
     "failed": "skip_record_failed",
     "list_separator": "skip_record_list_separator",
 }
@@ -383,33 +387,28 @@ def _things(value):
     return out
 
 
-def listed(items, language=None):
-    """Words named one after another by the pack's own list: its `join`
-    (`compositor.join`, "{first} and {last}" / ", and {last}") and its
-    separator (`skip_record_list_separator`)."""
-    from language_runtime import compositor_text, compositor_value
-    items = [str(item) for item in items if str(item or "").strip()]
-    if len(items) <= 1:
-        return "".join(items)
-    join = compositor_value("join", language)
-    if len(items) == 2:
-        return str(join["two"]).format(first=items[0], last=items[1])
-    separator = compositor_text(RECORD_WORDS["list_separator"], language)
-    return separator.join(items[:-1]) + str(join["many"]).format(last=items[-1])
-
-
 def how_it_went(name, outcome, reason=None, *, missing=(), meant="", language=None):
     """THE OUTCOME IN WORDS (`RECORD_WORDS`, `FAILURE_WORDS`: the pack's
-    templates): `done` says the mind did it and the record holds no more of
-    how it turned out; `not_known` that the mind did it but does not know
-    what came of it; `failed` that it did not come off and why -- for `not_held` the things
-    that were not to hand, for a way that failed the place it was going
-    (`meant`). "" where the pack has no words for it."""
+    templates), each said as the mind would remember it, never as a note
+    about the record: `done`, that the mind did it; `not_known`, that it set
+    about it and the rest was out of its hands -- or, where the row names
+    things not to hand (`missing`: the stretch partly failed,
+    `skip_itinerary.judge_without`), that it did it as far as it would go
+    without them; `failed`, that it did not come off and why -- for
+    `not_held` the things that were not to hand, for a way that failed the
+    place it was going (`meant`). "" where the pack has no words for it.
+
+    Measured on the lighthouse replayed a second time (chat 3 turn 25,
+    2026-10-21): the old words -- "did this; the record holds nothing more of
+    how it turned out", "does not know what came of it" -- were written into
+    the memories as they stood, and the keeper's watches came back "and did
+    not know what came of it", row after row."""
     from language_runtime import LanguagePackError, compositor_text
+    from world.skip_itinerary import listed
     if outcome == "done":
         key = RECORD_WORDS["done"]
     elif outcome != "failed":
-        key = RECORD_WORDS["not_known"]
+        key = RECORD_WORDS["not_known_without" if missing else "not_known"]
     elif reason in FAILURE_WORDS:
         plain, named = FAILURE_WORDS[reason]
         key = named if (missing if reason == "not_held" else meant) else plain
@@ -435,11 +434,12 @@ def record_rows(log, *, span_from, anchor, length, name="", room_names=None,
     declaration -- what it set about -- so the record calls it `set_about`,
     never `did`: a stretch that failed was not done. `how_it_went` says the
     outcome in the pack's words (`how_it_went`, which needs the mind's
-    `name`; a caller that gives none gets the codes alone), and the bare
-    `reason` code goes no further. Where a stretch never got where it was
-    going, `where` is where the mind stood, by its room's name
-    (`room_names`), and the words name the place it meant: the row's own
-    words for a place it never reached are not where it was."""
+    `name`; a caller that gives none gets the codes alone; a row that set
+    about nothing gets none), and the bare `reason` code goes no further.
+    Where a stretch never got where it was going, `where` is where the mind
+    stood, by its room's name (`room_names`), and the words name the place
+    it meant: the row's own words for a place it never reached are not where
+    it was."""
     from world.spatial import room_display_name
     route_failures = _route_failures()
     room_names = room_names or {}
@@ -486,7 +486,12 @@ def record_rows(log, *, span_from, anchor, length, name="", room_names=None,
         if weather:
             row["weather"] = weather
         row["outcome"] = outcome
-        if name:
+        # A row that set about nothing -- a stretch the mind left to the
+        # default day, or the moments after a ride put it ashore -- has no
+        # doing to tell as far as it went, so it has no words: "Pell Hardacre
+        # did it." over an empty `set_about` (the lighthouse replayed a second
+        # time, chat 3 turn 25) says a deed nobody declared.
+        if name and (set_about or outcome == "failed"):
             words = how_it_went(name, outcome, reason or None,
                                 missing=_things(entry["missing"]), meant=meant,
                                 language=language)
@@ -1076,19 +1081,51 @@ def drop_flagged(episode, flags, language=None):
     return kept if kept["memory"] else None
 
 
+def one_memory_per_occasion(entries):
+    """`(memories, merged)`. TWO MEMORIES BUILT FROM THE SAME ROWS ARE ONE
+    MEMORY: of every set of memories whose `rows` are the same (and name at
+    least one row), the BETTER-CHECKED is kept -- the one that passed the
+    check as written, before one that needed a rewrite, before one that kept
+    only what survived the drop; the fewer flags it first raised, then the
+    earlier -- and the rest go, their indices in `merged`. `entries` is
+    `[(memory, rank, index)]` in order, `rank` a tuple, lower the
+    better-checked (`check_and_mend`'s). A memory naming no row is its own.
+
+    Measured on the lighthouse replayed a second time (chat 3 turn 25,
+    2026-10-21): the boatman's two memories of the run he never finished
+    were both written from his first row -- one clean, one rewritten into a
+    near-copy of it -- and both were kept, side by side."""
+    best = {}
+    for n, (memory, rank, _index) in enumerate(entries):
+        key = frozenset(memory.get("rows") or ())
+        if key and (key not in best or rank < entries[best[key]][1]):
+            best[key] = n
+    out, merged = [], []
+    for n, (memory, _rank, index) in enumerate(entries):
+        key = frozenset(memory.get("rows") or ())
+        if key and best[key] != n:
+            merged.append(index)
+            continue
+        out.append(memory)
+    return out, merged
+
+
 def check_and_mend(name, count, payload, episodes, *, language=None):
     """The two-part check over one mind's memories -- the floor and the
-    decision model's questions -- the rewrite of the flagged, and the drop of
-    what still fails. Returns `(memories, report)`; the memories keep their
-    order, minus any with nothing left. `report["jev"]` is "unavailable" when
-    any question could not be asked of any memory, and `unanswered` names
-    those kinds."""
+    decision model's questions -- the rewrite of the flagged, the drop of
+    what still fails, and then ONE MEMORY AN OCCASION: two memories built
+    from the same rows are one, the better-checked kept
+    (`one_memory_per_occasion`). Returns `(memories, report)`; the memories
+    keep their order, minus any with nothing left and any merged
+    (`report["merged"]`). `report["jev"]` is "unavailable" when any question
+    could not be asked of any memory, and `unanswered` names those kinds."""
     support = number_support({key: payload[key] for key in ("who", "memory", "record", "span")},
                              language)
     record = payload["record"]
     before = {"who": payload["who"], "remembered": payload["memory"]}
     report = {"flagged": {}, "rewritten": [], "dropped_sentences": {},
-              "dropped": [], "unlocalized": [], "jev": "asked", "unanswered": []}
+              "dropped": [], "unlocalized": [], "merged": [], "jev": "asked",
+              "unanswered": []}
     checked = []
     for i, episode in enumerate(episodes):
         flags, unasked = flags_of(name, record, episode, support, before=before,
@@ -1101,7 +1138,9 @@ def check_and_mend(name, count, payload, episodes, *, language=None):
     report["flagged"] = {i: [_flag_for_writer(f) for f in flags]
                          for i, (_e, flags) in flagged.items()}
     if not flagged:
-        return [episode for episode, _flags in checked], report
+        kept, report["merged"] = one_memory_per_occasion(
+            [(episode, (0, 0, i), i) for i, (episode, _flags) in enumerate(checked)])
+        return kept, report
     try:
         candidates = rewrite_episodes(name, count, payload, flagged, language=language)
     except Exception as exc:  # noqa: BLE001 -- the drop below still runs
@@ -1110,7 +1149,7 @@ def check_and_mend(name, count, payload, episodes, *, language=None):
     out = []
     for i, (episode, flags) in enumerate(checked):
         if not flags:
-            out.append(episode)
+            out.append((episode, (0, 0, i), i))
             continue
         best = None
         for candidate in candidates.get(i, []):
@@ -1136,8 +1175,9 @@ def check_and_mend(name, count, payload, episodes, *, language=None):
             if chosen is None:
                 report["dropped"].append(i)
                 continue
-        out.append(chosen)
-    return out, report
+        out.append((chosen, (2 if still else 1, len(flags), i), i))
+    kept, report["merged"] = one_memory_per_occasion(out)
+    return kept, report
 
 
 # ---------------------------------------------------------------------------
@@ -1403,12 +1443,12 @@ def run_skip_memories(chat_id, turn_id, *, job=None, language=None,
 def summary_of(result):
     """What one mind's pass leaves in the log line: what was written, whether
     the decision model was asked (`jev`, and the kinds it could not be asked),
-    the flags raised by kind, the memories rewritten and dropped, and how many
-    sentences went -- so a live run says whether its check ran and what it
-    caught."""
+    the flags raised by kind, the memories rewritten, dropped and merged into
+    another of the same occasion, and how many sentences went -- so a live
+    run says whether its check ran and what it caught."""
     out = {k: v for k, v in (result or {}).items()
            if k in ("status", "written", "asked", "packet", "jev", "unanswered",
-                    "rewritten", "dropped")}
+                    "rewritten", "dropped", "merged")}
     kinds = {}
     for flags in ((result or {}).get("flagged") or {}).values():
         for flag in flags:
@@ -1431,9 +1471,10 @@ __all__ = [
     "SKIP_MEMORY_SALIENCE_SPAN", "SKIP_MEMORY_WORKERS", "SKIP_ORIGIN_PREFIX",
     "WRITER_PAYLOAD_KEYS", "ask_model", "card_of", "check_and_mend",
     "committed_output", "day_reader", "drop_flagged", "episodes_of",
-    "flags_of", "how_it_went", "is_skip_memory", "listed", "lived_hours",
+    "flags_of", "how_it_went", "is_skip_memory", "lived_hours",
     "memory_count", "memory_packet", "minds_to_remember", "number_support",
-    "occasion_seconds", "past_state", "record_rows", "record_text",
+    "occasion_seconds", "one_memory_per_occasion", "past_state", "record_rows",
+    "record_text",
     "remember_one", "rewrite_episodes", "rows_for", "run_skip_memories",
     "salience_of", "sentences", "skip_event_key", "span_view",
     "still_committed", "summary_of", "unsupported_numbers", "when_of",

@@ -750,15 +750,19 @@ class _TownRun:
             reason = None
         if not reached:
             outcome = "failed"
-        elif stretch["asleep"]:
-            outcome = "done"
-        elif unrun or stretch["away"] or stretch.get("with") \
-                or stretch.get("uses"):
-            # Its success waits on somebody else, on a thing, or on a world
-            # off the map nobody simulates: the world's to judge.
+        elif unrun and not stretch["asleep"]:
+            # The town never ran the body through it: the mind's declaration,
+            # unwitnessed -- the world's to judge.
             outcome = "not_known"
         else:
-            outcome = "done"
+            # THE ONE RULE both executors write (`skip_itinerary.
+            # stretch_outcome`): a sleep is done; a stretch whose success is
+            # another's response (`with`) or a world off the map nobody
+            # simulates (`away`) is the world's to judge; what it USES never
+            # makes it so -- the keeper's watch with his own lamp is done
+            # (the lighthouse replayed a second time, chat 3 turn 25).
+            from world.skip_itinerary import stretch_outcome
+            outcome = stretch_outcome(stretch, None, stretch["away"])
         seen = [] if stretch["asleep"] else self._seen(windows, labels)
         return {
             "from_s": stretch["from_s"], "until_s": stretch["until_s"],

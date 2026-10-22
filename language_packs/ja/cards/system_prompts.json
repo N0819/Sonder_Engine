@@ -496,6 +496,9 @@
     },
     "skip_thing_none": {
       "$text": "jev_questions/skip_thing_none.txt"
+    },
+    "skip_without": {
+      "$text": "jev_questions/skip_without.txt"
     }
   },
   "encoder": {

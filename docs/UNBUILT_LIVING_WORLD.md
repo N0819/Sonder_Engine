@@ -1391,10 +1391,13 @@ and drops what still fails. What it leaves:
     `how_it_went`, never to the `failed`/`not_known` codes, so the keeper's
     "the clockwork held through the night" and "the gear teeth meshed clean"
     flag, and a routine doing told as done does not. What stays: a stretch
-    whose success is the world's to judge but that names no `with`, `uses` or
-    `away` is still marked `done` by both executors, and where a result ends
-    and a doing's own texture begins ("the rotation turning, the wick burning
-    clean" on a night watch) is the decision model's reading, unmeasured live.
+    whose success is the world's to judge but that names no `with` or `away`
+    is marked `done` by both executors -- since fix lane B3 (2026-10-21) what
+    a stretch USES never makes it `not_known`, which had put "did not know what
+    came of it" on the keeper's every watch in the second replay -- and where
+    a result ends and a doing's own texture begins ("the rotation turning, the
+    wick burning clean" on a night watch) is the decision model's reading,
+    unmeasured live.
   - **`not_held` names what was missing only once the executor says**
     (`missing`, lane B2's); a log written before it reads "something it
     needed was not to hand". On the live LOG, things in reach still counted as
@@ -1405,7 +1408,24 @@ and drops what still fails. What it leaves:
     rate is unmeasured; it is the first kind `SKIP_MEMORY_CHECKS` would drop.
   - **The far end's own call still reads the codes**: its payload
     (`the_stretch_just_passed`, `agents/skip_stage.stretch_for_payload`)
-    carries `outcome`, `reason` and `meant`, not the words.
+    carries `outcome`, `reason`, `meant` and `missing` (on a row that went
+    without things not to hand, too), not the words.
+  - **The words are said as the mind would remember them** (fix lane B3,
+    2026-10-21): the writer copied the old ones into the second replay's
+    memories as they stood. `done` is that the mind did it, `not_known` that
+    it set about it and the rest was out of its hands, a row done without
+    things not to hand that it did it as far as it would go without them, and
+    a row that set about nothing has none. Whether the writer still echoes
+    them, and whether the outcome question reads "set about it" as narrower
+    than "did it", is the live replay's to show.
+  - **One memory an occasion** (fix lane B3): two memories built from the same
+    rows are one after the mend, the better-checked kept
+    (`one_memory_per_occasion`). Measured: the second replay's boatman kept two
+    memories of his first row (turn 25), and the post office his writer never
+    wrote one for stayed unremembered -- a turn later he set out to post the
+    same letter again, in a routine with no `uses` to fail it. Merging drops
+    the copy; it writes nothing for the occasion left out, and memories of
+    overlapping rows that are not the same rows stay apart.
   - **Whether a live run's check was asked** was not on record: the job's
     log line kept only what it wrote. It now carries the decision model's
     state (`jev`, `unanswered`) and the flags by kind (`summary_of`); the

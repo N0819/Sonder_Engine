@@ -10,7 +10,8 @@ this stage runs between `compile_world_context` and `perception_act`:
      does for the duration, one call each, in parallel, on its own tier role.
      The payload is its ordinary character payload, built by the same builder
      a beat's `character_step` uses (`character_step(skip=...)`), plus a
-     `skip` block; the card is `prompts/character_skip.txt`. The player is
+     `skip` block, its offers under the stretch's end (`skip_block`); the
+     card is `prompts/character_skip.txt`. The player is
      never asked: the account is theirs. A body the story holds sedated or
      unconscious is not asked either -- it can declare nothing, and its
      waking is the Director's.
@@ -26,10 +27,13 @@ this stage runs between `compile_world_context` and `perception_act`:
      the ways a body walks, never a frontier stub's join and never across
      water (`skip_itinerary.Ways`, the stub joins read from the registry by
      `frontier_stubs`), back onto the map by where it left it, and on with a
-     vessel already under way (`skip_itinerary.journeys`); both write one
-     outcome rule and one reason vocabulary, and a stretch's `uses` are met
-     by what the mind carries and what is within its reach where the stretch
-     finds it (`skip_itinerary.Reach`, its names resolved in `resolve_mind`).
+     vessel already under way (`skip_itinerary.journeys`), a stretch spent
+     on its way being the ride itself (`skip_itinerary.rides`); both write
+     one outcome rule and one reason vocabulary, and a stretch's `uses` are
+     met by what the mind carries and what is within its reach where the
+     stretch finds it (`skip_itinerary.Reach`, its names resolved in
+     `resolve_mind`) -- and what is not fails it only where it cannot be done
+     without (`judge_what_was_missing`, one decision request per mind).
      Company with the other asked minds and the player is shared afterwards,
      per observer (`share_company`).
   d. **The far end.** Each mind ends where its last stretch left it -- a move
@@ -276,15 +280,28 @@ def skip_block(span, *, asleep_now, where_you_are, offers):
     in, the day (0 is today) and part of the day it ends at -- the engine's
     own `{days, until_phase}` vocabulary -- the parts of the day an answer
     may name (`day_cycle.PHASE_NAMES`, protocol tokens), whether the mind is
-    asleep as it begins, where it is, and what the account offers it."""
+    asleep as it begins, where it is, and what the account offers it.
+
+    AN OFFER IS FOR WHEN THE STRETCH ENDS, so it sits under `until`. The
+    account's events happen at the far end, the moment the story takes up
+    again, and what it offers a mind is for that moment: taken up, it is
+    where the stretch leaves the mind (`at_the_end`, laid over the span's
+    last moments by `skip_itinerary.expand_itinerary`). Measured on the
+    lighthouse replayed a second time (chat 3 turn 26, 2026-10-21): offered
+    "comes down the tower stair into the kitchen with a mug of tea and sits
+    at the kitchen table across from Rhona Carrick" beside the stretch's
+    start, the keeper took it up as his plan's first stretch, morning to
+    midday, and was up in the lamp room on the night watch when the story
+    took up again."""
     from world.day_cycle import PHASE_NAMES
+    until = dict(span.until_words() or {})
+    until["offers"] = list(offers or [])
     block = {"length": span.length_words(),
              "now": span.phase_at(span.from_s) or "",
-             "until": span.until_words() or {},
+             "until": until,
              "parts_of_day": list(PHASE_NAMES),
              "asleep_now": bool(asleep_now),
-             "where_you_are": where_you_are or "",
-             "offers": list(offers or [])}
+             "where_you_are": where_you_are or ""}
     return block
 
 
@@ -517,6 +534,35 @@ def resolve_mind(name, stretches, scene, state, here, held, language=None,
     return itin.place_stretches(stretches, resolved), missing_from, record
 
 
+def judge_what_was_missing(name, log, language=None):
+    """`record`: ONE decision-model request for this mind over every row of
+    its log a thing not to hand failed (`skip_itinerary.short_of`): can it do
+    what the row says without what was missing
+    (`skip_itinerary.without_questions`)? A row the model says can be done
+    without them is told as far as it went (`skip_itinerary.judge_without`:
+    `not_known`, `missing` kept); every other stays failed. Nothing is asked
+    for a mind with no such row, and a request that fails changes nothing.
+    In place on `log`; the record says what was asked and what it changed."""
+    from llm import decisions
+    questions = itin.without_questions(name, log, language)
+    if not questions:
+        return {}
+    rows = itin.short_of(log)
+    state = {"mind": name,
+             "stretches": [{"where": log[i].get("where_text") or log[i].get("away") or "",
+                            "doing": log[i].get("doing") or "",
+                            "missing": list(log[i].get("missing") or ())}
+                           for i in rows]}
+    record = {"asked": len(questions)}
+    try:
+        answers = decisions.decide(state, questions)
+    except Exception as exc:  # noqa: BLE001 -- unanswered, the rows stay failed
+        record["jev_failed"] = f"{type(exc).__name__}: {str(exc)[:120]}"
+        return record
+    record["without"] = itin.judge_without(log, answers)
+    return record
+
+
 def frontier_stubs(chat_id):
     """`{stub room id: holder room id}` -- every space the plan holds open
     (`structure.mint_frontier`'s `provisional` stub, by its `frontier_of`
@@ -679,6 +725,19 @@ def skip_lives(ctx, nonce):
                 missing_from=missing_from, skies=skies, ways=ways,
                 journey=itin.journey_under_way(scene, here, under_way, ways))
         log = itin.place_words(log, scene)
+        # A thing not to hand fails a stretch only where the stretch cannot
+        # be done without it: one request for this mind, either executor's.
+        try:
+            judged = judge_what_was_missing(name, log, ctx.language)
+        except Exception as exc:  # noqa: BLE001 -- one mind, not the beat
+            ctx.add_warning(f"skip: what {name} went without could not be judged "
+                            f"({type(exc).__name__}: {str(exc)[:120]}); those "
+                            "stretches stay failed")
+            judged = {}
+        if judged and hasattr(ctx, "note_decision"):
+            ctx.note_decision("skip_without", name,
+                              "asked" if "without" in judged else "unanswered",
+                              json.dumps(judged, ensure_ascii=False)[:400])
         # Where a day that ends off the map left it, kept on its whereabouts:
         # the next skip brings it back by there (`persist/commit_skip.py`).
         far_end = dict(far_end, left_from=(
@@ -1012,7 +1071,8 @@ def widen_reactors_to_skip_far_end(chat_id, cast_rows, reactors, output, interp)
 def stretch_for_payload(ctx, name):
     """This mind's own log, in its own terms, for its far-end call --
     `[{day, from, until, where, doing, asleep, seen, weather, outcome,
-    reason, meant, missing}]` (the last three only on a row that failed), the
+    reason, meant, missing}]` (`reason` and `meant` only on a row that
+    failed, `missing` on any row that went without things not to hand), the
     last `SKIP_PAYLOAD_ROWS` -- or None when the beat carried it through no
     skip. Its own and nobody else's: the rows are its log, and `seen` is
     already what it saw, named as it knows them."""
@@ -1043,13 +1103,15 @@ def stretch_for_payload(ctx, name):
                  "outcome": row.get("outcome") or itin.OUTCOME_DONE}
         if row.get("reason"):
             # What failed, as the row says it (`skip_itinerary._row`): where
-            # it meant to be, in its own words, for a way it never made; what
-            # was not to hand, as it named them, for a thing out of reach.
+            # it meant to be, in its own words, for a way it never made.
             entry["reason"] = row["reason"]
             if row.get("meant"):
                 entry["meant"] = str(row["meant"])
-            if row.get("missing"):
-                entry["missing"] = [str(thing) for thing in row["missing"]]
+        if row.get("missing"):
+            # What was not to hand, as it named them: on a row it failed,
+            # and on a row that went as far as it could without them
+            # (`skip_itinerary.judge_without`).
+            entry["missing"] = [str(thing) for thing in row["missing"]]
         rows.append(entry)
     return rows
 
