@@ -35,6 +35,7 @@
   "nsfw_prompt_ids": [
     "background_react",
     "character_bare",
+    "character_skip",
     "conversation_thread",
     "director_body",
     "director_contact",
@@ -174,6 +175,9 @@
     },
     "skip_memory_rewrite": {
       "$text": "prompts/skip_memory_rewrite.txt"
+    },
+    "character_skip": {
+      "$text": "prompts/character_skip.txt"
     }
   },
   "specialists": {
@@ -468,6 +472,18 @@
     },
     "entities__examined": {
       "$text": "jev_questions/entities__examined.txt"
+    },
+    "skip_place": {
+      "$text": "jev_questions/skip_place.txt"
+    },
+    "skip_place_none": {
+      "$text": "jev_questions/skip_place_none.txt"
+    },
+    "skip_thing": {
+      "$text": "jev_questions/skip_thing.txt"
+    },
+    "skip_thing_none": {
+      "$text": "jev_questions/skip_thing_none.txt"
     }
   },
   "encoder": {
@@ -952,6 +968,9 @@
     },
     "lookups": {
       "$text": "character_bare/lookups.txt"
+    },
+    "stretch_just_passed": {
+      "$text": "character_bare/stretch_just_passed.txt"
     }
   },
   "character_jev": {

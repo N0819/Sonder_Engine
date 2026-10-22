@@ -1732,6 +1732,20 @@ def compose_beat_scene(ctx):
     except Exception as _solved_exc:  # the stored scene still merges
         ctx.add_warning(
             f"a solved plan could not be laid onto its stubs: {_solved_exc}")
+    # A SKIP'S FAR END IS WHERE THIS BEAT BEGAN (`agents/skip_stage.py`):
+    # every mind the stretch carried stands where its own last stretch left
+    # it -- or is off the map -- and the beat's own diff lands on that, as
+    # every reader of the beat saw it (`story.scene.get_scene` under the
+    # onset preview). Laid HERE, under the diff, so the account that follows
+    # the skip keeps the last word on anyone it moves, and the scene the
+    # commit writes carries the placements no diff states.
+    if getattr(ctx, "skip_lives", None):
+        try:
+            from agents.skip_stage import far_end_scene
+            far_end_scene(ctx, prev_scene)
+        except Exception as _far_exc:  # the stored scene still merges
+            ctx.add_warning(f"the skip's far end could not be laid under "
+                            f"the beat: {_far_exc}")
     # Carried beside prev_scene for the off-screen epoch. Once the scene
     # domain writes the new clock, a later commit domain cannot recover which
     # coarse time boundary THIS beat crossed. Keep the exact pre-turn value in

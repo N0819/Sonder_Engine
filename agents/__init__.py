@@ -79,6 +79,7 @@ from .loops import deterministic_micro_perception, interaction_loop, reaction_lo
 from .mapping import compile_world_context, merge_lore
 from .narration import narrator, narrator_extra
 from .perception import perception_act, perception_establish, perception_outcome
+from .skip_stage import skip_lives
 from .runtime import (
     ABORTS,
     STEP_HANDLERS,

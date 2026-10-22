@@ -1,0 +1,859 @@
+{
+ "_about": "Real answers to the skip question, from the live probe of 2026-10-21 (docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md § 2.1): each character's own captured payload replayed on its own model role with the draft skip card. Verbatim model output.",
+ "answers": {
+  "elias_two_days": {
+   "name": "Elias Thorne",
+   "role": "character_major",
+   "span": "two days: from now until the morning of the day after tomorrow",
+   "invitation": null,
+   "answer": {
+    "routine": [
+     {
+      "from": "night",
+      "until": "pre-dawn",
+      "where": "bedroom",
+      "doing": "sleep",
+      "asleep": true
+     },
+     {
+      "from": "pre-dawn",
+      "until": "dawn",
+      "where": "lamp room",
+      "doing": "wake, check lamp still burning, check weather through the lantern room windows",
+      "asleep": false
+     },
+     {
+      "from": "dawn",
+      "until": "morning",
+      "where": "lamp room and kitchen",
+      "doing": "extinguish lamp at first light, log overnight conditions, breakfast — bread and strong tea",
+      "asleep": false
+     },
+     {
+      "from": "morning",
+      "until": "midday",
+      "where": "lamp room and hall",
+      "doing": "maintenance — clean lens, check clockwork, oil bearings, sweep lamp room",
+      "asleep": false
+     },
+     {
+      "from": "midday",
+      "until": "afternoon",
+      "where": "kitchen",
+      "doing": "dinner — tinned meat or fish with bread, read barometer, check sea state from the window",
+      "asleep": false
+     },
+     {
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "hall and store",
+      "doing": "stores check, log any passing vessels, maintenance tasks as needed",
+      "asleep": false
+     },
+     {
+      "from": "dusk",
+      "until": "evening",
+      "where": "lamp room",
+      "doing": "light lamp, wind clockwork, check lens and rotation, confirm beam sweeping clear",
+      "asleep": false
+     },
+     {
+      "from": "evening",
+      "until": "night",
+      "where": "kitchen",
+      "doing": "tea, no sugar, write the day's log entry — weather, vessels, maintenance, any observations",
+      "asleep": false
+     }
+    ],
+    "plan": [
+     {
+      "day": 0,
+      "from": "morning",
+      "until": "midday",
+      "where": "hall and lamp room",
+      "doing": "open the mechanism crate fully with Carrick, lay out the new clockwork components on the hall floor, examine each piece against what he knows of the old mechanism — turn the lamp a quarter by hand so she can watch the gear train from below",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "he will not condemn what he has not examined, and Carrick asked to see it — the work is ground he can stand on"
+     },
+     {
+      "day": 0,
+      "from": "midday",
+      "until": "afternoon",
+      "where": "kitchen",
+      "doing": "while Carrick studies the mechanism below, sit with the logbook and recall the exact wording of the March pin and August belt entries — what he wrote, what the Board read, whether his honesty was taken for failure",
+      "asleep": false,
+      "with": [],
+      "why": "if his own words are the evidence against him, he should know precisely what they said"
+     },
+     {
+      "day": 0,
+      "from": "dusk",
+      "until": "evening",
+      "where": "lamp room",
+      "doing": "evening round with Carrick present for the first time — light the lamp, wind the clockwork, check the lens, check the rotation; let her watch or help, judge whether her hands understand the old mechanism",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "the light does not wait on the mechanism or the Board — the round must happen, and this is where he will see what she knows"
+     },
+     {
+      "day": 1,
+      "from": "morning",
+      "until": "midday",
+      "where": "lamp room and hall",
+      "doing": "continue examining the new mechanism alongside the old — let Carrick handle the components, watch her clockmaker's hands on the gear train, compare tolerances and materials, note what is better and what is worse",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "he wants to see the new mechanism judged against the old on its merits, not on the Board's authority — and he wants to see whether Carrick understands what she is looking at"
+     },
+     {
+      "day": 1,
+      "from": "afternoon",
+      "until": "evening",
+      "where": "kitchen and lamp room",
+      "doing": "test-fit the new mechanism's mounting plate against the old clockwork housing, check clearances, note what will need to be altered when the engineer arrives Tuesday — then the evening round as always",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "if the engineer is coming, he wants to know what the fitting will require before a stranger's hands touch his lamp — preparation is not acceptance"
+     },
+     {
+      "day": 1,
+      "from": "evening",
+      "until": "night",
+      "where": "kitchen",
+      "doing": "log entry for the day — weather, vessels, mechanism examination notes, observations of Carrick's competence; tea at the same hour",
+      "asleep": false,
+      "with": [],
+      "why": "the record must be complete and honest, even if honesty is what the Board used against him"
+     }
+    ],
+    "at_the_end": {
+     "where": "kitchen",
+     "doing": "sitting at the table with tea and the logbook open, having spent two days examining the new mechanism and watching Carrick work — the lamp burning above, the round completed, Tuesday's engineer one day closer",
+     "asleep": false
+    },
+    "on_your_mind": "The new mechanism is not as crude as he expected, and Carrick's hands on the clockwork were not a stranger's hands — but the engineer comes Tuesday, and what he has built and kept for eleven years will be judged by men who have never stood a night watch on this rock"
+   }
+  },
+  "elias_offer": {
+   "name": "Elias Thorne",
+   "role": "character_major",
+   "span": "two days and a half: from now until the night of the day after tomorrow",
+   "invitation": {
+    "when": "that last night",
+    "surface": "you come down from the first watch and sit across the kitchen table from Rhona with your tea"
+   },
+   "answer": {
+    "routine": [
+     {
+      "from": "pre-dawn",
+      "until": "dawn",
+      "where": "The Lamp Room",
+      "doing": "Wake, check the lamp status, check the barometer and weather glass, note sea state from the lantern room",
+      "asleep": false
+     },
+     {
+      "from": "dawn",
+      "until": "morning",
+      "where": "The Lamp Room and The Kitchen",
+      "doing": "Trim the lamp if needed, clean the lens with the chamois and alcohol, sweep the lantern room floor, put the kettle on, make tea",
+      "asleep": false
+     },
+     {
+      "from": "morning",
+      "until": "midday",
+      "where": "The Hall and The Lamp Room",
+      "doing": "Maintenance round — oil the clockwork, check the drive belt, inspect the lens for chips, log the morning weather, scan the horizon for vessels",
+      "asleep": false
+     },
+     {
+      "from": "midday",
+      "until": "afternoon",
+      "where": "The Kitchen",
+      "doing": "Cook one of the seven meals, eat, wash up, write up the morning's log entries, sort any post",
+      "asleep": false
+     },
+     {
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "The Lamp Room",
+      "doing": "Prepare the lamp for lighting — check the wick, trim it, fill the reservoir, check paraffin levels, wind the clockwork fully, clean the lens a second time",
+      "asleep": false
+     },
+     {
+      "from": "dusk",
+      "until": "evening",
+      "where": "The Lamp Room",
+      "doing": "Light the lamp, confirm the rotation, check the beam against the horizon, begin the first watch — scan for vessels, log traffic",
+      "asleep": false
+     },
+     {
+      "from": "evening",
+      "until": "night",
+      "where": "The Kitchen and The Lamp Room",
+      "doing": "Come down from watch for tea and a meal, return for the second watch if needed, log the evening weather and vessel count",
+      "asleep": false
+     },
+     {
+      "from": "night",
+      "until": "pre-dawn",
+      "where": "The Bedroom",
+      "doing": "Sleep — four or five hours, the lamp running on the clockwork, waking once to check the rotation",
+      "asleep": true
+     }
+    ],
+    "plan": [
+     {
+      "day": 0,
+      "from": "morning",
+      "until": "afternoon",
+      "where": "The Hall and The Lamp Room",
+      "doing": "Go up the stair to the lamp room and turn the lamp a quarter by hand while Carrick watches the gear from below. Open the mechanism crate with her. Examine the new clockwork against the old — every gear, every pin, every bearing. Judge it with his own eyes. Let her look too. Say little.",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "He will not condemn what he has not examined, and he needs to know what the Board is putting in his tower"
+     },
+     {
+      "day": 0,
+      "from": "dusk",
+      "until": "evening",
+      "where": "The Lamp Room",
+      "doing": "Evening round — light the lamp, wind the old clockwork, check the lens. The first night with another keeper in the tower. Show her the watch routine step by step without yielding any of it to her hands.",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "The light does not wait on the mechanism or the Board — the round must happen, and she needs to see how it is done on this rock"
+     },
+     {
+      "day": 0,
+      "from": "night",
+      "until": "pre-dawn",
+      "where": "The Bedroom",
+      "doing": "Sleep — or try to. Another person breathing through the wall. Wake once, go up, check the rotation, come back down.",
+      "asleep": true,
+      "with": [],
+      "why": "He needs the hours even if they are broken"
+     },
+     {
+      "day": 1,
+      "from": "morning",
+      "until": "afternoon",
+      "where": "The Lamp Room and The Hall",
+      "doing": "Watch Carrick work on the old clockwork with her own hands — let her open the gear train, let her touch the pin and the belt the Board cited. Judge whether she understands the mechanism or is only following instructions. Run the daily maintenance round alongside her without yielding the lead.",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "He needs to know if she can keep the light before the engineer comes on Tuesday — and whether the new mechanism is worth fitting or just another thing that will fail when it matters"
+     },
+     {
+      "day": 1,
+      "from": "dusk",
+      "until": "night",
+      "where": "The Lamp Room",
+      "doing": "Second evening round. Light the lamp, wind the clockwork, check the lens. Second night's watch — log the day's weather, vessel traffic, and what he has seen of her work. Write the log entry carefully.",
+      "asleep": false,
+      "with": [],
+      "why": "The round is the round — two nights or eleven years, it does not change"
+     },
+     {
+      "day": 2,
+      "from": "morning",
+      "until": "afternoon",
+      "where": "The Lamp Room and The Kitchen",
+      "doing": "Daily maintenance. Let Carrick test-fit a piece of the new mechanism against the old mounting — watch her hands, watch the tolerances. Decide whether to say what he sees or hold it for the log. Cook a meal. Eat in the kitchen without speaking unless she asks a direct question.",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "The engineer comes Tuesday and he needs to know what he will tell the man — or whether he will let the mechanism speak for itself"
+     },
+     {
+      "day": 2,
+      "from": "dusk",
+      "until": "evening",
+      "where": "The Lamp Room",
+      "doing": "Evening round — light the lamp, wind the clockwork, check the lens. Take the first watch. Come down from the lamp room when the rotation is steady and the horizon is clear.",
+      "asleep": false,
+      "with": [],
+      "why": "The light must burn — everything else is secondary"
+     },
+     {
+      "day": 2,
+      "from": "evening",
+      "until": "night",
+      "where": "The Kitchen",
+      "doing": "Sit across the kitchen table from Rhona Carrick with his tea. The lamp running above them on the clockwork, the sea outside, the tower quiet between watches.",
+      "asleep": false,
+      "with": [
+       "Rhona Carrick"
+      ],
+      "why": "The work is done for now and the tea is hot — there are things that have been held for two days and a half that may or may not find their way to words"
+     }
+    ],
+    "at_the_end": {
+     "where": "The Kitchen",
+     "doing": "Sitting across the kitchen table from Rhona Carrick with his tea, the lamp running above on the clockwork",
+     "asleep": false
+    },
+    "on_your_mind": "Whether Carrick's hands understand the old clockwork the way his do — and what it means for the light if she does, and what it means for him if she does not"
+   }
+  },
+  "pell_three_days": {
+   "name": "Pell Hardacre",
+   "role": "character_mid",
+   "span": "three days: from now until the evening of the third day from now",
+   "invitation": null,
+   "answer": {
+    "routine": [
+     {
+      "from": "pre-dawn",
+      "until": "dawn",
+      "where": "Harbour town — my own bed, then the quay",
+      "doing": "Wake before the light, tea in the kitchen, down to the Mary Ann to check the mooring lines and the engine before the day starts.",
+      "asleep": false
+     },
+     {
+      "from": "dawn",
+      "until": "morning",
+      "where": "The quay and the harbour front",
+      "doing": "Work on the Mary Ann — the engine wants looking at, the knocking on an irregular beat. Clean the injectors, listen to it run, swear at it, run it again. Take on fuel and water.",
+      "asleep": false
+     },
+     {
+      "from": "morning",
+      "until": "midday",
+      "where": "The harbour, the chandlers, the post office on the quay",
+      "doing": "Errands ashore — chandlery for parts, the post office to put Rhona Carrick's letter in the box, the fish market for a word with whoever's about. Gather what's being said.",
+      "asleep": false
+     },
+     {
+      "from": "midday",
+      "until": "afternoon",
+      "where": "The harbour pub",
+      "doing": "A pint and a plate, and the talk of the town. Trade what I heard on the rock for what's happened ashore. Keep an ear out for anything the lighthouse ought to know.",
+      "asleep": false
+     },
+     {
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "The quay and the Mary Ann",
+      "doing": "Back to the boat — finish what the engine needs, stow the gear, check the forecast on the barometer and the sky. Make the standing order list for the next run.",
+      "asleep": false
+     },
+     {
+      "from": "dusk",
+      "until": "evening",
+      "where": "The harbour front and the pub",
+      "doing": "Supper and company. The evening is when the harbour talks most freely — I listen, I talk, I remember names.",
+      "asleep": false
+     },
+     {
+      "from": "evening",
+      "until": "night",
+      "where": "My rooms above the harbour",
+      "doing": "A last look at the water from the window, the barometer, then bed. Sleep comes easy after a day on the boat.",
+      "asleep": false
+     },
+     {
+      "from": "night",
+      "until": "pre-dawn",
+      "where": "My rooms above the harbour",
+      "doing": "Asleep.",
+      "asleep": true
+     }
+    ],
+    "plan": [
+     {
+      "day": 0,
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "The channel, running east for the harbour",
+      "doing": "Run the Mary Ann east ahead of the squall, one hand on the wheel, the other on the throttle, reading the water and the sky. Keep her head up and take the beat as it comes.",
+      "asleep": false,
+      "with": [],
+      "why": "The squall is here, not coming. The only thing to do with a squall on the west water is to be east of it."
+     },
+     {
+      "day": 0,
+      "from": "dusk",
+      "until": "evening",
+      "where": "The quay, harbour town",
+      "doing": "Tie up, make the Mary Ann fast, check the mooring lines twice against the blow. Then the post office on the quay — Rhona Carrick's letter into the box before anything else, before the pub gets its hooks in me.",
+      "asleep": false,
+      "with": [],
+      "why": "A letter with a name on it is a thing I can carry clean. Harrow Street, by the post office on the quay — and I said I'd put it in the box meself this afternoon, and I will, even if the afternoon's gone."
+     },
+     {
+      "day": 0,
+      "from": "evening",
+      "until": "night",
+      "where": "The harbour pub",
+      "doing": "A pint, a plate, and the talk. Tell them a fitter's come out to the rock — quiet woman, clockmaker's hands, Board's business. Hear what's being said about the Board and the lamp, and who's asking after the lighthouse.",
+      "asleep": false,
+      "with": [],
+      "why": "News is half the reason I make the crossing, and a new face on the route is news. What I carry back to the harbour, I carry back to the rock."
+     },
+     {
+      "day": 1,
+      "from": "morning",
+      "until": "midday",
+      "where": "The quay and the Mary Ann",
+      "doing": "The engine. The knocking on an irregular beat wants finding before the next run, or it'll pick the worst day to quit. Strip what I can, listen to it run, and if it's beyond me, get the man from the boatyard to look at it.",
+      "asleep": false,
+      "with": [],
+      "why": "I've never missed a run the weather allowed, and I'll not have the Mary Ann be the reason. She's older than the route and she'll want a rebuild soon, but not this week."
+     },
+     {
+      "day": 1,
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "The harbour, the chandlers, the Board's office",
+      "doing": "The standing order for the lighthouse — food, fuel, lamp spares, post. Anything special the fitter or Elias wants sent out, I'll see to it if I can. A word at the Board's office about the lamp and the new mechanism, if the man there will have one.",
+      "asleep": false,
+      "with": [],
+      "why": "The lighthouse depends on me, and I will not let it down. The run comes first, and the run is stores and post and whatever word needs carrying."
+     },
+     {
+      "day": 2,
+      "from": "morning",
+      "until": "midday",
+      "where": "The quay and the Mary Ann",
+      "doing": "Load the standing order — crates, sacks, the paraffin drum, the post bag — and lash it all down in the well. Check the forecast. If the weather's fair, make ready to run Tuesday as usual.",
+      "asleep": false,
+      "with": [],
+      "why": "Tuesday is the run. If the weather allows, the boat goes, regardless of mood or what else is happening."
+     },
+     {
+      "day": 2,
+      "from": "midday",
+      "until": "afternoon",
+      "where": "The harbour pub",
+      "doing": "A last pint and a last word before the crossing. Whatever's been said in the two days since I was last on the rock, I'll have it straight in my head before I go.",
+      "asleep": false,
+      "with": [],
+      "why": "The rock is cut off between boats. What I carry out is all they get."
+     }
+    ],
+    "at_the_end": {
+     "where": "The quay, harbour town — the Mary Ann loaded and made fast, ready for the Tuesday run",
+     "doing": "Checking the forecast one last time and turning in early, with the letter posted and the engine seen to and the stores aboard",
+     "asleep": false
+    },
+    "on_your_mind": "The letter's in the box and the engine's been looked at, but the squall's still on the water and the run's not made yet — and there's a quiet fitter on the rock with the Board's instructions in her pocket that I'd give a good deal to read."
+   }
+  },
+  "nell_night": {
+   "name": "Nell Hale",
+   "role": "character_mid",
+   "span": "the rest of the night: from now until morning",
+   "invitation": null,
+   "answer": {
+    "routine": [],
+    "plan": [
+     {
+      "day": 0,
+      "from": "night",
+      "until": "pre-dawn",
+      "where": "the kitchen",
+      "doing": "Sit up by the fire with the second sock, answering Ash Penrose plain when he asks and pressing him once more about the towns he has passed and what the chain is for; then bank the peat, set the poker and the tongs back, and bolt the yard door before bed.",
+      "asleep": false,
+      "with": [
+       "Ash Penrose"
+      ],
+      "why": "The mending is in my hands and the fire is mine to keep; and I will not get another man off that road to ask about the county beyond the moor."
+     },
+     {
+      "day": 0,
+      "from": "pre-dawn",
+      "until": "dawn",
+      "where": "the kitchen and the byre",
+      "doing": "Wake before the house, rake the peat open and build the fire up, set the kettle, then out to the byre to check the animals and the yard after the night's wind and rain.",
+      "asleep": false,
+      "with": [],
+      "why": "The fire must not be found dead and the beasts come first, storm or no storm."
+     },
+     {
+      "day": 0,
+      "from": "dawn",
+      "until": "morning",
+      "where": "the kitchen",
+      "doing": "Make the porridge and the tea, see Gideon fed before he goes out, put a plate and a cup in front of Ash Penrose if he is still under the roof, and get the day's work started.",
+      "asleep": false,
+      "with": [
+       "Gideon Hale",
+       "Ash Penrose"
+      ],
+      "why": "The house is fed before anything else, and a guest is fed before he goes out into the wet."
+     },
+     {
+      "day": 0,
+      "from": "morning",
+      "until": "midday",
+      "where": "Hallow Farm — the kitchen and the yard",
+      "doing": "The ordinary forenoon: wash up, sweep the flags, see to the milk pans, take the mending down and put it away, and get the peat in before the weather turns again.",
+      "asleep": false,
+      "with": [],
+      "why": "The house is kept by the hour, not by the mood."
+     },
+     {
+      "day": 0,
+      "from": "midday",
+      "until": "afternoon",
+      "where": "Hallow Farm — the kitchen",
+      "doing": "Dinner for whoever is in, then the afternoon's round: bread or bannocks if the flour allows, a look at the stores, the accounts in the book.",
+      "asleep": false,
+      "with": [
+       "Gideon Hale"
+      ],
+      "why": "What is scarce has to be counted, and the counting is mine."
+     },
+     {
+      "day": 0,
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "Hallow Farm — the yard and the kitchen",
+      "doing": "Bring the peat and the water in, shut the byre for the night, light the lamps early if the cloud sits low, and get the evening meal on.",
+      "asleep": false,
+      "with": [],
+      "why": "Dark comes early off the moor and the house must be shut against it before it does."
+     },
+     {
+      "day": 0,
+      "from": "dusk",
+      "until": "evening",
+      "where": "the kitchen",
+      "doing": "Supper, the fire built up, the day's last mending or a bit of reading by the lamp while Gideon sits quiet; take Agnes her posset up the stair if she wants it.",
+      "asleep": false,
+      "with": [
+       "Gideon Hale"
+      ],
+      "why": "The evening is the only hour the house sits still, and it is the hour I like best."
+     },
+     {
+      "day": 0,
+      "from": "evening",
+      "until": "night",
+      "where": "the kitchen and the stair",
+      "doing": "Bank the fire, bolt the door, put out the lamps, and go up to bed.",
+      "asleep": false,
+      "with": [],
+      "why": "The fire is banked last and the door bolted last; that is the order of it."
+     },
+     {
+      "day": 0,
+      "from": "night",
+      "until": "dawn",
+      "where": "her room, Hallow Farm",
+      "doing": "Sleep.",
+      "asleep": true,
+      "with": [],
+      "why": "Morning comes early and the house does not wait."
+     }
+    ],
+    "at_the_end": {
+     "where": "Hallow Farm — the kitchen",
+     "doing": "Building up the morning fire and setting the kettle, the byre still to be checked",
+     "asleep": false
+    },
+    "on_your_mind": "Whether Ash Penrose answered me plain before he went up, or dodged the chain a third time — and whether the road east he asked about is the one I know or another one entirely."
+   }
+  },
+  "davey_night": {
+   "name": "Davey Mott",
+   "role": "character_mid",
+   "span": "the rest of the night: from now until tomorrow morning",
+   "invitation": null,
+   "answer": {
+    "routine": [],
+    "plan": [
+     {
+      "day": 0,
+      "from": "evening",
+      "until": "night",
+      "where": "The Gull and Anchor, square table by the hearth",
+      "doing": "Stay on the bench at Tamsin's shoulder with the letter still in her coat. Keep the talk low, keep the grey-coated man's line of sight to her face running past me, and wait her out on who paid her. Buy the next round when the pots run dry. Do not ask her to stay.",
+      "asleep": false,
+      "with": [
+       "Tamsin Reed"
+      ],
+      "why": "She came across the whole room to me and told me the truth of it. If I shout it across the table I lose the lean-in. So I keep my voice down and I keep her talking, and I keep myself between her and the corner table until I know what she's standing in."
+     },
+     {
+      "day": 0,
+      "from": "night",
+      "until": "night",
+      "where": "Market Strand, outside the Gull and Anchor",
+      "doing": "Walk Tamsin to wherever she's sleeping in Saltreach — the packet's berth or an old room in the lower town — and see her in. Say goodnight at the door and nothing more than that.",
+      "asleep": false,
+      "with": [
+       "Tamsin Reed"
+      ],
+      "why": "She's salt-damp to the bone and carrying something that has a way of coming back on the one who carried it. I'd rather she walked back out the door with it than hand it over, but I won't say so — I'll just be the one who walks her home."
+     },
+     {
+      "day": 0,
+      "from": "night",
+      "until": "pre-dawn",
+      "where": "Saltreach quay, the tide out",
+      "doing": "Walk the quay alone the long way round before turning in — past the bollards and the stacked cargo, out where the water's gone and the boards are bare.",
+      "asleep": false,
+      "with": [],
+      "why": "The feeling about Tamsin gets too big to sit on, and this is what those walks are for. Nobody knows that and nobody needs to."
+     },
+     {
+      "day": 1,
+      "from": "pre-dawn",
+      "until": "morning",
+      "where": "my rooms, lower town",
+      "doing": "Sleep.",
+      "asleep": true,
+      "with": [],
+      "why": "The quay starts early and I'm no good to anyone without it."
+     },
+     {
+      "day": 1,
+      "from": "morning",
+      "until": "midday",
+      "where": "Saltreach quay",
+      "doing": "Work the cargo — barrels, crates, nets, rope. Walk Ewan's stretch of the quay without making a thing of it, and keep an eye out for the new factor's tally book.",
+      "asleep": false,
+      "with": [],
+      "why": "The quay is my living and my place in the town. And his knee's worse and he's not saying it, so I'll take his stretch quietly."
+     },
+     {
+      "day": 1,
+      "from": "midday",
+      "until": "afternoon",
+      "where": "Saltreach quay and the market",
+      "doing": "Haul, stack, secure. Ask after Tamsin Reed — where she's berthing, whether the packet's still in, who she's been seen with. Ask it the way I ask everything: as news, not as worry.",
+      "asleep": false,
+      "with": [],
+      "why": "Everyone on the quay is better off when they all know each other's business, and I'm the one who knows it. If she's standing in something, I want the shape of it before she's in it up to her neck."
+     }
+    ],
+    "at_the_end": {
+     "where": "Saltreach quay, among the stacked cargo and the bollards",
+     "doing": "Working the morning haul with my hands full and my ear open for Tamsin Reed's name",
+     "asleep": false
+    },
+    "on_your_mind": "She's told me straight — a letter for Isolde Varrow, paid, no name — and I've asked who paid her and she hasn't answered yet. I keep her at my shoulder and my shoulder between her face and the grey coat, and I don't spend the one good thing I've got on the question I actually want to ask."
+   }
+  },
+  "corwin_day": {
+   "name": "Corwin Ashe",
+   "role": "character_major",
+   "span": "a day: from now until tomorrow evening",
+   "invitation": null,
+   "answer": {
+    "routine": [
+     {
+      "from": "night",
+      "until": "pre-dawn",
+      "where": "Gull and Anchor, rented room upstairs",
+      "doing": "Sleeping — the door locks and the room is his own",
+      "asleep": true
+     },
+     {
+      "from": "pre-dawn",
+      "until": "dawn",
+      "where": "Gull and Anchor, rented room",
+      "doing": "Waking, lying still, turning over what he saw the night before",
+      "asleep": false
+     },
+     {
+      "from": "dawn",
+      "until": "morning",
+      "where": "Gull and Anchor, taproom",
+      "doing": "Coming down for breakfast — bread, ale, quiet. The taproom is nearly empty in the morning and Hollis has little to say",
+      "asleep": false
+     },
+     {
+      "from": "morning",
+      "until": "midday",
+      "where": "Saltreach quay and dock front",
+      "doing": "Walking the harbour — air, water, the sound of rigging. Watching the comings and goings of the packet boats and the quay porters. A man who walks is a man who belongs to no one",
+      "asleep": false
+     },
+     {
+      "from": "midday",
+      "until": "afternoon",
+      "where": "Gull and Anchor, taproom",
+      "doing": "Back inside. The daytime taproom is thin and quiet — a different room than market night. Sits with a pot and watches the emptiness, noting who comes in the off hours",
+      "asleep": false
+     },
+     {
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "Gull and Anchor, taproom or the market strand",
+      "doing": "Nursing a drink, reading the room as it fills. Watching the weathered woman's corner table — does she come on non-market nights too?",
+      "asleep": false
+     },
+     {
+      "from": "dusk",
+      "until": "evening",
+      "where": "Gull and Anchor, taproom",
+      "doing": "Settling in for the evening — same table if it is free, a different one if the big man might remember the grey coat at the next table",
+      "asleep": false
+     }
+    ],
+    "plan": [
+     {
+      "day": 0,
+      "from": "evening",
+      "until": "night",
+      "where": "Gull and Anchor, taproom",
+      "doing": "Stays through the rest of market night, gaze on the fiddler, left hand loose on the table edge, watching the weathered woman's pouch in peripheral vision. Waits for the room to thin. If Tamsin moves toward the corner table, he does not turn — he lets the peripheral tell him. If the handoff happens, he notes the time, the hands, the pouch. If it does not, he notes that too and retires when the big man and Tamsin leave",
+      "asleep": false,
+      "with": [],
+      "why": "Three days of patience have bought him this close. The handoff is either tonight or not, and he needs to know which before he can decide whether to stay in Saltreach or move. Leaving now means losing the thread"
+     },
+     {
+      "day": 1,
+      "from": "morning",
+      "until": "midday",
+      "where": "Saltreach quay and dock front",
+      "doing": "Walks the harbour deliberately — not just for air but to see whether the weathered woman has a presence on the docks, whether Tamsin left on the morning packet, and whether the big man works the morning shift. Lets himself be seen walking so the town keeps filing him under 'quiet man who takes the air'",
+      "asleep": false,
+      "with": [],
+      "why": "His cover cracked last night — the big man noticed the grey coat. He needs to re-establish the pattern of a man who is simply here, and the docks are where a stranger walking looks least strange. Also: the weathered woman's movements off-market-night will tell him whether she is a fixture or a courier who comes and goes"
+     },
+     {
+      "day": 1,
+      "from": "afternoon",
+      "until": "evening",
+      "where": "Gull and Anchor, taproom",
+      "doing": "Returns for the evening but chooses a different seat — not the table beside the corner one. Further back, near the bar, where he can see both the corner table and the door without being within arm's reach of either. Nurses one pot through the evening. If the weathered woman comes again, watches her hands. If Tamsin returns, does not look at her directly",
+      "asleep": false,
+      "with": [],
+      "why": "If the big man remembers the grey coat at the next table, sitting there again is a provocation. A different seat says 'I am not watching you' while still letting him watch. The investigation needs another night if the handoff did not happen — but it needs a night that does not cost him the three days of invisibility he already spent"
+     }
+    ],
+    "at_the_end": {
+     "where": "Gull and Anchor, taproom",
+     "doing": "Seated near the bar, nursing an ale, watching the corner table from a new angle — the weathered woman's hands, the pouch, the door",
+     "asleep": false
+    },
+    "on_your_mind": "Whether the handoff happened tonight and whether the big man will remember the grey coat — because one tells him he is close and the other tells him how much cover he has left to spend"
+   }
+  },
+  "isolde_week": {
+   "name": "Isolde Varrow",
+   "role": "character_mid",
+   "span": "a week: from now until the evening seven days from now",
+   "invitation": null,
+   "answer": {
+    "routine": [
+     {
+      "from": "night",
+      "until": "pre-dawn",
+      "where": "the Gull and Anchor, corner table",
+      "doing": "Sitting with a cup I won't finish, watching the door and the room thin out; leaving last or near it, walking the harbour wall at low tide before turning in.",
+      "asleep": false
+     },
+     {
+      "from": "pre-dawn",
+      "until": "dawn",
+      "where": "my lodgings above the chandlery, Saltreach",
+      "doing": "Asleep.",
+      "asleep": true
+     },
+     {
+      "from": "dawn",
+      "until": "morning",
+      "where": "the quay and market strand",
+      "doing": "Walking the harbour as the boats come in — reading who landed what, who's nervous, which crates moved overnight. Passing a word to the customs clerk at his post.",
+      "asleep": false
+     },
+     {
+      "from": "morning",
+      "until": "midday",
+      "where": "the Gull and Anchor, corner table",
+      "doing": "Holding the corner table for whoever needs a message carried. Ordering something I won't finish. Saying little.",
+      "asleep": false
+     },
+     {
+      "from": "midday",
+      "until": "afternoon",
+      "where": "the warehouse row behind the quay",
+      "doing": "Calling on the two warehouse owners — checking what's moving, taking a message or leaving one, never touching the goods.",
+      "asleep": false
+     },
+     {
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "the harbour wall and the back lanes",
+      "doing": "Walking the wall at low tide, then the lanes — keeping my routes fresh, noting who's watching whom.",
+      "asleep": false
+     },
+     {
+      "from": "dusk",
+      "until": "night",
+      "where": "the Gull and Anchor, corner table",
+      "doing": "Back at the corner table for the evening trade. One drink, taken slow. Watching the door.",
+      "asleep": false
+     }
+    ],
+    "plan": [
+     {
+      "day": 0,
+      "from": "evening",
+      "until": "night",
+      "where": "the Gull and Anchor, corner table",
+      "doing": "Staying put. Letting the girl come to me if the letter's mine — not moving first, not giving the grey coat a show. If she comes, taking it without opening it at the table, reading it later. If she doesn't, finishing the cup and leaving alone.",
+      "asleep": false,
+      "with": [],
+      "why": "The letter comes to me or it doesn't. Either way I decide when, not the room."
+     },
+     {
+      "day": 1,
+      "from": "morning",
+      "until": "midday",
+      "where": "the customs clerk's post, Saltreach quay",
+      "doing": "Reading whatever came in the letter and deciding whether it's worth carrying. If it is, passing it through the usual node — no names, no writing. If it isn't, burning it.",
+      "asleep": false,
+      "with": [],
+      "why": "Information is the only currency that doesn't sink you — but only if it moves clean."
+     },
+     {
+      "day": 2,
+      "from": "afternoon",
+      "until": "dusk",
+      "where": "the warehouse row behind the quay",
+      "doing": "Checking whether the grey coat has been asking after me or my contacts. Listening more than speaking. Making sure no node has been touched.",
+      "asleep": false,
+      "with": [],
+      "why": "Three days is not a man passing through. If he's here for me, I want to know before he knows I know."
+     },
+     {
+      "day": 4,
+      "from": "evening",
+      "until": "night",
+      "where": "the Gull and Anchor, corner table",
+      "doing": "Market night again. Holding the corner. Seeing who comes back and who doesn't.",
+      "asleep": false,
+      "with": [],
+      "why": "The corner table is the work. It has to stay a known point, or the network has no address."
+     }
+    ],
+    "at_the_end": {
+     "where": "the Gull and Anchor, corner table",
+     "doing": "Sitting with a cup I won't finish, back to the wall, watching the door on market night.",
+     "asleep": false
+    },
+    "on_your_mind": "The letter hasn't reached my hand yet, and the grey coat is still between me and the door — three days is not a man passing through."
+   }
+  }
+ }
+}

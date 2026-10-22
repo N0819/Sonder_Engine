@@ -119,6 +119,12 @@ FRAME_SCOPED_WORLD_KEYS = {
     # playerless Aldermill run (2026-09-23) one unscoped row served both
     # causality bubbles, and a bubble's commit overwrites the player's too.
     "engine_notices",
+    # Where each AWAY cast member is (`agents/skip_stage.WHEREABOUTS_KEY`):
+    # a mind whose skip ended somewhere the world does not hold is dormant
+    # there, `{name: {kind, label, since_s, turn_idx, char_id}}`. Per-era like
+    # the roster it explains: a rewind past the skip brings them home, and a
+    # branch that never skipped never sent them.
+    "whereabouts",
 }
 #: Prefixes whose every key is per-era. `relationships:` because a stance is
 #: held by a mind that exists in one frame and may not exist in another.
@@ -159,6 +165,10 @@ ERA_WORLD_KEYS = frozenset({
     # the author's: what the story's Writers' Room holds for this era
     "planning_needs", "room_mandates", "room_status", "room_frontier",
     "room_bible", "room_proposals", "plot_packages",
+    # where the away cast are (`agents/skip_stage.WHEREABOUTS_KEY`): a
+    # bubble is the same era somewhere else, and a mind off the map is off it
+    # for every frame of the era
+    "whereabouts",
 })
 
 #: Frame kinds that are the same era as their parent (`core/frames.py`).

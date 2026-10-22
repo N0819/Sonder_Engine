@@ -864,6 +864,9 @@ const FRIENDLY_STEP_LABELS = {
   perception_act: "Working out who notices",
   reaction_loop: "Characters reacting",
   interaction_loop: "Characters responding",
+  // skip_lives runs only on a beat whose input skips time: every cast member
+  // is asked how they spend it, and their days are lived before the far end.
+  skip_lives: "Characters living through the skip",
   director_resolve: "Deciding what happens",
   perception_outcome: "Working out what everyone just saw",
   narrator: "Writing the scene",

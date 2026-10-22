@@ -3552,9 +3552,24 @@ def _private_continuity(ctx, cid, stored_state):
     return out
 
 
-def character_step(ctx, cid, nonce):
+def character_step(ctx, cid, nonce, *, skip=None):
+    """One mind's turn: its private payload built, its card sent, its reply
+    read back into the engine's shape.
+
+    `skip` (`agents/skip_stage.py`) asks for THE SAME PAYLOAD for a different
+    question: what this mind does across a stretch the story passes over
+    (`docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md` § 4.3). It carries the
+    mind's cast `row` -- a dormant mind is in no beat's cast -- and the
+    `view`/`observations` that last reached it; the payload is assembled as
+    for any beat, nothing is called, and `{payload, role, name, temperature,
+    sampler}` comes back for the skip stage to ask its own card with. The
+    beat's gates do not apply: a sleeper is asked (its answer begins with
+    sleep) and so is a mind the scene places nowhere."""
     chat = ctx.chat
-    row = next((c for c in ctx.cast if c["id"] == cid), None)
+    if skip is not None:
+        row = skip.get("row")
+    else:
+        row = next((c for c in ctx.cast if c["id"] == cid), None)
     if row is None:
         # Cast member was dismissed between plan construction and execution;
         # skip this character step gracefully rather than crashing with
@@ -3584,7 +3599,12 @@ def character_step(ctx, cid, nonce):
     # card -- senses, abilities, embodiment capabilities, extra parts -- so a
     # transformation that stopped at the observer's view would leave this mind
     # certain it still had the shape it started with. See scene.transformed_sheet.
-    shared = ctx._extra.setdefault("character_turn_snapshot", {})
+    # The beat's shared snapshot (the scene, the clock, the per-turn caches)
+    # is the beat's: a skip question is asked from the world as the stretch
+    # BEGINS, and must leave nothing in it for the minds answering at its far
+    # end (`agents/skip_stage.py`).
+    shared = ({} if skip is not None
+              else ctx._extra.setdefault("character_turn_snapshot", {}))
     transformations = shared.get("active_transformations")
     if transformations is None:
         transformations = active_transformations(chat["id"])
@@ -3607,7 +3627,7 @@ def character_step(ctx, cid, nonce):
     # and makes the invariant hold no matter who calls character_step. No LLM
     # call, no manifest (which perception would otherwise deliver as tells).
     _awareness = awareness_of(chat["id"], character_name(sh))
-    if _awareness in NON_AWAKE_GATED:
+    if _awareness in NON_AWAKE_GATED and skip is None:
         # SAY SO. `_awareness_gated` had exactly one reader in the tree, a
         # test, so nothing downstream and nothing in the pipeline drawer could
         # tell a mind that was asleep from one that declared nothing -- and a
@@ -3638,7 +3658,7 @@ def character_step(ctx, cid, nonce):
     # `scene.positions` had no entry for, in beats whose own
     # `perception_act.views` listed observers ['75'] / ['74','75'] -- 6
     # `character_major` calls at 13-22s each on an empty perception base.
-    if not any(b["id"] == cid for b in _present_cast_bodies(sc, ctx.cast)):
+    if skip is None and not any(b["id"] == cid for b in _present_cast_bodies(sc, ctx.cast)):
         # SAY SO, for the reason the awareness gate does: a mind that ran no
         # step generates no pressure and reads as a quiet one, and this went
         # unnoticed for sixteen turns.
@@ -3650,7 +3670,12 @@ def character_step(ctx, cid, nonce):
                 "name": character_name(sh), "char_id": cid,
                 "_absent_gated": True}
 
-    view, observations = _character_perception(ctx, cid, nonce)
+    if skip is not None:
+        # What last reached this mind, as the stretch begins: the skip stage
+        # hands in the previous beat's view of it (`skip_stage.last_view`).
+        view, observations = skip.get("view"), list(skip.get("observations") or [])
+    else:
+        view, observations = _character_perception(ctx, cid, nonce)
 
     # Resolved before the memory context, not after: where the character is
     # standing is a retrieval cue, and the recall is built here.
@@ -4660,6 +4685,18 @@ def character_step(ctx, cid, nonce):
             _gated_interim, lambda text: _self_second_person(text, _self_forms))
         payload["while_you_were_offscreen"] = _owned_interim
 
+    # THE STRETCH THIS MIND JUST LIVED THROUGH, at the far end of a skip
+    # (`agents/skip_stage.py`): its own log -- where it was, what it did,
+    # whom it saw, what failed -- as payload, the `interim_for` precedent.
+    # Payload, never memory: the memories are written out of band after the
+    # commit, from the same log. Strictly the mind's own; a skip question
+    # carries no log, since the stretch is what it is being asked about.
+    if skip is None:
+        from .skip_stage import stretch_for_payload
+        _stretch = stretch_for_payload(ctx, character_name(sh))
+        if _stretch:
+            payload["the_stretch_just_passed"] = _stretch
+
     # Authorial offers (P3): propositions the PLAYER authored about THIS
     # character's interior/behavior, rerouted here instead of being enacted as
     # truth (see director._route_authorial_npc_beat). The character decides
@@ -4714,6 +4751,19 @@ def character_step(ctx, cid, nonce):
     _nb_kept = {"concerns": list(_nb_active.get("active_concerns") or []),
                 "projects": list(_nb_self.get("projects") or [])}
     payload = character_bare.with_notebook(payload, _nb_view)
+    if skip is not None:
+        # THE SKIP QUESTION ASKS FROM HERE: the payload is this mind's
+        # ordinary one, whole, and the skip stage adds its question and its
+        # card (`agents/skip_stage.py`). What answers THIS beat's moment goes:
+        # the beat's decision block (a speech budget, a line owed, a silence)
+        # and a line that named what only this mind knows -- the stretch is
+        # not that moment. The offers addressed to it go with the question.
+        payload.pop("decision", None)
+        if isinstance(payload.get("perception"), dict):
+            payload["perception"].pop("impossible_knowledge", None)
+        return {"payload": payload, "role": role, "name": character_name(sh),
+                "temperature": character_temperature(sh),
+                "sampler": character_sampler(sh) or None}
     # Kept for the read-back: the notes in play are checked before the call,
     # against what reached this mind, before its own reply can restate them.
     _before_answers = {}

@@ -1,0 +1,1 @@
+Which of the places offered is the one {name} means by "{where}"? Choose the place those words name, as someone who knows these places would read them; words that cover several of them name the first they mention. Answer "none of these" when the words name somewhere that is not among them.

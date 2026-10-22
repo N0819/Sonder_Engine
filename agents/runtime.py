@@ -17,7 +17,7 @@ from persist.commit import commit_all
 from core.db import active_frame_id, q, qi, transaction, wget_for_frame, wset
 from language_runtime import current_language_id, story_language
 from core.pipeline_context import (
-    ChatData, PipelineContext, TurnData, current_step_key,
+    ChatData, PipelineContext, TurnData, beat_onset, current_step_key,
     current_warning_sink,
     current_decision_sink,
     current_exchange_sink,
@@ -47,6 +47,8 @@ from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
 from .mapping import compile_world_context
 from .narration import narrator, narrator_extra
+from . import skip_stage as _skip_lives_stage
+from .skip_stage import skip_lives
 from .perception import (drop_body_condition_caches, perception_act,
                          perception_establish, perception_outcome)
 from .storage import (
@@ -323,6 +325,7 @@ STEP_HANDLERS = {
     "director_establish": director_establish,
     "director_interpret": director_interpret,
     "compile_world_context": compile_world_context,
+    "skip_lives": skip_lives,
     "perception_establish": perception_establish,
     "perception_act": perception_act,
     "director_resolve": director_resolve,
@@ -352,6 +355,7 @@ STEP_HANDLERS = {
 STEP_LABELS = {
     "director_interpret": "Director · interpret & flow plan",
     "compile_world_context": "World context · compiled from canon",
+    "skip_lives": "Characters · living through the skip",
     "perception_act": "Perception · pass 1 — the act",
     "reaction_loop": "Characters · physical reactions",
     "interaction_loop": "Characters · interaction loop",
@@ -463,6 +467,13 @@ def compute_step(key, ctx, nonce):
     # variant. Same getattr tolerance as the warning sink -- a stand-in
     # context without the method must mean "no ledger", never a failed step.
     ledger = call_ledger_sink.set(getattr(ctx, "note_llm_call", None))
+    # THE WORLD AS THE BEAT OPENS, for every stage after a skip
+    # (`core.pipeline_context.beat_onset`): the far end the skip stage
+    # reached, laid over the stored world for this stage's reads and taken
+    # off again as it ends. Never the commit's: its transaction reads back
+    # what it wrote (`persist.commit` lays the far end under its preparation
+    # itself).
+    onset = beat_onset.set(_onset_for(ctx, key))
     try:
         # NOTHING NEW STARTS AFTER AN ABORT. The flag was polled between
         # streamed chunks and nowhere else, so a stage that had not begun
@@ -481,11 +492,30 @@ def compute_step(key, ctx, nonce):
             raise RuntimeError("unknown step " + key)
         return handler(ctx, nonce)
     finally:
+        beat_onset.reset(onset)
         call_ledger_sink.reset(ledger)
         current_warning_sink.reset(sink)
         current_decision_sink.reset(dsink)
         current_exchange_sink.reset(xsink)
         current_step_key.reset(token)
+
+
+#: The stages that read the world as the beat BEGAN: the interpretation, the
+#: compiler and the skip stage itself run before the far end exists, and the
+#: commit's transaction reads back what it writes.
+_BEFORE_THE_FAR_END = frozenset({"director_interpret", "compile_world_context",
+                                 "skip_lives", "commit"})
+
+
+def _onset_for(ctx, key):
+    """The far end a stage reads the world through, or None."""
+    if key in _BEFORE_THE_FAR_END:
+        return None
+    try:
+        return _skip_lives_stage.far_end_for(ctx)
+    except Exception:  # noqa: BLE001 -- no preview: the stored world
+        _step_logger.exception("the skip's far end could not be read")
+        return None
 
 
 def _with_engine_notes(content, ctx, key, parallel_with=()):
@@ -853,13 +883,26 @@ def resume_key_for_turn(turn_id, chat_id):
         if not isinstance(interpretation, dict):
             return "director_interpret"
         from agents.offscreen_beat import is_offscreen_beat
+        # A SKIP THIS BEAT'S RUN LIVED THROUGH plans the rest of the beat at
+        # its far end, as the run replanned after it (`_replan_after_skip`):
+        # the stored step is read back, with the cast it brought home.
+        _cast = active_cast(chat_id, turn["frame_id"])
+        _skip = None
+        if not step_is_stale(turn_id, _skip_lives_stage.STEP_KEY):
+            _skip = active_content(turn_id, _skip_lives_stage.STEP_KEY)
+        if isinstance(_skip, dict):
+            _cast = _skip_lives_stage.cast_at_far_end(
+                chat_id, turn["frame_id"], _cast, _skip)
+        else:
+            _skip = None
         plan = build_plan(
             interpretation,
-            active_cast(chat_id, turn["frame_id"]),
+            _cast,
             chat_id=chat_id,
             frame_id=turn["frame_id"],
             turn_idx=turn["idx"],
             offscreen=is_offscreen_beat(chat_id, turn),
+            skip=_skip,
         )
 
     rows = q(
@@ -906,10 +949,27 @@ def resume_key_for_turn(turn_id, chat_id):
     return None
 
 def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=None,
-               turn_idx=None, offscreen=False):
+               turn_idx=None, offscreen=False, skip=None):
+    """The beat's plan. `skip` is the skip stage's stored output, when it has
+    run: the gates below then read the world at its FAR END -- who stands
+    where, who is asleep -- as every stage after it does
+    (`agents/skip_stage.FarEnd`), so the plan a run rebuilds after the skip
+    and the one `resume_key_for_turn` rebuilds from the store agree."""
     if not isinstance(interp, dict):
         interp = {}
-        
+    if skip is not None and beat_onset.get() is None:
+        # The gates' reads go through the store (`get_scene`,
+        # `awareness_conditions`), so the far end is laid on them for this
+        # planning alone: the plan is built again in a copy of this context
+        # carrying the preview, and nothing of it outlives the call.
+        if chat_id is None or not _skip_lives_stage.skip_lives_planned(interp, offscreen):
+            skip = None
+        else:
+            planning = contextvars.copy_context()
+            planning.run(beat_onset.set, _skip_lives_stage.FarEnd(chat_id, skip))
+            return planning.run(build_plan, interp, cast_rows, chat_id, frame_id,
+                                extra_players=extra_players, turn_idx=turn_idx,
+                                offscreen=offscreen, skip=skip)
     plan = [("director_interpret", step_label("director_interpret"))]
     fl = interp.get("flow")
     if not isinstance(fl, dict):
@@ -922,6 +982,12 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     # `location_query`, `mapping_request`, `generation_requests`), not the
     # branch flag the retired plan took.
     plan.append(("compile_world_context", step_label("compile_world_context")))
+    # THE CAST LIVE THROUGH A STRETCH THE INPUT PASSES OVER, before anything
+    # perceives the far end (`agents/skip_stage.py`): planned from the stored
+    # interpretation alone -- its kept skip at least `SKIP_LIVED_SECONDS` --
+    # so a replay rebuilds the same plan. Never in a bubble's own beat.
+    if _skip_lives_stage.skip_lives_planned(interp, offscreen):
+        plan.append((_skip_lives_stage.STEP_KEY, step_label(_skip_lives_stage.STEP_KEY)))
     plan.append(("perception_act", step_label("perception_act")))
 
     valid_ids = {int(row["id"]) for row in cast_rows}
@@ -940,6 +1006,12 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     if chat_id is not None:
         reactors = widen_reactors_to_acted_upon(chat_id, cast_rows, interp,
                                                 reactors)
+    # ...and every mind a skip's far end leaves awake in the room the beat
+    # opens on for the player: the interpretation chose its reactors before
+    # the stretch, and never saw it arrive (`skip_stage.widen_reactors_to_skip_far_end`).
+    if chat_id is not None and skip is not None:
+        reactors = _skip_lives_stage.widen_reactors_to_skip_far_end(
+            chat_id, cast_rows, reactors, skip, interp)
 
     # Consciousness gate: an unconscious/asleep/sedated mind neither perceives
     # nor deliberates, so drop it from the reactor set before any character
@@ -982,6 +1054,11 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         _scene = wget_for_frame(chat_id, "scene", frame_id, None)
         if not isinstance(_scene, dict):
             _scene = get_scene(chat_id)
+        elif skip is not None:
+            # The frame's own scene, at a skip's far end, as `get_scene`
+            # gives it to every other reader of the beat.
+            from story.scene import _lay_beat_onset
+            _lay_beat_onset(chat_id, _scene)
         _present = {b["id"] for b in _present_cast_bodies(_scene, cast_rows)}
         reactors = [cid for cid in reactors if cid in _present]
 
@@ -1281,6 +1358,8 @@ SIDE_CHANNELS = {
     "_destination_residue_report": "diagnostic: absence reads as `no "
                                    "chances`, which is what a replayed beat "
                                    "is (see persist/commit.py)",
+    "_skip_far_end": "memo: the skip's far end (`skip_stage.FarEnd`), made "
+                     "again from the hydrated `skip_lives` content on a miss",
 }
 
 
@@ -1356,6 +1435,10 @@ def _rehydrate_side_channels(ctx, key, content):
     because a side channel must never be the reason a reroll fails.
     """
     _rehydrate_loop_results(ctx, key, content)
+    if key == _skip_lives_stage.STEP_KEY:
+        # The cast the far end brought home is the beat's cast from here on.
+        _skip_lives_stage.rehydrate(ctx, content)
+        return
     if key in ("interaction_loop", "reaction_loop"):
         rehydrate_loop_views(ctx, key, content)
         return
@@ -1369,11 +1452,13 @@ def _rehydrate_side_channels(ctx, key, content):
     if handler is None:
         return
     token = current_step_key.set("perception_outcome")
+    onset = beat_onset.set(_onset_for(ctx, "perception_outcome"))
     try:
         handler(ctx, 0)
     except Exception:
         _step_logger.exception("outcome_scene rebuild failed on resume")
     finally:
+        beat_onset.reset(onset)
         current_step_key.reset(token)
         ctx["perception_outcome"] = content
 
@@ -1831,12 +1916,44 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blockin
     if not is_offscreen_beat(chat_id, turn_row):
         cast_rows = _merge_bubbles_the_beat_reaches(ctx, chat_id, turn_row) or cast_rows
 
-    plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
+    # A SKIP THE TURN ALREADY LIVED THROUGH plans the beat at its far end,
+    # as `resume_key_for_turn` does from the same stored step; a skip about
+    # to be lived through replans when it has (`_replan_after_skip`).
+    _stored_skip = None
+    if not step_is_stale(turn_id, _skip_lives_stage.STEP_KEY):
+        _stored_skip = active_content(turn_id, _skip_lives_stage.STEP_KEY)
+    _stored_skip = _stored_skip if isinstance(_stored_skip, dict) else None
+    plan = build_plan(ctx["director_interpret"],
+                      (_skip_lives_stage.cast_at_far_end(
+                          chat_id, turn_row["frame_id"], cast_rows, _stored_skip)
+                       if _stored_skip else cast_rows),
+                      chat_id=chat_id,
                       frame_id=turn_row["frame_id"],
                       extra_players=ctx.extra_players,
                       turn_idx=getattr(ctx.turn, "idx", None),
-                      offscreen=is_offscreen_beat(chat_id, turn_row))
+                      offscreen=is_offscreen_beat(chat_id, turn_row),
+                      skip=_stored_skip)
     keys = [k for k, _ in plan]
+
+    def _replan_after_skip():
+        """THE PLAN AT THE FAR END. The gates that chose this plan read the
+        world before the skip; once it is lived through, the rest of the beat
+        is planned where it left everyone -- who stands with the player, who
+        is asleep, who came home (`skip_stage.FarEnd`). The steps up to the
+        skip are the same in both plans; steps the new plan does not want go
+        as an unwanted step always goes."""
+        new_plan = build_plan(ctx["director_interpret"], ctx.cast, chat_id=chat_id,
+                              frame_id=turn_row["frame_id"],
+                              extra_players=ctx.extra_players,
+                              turn_idx=getattr(ctx.turn, "idx", None),
+                              offscreen=is_offscreen_beat(chat_id, turn_row),
+                              skip=ctx.get(_skip_lives_stage.STEP_KEY))
+        new_keys = [k for k, _ in new_plan]
+        for row in q("SELECT * FROM steps WHERE turn_id=?", (turn_id,)):
+            if row["key"] in new_keys or variant_count(turn_id, row["key"]) > 1:
+                continue
+            delete_step(row["id"])
+        return new_plan, new_keys
     if start_key is not None and start_key not in keys:
         # Refuse before deleting orphans or marking anything stale -- an
         # unknown from_key must surface as an error the caller resolves,
@@ -1872,6 +1989,11 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blockin
             ctx[key] = c
             _rehydrate_side_channels(ctx, key, c)
             i += 1
+            if key == _skip_lives_stage.STEP_KEY:
+                plan, keys = _replan_after_skip()
+                start_i = (keys.index(start_key) if start_key in keys
+                           else min(start_i, i))
+                mark_steps_stale(turn_id, keys[start_i:])
             continue
         if key.startswith("character:"):
             group = []
@@ -1919,6 +2041,10 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None, refuse_blockin
         yield from _step_stream(bus, turn_id, key, label, i, ctx,
                                 variant_count(turn_id, key))
         i += 1
+        if key == _skip_lives_stage.STEP_KEY:
+            _skip_lives_stage.rehydrate(ctx, ctx.get(key))
+            plan, keys = _replan_after_skip()
+            mark_steps_stale(turn_id, keys[i:])
 
     _assert_plan_materialized(turn_id, plan, ctx)
     clear_steps_stale(turn_id, keys)

@@ -3,7 +3,7 @@
 `docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md` § 4.4 (a), and the timeskip
 half of `docs/UNBUILT_LIVING_WORLD.md` § 1.99d ("seed it as Charter state, run
 the institution forward with `simulate_bound=True`, and hand the accumulated
-life back"). The skip stage (`agents/skip_lives.py`) asks each cast member
+life back"). The skip stage (`agents/skip_stage.py`) asks each cast member
 what it does over the span and resolves the answer to an ITINERARY of
 absolute stretches; where the story has a town charter, that itinerary is
 walked here, among the town's own people, and the mind gets back what it did,
@@ -55,7 +55,7 @@ is a mind whose OWN body stands a post (a featured resident): its day keeps
 it off the bill, and the town's advance, holding that body where the commit
 stood it, may staff it there (chat 115: 8 of 10).
 
-WHAT COMES BACK, per the skip stage's fixed shapes (`agents/skip_lives.py`):
+WHAT COMES BACK, per the skip stage's fixed shapes (`agents/skip_stage.py`):
 a LOG row per stretch -- and per silence the town filled -- carrying the
 residents the mind stood among, each under the name THIS mind knows them by
 (an unmet resident is a stranger's label, never a name: the `known` ledger

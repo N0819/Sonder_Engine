@@ -219,7 +219,7 @@ def _clear_turn_scoped_context():
     background work: `db.active_frame_id` is the one that would matter and
     every job producer already sets it and resets in `finally`.
     """
-    from core.pipeline_context import (current_decision_sink,
+    from core.pipeline_context import (beat_onset, current_decision_sink,
                                        current_exchange_sink,
                                        current_step_key,
                                        current_warning_sink)
@@ -233,7 +233,7 @@ def _clear_turn_scoped_context():
     for var in (token_sink, reasoning_sink, generation_event_sink,
                 call_ledger_sink, cancel_event, current_warning_sink,
                 current_step_key, current_decision_sink,
-                current_exchange_sink):
+                current_exchange_sink, beat_onset):
         var.set(None)
 
 

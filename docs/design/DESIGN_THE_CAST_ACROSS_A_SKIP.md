@@ -1,6 +1,13 @@
 # Design: the cast lives through a time skip
 
-**Status: PROPOSED 2026-10-21; nothing built.** This note brings together
+**Status: BEING BUILT 2026-10-21** (the build spec's lanes): phase 0, the
+walk the floor refuses offered to its mind (`UNBUILT_PIPELINE.md` § 1.227);
+the stage -- the question, the itinerary, the executor, the far end and its
+commit -- `agents/skip_stage.py`, `world/skip_itinerary.py` and
+`persist/commit_skip.py` (`Design.md`, "The cast live through a time skip");
+the town's run of a body it holds, § 4.4 (a) (`world/charter_skip.py`); and
+the memories, § 4.6 (`mind/skip_memories.py`). What follows is the design as
+proposed and probed. This note brings together
 three earlier owner designs and the owner's restatement of the same day:
 - the timeskip half of `docs/UNBUILT_LIVING_WORLD.md` § 1.99d (2026-08-27);
 - the dormancy ruling, `docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md` § 3c

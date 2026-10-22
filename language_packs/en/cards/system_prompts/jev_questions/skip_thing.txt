@@ -1,0 +1,1 @@
+Which of the things {name} has on them is the one {name} means by "{thing}"? Choose the thing those words name. Answer "none of these" when the words name something that is not among them.

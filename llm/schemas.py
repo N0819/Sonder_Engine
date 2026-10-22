@@ -4246,6 +4246,65 @@ class CharacterBareOutput(LenientModel):
                         if row not in (None, "", {})])
 
 
+#: The keys of one stretch of a skip answer (`prompts/character_skip.txt`),
+#: and how each is read: a plain line, a flag, a whole day count, or a list of
+#: plain lines. `from` is a Python keyword, so a stretch stays a mapping
+#: rather than a model with a field of that name.
+_SKIP_STRETCH_LINES = ("from", "until", "where", "doing", "why")
+_SKIP_STRETCH_LISTS = ("with", "uses")
+
+
+def _skip_flag(value):
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().casefold() in ("true", "yes", "1")
+
+
+def _skip_stretch(value, planned=False):
+    """One stretch of a skip answer, its keys read leniently and nothing
+    else kept: an entry that is not an object is no stretch."""
+    if not isinstance(value, dict):
+        return None
+    out = {}
+    for key in _SKIP_STRETCH_LINES:
+        out[key] = " ".join(str(value.get(key) or "").split())
+    out["asleep"] = _skip_flag(value.get("asleep"))
+    if planned:
+        try:
+            out["day"] = max(0, int(float(value.get("day") or 0)))
+        except (TypeError, ValueError):
+            out["day"] = 0
+        for key in _SKIP_STRETCH_LISTS:
+            out[key] = _bare_lines(value.get(key))
+    return out
+
+
+def _skip_stretches(value, planned=False):
+    rows = value if isinstance(value, (list, tuple)) else ([] if value in (None, "", {}) else [value])
+    return [row for row in (_skip_stretch(r, planned) for r in rows) if row is not None]
+
+
+class CharacterSkipOutput(LenientModel):
+    """A mind's answer to the skip question (`agents/skip_stage.py`,
+    `prompts/character_skip.txt`): one ordinary day of the stretch, in order
+    what departs from it, where the stretch leaves it, and a line of what it
+    carries out. Nothing is required -- an answer that says nothing is the
+    default day, "silence is sleep" -- and nothing the card does not ask for
+    is kept."""
+    routine: list[dict] = Field(default_factory=list)
+    plan: list[dict] = Field(default_factory=list)
+    at_the_end: dict = Field(default_factory=dict)
+    on_your_mind: str = ""
+
+    _coerce_routine = validator("routine", pre=True, allow_reuse=True)(
+        lambda cls, v: _skip_stretches(v))
+    _coerce_plan = validator("plan", pre=True, allow_reuse=True)(
+        lambda cls, v: _skip_stretches(v, planned=True))
+    _coerce_end = validator("at_the_end", pre=True, allow_reuse=True)(
+        lambda cls, v: {key: val for key, val in (_skip_stretch(v) or {}).items()
+                        if key in ("where", "doing", "asleep")})
+
+
 class CharacterDecisionContinuity(LenientModel):
     """One private choice and its reason, never an action outcome."""
     chosen: str = ""
@@ -4724,6 +4783,9 @@ SCHEMA_MAP = {
     "interpret_repair": InterpretRepairOutput,
     "narrator": NarratorOutput,
     "character_bare": CharacterBareOutput,
+    # The skip question (`agents/skip_stage.py`): a sub-call inside the
+    # `skip_lives` step, one per asked mind, like the hands inside a stage.
+    "character_skip": CharacterSkipOutput,
     "character": CharacterOutput,
     "background_react": BackgroundReactOutput,
     "conversation_thread": ConversationThreadOutput,

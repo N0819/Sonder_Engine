@@ -110,6 +110,10 @@ def _beat_scene(ctx, dr=None):
     legitimately has; commit will write exactly it.
     """
     sc = wget(ctx.chat.id, "scene", {}) or {}
+    # ...and where a skip this beat passed over left everyone, which the
+    # beat opened on and its diff does not restate (`skip_stage.FarEnd`).
+    from .skip_stage import far_end_scene
+    sc = far_end_scene(ctx, sc)
     return beat_scene(sc, dr if dr is not None
                       else (ctx.get("director_resolve") or {}))
 

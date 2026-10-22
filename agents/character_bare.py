@@ -409,6 +409,10 @@ def modules_for(payload, *, disputed=(), rupture_open=False, rupture_forced=Fals
         out.append("impossible_knowledge")
     if (payload or {}).get("carried_reports") or self_.get("carried_reports"):
         out.append("carried_reports")
+    # A skip's far end: the stretch this mind just lived through, as its own
+    # log (`agents/skip_stage.stretch_for_payload`).
+    if (payload or {}).get("the_stretch_just_passed"):
+        out.append("stretch_just_passed")
     # Finding the way: the full card's spatial-frame, places and en-route
     # clauses as one class -- the frame rides on nearly every payload.
     if perception.get("spatial_frame"):

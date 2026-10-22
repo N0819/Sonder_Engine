@@ -1348,6 +1348,20 @@ a live probe:
 
 Proposed, not built; the owner's questions are its § 6.
 
+**2026-10-21: the stage is being built, as the build spec's lane B.** The
+timeskip half's core is the skip stage (`agents/skip_stage.py`, `world/skip_itinerary.py`,
+`persist/commit_skip.py`; `Design.md`'s row "The cast live through a time
+skip"): one question per cast member on its own payload, the answer laid on
+the clock and lived in pure code -- or in the town's charter where one holds
+the body -- and each mind placed where its own day left it, away and dormant
+where that is off the map. The three questions above are answered as the
+design note answers them: one call per mind; the projection of projects and
+intentions is the answer itself, never a second copy in the charter; a stretch
+the world cannot carry out fails with a typed reason the mind's log keeps.
+Still open here: crediting the projects and intentions a stretch served, the
+body's vitals and affect over the span, things moved in a skip, and bubble
+cast (whose frames keep their own clocks).
+
 **2026-10-21, later: the memories are built** (`mind/skip_memories.py`,
 `Design.md` "A mind remembers the days a skip passed over"; the stage that
 lives the skip and the town's charter are their own lanes). After a skip beat

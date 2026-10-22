@@ -1145,6 +1145,16 @@ def interaction_loop(ctx, nonce):
     initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
         int(cid) for cid in widen_reactors_to_acted_upon(
             ctx.chat.id, ctx.cast, interp, list(initial_reactors))]))
+    # ...and every mind a skip's far end leaves awake in the room the beat
+    # opens on for the player, whom the interpret chose its reactors before
+    # (`skip_stage.widen_reactors_to_skip_far_end`): the planner gave them the
+    # loop, and the loop must not stop on "no reactors" without them.
+    if ctx.get("skip_lives"):
+        from .skip_stage import widen_reactors_to_skip_far_end
+        initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+            int(cid) for cid in widen_reactors_to_skip_far_end(
+                ctx.chat.id, ctx.cast, list(initial_reactors),
+                ctx.get("skip_lives"), interp)]))
 
     # WHO THE BEAT LANDED ON GOES FIRST, and the beat says who that is in two
     # places: who was spoken to, and who was acted upon. Order is causality

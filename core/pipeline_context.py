@@ -58,6 +58,23 @@ def note_step_warning(msg: str) -> None:
             pass
 
 
+#: THE WORLD AS THIS BEAT OPENS, where a stage before the readers moved it
+#: without writing it: the skip stage's far end (`agents/skip_stage.FarEnd`).
+#: While it is set, `story.scene.get_scene` and `story.scene.
+#: awareness_conditions` answer with it laid over the stored world, so every
+#: reader after the skip -- perception, the characters, the loops, the
+#: resolve, the narrator -- reads one far end. `agents.runtime.compute_step`
+#: sets it for each stage after `skip_lives` and resets it as the stage ends;
+#: never for the commit's transaction, whose domains read back what they
+#: wrote, and never for background work (`core/jobs.py`). A PREVIEW, so no
+#: code that writes the scene back may run under it: a read-modify-write of
+#: the stored scene from inside a stage would make the far end durable before
+#: the commit validated it (no stage does today; the writers are the commit's
+#: domains and the Writers' Room's out-of-band jobs).
+beat_onset: contextvars.ContextVar[Optional[Any]] = \
+    contextvars.ContextVar("beat_onset", default=None)
+
+
 # Where a deterministic DECISION made below the agent layer should land. The
 # producers are the guards themselves -- composer, perception, the fan-out's
 # manifest check, the background gate -- none of which hold a PipelineContext,
@@ -326,6 +343,11 @@ class PipelineContext:
     # into `_extra`, and `world_context()` below reads whichever is present,
     # so a rerun of an old beat serves the lore it was served then.
     compile_world_context: Optional[dict] = None
+    # The skip stage (`agents/skip_stage.py`): what each cast member did over
+    # a stretch the players' input passed over. Read by the planner's gates,
+    # perception (through the onset preview), the character calls (their own
+    # log), the commit and the out-of-band memory job.
+    skip_lives: Optional[dict] = None
     perception_establish: Optional[dict] = None
     perception_act: Optional[dict] = None
     director_resolve: Optional[dict] = None

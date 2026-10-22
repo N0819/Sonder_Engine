@@ -4159,10 +4159,57 @@ What that leaves:
   probe of it: `docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md` -- ask each
   cast member what they do over the skip, run their answers as the charter
   runs a day, place them where it leaves them, write their memories after.
-  Proposed. Its phase 0 is built: the walk `a_walk_is_its_owners` refuses is
+  Its phase 0 is built: the walk `a_walk_is_its_owners` refuses is
   offered to its mind (`UNBUILT_PIPELINE.md` § 1.227). So is its last step:
   the memories are written (`mind/skip_memories.py`, 2026-10-21; its
   residuals are §1.99d's).
+  And its core is BEING BUILT 2026-10-21: the skip stage (`agents/skip_stage.py`,
+  `world/skip_itinerary.py`, `persist/commit_skip.py`; `Design.md`'s row "The
+  cast live through a time skip") asks them, lives their answers in code,
+  places them at the far end as an onset preview and commits it; where the
+  town's charter holds a body, the town lives its stretch
+  (`world/charter_skip.py`). What that leaves:
+  - **The far end is read on the stored clock.** The placements are
+    previewed and the clock is not (this entry's first residual, the owner's
+    call): a quay hand placed on the quay at seven in the morning is told by
+    perception "It is dark here", and every character payload of the beat
+    carries the clock the skip began on beside the log of the stretch it
+    lived (offline, the tavern night, 2026-10-21). By the same construction,
+    not measured: the town's residents a far end shows are where the stored
+    registry had them when the skip began, since the town's own advance runs
+    after the commit.
+  - **A place named by what it is to the mind -- "home", "my bunk" --
+    reaches the decision model with nothing beside any option to read it
+    by.** Offline on a copy of chat 175, the village the town's charter
+    holds, Mellisande's "home" went off the map for the night while her
+    cottage, The Lane's End, stood in the world; a day that ENDED "home"
+    would have left her away and dormant. A card clause asking for a place's
+    name, or the engine's knowledge of where a mind sleeps beside that
+    option, would close it; neither is built (the owner's call).
+  - **The body over the span is not lived.** The commit's survival tick and
+    affect decay still read the beat as one stretch from the stored
+    awareness (§3's arithmetic in the design note): a mind's sleep stretches
+    reach the far end's awareness, never its vitals.
+  - **The decision model's resolutions and the minds' answers are
+    unmeasured live.** Offline a word-overlap stand-in answered the place
+    questions; whether the decision model reads "bedroom" as the keeper's
+    room and "the harbour" as `The Mainland` is the live replay's to show.
+  - **A `doing` that carries intent reaches whoever shares the room.** The
+    card says `doing` is only what a watcher sees (a clause); the probe's
+    answers, written before it, put "watching the weathered woman's pouch"
+    into what two other minds saw (offline, the tavern night).
+  - **Within a room, a mind stands one pace inside the door it came by.**
+    The furniture its words name is not read into a station: "the Gull and
+    Anchor, corner table" seats Isolde by its door (offline, the tavern
+    night).
+  - **Exposed at the far end, not of it: a sound that fills a room is named
+    by its source's own label.** `spatial_sound_field._heard_standing_sources`
+    names a standing source by the entity's name, not by the observer's
+    recognition; at the tavern's far end the fiddle's even din reached two
+    minds as "The Fiddler", and the composer's tripwire repaired it to "the
+    thin stooped old man seated" (4 tripwires in the far-end perception, 0 in
+    the stored world's; any beat whose room carries one even sound reaches
+    it).
 
 Extended again 2026-10-21 (the probe's F20, "a skip moves the sky one
 rung"): the clock moved by a skip and the weather did not follow it.

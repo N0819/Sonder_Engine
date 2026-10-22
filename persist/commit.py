@@ -186,6 +186,7 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     BEARING_MANNERS, _bearing_subject_key, derive_borne_containment,
     _refuse_unheld_transfers, ComposedBeat, compose_beat_key,
     compose_beat_scene, composed_beat_for, sleepers_of)
+from persist.commit_skip import commit_skip_lives
 from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_spine,
     commit_information_carriers, commit_cast_changes, town_for_sweep)
 from persist.commit_memory import (_names_spoken_by, RECENT_TELLS_CAP, _durable_dialogue_category,
@@ -538,7 +539,13 @@ def _refuse_a_taken_back_turn(ctx):
 def _commit_all_locked(ctx, nonce):
     import extension_runtime as _extensions_module
 
-    prepared = _prepare_turn_commit(ctx)
+    # THE PREPARATION READS THE WORLD AS THE BEAT DID: a skip's far end is
+    # laid over every stored read of the scene and of who is asleep while the
+    # commit composes the beat (`agents/skip_stage.py`), and taken off before
+    # the transaction, whose domains read back what they wrote.
+    from agents.skip_stage import far_end_for, onset_preview
+    with onset_preview(far_end_for(ctx)):
+        prepared = _prepare_turn_commit(ctx)
     results = {}
 
     try:
@@ -564,6 +571,15 @@ def _commit_all_locked(ctx, nonce):
             _commit_domain(
                 ctx, results, "scene",
                 lambda: commit_scene(ctx, nonce, prepared=prepared["scene"]),
+            )
+            # A skip's far end: who is away and where, who came home, who is
+            # asleep and since when (`persist/commit_skip.py`). After the
+            # scene, which carries its placements; before the entities and
+            # the cast, so the beat's own conditions and roster changes have
+            # the last word.
+            _commit_domain(
+                ctx, results, "skip_lives",
+                lambda: commit_skip_lives(ctx, nonce),
             )
             _commit_domain(
                 ctx, results, "entities",

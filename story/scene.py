@@ -525,7 +525,29 @@ def get_scene(chat_id, chat=None):
         from core.logging_utils import logger
         logger.warning("solved plans not laid onto the stubs of chat %s: %s",
                        chat_id, exc)
+    # THE WORLD AS THE BEAT OPENS, where a stage before this reader moved it
+    # without writing it: a skip's far end (`agents/skip_stage.FarEnd`), laid
+    # on for every reader of the beat after the skip, as the commit will lay
+    # it under the beat's own diff (`compose_beat_scene`). Unset -- every beat
+    # with no skip, and the commit's own domains -- this is the stored scene.
+    _lay_beat_onset(chat_id, sc)
     return sc
+
+
+def _lay_beat_onset(chat_id, sc):
+    """Lay the beat's onset preview (`core.pipeline_context.beat_onset`) on a
+    scene read from the store, in place."""
+    from core.pipeline_context import beat_onset
+    onset = beat_onset.get()
+    if onset is None:
+        return sc
+    try:
+        return onset.apply_scene(chat_id, sc)
+    except Exception as exc:  # a preview that cannot lay is the stored scene
+        from core.logging_utils import logger
+        logger.warning("the beat's onset preview was not laid on chat %s: %s",
+                       chat_id, exc)
+        return sc
 
 
 def seed_scene_from_plan(chat_id, sc):
@@ -1420,6 +1442,21 @@ def awareness_conditions(chat_id):
     # is two answers to when this started. Stable, so the SQL clause above
     # still breaks a tie.
     rows.sort(key=lambda r: r["started_at_seconds"])
+    # A SKIP'S FAR END, as the beat after it reads the world
+    # (`core.pipeline_context.beat_onset`): a mind that slept through and
+    # woke is awake, and one that fell asleep is under from when it did --
+    # so the planner's gate, perception, the character gate and the
+    # resolve's waking floors (`awareness_map` reads these rows) all read one
+    # answer. Unset, these are the stored rows.
+    from core.pipeline_context import beat_onset
+    onset = beat_onset.get()
+    if onset is not None:
+        try:
+            rows = onset.overlay_awareness(chat_id, rows)
+        except Exception as exc:  # the stored rows stand
+            from core.logging_utils import logger
+            logger.warning("the beat's onset preview was not laid on the "
+                           "awareness of chat %s: %s", chat_id, exc)
     return rows
 
 
