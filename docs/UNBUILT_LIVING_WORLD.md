@@ -1380,12 +1380,37 @@ and drops what still fails. What it leaves:
   Consolidation reads windows by turn index, and a window ending at the skip
   beat that ran before the job landed never sees its rows. They stay in the
   bank and in recall.
-- **Two of the design's three questions are not asked** (§ 4.6): an outcome
-  of the mind's own attempt the log does not give, and a past event `memory`
-  does not hold. The typed `outcome` (`not_known` stops a memory at the
-  attempt) and the card's clauses carry them, and the floor catches their
-  numbers; the build spec narrowed the model's part to one question, others'
-  conduct.
+- **All three of the design's questions are asked now** (§ 4.6; the
+  lighthouse replayed 2026-10-21, chat 3 turn 25, wrote a failed post-office
+  stretch as posted, gave a rotation test two outcomes no row gives, and let
+  the yard man "look at it"): the record says each outcome in words
+  (`how_it_went`), and `outcome` and `past` joined `others`, whose question
+  now says the record shows another person only in `with`. What they leave:
+  - **A result told past a `done` row is the outcome question's too** (the
+    coordinator's ruling, the same day): the question is keyed to each row's
+    `how_it_went`, never to the `failed`/`not_known` codes, so the keeper's
+    "the clockwork held through the night" and "the gear teeth meshed clean"
+    flag, and a routine doing told as done does not. What stays: a stretch
+    whose success is the world's to judge but that names no `with`, `uses` or
+    `away` is still marked `done` by both executors, and where a result ends
+    and a doing's own texture begins ("the rotation turning, the wick burning
+    clean" on a night watch) is the decision model's reading, unmeasured live.
+  - **`not_held` names what was missing only once the executor says**
+    (`missing`, lane B2's); a log written before it reads "something it
+    needed was not to hand". On the live LOG, things in reach still counted as
+    not held, so the keeper's own lamp-room stretches read as failures and
+    the check holds his memories to them -- faithfully, to a wrong record.
+  - **`past` reads the mind's whole memory packet** beside the record (42,440
+    characters for the keeper on the live copy), and its live false-positive
+    rate is unmeasured; it is the first kind `SKIP_MEMORY_CHECKS` would drop.
+  - **The far end's own call still reads the codes**: its payload
+    (`the_stretch_just_passed`, `agents/skip_stage.stretch_for_payload`)
+    carries `outcome`, `reason` and `meant`, not the words.
+  - **Whether a live run's check was asked** was not on record: the job's
+    log line kept only what it wrote. It now carries the decision model's
+    state (`jev`, `unanswered`) and the flags by kind (`summary_of`); the
+    2026-10-21 replay's own run cannot be read back, though the route was up
+    and answering in the same process that minute.
 - **The floor is lenient where a figure is small or not a figure.** A number
   is held by any equal value in the sources, so "down two tins" stood beside a
   record whose days run to 2; fractions and ordinals are not figures ("half a

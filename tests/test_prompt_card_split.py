@@ -49,7 +49,12 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 300   # +6 (2026-10-21): the skip stage's card
+PART_COUNT = 304   # +4 (2026-10-21): the outcome and past questions that
+                   # check a skip memory and their sentence forms,
+                   # `jev_questions.skip_memory_outcome`,
+                   # `skip_memory_outcome_sentence`, `skip_memory_past`
+                   # and `skip_memory_past_sentence` (mind/skip_memories.py).
+                   # +6 (2026-10-21): the skip stage's card
                    # `prompts.character_skip`, the far-end module
                    # `character_bare.stretch_just_passed`, and the decision
                    # model's place and thing questions with their "none of

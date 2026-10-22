@@ -1,0 +1,1 @@
+Does this sentence of `memory` give a detail of {name}'s past -- of any time before the stretch `record` covers -- that none of `remembered`, `who` and `record` holds? Answer no when what it says of the time before is held there, and when it keeps to the stretch. The sentence: {sentence}

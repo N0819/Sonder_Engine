@@ -27,20 +27,33 @@ dormancy ruling of 2026-09-17), and where each is kept:
   * PROVENANCE IS `witnessed`. The mind was there. The origin travels on the
     row's `event_key` (`SKIP_ORIGIN_PREFIX`), never as a fifth provenance.
 
+THE RECORD SAYS HOW IT WENT. A LOG row's `doing` is what the mind set
+about, and its `outcome` a code; the record hands the writer the first as
+`set_about` and the second IN WORDS as well (`how_it_went`, the pack's
+templates): what did not come off and why, that the mind did it but does not
+know what came of it, or that it did it and the record holds no more. A code alone was
+read as success -- the lighthouse replayed 2026-10-21 (chat 3, turn 25): the
+boatman's `failed`/`not_held` post-office stretch came back "So I did ...
+into the box", where the probe's record, which said it in words, got the
+loss written.
+
 THE CHECK. The probe's writer invented (`DESIGN_THE_CAST_ACROSS_A_SKIP.md`
 § 2.2: 8 of 15 memories on the first card; 3-4 of 15, all mild, for the cheap
 model on the tight one), and one broad "find the inventions" question to a
 model flagged none of the inventions in two sets and flagged facts the record
-gives in a third. So the check is two narrow things:
+gives in a third. So the check is narrow things:
   * a deterministic FLOOR for the most damaging kind -- a number, a clock time
     or a count a memory states that neither the record, `memory` nor the card
     holds (`unsupported_numbers`). A number is a CLOSED FORM: digits, and the
     pack's own number words composed by the pack's own grammar
     (`linguistics.mind.skip_memories`), never a list of ways to say one;
-  * ONE decision-model question per memory: does anyone besides {name} speak
-    or act here beyond what the record shows? (`jev_questions.
-    skip_memory_others`), localized to its sentences by the same question
-    asked of each (`skip_memory_sentence`).
+  * one decision-model question of each kind per memory
+    (`SKIP_MEMORY_QUESTIONS`, `SKIP_MEMORY_CHECKS`): does anyone besides
+    {name} speak or act beyond what the record's `with` shows; does it tell
+    any row past its `how_it_went` -- what did not come off as done, or how
+    any doing turned out; does it give a detail of the time before that
+    neither `memory` nor the card holds -- each localized to its sentences
+    by the same question asked of each.
 A flagged memory is rewritten once, its flags named; if it still fails, its
 flagged sentences go, and a memory with nothing left goes with them.
 """
@@ -98,6 +111,11 @@ SKIP_MEMORY_ATTEMPTS = 2
 #: (`agents/director_prose.DEFAULT_THRESHOLD`).
 SKIP_MEMORY_JEV_THRESHOLD = 0.5
 
+#: How much of the job's summary line reaches the log: a skip asks the whole
+#: cast, and each mind's summary -- status, the decision model's state, the
+#: flags by kind -- runs to about two hundred characters.
+SKIP_MEMORY_LOG_CHARS = 2400
+
 #: How many minds' memories are written at once. A skip asks the whole cast;
 #: one after another, six writers with their rewrites run past a minute and a
 #: half, inside which the next beat may well start. In parallel they take as
@@ -134,15 +152,46 @@ WRITER_PAYLOAD_KEYS = ("who", "memory", "record", "span")
 #: The LOG row fields the record is built from (the build spec's LOG shape).
 #: A row is read through this list and nothing else: another mind's plan or
 #: its `why` is never on a mind's LOG row, and were a later stage to put one
-#: there, this is where it would stop.
+#: there, this is where it would stop. `missing` (the things a `not_held`
+#: stretch used that were neither on the mind nor within reach, in its own
+#: words) and `meant` (where a stretch that never got there was going) are
+#: the executor's, on a failed row; a log written before them reads without.
 LOG_FIELDS = ("from_s", "until_s", "room", "away", "where_text", "doing",
-              "asleep", "seen", "weather", "outcome", "reason")
+              "asleep", "seen", "weather", "outcome", "reason", "missing",
+              "meant")
 #: Of what a mind saw of another, only who it knows them as and what they
 #: were seen doing -- the other's `doing`, never their `why`.
 SEEN_FIELDS = ("who", "doing")
 #: A stretch's outcome, the LOG's closed set; anything else reads as the
 #: world's to judge.
 OUTCOMES = ("done", "failed", "not_known")
+
+#: HOW A STRETCH WENT, IN WORDS: the pack's template (`compositor.templates`)
+#: for each outcome, and for each reason a stretch fails, so the record says
+#: what did not come off where it held only a code. The live case (the
+#: lighthouse replayed 2026-10-21, chat 3 turn 25): the boatman's post-office
+#: stretch reached the writer as `failed`/`not_held` and came back "So I did
+#: ... into the box", in a world where the letter never left the rock; the
+#: probe's record had said it in words ("it did not come off: the letter was
+#: not in your pocket") and its writer wrote the loss. The reasons are the
+#: executors' protocol tokens (`world/skip_itinerary.FAILURE_REASONS`), each
+#: with two templates: its words, and its words naming what failed -- the
+#: `missing` things for `not_held`, the place `meant` for a way that failed
+#: -- used when the row names it. A reason with no words of its own reads as
+#: the plain failure.
+RECORD_WORDS = {
+    "done": "skip_record_done",
+    "not_known": "skip_record_not_known",
+    "failed": "skip_record_failed",
+    "list_separator": "skip_record_list_separator",
+}
+FAILURE_WORDS = {
+    "not_held": ("skip_record_not_held", "skip_record_not_held_named"),
+    "no_route": ("skip_record_no_route", "skip_record_no_route_named"),
+    "shut_way": ("skip_record_shut_way", "skip_record_shut_way_named"),
+    "too_far": ("skip_record_too_far", "skip_record_too_far_named"),
+    "no_crossing": ("skip_record_no_crossing", "skip_record_no_crossing_named"),
+}
 
 #: What of the mind's card the writer reads: who it is, what drives it, how it
 #: speaks, and its own past as the card tells it -- the voice, and the past
@@ -312,27 +361,116 @@ def _text(value):
     return " ".join(str(value or "").split())
 
 
-def record_rows(log, *, span_from, anchor, length):
+def _route_failures():
+    """The reasons a stretch never got where it meant to be: its row's
+    `room` is where the mind stood -- or as far along the way as it got --
+    and the place it was going is `meant`, or, on a log written before that
+    field, its own `where_text`. The executor's own set (`world/
+    skip_itinerary.ROUTE_REASONS`), and its three way-reasons where it names
+    none."""
+    from world import skip_itinerary as itin
+    return tuple(getattr(itin, "ROUTE_REASONS", None)
+                 or (itin.REASON_NO_ROUTE, itin.REASON_SHUT_WAY, itin.REASON_TOO_FAR))
+
+
+def _things(value):
+    """`missing` as the mind's own words, in order, each once."""
+    out = []
+    for item in value if isinstance(value, (list, tuple)) else ([value] if value else []):
+        text = _text(item)
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def listed(items, language=None):
+    """Words named one after another by the pack's own list: its `join`
+    (`compositor.join`, "{first} and {last}" / ", and {last}") and its
+    separator (`skip_record_list_separator`)."""
+    from language_runtime import compositor_text, compositor_value
+    items = [str(item) for item in items if str(item or "").strip()]
+    if len(items) <= 1:
+        return "".join(items)
+    join = compositor_value("join", language)
+    if len(items) == 2:
+        return str(join["two"]).format(first=items[0], last=items[1])
+    separator = compositor_text(RECORD_WORDS["list_separator"], language)
+    return separator.join(items[:-1]) + str(join["many"]).format(last=items[-1])
+
+
+def how_it_went(name, outcome, reason=None, *, missing=(), meant="", language=None):
+    """THE OUTCOME IN WORDS (`RECORD_WORDS`, `FAILURE_WORDS`: the pack's
+    templates): `done` says the mind did it and the record holds no more of
+    how it turned out; `not_known` that the mind did it but does not know
+    what came of it; `failed` that it did not come off and why -- for `not_held` the things
+    that were not to hand, for a way that failed the place it was going
+    (`meant`). "" where the pack has no words for it."""
+    from language_runtime import LanguagePackError, compositor_text
+    if outcome == "done":
+        key = RECORD_WORDS["done"]
+    elif outcome != "failed":
+        key = RECORD_WORDS["not_known"]
+    elif reason in FAILURE_WORDS:
+        plain, named = FAILURE_WORDS[reason]
+        key = named if (missing if reason == "not_held" else meant) else plain
+    else:
+        key = RECORD_WORDS["failed"]
+    try:
+        return compositor_text(key, language, name=name,
+                               missing=listed(missing, language), meant=meant)
+    except LanguagePackError as exc:
+        logger.info("skip memory: no words for %s (%s)", key, str(exc)[:200])
+        return ""
+
+
+def record_rows(log, *, span_from, anchor, length, name="", room_names=None,
+                language=None):
     """The writer's `record`: one row per stretch of THIS mind's LOG, read
     through `LOG_FIELDS` alone. `n` is the stretch's place in the log, which
     is how a memory names the rows it is made from (`rows`) and so how it is
     dated. A row carries only what it has: no empty `with`, no `weather` the
-    log did not record."""
+    log did not record.
+
+    WHAT IT SET ABOUT, AND HOW IT WENT. A row's `doing` is the mind's own
+    declaration -- what it set about -- so the record calls it `set_about`,
+    never `did`: a stretch that failed was not done. `how_it_went` says the
+    outcome in the pack's words (`how_it_went`, which needs the mind's
+    `name`; a caller that gives none gets the codes alone), and the bare
+    `reason` code goes no further. Where a stretch never got where it was
+    going, `where` is where the mind stood, by its room's name
+    (`room_names`), and the words name the place it meant: the row's own
+    words for a place it never reached are not where it was."""
+    from world.spatial import room_display_name
+    route_failures = _route_failures()
+    room_names = room_names or {}
     out = []
-    for n, entry in enumerate(log if isinstance(log, list) else []):
-        if not isinstance(entry, dict):
+    for n, raw in enumerate(log if isinstance(log, list) else []):
+        if not isinstance(raw, dict):
             continue
-        entry = {key: entry.get(key) for key in LOG_FIELDS}
+        entry = {key: raw.get(key) for key in LOG_FIELDS}
         start = _seconds(entry["from_s"], span_from)
         row = {"n": n,
                "when": when_of(start, _seconds(entry["until_s"], start),
                                span_from, anchor, length)}
+        outcome = entry["outcome"] if entry["outcome"] in OUTCOMES else "not_known"
+        reason = _text(entry["reason"]) if outcome == "failed" else ""
         where = _text(entry["where_text"]) or _text(entry["away"])
+        meant = ""
+        if reason in route_failures:
+            # A row that carries `meant` says where the body was in its
+            # `where_text`; one written before the field holds the place it
+            # meant there.
+            meant = _text(entry["meant"] if "meant" in raw else entry["where_text"])
+            room = _text(entry["room"])
+            where = (_text(room_names.get(room)) or room_display_name(None, room)
+                     if room else _text(entry["away"]))
+            if meant and meant.casefold() == where.casefold():
+                meant = ""
         if where:
             row["where"] = where
-        did = _text(entry["doing"])
-        if did:
-            row["did"] = did
+        set_about = _text(entry["doing"])
+        if set_about:
+            row["set_about"] = set_about
         if entry["asleep"] in (True, 1):
             row["asleep"] = True
         seen = []
@@ -347,11 +485,13 @@ def record_rows(log, *, span_from, anchor, length):
         weather = _text(entry["weather"])
         if weather:
             row["weather"] = weather
-        outcome = entry["outcome"] if entry["outcome"] in OUTCOMES else "not_known"
         row["outcome"] = outcome
-        reason = _text(entry["reason"])
-        if outcome == "failed" and reason:
-            row["reason"] = reason
+        if name:
+            words = how_it_went(name, outcome, reason or None,
+                                missing=_things(entry["missing"]), meant=meant,
+                                language=language)
+            if words:
+                row["how_it_went"] = words
         out.append(row)
     return out
 
@@ -361,7 +501,7 @@ def record_text(record):
     character call's view is (`build_character_memory_context`)."""
     lines = []
     for row in record or []:
-        parts = [row.get("where") or "", row.get("did") or ""]
+        parts = [row.get("where") or "", row.get("set_about") or ""]
         for other in row.get("with") or []:
             parts.append(" ".join(v for v in (other.get("who"), other.get("doing")) if v))
         if row.get("weather"):
@@ -767,8 +907,48 @@ def unsupported_numbers(text, support, language=None):
 
 
 # ---------------------------------------------------------------------------
-# The decision model: one narrow question per memory.
+# The decision model: narrow questions, one of each kind per memory.
 # ---------------------------------------------------------------------------
+
+#: THE MODEL'S QUESTIONS. Each kind is one narrow question asked of every
+#: memory, and the same question asked of each of its sentences to say where
+#: (`jev_questions`, the pack's): `(memory question, sentence question, key
+#: prefix of a sentence's answer)`. Narrow on purpose: the probe's one broad
+#: "find the inventions" flagged none of them in two sets
+#: (`DESIGN_THE_CAST_ACROSS_A_SKIP.md` § 2.2). The design's three (§ 4.6):
+#:   * `others` -- someone besides the mind speaks or acts beyond what the
+#:     record's `with` shows of them. The record shows another person ONLY
+#:     there: someone named in the mind's own `set_about` is part of what it
+#:     meant to do (the live miss: the yard man "looked at it" in a memory
+#:     whose row's own plan wrote "stands over him while he looks at it");
+#:   * `outcome` -- the memory tells a row past its `how_it_went`: what did
+#:     not come off told as done, or how ANY doing turned out -- every row,
+#:     keyed to the words and never to the `failed`/`not_known` codes, since
+#:     the `done` words hold nothing of how a doing turned out either (the
+#:     coordinator's ruling on the live measurement). A doing told as done is
+#:     not a result. The live case: the boatman's failed post-office stretch
+#:     written "So I did ... into the box"; the keeper's rotation test given a
+#:     drift, a clean mesh, and a night the clockwork "held" past `done` rows;
+#:   * `past` -- a detail of the time before the stretch that neither the
+#:     mind's memory nor its card holds.
+SKIP_MEMORY_QUESTIONS = {
+    "others": ("skip_memory_others", "skip_memory_sentence", "s"),
+    "outcome": ("skip_memory_outcome", "skip_memory_outcome_sentence", "o"),
+    "past": ("skip_memory_past", "skip_memory_past_sentence", "p"),
+}
+
+#: WHICH OF THEM ARE ASKED, in this order. Named so the owner can drop one:
+#: a kind left out is simply not asked, and its flags never raised. `past`
+#: reads the mind's whole memory packet beside the record (`past_state`), so
+#: it is the one a live false-positive rate would cut first.
+SKIP_MEMORY_CHECKS = ("others", "outcome", "past")
+
+#: The questions that read the mind's past -- its card and its memory, beside
+#: the record. The others read the record and the memory being checked alone,
+#: so a past `memory` holds never reads to them as something the stretch
+#: showed.
+_READS_THE_PAST = ("past",)
+
 
 def _yes(answer):
     return decisions.probability(answer) >= SKIP_MEMORY_JEV_THRESHOLD
@@ -778,42 +958,69 @@ def _jev_state(name, record, text):
     return {"name": name, "record": record, "memory": text}
 
 
-def others_act(name, record, text, *, language=None):
-    """Does anyone besides `name` speak or act in `text` beyond what the
-    record shows? True / False, or None when the decision model could not be
-    asked (the floor still stands; the question fails open)."""
-    question = jev_question("skip_memory_others", language, name=name)
-    if not question:
-        return None
-    try:
-        answers = decisions.decide(_jev_state(name, record, text),
-                                   {"others": {"type": "noul", "instructions": question}})
-    except Exception as exc:  # noqa: BLE001 -- unasked, never a lost memory
-        logger.info("skip memory: decision model not asked (%s)", str(exc)[:200])
-        return None
-    if "others" not in answers:
-        return None
-    return _yes(answers.get("others"))
+def past_state(name, record, text, before):
+    """The `past` question's state: the record and the memory being checked,
+    and what the writer had of the time before -- the mind's card (`who`) and
+    its memory packet (`remembered`). The mind's own, as the writer's
+    payload is; nothing else."""
+    before = before if isinstance(before, dict) else {}
+    return {"name": name, "who": before.get("who") or {},
+            "remembered": before.get("remembered") or {},
+            "record": record, "memory": text}
 
 
-def others_in(name, record, text, pieces, *, language=None):
-    """Which of `pieces` (sentences of `text`) give someone besides `name`
-    words or conduct the record does not show: the same question, asked of
-    each sentence, in one request. [] when it could not be asked."""
-    questions = {}
-    for i, piece in enumerate(pieces):
-        question = jev_question("skip_memory_sentence", language, name=name,
-                                sentence=piece)
-        if question:
-            questions[f"s{i}"] = {"type": "noul", "instructions": question}
-    if not questions:
-        return []
-    try:
-        answers = decisions.decide(_jev_state(name, record, text), questions)
-    except Exception as exc:  # noqa: BLE001 -- unlocalized, never a lost memory
-        logger.info("skip memory: sentences not asked (%s)", str(exc)[:200])
-        return []
-    return [piece for i, piece in enumerate(pieces) if _yes(answers.get(f"s{i}"))]
+def ask_model(name, record, text, pieces, *, before=None, language=None):
+    """`(verdicts, placed)`: for each asked kind (`SKIP_MEMORY_CHECKS`), True
+    or False -- None where it could not be asked, which fails open: the floor
+    still stands -- and the `pieces` (sentences of `text`) its sentence
+    question places it in. A kind's memory question and its sentence
+    questions go out in ONE request per state: the decision model answers
+    every question of a request on its own, so nothing is lost by asking the
+    sentences beside the memory, and a sentence's yes is read only where the
+    memory's was."""
+    kinds = [kind for kind in SKIP_MEMORY_CHECKS if kind in SKIP_MEMORY_QUESTIONS]
+    verdicts, placed = {}, {}
+    requests = []
+    plain = [kind for kind in kinds if kind not in _READS_THE_PAST]
+    if plain:
+        requests.append((_jev_state(name, record, text), plain))
+    past = [kind for kind in kinds if kind in _READS_THE_PAST]
+    if past:
+        if before is None:
+            verdicts.update({kind: None for kind in past})
+        else:
+            requests.append((past_state(name, record, text, before), past))
+    for state, group in requests:
+        questions = {}
+        for kind in group:
+            whole_key, sentence_key, prefix = SKIP_MEMORY_QUESTIONS[kind]
+            whole = jev_question(whole_key, language, name=name)
+            if not whole:
+                verdicts[kind] = None
+                continue
+            questions[kind] = {"type": "noul", "instructions": whole}
+            for i, piece in enumerate(pieces):
+                one = jev_question(sentence_key, language, name=name, sentence=piece)
+                if one:
+                    questions[f"{prefix}{i}"] = {"type": "noul", "instructions": one}
+        if not questions:
+            continue
+        try:
+            answers = decisions.decide(state, questions)
+        except Exception as exc:  # noqa: BLE001 -- unasked, never a lost memory
+            logger.info("skip memory: decision model not asked (%s)", str(exc)[:200])
+            answers = {}
+        for kind in group:
+            if kind not in questions:
+                continue
+            if kind not in answers:
+                verdicts[kind] = None
+                continue
+            verdicts[kind] = _yes(answers[kind])
+            prefix = SKIP_MEMORY_QUESTIONS[kind][2]
+            placed[kind] = [piece for i, piece in enumerate(pieces)
+                            if _yes(answers.get(f"{prefix}{i}"))]
+    return verdicts, placed
 
 
 # ---------------------------------------------------------------------------
@@ -824,25 +1031,31 @@ def _whole(episode):
     return " ".join(p for p in (episode["memory"], episode["consequence"]) if p)
 
 
-def flags_of(name, record, episode, support, *, language=None):
-    """`(flags, asked)`: what one memory went past -- `number` flags from the
-    floor, `others` flags from the decision model, each naming the sentence it
-    stands in where one could be named -- and whether the model was asked."""
+def flags_of(name, record, episode, support, *, before=None, language=None):
+    """`(flags, unasked)`: what one memory went past -- `number` flags from
+    the floor, and a flag of each kind the decision model said yes to
+    (`SKIP_MEMORY_CHECKS`: `others`, `outcome`, `past`), each naming the
+    sentence it stands in where one could be named -- and the kinds that
+    could not be asked. `before` is what the writer had of the time before
+    the stretch (`who`, `remembered`), which only `past` reads."""
     flags = []
     for part in ("memory", "consequence"):
         for found in unsupported_numbers(episode[part], support, language):
             flags.append({"kind": "number", "said": found["said"],
                           "in": found["in"], "part": part})
-    others = others_act(name, record, _whole(episode), language=language)
-    if others:
-        parts = [(part, piece) for part in ("memory", "consequence")
-                 for piece in sentences(episode[part], language)]
-        found = set(others_in(name, record, _whole(episode),
-                              [piece for _part, piece in parts], language=language))
-        named = [{"kind": "others", "in": piece, "part": part}
+    parts = [(part, piece) for part in ("memory", "consequence")
+             for piece in sentences(episode[part], language)]
+    verdicts, placed = ask_model(name, record, _whole(episode),
+                                 [piece for _part, piece in parts],
+                                 before=before, language=language)
+    for kind in SKIP_MEMORY_CHECKS:
+        if not verdicts.get(kind):
+            continue
+        found = set(placed.get(kind) or ())
+        named = [{"kind": kind, "in": piece, "part": part}
                  for part, piece in parts if piece in found]
-        flags.extend(named or [{"kind": "others"}])
-    return flags, others is not None
+        flags.extend(named or [{"kind": kind}])
+    return flags, [kind for kind in SKIP_MEMORY_CHECKS if verdicts.get(kind) is None]
 
 
 def drop_flagged(episode, flags, language=None):
@@ -864,19 +1077,25 @@ def drop_flagged(episode, flags, language=None):
 
 
 def check_and_mend(name, count, payload, episodes, *, language=None):
-    """The two-part check over one mind's memories, the rewrite of the
-    flagged, and the drop of what still fails. Returns `(memories, report)`;
-    the memories keep their order, minus any with nothing left."""
+    """The two-part check over one mind's memories -- the floor and the
+    decision model's questions -- the rewrite of the flagged, and the drop of
+    what still fails. Returns `(memories, report)`; the memories keep their
+    order, minus any with nothing left. `report["jev"]` is "unavailable" when
+    any question could not be asked of any memory, and `unanswered` names
+    those kinds."""
     support = number_support({key: payload[key] for key in ("who", "memory", "record", "span")},
                              language)
     record = payload["record"]
+    before = {"who": payload["who"], "remembered": payload["memory"]}
     report = {"flagged": {}, "rewritten": [], "dropped_sentences": {},
-              "dropped": [], "unlocalized": [], "jev": "asked"}
+              "dropped": [], "unlocalized": [], "jev": "asked", "unanswered": []}
     checked = []
     for i, episode in enumerate(episodes):
-        flags, asked = flags_of(name, record, episode, support, language=language)
-        if not asked:
+        flags, unasked = flags_of(name, record, episode, support, before=before,
+                                  language=language)
+        if unasked:
             report["jev"] = "unavailable"
+            report["unanswered"] = sorted(set(report["unanswered"]) | set(unasked))
         checked.append((episode, flags))
     flagged = {i: (episode, flags) for i, (episode, flags) in enumerate(checked) if flags}
     report["flagged"] = {i: [_flag_for_writer(f) for f in flags]
@@ -895,7 +1114,8 @@ def check_and_mend(name, count, payload, episodes, *, language=None):
             continue
         best = None
         for candidate in candidates.get(i, []):
-            again, _asked = flags_of(name, record, candidate, support, language=language)
+            again, _unasked = flags_of(name, record, candidate, support,
+                                       before=before, language=language)
             if not again:
                 best = (candidate, [])
                 break
@@ -907,7 +1127,7 @@ def check_and_mend(name, count, payload, episodes, *, language=None):
             report["rewritten"].append(i)
         chosen, still = best
         if still:
-            if any(f["kind"] == "others" and not f.get("in") for f in still):
+            if any(f["kind"] in SKIP_MEMORY_QUESTIONS and not f.get("in") for f in still):
                 report["unlocalized"].append(i)
             gone = sorted({f["in"] for f in still if f.get("in")})
             if gone:
@@ -1097,7 +1317,8 @@ def remember_one(chat_id, turn, variant_id, name, entry, span, *, char_id,
     sheet, active, _stance = sheet_state(row)
     log = [r for r in entry.get("log") or []] if isinstance(entry.get("log"), list) else []
     record = record_rows(log, span_from=_seconds(span.get("from_s"), 0.0),
-                         anchor=anchor, length=length)
+                         anchor=anchor, length=length, name=name,
+                         room_names=room_names, language=language)
     memory, which = memory_packet(chat_id, char_id, turn["idx"], sheet, active,
                                   record, language=language)
     payload = writer_payload(card_of(sheet), memory, record,
@@ -1146,7 +1367,8 @@ def run_skip_memories(chat_id, turn_id, *, job=None, language=None,
     anchor, length = day_reader(chat_id)
     cast = all_cast_name_to_id(chat_id)
     scene = wget(chat_id, "scene", {}) or {}
-    room_names = {str(rid): str((room or {}).get("name") or rid)
+    from world.spatial import room_display_name
+    room_names = {str(rid): room_display_name(room, rid)
                   for rid, room in (scene.get("rooms") or {}).items()
                   if isinstance(room, dict)}
     known_map = wget(chat_id, "known", {}) or {}
@@ -1173,26 +1395,47 @@ def run_skip_memories(chat_id, turn_id, *, job=None, language=None,
         for name, future in futures:
             results[name] = future.result()
     logger.info("skip memories: chat=%s turn=%s %s", chat_id, turn_id, json.dumps(
-        {name: {k: v for k, v in r.items() if k in ("status", "written", "asked",
-                                                    "packet", "dropped")}
-         for name, r in results.items()}, ensure_ascii=False, default=str)[:600])
+        {name: summary_of(r) for name, r in results.items()},
+        ensure_ascii=False, default=str)[:SKIP_MEMORY_LOG_CHARS])
     return results
 
 
+def summary_of(result):
+    """What one mind's pass leaves in the log line: what was written, whether
+    the decision model was asked (`jev`, and the kinds it could not be asked),
+    the flags raised by kind, the memories rewritten and dropped, and how many
+    sentences went -- so a live run says whether its check ran and what it
+    caught."""
+    out = {k: v for k, v in (result or {}).items()
+           if k in ("status", "written", "asked", "packet", "jev", "unanswered",
+                    "rewritten", "dropped")}
+    kinds = {}
+    for flags in ((result or {}).get("flagged") or {}).values():
+        for flag in flags:
+            kinds[flag.get("kind")] = kinds.get(flag.get("kind"), 0) + 1
+    if kinds:
+        out["flags"] = kinds
+    dropped = (result or {}).get("dropped_sentences") or {}
+    if dropped:
+        out["dropped_sentences"] = sum(len(v) for v in dropped.values())
+    return out
+
+
 __all__ = [
-    "CARD_FIELDS", "LOG_FIELDS", "OUTCOMES", "SEEN_FIELDS",
-    "SKIP_HOURS_PER_MEMORY", "SKIP_LIVES_STEP", "SKIP_MEMORIES_MAX",
-    "SKIP_MEMORIES_MIN", "SKIP_MEMORY_ATTEMPTS", "SKIP_MEMORY_JEV_THRESHOLD",
-    "SKIP_MEMORY_MAX_TOKENS", "SKIP_MEMORY_ROLE", "SKIP_MEMORY_SALIENCE_CEILING",
-    "SKIP_MEMORY_SALIENCE_FLOOR", "SKIP_MEMORY_SALIENCE_SPAN",
-    "SKIP_MEMORY_WORKERS", "SKIP_ORIGIN_PREFIX", "WRITER_PAYLOAD_KEYS",
-    "card_of", "check_and_mend", "committed_output", "day_reader",
-    "drop_flagged", "episodes_of", "flags_of", "is_skip_memory",
-    "lived_hours", "memory_count", "memory_packet", "minds_to_remember",
-    "number_support", "occasion_seconds", "others_act", "others_in",
-    "record_rows", "record_text", "remember_one", "rewrite_episodes",
-    "rows_for", "run_skip_memories", "salience_of", "sentences",
-    "skip_event_key", "span_view", "still_committed", "unsupported_numbers",
-    "when_of", "write_episodes", "write_rows", "writer_payload",
-    "writer_system",
+    "CARD_FIELDS", "FAILURE_WORDS", "LOG_FIELDS", "OUTCOMES", "RECORD_WORDS",
+    "SEEN_FIELDS", "SKIP_HOURS_PER_MEMORY", "SKIP_LIVES_STEP",
+    "SKIP_MEMORIES_MAX", "SKIP_MEMORIES_MIN", "SKIP_MEMORY_ATTEMPTS",
+    "SKIP_MEMORY_CHECKS", "SKIP_MEMORY_JEV_THRESHOLD", "SKIP_MEMORY_LOG_CHARS",
+    "SKIP_MEMORY_MAX_TOKENS", "SKIP_MEMORY_QUESTIONS", "SKIP_MEMORY_ROLE",
+    "SKIP_MEMORY_SALIENCE_CEILING", "SKIP_MEMORY_SALIENCE_FLOOR",
+    "SKIP_MEMORY_SALIENCE_SPAN", "SKIP_MEMORY_WORKERS", "SKIP_ORIGIN_PREFIX",
+    "WRITER_PAYLOAD_KEYS", "ask_model", "card_of", "check_and_mend",
+    "committed_output", "day_reader", "drop_flagged", "episodes_of",
+    "flags_of", "how_it_went", "is_skip_memory", "listed", "lived_hours",
+    "memory_count", "memory_packet", "minds_to_remember", "number_support",
+    "occasion_seconds", "past_state", "record_rows", "record_text",
+    "remember_one", "rewrite_episodes", "rows_for", "run_skip_memories",
+    "salience_of", "sentences", "skip_event_key", "span_view",
+    "still_committed", "summary_of", "unsupported_numbers", "when_of",
+    "write_episodes", "write_rows", "writer_payload", "writer_system",
 ]

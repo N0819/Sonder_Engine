@@ -1,0 +1,1 @@
+Does `memory` give a detail of {name}'s past -- of any time before the stretch `record` covers -- that none of `remembered`, `who` and `record` holds? Answer yes when it tells something from before the stretch that nothing in them gives. Answer no when every detail of the time before is one they hold, and when the memory keeps to the stretch.

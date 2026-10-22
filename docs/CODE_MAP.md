@@ -89,7 +89,7 @@
 | `mind/memory_write.py` | 989 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/notebook.py` | 406 |  | `mind` |
 | `mind/psychology_runtime.py` | 873 |  | — |
-| `mind/skip_memories.py` | 1198 |  | `core.db`, `core.logging_utils`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory` |
+| `mind/skip_memories.py` | 1441 |  | `core.db`, `core.logging_utils`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory` |
 | `mind/theory_of_mind.py` | 861 |  | — |
 | `mind/thoughts.py` | 131 |  | `core.db` |
 | `persist/__init__.py` | 6 |  | — |
@@ -1211,14 +1211,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_skip_memories()` | 1119 | 61 lines |
-| `check_and_mend()` | 866 | 55 lines |
-| `record_rows()` | 315 | 42 lines |
-| `_compose()` | 617 | 41 lines |
-| `sentences()` | 712 | 37 lines |
-| `episodes_of()` | 483 | 35 lines |
-| `number_support()` | 677 | 33 lines |
-| `write_rows()` | 1034 | 33 lines |
+| `record_rows()` | 426 | 71 lines |
+| `check_and_mend()` | 1079 | 62 lines |
+| `run_skip_memories()` | 1340 | 61 lines |
+| `ask_model()` | 972 | 52 lines |
+| `_compose()` | 757 | 41 lines |
+| `sentences()` | 852 | 37 lines |
+| `episodes_of()` | 623 | 35 lines |
+| `number_support()` | 817 | 33 lines |
 
 ### `mind/theory_of_mind.py`
 

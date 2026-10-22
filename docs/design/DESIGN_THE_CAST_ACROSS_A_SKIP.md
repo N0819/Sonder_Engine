@@ -466,8 +466,12 @@ leaves is `docs/UNBUILT_LIVING_WORLD.md` § 1.99d.*
 *Built 2026-10-21 (`mind/skip_memories.py`; `Design.md`, "A mind remembers the days a
 skip passed over"): the job, the writer on its own `skip_memory` row, the count as a
 ceiling, the numbers floor, ONE of the three questions above (others' conduct -- the
-build spec's narrowing) with a rewrite and a drop, and the rows. What it leaves is
-`docs/UNBUILT_LIVING_WORLD.md` § 1.99d.*
+build spec's narrowing) with a rewrite and a drop, and the rows. The same day, after the
+lighthouse replay (chat 3 turn 25) wrote a failed stretch as done: the record says each
+outcome in words, and all three questions are asked: others' conduct read only in the
+record's `with`, every row's outcome held to its `how_it_went` (`done` rows included), and
+the past. What it leaves is `docs/UNBUILT_LIVING_WORLD.md`
+§ 1.99d.*
 
 ### 4.7 The three questions § 1.99d left open
 

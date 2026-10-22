@@ -443,6 +443,18 @@
     "skip_memory_sentence": {
       "$text": "jev_questions/skip_memory_sentence.txt"
     },
+    "skip_memory_outcome": {
+      "$text": "jev_questions/skip_memory_outcome.txt"
+    },
+    "skip_memory_outcome_sentence": {
+      "$text": "jev_questions/skip_memory_outcome_sentence.txt"
+    },
+    "skip_memory_past": {
+      "$text": "jev_questions/skip_memory_past.txt"
+    },
+    "skip_memory_past_sentence": {
+      "$text": "jev_questions/skip_memory_past_sentence.txt"
+    },
     "conditions__awareness": {
       "$text": "jev_questions/conditions__awareness.txt"
     },

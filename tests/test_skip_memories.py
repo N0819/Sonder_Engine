@@ -352,8 +352,8 @@ class TestOneCallPerMindItsOwnLogOnly:
         rows = sm.record_rows(_elias_log(), span_from=0.0, anchor=ANCHOR_HOUR, length=24.0)
         blob = json.dumps(rows)
         assert SECRET_OWN_WHY not in blob and SECRET_OTHER_WHY not in blob
-        assert set(rows[0]) <= {"n", "when", "where", "did", "asleep", "with",
-                                "weather", "outcome", "reason"}
+        assert set(rows[0]) <= {"n", "when", "where", "set_about", "asleep", "with",
+                                "weather", "outcome", "how_it_went"}
         assert rows[0]["with"] == [{"who": "Rhona Carrick", "doing": "working at the gear train"}]
         assert set(sm.SEEN_FIELDS) == {"who", "doing"}
 
@@ -362,7 +362,7 @@ class TestOneCallPerMindItsOwnLogOnly:
         asks it: the names, attributes and string keys the bodies can reach."""
         tree = ast.parse(inspect.getsource(sm))
         for fname in ("remember_one", "writer_payload", "record_rows", "memory_packet",
-                      "card_of", "_jev_state"):
+                      "card_of", "_jev_state", "past_state", "how_it_went"):
             fn = next(node for node in ast.walk(tree)
                       if isinstance(node, ast.FunctionDef) and node.name == fname)
             reached = set()
@@ -379,25 +379,35 @@ class TestOneCallPerMindItsOwnLogOnly:
 
     def test_the_decision_models_state_is_the_record_and_the_memory(self, story,
                                                                    monkeypatch):
-        seen_states = []
+        seen_states, past_states = [], []
 
         def answer(state, questions):
-            if "others" in questions or any(k.startswith("s") and k[1:].isdigit()
-                                            for k in questions):
+            if "past" in questions:
+                past_states.append(state)
+            elif "others" in questions or "outcome" in questions:
                 seen_states.append(state)
-                return {k: {"type": "noul", "noul": 0.0} for k in questions}
-            return {}
+            else:
+                return {}
+            return {k: {"type": "noul", "noul": 0.0} for k in questions}
 
         monkeypatch.setattr(decisions, "OVERRIDE", answer)
         writer = _Writer({"Elias Thorne": ELIAS_PLAIN, "Pell Hardacre": PELL_PLAIN})
         monkeypatch.setattr(sm, "chat_complete", writer)
         sm.run_skip_memories(story["cid"], story["turn"])
-        assert seen_states
+        assert seen_states and past_states
         for state in seen_states:
             assert set(state) == {"name", "record", "memory"}
+        # The past question alone reads what the writer had of the time
+        # before: the mind's own card and memory, nothing more.
+        for state in past_states:
+            assert set(state) == {"name", "who", "remembered", "record", "memory"}
+        elias = [s for s in past_states if s["name"] == "Elias Thorne"]
+        assert elias and "read the Board's letter twice" in json.dumps(elias[0]["remembered"])
+        for state in seen_states + past_states:
             blob = json.dumps(state)
             for secret in (SECRET_OWN_WHY, SECRET_PROSE, SECRET_OTHER_WHY):
                 assert secret not in blob
+        assert SECRET_OTHER_BANK not in json.dumps(elias)
 
 
 # ---------------------------------------------------------------------------
@@ -794,8 +804,8 @@ class TestTheCards:
         assert "{name}" not in system and "{count}" not in system
         for key in sm.WRITER_PAYLOAD_KEYS:
             assert "`%s`" % key in system, key
-        for key in ("n", "when", "where", "did", "asleep", "with", "weather", "outcome",
-                    "reason", "done", "failed", "not_known"):
+        for key in ("n", "when", "where", "set_about", "asleep", "with", "weather",
+                    "outcome", "how_it_went", "done", "failed", "not_known"):
             assert "`%s`" % key in system, key
         for key in ("rows", "memory", "consequence", "valence", "arousal"):
             assert '"%s"' % key in system, key
@@ -804,13 +814,18 @@ class TestTheCards:
     def test_the_rewrite_pass_names_its_flags(self, language):
         system = sm.writer_system("Elias Thorne", 4, language, rewrite=True)
         assert system.count("Elias Thorne") >= 2
-        for key in ("rewrite", "index", "flags", "number", "others", "said", "in"):
+        for key in ("rewrite", "index", "flags", "number", "others", "outcome", "past",
+                    "said", "in", "with", "how_it_went", "failed", "not_known"):
             assert "`%s`" % key in system, key
         assert '"index"' in system
 
     @pytest.mark.parametrize("pid", ["prompts.skip_memory", "prompts.skip_memory_rewrite",
                                      "jev_questions.skip_memory_others",
-                                     "jev_questions.skip_memory_sentence"])
+                                     "jev_questions.skip_memory_sentence",
+                                     "jev_questions.skip_memory_outcome",
+                                     "jev_questions.skip_memory_outcome_sentence",
+                                     "jev_questions.skip_memory_past",
+                                     "jev_questions.skip_memory_past_sentence"])
     def test_japanese_keeps_every_protocol_span(self, pid):
         import sys
         from pathlib import Path
@@ -826,12 +841,30 @@ class TestTheCards:
         assert canonical_language_tokens(en) <= canonical_language_tokens(ja)
 
     @pytest.mark.parametrize("language", ["en", "ja"])
-    def test_the_two_questions_are_the_packs(self, language):
+    def test_the_questions_are_the_packs(self, language):
         from llm.prompts import jev_question
-        assert "Elias" in jev_question("skip_memory_others", language, name="Elias")
-        sentence = jev_question("skip_memory_sentence", language, name="Elias",
-                                sentence="The barman noticed.")
-        assert "Elias" in sentence and sentence.rstrip().endswith("The barman noticed.")
+        assert set(sm.SKIP_MEMORY_CHECKS) <= set(sm.SKIP_MEMORY_QUESTIONS)
+        for whole_key, sentence_key, _prefix in sm.SKIP_MEMORY_QUESTIONS.values():
+            assert "Elias" in jev_question(whole_key, language, name="Elias")
+            sentence = jev_question(sentence_key, language, name="Elias",
+                                    sentence="The barman noticed.")
+            assert "Elias" in sentence and sentence.rstrip().endswith("The barman noticed.")
+
+    @pytest.mark.parametrize("language", ["en", "ja"])
+    def test_each_question_names_what_its_state_holds(self, language):
+        """A question talks about the fields its request carries, and the
+        outcome question about the record's words for how a row went."""
+        from llm.prompts import jev_question
+        for kind, keys in sm.SKIP_MEMORY_QUESTIONS.items():
+            for key in keys[:2]:
+                text = jev_question(key, language, name="Elias", sentence="x")
+                assert "`memory`" in text and "`record`" in text, (kind, key)
+        for key in sm.SKIP_MEMORY_QUESTIONS["outcome"][:2]:
+            text = jev_question(key, language, name="Elias", sentence="x")
+            assert "`how_it_went`" in text, key
+        for key in sm.SKIP_MEMORY_QUESTIONS["past"][:2]:
+            text = jev_question(key, language, name="Elias", sentence="x")
+            assert "`remembered`" in text and "`who`" in text, key
 
     @pytest.mark.parametrize("language", ["en", "ja"])
     def test_the_adult_overlay_reaches_the_writer_as_it_reaches_the_character(
@@ -844,3 +877,537 @@ class TestTheCards:
         from llm import providers
         assert sm.SKIP_MEMORY_ROLE in providers.ROLES
         assert sm.SKIP_MEMORY_ROLE not in providers.ROLE_FALLBACKS
+
+
+# ---------------------------------------------------------------------------
+# The record says how each stretch went IN WORDS, and three narrow questions
+# hold a memory to it. The live case, the lighthouse replayed on
+# 2026-10-21's code (job tmp fixes/live_skip/live_control.db, chat 3, turn 25
+# at idx 8): the boatman's post-office stretch reached the writer as the
+# codes `failed`/`not_held` and came back "So I did ... into the box" -- in
+# a world where the letter never left the rock; the keeper's rotation test
+# got a drift and then a clean mesh that no row gives; and the yard man
+# "looked at it" while the others-check let him by.
+# ---------------------------------------------------------------------------
+
+#: What the boatman's stretch used and did not have to hand, in his own
+#: words: the executor's `missing` (lane B2) on a `not_held` row.
+PELL_LETTER = "Rhona Carrick's sealed letter, dry in the inside pocket of the oilskin jacket"
+PELL_POST_DOING = (
+    "Runs the Mary Ann in on the last of the flood, makes her fast, and goes straight up off "
+    "the boat to the post office on the quay with Rhona Carrick's letter in his hand — puts "
+    "it in the box himself before he does anything else, and says a word to the clerk about "
+    "the weather coming so the crossing gets talked about.")
+PELL_KNOCK_DOING = (
+    "Has the engine cover off the Mary Ann first thing and works the knock — cleans the "
+    "injectors, checks the tappets, runs her against the warps and listens. If it's beyond "
+    "him, walks the impeller and the fuel line down to the yard man and stands over him while "
+    "he looks at it, asking questions the whole time.")
+ELIAS_TEST_DOING = (
+    "Continue fitting and testing the new clockwork against the old — running it through "
+    "rotation cycles, checking gear engagement, timing the sweep, marking any faults to show "
+    "the engineer on Tuesday")
+
+#: The live memories, word for word (`skip:25:Pell Hardacre:0`, `:2`;
+#: `skip:25:Elias Thorne:2`), split at the row's own consequence label.
+PELL_POSTED = (
+    "I brought the Mary Ann in on the last of the flood and made her fast, and I went straight "
+    "up off the boat with Rhona Carrick's letter in me hand — Harrow Street, by the post office "
+    "on the quay, that's what she said, and I'd told her I'd put it in the box meself before "
+    "the pub got its hooks in me. So I did. Straight up the quay, letter in the fist, into the "
+    "box. And I had a word with the clerk about the weather coming up the channel, for it was "
+    "worth talking about, spray heavy enough to sting and the glass falling. I stood there a "
+    "moment after, thinking that was the job done neat.")
+PELL_POSTED_AFTER = "I did what she asked and I did it first, before anything else — that much I know I did."
+PELL_YARD = (
+    "Woke with the gulls, boiled a tin kettle on the little stove, drank tea standing on the "
+    "quay watching the sky over the channel to see what the day meant to do. Then I had the "
+    "engine cover off the Mary Ann and a proper look at the knock — cleaned the injectors, "
+    "checked the tappets, topped the oil, ran her against the warps to hear the beat. That "
+    "knock was still in her. So I walked the impeller and the fuel line down to the yard man "
+    "and stood over him while he looked at it, asking questions the whole time, for I'd "
+    "rather know than guess.")
+YARD_MAN = ("So I walked the impeller and the fuel line down to the yard man and stood over him "
+            "while he looked at it, asking questions the whole time, for I'd rather know than "
+            "guess.")
+ELIAS_DRIFT = (
+    "Barometer reading, weather logged, the horizon watched for first light. Extinguished the "
+    "lamp, trimmed the wick, cleaned the chimney and lens. Then I ran the new clockwork "
+    "through rotation cycles against the old — checking gear engagement, timing the sweep "
+    "against the clock, marking faults to show the engineer on Tuesday. The timing drifted. "
+    "I ran it again. The drift held. I marked it in the log and set the old method in "
+    "parallel, because the light will not wait on a mechanism that cannot keep its measure. "
+    "Carrick was below, or somewhere in the tower; I did not look for her. The work was the "
+    "work.")
+#: What the boatman's memory says once it holds to the record.
+PELL_MENDED = ("I brought the Mary Ann in on the last of the flood, made her fast and went "
+               "straight up the quay for the box -- and the letter was not on me.")
+
+
+def _live_row(from_h, until_h, doing, outcome, *, reason=None, room=None, away=None,
+              where_text="", seen=(), **extra):
+    return {"from_s": from_h * HOUR, "until_s": until_h * HOUR, "room": room, "away": away,
+            "where_text": where_text, "doing": doing, "asleep": False, "seen": list(seen),
+            "weather": None, "outcome": outcome, "reason": reason, **extra}
+
+
+def _pell_post_row(**extra):
+    return _live_row(2, 6, PELL_POST_DOING, "failed", reason="not_held", room="the_mainland",
+                     where_text="the mainland quay and the post office on the quay", **extra)
+
+
+def _relog(story, *, elias_log=None, pell_log=None):
+    """Put the skip step's output back with these logs, as the live LOG had them."""
+    db = story["db"]
+    sid = db.q("SELECT id FROM steps WHERE turn_id=? AND key=?",
+               (story["turn"], sm.SKIP_LIVES_STEP), one=True)["id"]
+    db.qi("UPDATE variants SET content=? WHERE step_id=? AND active=1",
+          (json.dumps(_output(elias_log=elias_log, pell_log=pell_log)), sid))
+
+
+def _questions(questions, kind):
+    """`(whole, {i: sentence})`: one kind's memory question and its
+    sentence questions in a request, by the keys the module gives them."""
+    whole = questions.get(kind)
+    prefix = sm.SKIP_MEMORY_QUESTIONS[kind][2]
+    placed = {int(key[len(prefix):]): q["instructions"].rsplit("The sentence: ", 1)[-1].strip()
+              for key, q in questions.items()
+              if key.startswith(prefix) and key[len(prefix):].isdigit()}
+    return whole, placed
+
+
+class _Judge:
+    """The decision model, as a test: yes for a memory -- and for each of its
+    sentences -- holding one of the markers given for that kind, no for
+    everything else asked. Records every request."""
+
+    def __init__(self, **markers):
+        self.markers = markers
+        self.requests = []
+
+    def __call__(self, state, questions):
+        self.requests.append((state, questions))
+        out = {}
+        for kind in sm.SKIP_MEMORY_QUESTIONS:
+            whole, placed = _questions(questions, kind)
+            marks = self.markers.get(kind) or ()
+            if whole is not None:
+                hit = any(m in state["memory"] for m in marks)
+                out[kind] = {"type": "noul", "noul": 0.9 if hit else 0.05}
+            prefix = sm.SKIP_MEMORY_QUESTIONS[kind][2]
+            for i, sentence in placed.items():
+                hit = any(m in sentence for m in marks)
+                out[f"{prefix}{i}"] = {"type": "noul", "noul": 0.9 if hit else 0.05}
+        return out
+
+    def asked(self, kind):
+        return [q for _s, q in self.requests if kind in q]
+
+
+def _run_pell(story, monkeypatch, judge, pell_log, first, rewrite):
+    monkeypatch.setattr(decisions, "OVERRIDE", judge)
+    _relog(story, pell_log=pell_log)
+
+    def pell(system, payload):
+        return rewrite(payload) if "rewrite" in payload else first
+
+    writer = _Writer({"Elias Thorne": ELIAS_PLAIN, "Pell Hardacre": pell})
+    monkeypatch.setattr(sm, "chat_complete", writer)
+    result = sm.run_skip_memories(story["cid"], story["turn"])["Pell Hardacre"]
+    rows = story["db"].q("SELECT content FROM memories WHERE char_id=? AND event_key LIKE "
+                         "'skip:%' ORDER BY event_key", (story["pell"],))
+    return result, [r["content"] for r in rows], writer.for_mind("Pell Hardacre")
+
+
+class TestTheRecordSaysHowItWent:
+    def _one(self, row, language="en", **kw):
+        return sm.record_rows([row], span_from=0.0, anchor=ANCHOR_HOUR, length=24.0,
+                              name="Pell Hardacre", language=language, **kw)[0]
+
+    def test_a_failed_row_says_in_words_what_was_not_to_hand(self):
+        row = self._one(_pell_post_row(missing=[PELL_LETTER]))
+        assert row["outcome"] == "failed"
+        words = row["how_it_went"]
+        assert "did not come off" in words and PELL_LETTER in words
+        assert "Pell Hardacre" in words
+        # The words carry the reason; the bare code never reaches the writer,
+        # and what the mind set about is never called what it DID.
+        assert "reason" not in row and "did" not in row
+        assert row["set_about"].startswith("Runs the Mary Ann in")
+        # It went: the place stands, in its own words.
+        assert row["where"] == "the mainland quay and the post office on the quay"
+
+    def test_more_than_one_thing_is_named_by_the_packs_own_list(self):
+        row = self._one(_pell_post_row(missing=["the post bag", "the standing order",
+                                                "the Mary Ann"]))
+        assert "the post bag, the standing order, and the Mary Ann" in row["how_it_went"]
+        ja = self._one(_pell_post_row(missing=["郵便袋", "定期の注文品", "メアリー・アン号"]),
+                       language="ja")
+        assert "郵便袋、定期の注文品、そしてメアリー・アン号" in ja["how_it_went"]
+
+    def test_a_row_written_before_missing_still_says_it_did_not_come_off(self):
+        row = self._one(_pell_post_row())
+        assert "did not come off" in row["how_it_went"]
+        assert "missing" not in row
+
+    @pytest.mark.parametrize("reason", ["no_route", "shut_way", "too_far"])
+    def test_a_way_that_failed_names_where_it_was_going_and_where_it_stood(self, reason):
+        # The executors' shape: `room` is where the mind stood (or as far
+        # along the way as it got), `where_text` its own words for where it
+        # meant to be.
+        row = _live_row(26, 30, "asking after the new mechanism", "failed", reason=reason,
+                        room="lamp_room", where_text="the Board's office")
+        got = self._one(row, room_names={"lamp_room": "The Lamp Room"})
+        assert got["where"] == "The Lamp Room"
+        assert "the Board's office" in got["how_it_went"]
+        assert "did not come off" in got["how_it_went"]
+        # The LOG's own `meant` (lane B2) is the place, where it gives one.
+        got = self._one(dict(row, meant="the harbour office"),
+                        room_names={"lamp_room": "The Lamp Room"})
+        assert "the harbour office" in got["how_it_went"]
+        assert "the Board's office" not in json.dumps(got)
+
+    def test_a_way_only_a_vessel_crosses_names_where_it_was_going(self):
+        for language in ("en", "ja"):
+            words = sm.how_it_went("Pell Hardacre", "failed", "no_crossing",
+                                   meant="the rock", language=language)
+            assert "the rock" in words and "Pell Hardacre" in words
+        assert "did not come off" in sm.how_it_went("Pell Hardacre", "failed",
+                                                    "no_crossing", meant="the rock")
+
+    def test_a_row_carrying_meant_says_where_it_stood_in_its_own_words(self):
+        """The executor's shape once `meant` is on every row (lane B2):
+        `where_text` is where the body WAS, `meant` where it was going -- so
+        an empty `meant` never borrows `where_text` for the place."""
+        row = _live_row(26, 30, "asking after the new mechanism", "failed",
+                        reason="no_route", room="lamp_room", where_text="up in the lantern",
+                        meant=None, missing=[])
+        got = self._one(row, room_names={"lamp_room": "The Lamp Room"})
+        assert got["where"] == "The Lamp Room"
+        assert "lantern" not in got["how_it_went"]
+        assert "did not come off" in got["how_it_went"]
+
+    def test_not_known_says_the_mind_does_not_know_and_done_says_no_more(self):
+        unknown = self._one(_live_row(0, 4, "supper at the pub", "not_known",
+                                      away="the harbour pub", where_text="the harbour pub"))
+        # The doing happened; what came of it is the world's, unknown to him.
+        assert unknown["how_it_went"] == ("Pell Hardacre did this, but does not know what "
+                                          "came of it.")
+        done = self._one(_live_row(0, 4, "testing the clockwork", "done", room="lamp_room",
+                                   where_text="The Lamp Room"))
+        assert "Pell Hardacre did this" in done["how_it_went"]
+        assert "nothing more" in done["how_it_went"]
+
+    def test_the_words_are_the_packs_in_japanese(self):
+        row = self._one(_pell_post_row(missing=["リアナの封をした手紙"]), language="ja")
+        assert "リアナの封をした手紙" in row["how_it_went"]
+        assert "Pell Hardacre" in row["how_it_went"]
+        assert "did not come off" not in row["how_it_went"]
+        unknown = self._one(_live_row(0, 4, "x", "not_known", away="港"), language="ja")
+        assert "Pell Hardacre" in unknown["how_it_went"]
+        assert "did not come off" not in unknown["how_it_went"]
+        assert "what came of it" not in unknown["how_it_went"]
+
+    def test_every_outcome_and_reason_has_its_words_in_both_packs(self):
+        from language_runtime import installed_language_packs
+        from world.skip_itinerary import FAILURE_REASONS
+        # Every reason either executor writes has its words.
+        assert set(FAILURE_REASONS) <= set(sm.FAILURE_WORDS)
+        keys = list(sm.RECORD_WORDS.values()) + [
+            key for pair in sm.FAILURE_WORDS.values() for key in pair]
+        for language in ("en", "ja"):
+            templates = installed_language_packs()[language].card("compositor")["templates"]
+            for key in keys:
+                assert str(templates.get(key) or "").strip(), (language, key)
+
+    def test_the_writer_is_handed_the_words(self, story, monkeypatch):
+        _no_decisions(monkeypatch)
+        _relog(story, pell_log=[_pell_post_row(missing=[PELL_LETTER])])
+        writer = _Writer({"Elias Thorne": ELIAS_PLAIN, "Pell Hardacre": PELL_PLAIN})
+        monkeypatch.setattr(sm, "chat_complete", writer)
+        sm.run_skip_memories(story["cid"], story["turn"])
+        record = writer.for_mind("Pell Hardacre")[0]["payload"]["record"]
+        assert "did not come off" in record[0]["how_it_went"]
+        assert PELL_LETTER in record[0]["how_it_went"]
+
+
+class TestTheOutcomeCheck:
+    def test_pells_posted_letter_is_flagged_and_mended(self, story, monkeypatch):
+        judge = _Judge(outcome=("So I did", "into the box", "job done neat",
+                                "that much I know I did"))
+        first = _answer(_episode(PELL_POSTED, rows=[0], consequence=PELL_POSTED_AFTER,
+                                 valence=0.3, arousal=0.4))
+        mended = _answer(_episode(PELL_MENDED, rows=[0], index=0, valence=-0.8, arousal=0.8))
+        result, contents, calls = _run_pell(story, monkeypatch, judge,
+                                            [_pell_post_row(missing=[PELL_LETTER])],
+                                            first, lambda payload: mended)
+        assert len(calls) == 2                      # the writer, then ONE rewrite
+        flags = calls[1]["payload"]["rewrite"][0]["flags"]
+        assert {f["kind"] for f in flags} == {"outcome"}
+        flagged = {f["in"] for f in flags}
+        assert "So I did." in flagged
+        assert "Straight up the quay, letter in the fist, into the box." in flagged
+        assert PELL_POSTED_AFTER in flagged         # the consequence line too
+        assert result["rewritten"] == [0]
+        assert contents == [PELL_MENDED]
+
+    def test_a_rewrite_that_still_posts_it_loses_those_sentences(self, story, monkeypatch):
+        judge = _Judge(outcome=("So I did", "into the box", "job done neat",
+                                "that much I know I did"))
+        first = _answer(_episode(PELL_POSTED, rows=[0], consequence=PELL_POSTED_AFTER))
+        again = _answer(_episode(PELL_POSTED, rows=[0], consequence=PELL_POSTED_AFTER,
+                                 index=0))
+        result, contents, _calls = _run_pell(story, monkeypatch, judge,
+                                             [_pell_post_row(missing=[PELL_LETTER])],
+                                             first, lambda payload: again)
+        assert "So I did." in result["dropped_sentences"][0]
+        assert len(contents) == 1
+        assert "into the box" not in contents[0] and "So I did" not in contents[0]
+        assert "What stayed with me" not in contents[0]   # the consequence went whole
+        assert contents[0].startswith("I brought the Mary Ann in")
+
+    @pytest.mark.parametrize("outcome, reason", [("failed", "not_held"), ("not_known", None)])
+    def test_elias_invented_drift_is_flagged(self, story, monkeypatch, outcome, reason):
+        """As the live LOG had the row (`failed`/`not_held`), and as it reads
+        once a thing in reach counts as to hand (`not_known`: the test's
+        verdict is the world's to judge)."""
+        judge = _Judge(outcome=("drifted", "drift held", "drifts on the sweep"))
+        monkeypatch.setattr(decisions, "OVERRIDE", judge)
+        _relog(story, elias_log=[_live_row(0, 6, ELIAS_TEST_DOING, outcome, reason=reason,
+                                           room="lamp_room", where_text="The Lamp Room")])
+        writer = _Writer({"Pell Hardacre": PELL_PLAIN, "Elias Thorne": lambda system, payload: (
+            _answer(_episode(ELIAS_DRIFT, rows=[0], index=0,
+                             consequence="The new clockwork drifts on the sweep, and I have "
+                                         "it written down."))
+        )})
+        monkeypatch.setattr(sm, "chat_complete", writer)
+        result = sm.run_skip_memories(story["cid"], story["turn"])["Elias Thorne"]
+        flags = result["flagged"][0]
+        assert {"kind": "outcome", "in": "The timing drifted."} in flags
+        assert {"kind": "outcome", "in": "The drift held."} in flags
+        assert "The timing drifted." in result["dropped_sentences"][0]
+        row = story["db"].q("SELECT content FROM memories WHERE char_id=? AND event_key "
+                            "LIKE 'skip:%'", (story["elias"],), one=True)
+        assert "drift" not in row["content"]
+
+    def test_a_clean_memory_is_asked_and_passes(self, story, monkeypatch):
+        judge = _Judge(outcome=("into the box",), others=("looked at it",),
+                       past=("tucked it",))
+        clean = _answer(_episode(PELL_MENDED, rows=[0], valence=-0.8, arousal=0.8))
+        result, contents, calls = _run_pell(story, monkeypatch, judge,
+                                            [_pell_post_row(missing=[PELL_LETTER])],
+                                            clean, lambda payload: clean)
+        assert len(calls) == 1                      # nothing to rewrite
+        assert contents == [PELL_MENDED]
+        assert result["flagged"] == {} and result["jev"] == "asked"
+        # ...and it WAS asked, all three questions, about the one memory.
+        for kind in ("others", "outcome", "past"):
+            assert any(PELL_MENDED in state["memory"] and kind in questions
+                       for state, questions in judge.requests), kind
+
+
+class TestTheOthersCheckReadsWith:
+    def test_the_question_says_the_record_shows_others_only_in_with(self):
+        from llm.prompts import jev_question
+        for language in ("en", "ja"):
+            for key in ("skip_memory_others", "skip_memory_sentence"):
+                text = jev_question(key, language, name="Pell", sentence="x")
+                assert "`with`" in text and "`set_about`" in text, (language, key)
+
+    def test_the_yard_man_is_flagged(self, story, monkeypatch):
+        """The live miss. The yard man "looks at it" in the boatman's OWN
+        stretch -- his plan wrote it -- and in no `with`: nobody saw the yard
+        man do anything. A judge that reads the record the way the question
+        tells it to: where the question says only `with` shows another
+        person, it looks there; where it does not, the whole record shows
+        them, and the plan's own words pass the memory."""
+
+        def judge(state, questions):
+            out = {}
+            whole, placed = _questions(questions, "others")
+            if whole is None:
+                return out
+            only_with = "`with`" in whole["instructions"] and "`set_about`" in whole[
+                "instructions"]
+            shown = (" ".join(other.get("doing", "") for row in state["record"]
+                              for other in row.get("with") or ())
+                     if only_with else json.dumps(state["record"]))
+            invented = "looks at it" not in shown
+
+            def says(text):
+                return invented and "looked at it" in text
+
+            out["others"] = {"type": "noul", "noul": 0.9 if says(state["memory"]) else 0.05}
+            prefix = sm.SKIP_MEMORY_QUESTIONS["others"][2]
+            for i, sentence in placed.items():
+                out[f"{prefix}{i}"] = {"type": "noul", "noul": 0.9 if says(sentence) else 0.05}
+            return out
+
+        first = _answer(_episode(PELL_YARD, rows=[0]))
+        mended = _answer(_episode(PELL_YARD.replace(
+            YARD_MAN, "So I walked the impeller and the fuel line down to the yard man."),
+            rows=[0], index=0))
+        row = _live_row(4, 10, PELL_KNOCK_DOING, "failed", reason="not_held",
+                        room="the_mainland", where_text="the mainland quay and the harbour")
+        result, contents, calls = _run_pell(story, monkeypatch, judge, [row], first,
+                                            lambda payload: mended)
+        assert {"kind": "others", "in": YARD_MAN} in result["flagged"][0]
+        assert len(calls) == 2
+        assert contents and "looked at it" not in contents[0]
+
+
+class TestTheLogLine:
+    def test_it_says_whether_the_model_was_asked_and_what_it_flagged(self, story,
+                                                                     monkeypatch):
+        """The live replay's line kept only what was written, so whether its
+        check ran could not be read back. It says so now, by kind."""
+        lines = []
+        monkeypatch.setattr(sm.logger, "info",
+                            lambda msg, *args: lines.append(msg % args if args else msg))
+        judge = _Judge(others=("barman",))
+        monkeypatch.setattr(decisions, "OVERRIDE", judge)
+        flagged = _answer(_episode("I asked after the mechanism. " + INVENTED, rows=[2]))
+        writer = _Writer({"Elias Thorne": flagged, "Pell Hardacre": PELL_PLAIN})
+        monkeypatch.setattr(sm, "chat_complete", writer)
+        sm.run_skip_memories(story["cid"], story["turn"])
+        line = next(text for text in lines if text.startswith("skip memories:"))
+        summary = json.loads(line.split(" ", 4)[-1])
+        assert summary["Elias Thorne"]["jev"] == "asked"
+        assert summary["Elias Thorne"]["flags"] == {"others": 1}
+        assert summary["Elias Thorne"]["dropped_sentences"] == 1
+        assert summary["Pell Hardacre"]["jev"] == "asked"
+        assert "flags" not in summary["Pell Hardacre"]
+
+
+#: The keeper's live memories against rows the executor marked `done`
+#: (`skip:25:Elias Thorne:1` and `:3`, word for word): results told past what
+#: the record holds of a night watch and of a rotation test.
+ELIAS_NIGHT = (
+    "Barometer reading at first light, weather logged. Extinguished the lamp, trimmed the "
+    "wick, cleaned the chimney and lens with the chamois and the spirit. Breakfast in the "
+    "kitchen — bread and tea — then down to the hall to check the stores. The afternoon went "
+    "to the mechanism: fitting, testing, adjusting. I filled the reservoir, checked the wick, "
+    "set the rotation, and lit the lamp at dusk. Tea and a meal, then back up to check the "
+    "lamp before the night watch. Every two hours through the dark, the rotation turning, the "
+    "wick burning clean. The clockwork held through the night. I did not sleep much. I never "
+    "do when a new thing is turning over my head.")
+ELIAS_NIGHT_AFTER = ("The new mechanism has run a full night without fault, and I have logged "
+                     "it — but a night is not a storm.")
+NIGHT_WATCH_DOING = ("Night watch — the lamp burning, checking rotation and wick every two "
+                     "hours, logging weather and any vessel lights seen")
+ELIAS_MESHED = (
+    "I ran the new clockwork through a full rotation cycle, checking gear engagement and "
+    "timing the sweep against the clock. The gear teeth meshed clean. The sweep came round on "
+    "the mark. I stood at the pedestal with the clock in my hand and watched it turn, and for "
+    "that one cycle it did what it was sent to do. I did not say anything to it. I do not "
+    "speak to the new mechanism. But I stood there longer than the test required, watching "
+    "the brass go round, and the light was steady, and the sea below was the same sea it has "
+    "always been.")
+ELIAS_MESHED_AFTER = "One clean cycle is not trust, but it is a fact I can log — and I logged it."
+AT_THE_END_DOING = ("Testing the new clockwork through a rotation cycle, checking gear "
+                    "engagement and timing the sweep against the clock")
+
+
+def _scoped_judge(results):
+    """The decision model as a reader of the outcome question's own scope.
+    Where the question asks only of rows the record marks `failed` or
+    `not_known` (it names those codes), a row marked `done` is outside it and
+    a result told past it passes; where it asks of every row's
+    `how_it_went`, every row is inside. Yes for a sentence telling one of
+    `results` -- how a doing turned out -- about a row in scope; a doing
+    told as done is never one of them."""
+
+    def judge(state, questions):
+        whole, placed = _questions(questions, "outcome")
+        if whole is None:
+            return {}
+        coded = any(code in whole["instructions"] for code in ("`failed`", "`not_known`"))
+        in_scope = [row for row in state["record"]
+                    if not coded or row["outcome"] in ("failed", "not_known")]
+
+        def says(text):
+            return 0.9 if in_scope and any(r in text for r in results) else 0.05
+
+        out = {"outcome": {"type": "noul", "noul": says(state["memory"])}}
+        prefix = sm.SKIP_MEMORY_QUESTIONS["outcome"][2]
+        for i, sentence in placed.items():
+            out[f"{prefix}{i}"] = {"type": "noul", "noul": says(sentence)}
+        return out
+
+    return judge
+
+
+class TestTheOutcomeCheckReachesEveryRow:
+    """The coordinator's ruling, 2026-10-21, on the live measurement: a result
+    told past ANY row's `how_it_went` goes beyond the record -- the `done`
+    words say "did this; the record holds nothing more of how it turned
+    out" -- so the outcome check is keyed to `how_it_went`, never to the
+    `failed`/`not_known` codes. A routine doing told as done stays clean."""
+
+    @pytest.mark.parametrize("doing, memory, after, results, flagged, clean", [
+        (AT_THE_END_DOING, ELIAS_MESHED, ELIAS_MESHED_AFTER,
+         ("meshed clean", "came round on the mark", "did what it was sent to do",
+          "One clean cycle"),
+         ["The gear teeth meshed clean.", "The sweep came round on the mark.",
+          ELIAS_MESHED_AFTER],
+         "I ran the new clockwork through a full rotation cycle, checking gear engagement "
+         "and timing the sweep against the clock."),
+        (NIGHT_WATCH_DOING, ELIAS_NIGHT, ELIAS_NIGHT_AFTER,
+         ("held through the night", "without fault", "the rotation turning"),
+         ["The clockwork held through the night.", ELIAS_NIGHT_AFTER],
+         "I filled the reservoir, checked the wick, set the rotation, and lit the lamp at "
+         "dusk."),
+    ])
+    def test_a_result_told_past_a_done_row_is_flagged(self, story, monkeypatch, doing,
+                                                      memory, after, results, flagged,
+                                                      clean):
+        monkeypatch.setattr(decisions, "OVERRIDE", _scoped_judge(results))
+        _relog(story, elias_log=[_live_row(0, 6, doing, "done", room="lamp_room",
+                                           where_text="The Lamp Room")])
+        written = _answer(_episode(memory, rows=[0], consequence=after, index=0))
+        writer = _Writer({"Pell Hardacre": PELL_PLAIN,
+                          "Elias Thorne": lambda system, payload: written})
+        monkeypatch.setattr(sm, "chat_complete", writer)
+        result = sm.run_skip_memories(story["cid"], story["turn"])["Elias Thorne"]
+        placed = {flag.get("in") for flag in result["flagged"][0] if flag["kind"] == "outcome"}
+        for sentence in flagged:
+            assert sentence in placed, sentence
+        assert clean not in placed                  # the doing, told as done
+        row = story["db"].q("SELECT content FROM memories WHERE char_id=? AND event_key "
+                            "LIKE 'skip:%'", (story["elias"],), one=True)
+        assert clean in row["content"]
+        for sentence in flagged:
+            assert sentence not in row["content"]
+
+    @pytest.mark.parametrize("language", ["en", "ja"])
+    def test_the_question_is_keyed_to_how_it_went_never_to_the_codes(self, language):
+        from llm.prompts import jev_question
+        for key in sm.SKIP_MEMORY_QUESTIONS["outcome"][:2]:
+            text = jev_question(key, language, name="Elias", sentence="x")
+            assert "`how_it_went`" in text, key
+            assert "`failed`" not in text and "`not_known`" not in text, key
+
+    @pytest.mark.parametrize("language, done", [
+        ("en", "anything else Elias did as done"),
+        ("ja", "ほかにEliasがしたことはしたこととして"),
+    ])
+    def test_a_routine_doing_told_as_done_is_named_clean(self, language, done):
+        """The complement, stated where the question says no: what the mind
+        did is told as done; only what did not come off, and how any doing
+        turned out, go past the record."""
+        from llm.prompts import jev_question
+        for key in sm.SKIP_MEMORY_QUESTIONS["outcome"][:2]:
+            assert done in jev_question(key, language, name="Elias", sentence="x"), key
+
+    @pytest.mark.parametrize("language, told", [
+        ("en", "is told as done"), ("ja", "したこととして語ります")])
+    def test_the_cards_take_every_row_as_far_as_its_how_it_went(self, language, told):
+        system = sm.writer_system("Elias Thorne", 4, language, rewrite=True)
+        flag = next(line for line in system.splitlines()
+                    if line.startswith("- ") and "`outcome`" in line)
+        assert "`how_it_went`" in flag
+        assert "`failed`" not in flag and "`not_known`" not in flag
+        bullet = next(line for line in system.splitlines()
+                      if line.startswith("- ") and "`how_it_went`" in line
+                      and "`outcome`" not in line)
+        assert told in bullet
