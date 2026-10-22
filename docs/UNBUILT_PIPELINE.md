@@ -2180,7 +2180,7 @@ and the encoder's new clauses.
 
 <a id="unbuilt-1-227"></a>
 
-### 1.227 A walk the floor refuses is offered to its mind -- BUILT 2026-10-21, residuals open
+### 1.227 A walk the floor refuses is offered to its mind, and the account's framing and the world agree -- BUILT 2026-10-21, residuals open
 
 Phase 0 of `docs/design/DESIGN_THE_CAST_ACROSS_A_SKIP.md` (§ 4.3.1), found
 on the lighthouse probe's F16 beat (control chat 2 idx 9, "That night, when
@@ -2229,6 +2229,68 @@ are (`director_interpret.authorial_offers`).
 **Needs a live replay**: whether a character takes up a walk offered
 mid-scene (the probe tested the skip question only), and the lighthouse
 from idx 8 with its idx 9 input.
+
+**Second pass, the same day (the lighthouse replayed on that day's code).**
+Job tmp `fixes/live_skip/live_control.db`, chat 3, turns 25-26 (idx 8-9).
+Three defects of one thread; `Design.md` rows "A mind goes only where its
+own declaration takes it" and "A player's own account places the player
+where it says"; `tests/test_the_account_and_the_world_agree.py`.
+
+- **The offer was too thin to take up.** The encoder filed the keeper's walk
+  and his sitting down under the player (`source_entity_id` persona:3). The
+  floor offered him "in The Kitchen", and the sitting down, no walk, stood.
+  Built: whose act an event is is read off its own writes where it is filed
+  under its declarer (`director_prose._doer_alone`), and every other act of
+  a mind whose walk was refused goes with the walk, offered in the order
+  told. He is now offered "comes down the Tower Stair into the kitchen", then
+  "sits at the kitchen table across from Rhona Carrick".
+- **The resolve and the narrator put him at the table.** Neither invented it.
+  `already_happened` carried both events as the player's kept rows, and the
+  narrator's `current_events` carried them as HER acts (actor Rhona Carrick,
+  "comes down the Tower Stair into the kitchen") -- the first fix removes
+  both at the stage where they began. The resolve had no position for the
+  player at all: her room was in no declarer's aperture. Built: the players'
+  rooms are in the resolve's aperture (`director.director_resolve`).
+- **The player's own account did not move her.** Turn 25's decision model
+  answered the positions question 0.18, never told where anyone started; the
+  encoder set the log on `kitchen_table` from the hall with no position; the
+  repair checks granted channels only. Turn 26's repair removed the position
+  the encoder did write. Built: the decision model is told where each person
+  is before the passage (`where_each_is`), and
+  `director_prose.the_account_places_its_own_body` writes a player's walk
+  where her own step puts her at another room's fixture.
+
+**Waiting on the owner's ruling.**
+- `the_account_places_its_own_body` is a guard that ADDS a write: the
+  encoder never wrote that walk. Measured over 335 stored interprets, it
+  fires on 3 distinct beats (5 records), every one of the class. Its hands
+  reading (a fixture her own hands set a thing on or take it from) is the
+  only signal turn 25 carried. It would also read a throw onto a fixture
+  across a doorway as a walk; stored firings of that shape: 0.
+- The riding acts go to the walk floor's convention (the `observable`). The
+  conduct floor offers the `event` sentence, as before.
+
+**Residuals.**
+- A mind's act filed under its declarer that writes no body at all ("Elias
+  nods", no transforms) cannot be read for a doer, and stays the
+  declarer's. So does one aimed at the mind by a wrong `targets` -- chat 1
+  idx 2 of the probe, "Pell Hardacre sits at the stone bench", filed under
+  the player with Pell in its targets.
+- A mind's act filed under its declarer, with no walk refused, is still
+  enacted: the doer reading is the walk floor's alone. Measured, the conduct
+  floor would gain nothing from it on the stored interprets: the one
+  candidate is this beat's sitting down, which now rides.
+- An event that writes both the mind's walk and the declarer's own (turn
+  26's pre-repair draft) is read as the declarer's, and offers the place.
+- The decision model's new line changes the state every channel question
+  reads. Only a live run says what it does to the other answers.
+- The player's page still opens with her own words: "That night, when
+  Elias comes down ... and sits across the table from her". An offer the
+  keeper declines leaves that text on the page, and the world without him.
+
+**Needs a live replay**: the lighthouse from idx 8 (turn 25 should end with
+Rhona in the kitchen, by the encoder's position or the floor's; turn 26 should
+offer the keeper both acts and tell the resolve and the narrator neither).
 
 ## 2. Roadmap
 

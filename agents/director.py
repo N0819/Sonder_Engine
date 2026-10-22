@@ -6151,8 +6151,20 @@ def director_resolve(ctx, nonce, _corrections=None):
         _identity_index.get(str(group.get("entity_id")))
         for group in _resolve_event_inputs if isinstance(group, dict)
     ]
+    # THE PLAYERS ARE IN THE BEAT THEIR INPUT ENTERED. Asserted human input
+    # is absent from `event_inputs` -- it is `already_happened` -- so the
+    # aperture was the declarers' alone, and a player whose room no declarer
+    # could see was nowhere in the author's world but `here`. The lighthouse
+    # replayed on 2026-10-21's code (job tmp `fixes/live_skip/
+    # live_control.db`, chat 3, turn 26): the keeper declared from the lamp
+    # room, the player sat in the hall two storeys down, and the author --
+    # told by `already_happened` that she sat at the kitchen table -- put her
+    # across the table from him. Her room is in the aperture like any
+    # actor's, so `standing_relations` says where she stands.
     _resolve_causal_rooms = causal_scene_room_ids(
-        resolve_sc, _resolve_actor_names,
+        resolve_sc, _resolve_actor_names + [p_name] + [
+            str(extra.get("name") or "") for extra in ctx.extra_players or ()
+            if isinstance(extra, dict)],
         fallback_room=room_of(resolve_sc, p_name))
     _resolve_causal_index = causal_world_index(
         resolve_sc, here=room_of(resolve_sc, p_name),

@@ -889,10 +889,13 @@ def _job_view(job, units, sources=None):
     return view
 
 
-def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts):
+def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts,
+                 scene=None):
     """The tools the targeted encoder holds: whatever the ledger and fix
     jobs name, and for a missing sentence whatever Jev picks for THAT
-    sentence -- falling back to the beat's own tools."""
+    sentence -- falling back to the beat's own tools. ``scene`` is the
+    stage's world, so the sentence's channel questions are told where each
+    person stood, as the draft's were (`director_prose.where_each_is`)."""
     from llm.prompts import encoder_parts
     from .director_prose import part_channel, select_channels
     tools = [job["channel"] for job in jobs if job["kind"] in ("ledger", "fix")]
@@ -908,7 +911,8 @@ def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts)
     record = {}
     if missing:
         text = " ".join(u["text"].strip() for u in units if u["id"] in missing)
-        chosen, routing = select_channels(ctx, stage, text, model_payload, facts)
+        chosen, routing = select_channels(ctx, stage, text, model_payload, facts,
+                                          scene=scene)
         record = {"sentences": missing, "selected": chosen, "parts": routing.get("parts"),
                   "seconds": routing.get("seconds"), "failed": routing.get("failed")}
         tools += [c for c in chosen if c in channels or not channels]
@@ -1121,7 +1125,7 @@ def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_pa
     Both calls continue `held`, the draft's own request, where they can
     (`continuation`)."""
     tools, tool_parts, routing = repair_tools(ctx, stage, units, jobs, model_payload,
-                                              facts, channels, parts)
+                                              facts, channels, parts, scene=sc)
     answers, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
                                  model_payload, view, extras, rooms_elsewhere, new_places,
                                  base_payload, held=held, stage=stage)
