@@ -29,8 +29,11 @@ THREE PARTS, each a pure function of its inputs:
     and a stretch spent on that way is the ride itself (`rides`);
     what a stretch uses is met by what the mind carries, what is within its
     reach where the stretch finds it, and what it can walk to and back for
-    inside the stretch (`Reach`), and what is not fails it only where it
-    cannot be done without (`judge_without`); a stretch the
+    inside the stretch (`Reach`) -- only a thing a body can carry is ever
+    missing (`Reach.can_carry`): a fixture, a store, a vessel is used where it
+    stands -- and what is not fails it only where the decision model says it
+    cannot be done without (`judge_without`; no answer never fails it); a
+    stretch the
     world cannot carry out fails with a typed reason, and its row says what
     failed (`missing`, `meant`); two minds in the same room, or at the same off-map
     label, over overlapping time each receive the other's `doing` -- never
@@ -69,17 +72,19 @@ SKIP_LIVED_SECONDS = 3600.0
 SKIP_PLACE_MIN_PROBABILITY = 0.5
 
 #: How sure the decision model must be that a thing the mind means to use IS
-#: one of the things it has on it. Below it the stretch fails as "it was not on
-#: you" -- the same side the place threshold errs to: the world does not hand
-#: a body a thing it was not carrying.
+#: one of the things offered before the words are read as that thing. Below
+#: it the words name no thing the world holds, and are never missing
+#: (`Reach.missing`): the world does not hand a body a thing, and it never
+#: denies one on a guess either.
 SKIP_THING_MIN_PROBABILITY = 0.5
 
 #: How sure the decision model must be that a stretch CAN be done without the
 #: things that were not to hand before it is told as far as it went
-#: (`judge_without`) rather than failed. Below it -- and wherever the
-#: question went unanswered -- the stretch fails `not_held`, as every such
-#: stretch did before the question was asked: the same side the thing
-#: threshold errs to. Named per the owner's rule on thresholds.
+#: (`judge_without`) rather than failed. Below it the stretch fails
+#: `not_held`: the decision model said no. A question it did not answer
+#: leaves the row told as far as it went (`answered`): no answer never
+#: invents a failure (the owner's ruling, 2026-10-22). Named per the owner's
+#: rule on thresholds.
 SKIP_WITHOUT_MIN_PROBABILITY = 0.5
 
 #: `at_the_end` is where the stretch leaves the mind, and it is laid over the
@@ -117,10 +122,12 @@ SKIP_WEATHER_CHANGES = 4
 #: for both executors -- this one and the town charter's
 #: (`world/charter_skip`): `failed`, with a typed reason; else `not_known`
 #: for a stretch that partly failed (a thing not to hand it could be done
-#: without, `judge_without`); else `done` for a sleep; else `not_known` for a
-#: stretch whose success is the world's to judge -- another's response
-#: (`with`) or a world off the map nobody simulates (`away`); else `done`
-#: (`stretch_outcome`). What a stretch USES never makes it unknown.
+#: without, or that no answer judged, `judge_without`; a place no answer
+#: placed that the body could not follow); else `done` for a sleep; else
+#: `not_known` for a stretch whose success is the world's to judge --
+#: another's response (`with`) or a world off the map nobody simulates
+#: (`away`); else `done` (`stretch_outcome`). What a stretch USES never makes
+#: it unknown.
 OUTCOME_DONE = "done"
 OUTCOME_FAILED = "failed"
 OUTCOME_NOT_KNOWN = "not_known"
@@ -134,9 +141,11 @@ OUTCOME_NOT_KNOWN = "not_known"
 #: moves through -- and no crossing was made (`Ways`; a crossing of the
 #: mind's own inside a skip is not built, so every such stretch fails so,
 #: while the ride a journey already under way makes is no crossing of its
-#: own, `rides`); and, laid over either executor's rows, a thing the stretch
-#: uses that the world holds neither on the mind nor within its reach
-#: (`Reach`) and that the stretch cannot be done without (`judge_without`).
+#: own, `rides`); and, laid over either executor's rows, a thing a body can
+#: carry that the stretch uses and the world holds neither on the mind nor
+#: within its reach (`Reach`: a fixture, a store too big to carry and a
+#: vessel never fail it) and that the decision model says the stretch cannot
+#: be done without (`judge_without`).
 REASON_NO_ROUTE = "no_route"
 REASON_SHUT_WAY = "shut_way"
 REASON_TOO_FAR = "too_far"
@@ -683,6 +692,44 @@ def _choice(answer, threshold):
     return pick
 
 
+def answered(answer):
+    """Did the decision model answer a question? A `choice` that picked an
+    option -- "none of these" is an answer -- or a `noul` carrying its
+    probability, however low. No entry, an error, an unreadable shape or a
+    request that failed is NO ANSWER, and NO ANSWER NEVER INVENTS A FAILURE:
+    a stretch fails only where the world, or the decision model's own
+    answer, says it could not be done (`judge_without`, `place_stretches`).
+    Measured on the lighthouse replayed a fourth time (chat 3 turn 26,
+    2026-10-22): an unanswered `without` left a row failed, as a "no" did."""
+    if not isinstance(answer, dict):
+        return False
+    if str(answer.get("choice") or "").strip():
+        return True
+    value = answer.get("noul")
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def unanswered_places(answers, texts, questions):
+    """`{text}` -- every written place a place question WAS asked about
+    (`place_questions`' `place:<n>` keys in `questions`) that the decision
+    model did not answer (`answered`). "None of these" and a weak pick are
+    answers: those places are off-map labels the decision model read as
+    such. A place no question was asked about -- nothing to ask over -- is
+    not here either."""
+    out = set()
+    for n, text in enumerate(texts):
+        key = f"place:{n}"
+        if key in (questions or {}) and not answered((answers or {}).get(key)):
+            out.add(text)
+    return out
+
+
 def thing_questions(name, texts, held, language=None):
     """`{key: question}` -- one `choice` per thing a stretch uses that no
     thing's name answered exactly, over the things offered plus "none of
@@ -738,10 +785,14 @@ def held_exactly(text, held):
                                 for key, label in held.items())
 
 
-def place_stretches(stretches, resolved):
+def place_stretches(stretches, resolved, unplaced=()):
     """Each stretch with its place set: a room the resolution found, else
     its own words as an off-map label. An empty `where_text` is "where I
-    stand" and is left for the executor, which knows where that is."""
+    stand" and is left for the executor, which knows where that is. A label
+    whose question the decision model never answered (`unanswered_places`)
+    is marked `unplaced` -- internal, never on the build spec's STRETCH
+    (`as_stretch`) -- so the executor never fails a crossing on it: nothing
+    showed the place lay across the water (`live_through`)."""
     out = []
     for item in stretches:
         text = item.get("where_text") or ""
@@ -749,6 +800,8 @@ def place_stretches(stretches, resolved):
             out.append(dict(item, room=None, away=None))
         elif text in resolved:
             out.append(dict(item, room=resolved[text], away=None))
+        elif text in unplaced:
+            out.append(dict(item, room=None, away=text, unplaced=True))
         else:
             out.append(dict(item, room=None, away=text))
     return out
@@ -814,17 +867,32 @@ class Reach:
     behind it. And a thing that IS missing fails the stretch only where the
     stretch cannot be done without it (`judge_without`).
 
-    OFF THE MAP, ONLY A THING THAT COULD HAVE BEEN BROUGHT IS MISSING. A
-    fixture, or a thing nothing carries and that goes nowhere of itself, of a
-    place the world holds was never going to be at a place it does not hold:
-    the mind's words named another thing of the same name there, which the
-    world does not hold either -- never missing, like any such words. A
-    thing the record says a body can carry (`portable`), or one that goes
-    places (`MOVING_KINDS`), or one lying inside either, could have been
-    there and was not. Measured on the same replay (turn 26): at home on the
-    mainland, the boatman's "kitchen table" was read as the lighthouse
-    kitchen's table and counted missing beside the letter that truly lay on
-    the rock.
+    A STRETCH FAILS ITS HOLDING CHECK ONLY ON POSITIVE EVIDENCE, AND ONLY A
+    THING A BODY CAN CARRY IS EVER MISSING (`can_carry`). A fixture, a thing
+    too big to carry -- a store, a pile of cargo -- and a vessel are never
+    missing, on the map or off it: the mind goes to them and uses them where
+    they stand, and whether it can be there is the stretch's PLACE, which
+    routing decides (`no_route`, `no_crossing`), never this check. A thing a
+    body can carry is missing only where the world holds it out of the
+    mind's reach for the stretch: on another body (the decision model then
+    judges whether the stretch could be done without it, `judge_without`),
+    or where the mind cannot walk to and back for it inside the stretch
+    (`fetch`) -- anywhere the world holds it, from a place off the map. Words
+    that may name both kinds are never missing: one reading of them is used
+    where it stands. A FALSE FAILURE BECOMES CANON -- the log is what the
+    mind remembers and what its next beat is told -- so the executor never
+    fails a stretch on what it cannot show. Measured on the lighthouse
+    replayed a fourth time (chat 3, turns 25 and 26, 2026-10-22), with the
+    fetch above in place: the decision model read the keeper's "paraffin" as
+    the pile of stores on the steps (cargo, "a sloshing drum of paraffin"),
+    so his lamp work failed on five rows and his memory kept "The lamp went
+    dark on my watch for want of paraffin I should have had at hand"; his
+    tea in the kitchen failed for the hall's stove; and the boatman's day at
+    a harbour the world does not hold failed on every stretch that named the
+    Mary Ann, docked at the mainland -- his dinner among them. The third
+    replay (turn 26) had already shown the off-map half: the boatman's
+    "kitchen table" at home was read as the lighthouse kitchen's and counted
+    missing beside the letter that truly lay on the rock.
 
     `carried` is `{key: label}` of what the mind has on it
     (`skip_stage.held_things`); everything else is read from the scene.
@@ -832,7 +900,7 @@ class Reach:
     without them nothing is (`fetch`)."""
 
     def __init__(self, scene, name, carried=None, journeys=None, ways=None):
-        from world.spatial import MOVING_KINDS, _interior_rooms_of, _is_body_entity
+        from world.spatial import _interior_rooms_of, _is_body_entity
         self.scene = scene if isinstance(scene, dict) else {}
         self.name = str(name or "")
         self.journeys = dict(journeys or {})
@@ -849,7 +917,7 @@ class Reach:
         self.inside = {}         # vessel key -> its own rooms
         self.fixture_room = {}   # fixture key -> its room
         self.portable = set()    # keys the record says a body can carry
-        self.moving = set()      # keys of things that go places (a vessel)
+        self.on_a_body = set()   # keys a body carries now, this mind's or another's
         self._trips = {}         # (here, there) -> a walk there and back, seconds
         people = {str(k) for k, e in entities.items()
                   if not isinstance(e, dict) or _is_body_entity(self.scene, k, e)}
@@ -898,8 +966,6 @@ class Reach:
             self.option[key] = "%s (%s)" % (name_, described) if described else name_
             if ent.get("portable"):
                 self.portable.add(key)
-            if str(ent.get("kind") or "").strip().casefold() in MOVING_KINDS:
-                self.moving.add(key)
             inside = [str(r) for r in _interior_rooms_of(self.scene, key)]
             if inside:
                 self.inside[key] = inside
@@ -908,8 +974,10 @@ class Reach:
                 self.outer[key] = outer
             if kind == "room":
                 self.where[key] = where
-            elif kind == "body" and _fold(where) == _fold(self.name):
-                self.carried.setdefault(key, name_)
+            elif kind == "body":
+                self.on_a_body.add(key)
+                if _fold(where) == _fold(self.name):
+                    self.carried.setdefault(key, name_)
         for rid in sorted(rooms):
             anchors = (rooms[rid] or {}).get("anchors") if isinstance(rooms[rid], dict) else None
             for aid in sorted(anchors or {}) if isinstance(anchors, dict) else ():
@@ -990,40 +1058,54 @@ class Reach:
             return True                         # aboard it
         return self.room_at(key, t) == room     # beside it, or it lies here
 
-    def could_be_brought(self, key):
-        """Could a body, or the thing's own going, have brought it anywhere?
-        A thing the record says a body can carry, one of the engine's moving
-        kinds, or one lying inside either -- never a fixture."""
+    def can_carry(self, key):
+        """Does the world say a body can carry this thing? POSITIVE EVIDENCE
+        only: the record marks it `portable`, a body carries it now (the
+        engine's own reading of a carried thing, `spatial_routing.
+        _is_carried_interior`), or it lies inside a thing that is either.
+        Never a fixture; never a thing whose record says nothing, or says it
+        stays -- a store, a pile of cargo, a vessel."""
         if key in self.fixture_room:
             return False
-        return any(k in self.portable or k in self.moving
+        return any(k in self.portable or k in self.on_a_body
                    for k in (key, self.outer.get(key, key)))
 
+    def held_somewhere(self, key, t=None):
+        """Does the world hold the thing anywhere at story second `t`: on a
+        body, in a room, or aboard a vessel under way? A thing the world
+        places nowhere is not held elsewhere -- nothing shows it out of
+        reach -- so it is never missing."""
+        if key in self.on_a_body or key in self.fixture_room:
+            return True
+        outer = self.outer.get(key, key)
+        return bool(self.room_at(outer, t)) or outer in self.journeys
+
     def missing(self, uses, named, room, away=None, t=None):
-        """The words of each thing `uses` names that the world holds and
-        holds out of reach -- neither on the mind nor where the stretch finds
-        it -- as the mind wrote them. `named` is `{words: {key}}` from the
-        resolution; words naming no thing the world holds are never
-        missing, and off the map neither are words naming only things that
-        could not have been brought there (`could_be_brought`). What the mind
-        can fetch is `fetch`'s, after this."""
-        off_map = bool(away) or not room
+        """The words of each thing `uses` names that the world holds out of
+        reach -- held somewhere (`held_somewhere`), and neither on the mind
+        nor where the stretch finds it -- and that a body can carry
+        (`can_carry`), every thing the words may name, as the mind wrote
+        them. `named` is `{words: {key}}` from the resolution; words naming
+        no thing the world holds are never missing, and neither are words
+        naming a fixture, a thing too big to carry or a vessel, on the map or
+        off it: the mind uses them where they stand. What the mind can fetch
+        is `fetch`'s, after this."""
         out = []
         for text in uses or ():
             keys = (named or {}).get(text) or ()
             if not keys or any(self.in_reach(k, room, away, t) for k in keys):
                 continue
-            if off_map and not any(self.could_be_brought(k) for k in keys):
+            if not all(self.can_carry(k) and self.held_somewhere(k, t) for k in keys):
                 continue
             out.append(text)
         return out
 
     def _lies_in(self, key, t):
         """The room a thing the mind could FETCH lies in at story second `t`,
-        or None: a thing the record says a body can carry, lying in a room --
+        or None: a thing a body can carry (`can_carry`), lying in a room --
         or inside things lying there -- never on another body, never a
         fixture, and never a thing too big to carry, a vessel among them."""
-        if key in self.fixture_room or key not in self.portable:
+        if not self.can_carry(key):
             return None
         return self.room_at(self.outer.get(key, key), t)
 
@@ -1333,8 +1415,10 @@ def stretch_outcome(stretch, reason=None, away=None, partial=False):
     """A row's outcome, by the one rule both executors write
     (`charter_skip._TownRun._stretch_row` is the other): `failed` when it
     failed; else `not_known` when it PARTLY failed -- things not to hand that
-    it could be done without (`partial`, `judge_without`), so it is told only
-    as far as it went; else `done` for a sleep; else `not_known` when its
+    it could be done without, or that no answer judged (`partial`,
+    `judge_without`), or a place no answer placed that the body could not
+    follow (`_row`'s `unplaced`) -- so it is told only as far as it went;
+    else `done` for a sleep; else `not_known` when its
     success is the world's to judge: another's response (`with`), or a world
     off the map nobody simulates (`away`, where the body is as it runs); else
     `done`.
@@ -1436,15 +1520,18 @@ class Skies:
         return " → ".join(seen) if seen else None
 
 
-def _row(item, arrival, end, room, away, reason, missing, skies):
+def _row(item, arrival, end, room, away, reason, missing, skies, unplaced=False):
     """One LOG row. A row failed for a reason in `ROUTE_REASONS` never got
     where it meant to be: its `where_text` is left for `place_words` to say
     where the body WAS, and `meant` keeps the mind's own words for where it
     meant to be. A row failed `not_held` names what was not to hand in
-    `missing`, as the mind wrote it."""
+    `missing`, as the mind wrote it. A row whose place no answer placed and
+    that the body could not follow (`unplaced`) is said the same way, and
+    told as far as it went (`not_known`, no reason): nothing showed it
+    failed."""
     where_text = item.get("where_text") or ""
     meant = None
-    if reason in ROUTE_REASONS:
+    if reason in ROUTE_REASONS or unplaced:
         meant, where_text = (where_text or None), ""
     return {
         "from_s": arrival, "until_s": end, "room": room, "away": away,
@@ -1452,7 +1539,7 @@ def _row(item, arrival, end, room, away, reason, missing, skies):
         "asleep": bool(item.get("asleep")), "seen": [],
         "weather": (skies.over(arrival, end, room=room, away=away)
                     if skies is not None else None),
-        "outcome": stretch_outcome(item, reason, away), "reason": reason,
+        "outcome": stretch_outcome(item, reason, away, partial=unplaced), "reason": reason,
         "missing": list(missing or ()), "meant": meant}
 
 
@@ -1487,7 +1574,11 @@ def live_through(stretches, *, scene, start_room=None, start_away=None,
     A stretch the world cannot carry out FAILS with a typed reason and leaves
     the mind where its last stretch that could happen left it: no route, one
     only past a fastened door, one only across what a vessel crosses, or a
-    way it was still on when the stretch ran out. A thing the stretch uses
+    way it was still on when the stretch ran out. A place the decision model
+    never answered (`unplaced`, `place_stretches`) fails no crossing: from
+    the water, or under way, the body stays -- rides on -- and the row is
+    told as far as it went, the words kept in `meant`; nothing showed the
+    place lay across the water. A thing the stretch uses
     that the world holds neither on the mind nor within its reach where the
     stretch finds it (`missing_from(uses, room, away, t) -> [words]`, as
     `Reach.missing` answers; or `uses_held(words) -> bool`, a reader of what
@@ -1502,6 +1593,16 @@ def live_through(stretches, *, scene, start_room=None, start_away=None,
 
     `asleep_since` is when the mind's sleep began if it is asleep as the
     span opens, so a sleep that runs on into the span keeps its true start.
+
+    The far end carries `left_from`: where a day that ends off the map left
+    the map, as this walk knows it -- the room the body last stood in on the
+    map, a journey's landing among them. AFTER A RIDE THAT IS WHERE THE
+    JOURNEY BROUGHT IT, never the space the vessel moved through: the moment
+    ashore has no row of its own when the stretch it lands in goes on
+    elsewhere, so the log alone cannot say it. Measured on the lighthouse
+    replayed a fourth time (chat 3 turn 25, 2026-10-22): the boatman rode the
+    Mary Ann to the mainland and spent his day at a harbour off the map, and
+    his whereabouts kept `the_channel`.
     """
     ways = ways if ways is not None else Ways(scene)
     room = str(start_room) if start_room else None
@@ -1592,10 +1693,17 @@ def live_through(stretches, *, scene, start_room=None, start_away=None,
                     else:
                         arrival += seconds
                         room, away = target_room, None
-        elif target_away and not target_room:
+        stayed = False
+        if target_away and not target_room:
             if under_way or (room and room in ways.media):
-                # Out of the space a vessel moves through is a crossing.
-                reason = REASON_NO_CROSSING
+                if item.get("unplaced"):
+                    # No answer placed it: nothing shows the way there lies
+                    # across the water, so the body stays -- rides on -- and
+                    # the row is told as far as it went.
+                    stayed = True
+                else:
+                    # Out of the space a vessel moves through is a crossing.
+                    reason = REASON_NO_CROSSING
             else:
                 room, away = None, target_away
         if under_way and reason in ROUTE_REASONS:
@@ -1613,8 +1721,11 @@ def live_through(stretches, *, scene, start_room=None, start_away=None,
                 reason = REASON_NOT_HELD
         if room:
             left_by = room
-        log.append(_row(item, arrival, end, room, away, reason, missing, skies))
-    return log, far_end_of(log, start_room, start_away, asleep_since)
+        log.append(_row(item, arrival, end, room, away, reason, missing, skies,
+                        unplaced=stayed))
+    far = far_end_of(log, start_room, start_away, asleep_since)
+    far["left_from"] = left_by if far.get("away") and not far.get("room") else None
+    return log, far
 
 
 def _landed(item):
@@ -1740,20 +1851,26 @@ def judge_without(log, answers, threshold=SKIP_WITHOUT_MIN_PROBABILITY):
     the decision model says can be done without them (`without_questions`,
     yes at or above `threshold`) partly failed: it is told as far as it went
     -- `not_known` by the one rule (`stretch_outcome`'s `partial`), its
-    reason gone, `missing` kept to say what it went without. A row answered
-    no, or not answered at all, stays failed `not_held`. In place; returns
-    the indices of the rows it changed.
+    reason gone, `missing` kept to say what it went without. Only a row
+    answered no stays failed `not_held`: one the decision model did not
+    answer (`answered` -- no entry, an unreadable one, a request that failed
+    or was never made) is told as far as it went too, because NO ANSWER
+    NEVER INVENTS A FAILURE. In place; returns the indices of the rows it
+    changed.
 
     Measured on the lighthouse replayed a second time (chat 3 turn 25,
     2026-10-21): the keeper's "Log the failure -- record the broken pinion
     ... sit with the logbook" failed whole for want of "the new clockwork
     mechanism", which stood one floor up; the boatman's walk to the post
-    office with a letter that lay on the rock must still fail."""
+    office with a letter that lay on the rock must still fail. And a fourth
+    time (chat 3, turns 25 and 26, 2026-10-22): a false failure becomes what
+    the mind remembers and says, so a row stays failed only on the decision
+    model's own no."""
     from llm.decisions import probability
     changed = []
     for i in short_of(log):
         answer = (answers or {}).get(f"without:{i}")
-        if answer is None or probability(answer) < float(threshold):
+        if answered(answer) and probability(answer) < float(threshold):
             continue
         row = log[i]
         row["outcome"] = stretch_outcome(row, None, row.get("away"), partial=True)

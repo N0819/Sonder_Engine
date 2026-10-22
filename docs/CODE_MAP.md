@@ -36,7 +36,7 @@
 | `agents/offscreen_beat.py` | 490 |  | — |
 | `agents/perception.py` | 9323 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 2180 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents`, `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.skip_stage`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
-| `agents/skip_stage.py` | 1127 |  | `core.db`, `world` |
+| `agents/skip_stage.py` | 1155 |  | `core.db`, `world` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 3485 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -230,7 +230,7 @@
 | `world/routines.py` | 256 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 206 |  | — |
 | `world/site_plan.py` | 1689 |  | — |
-| `world/skip_itinerary.py` | 1878 |  | `world.spatial` |
+| `world/skip_itinerary.py` | 1995 |  | `world.spatial` |
 | `world/spatial.py` | 461 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_listener`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_pack`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
 | `world/spatial_barriers.py` | 1130 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 674 |  | `story.scene`, `world.spatial`, `world.spatial_frames` |
@@ -632,14 +632,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `skip_lives()` | 632 | 134 lines |
-| `resolve_mind()` | 471 | 63 lines |
-| `stretch_for_payload()` | 1074 | 46 lines |
-| `ask()` | 315 | 34 lines |
-| `widen_reactors_to_skip_far_end()` | 1042 | 30 lines |
-| `skip_block()` | 278 | 29 lines |
-| `judge_what_was_missing()` | 536 | 27 lines |
-| `_share()` | 780 | 25 lines |
+| `skip_lives()` | 651 | 143 lines |
+| `resolve_mind()` | 477 | 70 lines |
+| `stretch_for_payload()` | 1102 | 46 lines |
+| `ask()` | 321 | 34 lines |
+| `judge_what_was_missing()` | 549 | 33 lines |
+| `widen_reactors_to_skip_far_end()` | 1070 | 30 lines |
+| `skip_block()` | 284 | 29 lines |
+| `_share()` | 808 | 25 lines |
 
 ### `agents/storage.py`
 
@@ -2879,14 +2879,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `live_through()` | 1459 | 159 lines |
-| `lay_over()` | 1644 | 50 lines |
-| `journeys()` | 1219 | 41 lines |
-| `expand_itinerary()` | 486 | 39 lines |
-| `share_company()` | 1843 | 36 lines |
-| `default_day()` | 415 | 31 lines |
-| `_placed_in_order()` | 448 | 26 lines |
-| `journey_under_way()` | 1282 | 26 lines |
+| `live_through()` | 1546 | 183 lines |
+| `lay_over()` | 1755 | 50 lines |
+| `journeys()` | 1301 | 41 lines |
+| `expand_itinerary()` | 495 | 39 lines |
+| `share_company()` | 1960 | 36 lines |
+| `judge_without()` | 1848 | 32 lines |
+| `default_day()` | 424 | 31 lines |
+| `stretch_outcome()` | 1414 | 27 lines |
 
 ### `world/spatial_barriers.py`
 

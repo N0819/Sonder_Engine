@@ -623,7 +623,7 @@ def test_a_walk_takes_its_time_from_the_start_of_the_stretch_it_walks_to():
     assert log[1]["from_s"] == pytest.approx(3600.0 + second)
     assert first > 0 and second > first
     assert far == {"room": "stair", "away": None, "asleep": False,
-                   "asleep_since_s": None}
+                   "asleep_since_s": None, "left_from": None}
 
 
 def test_a_stretch_the_world_cannot_carry_out_fails_with_its_reason():
@@ -697,7 +697,7 @@ def test_one_outcome_rule_and_one_reason_vocabulary_for_both_executors():
     assert [r["outcome"] for r in log] == [
         "done", "not_known", "done", "done", "not_known", "done", "not_known"]
     assert far == {"room": None, "away": "my rooms", "asleep": False,
-                   "asleep_since_s": None}
+                   "asleep_since_s": None, "left_from": "kitchen"}
     assert set(charter_skip.FAILURE_REASONS) <= set(itin.FAILURE_REASONS)
 
 
@@ -735,10 +735,12 @@ def test_the_towns_rows_carry_what_only_the_stage_knows(story, monkeypatch):
         return None
     monkeypatch.setattr(charter_skip, "live_in_charter", runner)
     # A lantern the world holds, locked away in the store: out of reach on
-    # the landing (a thing the world holds nowhere is never missing).
+    # the landing (a thing the world holds nowhere is never missing), and a
+    # thing a body carries (only such a thing is ever missing, fix lane B5).
     from core.db import wget, wset
     scene = wget(story["chat"], "scene")
-    scene["entities"]["lantern"] = {"name": "a storm lantern", "kind": "light"}
+    scene["entities"]["lantern"] = {"name": "a storm lantern", "kind": "light",
+                                    "portable": True}
     scene["positions"]["lantern"] = "store"
     wset(story["chat"], "scene", scene)
     answer = {"plan": [
@@ -756,7 +758,10 @@ def test_the_towns_rows_carry_what_only_the_stage_knows(story, monkeypatch):
         assert itinerary == out["minds"][name]["itinerary"] and span == out["span"]
     elias = out["minds"][ELIAS]["log"]
     landing = [r for r in elias if r["room"] == "landing"]
-    assert landing and all((r["outcome"], r["reason"]) == ("failed", "not_held")
+    # The decision model answers no `without` question here (`_jev`), and no
+    # answer never invents a failure (fix lane B5): the rows are told as far
+    # as they went, what they lacked kept.
+    assert landing and all((r["outcome"], r["reason"]) == ("not_known", None)
                            and r["missing"] == ["a storm lantern"] for r in landing)
     assert all(r["weather"] for r in landing)          # the sky it stood under
     lamp = [r for r in elias if r["room"] == "lamp_room"]

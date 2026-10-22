@@ -178,10 +178,11 @@ def _assert_the_picks_reproduce_the_keepers_live_log():
 
 def _assert_the_picks_reproduce_the_boatmans_live_logs():
     """Off the map, the boatman's live `missing` is what the reach now gives
-    plus the words that named only things that could not have been brought
-    there -- the crates (the pile of stores on the rock's steps) and the
-    lighthouse kitchen's table."""
-    immovable = {"crates", "kitchen table"}
+    plus the words that named only things no body carries -- the crates (the
+    pile of stores on the rock's steps), the lighthouse kitchen's table and,
+    since fix lane B5 (the owner's ruling of 2026-10-22: a vessel is never
+    missing), the Mary Ann."""
+    immovable = {"crates", "kitchen table", "the Mary Ann"}
     for turn in (T25, T26):
         scene = _scene(turn)
         reach = itin.Reach(scene, PELL, journeys=itin.journeys(scene, turn["span"]["from_s"]))
@@ -314,14 +315,20 @@ def test_the_letter_across_the_water_stays_missing():
 
 def test_a_thing_no_body_carries_is_never_fetched():
     """A fixture is used where it stands and a thing too big to carry is
-    gone to, never fetched: from the kitchen the lamp and the pedestal stay
-    missing, however near. Had "paraffin" been read as the pile of stores
-    on the steps -- cargo, not portable -- it would stay missing too."""
+    gone to, never fetched -- and, since fix lane B5 (the owner's ruling of
+    2026-10-22: a stretch fails its holding check only on positive evidence,
+    and only a thing a body can carry is ever missing), never missing
+    either: from the kitchen the lamp and the pedestal are not. Read as the
+    pile of stores on the steps -- cargo, not portable -- "paraffin" is
+    neither fetched nor missing; the fourth live replay read it so, and the
+    keeper's lamp failed for it
+    (`tests/test_a_skip_fails_only_on_positive_evidence.py`)."""
     scene = _scene(T25)
     reach = itin.Reach(scene, ELIAS, ways=_ways(T25, scene))
     named = {"the lamp": {LAMP}, "the pedestal": {PEDESTAL}, "paraffin": {PILE}}
     span = T25["span"]
-    assert reach.missing(list(named), named, "kitchen") == list(named)
+    assert not any(reach.in_reach(k, "kitchen") for keys in named.values() for k in keys)
+    assert reach.missing(list(named), named, "kitchen") == []
     assert reach.fetch(list(named), named, "kitchen", t=span["from_s"],
                        until=span["until_s"]) == ([], 0.0)
     assert scene["entities"][PILE]["portable"] is False
@@ -354,15 +361,20 @@ def test_an_off_map_stretchs_foreign_fixture_is_never_missing():
     the world holds, and was never going to be on the mainland. It is never
     missing; the letter -- a thing he could have carried -- is. On the quay
     the crates (the pile of stores, cargo nobody carries) are never missing
-    either, while the post bag (portable) and the Mary Ann (a thing that
-    goes places) could have been there and were not."""
+    either, while the post bag (portable) could have been there and was not.
+    The Mary Ann, a vessel, is boarded where she lies and is never missing
+    (fix lane B5, the owner's ruling of 2026-10-22; B4 read a moving kind as
+    a thing that could have been brought)."""
     _assert_the_picks_reproduce_the_boatmans_live_logs()
     scene = _scene(T26)
     reach = itin.Reach(scene, PELL)
     named = {"kitchen table": {KITCHEN_TABLE}, "the letter": {LETTER},
              "the fire": set(), "oilskin jacket": set()}
     assert reach.missing(list(named), named, None, "home") == ["the letter"]
-    assert reach.missing(["kitchen table"], named, "bedroom_elias") == ["kitchen table"]
+    # From the next room the table is not to hand, and still never missing:
+    # a fixture is used where it stands (fix lane B5).
+    assert not reach.in_reach(KITCHEN_TABLE, "bedroom_elias")
+    assert reach.missing(["kitchen table"], named, "bedroom_elias") == []
     log, _far = _live(T26, PELL)
     assert log[0]["missing"] == ["Rhona Carrick's sealed letter"]
     assert T26["minds"][PELL]["log_as_run"][0]["missing"] == \
@@ -373,26 +385,36 @@ def test_an_off_map_stretchs_foreign_fixture_is_never_missing():
     named = {"the Mary Ann": {MARY_ANN}, "crates": {PILE}, "the post bag": {POST_BAG}}
     day1 = 141300.0
     assert reach.missing(list(named), named, None, "the quay, aboard the Mary Ann", day1) == \
-        ["the Mary Ann", "the post bag"]
+        ["the post bag"]
     log, _far = _live(T25, PELL)
     loading = next(r for r in log if r["doing"].startswith("Loads the Tuesday run"))
-    assert loading["missing"] == ["the Mary Ann", "the post bag"]
+    assert loading["missing"] == ["the post bag"]
 
 
-def test_a_thing_inside_a_thing_that_could_be_brought_can_be_missing_off_the_map():
-    """The could-have-been-brought test follows a thing to what holds it:
-    the post bag stowed in the Mary Ann can be missing off the map, and a
-    thing inside the pile of stores, which nobody carries, is portable on
-    its own record and can be too."""
+def test_a_thing_inside_a_thing_a_body_can_carry_can_be_missing_off_the_map():
+    """The can-carry test (`Reach.can_carry`) follows a thing to what holds
+    it: a thing whose own record does not say a body carries it, stowed in
+    the post bag, goes where a body carries the bag and can be missing off
+    the map; a thing inside the pile of stores, which nobody carries, is
+    portable on its own record and can be too. Stowed in the Mary Ann, a
+    thing that is not portable itself is never missing: a vessel is no thing
+    a body carries (fix lane B5, the owner's ruling of 2026-10-22; B4 read a
+    moving kind as one that could have been brought)."""
+    scene = _scene(T25)
+    scene["entities"][LETTER]["portable"] = False
+    scene["contained"][LETTER] = {"in": POST_BAG, "mode": "stowed"}
+    reach = itin.Reach(scene, PELL)
+    assert reach.can_carry(LETTER) and reach.can_carry(POST_BAG)
+    assert reach.missing(["the letter"], {"the letter": {LETTER}}, None, "home") == ["the letter"]
+    assert not any(reach.can_carry(k) for k in (PILE, KITCHEN_TABLE, MARY_ANN))
     scene = _scene(T25)
     scene["entities"][POST_BAG]["portable"] = False
     scene["contained"][POST_BAG] = {"in": MARY_ANN, "mode": "stowed"}
-    reach = itin.Reach(scene, PELL)
-    assert reach.could_be_brought(POST_BAG)
-    assert not reach.could_be_brought(PILE) and not reach.could_be_brought(KITCHEN_TABLE)
     scene["contained"][LETTER] = {"in": PILE, "mode": "stowed"}
     reach = itin.Reach(scene, PELL)
-    assert reach.could_be_brought(LETTER)
+    assert not reach.can_carry(POST_BAG)
+    assert reach.missing(["the post bag"], {"the post bag": {POST_BAG}}, None, "home") == []
+    assert reach.can_carry(LETTER)
     assert reach.missing(["the letter"], {"the letter": {LETTER}}, None, "home") == ["the letter"]
 
 

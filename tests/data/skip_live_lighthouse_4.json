@@ -1,0 +1,4741 @@
+{
+ "about": "The lighthouse replayed a FOURTH time, on 26b50870 (job tmp fixes/live_skip4/live_control.db, chat 3, with decision capture on): turns 25 (idx 8, 'Two days later the wind gets up from the west ...') and 26 (idx 9, 'That night, when Elias comes down from the first watch ...'). Per turn: the world before it (checkpoint 8 / 9) and the whereabouts it held, the interpret's authorial offers, and its skip_lives step -- each mind's answer, the itinerary the stage resolved from it, the log and far end that code gave it -- the decision model's own answers from the capture (`decided`: each place asked and the room it was read as, each thing asked and the thing it was read as, each `without` verdict by the row's doing and what it went without), the memories the job wrote from it, and the narration the reader got.",
+ "turns": {
+  "25": {
+   "idx": 8,
+   "input": "Two days later the wind gets up from the west and the sea comes white over the rock all morning. Rhona keeps to the kitchen with the stove going and the log open on the table, writing up the trial of the new mechanism.",
+   "clock": {
+    "elapsed_seconds": 78466.0,
+    "anchor_hour": 15.75,
+    "day_length_hours": 24.0,
+    "hour_of_day": 13.55
+   },
+   "span": {
+    "from_s": 78466.0,
+    "until_s": 227700.0
+   },
+   "scene": {
+    "rooms": {
+     "bedroom_elias": {
+      "name": "Elias's Room",
+      "adjacent": [
+       {
+        "to": "kitchen",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "w",
+        "name": "Elias's Room",
+        "desc": "A narrow plank door, painted once and scuffed grey at the foot, hung on iron strap hinges."
+       }
+      ],
+      "planned": true,
+      "purpose": "One of the tower's two narrow bedrooms, off the kitchen: a bunk, a chest and a small window.",
+      "access": "Through a door off the kitchen.",
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 6,
+       "d": 7
+      },
+      "shape": "rectangle",
+      "exposure": "enclosed",
+      "level": 2,
+      "floor": "timber",
+      "surface": "furnished",
+      "from_event": 0,
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": 0,
+       "y": 0,
+       "elev_m": 6.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "bedroom_rhona": {
+      "name": "The Spare Room",
+      "adjacent": [
+       {
+        "to": "kitchen",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "e",
+        "name": "The Spare Room",
+        "desc": "A narrow plank door, its paint worn to bare wood along the latch edge, hung on iron strap hinges."
+       }
+      ],
+      "planned": true,
+      "purpose": "The tower's other narrow bedroom, off the kitchen, kept for a relief keeper: a bunk, a chest and a small window.",
+      "access": "Through a door off the kitchen.",
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 6,
+       "d": 7
+      },
+      "shape": "rectangle",
+      "exposure": "enclosed",
+      "level": 2,
+      "floor": "timber",
+      "surface": "furnished",
+      "from_event": 0
+     },
+     "kitchen": {
+      "name": "The Kitchen",
+      "adjacent": [
+       {
+        "to": "tower_hall",
+        "vertical": "down",
+        "way": "stair",
+        "dir": "e",
+        "barrier": "open",
+        "name": "The Hall",
+        "desc": "The tower stair, a tight curve of stone treads winding down the inside of the tower wall to the hall below."
+       },
+       {
+        "to": "bedroom_elias",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "e",
+        "name": "Elias's Room",
+        "desc": "A narrow plank door, painted once and scuffed grey at the foot, hung on iron strap hinges."
+       },
+       {
+        "to": "bedroom_rhona",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "w",
+        "name": "The Spare Room",
+        "desc": "A narrow plank door, its paint worn to bare wood along the latch edge, hung on iron strap hinges."
+       },
+       {
+        "to": "lamp_room",
+        "vertical": "up",
+        "way": "stair",
+        "dir": "n",
+        "barrier": "open",
+        "name": "The Tower Stair",
+        "desc": "A tight spiral of stone treads winding up through the thickness of the tower wall, worn hollow in the middle, with a rope strung along the outer curve for a hand."
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 9,
+       "d": 9
+      },
+      "shape": "round",
+      "exposure": "enclosed",
+      "level": 2,
+      "floor": "stone",
+      "surface": "furnished",
+      "from_event": 1,
+      "desc": "The tower's living floor, a round stone room the width of the tower, its walls limewashed and gone the colour of weak tea above the smoke line. The floor is flagged stone, swept clean, with a scatter of rush matting worn thin in the track between the stair and the table. A cast-iron range stands against the north wall, its flue carried up through the stone, and a kettle sits on the hob. A long deal table runs down the middle of the room, scrubbed pale, ringed with knife scars and the black half-moons of hot pans. Two narrow doors open off the room, one east and one west, and the tower stair climbs the north wall in a tight curve of stone treads toward the lamp room. The air holds woodsmoke, boiled greens and the cold breath of the sea that comes up the stairwell.",
+      "light": "lit",
+      "anchors": {
+       "range": {
+        "desc": "A cast-iron range set into the north wall, its door blackened, its top plates scored by years of kettles and pans. A flue of sooted stone carries the smoke up through the wall.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "large"
+       },
+       "kitchen_table": {
+        "desc": "A long deal table down the middle of the room, scrubbed pale and scored with knife marks and the black rings of hot pans.",
+        "dir": "w",
+        "height": "waist",
+        "footprint": "large"
+       },
+       "bench": {
+        "desc": "A plain bench of scrubbed deal drawn up along the table's seaward side, its legs worn to a shine on the flagstones.",
+        "dir": "s",
+        "height": "waist",
+        "footprint": "run",
+        "offset": 1.0
+       },
+       "dresser": {
+        "desc": "A painted dresser against the wall, its shelves crowded with chipped crockery, a few tins and a jar of salt.",
+        "dir": "w",
+        "height": "head",
+        "footprint": "large"
+       },
+       "stair_foot": {
+        "desc": "The foot of the tower stair, where the lowest stone treads curve up out of the floor toward the lamp room.",
+        "dir": "n",
+        "height": "floor",
+        "footprint": "small"
+       },
+       "pegs": {
+        "desc": "A row of iron pegs beside the east door, hung with an apron, a cloth cap and a bundle of dried herbs.",
+        "dir": "e",
+        "height": "head",
+        "footprint": "small"
+       }
+      },
+      "size": "huge",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -9,
+       "y": 1,
+       "elev_m": 6.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "lamp_room": {
+      "name": "The Lamp Room",
+      "adjacent": [
+       {
+        "to": "kitchen",
+        "vertical": "down",
+        "way": "stair",
+        "dir": "s",
+        "barrier": "open",
+        "name": "The Tower Stair",
+        "desc": "A tight spiral of stone treads winding up through the thickness of the tower wall, worn hollow in the middle, with a rope strung along the outer curve for a hand."
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 7,
+       "d": 7
+      },
+      "shape": "round",
+      "exposure": "enclosed",
+      "level": 3,
+      "floor": "stone",
+      "surface": "bare",
+      "from_event": 1,
+      "desc": "The glass room at the top of the tower, a round stone chamber the width of the tower with a ring of tall windows set in its seaward half, their leaded panes greenish and streaked with salt. The stone floor is flagged and worn smooth in a circle where feet have turned, and the limewash on the walls has gone grey with soot and damp. A low iron rail runs round the landward side of the floor, and the tower stair comes up through the stone at the south. The old lamp stands at the centre on its iron pedestal, its brass dulled, its wick trimmed, and beside it the Board's new mechanism sits on a deal bench with its gearing half assembled, tools and offcuts scattered around it. The air smells of paraffin, cold iron and the sea, and the wind is never quite still up here.",
+      "light": "lit",
+      "windows": [
+       "n",
+       "e",
+       "ne"
+      ],
+      "far_look": "A round glass lantern room crowning a stone tower, its panes catching the sky.",
+      "anchors": {
+       "lamp_pedestal": {
+        "desc": "A squat iron pedestal bolted to the flags at the centre of the floor, its base ringed with rust, carrying the old lamp: a brass housing with a thick glass chimney, its wick trimmed and its reservoir half full of paraffin.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "small",
+        "offset": 0.4,
+        "cell": [
+         3,
+         3
+        ]
+       },
+       "work_bench": {
+        "desc": "A deal bench set against the landward wall, its top scored and stained with oil, crowded with the Board's new mechanism: brass gearing half assembled, a coil of fine wire, spanners, and filings of metal.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "large",
+        "cell": [
+         2,
+         1
+        ]
+       },
+       "rail": {
+        "desc": "A low iron rail running round the landward side of the floor, its paint flaked to bare metal, set there to keep a body off the wall where the stair comes up.",
+        "dir": "w",
+        "height": "waist",
+        "footprint": "run",
+        "cell": [
+         0,
+         2
+        ]
+       },
+       "stair_head": {
+        "desc": "The head of the tower stair, where the topmost treads break through the flags and the rope ends at an iron ring set in the stone.",
+        "dir": "s",
+        "height": "floor",
+        "footprint": "small",
+        "offset": 0.8,
+        "cell": [
+         3,
+         5
+        ]
+       }
+      },
+      "size": "large",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -9,
+       "y": 1,
+       "elev_m": 9.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "rock_landing": {
+      "name": "The Landing",
+      "adjacent": [
+       {
+        "to": "the_stair",
+        "vertical": "up",
+        "way": "ladder",
+        "dir": "n",
+        "barrier": "open",
+        "name": "the iron ladder up the crag",
+        "material": "metal",
+        "desc": "An iron ladder bolted to the crag face, rungs worn smooth and bright at the centre and rusted at the stringers, rising the height of a man and a half to the ledge above."
+       },
+       {
+        "to": "the_mainland",
+        "barrier": "open_door",
+        "axis": "the mainland"
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 12,
+       "d": 8
+      },
+      "shape": "rectangle",
+      "exposure": "open",
+      "sound": {
+       "level": "loud",
+       "detail": "the sea breaking and dragging on the rock below"
+      },
+      "floor": "stone",
+      "surface": "bare",
+      "far_look": "a low shelf of wet black rock at the foot of the crag, white where the swell breaks over it",
+      "desc": "A low shelf of wet black rock at the foot of the crag, slick with weed where the swell reaches and bleached pale and dry above it. An iron ring and a rusted bollard stand at the seaward lip where boats tie up. The crag rises sheer on the north side, its face streaked white with guano, and the iron ladder is bolted to it. Broken shell, a few lengths of weathered timber and the rusted staples of old moorings lie about. There is nothing here the sea has not handled.",
+      "from_event": 0,
+      "anchors": {
+       "tie_up": {
+        "desc": "A rusted iron bollard and a ring set into the rock at the seaward lip, both scabbed with old paint and salt. The ring is worn bright on its inner curve where lines have run through it for years.",
+        "dir": "w",
+        "height": "waist",
+        "footprint": "point"
+       },
+       "dry_ledge": {
+        "desc": "A raised shelf of drier rock at the back of the landing, bleached pale and scattered with broken shell and a few lengths of weathered timber. High enough that only the worst of the swell reaches it.",
+        "dir": "e",
+        "height": "floor",
+        "footprint": "large"
+       },
+       "crag_foot": {
+        "desc": "The sheer face of the crag on the north side, wet and streaked white with guano, its base undercut where the sea has worked at it. The iron ladder is bolted to it.",
+        "dir": "n",
+        "height": "full",
+        "footprint": "run"
+       }
+      },
+      "size": "small",
+      "level": 0,
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -6,
+       "y": 8,
+       "elev_m": 0.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "store": {
+      "name": "The Store",
+      "adjacent": [
+       {
+        "to": "tower_hall",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "w",
+        "name": "the store door"
+       }
+      ],
+      "planned": true,
+      "purpose": "A cold stone room off the hall holding the oil, the coal, the tools and the Board's crates of supplies.",
+      "access": "Through a door off the hall.",
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 7,
+       "d": 6
+      },
+      "shape": "rectangle",
+      "exposure": "enclosed",
+      "level": 1,
+      "floor": "stone",
+      "surface": "bare",
+      "from_event": 0,
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -1,
+       "y": 0,
+       "elev_m": 3.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "the_stair": {
+      "name": "The Steps",
+      "adjacent": [
+       {
+        "to": "rock_landing",
+        "vertical": "down",
+        "way": "ladder",
+        "dir": "s",
+        "barrier": "open",
+        "name": "the iron ladder down to the landing",
+        "material": "metal",
+        "desc": "An iron ladder bolted to the crag face, rungs worn smooth and bright at the centre and rusted at the stringers, dropping the height of a man and a half to the landing shelf."
+       },
+       {
+        "to": "tower_hall",
+        "barrier": "open_door",
+        "material": "wood",
+        "dir": "n",
+        "name": "the tower door",
+        "desc": "A heavy door of tarred wood set in the tower's foot, iron-banded and hung on strap hinges, with a small barred grille at eye height and a rim of salt bloom along its lower edge."
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 6,
+       "d": 10
+      },
+      "shape": "l",
+      "exposure": "open",
+      "level": 1,
+      "floor": "stone",
+      "surface": "bare",
+      "far_look": "worn steps cut up the face of the crag to a heavy door in the tower's foot",
+      "desc": "A narrow ledge at the head of the iron ladder, and then worn steps cut into the crag climbing to the tower door. The ledge is flat enough to set a crate down and no wider. An iron handrail is bolted into the rock alongside the steps, pitted and cold. From here the whole of the landing lies below, and the sea beyond it.",
+      "from_event": 5,
+      "anchors": {
+       "ledge": {
+        "desc": "A flat shelf of rock at the head of the ladder, no wider than a man's stride, scuffed and salt-bleached, with a scatter of small stones and a rusted staple where a line has been made fast.",
+        "dir": "s",
+        "height": "floor",
+        "footprint": "large"
+       },
+       "handrail": {
+        "desc": "An iron handrail bolted into the crag alongside the steps, pitted with rust and cold enough to bite through wool.",
+        "dir": "e",
+        "height": "waist",
+        "footprint": "run"
+       }
+      },
+      "size": "small",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -6,
+       "y": 8,
+       "elev_m": 3.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "tower_hall": {
+      "name": "The Hall",
+      "adjacent": [
+       {
+        "to": "the_stair",
+        "barrier": "open_door",
+        "material": "wood",
+        "dir": "s",
+        "name": "the tower door",
+        "desc": "A heavy door of tarred wood set in the tower's foot, iron-banded and hung on strap hinges, with a small barred grille at eye height and a rim of salt bloom along its lower edge."
+       },
+       {
+        "to": "store",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "e",
+        "name": "the store door"
+       },
+       {
+        "to": "kitchen",
+        "vertical": "up",
+        "way": "stair",
+        "dir": "w",
+        "barrier": "open",
+        "name": "The Hall",
+        "desc": "The tower stair, a tight curve of stone treads winding down the inside of the tower wall to the hall below."
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 8,
+       "d": 8
+      },
+      "shape": "round",
+      "exposure": "enclosed",
+      "level": 1,
+      "floor": "stone",
+      "surface": "bare",
+      "from_event": 1,
+      "desc": "A round stone room inside the tower's heavy door, its walls the thickness of the tower itself, limewashed once and gone grey with salt and smoke. The floor is flagged stone, worn hollow in the track between the door and the stair. A paraffin lamp hangs on a bracket by the door, and the air holds paraffin and wet wool. The tower stair climbs the west wall in a tight curve of stone treads. The store door stands in the east wall, iron-banded and shut. A hall table stands against the north wall with a bench beneath it, and a row of pegs beside the door carries oilskins and a sou'wester. A small cast-iron stove stands against the north wall, ticking as it cools.",
+      "light": "lit",
+      "anchors": {
+       "hall_table": {
+        "desc": "A plain deal table against the north wall, scrubbed pale and scored with years of use, its top damp where wet mail has been set down. A bench stands beneath it.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "large"
+       },
+       "pegs": {
+        "desc": "A row of iron pegs beside the door, hung with oilskins, a sou'wester and a coil of tarred line. The wall behind them is dark with grease and salt.",
+        "dir": "s",
+        "height": "head",
+        "footprint": "run",
+        "offset": 0.0
+       },
+       "stair_foot": {
+        "desc": "The foot of the tower stair, where the lowest stone treads curve up out of the hall against the west wall. The treads are worn dished at the centre and gritty with blown sand.",
+        "dir": "w",
+        "height": "floor",
+        "footprint": "small",
+        "offset": 0.1667
+       },
+       "stove": {
+        "desc": "A small cast-iron stove set against the north wall, its door blackened and its top plate warm to the hand, ticking as it cools. A short flue runs up into the stone.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "small"
+       }
+      },
+      "size": "large",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -9,
+       "y": 1,
+       "elev_m": 3.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "the_mainland": {
+      "name": "The Mainland",
+      "planned": true,
+      "purpose": "",
+      "adjacent": [
+       {
+        "to": "rock_landing",
+        "barrier": "open_door"
+       }
+      ],
+      "region": "the_lamp_tower",
+      "level": 0,
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": 16,
+       "y": 5,
+       "elev_m": 0.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "the_channel": {
+      "name": "the channel",
+      "desc": "The sound between the rock and the mainland, open water over a drowned shelf of reef. Grey and white in bad weather, churned into standing waves where the tide runs against the swell, and slack and green-brown in calm. The reef breaks white at the south end and the mainland shore lies low and dark to the east. Nothing crosses it but boats, and nothing stays on it.",
+      "adjacent": [
+       {
+        "to": "rock_landing",
+        "barrier": "open",
+        "dir": "w",
+        "distance": {
+         "value": 1.5,
+         "unit": "km"
+        },
+        "name": "the channel west of the rock"
+       },
+       {
+        "to": "the_mainland",
+        "barrier": "open",
+        "dir": "e",
+        "distance": {
+         "value": 13,
+         "unit": "km"
+        },
+        "name": "the channel east to the mainland"
+       }
+      ],
+      "light": "lit",
+      "exposure": "open",
+      "far_look": "open water between a black rock and a low dark shore, breaking white over a drowned reef",
+      "level": 0,
+      "floor": "water",
+      "surface": "bare",
+      "anchors": {
+       "reef_head": {
+        "desc": "The drowned head of the reef at the south end of the channel, breaking white in any sea and showing bare black rock at low water. The tide runs hard over it.",
+        "dir": "s",
+        "height": "floor",
+        "footprint": "large"
+       },
+       "slack_water": {
+        "desc": "The middle of the channel, where the tide turns and the water goes slack and green-brown over the drowned shelf, deep enough for a boat to lie to.",
+        "dir": "n",
+        "height": "floor",
+        "footprint": "large"
+       }
+      },
+      "size": "large",
+      "extent": {
+       "w": 10.0,
+       "d": 7.0
+      },
+      "shape": "composite",
+      "from_event": 1,
+      "name_derived": false,
+      "region": "the_lamp_tower",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": 6,
+       "y": 8,
+       "elev_m": 0.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "mary_ann_interior": {
+      "name": "The Mary Ann",
+      "desc": "",
+      "parent_entity": "fe01eaf0eb204899",
+      "adjacent": [
+       {
+        "to": "the_channel",
+        "distance": "near",
+        "barrier": "closed_door"
+       }
+      ],
+      "dock_exit": true,
+      "level": 0
+     }
+    },
+    "entities": {
+     "fe01eaf0eb204899": {
+      "from_event": 3,
+      "name": "The Mary Ann",
+      "kind": "vehicle",
+      "description": "Pell Hardacre's workboat: a stout, slab-sided motor boat, dark green above the waterline and tarred black below, with a small wheelhouse forward and an open well aft. She smells of diesel, brine and old rope.",
+      "aliases": [
+       "the boat",
+       "the relief boat"
+      ],
+      "portable": false,
+      "container": true,
+      "interior_rooms": [
+       "mary_ann_interior"
+      ],
+      "state": {
+       "engine": "running",
+       "mooring": "cast off",
+       "cargo": "crates of tinned food and paraffin, a sack of coal, and the post bag, lashed down in the well",
+       "transit": {
+        "phase": "in_transit",
+        "destination_room": "the_mainland",
+        "route_room": "the_channel",
+        "departed_from": "rock_landing"
+       }
+      },
+      "ubiquitous": false,
+      "sound_source": "audible"
+     },
+     "0bcb2b599f134f41": {
+      "from_event": 0,
+      "name": "clockmaker's toolkit",
+      "kind": "tool",
+      "description": "A leather roll of fine tools — tweezers, small screwdrivers, a pin vice, files and a loupe — worn soft at the edges and darkened with handling.",
+      "aliases": [
+       "the toolkit",
+       "the kit roll"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "held_by": "Rhona Carrick"
+     },
+     "418a3aedd649471d": {
+      "from_event": 4,
+      "name": "a folded letter",
+      "kind": "document",
+      "description": "A letter folded small and worn at the creases from being carried in a pocket.",
+      "aliases": [
+       "the letter"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "examined": "Northern Lighthouse Board paper, headed, dated, numbered in the margin: citing two failures in the twelvemonth, the Commissioners' engineer will attend Tuesday next to inspect and report on the mechanism, and the keeper is to afford him every facility and keep the apparatus in service meanwhile.",
+       "seal": "broken",
+       "opened": true,
+       "oriented_to": "Rhona Carrick"
+      },
+      "ubiquitous": false
+     },
+     "char_rhona_carrick": {
+      "name": "Rhona Carrick",
+      "kind": "person",
+      "from_event": 0,
+      "aliases": []
+     },
+     "char_elias_thorne": {
+      "name": "Elias Thorne",
+      "kind": "person",
+      "from_event": 0,
+      "aliases": []
+     },
+     "char_pell_hardacre": {
+      "name": "Pell Hardacre",
+      "kind": "person",
+      "from_event": 0,
+      "aliases": []
+     },
+     "b3ea5e0846b44fe9": {
+      "name": "a crate of tinned goods",
+      "kind": "container",
+      "description": "A heavy roped wooden crate packed with tins of food.",
+      "aliases": [
+       "crate",
+       "box",
+       "tinned goods"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 5
+     },
+     "7041a08392c14695": {
+      "name": "a pile of stores",
+      "kind": "cargo",
+      "description": "Crates of tinned goods, a sack of flour, a sloshing drum of paraffin, lamp spares in a wooden box, and the mail sack, crowded on the wet ledge against the tower door.",
+      "aliases": [
+       "crates",
+       "stores",
+       "boxes"
+      ],
+      "portable": false,
+      "container": false,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 14
+     },
+     "b86503d36fb94aa2": {
+      "name": "the post bag",
+      "kind": "container",
+      "description": "A heavy oilskin canvas mail sack with a buckled flap, swollen with the week's mail.",
+      "aliases": [
+       "post bag",
+       "bag",
+       "mail sack"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {
+       "hatch": "open"
+      },
+      "ubiquitous": false,
+      "from_event": 6
+     },
+     "5e2db937400a4440": {
+      "name": "bundle of station mail",
+      "kind": "document",
+      "description": "Three envelopes for the station, a newspaper folded in oilskin, and a small parcel in brown paper and twine.",
+      "aliases": [
+       "station mail",
+       "mail bundle",
+       "station's bundle"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "examined": "a dozen envelopes and two small parcels, twine-tied; top addressed to the lighthouse in clerk's copperplate, a Board circular beneath, and a seed catalogue for north light"
+      },
+      "ubiquitous": false,
+      "from_event": 6
+     },
+     "ca2c570ee4914419": {
+      "name": "a stiff envelope",
+      "kind": "document",
+      "description": "A long, stiff envelope printed with a clockmaker's name in the corner, addressed in copperplate to Miss R. Carrick at the light, postmarked mainland three days prior.",
+      "aliases": [
+       "envelope",
+       "letter",
+       "clockmaker's envelope"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 8
+     },
+     "4b92b2b8653b43d4": {
+      "name": "a sealed letter",
+      "kind": "document",
+      "description": "A sealed letter addressed in Rhona Carrick's hand to her sister in Harrow Street, by the post office on the quay.",
+      "aliases": [
+       "sealed letter",
+       "the letter",
+       "letter"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "examined": "addressed to sister in Harrow Street in Rhona's hand, flap sealed with wax, warm from grip"
+      },
+      "from_event": 3
+     },
+     "2275c0d8a81c43d2": {
+      "name": "the tower lamp",
+      "kind": "light",
+      "description": "The great revolving lantern apparatus in the glass room at the top of the tower.",
+      "aliases": [
+       "the lamp",
+       "the light"
+      ],
+      "portable": false,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "lit": true
+      },
+      "ubiquitous": false,
+      "light_source": "bright",
+      "from_event": 3
+     },
+     "845c4d283ebf465d": {
+      "name": "a mug of tea",
+      "kind": "drink",
+      "description": "A thick stoneware mug of hot tea.",
+      "aliases": [
+       "mug",
+       "tea"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 4
+     },
+     "6fa82c0b4ff243f4": {
+      "name": "the crate from the Board",
+      "kind": "container",
+      "description": "A wooden crate sent by the Northern Lighthouse Board, stood open on the floor of the Lamp Room.",
+      "aliases": [
+       "crate",
+       "board's crate",
+       "open crate"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {
+       "hatch": "open"
+      },
+      "ubiquitous": false,
+      "from_event": 3
+     },
+     "6870d80e29ab47cb": {
+      "name": "the new clockwork",
+      "kind": "mechanism",
+      "description": "The Board's new clockwork mechanism, laid out on a sack on the floor beside its crate.",
+      "aliases": [
+       "clockwork",
+       "mechanism",
+       "gearing"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "assembly": "unfitted",
+       "condition": "plate tipped on two bolts, pinion cocked against gear wheel with two teeth chipped bright"
+      },
+      "ubiquitous": false,
+      "from_event": 5
+     },
+     "bc6c40aab847432d": {
+      "name": "paraffin crate",
+      "kind": "container",
+      "description": "A heavy wooden crate of paraffin tins, wet and weeping along its bottom boards.",
+      "aliases": [
+       "crate",
+       "the paraffin crate"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {
+       "examined": "heavy timber crate, bottom boards soaked with paraffin from a weeping tin"
+      },
+      "ubiquitous": false,
+      "scent": "sharp, cold paraffin",
+      "from_event": 3
+     },
+     "bf574f81855d477f": {
+      "name": "the crate stencilled for the mechanism",
+      "kind": "container",
+      "description": "A long crate stencilled with the Board's mark, its lid nailed down over the old lamp mechanism and packed with straw.",
+      "aliases": [
+       "long crate",
+       "mechanism crate",
+       "crate"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {
+       "hatch": "shut",
+       "examined": "long deal crate with the Board's mark stencilled on the lid, nailed down fast over the old mechanism and straw"
+      },
+      "ubiquitous": false,
+      "from_event": 3
+     },
+     "7e9877bde91a4e48": {
+      "name": "the oil can",
+      "kind": "tool",
+      "description": "A metal oil can with a long spout, left sitting by the door.",
+      "aliases": [
+       "oil can",
+       "can"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 3
+     }
+    },
+    "positions": {
+     "Rhona Carrick": "tower_hall",
+     "Elias Thorne": "lamp_room",
+     "Pell Hardacre": "the_channel",
+     "fe01eaf0eb204899": "the_channel",
+     "0bcb2b599f134f41": "tower_hall",
+     "418a3aedd649471d": "kitchen",
+     "b3ea5e0846b44fe9": "the_stair",
+     "7041a08392c14695": "the_stair",
+     "b86503d36fb94aa2": "tower_hall",
+     "5e2db937400a4440": "tower_hall",
+     "ca2c570ee4914419": "tower_hall",
+     "4b92b2b8653b43d4": "tower_hall",
+     "2275c0d8a81c43d2": "lamp_room",
+     "845c4d283ebf465d": "kitchen",
+     "6870d80e29ab47cb": "lamp_room",
+     "bc6c40aab847432d": "tower_hall",
+     "6fa82c0b4ff243f4": "lamp_room",
+     "bf574f81855d477f": "tower_hall",
+     "7e9877bde91a4e48": "tower_hall"
+    },
+    "contained": {
+     "0bcb2b599f134f41": {
+      "in": "Rhona Carrick",
+      "mode": "carried",
+      "by": "bearing"
+     },
+     "ca2c570ee4914419": {
+      "in": "Rhona Carrick",
+      "mode": "held"
+     }
+    },
+    "attire": {
+     "Elias Thorne": {
+      "wearing": [
+       "heavy navy wool fisherman's sweater",
+       "cotton undershirt",
+       "canvas work trousers",
+       "oiled leather boots",
+       "wool socks"
+      ],
+      "state": [
+       "all garments worn, mended, and faintly salt-stained from years of the same hands washing and drying them; clean and functional but showing long service"
+      ],
+      "regions": {
+       "torso": {
+        "garments": [
+         {
+          "name": "heavy navy wool fisherman's sweater",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "torso",
+           "arms",
+           "waist"
+          ]
+         },
+         {
+          "name": "cotton undershirt",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": []
+         }
+        ],
+        "beneath": ""
+       },
+       "arms": {
+        "garments": [
+         {
+          "name": "heavy navy wool fisherman's sweater",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "torso",
+           "arms",
+           "waist"
+          ]
+         }
+        ],
+        "beneath": ""
+       },
+       "waist": {
+        "garments": [
+         {
+          "name": "heavy navy wool fisherman's sweater",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "torso",
+           "arms",
+           "waist"
+          ]
+         }
+        ],
+        "beneath": ""
+       },
+       "legs": {
+        "garments": [
+         {
+          "name": "canvas work trousers",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "groin",
+           "legs"
+          ]
+         }
+        ],
+        "beneath": ""
+       },
+       "groin": {
+        "garments": [
+         {
+          "name": "canvas work trousers",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "groin",
+           "legs"
+          ]
+         }
+        ],
+        "beneath": ""
+       },
+       "feet": {
+        "garments": [
+         {
+          "name": "oiled leather boots",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": []
+         },
+         {
+          "name": "wool socks",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": []
+         }
+        ],
+        "beneath": ""
+       }
+      }
+     },
+     "Pell Hardacre": {
+      "wearing": [
+       "{'id'"
+      ],
+      "state": [
+       "oilskin jacket is well-waxed but faded, salt rings at cuffs and collar",
+       "sweater is pilled and carries a persistent brine smell",
+       "trousers are grease-spotted and stiff with use",
+       "left boot has a visible vulcanised patch near the ankle",
+       "cap is salt-stiffened and faded from dark blue to a chalky grey-blue"
+      ],
+      "regions": {
+       "torso": {
+        "garments": [
+         {
+          "name": "{'id'",
+          "attaches": false,
+          "description": "'oilskin_jacket', 'name': 'oilskin jacket', 'desc': 'A weathered, dark-green oilskin jacket, repeatedly re-waxed, with salt-stain rings at the cuffs and collar. Cut wide enough to layer underneath.', 'covers': ['torso', 'arms'], 'layers': 'outer'}",
+          "state": "worn",
+          "condition": "",
+          "covers": []
+         }
+        ],
+        "beneath": ""
+       }
+      }
+     }
+    },
+    "stations": {
+     "Rhona Carrick": {
+      "at": null,
+      "near": [
+       "ca2c570ee4914419"
+      ],
+      "from_event": 4,
+      "cell": [
+       1,
+       3
+      ]
+     },
+     "Pell Hardacre": {
+      "at": null,
+      "near": [
+       "Pell Hardacre"
+      ],
+      "from_event": 8,
+      "cell": [
+       5,
+       3
+      ]
+     },
+     "Elias Thorne": {
+      "at": "lamp_pedestal",
+      "near": [
+       "2275c0d8a81c43d2"
+      ],
+      "from_event": 1,
+      "cell": [
+       3,
+       4
+      ]
+     },
+     "fe01eaf0eb204899": {
+      "at": null,
+      "near": [],
+      "cell": [
+       1,
+       3
+      ]
+     },
+     "b3ea5e0846b44fe9": {
+      "at": "ledge",
+      "near": [
+       "7041a08392c14695"
+      ],
+      "from_event": 14,
+      "cell": [
+       2,
+       8
+      ]
+     },
+     "7041a08392c14695": {
+      "at": "ledge",
+      "near": [
+       "b3ea5e0846b44fe9"
+      ],
+      "from_event": 14
+     },
+     "ca2c570ee4914419": {
+      "at": null,
+      "near": [
+       "Rhona Carrick"
+      ]
+     },
+     "418a3aedd649471d": {
+      "at": "kitchen_table",
+      "near": [],
+      "from_event": 3
+     },
+     "b86503d36fb94aa2": {
+      "at": null,
+      "near": []
+     },
+     "845c4d283ebf465d": {
+      "at": "kitchen_table",
+      "near": [],
+      "from_event": 4
+     },
+     "bc6c40aab847432d": {
+      "at": null,
+      "near": [],
+      "from_event": 3
+     },
+     "2275c0d8a81c43d2": {
+      "at": null,
+      "near": [
+       "Elias Thorne",
+       "6870d80e29ab47cb"
+      ]
+     },
+     "6870d80e29ab47cb": {
+      "at": null,
+      "near": [
+       "2275c0d8a81c43d2"
+      ]
+     }
+    }
+   },
+   "provisional": {
+    "the_mainland": {
+     "provisional": true,
+     "frontier_of": {
+      "room": "rock_landing",
+      "axis": "the mainland"
+     }
+    }
+   },
+   "whereabouts": null,
+   "authorial_offers": [],
+   "minds": {
+    "Elias Thorne": {
+     "answer": {
+      "routine": [
+       {
+        "from": "night",
+        "until": "pre-dawn",
+        "where": "The Lamp Room",
+        "doing": "Night watch at the pedestal — log any vessels, keep the lamp burning and turning, watch the gear train for any sign of slip or catch",
+        "why": "the light must burn and sweep through every night — this is the one thing that does not change because the mechanism broke",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "logbook",
+         "pen",
+         "paraffin"
+        ]
+       },
+       {
+        "from": "pre-dawn",
+        "until": "dawn",
+        "where": "The Lamp Room",
+        "doing": "Check the lamp, trim the wick if it has carboned, note the last vessels of the night in the log",
+        "why": "the lamp must be tended before first light — a trimmed wick burns clean and the log must be complete before the lamp goes dark",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "wick trimmer",
+         "logbook",
+         "pen"
+        ]
+       },
+       {
+        "from": "dawn",
+        "until": "morning",
+        "where": "The Lamp Room",
+        "doing": "Extinguish the lamp at first light, clean the lens with the cloth, make the morning log entry — weather, lamp hours, any vessels",
+        "why": "the lamp goes dark at dawn and the lens must be clean for the next night — the round is the round, broken mechanism or not",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "lens cloth",
+         "logbook",
+         "pen"
+        ]
+       },
+       {
+        "from": "morning",
+        "until": "midday",
+        "where": "The Kitchen",
+        "doing": "Breakfast — bread and tea, the same as every morning; barometer reading, weather observation, log entry",
+        "why": "the weather must be read and recorded every morning — storms come without warning and the log must be kept regardless of what else is happening",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "kettle",
+         "bread",
+         "tea",
+         "barometer",
+         "logbook",
+         "pen"
+        ]
+       },
+       {
+        "from": "midday",
+        "until": "afternoon",
+        "where": "The Kitchen",
+        "doing": "Midday meal from tinned stores, check the log for gaps, eat what is put in front of him without comment",
+        "why": "food is fuel and the log must be checked — nothing changes that, not a broken pinion and not a stranger in the tower",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "tinned goods",
+         "kettle",
+         "logbook"
+        ]
+       },
+       {
+        "from": "afternoon",
+        "until": "dusk",
+        "where": "The Lamp Room",
+        "doing": "Prepare the lamp for evening — fill the paraffin reservoir, clean the lens again, check the rotation method and verify it will hold through the night",
+        "why": "the lamp must be ready before dusk — whatever turns it, clockwork or hand, it must be tested and trusted before the light goes on",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "paraffin",
+         "lens cloth",
+         "lamp tools",
+         "logbook"
+        ]
+       },
+       {
+        "from": "dusk",
+        "until": "evening",
+        "where": "The Lamp Room",
+        "doing": "Light the lamp at dusk, verify the rotation is working — clockwork or manual — and begin the night log",
+        "why": "the light goes on at dusk and the night log begins — this has not changed in eleven years and will not change now",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "matches",
+         "paraffin",
+         "logbook",
+         "pen"
+        ]
+       },
+       {
+        "from": "evening",
+        "until": "night",
+        "where": "The Kitchen",
+        "doing": "Tea, strong, no sugar, at the same hour; evening log entry; review the night ahead",
+        "why": "tea at the same hour is the one thing that holds the evening together — routine is what keeps a man steady when the mechanism is not",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "kettle",
+         "tea",
+         "logbook",
+         "pen"
+        ]
+       }
+      ],
+      "plan": [
+       {
+        "from": "afternoon",
+        "until": "evening",
+        "where": "The Lamp Room",
+        "doing": "Kneel beside the pedestal and examine the broken pinion — pick up the brass shim from the flags, fit it back against the gear teeth, assess whether the old clockwork can be disengaged from the drive so the lamp turns free by hand; check the lamp housing, wick, and reservoir for damage from the slip; if the clockwork is jammed, work the release catch and free the drive shaft so the pedestal turns manually",
+        "why": "the pinion broke in his hands and the mechanism is cocked — he needs to see the fracture himself and know whether the lamp can turn tonight; the old mechanism that he trusted just failed along the fault line the Board named, and he will not believe it until he has held the broken teeth in his fingers",
+        "asleep": false,
+        "with": [
+         "Rhona Carrick"
+        ],
+        "uses": [
+         "screwdriver",
+         "brass shim",
+         "lamp tools",
+         "clockmaker's toolkit (Carrick's)"
+        ],
+        "day": 0
+       },
+       {
+        "from": "evening",
+        "until": "night",
+        "where": "The Lamp Room",
+        "doing": "Light the lamp at dusk with the clockwork disengaged; log the breakage in the station log — time, cause, the cracked pinion teeth, the cocked mechanism, the brass shim displaced; begin turning the lamp by hand at quarter-turn intervals to keep the beam sweeping",
+        "why": "the evening round does not wait for the mechanism to be fixed — the lamp is lit at dusk and the breakage is logged honestly, as everything is logged; the Board will read this entry and he will not have hidden it",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "logbook",
+         "pen",
+         "matches",
+         "paraffin"
+        ],
+        "day": 0
+       },
+       {
+        "from": "night",
+        "until": "pre-dawn",
+        "where": "The Lamp Room",
+        "doing": "First night of manual rotation — stay at the pedestal through the dark hours, turning the lamp by hand at intervals to keep the beam sweeping the horizon; log any vessels; speak to the lamp once or twice without realising he does it; do not leave the lamp room except to descend for paraffin if the reservoir runs low",
+        "why": "if the clockwork will not turn, he will — the light must sweep and he is the mechanism now; he has done long nights before and this is what the work demands",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "logbook",
+         "pen",
+         "paraffin",
+         "kettle"
+        ],
+        "day": 0
+       },
+       {
+        "from": "dawn",
+        "until": "morning",
+        "where": "The Lamp Room",
+        "doing": "Extinguish the lamp, then lay the new clockwork from the crate on a cloth beside the old mechanism on the pedestal — set the two side by side and compare the gear trains, the pinion teeth, the drive shafts; note where the old teeth fractured and whether the new pinion is cast from the same brass or something different",
+        "why": "the first night is survived — now the mechanism must be fixed before the second night; he needs to see the new clockwork against the old and judge whether it will hold when it matters, or whether the Board has sent him the same fault in a new housing",
+        "asleep": false,
+        "with": [
+         "Rhona Carrick"
+        ],
+        "uses": [
+         "new clockwork mechanism",
+         "clockmaker's toolkit (Carrick's)",
+         "screwdriver",
+         "wrench",
+         "lamp tools"
+        ],
+        "day": 1
+       },
+       {
+        "from": "morning",
+        "until": "afternoon",
+        "where": "The Lamp Room",
+        "doing": "Work on the mechanism — if the old pinion can be filed and reset with a shim, repair it; if the fracture is too deep, begin fitting the new clockwork to the pedestal; let Carrick examine the gear train where her clockmaker's eye sees what his hands know by feel, but keep his own hands on the lamp housing and drive shaft; test the rotation by hand at every stage of the fitting",
+        "why": "the light must turn tonight — one way or another the mechanism must work before dusk; he will judge the new clockwork by the same standard he judges everything: will it hold when the gale comes and the sea rises and a ship is making for the rocks",
+        "asleep": false,
+        "with": [
+         "Rhona Carrick"
+        ],
+        "uses": [
+         "new clockwork mechanism",
+         "clockmaker's toolkit (Carrick's)",
+         "screwdriver",
+         "wrench",
+         "file",
+         "brass shim",
+         "lamp tools"
+        ],
+        "day": 1
+       },
+       {
+        "from": "afternoon",
+        "until": "dusk",
+        "where": "The Lamp Room",
+        "doing": "Finish whatever mechanism work can be completed — test the rotation under load, clockwork engaged, and watch the pinion teeth through a full revolution; clean the lens a final time; fill the paraffin reservoir; if the new mechanism is fitted, wind the clockwork and let it run a quarter-turn while he watches; if the old is repaired, do the same; if neither is ready, prepare for a second night of manual rotation",
+        "why": "the second night is coming and the lamp must be ready — the work is not done until the lamp turns and the light sweeps, and he will not call it done until he has watched the gear hold through a full rotation with his own eyes",
+        "asleep": false,
+        "with": [
+         "Rhona Carrick"
+        ],
+        "uses": [
+         "paraffin",
+         "lens cloth",
+         "lamp tools",
+         "logbook",
+         "pen"
+        ],
+        "day": 1
+       },
+       {
+        "from": "night",
+        "until": "pre-dawn",
+        "where": "The Lamp Room",
+        "doing": "Second night watch — if the clockwork is repaired or fitted, monitor it through the dark hours, listening for any catch or slip in the gear train, watching the pinion teeth through each revolution; if still manual, continue hand-turning; log vessels; watch the rotation gear for the same fault that broke the old pinion",
+        "why": "the second night must be as clean as the first — the light must not fail, and if the repaired or new mechanism shows the same fault, he needs to know before the engineer arrives on Tuesday",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "logbook",
+         "pen",
+         "paraffin"
+        ],
+        "day": 1
+       },
+       {
+        "from": "pre-dawn",
+        "until": "morning",
+        "where": "The Lamp Room",
+        "doing": "Check the lamp, note the last vessels of the night, extinguish at first light; examine the pinion teeth and gear train in the dawn light for any sign of wear, slip, or fracture from the second night; make the log entry — two nights kept, the mechanism held or did not, what the engineer will find when he comes",
+        "why": "the night is done and the record must be complete — he needs to know what he has and what he is handing to the Commissioners' engineer when Tuesday comes; the log will show two nights of light kept, by hand if necessary, and he will not be ashamed of that",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "logbook",
+         "pen",
+         "lamp tools",
+         "lens cloth"
+        ],
+        "day": 2
+       }
+      ],
+      "at_the_end": {
+       "where": "The Lamp Room",
+       "doing": "Standing beside the pedestal at dawn, the lamp extinguished, examining the mechanism — whether repaired old or fitted new — for any sign of the same fault that broke the pinion, and writing the log entry that records two nights of light kept",
+       "why": "two nights are done and the light did not fail — now the record must show it and the mechanism must be ready for the engineer's judgment on Tuesday",
+       "asleep": false,
+       "with": [],
+       "uses": [
+        "logbook",
+        "pen",
+        "lamp tools"
+       ]
+      },
+      "on_your_mind": "The old mechanism broke in his hands along the fault the Board already named — and the new clockwork is in the crate, waiting. The light still burns. The question is whether the new pinion will hold where the old one cracked, and whether he can bring himself to trust something he did not make."
+     },
+     "itinerary": [
+      {
+       "from_s": 78466.0,
+       "until_s": 99900.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Kneel beside the pedestal and examine the broken pinion — pick up the brass shim from the flags, fit it back against the gear teeth, assess whether the old clockwork can be disengaged from the drive so the lamp turns free by hand; check the lamp housing, wick, and reservoir for damage from the slip; if the clockwork is jammed, work the release catch and free the drive shaft so the pedestal turns manually",
+       "asleep": false,
+       "with": [
+        "Rhona Carrick"
+       ],
+       "why": "the pinion broke in his hands and the mechanism is cocked — he needs to see the fracture himself and know whether the lamp can turn tonight; the old mechanism that he trusted just failed along the fault line the Board named, and he will not believe it until he has held the broken teeth in his fingers",
+       "uses": [
+        "screwdriver",
+        "brass shim",
+        "lamp tools",
+        "clockmaker's toolkit (Carrick's)"
+       ]
+      },
+      {
+       "from_s": 99900.0,
+       "until_s": 108900.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Light the lamp at dusk with the clockwork disengaged; log the breakage in the station log — time, cause, the cracked pinion teeth, the cocked mechanism, the brass shim displaced; begin turning the lamp by hand at quarter-turn intervals to keep the beam sweeping",
+       "asleep": false,
+       "with": [],
+       "why": "the evening round does not wait for the mechanism to be fixed — the lamp is lit at dusk and the breakage is logged honestly, as everything is logged; the Board will read this entry and he will not have hidden it",
+       "uses": [
+        "logbook",
+        "pen",
+        "matches",
+        "paraffin"
+       ]
+      },
+      {
+       "from_s": 108900.0,
+       "until_s": 132300.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "First night of manual rotation — stay at the pedestal through the dark hours, turning the lamp by hand at intervals to keep the beam sweeping the horizon; log any vessels; speak to the lamp once or twice without realising he does it; do not leave the lamp room except to descend for paraffin if the reservoir runs low",
+       "asleep": false,
+       "with": [],
+       "why": "if the clockwork will not turn, he will — the light must sweep and he is the mechanism now; he has done long nights before and this is what the work demands",
+       "uses": [
+        "logbook",
+        "pen",
+        "paraffin",
+        "kettle"
+       ]
+      },
+      {
+       "from_s": 132300.0,
+       "until_s": 137700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Check the lamp, trim the wick if it has carboned, note the last vessels of the night in the log",
+       "asleep": false,
+       "with": [],
+       "why": "the lamp must be tended before first light — a trimmed wick burns clean and the log must be complete before the lamp goes dark",
+       "uses": [
+        "wick trimmer",
+        "logbook",
+        "pen"
+       ]
+      },
+      {
+       "from_s": 137700.0,
+       "until_s": 141300.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Extinguish the lamp, then lay the new clockwork from the crate on a cloth beside the old mechanism on the pedestal — set the two side by side and compare the gear trains, the pinion teeth, the drive shafts; note where the old teeth fractured and whether the new pinion is cast from the same brass or something different",
+       "asleep": false,
+       "with": [
+        "Rhona Carrick"
+       ],
+       "why": "the first night is survived — now the mechanism must be fixed before the second night; he needs to see the new clockwork against the old and judge whether it will hold when it matters, or whether the Board has sent him the same fault in a new housing",
+       "uses": [
+        "new clockwork mechanism",
+        "clockmaker's toolkit (Carrick's)",
+        "screwdriver",
+        "wrench",
+        "lamp tools"
+       ]
+      },
+      {
+       "from_s": 141300.0,
+       "until_s": 164700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Work on the mechanism — if the old pinion can be filed and reset with a shim, repair it; if the fracture is too deep, begin fitting the new clockwork to the pedestal; let Carrick examine the gear train where her clockmaker's eye sees what his hands know by feel, but keep his own hands on the lamp housing and drive shaft; test the rotation by hand at every stage of the fitting",
+       "asleep": false,
+       "with": [
+        "Rhona Carrick"
+       ],
+       "why": "the light must turn tonight — one way or another the mechanism must work before dusk; he will judge the new clockwork by the same standard he judges everything: will it hold when the gale comes and the sea rises and a ship is making for the rocks",
+       "uses": [
+        "new clockwork mechanism",
+        "clockmaker's toolkit (Carrick's)",
+        "screwdriver",
+        "wrench",
+        "file",
+        "brass shim",
+        "lamp tools"
+       ]
+      },
+      {
+       "from_s": 164700.0,
+       "until_s": 180900.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Finish whatever mechanism work can be completed — test the rotation under load, clockwork engaged, and watch the pinion teeth through a full revolution; clean the lens a final time; fill the paraffin reservoir; if the new mechanism is fitted, wind the clockwork and let it run a quarter-turn while he watches; if the old is repaired, do the same; if neither is ready, prepare for a second night of manual rotation",
+       "asleep": false,
+       "with": [
+        "Rhona Carrick"
+       ],
+       "why": "the second night is coming and the lamp must be ready — the work is not done until the lamp turns and the light sweeps, and he will not call it done until he has watched the gear hold through a full rotation with his own eyes",
+       "uses": [
+        "paraffin",
+        "lens cloth",
+        "lamp tools",
+        "logbook",
+        "pen"
+       ]
+      },
+      {
+       "from_s": 180900.0,
+       "until_s": 186300.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Light the lamp at dusk, verify the rotation is working — clockwork or manual — and begin the night log",
+       "asleep": false,
+       "with": [],
+       "why": "the light goes on at dusk and the night log begins — this has not changed in eleven years and will not change now",
+       "uses": [
+        "matches",
+        "paraffin",
+        "logbook",
+        "pen"
+       ]
+      },
+      {
+       "from_s": 186300.0,
+       "until_s": 195300.0,
+       "room": "kitchen",
+       "away": null,
+       "where_text": "The Kitchen",
+       "doing": "Tea, strong, no sugar, at the same hour; evening log entry; review the night ahead",
+       "asleep": false,
+       "with": [],
+       "why": "tea at the same hour is the one thing that holds the evening together — routine is what keeps a man steady when the mechanism is not",
+       "uses": [
+        "kettle",
+        "tea",
+        "logbook",
+        "pen"
+       ]
+      },
+      {
+       "from_s": 195300.0,
+       "until_s": 218700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Second night watch — if the clockwork is repaired or fitted, monitor it through the dark hours, listening for any catch or slip in the gear train, watching the pinion teeth through each revolution; if still manual, continue hand-turning; log vessels; watch the rotation gear for the same fault that broke the old pinion",
+       "asleep": false,
+       "with": [],
+       "why": "the second night must be as clean as the first — the light must not fail, and if the repaired or new mechanism shows the same fault, he needs to know before the engineer arrives on Tuesday",
+       "uses": [
+        "logbook",
+        "pen",
+        "paraffin"
+       ]
+      },
+      {
+       "from_s": 218700.0,
+       "until_s": 225900.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Check the lamp, note the last vessels of the night, extinguish at first light; examine the pinion teeth and gear train in the dawn light for any sign of wear, slip, or fracture from the second night; make the log entry — two nights kept, the mechanism held or did not, what the engineer will find when he comes",
+       "asleep": false,
+       "with": [],
+       "why": "the night is done and the record must be complete — he needs to know what he has and what he is handing to the Commissioners' engineer when Tuesday comes; the log will show two nights of light kept, by hand if necessary, and he will not be ashamed of that",
+       "uses": [
+        "logbook",
+        "pen",
+        "lamp tools",
+        "lens cloth"
+       ]
+      },
+      {
+       "from_s": 225900.0,
+       "until_s": 227700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Standing beside the pedestal at dawn, the lamp extinguished, examining the mechanism — whether repaired old or fitted new — for any sign of the same fault that broke the pinion, and writing the log entry that records two nights of light kept",
+       "asleep": false,
+       "with": [],
+       "why": "two nights are done and the light did not fail — now the record must show it and the mechanism must be ready for the engineer's judgment on Tuesday",
+       "uses": [
+        "logbook",
+        "pen",
+        "lamp tools"
+       ]
+      }
+     ],
+     "log_as_run": [
+      {
+       "from_s": 78466.0,
+       "until_s": 99900.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Kneel beside the pedestal and examine the broken pinion — pick up the brass shim from the flags, fit it back against the gear teeth, assess whether the old clockwork can be disengaged from the drive so the lamp turns free by hand; check the lamp housing, wick, and reservoir for damage from the slip; if the clockwork is jammed, work the release catch and free the drive shaft so the pedestal turns manually",
+       "asleep": false,
+       "outcome": "not_known",
+       "reason": null,
+       "missing": [
+        "screwdriver",
+        "lamp tools",
+        "clockmaker's toolkit (Carrick's)"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 99900.0,
+       "until_s": 108900.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Light the lamp at dusk with the clockwork disengaged; log the breakage in the station log — time, cause, the cracked pinion teeth, the cocked mechanism, the brass shim displaced; begin turning the lamp by hand at quarter-turn intervals to keep the beam sweeping",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "paraffin"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 108900.0,
+       "until_s": 132300.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "First night of manual rotation — stay at the pedestal through the dark hours, turning the lamp by hand at intervals to keep the beam sweeping the horizon; log any vessels; speak to the lamp once or twice without realising he does it; do not leave the lamp room except to descend for paraffin if the reservoir runs low",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "paraffin"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 132300.0,
+       "until_s": 137700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Check the lamp, trim the wick if it has carboned, note the last vessels of the night in the log",
+       "asleep": false,
+       "outcome": "done",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      },
+      {
+       "from_s": 137700.0,
+       "until_s": 141300.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Extinguish the lamp, then lay the new clockwork from the crate on a cloth beside the old mechanism on the pedestal — set the two side by side and compare the gear trains, the pinion teeth, the drive shafts; note where the old teeth fractured and whether the new pinion is cast from the same brass or something different",
+       "asleep": false,
+       "outcome": "not_known",
+       "reason": null,
+       "missing": [
+        "clockmaker's toolkit (Carrick's)",
+        "screwdriver",
+        "lamp tools"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 141300.0,
+       "until_s": 164700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Work on the mechanism — if the old pinion can be filed and reset with a shim, repair it; if the fracture is too deep, begin fitting the new clockwork to the pedestal; let Carrick examine the gear train where her clockmaker's eye sees what his hands know by feel, but keep his own hands on the lamp housing and drive shaft; test the rotation by hand at every stage of the fitting",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "clockmaker's toolkit (Carrick's)",
+        "screwdriver",
+        "file",
+        "lamp tools"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 164700.0,
+       "until_s": 180900.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Finish whatever mechanism work can be completed — test the rotation under load, clockwork engaged, and watch the pinion teeth through a full revolution; clean the lens a final time; fill the paraffin reservoir; if the new mechanism is fitted, wind the clockwork and let it run a quarter-turn while he watches; if the old is repaired, do the same; if neither is ready, prepare for a second night of manual rotation",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "paraffin",
+        "lamp tools"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 180900.0,
+       "until_s": 186300.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Light the lamp at dusk, verify the rotation is working — clockwork or manual — and begin the night log",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "paraffin"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 186306.92307692306,
+       "until_s": 195300.0,
+       "room": "kitchen",
+       "away": null,
+       "where_text": "The Kitchen",
+       "doing": "Tea, strong, no sugar, at the same hour; evening log entry; review the night ahead",
+       "asleep": false,
+       "outcome": "done",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      },
+      {
+       "from_s": 195308.46153846153,
+       "until_s": 218700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Second night watch — if the clockwork is repaired or fitted, monitor it through the dark hours, listening for any catch or slip in the gear train, watching the pinion teeth through each revolution; if still manual, continue hand-turning; log vessels; watch the rotation gear for the same fault that broke the old pinion",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "paraffin"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 218700.0,
+       "until_s": 225900.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Check the lamp, note the last vessels of the night, extinguish at first light; examine the pinion teeth and gear train in the dawn light for any sign of wear, slip, or fracture from the second night; make the log entry — two nights kept, the mechanism held or did not, what the engineer will find when he comes",
+       "asleep": false,
+       "outcome": "not_known",
+       "reason": null,
+       "missing": [
+        "lamp tools"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 225900.0,
+       "until_s": 227700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Standing beside the pedestal at dawn, the lamp extinguished, examining the mechanism — whether repaired old or fitted new — for any sign of the same fault that broke the pinion, and writing the log entry that records two nights of light kept",
+       "asleep": false,
+       "outcome": "not_known",
+       "reason": null,
+       "missing": [
+        "lamp tools"
+       ],
+       "meant": null
+      }
+     ],
+     "far_end_as_run": {
+      "room": "lamp_room",
+      "away": null,
+      "asleep": false,
+      "asleep_since_s": null,
+      "left_from": null
+     },
+     "decided": {
+      "places": {},
+      "things": {
+       "screwdriver": {
+        "key": "0bcb2b599f134f41",
+        "p": 0.77
+       },
+       "brass shim": {
+        "key": null,
+        "p": 0.9400000000000001
+       },
+       "lamp tools": {
+        "key": "0bcb2b599f134f41",
+        "p": 0.54
+       },
+       "clockmaker's toolkit (Carrick's)": {
+        "key": "0bcb2b599f134f41",
+        "p": 0.92
+       },
+       "logbook": {
+        "key": null,
+        "p": 1
+       },
+       "pen": {
+        "key": null,
+        "p": 1
+       },
+       "matches": {
+        "key": null,
+        "p": 0.56
+       },
+       "paraffin": {
+        "key": "7041a08392c14695",
+        "p": 0.81
+       },
+       "kettle": {
+        "key": null,
+        "p": 0.5
+       },
+       "wick trimmer": {
+        "key": null,
+        "p": 0.92
+       },
+       "new clockwork mechanism": {
+        "key": "6870d80e29ab47cb",
+        "p": 1
+       },
+       "wrench": {
+        "key": null,
+        "p": 0.93
+       },
+       "file": {
+        "key": "0bcb2b599f134f41",
+        "p": 0.68
+       },
+       "lens cloth": {
+        "key": null,
+        "p": 0.97
+       }
+      },
+      "without": [
+       {
+        "doing": "Kneel beside the pedestal and examine the broken pinion — pick up the brass shim from the flags, fit it back against the gear teeth, assess whether the old clockwork can be disengaged from the drive so the lamp turns free by hand; check the lamp housing, wick, and reservoir for damage from the slip; if the clockwork is jammed, work the release catch and free the drive shaft so the pedestal turns manually",
+        "missing": [
+         "screwdriver",
+         "lamp tools",
+         "clockmaker's toolkit (Carrick's)"
+        ],
+        "noul": 0.6
+       },
+       {
+        "doing": "Light the lamp at dusk with the clockwork disengaged; log the breakage in the station log — time, cause, the cracked pinion teeth, the cocked mechanism, the brass shim displaced; begin turning the lamp by hand at quarter-turn intervals to keep the beam sweeping",
+        "missing": [
+         "paraffin"
+        ],
+        "noul": 0.08
+       },
+       {
+        "doing": "First night of manual rotation — stay at the pedestal through the dark hours, turning the lamp by hand at intervals to keep the beam sweeping the horizon; log any vessels; speak to the lamp once or twice without realising he does it; do not leave the lamp room except to descend for paraffin if the reservoir runs low",
+        "missing": [
+         "paraffin"
+        ],
+        "noul": 0.23
+       },
+       {
+        "doing": "Extinguish the lamp, then lay the new clockwork from the crate on a cloth beside the old mechanism on the pedestal — set the two side by side and compare the gear trains, the pinion teeth, the drive shafts; note where the old teeth fractured and whether the new pinion is cast from the same brass or something different",
+        "missing": [
+         "clockmaker's toolkit (Carrick's)",
+         "screwdriver",
+         "lamp tools"
+        ],
+        "noul": 0.83
+       },
+       {
+        "doing": "Work on the mechanism — if the old pinion can be filed and reset with a shim, repair it; if the fracture is too deep, begin fitting the new clockwork to the pedestal; let Carrick examine the gear train where her clockmaker's eye sees what his hands know by feel, but keep his own hands on the lamp housing and drive shaft; test the rotation by hand at every stage of the fitting",
+        "missing": [
+         "clockmaker's toolkit (Carrick's)",
+         "screwdriver",
+         "file",
+         "lamp tools"
+        ],
+        "noul": 0.09
+       },
+       {
+        "doing": "Finish whatever mechanism work can be completed — test the rotation under load, clockwork engaged, and watch the pinion teeth through a full revolution; clean the lens a final time; fill the paraffin reservoir; if the new mechanism is fitted, wind the clockwork and let it run a quarter-turn while he watches; if the old is repaired, do the same; if neither is ready, prepare for a second night of manual rotation",
+        "missing": [
+         "paraffin",
+         "lamp tools"
+        ],
+        "noul": 0.11
+       },
+       {
+        "doing": "Light the lamp at dusk, verify the rotation is working — clockwork or manual — and begin the night log",
+        "missing": [
+         "paraffin"
+        ],
+        "noul": 0.11
+       },
+       {
+        "doing": "Second night watch — if the clockwork is repaired or fitted, monitor it through the dark hours, listening for any catch or slip in the gear train, watching the pinion teeth through each revolution; if still manual, continue hand-turning; log vessels; watch the rotation gear for the same fault that broke the old pinion",
+        "missing": [
+         "paraffin"
+        ],
+        "noul": 0.42
+       },
+       {
+        "doing": "Check the lamp, note the last vessels of the night, extinguish at first light; examine the pinion teeth and gear train in the dawn light for any sign of wear, slip, or fracture from the second night; make the log entry — two nights kept, the mechanism held or did not, what the engineer will find when he comes",
+        "missing": [
+         "lamp tools"
+        ],
+        "noul": 0.61
+       },
+       {
+        "doing": "Standing beside the pedestal at dawn, the lamp extinguished, examining the mechanism — whether repaired old or fitted new — for any sign of the same fault that broke the pinion, and writing the log entry that records two nights of light kept",
+        "missing": [
+         "lamp tools"
+        ],
+        "noul": 0.71
+       }
+      ]
+     }
+    },
+    "Pell Hardacre": {
+     "answer": {
+      "routine": [
+       {
+        "from": "night",
+        "until": "pre-dawn",
+        "where": "the channel",
+        "doing": "Keep the Mary Ann running east through the dark with the squall astern, one hand on the wheel and the other braced, listening to the engine knock on its irregular beat and easing the throttle when it stumbles",
+        "why": "The channel at night in a blow is no place to be caught jawing or daydreaming. Every knock of that engine I hear is a question I can't answer till I'm alongside the quay.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann",
+         "oilskin jacket"
+        ]
+       },
+       {
+        "from": "pre-dawn",
+        "until": "dawn",
+        "where": "the channel",
+        "doing": "Bring the Mary Ann in past the harbour mouth on the ebb, read the water and the light on the quay, and work her alongside the berth",
+        "why": "Get her tied up before the weather turns the harbour into a washing machine, and get the lines on before the tide drops too far.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ]
+       },
+       {
+        "from": "dawn",
+        "until": "morning",
+        "where": "the harbour quay",
+        "doing": "Make the Mary Ann fast, coil the lines, stow the oilskin, and walk up the quay to the post office with Rhona Carrick's letter in the inside pocket",
+        "why": "A letter in the pocket is a letter half-carried. It goes in the box this morning before anything else gets its hooks into me.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann",
+         "Rhona Carrick's letter"
+        ]
+       },
+       {
+        "from": "morning",
+        "until": "midday",
+        "where": "the harbour",
+        "doing": "Post the letter, then make the rounds — the chandlery for the engine parts, the pub for whatever's being said, the Board's office to leave word that the run's done and the new keeper's on the rock",
+        "why": "The run isn't finished till the word's back and the errands are squared. And there's a knock in that engine that won't fix itself.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "Rhona Carrick's letter"
+        ]
+       },
+       {
+        "from": "midday",
+        "until": "afternoon",
+        "where": "the harbour",
+        "doing": "Get the engine cover off the Mary Ann at the berth and have a look at the knock — listen to it, feel the rock in the block, check the injectors and the mounts",
+        "why": "It's been running rough two crossings now. If it's going to quit it'll pick Tuesday morning with a crate of paraffin aboard, and I'll not have that on me.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ]
+       },
+       {
+        "from": "afternoon",
+        "until": "dusk",
+        "where": "the harbour",
+        "doing": "Finish up with the engine, load the standing order for Tuesday's run into the well, and take a pint at the pub where the talk is",
+        "why": "A man who carries news has to collect it. And after a night crossing in a blow, a pint and a warm room is the pay.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ]
+       },
+       {
+        "from": "dusk",
+        "until": "evening",
+        "where": "the harbour",
+        "doing": "Supper and a last walk down the quay to check the Mary Ann's lines and the weather glass before turning in",
+        "why": "The sea decides the timetable, and I want to know what it's planning before I sleep.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ]
+       },
+       {
+        "from": "evening",
+        "until": "night",
+        "where": "the harbour",
+        "doing": "Sleep",
+        "why": "A night on the water and a day on the quay. Tomorrow's the run back if the weather holds.",
+        "asleep": true,
+        "with": [],
+        "uses": []
+       }
+      ],
+      "plan": [
+       {
+        "from": "night",
+        "until": "night",
+        "where": "the harbour",
+        "doing": "Nothing beyond the day's round — the letter posted, the engine looked at, the pint drunk, and the Mary Ann tied up safe",
+        "why": "The run's done and the next one's Tuesday. A quiet night ashore is what the day asks.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ],
+        "day": 0
+       },
+       {
+        "from": "dawn",
+        "until": "morning",
+        "where": "the harbour",
+        "doing": "Load the last of the Tuesday stores into the Mary Ann's well, check the fuel and the water, and read the glass and the sky for the crossing",
+        "why": "Tuesday's run is the one that matters — the new keeper's first week, and whatever's waiting on the rock. Everything else is preparation.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ],
+        "day": 1
+       },
+       {
+        "from": "morning",
+        "until": "midday",
+        "where": "the harbour",
+        "doing": "Walk the quay and the pub for any word that's come in for the lighthouse or the Board, and collect any post that's arrived for the station or for Rhona Carrick",
+        "why": "If there's a letter with her name on it, she asked for it plain. And the Board's man won't wait on the post.",
+        "asleep": false,
+        "with": [],
+        "uses": [],
+        "day": 1
+       },
+       {
+        "from": "midday",
+        "until": "evening",
+        "where": "the harbour",
+        "doing": "Squared away with the boat and the stores, then an early night",
+        "why": "An early start Tuesday and a long crossing. Better rested than sorry.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ],
+        "day": 1
+       },
+       {
+        "from": "pre-dawn",
+        "until": "dawn",
+        "where": "the harbour",
+        "doing": "Cast off from the quay in the dark and run the Mary Ann west down the channel toward the rock with the stores and the post aboard",
+        "why": "The run comes first. If the weather allows, the boat goes — and the lighthouse doesn't get to skip a week.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ],
+        "day": 2
+       },
+       {
+        "from": "dawn",
+        "until": "morning",
+        "where": "the channel",
+        "doing": "Bring the Mary Ann in to the landing at the rock, make her fast to the ring and the bollard, and start handing the stores up the iron ladder",
+        "why": "Get the crates and the post bag up before the swell makes the ladder a fool's game — and get a proper word with Rhona Carrick about her sister's name.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ],
+        "day": 2
+       }
+      ],
+      "at_the_end": {
+       "where": "the landing at the rock",
+       "doing": "Standing at the foot of the iron ladder with the stores half up and the post bag over my shoulder, looking up to see who's at the ledge",
+       "why": "Tuesday morning, the run made, the stores coming up, and a name still owed me from the woman on the rock.",
+       "asleep": false,
+       "with": [],
+       "uses": [
+        "the Mary Ann",
+        "the post bag"
+       ]
+      },
+      "on_your_mind": "The letter's posted and the engine's looked at, but I still don't have her sister's name — and I want to see how she and Elias are with each other now the week's work has begun."
+     },
+     "itinerary": [
+      {
+       "from_s": 78466.0,
+       "until_s": 94500.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Finish up with the engine, load the standing order for Tuesday's run into the well, and take a pint at the pub where the talk is",
+       "asleep": false,
+       "with": [],
+       "why": "A man who carries news has to collect it. And after a night crossing in a blow, a pint and a warm room is the pay.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 94500.0,
+       "until_s": 99900.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Supper and a last walk down the quay to check the Mary Ann's lines and the weather glass before turning in",
+       "asleep": false,
+       "with": [],
+       "why": "The sea decides the timetable, and I want to know what it's planning before I sleep.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 99900.0,
+       "until_s": 108900.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Sleep",
+       "asleep": true,
+       "with": [],
+       "why": "A night on the water and a day on the quay. Tomorrow's the run back if the weather holds.",
+       "uses": []
+      },
+      {
+       "from_s": 108900.0,
+       "until_s": 132300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Nothing beyond the day's round — the letter posted, the engine looked at, the pint drunk, and the Mary Ann tied up safe",
+       "asleep": false,
+       "with": [],
+       "why": "The run's done and the next one's Tuesday. A quiet night ashore is what the day asks.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 132300.0,
+       "until_s": 137700.0,
+       "room": "the_channel",
+       "away": null,
+       "where_text": "the channel",
+       "doing": "Bring the Mary Ann in past the harbour mouth on the ebb, read the water and the light on the quay, and work her alongside the berth",
+       "asleep": false,
+       "with": [],
+       "why": "Get her tied up before the weather turns the harbour into a washing machine, and get the lines on before the tide drops too far.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 137700.0,
+       "until_s": 141300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Load the last of the Tuesday stores into the Mary Ann's well, check the fuel and the water, and read the glass and the sky for the crossing",
+       "asleep": false,
+       "with": [],
+       "why": "Tuesday's run is the one that matters — the new keeper's first week, and whatever's waiting on the rock. Everything else is preparation.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 141300.0,
+       "until_s": 155700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Walk the quay and the pub for any word that's come in for the lighthouse or the Board, and collect any post that's arrived for the station or for Rhona Carrick",
+       "asleep": false,
+       "with": [],
+       "why": "If there's a letter with her name on it, she asked for it plain. And the Board's man won't wait on the post.",
+       "uses": []
+      },
+      {
+       "from_s": 155700.0,
+       "until_s": 186300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Squared away with the boat and the stores, then an early night",
+       "asleep": false,
+       "with": [],
+       "why": "An early start Tuesday and a long crossing. Better rested than sorry.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 186300.0,
+       "until_s": 195300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Sleep",
+       "asleep": true,
+       "with": [],
+       "why": "A night on the water and a day on the quay. Tomorrow's the run back if the weather holds.",
+       "uses": []
+      },
+      {
+       "from_s": 195300.0,
+       "until_s": 218700.0,
+       "room": "the_channel",
+       "away": null,
+       "where_text": "the channel",
+       "doing": "Keep the Mary Ann running east through the dark with the squall astern, one hand on the wheel and the other braced, listening to the engine knock on its irregular beat and easing the throttle when it stumbles",
+       "asleep": false,
+       "with": [],
+       "why": "The channel at night in a blow is no place to be caught jawing or daydreaming. Every knock of that engine I hear is a question I can't answer till I'm alongside the quay.",
+       "uses": [
+        "the Mary Ann",
+        "oilskin jacket"
+       ]
+      },
+      {
+       "from_s": 218700.0,
+       "until_s": 224100.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Cast off from the quay in the dark and run the Mary Ann west down the channel toward the rock with the stores and the post aboard",
+       "asleep": false,
+       "with": [],
+       "why": "The run comes first. If the weather allows, the boat goes — and the lighthouse doesn't get to skip a week.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 224100.0,
+       "until_s": 225900.0,
+       "room": "the_channel",
+       "away": null,
+       "where_text": "the channel",
+       "doing": "Bring the Mary Ann in to the landing at the rock, make her fast to the ring and the bollard, and start handing the stores up the iron ladder",
+       "asleep": false,
+       "with": [],
+       "why": "Get the crates and the post bag up before the swell makes the ladder a fool's game — and get a proper word with Rhona Carrick about her sister's name.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 225900.0,
+       "until_s": 227700.0,
+       "room": "rock_landing",
+       "away": null,
+       "where_text": "the landing at the rock",
+       "doing": "Standing at the foot of the iron ladder with the stores half up and the post bag over my shoulder, looking up to see who's at the ledge",
+       "asleep": false,
+       "with": [],
+       "why": "Tuesday morning, the run made, the stores coming up, and a name still owed me from the woman on the rock.",
+       "uses": [
+        "the Mary Ann",
+        "the post bag"
+       ]
+      }
+     ],
+     "log_as_run": [
+      {
+       "from_s": 88473.69230769231,
+       "until_s": 94500.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Finish up with the engine, load the standing order for Tuesday's run into the well, and take a pint at the pub where the talk is",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 94500.0,
+       "until_s": 99900.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Supper and a last walk down the quay to check the Mary Ann's lines and the weather glass before turning in",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 99900.0,
+       "until_s": 108900.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Sleep",
+       "asleep": true,
+       "outcome": "done",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      },
+      {
+       "from_s": 108900.0,
+       "until_s": 132300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Nothing beyond the day's round — the letter posted, the engine looked at, the pint drunk, and the Mary Ann tied up safe",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 132300.0,
+       "until_s": 137700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Bring the Mary Ann in past the harbour mouth on the ebb, read the water and the light on the quay, and work her alongside the berth",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "no_crossing",
+       "missing": [],
+       "meant": "the channel"
+      },
+      {
+       "from_s": 137700.0,
+       "until_s": 141300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Load the last of the Tuesday stores into the Mary Ann's well, check the fuel and the water, and read the glass and the sky for the crossing",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 141300.0,
+       "until_s": 155700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Walk the quay and the pub for any word that's come in for the lighthouse or the Board, and collect any post that's arrived for the station or for Rhona Carrick",
+       "asleep": false,
+       "outcome": "not_known",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      },
+      {
+       "from_s": 155700.0,
+       "until_s": 186300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Squared away with the boat and the stores, then an early night",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 186300.0,
+       "until_s": 195300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Sleep",
+       "asleep": true,
+       "outcome": "done",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      },
+      {
+       "from_s": 195300.0,
+       "until_s": 218700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Keep the Mary Ann running east through the dark with the squall astern, one hand on the wheel and the other braced, listening to the engine knock on its irregular beat and easing the throttle when it stumbles",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "no_crossing",
+       "missing": [],
+       "meant": "the channel"
+      },
+      {
+       "from_s": 218700.0,
+       "until_s": 224100.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Cast off from the quay in the dark and run the Mary Ann west down the channel toward the rock with the stores and the post aboard",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 224100.0,
+       "until_s": 225900.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Bring the Mary Ann in to the landing at the rock, make her fast to the ring and the bollard, and start handing the stores up the iron ladder",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "no_crossing",
+       "missing": [],
+       "meant": "the channel"
+      },
+      {
+       "from_s": 225900.0,
+       "until_s": 227700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Standing at the foot of the iron ladder with the stores half up and the post bag over my shoulder, looking up to see who's at the ledge",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "no_crossing",
+       "missing": [],
+       "meant": "the landing at the rock"
+      }
+     ],
+     "far_end_as_run": {
+      "room": null,
+      "away": "the harbour",
+      "asleep": false,
+      "asleep_since_s": null,
+      "left_from": "the_channel"
+     },
+     "decided": {
+      "places": {
+       "the harbour": {
+        "room": null,
+        "p": 0.81
+       },
+       "the landing at the rock": {
+        "room": "rock_landing",
+        "p": 0.62
+       }
+      },
+      "things": {
+       "oilskin jacket": {
+        "key": null,
+        "p": 0.9
+       }
+      },
+      "without": [
+       {
+        "doing": "Finish up with the engine, load the standing order for Tuesday's run into the well, and take a pint at the pub where the talk is",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.39
+       },
+       {
+        "doing": "Supper and a last walk down the quay to check the Mary Ann's lines and the weather glass before turning in",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.11
+       },
+       {
+        "doing": "Nothing beyond the day's round — the letter posted, the engine looked at, the pint drunk, and the Mary Ann tied up safe",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.12
+       },
+       {
+        "doing": "Load the last of the Tuesday stores into the Mary Ann's well, check the fuel and the water, and read the glass and the sky for the crossing",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.06
+       },
+       {
+        "doing": "Squared away with the boat and the stores, then an early night",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.18
+       },
+       {
+        "doing": "Cast off from the quay in the dark and run the Mary Ann west down the channel toward the rock with the stores and the post aboard",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.05
+       }
+      ]
+     }
+    }
+   },
+   "memories_as_written": {
+    "Elias Thorne": [
+     {
+      "event_key": "skip:25:Elias Thorne:0",
+      "content": "The pinion teeth broke with a crack like a shot down the stairwell. I meant to examine the breakage, light the lamp at dusk with the clockwork disengaged, and log the cracked pinion, the cocked mechanism, the displaced shim. But there was no paraffin within reach and none on me, and the lamp did not light. The light did not burn that night. What stayed with me: The lamp went dark on my watch for want of paraffin I should have had at hand, and that is the one failure with no restitution.",
+      "encoded_at_seconds": 132300.0,
+      "location": "The Lamp Room",
+      "valence": -0.9,
+      "arousal": 0.85
+     },
+     {
+      "event_key": "skip:25:Elias Thorne:1",
+      "content": "I checked the lamp at first light, trimmed the wick, noted the last vessels in the log. I meant to file and reset the old pinion with a shim, or begin fitting the new clockwork, letting Carrick's clockmaker's eye see what my hands know by feel while I kept my hands on the housing and drive shaft. But there was no clockmaker's toolkit, no screwdriver, no file, no lamp tools within reach. There was no paraffin. The lamp did not light. What stayed with me: A second night without the light, and the work half-done for want of tools that should have been in the lamp room.",
+      "encoded_at_seconds": 186300.0,
+      "location": "The Lamp Room",
+      "valence": -0.85,
+      "arousal": 0.75
+     },
+     {
+      "event_key": "skip:25:Elias Thorne:2",
+      "content": "Tea, strong, no sugar, at the same hour in the kitchen, and the evening log entry made. Then the second night watch at the pedestal — still turning the lamp by hand, for there was no paraffin to light it and no tools to mend the mechanism. I watched the gear train for the same fault that broke the old pinion. At pre-dawn I checked the lamp, noted the last vessels, and at first light extinguished it. I did it as far as it would go without lamp tools.",
+      "encoded_at_seconds": 227700.0,
+      "location": "The Lamp Room",
+      "valence": -0.7,
+      "arousal": 0.6
+     }
+    ],
+    "Pell Hardacre": [
+     {
+      "event_key": "skip:25:Pell Hardacre:0",
+      "content": "I came off the water that afternoon with the squall on me heels and put in at the harbour, and the first thing I meant to do was see to the Mary Ann — finish up with the engine, load the standing order for Tuesday's run into the well, and take a pint at the pub where the talk is. It did not come off, for want of the Mary Ann: neither on me nor within reach. The supper and the last walk down the quay to check her lines and the weather glass before turning in — that did not come off either, same want. What I did do was sleep, and I did that. Beyond the day's round — the letter posted, the engine looked at, the pint drunk, and the Mary Ann tied up safe — that did not come off, for want of the Mary Ann. I turned in with the glass falling and the spray coming over the wall and told meself it would all keep till morning. What stayed with me: The letter's still on me, the engine's still not seen to, Tuesday's stores aren't in the well, and the pint wasn't drunk — and the Mary Ann's the want of it all.",
+      "encoded_at_seconds": 132300.0,
+      "location": "the harbour",
+      "valence": -0.25,
+      "arousal": 0.35
+     },
+     {
+      "event_key": "skip:25:Pell Hardacre:1",
+      "content": "I was down at the harbour before light to bring the Mary Ann in past the harbour mouth on the ebb, read the water and the light on the quay, and work her alongside the berth. It did not come off: the only way to the channel crossed what only a vessel crosses, and I made no crossing. Then I meant to load the last of the Tuesday stores into her well, check the fuel and the water, and read the glass and the sky for the crossing — that did not come off either, for want of the Mary Ann, neither on me nor within reach. I walked the quay and the pub for any word that's come in for the lighthouse or the Board, and for any post arrived for the station or for Rhona Carrick. I set about it, and the rest was out of me hands. Squaring away with the boat and the stores and an early night did not come off, same want. I slept, and that I did do. What stayed with me: I've asked after the post and the Board's word and don't know what's come of it, and I've still not made the run.",
+      "encoded_at_seconds": 195300.0,
+      "location": "the harbour",
+      "valence": -0.35,
+      "arousal": 0.4
+     },
+     {
+      "event_key": "skip:25:Pell Hardacre:2",
+      "content": "I kept the Mary Ann running east through the dark with the squall astern, one hand on the wheel and the other braced, listening to the engine knock on its irregular beat and easing the throttle when it stumbled. That did not come off: the only way to the channel crossed what only a vessel crosses, and I made no crossing. Pre-dawn I meant to cast off from the quay and run her west down the channel toward the rock with the stores and the post aboard — did not come off, for want of the Mary Ann, neither on me nor within reach. Dawn I meant to bring her in to the landing at the rock, make her fast to the ring and the bollard, and start handing the stores up the iron ladder. Did not come off: the only way to the channel crossed what only a vessel crosses, and I made no crossing. And standing at the foot of the iron ladder with the stores half up and the post bag over me shoulder, looking up to see who's at the ledge — that did not come off either, the only way to the landing crossed what only a vessel crosses, and I made no crossing. What stayed with me: The run's not made, the stores and the post are still with me on the harbour side, and I've not set eyes on the rock since I left it.",
+      "encoded_at_seconds": 227700.0,
+      "location": "the harbour",
+      "valence": -0.5,
+      "arousal": 0.55
+     }
+    ]
+   },
+   "narration_as_written": "The log lay open at the middle spread, its ruled columns gone soft along the creases. Rhona set the pen to the first line and worked down the page the way she worked a train of gears — one entry at a time, nothing skipped.\n\nDate. Wind west, fresh to strong. Sea white over the rock since first light. New drive seated on the pedestal, old bearings drawn and set aside. Quarter-turn by hand from the stair foot, gear train followed through the full revolution — no catch, no lift at the tooth. Two nights of watch on the new clockwork, the lamp turning even, the weights taking up smooth. She wrote the last line twice and kept the first.\n\nParaffin lay sharp over everything the stores touched, and under it the wet-stone smell the walls carried in this weather. It put her in mind of a window on Harrow Street with the rain running down the glass and her sister's kettle going. She did not write that down.\n\nThe spray came at the wall in long heavy pushes, all of it on the outside of the stone. The tea had gone cold at her elbow; she drank it anyway, blotted the page, and closed the log on the pen."
+  },
+  "26": {
+   "idx": 9,
+   "input": "That night, when Elias comes down from the first watch and sits across the table from her with his tea, Rhona looks up from the log and says, quietly: \"You read that letter of yours twice the day I came, and put it away like it bit you. Bad news from the shore?\"",
+   "clock": {
+    "elapsed_seconds": 233820.0,
+    "anchor_hour": 15.75,
+    "day_length_hours": 24.0,
+    "hour_of_day": 8.7
+   },
+   "span": {
+    "from_s": 233820.0,
+    "until_s": 281700.0
+   },
+   "scene": {
+    "rooms": {
+     "bedroom_elias": {
+      "name": "Elias's Room",
+      "adjacent": [
+       {
+        "to": "kitchen",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "w",
+        "name": "Elias's Room",
+        "desc": "A narrow plank door, painted once and scuffed grey at the foot, hung on iron strap hinges."
+       }
+      ],
+      "planned": true,
+      "purpose": "One of the tower's two narrow bedrooms, off the kitchen: a bunk, a chest and a small window.",
+      "access": "Through a door off the kitchen.",
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 6,
+       "d": 7
+      },
+      "shape": "rectangle",
+      "exposure": "enclosed",
+      "level": 2,
+      "floor": "timber",
+      "surface": "furnished",
+      "from_event": 0,
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": 0,
+       "y": 0,
+       "elev_m": 6.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "bedroom_rhona": {
+      "name": "The Spare Room",
+      "adjacent": [
+       {
+        "to": "kitchen",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "e",
+        "name": "The Spare Room",
+        "desc": "A narrow plank door, its paint worn to bare wood along the latch edge, hung on iron strap hinges."
+       }
+      ],
+      "planned": true,
+      "purpose": "The tower's other narrow bedroom, off the kitchen, kept for a relief keeper: a bunk, a chest and a small window.",
+      "access": "Through a door off the kitchen.",
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 6,
+       "d": 7
+      },
+      "shape": "rectangle",
+      "exposure": "enclosed",
+      "level": 2,
+      "floor": "timber",
+      "surface": "furnished",
+      "from_event": 0
+     },
+     "kitchen": {
+      "name": "The Kitchen",
+      "adjacent": [
+       {
+        "to": "tower_hall",
+        "vertical": "down",
+        "way": "stair",
+        "dir": "e",
+        "barrier": "open",
+        "name": "The Hall",
+        "desc": "The tower stair, a tight curve of stone treads winding down the inside of the tower wall to the hall below."
+       },
+       {
+        "to": "bedroom_elias",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "e",
+        "name": "Elias's Room",
+        "desc": "A narrow plank door, painted once and scuffed grey at the foot, hung on iron strap hinges."
+       },
+       {
+        "to": "bedroom_rhona",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "w",
+        "name": "The Spare Room",
+        "desc": "A narrow plank door, its paint worn to bare wood along the latch edge, hung on iron strap hinges."
+       },
+       {
+        "to": "lamp_room",
+        "vertical": "up",
+        "way": "stair",
+        "dir": "n",
+        "barrier": "open",
+        "name": "The Tower Stair",
+        "desc": "A tight spiral of stone treads winding up through the thickness of the tower wall, worn hollow in the middle, with a rope strung along the outer curve for a hand."
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 9,
+       "d": 9
+      },
+      "shape": "round",
+      "exposure": "enclosed",
+      "level": 2,
+      "floor": "stone",
+      "surface": "furnished",
+      "from_event": 1,
+      "desc": "The tower's living floor, a round stone room the width of the tower, its walls limewashed and gone the colour of weak tea above the smoke line. The floor is flagged stone, swept clean, with a scatter of rush matting worn thin in the track between the stair and the table. A cast-iron range stands against the north wall, its flue carried up through the stone, and a kettle sits on the hob. A long deal table runs down the middle of the room, scrubbed pale, ringed with knife scars and the black half-moons of hot pans. Two narrow doors open off the room, one east and one west, and the tower stair climbs the north wall in a tight curve of stone treads toward the lamp room. The air holds woodsmoke, boiled greens and the cold breath of the sea that comes up the stairwell.",
+      "light": "lit",
+      "anchors": {
+       "range": {
+        "desc": "A cast-iron range set into the north wall, its door blackened, its top plates scored by years of kettles and pans. A flue of sooted stone carries the smoke up through the wall.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "large"
+       },
+       "kitchen_table": {
+        "desc": "A long deal table down the middle of the room, scrubbed pale and scored with knife marks and the black rings of hot pans.",
+        "dir": "w",
+        "height": "waist",
+        "footprint": "large"
+       },
+       "bench": {
+        "desc": "A plain bench of scrubbed deal drawn up along the table's seaward side, its legs worn to a shine on the flagstones.",
+        "dir": "s",
+        "height": "waist",
+        "footprint": "run",
+        "offset": 1.0
+       },
+       "dresser": {
+        "desc": "A painted dresser against the wall, its shelves crowded with chipped crockery, a few tins and a jar of salt.",
+        "dir": "w",
+        "height": "head",
+        "footprint": "large"
+       },
+       "stair_foot": {
+        "desc": "The foot of the tower stair, where the lowest stone treads curve up out of the floor toward the lamp room.",
+        "dir": "n",
+        "height": "floor",
+        "footprint": "small"
+       },
+       "pegs": {
+        "desc": "A row of iron pegs beside the east door, hung with an apron, a cloth cap and a bundle of dried herbs.",
+        "dir": "e",
+        "height": "head",
+        "footprint": "small"
+       }
+      },
+      "size": "huge",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -9,
+       "y": 1,
+       "elev_m": 6.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "lamp_room": {
+      "name": "The Lamp Room",
+      "adjacent": [
+       {
+        "to": "kitchen",
+        "vertical": "down",
+        "way": "stair",
+        "dir": "s",
+        "barrier": "open",
+        "name": "The Tower Stair",
+        "desc": "A tight spiral of stone treads winding up through the thickness of the tower wall, worn hollow in the middle, with a rope strung along the outer curve for a hand."
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 7,
+       "d": 7
+      },
+      "shape": "round",
+      "exposure": "enclosed",
+      "level": 3,
+      "floor": "stone",
+      "surface": "bare",
+      "from_event": 1,
+      "desc": "The glass room at the top of the tower, a round stone chamber the width of the tower with a ring of tall windows set in its seaward half, their leaded panes greenish and streaked with salt. The stone floor is flagged and worn smooth in a circle where feet have turned, and the limewash on the walls has gone grey with soot and damp. A low iron rail runs round the landward side of the floor, and the tower stair comes up through the stone at the south. The old lamp stands at the centre on its iron pedestal, its brass dulled, its wick trimmed, and beside it the Board's new mechanism sits on a deal bench with its gearing half assembled, tools and offcuts scattered around it. The air smells of paraffin, cold iron and the sea, and the wind is never quite still up here.",
+      "light": "lit",
+      "windows": [
+       "n",
+       "e",
+       "ne"
+      ],
+      "far_look": "A round glass lantern room crowning a stone tower, its panes catching the sky.",
+      "anchors": {
+       "lamp_pedestal": {
+        "desc": "A squat iron pedestal bolted to the flags at the centre of the floor, its base ringed with rust, carrying the old lamp: a brass housing with a thick glass chimney, its wick trimmed and its reservoir half full of paraffin.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "small",
+        "offset": 0.4,
+        "cell": [
+         3,
+         3
+        ]
+       },
+       "work_bench": {
+        "desc": "A deal bench set against the landward wall, its top scored and stained with oil, crowded with the Board's new mechanism: brass gearing half assembled, a coil of fine wire, spanners, and filings of metal.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "large",
+        "cell": [
+         2,
+         1
+        ]
+       },
+       "rail": {
+        "desc": "A low iron rail running round the landward side of the floor, its paint flaked to bare metal, set there to keep a body off the wall where the stair comes up.",
+        "dir": "w",
+        "height": "waist",
+        "footprint": "run",
+        "cell": [
+         0,
+         2
+        ]
+       },
+       "stair_head": {
+        "desc": "The head of the tower stair, where the topmost treads break through the flags and the rope ends at an iron ring set in the stone.",
+        "dir": "s",
+        "height": "floor",
+        "footprint": "small",
+        "offset": 0.8,
+        "cell": [
+         3,
+         5
+        ]
+       }
+      },
+      "size": "large",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -9,
+       "y": 1,
+       "elev_m": 9.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "rock_landing": {
+      "name": "The Landing",
+      "adjacent": [
+       {
+        "to": "the_stair",
+        "vertical": "up",
+        "way": "ladder",
+        "dir": "n",
+        "barrier": "open",
+        "name": "the iron ladder up the crag",
+        "material": "metal",
+        "desc": "An iron ladder bolted to the crag face, rungs worn smooth and bright at the centre and rusted at the stringers, rising the height of a man and a half to the ledge above."
+       },
+       {
+        "to": "the_mainland",
+        "barrier": "open_door",
+        "axis": "the mainland"
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 12,
+       "d": 8
+      },
+      "shape": "rectangle",
+      "exposure": "open",
+      "sound": {
+       "level": "loud",
+       "detail": "the sea breaking and dragging on the rock below"
+      },
+      "floor": "stone",
+      "surface": "bare",
+      "far_look": "a low shelf of wet black rock at the foot of the crag, white where the swell breaks over it",
+      "desc": "A low shelf of wet black rock at the foot of the crag, slick with weed where the swell reaches and bleached pale and dry above it. An iron ring and a rusted bollard stand at the seaward lip where boats tie up. The crag rises sheer on the north side, its face streaked white with guano, and the iron ladder is bolted to it. Broken shell, a few lengths of weathered timber and the rusted staples of old moorings lie about. There is nothing here the sea has not handled.",
+      "from_event": 0,
+      "anchors": {
+       "tie_up": {
+        "desc": "A rusted iron bollard and a ring set into the rock at the seaward lip, both scabbed with old paint and salt. The ring is worn bright on its inner curve where lines have run through it for years.",
+        "dir": "w",
+        "height": "waist",
+        "footprint": "point"
+       },
+       "dry_ledge": {
+        "desc": "A raised shelf of drier rock at the back of the landing, bleached pale and scattered with broken shell and a few lengths of weathered timber. High enough that only the worst of the swell reaches it.",
+        "dir": "e",
+        "height": "floor",
+        "footprint": "large"
+       },
+       "crag_foot": {
+        "desc": "The sheer face of the crag on the north side, wet and streaked white with guano, its base undercut where the sea has worked at it. The iron ladder is bolted to it.",
+        "dir": "n",
+        "height": "full",
+        "footprint": "run"
+       }
+      },
+      "size": "small",
+      "level": 0,
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -6,
+       "y": 8,
+       "elev_m": 0.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "store": {
+      "name": "The Store",
+      "adjacent": [
+       {
+        "to": "tower_hall",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "w",
+        "name": "the store door"
+       }
+      ],
+      "planned": true,
+      "purpose": "A cold stone room off the hall holding the oil, the coal, the tools and the Board's crates of supplies.",
+      "access": "Through a door off the hall.",
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 7,
+       "d": 6
+      },
+      "shape": "rectangle",
+      "exposure": "enclosed",
+      "level": 1,
+      "floor": "stone",
+      "surface": "bare",
+      "from_event": 0,
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -1,
+       "y": 0,
+       "elev_m": 3.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "the_stair": {
+      "name": "The Steps",
+      "adjacent": [
+       {
+        "to": "rock_landing",
+        "vertical": "down",
+        "way": "ladder",
+        "dir": "s",
+        "barrier": "open",
+        "name": "the iron ladder down to the landing",
+        "material": "metal",
+        "desc": "An iron ladder bolted to the crag face, rungs worn smooth and bright at the centre and rusted at the stringers, dropping the height of a man and a half to the landing shelf."
+       },
+       {
+        "to": "tower_hall",
+        "barrier": "open_door",
+        "material": "wood",
+        "dir": "n",
+        "name": "the tower door",
+        "desc": "A heavy door of tarred wood set in the tower's foot, iron-banded and hung on strap hinges, with a small barred grille at eye height and a rim of salt bloom along its lower edge."
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 6,
+       "d": 10
+      },
+      "shape": "l",
+      "exposure": "open",
+      "level": 1,
+      "floor": "stone",
+      "surface": "bare",
+      "far_look": "worn steps cut up the face of the crag to a heavy door in the tower's foot",
+      "desc": "A narrow ledge at the head of the iron ladder, and then worn steps cut into the crag climbing to the tower door. The ledge is flat enough to set a crate down and no wider. An iron handrail is bolted into the rock alongside the steps, pitted and cold. From here the whole of the landing lies below, and the sea beyond it.",
+      "from_event": 5,
+      "anchors": {
+       "ledge": {
+        "desc": "A flat shelf of rock at the head of the ladder, no wider than a man's stride, scuffed and salt-bleached, with a scatter of small stones and a rusted staple where a line has been made fast.",
+        "dir": "s",
+        "height": "floor",
+        "footprint": "large"
+       },
+       "handrail": {
+        "desc": "An iron handrail bolted into the crag alongside the steps, pitted with rust and cold enough to bite through wool.",
+        "dir": "e",
+        "height": "waist",
+        "footprint": "run"
+       }
+      },
+      "size": "small",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -6,
+       "y": 8,
+       "elev_m": 3.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "tower_hall": {
+      "name": "The Hall",
+      "adjacent": [
+       {
+        "to": "the_stair",
+        "barrier": "open_door",
+        "material": "wood",
+        "dir": "s",
+        "name": "the tower door",
+        "desc": "A heavy door of tarred wood set in the tower's foot, iron-banded and hung on strap hinges, with a small barred grille at eye height and a rim of salt bloom along its lower edge."
+       },
+       {
+        "to": "store",
+        "barrier": "closed_door",
+        "material": "wood",
+        "dir": "e",
+        "name": "the store door"
+       },
+       {
+        "to": "kitchen",
+        "vertical": "up",
+        "way": "stair",
+        "dir": "w",
+        "barrier": "open",
+        "name": "The Hall",
+        "desc": "The tower stair, a tight curve of stone treads winding down the inside of the tower wall to the hall below."
+       }
+      ],
+      "region": "the_lamp_tower",
+      "extent": {
+       "w": 8,
+       "d": 8
+      },
+      "shape": "round",
+      "exposure": "enclosed",
+      "level": 1,
+      "floor": "stone",
+      "surface": "bare",
+      "from_event": 1,
+      "desc": "A round stone room inside the tower's heavy door, its walls the thickness of the tower itself, limewashed once and gone grey with salt and smoke. The floor is flagged stone, worn hollow in the track between the door and the stair. A paraffin lamp hangs on a bracket by the door, and the air holds paraffin and wet wool. The tower stair climbs the west wall in a tight curve of stone treads. The store door stands in the east wall, iron-banded and shut. A hall table stands against the north wall with a bench beneath it, and a row of pegs beside the door carries oilskins and a sou'wester. A small cast-iron stove stands against the north wall, ticking as it cools.",
+      "light": "lit",
+      "anchors": {
+       "hall_table": {
+        "desc": "A plain deal table against the north wall, scrubbed pale and scored with years of use, its top damp where wet mail has been set down. A bench stands beneath it.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "large"
+       },
+       "pegs": {
+        "desc": "A row of iron pegs beside the door, hung with oilskins, a sou'wester and a coil of tarred line. The wall behind them is dark with grease and salt.",
+        "dir": "s",
+        "height": "head",
+        "footprint": "run",
+        "offset": 0.0
+       },
+       "stair_foot": {
+        "desc": "The foot of the tower stair, where the lowest stone treads curve up out of the hall against the west wall. The treads are worn dished at the centre and gritty with blown sand.",
+        "dir": "w",
+        "height": "floor",
+        "footprint": "small",
+        "offset": 0.1667
+       },
+       "stove": {
+        "desc": "A small cast-iron stove set against the north wall, its door blackened and its top plate warm to the hand, ticking as it cools. A short flue runs up into the stone.",
+        "dir": "n",
+        "height": "waist",
+        "footprint": "small"
+       }
+      },
+      "size": "large",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": -9,
+       "y": 1,
+       "elev_m": 3.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "the_mainland": {
+      "name": "The Mainland",
+      "planned": true,
+      "purpose": "",
+      "adjacent": [
+       {
+        "to": "rock_landing",
+        "barrier": "open_door"
+       }
+      ],
+      "region": "the_lamp_tower",
+      "level": 0,
+      "provisional": true,
+      "frontier_of": {
+       "room": "rock_landing",
+       "axis": "the mainland"
+      },
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": 16,
+       "y": 5,
+       "elev_m": 0.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "the_channel": {
+      "name": "the channel",
+      "desc": "The sound between the rock and the mainland, open water over a drowned shelf of reef. Grey and white in bad weather, churned into standing waves where the tide runs against the swell, and slack and green-brown in calm. The reef breaks white at the south end and the mainland shore lies low and dark to the east. Nothing crosses it but boats, and nothing stays on it.",
+      "adjacent": [
+       {
+        "to": "rock_landing",
+        "barrier": "open",
+        "dir": "w",
+        "distance": {
+         "value": 1.5,
+         "unit": "km"
+        },
+        "name": "the channel west of the rock"
+       },
+       {
+        "to": "the_mainland",
+        "barrier": "open",
+        "dir": "e",
+        "distance": {
+         "value": 13,
+         "unit": "km"
+        },
+        "name": "the channel east to the mainland"
+       }
+      ],
+      "light": "lit",
+      "exposure": "open",
+      "far_look": "open water between a black rock and a low dark shore, breaking white over a drowned reef",
+      "level": 0,
+      "floor": "water",
+      "surface": "bare",
+      "anchors": {
+       "reef_head": {
+        "desc": "The drowned head of the reef at the south end of the channel, breaking white in any sea and showing bare black rock at low water. The tide runs hard over it.",
+        "dir": "s",
+        "height": "floor",
+        "footprint": "large"
+       },
+       "slack_water": {
+        "desc": "The middle of the channel, where the tide turns and the water goes slack and green-brown over the drowned shelf, deep enough for a boat to lie to.",
+        "dir": "n",
+        "height": "floor",
+        "footprint": "large"
+       }
+      },
+      "size": "large",
+      "extent": {
+       "w": 10.0,
+       "d": 7.0
+      },
+      "shape": "composite",
+      "from_event": 1,
+      "name_derived": false,
+      "region": "the_lamp_tower",
+      "site": {
+       "plan": "the_lamp_tower",
+       "x": 6,
+       "y": 8,
+       "elev_m": 0.0,
+       "derived": true,
+       "origin": "bedroom_elias"
+      }
+     },
+     "mary_ann_interior": {
+      "name": "The Mary Ann",
+      "desc": "",
+      "parent_entity": "fe01eaf0eb204899",
+      "adjacent": [
+       {
+        "to": "the_channel",
+        "distance": "near",
+        "barrier": "closed_door"
+       }
+      ],
+      "dock_exit": true,
+      "level": 0
+     }
+    },
+    "entities": {
+     "fe01eaf0eb204899": {
+      "from_event": 3,
+      "name": "The Mary Ann",
+      "kind": "vehicle",
+      "description": "Pell Hardacre's workboat: a stout, slab-sided motor boat, dark green above the waterline and tarred black below, with a small wheelhouse forward and an open well aft. She smells of diesel, brine and old rope.",
+      "aliases": [
+       "the boat",
+       "the relief boat"
+      ],
+      "portable": false,
+      "container": true,
+      "interior_rooms": [
+       "mary_ann_interior"
+      ],
+      "state": {
+       "engine": "running",
+       "mooring": "cast off",
+       "cargo": "crates of tinned food and paraffin, a sack of coal, and the post bag, lashed down in the well",
+       "transit": {
+        "phase": "in_transit",
+        "destination_room": "the_mainland",
+        "route_room": "the_channel",
+        "departed_from": "rock_landing"
+       }
+      },
+      "ubiquitous": false,
+      "sound_source": "audible"
+     },
+     "0bcb2b599f134f41": {
+      "from_event": 0,
+      "name": "clockmaker's toolkit",
+      "kind": "tool",
+      "description": "A leather roll of fine tools — tweezers, small screwdrivers, a pin vice, files and a loupe — worn soft at the edges and darkened with handling.",
+      "aliases": [
+       "the toolkit",
+       "the kit roll"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "held_by": "Rhona Carrick"
+     },
+     "418a3aedd649471d": {
+      "from_event": 4,
+      "name": "a folded letter",
+      "kind": "document",
+      "description": "A letter folded small and worn at the creases from being carried in a pocket.",
+      "aliases": [
+       "the letter"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "examined": "Northern Lighthouse Board paper, headed, dated, numbered in the margin: citing two failures in the twelvemonth, the Commissioners' engineer will attend Tuesday next to inspect and report on the mechanism, and the keeper is to afford him every facility and keep the apparatus in service meanwhile.",
+       "seal": "broken",
+       "opened": true,
+       "oriented_to": "Rhona Carrick"
+      },
+      "ubiquitous": false
+     },
+     "char_rhona_carrick": {
+      "name": "Rhona Carrick",
+      "kind": "person",
+      "from_event": 0,
+      "aliases": []
+     },
+     "char_elias_thorne": {
+      "name": "Elias Thorne",
+      "kind": "person",
+      "from_event": 0,
+      "aliases": []
+     },
+     "char_pell_hardacre": {
+      "name": "Pell Hardacre",
+      "kind": "person",
+      "from_event": 0,
+      "aliases": []
+     },
+     "b3ea5e0846b44fe9": {
+      "name": "a crate of tinned goods",
+      "kind": "container",
+      "description": "A heavy roped wooden crate packed with tins of food.",
+      "aliases": [
+       "crate",
+       "box",
+       "tinned goods"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 5
+     },
+     "7041a08392c14695": {
+      "name": "a pile of stores",
+      "kind": "cargo",
+      "description": "Crates of tinned goods, a sack of flour, a sloshing drum of paraffin, lamp spares in a wooden box, and the mail sack, crowded on the wet ledge against the tower door.",
+      "aliases": [
+       "crates",
+       "stores",
+       "boxes"
+      ],
+      "portable": false,
+      "container": false,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 14
+     },
+     "b86503d36fb94aa2": {
+      "name": "the post bag",
+      "kind": "container",
+      "description": "A heavy oilskin canvas mail sack with a buckled flap, swollen with the week's mail.",
+      "aliases": [
+       "post bag",
+       "bag",
+       "mail sack"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {
+       "hatch": "open"
+      },
+      "ubiquitous": false,
+      "from_event": 6
+     },
+     "5e2db937400a4440": {
+      "name": "bundle of station mail",
+      "kind": "document",
+      "description": "Three envelopes for the station, a newspaper folded in oilskin, and a small parcel in brown paper and twine.",
+      "aliases": [
+       "station mail",
+       "mail bundle",
+       "station's bundle"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "examined": "a dozen envelopes and two small parcels, twine-tied; top addressed to the lighthouse in clerk's copperplate, a Board circular beneath, and a seed catalogue for north light"
+      },
+      "ubiquitous": false,
+      "from_event": 6
+     },
+     "ca2c570ee4914419": {
+      "name": "a stiff envelope",
+      "kind": "document",
+      "description": "A long, stiff envelope printed with a clockmaker's name in the corner, addressed in copperplate to Miss R. Carrick at the light, postmarked mainland three days prior.",
+      "aliases": [
+       "envelope",
+       "letter",
+       "clockmaker's envelope"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 8
+     },
+     "4b92b2b8653b43d4": {
+      "name": "a sealed letter",
+      "kind": "document",
+      "description": "A sealed letter addressed in Rhona Carrick's hand to her sister in Harrow Street, by the post office on the quay.",
+      "aliases": [
+       "sealed letter",
+       "the letter",
+       "letter"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "examined": "addressed to sister in Harrow Street in Rhona's hand, flap sealed with wax, warm from grip"
+      },
+      "from_event": 3
+     },
+     "2275c0d8a81c43d2": {
+      "name": "the tower lamp",
+      "kind": "light",
+      "description": "The great revolving lantern apparatus in the glass room at the top of the tower.",
+      "aliases": [
+       "the lamp",
+       "the light"
+      ],
+      "portable": false,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "lit": false
+      },
+      "ubiquitous": false,
+      "light_source": "dim",
+      "from_event": 3
+     },
+     "845c4d283ebf465d": {
+      "name": "a mug of tea",
+      "kind": "drink",
+      "description": "A thick stoneware mug of hot tea.",
+      "aliases": [
+       "mug",
+       "tea"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 4
+     },
+     "6fa82c0b4ff243f4": {
+      "name": "the crate from the Board",
+      "kind": "container",
+      "description": "A wooden crate sent by the Northern Lighthouse Board, stood open on the floor of the Lamp Room.",
+      "aliases": [
+       "crate",
+       "board's crate",
+       "open crate"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {
+       "hatch": "open"
+      },
+      "ubiquitous": false,
+      "from_event": 3
+     },
+     "6870d80e29ab47cb": {
+      "name": "the new clockwork",
+      "kind": "mechanism",
+      "description": "The Board's new clockwork mechanism, laid out on a sack on the floor beside its crate.",
+      "aliases": [
+       "clockwork",
+       "mechanism",
+       "gearing"
+      ],
+      "portable": true,
+      "container": false,
+      "interior_rooms": [],
+      "state": {
+       "assembly": "unfitted",
+       "condition": "pinion cocked against gear wheel, two teeth chipped bright",
+       "examined": "pinion cocked against gear wheel, two teeth chipped bright"
+      },
+      "ubiquitous": false,
+      "from_event": 2
+     },
+     "bc6c40aab847432d": {
+      "name": "paraffin crate",
+      "kind": "container",
+      "description": "A heavy wooden crate of paraffin tins, wet and weeping along its bottom boards.",
+      "aliases": [
+       "crate",
+       "the paraffin crate"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {
+       "examined": "heavy timber crate, bottom boards soaked with paraffin from a weeping tin"
+      },
+      "ubiquitous": false,
+      "scent": "sharp, cold paraffin",
+      "from_event": 3
+     },
+     "bf574f81855d477f": {
+      "name": "the crate stencilled for the mechanism",
+      "kind": "container",
+      "description": "A long crate stencilled with the Board's mark, its lid nailed down over the old lamp mechanism and packed with straw.",
+      "aliases": [
+       "long crate",
+       "mechanism crate",
+       "crate"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {
+       "hatch": "shut",
+       "examined": "long deal crate with the Board's mark stencilled on the lid, nailed down fast over the old mechanism and straw"
+      },
+      "ubiquitous": false,
+      "from_event": 3
+     },
+     "7e9877bde91a4e48": {
+      "name": "the oil can",
+      "kind": "tool",
+      "description": "A metal oil can with a long spout, left sitting by the door.",
+      "aliases": [
+       "oil can",
+       "can"
+      ],
+      "portable": true,
+      "container": true,
+      "interior_rooms": [],
+      "state": {},
+      "ubiquitous": false,
+      "from_event": 3
+     }
+    },
+    "positions": {
+     "Rhona Carrick": "kitchen",
+     "Elias Thorne": "lamp_room",
+     "fe01eaf0eb204899": "the_channel",
+     "0bcb2b599f134f41": "kitchen",
+     "418a3aedd649471d": "kitchen",
+     "b3ea5e0846b44fe9": "the_stair",
+     "7041a08392c14695": "the_stair",
+     "b86503d36fb94aa2": "tower_hall",
+     "5e2db937400a4440": "tower_hall",
+     "ca2c570ee4914419": "kitchen",
+     "4b92b2b8653b43d4": "tower_hall",
+     "2275c0d8a81c43d2": "lamp_room",
+     "845c4d283ebf465d": "kitchen",
+     "6870d80e29ab47cb": "lamp_room",
+     "bc6c40aab847432d": "tower_hall",
+     "6fa82c0b4ff243f4": "lamp_room",
+     "bf574f81855d477f": "tower_hall",
+     "7e9877bde91a4e48": "tower_hall"
+    },
+    "contained": {
+     "0bcb2b599f134f41": {
+      "in": "Rhona Carrick",
+      "mode": "carried",
+      "by": "bearing"
+     },
+     "ca2c570ee4914419": {
+      "in": "Rhona Carrick",
+      "mode": "held"
+     }
+    },
+    "attire": {
+     "Elias Thorne": {
+      "wearing": [
+       "heavy navy wool fisherman's sweater",
+       "cotton undershirt",
+       "canvas work trousers",
+       "oiled leather boots",
+       "wool socks"
+      ],
+      "state": [
+       "all garments worn, mended, and faintly salt-stained from years of the same hands washing and drying them; clean and functional but showing long service"
+      ],
+      "regions": {
+       "torso": {
+        "garments": [
+         {
+          "name": "heavy navy wool fisherman's sweater",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "torso",
+           "arms",
+           "waist"
+          ]
+         },
+         {
+          "name": "cotton undershirt",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": []
+         }
+        ],
+        "beneath": ""
+       },
+       "arms": {
+        "garments": [
+         {
+          "name": "heavy navy wool fisherman's sweater",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "torso",
+           "arms",
+           "waist"
+          ]
+         }
+        ],
+        "beneath": ""
+       },
+       "waist": {
+        "garments": [
+         {
+          "name": "heavy navy wool fisherman's sweater",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "torso",
+           "arms",
+           "waist"
+          ]
+         }
+        ],
+        "beneath": ""
+       },
+       "legs": {
+        "garments": [
+         {
+          "name": "canvas work trousers",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "groin",
+           "legs"
+          ]
+         }
+        ],
+        "beneath": ""
+       },
+       "groin": {
+        "garments": [
+         {
+          "name": "canvas work trousers",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": [
+           "groin",
+           "legs"
+          ]
+         }
+        ],
+        "beneath": ""
+       },
+       "feet": {
+        "garments": [
+         {
+          "name": "oiled leather boots",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": []
+         },
+         {
+          "name": "wool socks",
+          "attaches": false,
+          "description": "",
+          "state": "worn",
+          "condition": "",
+          "covers": []
+         }
+        ],
+        "beneath": ""
+       }
+      }
+     },
+     "Pell Hardacre": {
+      "wearing": [
+       "{'id'"
+      ],
+      "state": [
+       "oilskin jacket is well-waxed but faded, salt rings at cuffs and collar",
+       "sweater is pilled and carries a persistent brine smell",
+       "trousers are grease-spotted and stiff with use",
+       "left boot has a visible vulcanised patch near the ankle",
+       "cap is salt-stiffened and faded from dark blue to a chalky grey-blue"
+      ],
+      "regions": {
+       "torso": {
+        "garments": [
+         {
+          "name": "{'id'",
+          "attaches": false,
+          "description": "'oilskin_jacket', 'name': 'oilskin jacket', 'desc': 'A weathered, dark-green oilskin jacket, repeatedly re-waxed, with salt-stain rings at the cuffs and collar. Cut wide enough to layer underneath.', 'covers': ['torso', 'arms'], 'layers': 'outer'}",
+          "state": "worn",
+          "condition": "",
+          "covers": []
+         }
+        ],
+        "beneath": ""
+       }
+      }
+     }
+    },
+    "stations": {
+     "Rhona Carrick": {
+      "at": "bench",
+      "near": [
+       "418a3aedd649471d",
+       "845c4d283ebf465d",
+       "ca2c570ee4914419"
+      ],
+      "from_event": 3
+     },
+     "Elias Thorne": {
+      "at": "lamp_pedestal",
+      "near": [
+       "2275c0d8a81c43d2"
+      ],
+      "from_event": 1,
+      "cell": [
+       3,
+       4
+      ]
+     },
+     "fe01eaf0eb204899": {
+      "at": null,
+      "near": [],
+      "cell": [
+       1,
+       3
+      ]
+     },
+     "b3ea5e0846b44fe9": {
+      "at": "ledge",
+      "near": [
+       "7041a08392c14695"
+      ],
+      "from_event": 14,
+      "cell": [
+       2,
+       8
+      ]
+     },
+     "7041a08392c14695": {
+      "at": "ledge",
+      "near": [
+       "b3ea5e0846b44fe9"
+      ],
+      "from_event": 14
+     },
+     "ca2c570ee4914419": {
+      "at": null,
+      "near": [
+       "Rhona Carrick"
+      ]
+     },
+     "418a3aedd649471d": {
+      "at": "kitchen_table",
+      "near": [
+       "Rhona Carrick"
+      ],
+      "from_event": 3
+     },
+     "b86503d36fb94aa2": {
+      "at": null,
+      "near": []
+     },
+     "845c4d283ebf465d": {
+      "at": "kitchen_table",
+      "near": [
+       "Rhona Carrick"
+      ],
+      "from_event": 4
+     },
+     "bc6c40aab847432d": {
+      "at": null,
+      "near": [],
+      "from_event": 3
+     },
+     "2275c0d8a81c43d2": {
+      "at": null,
+      "near": [
+       "Elias Thorne",
+       "6870d80e29ab47cb"
+      ]
+     },
+     "6870d80e29ab47cb": {
+      "at": null,
+      "near": [
+       "2275c0d8a81c43d2"
+      ]
+     }
+    }
+   },
+   "provisional": {
+    "the_mainland": {
+     "provisional": true,
+     "frontier_of": {
+      "room": "rock_landing",
+      "axis": "the mainland"
+     }
+    }
+   },
+   "whereabouts": {
+    "Pell Hardacre": {
+     "kind": "off_map",
+     "label": "the harbour",
+     "since_s": 88473.69230769231,
+     "turn_idx": 8,
+     "char_id": 2,
+     "left_from": "the_channel"
+    }
+   },
+   "authorial_offers": [
+    {
+     "subject_id": 1,
+     "proposition": "comes down the tower stair into the kitchen",
+     "source": "player"
+    },
+    {
+     "subject_id": 1,
+     "proposition": "sits at the kitchen table across from Rhona Carrick with his tea",
+     "source": "player"
+    }
+   ],
+   "minds": {
+    "Elias Thorne": {
+     "answer": {
+      "routine": [],
+      "plan": [
+       {
+        "from": "morning",
+        "until": "midday",
+        "where": "The Lamp Room",
+        "doing": "Examines the broken pinion and cocked mechanism by touch and by the grey light through the salt-streaked panes, tracing the crack line where the teeth sheared, checking the drive shaft for warping, finding the brass shim that bounced off the flagstones and pocketing it. Goes down the stair to the hall and the store for his lamp tools — the screwdriver, the file, the wick trimmer, the brass wrench — and carries them up in a canvas roll. Checks the paraffin reservoir: half full, enough for tonight. Sets the tools out on the flagstone in order.",
+        "why": "Two nights dark. That ends tonight. The mechanism must be assessed with his own hands and his own tools before anything else is decided — the breakage tells him something about the old gear and he needs to read it before the engineer comes to replace what he has not yet understood.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "lamp tools — screwdriver, file, wick trimmer, brass wrench",
+         "brass shim from the flagstones",
+         "paraffin reservoir"
+        ],
+        "day": 0
+       },
+       {
+        "from": "midday",
+        "until": "afternoon",
+        "where": "The Lamp Room",
+        "doing": "Files the sheared pinion teeth clean, resets the pinion with the recovered brass shim, and tests the gear train by hand — turning the lamp a quarter, listening to the mesh, feeling for the catch that broke before. If the shim holds, winds the clockwork and lets the mechanism run under its own weight. Watches it through three rotations. If it slips or catches, stops it and begins fitting the new clockwork from the crate, working from the Board's diagram and his own knowledge of the housing, keeping his hands on every piece.",
+        "why": "The light must burn tonight. If the old pinion can be shimmed and hold, it holds — he trusts what he has tested. If it cannot, the new mechanism goes in now, not Tuesday, because two dark nights is already two too many and a third would be the failure that has no restitution.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "lamp tools — file, screwdriver, brass wrench",
+         "brass shim",
+         "new clockwork mechanism from the crate",
+         "Board's diagram"
+        ],
+        "day": 0
+       },
+       {
+        "from": "afternoon",
+        "until": "dusk",
+        "where": "The Lamp Room",
+        "doing": "Cleans the lens with the chamois and paraffin, checks the wick, trims it square, fills the reservoir to the line from the paraffin can, and sets the chimney back in place. Checks the barometer and reads the sky through the panes — weather, visibility, sea state — for the night ahead. Makes ready to light.",
+        "why": "The lamp must be ready before dusk. No paraffin missing, no wick untrimmed, no lens uncleaned — not tonight, not after two dark nights.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "chamois cloth",
+         "paraffin can",
+         "wick trimmer",
+         "barometer"
+        ],
+        "day": 0
+       },
+       {
+        "from": "dusk",
+        "until": "evening",
+        "where": "The Lamp Room",
+        "doing": "Lights the lamp at dusk — strikes the match, sets the wick, watches the flame catch and settle behind the chimney. If the clockwork holds, engages the rotation and watches the beam sweep out across the water. If it does not, stands at the pedestal and turns the lamp by hand, quarter by quarter, for the first watch. Logs the day: the broken pinion, the repair or the new fitting, the lighting, the weather, every vessel sighted.",
+        "why": "The light burns tonight. That is the only thing that matters, and the log records it — the two dark nights, the breakage, the repair, the lighting. The record is honest because it has to be.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "matches",
+         "logbook and pen",
+         "clockwork mechanism"
+        ],
+        "day": 0
+       },
+       {
+        "from": "evening",
+        "until": "night",
+        "where": "The Kitchen",
+        "doing": "Comes down the tower stair into the kitchen, puts the kettle on the wood stove, makes tea — strong, no sugar — and sits at the table. Opens the logbook to the day's entry and reads it back, checking times and details against what he remembers. Sets the pen down and drinks the tea.",
+        "why": "The lamp is lit. The mechanism holds or it doesn't, but the light is burning and the log is made. Tea at the same hour as every evening — the one thing that is the same tonight as it was before she came, before the pinion broke, before the light went dark.",
+        "asleep": false,
+        "with": [
+         "Rhona Carrick"
+        ],
+        "uses": [
+         "kettle",
+         "wood stove",
+         "tea, loose leaf",
+         "logbook and pen"
+        ],
+        "day": 0
+       }
+      ],
+      "at_the_end": {
+       "where": "The Kitchen",
+       "doing": "Sits at the kitchen table across from Rhona Carrick with his tea, the logbook open before him, the pen down, the light burning above them in the tower.",
+       "why": "The light is lit. The work is done for now. The tea is the same as every other evening, and the kitchen is warm, and the lamp is burning — and that is enough for tonight.",
+       "asleep": false,
+       "with": [
+        "Rhona Carrick"
+       ],
+       "uses": [
+        "tea",
+        "logbook"
+       ]
+      },
+      "on_your_mind": "Two nights dark. The pinion cracked under his hand and the light went out, and no honest log entry can make that right. But the lamp is lit tonight. The shim holds or the new clockwork runs — either way, the beam is sweeping the sea again. The engineer comes Tuesday. Carrick has clockmaker's hands and she was watching the gear when it broke. He has not said what he thinks about that, and he is not sure what he thinks yet."
+     },
+     "itinerary": [
+      {
+       "from_s": 233820.0,
+       "until_s": 242100.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Examines the broken pinion and cocked mechanism by touch and by the grey light through the salt-streaked panes, tracing the crack line where the teeth sheared, checking the drive shaft for warping, finding the brass shim that bounced off the flagstones and pocketing it. Goes down the stair to the hall and the store for his lamp tools — the screwdriver, the file, the wick trimmer, the brass wrench — and carries them up in a canvas roll. Checks the paraffin reservoir: half full, enough for tonight. Sets the tools out on the flagstone in order.",
+       "asleep": false,
+       "with": [],
+       "why": "Two nights dark. That ends tonight. The mechanism must be assessed with his own hands and his own tools before anything else is decided — the breakage tells him something about the old gear and he needs to read it before the engineer comes to replace what he has not yet understood.",
+       "uses": [
+        "lamp tools — screwdriver, file, wick trimmer, brass wrench",
+        "brass shim from the flagstones",
+        "paraffin reservoir"
+       ]
+      },
+      {
+       "from_s": 242100.0,
+       "until_s": 251100.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Files the sheared pinion teeth clean, resets the pinion with the recovered brass shim, and tests the gear train by hand — turning the lamp a quarter, listening to the mesh, feeling for the catch that broke before. If the shim holds, winds the clockwork and lets the mechanism run under its own weight. Watches it through three rotations. If it slips or catches, stops it and begins fitting the new clockwork from the crate, working from the Board's diagram and his own knowledge of the housing, keeping his hands on every piece.",
+       "asleep": false,
+       "with": [],
+       "why": "The light must burn tonight. If the old pinion can be shimmed and hold, it holds — he trusts what he has tested. If it cannot, the new mechanism goes in now, not Tuesday, because two dark nights is already two too many and a third would be the failure that has no restitution.",
+       "uses": [
+        "lamp tools — file, screwdriver, brass wrench",
+        "brass shim",
+        "new clockwork mechanism from the crate",
+        "Board's diagram"
+       ]
+      },
+      {
+       "from_s": 251100.0,
+       "until_s": 267300.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Cleans the lens with the chamois and paraffin, checks the wick, trims it square, fills the reservoir to the line from the paraffin can, and sets the chimney back in place. Checks the barometer and reads the sky through the panes — weather, visibility, sea state — for the night ahead. Makes ready to light.",
+       "asleep": false,
+       "with": [],
+       "why": "The lamp must be ready before dusk. No paraffin missing, no wick untrimmed, no lens uncleaned — not tonight, not after two dark nights.",
+       "uses": [
+        "chamois cloth",
+        "paraffin can",
+        "wick trimmer",
+        "barometer"
+       ]
+      },
+      {
+       "from_s": 267300.0,
+       "until_s": 272700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Lights the lamp at dusk — strikes the match, sets the wick, watches the flame catch and settle behind the chimney. If the clockwork holds, engages the rotation and watches the beam sweep out across the water. If it does not, stands at the pedestal and turns the lamp by hand, quarter by quarter, for the first watch. Logs the day: the broken pinion, the repair or the new fitting, the lighting, the weather, every vessel sighted.",
+       "asleep": false,
+       "with": [],
+       "why": "The light burns tonight. That is the only thing that matters, and the log records it — the two dark nights, the breakage, the repair, the lighting. The record is honest because it has to be.",
+       "uses": [
+        "matches",
+        "logbook and pen",
+        "clockwork mechanism"
+       ]
+      },
+      {
+       "from_s": 272700.0,
+       "until_s": 279900.0,
+       "room": "kitchen",
+       "away": null,
+       "where_text": "The Kitchen",
+       "doing": "Comes down the tower stair into the kitchen, puts the kettle on the wood stove, makes tea — strong, no sugar — and sits at the table. Opens the logbook to the day's entry and reads it back, checking times and details against what he remembers. Sets the pen down and drinks the tea.",
+       "asleep": false,
+       "with": [
+        "Rhona Carrick"
+       ],
+       "why": "The lamp is lit. The mechanism holds or it doesn't, but the light is burning and the log is made. Tea at the same hour as every evening — the one thing that is the same tonight as it was before she came, before the pinion broke, before the light went dark.",
+       "uses": [
+        "kettle",
+        "wood stove",
+        "tea, loose leaf",
+        "logbook and pen"
+       ]
+      },
+      {
+       "from_s": 279900.0,
+       "until_s": 281700.0,
+       "room": "kitchen",
+       "away": null,
+       "where_text": "The Kitchen",
+       "doing": "Sits at the kitchen table across from Rhona Carrick with his tea, the logbook open before him, the pen down, the light burning above them in the tower.",
+       "asleep": false,
+       "with": [
+        "Rhona Carrick"
+       ],
+       "why": "The light is lit. The work is done for now. The tea is the same as every other evening, and the kitchen is warm, and the lamp is burning — and that is enough for tonight.",
+       "uses": [
+        "tea",
+        "logbook"
+       ]
+      }
+     ],
+     "log_as_run": [
+      {
+       "from_s": 233820.0,
+       "until_s": 242100.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Examines the broken pinion and cocked mechanism by touch and by the grey light through the salt-streaked panes, tracing the crack line where the teeth sheared, checking the drive shaft for warping, finding the brass shim that bounced off the flagstones and pocketing it. Goes down the stair to the hall and the store for his lamp tools — the screwdriver, the file, the wick trimmer, the brass wrench — and carries them up in a canvas roll. Checks the paraffin reservoir: half full, enough for tonight. Sets the tools out on the flagstone in order.",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "lamp tools — screwdriver, file, wick trimmer, brass wrench"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 242100.0,
+       "until_s": 251100.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Files the sheared pinion teeth clean, resets the pinion with the recovered brass shim, and tests the gear train by hand — turning the lamp a quarter, listening to the mesh, feeling for the catch that broke before. If the shim holds, winds the clockwork and lets the mechanism run under its own weight. Watches it through three rotations. If it slips or catches, stops it and begins fitting the new clockwork from the crate, working from the Board's diagram and his own knowledge of the housing, keeping his hands on every piece.",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "lamp tools — file, screwdriver, brass wrench"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 251100.0,
+       "until_s": 267300.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Cleans the lens with the chamois and paraffin, checks the wick, trims it square, fills the reservoir to the line from the paraffin can, and sets the chimney back in place. Checks the barometer and reads the sky through the panes — weather, visibility, sea state — for the night ahead. Makes ready to light.",
+       "asleep": false,
+       "outcome": "done",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      },
+      {
+       "from_s": 267300.0,
+       "until_s": 272700.0,
+       "room": "lamp_room",
+       "away": null,
+       "where_text": "The Lamp Room",
+       "doing": "Lights the lamp at dusk — strikes the match, sets the wick, watches the flame catch and settle behind the chimney. If the clockwork holds, engages the rotation and watches the beam sweep out across the water. If it does not, stands at the pedestal and turns the lamp by hand, quarter by quarter, for the first watch. Logs the day: the broken pinion, the repair or the new fitting, the lighting, the weather, every vessel sighted.",
+       "asleep": false,
+       "outcome": "done",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      },
+      {
+       "from_s": 272706.92307692306,
+       "until_s": 279900.0,
+       "room": "kitchen",
+       "away": null,
+       "where_text": "The Kitchen",
+       "doing": "Comes down the tower stair into the kitchen, puts the kettle on the wood stove, makes tea — strong, no sugar — and sits at the table. Opens the logbook to the day's entry and reads it back, checking times and details against what he remembers. Sets the pen down and drinks the tea.",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "wood stove"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 279900.0,
+       "until_s": 281700.0,
+       "room": "kitchen",
+       "away": null,
+       "where_text": "The Kitchen",
+       "doing": "Sits at the kitchen table across from Rhona Carrick with his tea, the logbook open before him, the pen down, the light burning above them in the tower.",
+       "asleep": false,
+       "outcome": "not_known",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      }
+     ],
+     "far_end_as_run": {
+      "room": "kitchen",
+      "away": null,
+      "asleep": false,
+      "asleep_since_s": null,
+      "left_from": null
+     },
+     "decided": {
+      "places": {},
+      "things": {
+       "lamp tools — screwdriver, file, wick trimmer, brass wrench": {
+        "key": "0bcb2b599f134f41",
+        "p": 0.63
+       },
+       "brass shim from the flagstones": {
+        "key": null,
+        "p": 0.97
+       },
+       "paraffin reservoir": {
+        "key": "2275c0d8a81c43d2",
+        "p": 0.66
+       },
+       "lamp tools — file, screwdriver, brass wrench": {
+        "key": "0bcb2b599f134f41",
+        "p": 0.84
+       },
+       "brass shim": {
+        "key": null,
+        "p": 0.99
+       },
+       "new clockwork mechanism from the crate": {
+        "key": "6870d80e29ab47cb",
+        "p": 0.97
+       },
+       "Board's diagram": {
+        "key": null,
+        "p": 0.8
+       },
+       "chamois cloth": {
+        "key": null,
+        "p": 1
+       },
+       "paraffin can": {
+        "key": null,
+        "p": 0.42
+       },
+       "wick trimmer": {
+        "key": null,
+        "p": 0.88
+       },
+       "barometer": {
+        "key": null,
+        "p": 1
+       },
+       "matches": {
+        "key": null,
+        "p": 0.97
+       },
+       "logbook and pen": {
+        "key": null,
+        "p": 0.96
+       },
+       "clockwork mechanism": {
+        "key": "6870d80e29ab47cb",
+        "p": 0.58
+       },
+       "kettle": {
+        "key": null,
+        "p": 0.78
+       },
+       "wood stove": {
+        "key": "fixture:tower_hall:stove",
+        "p": 0.88
+       },
+       "tea, loose leaf": {
+        "key": null,
+        "p": 0.73
+       },
+       "logbook": {
+        "key": null,
+        "p": 1
+       }
+      },
+      "without": [
+       {
+        "doing": "Examines the broken pinion and cocked mechanism by touch and by the grey light through the salt-streaked panes, tracing the crack line where the teeth sheared, checking the drive shaft for warping, finding the brass shim that bounced off the flagstones and pocketing it. Goes down the stair to the hall and the store for his lamp tools — the screwdriver, the file, the wick trimmer, the brass wrench — and carries them up in a canvas roll. Checks the paraffin reservoir: half full, enough for tonight. Sets the tools out on the flagstone in order.",
+        "missing": [
+         "lamp tools — screwdriver, file, wick trimmer, brass wrench"
+        ],
+        "noul": 0.24
+       },
+       {
+        "doing": "Files the sheared pinion teeth clean, resets the pinion with the recovered brass shim, and tests the gear train by hand — turning the lamp a quarter, listening to the mesh, feeling for the catch that broke before. If the shim holds, winds the clockwork and lets the mechanism run under its own weight. Watches it through three rotations. If it slips or catches, stops it and begins fitting the new clockwork from the crate, working from the Board's diagram and his own knowledge of the housing, keeping his hands on every piece.",
+        "missing": [
+         "lamp tools — file, screwdriver, brass wrench"
+        ],
+        "noul": 0.09
+       },
+       {
+        "doing": "Comes down the tower stair into the kitchen, puts the kettle on the wood stove, makes tea — strong, no sugar — and sits at the table. Opens the logbook to the day's entry and reads it back, checking times and details against what he remembers. Sets the pen down and drinks the tea.",
+        "missing": [
+         "wood stove"
+        ],
+        "noul": 0.14
+       }
+      ]
+     }
+    },
+    "Pell Hardacre": {
+     "answer": {
+      "routine": [
+       {
+        "from": "night",
+        "until": "pre-dawn",
+        "where": "the harbour",
+        "doing": "Sleep in my bunk at the harbour lodging, one ear half-open for the wind on the window and the rattle of the boats at the quay.",
+        "why": "Nothing to be done in the dark with a squall running; the run waits on the weather and the weather waits on the morning.",
+        "asleep": true,
+        "with": [],
+        "uses": []
+       },
+       {
+        "from": "pre-dawn",
+        "until": "dawn",
+        "where": "the harbour",
+        "doing": "Down to the quay with the lantern, check the Mary Ann's lines and fenders, lift the engine cover and have a listen to the knock, top up the fuel and the water from the cans on the quay.",
+        "why": "If the engine's going to quit it'll pick the worst day, and Tuesday's the day that matters. Find the knock now while I've the light and the quiet.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann",
+         "engine tools",
+         "fuel cans",
+         "the lantern"
+        ]
+       },
+       {
+        "from": "dawn",
+        "until": "morning",
+        "where": "the harbour",
+        "doing": "Read the glass and the sky from the quay head, then walk the harbour and the pub for any word come in for the lighthouse or the Board, and for any post for the station or for Rhona Carrick.",
+        "why": "News is half the reason I make the crossing, and I've asked after the post and the Board's word and don't know what's come of it. A boatman who doesn't know what's in the harbour is no use to the rock.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the glass",
+         "the post bag"
+        ]
+       },
+       {
+        "from": "morning",
+        "until": "midday",
+        "where": "the harbour",
+        "doing": "Load the standing order for Tuesday's run into the Mary Ann's well — tinned goods, paraffin, the sack of coal, lamp spares — and lash it down, checking the list twice against the Board's order.",
+        "why": "The stores don't load themselves and I'll not be caught Tuesday morning with the boat half-empty and the tide making.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann",
+         "the standing order list",
+         "crates",
+         "the paraffin drum"
+        ]
+       },
+       {
+        "from": "midday",
+        "until": "afternoon",
+        "where": "the harbour",
+        "doing": "Sit down to a proper dinner at the lodging — hot food, a pot of tea — and then back down to the Mary Ann for a last look at the engine and the moorings before the evening.",
+        "why": "A man works better fed, and the boat wants a second eye on her before I turn in.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann"
+        ]
+       },
+       {
+        "from": "afternoon",
+        "until": "dusk",
+        "where": "the harbour",
+        "doing": "Take a pint at the pub and trade the harbour's talk — who's in, who's out, what's come off the boats — and keep an ear open for anything bound for the rock.",
+        "why": "The pub's where the harbour tells me what it knows, and what it knows is what I carry west on Tuesday.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "a pint",
+         "the post bag"
+        ]
+       },
+       {
+        "from": "dusk",
+        "until": "evening",
+        "where": "the harbour",
+        "doing": "Walk the quay once more to check the Mary Ann's lines and the glass, then a last look at the west sky before turning in.",
+        "why": "The run comes first and the sea decides the timetable. A last read of the glass costs nothing and tells me what Tuesday will be.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "the Mary Ann",
+         "the glass"
+        ]
+       },
+       {
+        "from": "evening",
+        "until": "night",
+        "where": "the harbour",
+        "doing": "Supper at the lodging, then turn in with the glass read and the alarm set for the pre-dawn tide.",
+        "why": "Tuesday's run is the thing that matters and it starts before light. Sleep is part of the work.",
+        "asleep": false,
+        "with": [],
+        "uses": []
+       }
+      ],
+      "plan": [
+       {
+        "from": "morning",
+        "until": "midday",
+        "where": "the harbour",
+        "doing": "Walk up to Harrow Street by the post office on the quay and put Rhona Carrick's sealed letter in the box meself, before the pub gets its hooks in me.",
+        "why": "A letter in the pocket is a letter half-carried. She asked me plain and I said I'd do it today, and a promise to a woman on the rock is a promise to the rock.",
+        "asleep": false,
+        "with": [],
+        "uses": [
+         "Rhona Carrick's sealed letter"
+        ],
+        "day": 0
+       }
+      ],
+      "at_the_end": {
+       "where": "the harbour",
+       "doing": "Turning in at the lodging with the glass read, the Mary Ann loaded and tied up safe, and the alarm set for the pre-dawn tide — Tuesday's run to the rock the first thing on my mind.",
+       "why": "The run's the thing that matters and it starts before light. Everything else — the engine, the stores, the post, the pint — is squared away so Tuesday's crossing goes.",
+       "asleep": false,
+       "with": [],
+       "uses": [
+        "the Mary Ann",
+        "the glass"
+       ]
+      },
+      "on_your_mind": "The letter's posted, the engine's seen to, Tuesday's stores are in the well, and the Mary Ann's tied up safe — and I still owe myself Rhona Carrick's sister's name when I bring the stores back west."
+     },
+     "itinerary": [
+      {
+       "from_s": 233820.0,
+       "until_s": 242100.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Walk up to Harrow Street by the post office on the quay and put Rhona Carrick's sealed letter in the box meself, before the pub gets its hooks in me.",
+       "asleep": false,
+       "with": [],
+       "why": "A letter in the pocket is a letter half-carried. She asked me plain and I said I'd do it today, and a promise to a woman on the rock is a promise to the rock.",
+       "uses": [
+        "Rhona Carrick's sealed letter"
+       ]
+      },
+      {
+       "from_s": 242100.0,
+       "until_s": 251100.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Sit down to a proper dinner at the lodging — hot food, a pot of tea — and then back down to the Mary Ann for a last look at the engine and the moorings before the evening.",
+       "asleep": false,
+       "with": [],
+       "why": "A man works better fed, and the boat wants a second eye on her before I turn in.",
+       "uses": [
+        "the Mary Ann"
+       ]
+      },
+      {
+       "from_s": 251100.0,
+       "until_s": 267300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Take a pint at the pub and trade the harbour's talk — who's in, who's out, what's come off the boats — and keep an ear open for anything bound for the rock.",
+       "asleep": false,
+       "with": [],
+       "why": "The pub's where the harbour tells me what it knows, and what it knows is what I carry west on Tuesday.",
+       "uses": [
+        "a pint",
+        "the post bag"
+       ]
+      },
+      {
+       "from_s": 267300.0,
+       "until_s": 272700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Walk the quay once more to check the Mary Ann's lines and the glass, then a last look at the west sky before turning in.",
+       "asleep": false,
+       "with": [],
+       "why": "The run comes first and the sea decides the timetable. A last read of the glass costs nothing and tells me what Tuesday will be.",
+       "uses": [
+        "the Mary Ann",
+        "the glass"
+       ]
+      },
+      {
+       "from_s": 272700.0,
+       "until_s": 279900.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Supper at the lodging, then turn in with the glass read and the alarm set for the pre-dawn tide.",
+       "asleep": false,
+       "with": [],
+       "why": "Tuesday's run is the thing that matters and it starts before light. Sleep is part of the work.",
+       "uses": []
+      },
+      {
+       "from_s": 279900.0,
+       "until_s": 281700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Turning in at the lodging with the glass read, the Mary Ann loaded and tied up safe, and the alarm set for the pre-dawn tide — Tuesday's run to the rock the first thing on my mind.",
+       "asleep": false,
+       "with": [],
+       "why": "The run's the thing that matters and it starts before light. Everything else — the engine, the stores, the post, the pint — is squared away so Tuesday's crossing goes.",
+       "uses": [
+        "the Mary Ann",
+        "the glass"
+       ]
+      }
+     ],
+     "log_as_run": [
+      {
+       "from_s": 233820.0,
+       "until_s": 242100.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Walk up to Harrow Street by the post office on the quay and put Rhona Carrick's sealed letter in the box meself, before the pub gets its hooks in me.",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "Rhona Carrick's sealed letter"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 242100.0,
+       "until_s": 251100.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Sit down to a proper dinner at the lodging — hot food, a pot of tea — and then back down to the Mary Ann for a last look at the engine and the moorings before the evening.",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 251100.0,
+       "until_s": 267300.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Take a pint at the pub and trade the harbour's talk — who's in, who's out, what's come off the boats — and keep an ear open for anything bound for the rock.",
+       "asleep": false,
+       "outcome": "not_known",
+       "reason": null,
+       "missing": [
+        "the post bag"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 267300.0,
+       "until_s": 272700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Walk the quay once more to check the Mary Ann's lines and the glass, then a last look at the west sky before turning in.",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      },
+      {
+       "from_s": 272700.0,
+       "until_s": 279900.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Supper at the lodging, then turn in with the glass read and the alarm set for the pre-dawn tide.",
+       "asleep": false,
+       "outcome": "not_known",
+       "reason": null,
+       "missing": [],
+       "meant": null
+      },
+      {
+       "from_s": 279900.0,
+       "until_s": 281700.0,
+       "room": null,
+       "away": "the harbour",
+       "where_text": "the harbour",
+       "doing": "Turning in at the lodging with the glass read, the Mary Ann loaded and tied up safe, and the alarm set for the pre-dawn tide — Tuesday's run to the rock the first thing on my mind.",
+       "asleep": false,
+       "outcome": "failed",
+       "reason": "not_held",
+       "missing": [
+        "the Mary Ann"
+       ],
+       "meant": null
+      }
+     ],
+     "far_end_as_run": {
+      "room": null,
+      "away": "the harbour",
+      "asleep": false,
+      "asleep_since_s": null,
+      "left_from": "the_channel"
+     },
+     "decided": {
+      "places": {
+       "the harbour": {
+        "room": null,
+        "p": 0.76
+       }
+      },
+      "things": {
+       "Rhona Carrick's sealed letter": {
+        "key": "4b92b2b8653b43d4",
+        "p": 0.99
+       },
+       "a pint": {
+        "key": null,
+        "p": 0.98
+       },
+       "the glass": {
+        "key": null,
+        "p": 0.6
+       }
+      },
+      "without": [
+       {
+        "doing": "Walk up to Harrow Street by the post office on the quay and put Rhona Carrick's sealed letter in the box meself, before the pub gets its hooks in me.",
+        "missing": [
+         "Rhona Carrick's sealed letter"
+        ],
+        "noul": 0.08
+       },
+       {
+        "doing": "Sit down to a proper dinner at the lodging — hot food, a pot of tea — and then back down to the Mary Ann for a last look at the engine and the moorings before the evening.",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.09
+       },
+       {
+        "doing": "Take a pint at the pub and trade the harbour's talk — who's in, who's out, what's come off the boats — and keep an ear open for anything bound for the rock.",
+        "missing": [
+         "the post bag"
+        ],
+        "noul": 0.81
+       },
+       {
+        "doing": "Walk the quay once more to check the Mary Ann's lines and the glass, then a last look at the west sky before turning in.",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.1
+       },
+       {
+        "doing": "Turning in at the lodging with the glass read, the Mary Ann loaded and tied up safe, and the alarm set for the pre-dawn tide — Tuesday's run to the rock the first thing on my mind.",
+        "missing": [
+         "the Mary Ann"
+        ],
+        "noul": 0.08
+       }
+      ]
+     }
+    }
+   },
+   "memories_as_written": {
+    "Elias Thorne": [
+     {
+      "event_key": "skip:26:Elias Thorne:0",
+      "content": "I went up to the lamp room with the grey light coming through the salt-streaked panes and put my hands on the mechanism. The pinion teeth had sheared clean; the drive shaft was true; the brass shim had bounced off the flagstones and I pocketed it. I went down for my lamp tools — the screwdriver, the file, the wick trimmer, the brass wrench — and they were not where they should have been, not on me, not within reach. I set out what I had on the flagstone in order and it was not enough. I could not file the teeth, could not reset the pinion, could not begin the new clockwork from the crate. So I cleaned the lens with the chamois and paraffin, trimmed the wick square, filled the reservoir to the line, checked the barometer and the sky. At dusk I struck the match and the flame caught and settled behind the chimney, and I stood at the pedestal and turned the lamp by hand, quarter by quarter, through the first watch, and logged the day — the broken pinion, the weather, the vessels. Then down to the kitchen for tea, strong, no sugar, and the logbook open before me, and Miss Carrick across the table. What stayed with me: The lamp burns by my hand and not the clockwork's, and the tools that would have mended it were not in the room where they belong.",
+      "encoded_at_seconds": 281700.0,
+      "location": "The Kitchen",
+      "valence": -0.3,
+      "arousal": 0.4
+     }
+    ],
+    "Pell Hardacre": [
+     {
+      "event_key": "skip:26:Pell Hardacre:0",
+      "content": "I came off the water with the squall on me heels and put in at the harbour, and the first thing on me mind was Rhona Carrick's letter — Harrow Street, by the post office on the quay, in the box meself before the pub got its hooks in me. That did not come off; the letter was neither on me nor within reach, and I never got up Harrow Street at all. Nor the dinner at the lodging — hot food and a pot of tea — for want of the Mary Ann. I did get a pint at the pub and traded the harbour's talk, who's in and who's out and what's come off the boats, keeping an ear open for anything bound for the rock; that went as far as it would go without the post bag. The walk down the quay to check her lines and the glass before turning in did not come off, same want. Supper and turning in with the glass read and the alarm set for the pre-dawn tide — I set about it and the rest was out of me hands. What I'd meant — the Mary Ann loaded and tied up safe, Tuesday's run first thing on me mind — did not come off. Slate grey the whole day, gale blowing, spray coming over the wall. What stayed with me: The letter's still on me unposted, the Mary Ann's not seen to and not loaded, and Tuesday's run sits on me unready.",
+      "encoded_at_seconds": 281700.0,
+      "location": "the harbour",
+      "valence": -0.4,
+      "arousal": 0.45
+     }
+    ]
+   },
+   "narration_as_written": "The answer came flat and quiet. Not defensive, not apologetic — the voice of a man setting down a fact he had already lived with and would not dress up. \"The log's accurate.\"\n\nIt did not touch the letter. His thumb found the rim of the mug and went round it in a slow circle, pressing hard enough to whiten the nail. Then he lifted the mug and drank, slow, his eyes on the stair, and set it back down on the deal with a click.\n\nBelow, the sea took the rock — a long suck, then a boom coming up through the flagstones and the table legs. The range ticked as its iron cooled."
+  }
+ }
+}

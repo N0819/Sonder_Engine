@@ -4306,7 +4306,11 @@ What that leaves:
     - **One place, resolved two ways.** The decision model put "the mainland quay
       and the harbour" on the mainland's stub and "the mainland quay" off the map,
       so the boatman's last morning on the quay failed `not_held` for the Mary Ann
-      docked at the stub, beside the post bag that truly lay on the rock.
+      docked at the stub, beside the post bag that truly lay on the rock. The
+      vessel no longer fails it (fix lane B5, below: a vessel is never missing);
+      the place still resolves two ways -- in the fourth replay "the harbour"
+      went off the map (none of these, 0.81 and 0.76) while the Mary Ann docked
+      at the mainland's stub, whose option carries no purpose to read it by.
     - ~~**A stretch with one thing out of reach fails whole.**~~ Ruled and built
       2026-10-21 (fix lane B3, below): it fails only where it cannot be done
       without what is missing. Words naming no thing the world holds never fail one.
@@ -4344,8 +4348,11 @@ What that leaves:
     - **The `without` answers are unmeasured.** Offline they were a hand
       reading: the keeper's inspection, lamp-lighting and two log entries done
       without what was missing, the swap without the clockmaker's tools and
-      the post without the letter not. An unanswered question leaves the row
-      failed (`SKIP_WITHOUT_MIN_PROBABILITY`, the owner's).
+      the post without the letter not. ~~An unanswered question leaves the row
+      failed~~ -- ruled and built 2026-10-22 (fix lane B5, below): an
+      unanswered question leaves the row `not_known`, only a no keeps it
+      failed. The fourth replay's run was captured, so its answers are on
+      record (`tests/data/skip_live_lighthouse_4.json`, `decided`).
     - **The account's offers carry no time of their own.** `authorial_offers`
       holds `{subject_id, proposition, source}`; every offer is read as the far
       end's, which an account that frames a mind's doing DURING the stretch
@@ -4369,7 +4376,8 @@ What that leaves:
     written in his routine, ran again on day 1 and failed again. Now a thing
     is to hand when the mind can walk to and back for it inside the stretch
     (`Reach.fetch`); off the map only a thing that could have been brought
-    there can be missing (`Reach.could_be_brought`); and the card says a
+    there can be missing (then `Reach.could_be_brought`, since fix lane B5
+    `Reach.can_carry`, on the map and off it); and the card says a
     routine holds only what repeats every day (`Design.md`'s row). What that
     leaves:
     - **A fetch borrows.** Nothing is moved: the crate stays in the hall and
@@ -4380,25 +4388,26 @@ What that leaves:
       right.** 141 of the owner's 931 stored non-person things are an object,
       item, container or device whose `portable` is false or absent; read by
       hand, several are plainly carried things (a medical kit, a key ring, a
-      bowl of soup, an antiseptic wipe). Such a thing is never fetched -- the
-      stretch fails as it did before -- and, off the map, never missing. Where
-      the flag is minted is the encoder's and the establish card's, not the
-      skip's.
-    - **What is drawn from a thing too big to carry is not modelled.** Had the
-      decision model read "paraffin" as the pile of stores on the steps
-      (cargo, `portable: false`, "a sloshing drum of paraffin" in its
-      description), it would stay missing.
-    - **A vessel can be missing off the map.** The rule reads a moving kind as
-      a thing that could have been brought, so the boatman loading "aboard the
-      Mary Ann" on an off-map quay still fails for her while the world docked
-      her at the mainland's stub -- "one place, resolved two ways", above. The
-      brief said "only a PORTABLE thing"; reading a vessel as never missing off
-      the map is one line (the owner's call).
+      bowl of soup, an antiseptic wipe). Such a thing is never fetched and,
+      since fix lane B5 (below), never missing either, on the map or off it:
+      the error now lands on the side of success -- a stretch is told done
+      with a thing the mind could not have had -- where it landed on the side
+      of failure. Where the flag is minted is the encoder's and the establish
+      card's, not the skip's.
+    - ~~**What is drawn from a thing too big to carry is not modelled.**~~
+      Ruled and built 2026-10-22 (fix lane B5, below): the fourth replay's
+      decision model DID read "paraffin" as the pile of stores, and a thing
+      too big to carry is now never missing -- the mind draws from it where it
+      stands.
+    - ~~**A vessel can be missing off the map.**~~ Ruled and built 2026-10-22
+      (fix lane B5, below): a vessel is never missing, on the map or off it;
+      where the body can be is the stretch's place.
     - **Which thing a word was read as is not on the live record.** The stage
       notes its resolutions in one decision note, cut at 400 characters
       (`PipelineContext.note_decision`): the keeper's "paraffin" lay past the
       cut, and the picks behind this fix were reconstructed. The next live
-      replay should run with `decision_capture` on.
+      replay should run with `decision_capture` on. (The fourth did; its
+      picks are on record, `tests/data/skip_live_lighthouse_4.json`.)
     - **A one-off in the routine is a clause's to keep out.** Of the 44 routine
       entries in the three replays' 10 recorded answers, 5 are one-offs (all
       the boatman's, in 3 of the 6 answers that wrote a routine) and 7 more
@@ -4410,6 +4419,67 @@ What that leaves:
       ("does {name} do this on every day of the stretch?"), a no moving the
       entry to the plan on the first day it lands (not built; the owner's
       call).
+  - **What the fourth live replay showed, fixed 2026-10-22 (fix lane B5).** The
+    lighthouse replayed on 26b50870 (chat 3, turns 25 and 26, decision capture
+    on) turned false failures into story facts again, the fetch in place: the
+    decision model read the keeper's "paraffin" as the pile of stores on the
+    steps (cargo, not portable), which nothing fetches, so five of his lamp
+    rows failed `not_held` and his memory kept "The lamp went dark on my watch
+    for want of paraffin I should have had at hand"; his tea in the kitchen
+    failed for the hall's stove; the boatman's day at "the harbour" -- none of
+    the places offered -- failed nine stretches over the two turns for want of
+    the Mary Ann docked at the mainland, his dinner among them, so his
+    memories read as a failure log; a `without` question left unanswered
+    would have left its row failed; and his whereabouts kept `left_from` the
+    channel, the journey's route room. THE LESSON, now the executor's rule: A
+    FALSE FAILURE BECOMES CANON -- the log is what the mind remembers and what
+    its next beat is told -- SO A STRETCH FAILS ONLY ON POSITIVE EVIDENCE.
+    Only a thing a body can carry (`Reach.can_carry`: `portable`, carried by a
+    body now, or inside such a thing) that the world holds somewhere out of
+    reach is ever missing -- never a fixture, a store or a vessel, which the
+    mind uses where they stand, its being there the stretch's place; no
+    answer from the decision model is a failure (`answered`: an unanswered
+    `without` is `not_known`, an unanswered place is an `unplaced` label no
+    crossing fails on); and after a ride a mind leaves the map by where the
+    journey brought it (`live_through`'s far end). Measured offline on the
+    run's own answers and captured decisions: the keeper's failed rows 6 -> 2
+    and 3 -> 2, all the toolkit the player carries; the boatman's 10 -> 4,
+    his crossings, and 4 -> 1, the letter on the rock; `left_from` the
+    mainland (`Design.md`'s row). What that leaves:
+    - **A false success now stands where a false failure stood.** A thing
+      whose record wrongly says it stays, or that the world places nowhere,
+      is used by the stretch; the error is the record's (`portable` is the
+      encoder's and the establish card's to mint), and it is the side the
+      owner chose.
+    - **The walk to a thing used where it stands is not priced.** A store or
+      a fixture in another room is used with no time taken from the stretch,
+      where a fetch takes its round trip; nothing fails for it either way.
+    - **A `without` question whose row changed is unmeasured.** The keeper's
+      "finish the mechanism work" row now goes without the lamp tools alone;
+      offline it carried the live "no" given for "paraffin and lamp tools".
+    - **A whereabouts written before the fix keeps the route room.** The live
+      chat's boatman is away with `left_from` the channel; a later skip brings
+      him back through the water (`no_crossing`) until a beat moves him. Run
+      chained from the fixed turn 25 he carries the mainland on.
+    - **`left_from` aboard, and after a journey that ends off the map, is not
+      ruled.** Aboard, the body leaves the map from the vessel's own room
+      once she has docked; carried to an end the world does not hold, it
+      left by the room it rode from -- the space the vessel moved through,
+      when it rode beside her. The owner's call.
+    - **The ride's hours vanish when the stretch it ends in is placed
+      ashore.** The boatman's turn-25 log begins at 88,474 s, the journey's
+      end: the crossing he made on the Mary Ann is in no row, so no memory
+      can hold it (fix lane B3 closed it only for a stretch placed on the
+      journey's way or with no place of its own).
+    - **An off-map day reads as out of the mind's hands.** With nothing
+      failed, the boatman's turn-25 record says "set about it, and the rest
+      was out of Pell Hardacre's hands" on seven rows -- the outcome rule's
+      `away` (a world nobody simulates is `not_known`). Whether such a
+      stretch, with no `with` and nothing missing, is `done` is the owner's.
+    - **An unanswered place off ordinary ground still sends the mind away.**
+      No crossing fails on it, but it is an off-map label like "none of
+      these", so a mind can be made dormant on no answer -- a placement, not
+      a failure.
   - **A `doing` that carries intent reaches whoever shares the room.** The
     card says `doing` is only what a watcher sees (a clause); the probe's
     answers, written before it, put "watching the weathered woman's pouch"

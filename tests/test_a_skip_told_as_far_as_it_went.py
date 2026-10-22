@@ -327,7 +327,9 @@ def test_a_thing_not_to_hand_fails_a_stretch_only_where_it_cannot_be_done_withou
     as it went (`not_known`, `missing` kept, no reason) where it can be done
     without -- the keeper's log entry without the new clockwork -- and
     failed where it cannot: the boatman's walk to post a letter that lies
-    on the rock. A row answered no, or not at all, stays failed."""
+    on the rock. A row answered no stays failed; one not answered at all is
+    told as far as it went (fix lane B5, the owner's ruling of 2026-10-22:
+    no answer never invents a failure)."""
     _assert_the_picks_reproduce_the_live_logs()
     elias, _ = _live(T25, ELIAS)
     pell, _ = _live(T25, PELL)
@@ -337,9 +339,13 @@ def test_a_thing_not_to_hand_fails_a_stretch_only_where_it_cannot_be_done_withou
                              "Log the failure — reco"],
                      PELL: ["Run the Mary Ann east ", "Tie up at the harbour,"]}
     unanswered = copy.deepcopy(pell)
-    assert itin.judge_without(unanswered, {}) == []
-    assert itin.judge_without(unanswered, {"without:2": {"type": "noul", "noul": 0.2}}) == []
-    assert unanswered == pell
+    assert itin.judge_without(unanswered, {}) == itin.short_of(pell)
+    assert all(unanswered[i]["outcome"] == "not_known" and unanswered[i]["missing"]
+               for i in itin.short_of(pell))
+    said_no = copy.deepcopy(pell)
+    no = {"type": "noul", "noul": 0.2}
+    assert itin.judge_without(said_no, {f"without:{i}": no for i in itin.short_of(pell)}) == []
+    assert said_no == pell
     for name, log in ((ELIAS, elias), (PELL, pell)):
         questions = itin.without_questions(name, log)
         assert sorted(questions) == sorted(f"without:{i}" for i in itin.short_of(log))

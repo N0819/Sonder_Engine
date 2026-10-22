@@ -1413,6 +1413,16 @@ and drops what still fails. What it leaves:
     `UNBUILT_WORLD.md` § 1.166); nothing in the memory job can tell a false
     failure from a true one, and a writer that explains a want ("none in the
     stores") is still the outcome question's to catch, unmeasured live.
+    The fourth replay (fix lane B5, 2026-10-22) showed it again with the
+    fetch in place: "paraffin" read as a store too big to carry kept the
+    keeper's "The lamp went dark on my watch for want of paraffin I should
+    have had at hand", and a vessel named off the map made the boatman's
+    memories a failure log. THE LESSON, the executor's rule since: a false
+    failure becomes canon, so a stretch fails only on positive evidence --
+    only a thing a body can carry is ever missing (`Reach.can_carry`), and no
+    answer from the decision model ever invents a failure
+    (`skip_itinerary.answered`). The memory job, which cannot tell the two
+    apart, is downstream of that floor, never a second one.
   - **`past` reads the mind's whole memory packet** beside the record (42,440
     characters for the keeper on the live copy), and its live false-positive
     rate is unmeasured; it is the first kind `SKIP_MEMORY_CHECKS` would drop.
@@ -1496,8 +1506,9 @@ walk still crosses what the stage's own executor no longer does (fix lane B2,
 2026-10-21, `UNBUILT_WORLD.md` § 1.166): a frontier stub's join and water are
 ways to `charter_space.people_neighbors`, and an away body comes back with no
 walk; the stage lays the holding check (`skip_itinerary.Reach`, a fetch inside
-the row among it since fix lane B4, its trip taken out of the row's start) and
-what a failed row says (`missing`, `meant`) over the town's rows.
+the row among it since fix lane B4, its trip taken out of the row's start, and
+only a thing a body can carry ever missing since fix lane B5) and what a
+failed row says (`missing`, `meant`) over the town's rows.
 
 <a id="unbuilt-1-99e"></a>
 

@@ -33,14 +33,20 @@ this stage runs between `compile_world_context` and `perception_act`:
      met by what the mind carries, what is within its reach where the
      stretch finds it, and what it can walk to and back for inside the
      stretch (`skip_itinerary.Reach`, its names resolved in `resolve_mind`)
-     -- and what is not fails it only where it cannot be done without
-     (`judge_what_was_missing`, one decision request per mind).
+     -- only a thing a body can carry is ever missing, a fixture, a store
+     or a vessel being used where it stands -- and what is not fails it
+     only where the decision model says it cannot be done without
+     (`judge_what_was_missing`, one decision request per mind). A STRETCH
+     FAILS ONLY ON POSITIVE EVIDENCE: a false failure becomes what the mind
+     remembers and says, so no answer from the decision model ever invents
+     one.
      Company with the other asked minds and the player is shared afterwards,
      per observer (`share_company`).
   d. **The far end.** Each mind ends where its last stretch left it -- a move
      of its own declaration. One whose day ends somewhere the world does not
      hold is AWAY there: dormant, with a typed whereabouts that keeps the room
-     it left the map by (`left_from`). One asleep at the
+     it left the map by (`left_from`; after a ride, where the journey brought
+     it). One asleep at the
      far end is asleep from when that sleep began. The rest of the beat reads
      all of it as an ONSET PREVIEW (`FarEnd`, read through `story.scene`'s
      `get_scene` and `awareness_conditions` while a stage after this one
@@ -480,7 +486,10 @@ def resolve_mind(name, stretches, scene, state, here, held, language=None,
     left -- places and things together, a thing over what the mind has on it
     (`held`) and the things and fixtures of the world it may mean (`Reach.
     options`) -- and what neither answers is an off-map label, or words that
-    name no thing the world holds (never missing: `Reach`). `under_way` is
+    name no thing the world holds (never missing: `Reach`). A place the
+    request asked about and got no answer for is a label marked `unplaced`
+    (`skip_itinerary.unanswered_places`), on which no crossing ever fails:
+    no answer never invents a failure. `under_way` is
     `skip_itinerary.journeys`: a vessel under way stands where its journey
     has brought it."""
     from llm import decisions
@@ -526,11 +535,15 @@ def resolve_mind(name, stretches, scene, state, here, held, language=None,
         except Exception as exc:  # noqa: BLE001 -- unanswered is off the map
             record["jev_failed"] = f"{type(exc).__name__}: {str(exc)[:120]}"
     resolved.update(itin.read_place_answers(answers, unresolved, options))
+    unplaced = itin.unanswered_places(answers, unresolved, questions) - set(resolved)
     for thing, key in itin.read_thing_picks(answers, unnamed, offered).items():
         named[thing] = {key}
     record["resolved"] = dict(resolved)
+    if unplaced:
+        record["unplaced"] = sorted(unplaced)
     record["things"] = {thing: sorted(keys) for thing, keys in named.items()}
-    return itin.place_stretches(stretches, resolved), itin.Holding(reach, named), record
+    return (itin.place_stretches(stretches, resolved, unplaced),
+            itin.Holding(reach, named), record)
 
 
 def judge_what_was_missing(name, log, language=None):
@@ -539,26 +552,32 @@ def judge_what_was_missing(name, log, language=None):
     what the row says without what was missing
     (`skip_itinerary.without_questions`)? A row the model says can be done
     without them is told as far as it went (`skip_itinerary.judge_without`:
-    `not_known`, `missing` kept); every other stays failed. Nothing is asked
-    for a mind with no such row, and a request that fails changes nothing.
-    In place on `log`; the record says what was asked and what it changed."""
+    `not_known`, `missing` kept), and so is a row it gives no answer for --
+    the request failed, or never went: NO ANSWER NEVER INVENTS A FAILURE.
+    Only the model's own no keeps a row failed. Nothing is asked for a mind
+    with no such row. In place on `log`; the record says what was asked,
+    what it changed and what went unanswered."""
     from llm import decisions
-    questions = itin.without_questions(name, log, language)
-    if not questions:
-        return {}
     rows = itin.short_of(log)
+    if not rows:
+        return {}
+    questions = itin.without_questions(name, log, language)
     state = {"mind": name,
              "stretches": [{"where": log[i].get("where_text") or log[i].get("away") or "",
                             "doing": log[i].get("doing") or "",
                             "missing": list(log[i].get("missing") or ())}
                            for i in rows]}
     record = {"asked": len(questions)}
-    try:
-        answers = decisions.decide(state, questions)
-    except Exception as exc:  # noqa: BLE001 -- unanswered, the rows stay failed
-        record["jev_failed"] = f"{type(exc).__name__}: {str(exc)[:120]}"
-        return record
+    answers = {}
+    if questions:
+        try:
+            answers = decisions.decide(state, questions) or {}
+        except Exception as exc:  # noqa: BLE001 -- unanswered: told as far as it went
+            record["jev_failed"] = f"{type(exc).__name__}: {str(exc)[:120]}"
+    unanswered = [i for i in rows if not itin.answered(answers.get(f"without:{i}"))]
     record["without"] = itin.judge_without(log, answers)
+    if unanswered:
+        record["unanswered"] = unanswered
     return record
 
 
@@ -730,21 +749,30 @@ def skip_lives(ctx, nonce):
         log = itin.place_words(log, scene)
         # A thing not to hand fails a stretch only where the stretch cannot
         # be done without it: one request for this mind, either executor's.
+        # No answer never invents a failure: a row nothing judged is told
+        # as far as it went.
         try:
             judged = judge_what_was_missing(name, log, ctx.language)
         except Exception as exc:  # noqa: BLE001 -- one mind, not the beat
             ctx.add_warning(f"skip: what {name} went without could not be judged "
                             f"({type(exc).__name__}: {str(exc)[:120]}); those "
-                            "stretches stay failed")
-            judged = {}
+                            "stretches are told as far as they went")
+            judged = {"failed": str(exc)[:120]}
+            with contextlib.suppress(Exception):
+                judged["without"] = itin.judge_without(log, {})
         if judged and hasattr(ctx, "note_decision"):
             ctx.note_decision("skip_without", name,
-                              "asked" if "without" in judged else "unanswered",
+                              "unanswered" if (judged.get("jev_failed") or judged.get("failed"))
+                              else "asked",
                               json.dumps(judged, ensure_ascii=False)[:400])
         # Where a day that ends off the map left it, kept on its whereabouts:
         # the next skip brings it back by there (`persist/commit_skip.py`).
+        # The mind's own executor says where its walk left the map -- after
+        # a ride, where the journey brought it, which no row of the log
+        # stands in (`skip_itinerary.live_through`); the town's rows say it
+        # themselves.
         far_end = dict(far_end, left_from=(
-            itin.left_the_map_from(log, here, left_by)
+            (far_end.get("left_from") or itin.left_the_map_from(log, here, left_by))
             if far_end.get("away") and not far_end.get("room") else None))
         logs[name] = log
         minds[name] = {"source": source,

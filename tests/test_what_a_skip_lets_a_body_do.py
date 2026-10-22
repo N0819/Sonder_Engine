@@ -123,15 +123,19 @@ def test_the_keepers_lamp_is_within_his_reach_and_lighting_it_is_not_failed():
 def test_a_rooms_things_and_fixtures_are_within_reach_and_elsewhere_is_not():
     """Within reach in a room: the things the scene stands there and its
     fixtures (`anchors`). Elsewhere -- the same lamp from the kitchen -- the
-    thing is missing, named as the mind wrote it."""
+    thing is out of reach; and a thing a body can carry out of reach is
+    missing, named as the mind wrote it. The lamp and the pedestal are not:
+    since fix lane B5 (the owner's ruling of 2026-10-22) a fixture and a thing
+    too big to carry are used where they stand and never fail the holding
+    check."""
     scene = _scene()
     reach = itin.Reach(scene, ELIAS)
     assert reach.named("the lamp") == {LAMP}                 # an alias, exactly
     named = {"the lamp": {LAMP}, "the new clockwork in the crate": {CLOCKWORK},
              "the pedestal": {PEDESTAL}}
     assert reach.missing(list(named), named, "lamp_room") == []
-    assert reach.missing(["the lamp", "the pedestal"], named, "kitchen") == \
-        ["the lamp", "the pedestal"]
+    assert not reach.in_reach(LAMP, "kitchen") and not reach.in_reach(PEDESTAL, "kitchen")
+    assert reach.missing(list(named), named, "kitchen") == ["the new clockwork in the crate"]
 
 
 def test_a_thing_on_another_body_is_theirs_and_out_of_reach():
@@ -175,22 +179,26 @@ def test_words_that_name_no_thing_the_world_holds_are_never_missing():
 def test_a_vessel_is_never_held_one_is_aboard_it_or_beside_it():
     """Beside the Mary Ann in the channel, or aboard her, the boatman has her;
     on the landing, with her out in the channel, he has not; and once her
-    journey has ended she stands where it ended."""
+    journey has ended she stands where it ended. Out of his reach she is
+    still never missing: a vessel is boarded or worked where she lies, and
+    whether he can be there is his stretch's place (fix lane B5, the owner's
+    ruling of 2026-10-22)."""
     scene = _scene()
     under_way = itin.journeys(scene, FROM)
     reach = itin.Reach(scene, PELL, journeys=under_way)
     named = {"the Mary Ann": reach.named("the Mary Ann")}
     assert named["the Mary Ann"] == {MARY_ANN}
     ends = under_way[MARY_ANN]["until_s"]
-    assert reach.missing(["the Mary Ann"], named, "the_channel", t=FROM) == []
-    assert reach.missing(["the Mary Ann"], named, "mary_ann_interior", t=FROM) == []
-    assert reach.missing(["the Mary Ann"], named, "rock_landing", t=FROM) == ["the Mary Ann"]
-    assert reach.missing(["the Mary Ann"], named, "the_mainland", t=ends - 1.0) == \
-        ["the Mary Ann"]
-    assert reach.missing(["the Mary Ann"], named, "the_mainland", t=ends) == []
+    assert reach.in_reach(MARY_ANN, "the_channel", t=FROM)
+    assert reach.in_reach(MARY_ANN, "mary_ann_interior", t=FROM)
+    assert not reach.in_reach(MARY_ANN, "rock_landing", t=FROM)
+    assert not reach.in_reach(MARY_ANN, "the_mainland", t=ends - 1.0)
+    assert reach.in_reach(MARY_ANN, "the_mainland", t=ends)
     # Off the map nothing is in reach that the mind does not carry.
-    assert reach.missing(["the Mary Ann"], named, None, "the mainland quay", ends) == \
-        ["the Mary Ann"]
+    assert not reach.in_reach(MARY_ANN, None, "the mainland quay", ends)
+    for room, away, t in (("the_channel", None, FROM), ("rock_landing", None, FROM),
+                          ("the_mainland", None, ends - 1.0), (None, "the mainland quay", ends)):
+        assert reach.missing(["the Mary Ann"], named, room, away, t) == [], (room, away)
 
 
 def test_what_lies_inside_a_thing_goes_where_the_thing_goes():
@@ -359,7 +367,7 @@ def test_the_boatmans_live_day_ends_away_on_the_mainland():
     log, far, here = _live(PELL)
     assert LIVE["minds"][PELL]["far_end_as_run"]["room"] == "rock_landing"
     assert far == {"room": None, "away": "the mainland quay", "asleep": False,
-                   "asleep_since_s": None}
+                   "asleep_since_s": None, "left_from": "the_mainland"}
     assert itin.left_the_map_from(log, here) == "the_mainland"
     home = log[-3:]
     assert [r["reason"] for r in home] == [itin.REASON_NO_CROSSING] * 3
@@ -402,14 +410,15 @@ def test_the_towns_rows_say_what_failed_too():
     """A row the town's charter wrote (`world/charter_skip`) is laid over the
     same way (`lay_over`): one it failed on the way says where it got to and
     keeps the mind's words in `meant`; one inside a stretch that uses a thing
-    out of reach fails `not_held`, naming it; and every row carries both
-    fields."""
+    out of reach fails `not_held`, naming it -- a thing a body can carry, the
+    toolkit in the player's hands (a fixture or a thing too big to carry
+    never fails it since fix lane B5); and every row carries both fields."""
     scene = _scene()
     reach = itin.Reach(scene, ELIAS)
-    named = {"the lamp": {LAMP}}
+    named = {"the kit roll": {TOOLKIT}}
     stretches = [{"from_s": 0.0, "until_s": 100.0, "room": "lamp_room", "away": None,
                   "where_text": "The Lamp Room", "doing": "lights it", "asleep": False,
-                  "with": [], "why": "", "uses": ["the lamp"]}]
+                  "with": [], "why": "", "uses": ["the kit roll"]}]
     rows = [{"from_s": 0.0, "until_s": 50.0, "room": "kitchen", "away": None,
              "where_text": "The Lamp Room", "doing": "lights it", "asleep": False,
              "seen": [], "weather": None, "outcome": "failed", "reason": "no_route"},
@@ -421,7 +430,7 @@ def test_the_towns_rows_say_what_failed_too():
         ("The Lamp Room", "", [])
     assert itin.place_words(log, scene)[0]["where_text"] == "The Kitchen"
     assert (log[1]["outcome"], log[1]["reason"], log[1]["missing"]) == \
-        ("failed", "not_held", ["the lamp"])
+        ("failed", "not_held", ["the kit roll"])
 
 
 # --------------------------------------------------------------------------
