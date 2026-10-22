@@ -12,7 +12,7 @@
 | `agents/character_bare.py` | 1172 |  | `agents.common`, `llm.prompts`, `mind` |
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/character_tools.py` | 732 |  | `core.db` |
-| `agents/common.py` | 12969 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 12971 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 7691 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 7999 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 611 |  | `agents.common`, `story.character_schema`, `world.spatial` |
@@ -36,7 +36,7 @@
 | `agents/offscreen_beat.py` | 490 |  | — |
 | `agents/perception.py` | 9323 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 2180 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents`, `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.skip_stage`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
-| `agents/skip_stage.py` | 1155 |  | `core.db`, `world` |
+| `agents/skip_stage.py` | 1170 |  | `core.db`, `world` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 3485 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -55,7 +55,7 @@
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 325 |  | `core.db` |
 | `llm/json_mend.py` | 302 |  | — |
-| `llm/llm_quality.py` | 2124 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 2132 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 710 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 5849 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
@@ -329,14 +329,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 4776 | 309 lines |
+| `norm_sequence()` | 4778 | 309 lines |
 | `presence_figures_for_room()` | 2276 | 284 lines |
-| `_check_narrator_fidelity()` | 12138 | 258 lines |
-| `_scrub_unknown_identities()` | 6640 | 219 lines |
-| `_summary_label()` | 6095 | 181 lines |
-| `_scrub_invented_dialogue()` | 10546 | 151 lines |
+| `_check_narrator_fidelity()` | 12140 | 258 lines |
+| `_scrub_unknown_identities()` | 6642 | 219 lines |
+| `_summary_label()` | 6097 | 181 lines |
+| `_scrub_invented_dialogue()` | 10548 | 151 lines |
 | `observer_body_regions()` | 1750 | 140 lines |
-| `_check_quote_attribution()` | 11710 | 131 lines |
+| `_check_quote_attribution()` | 11712 | 131 lines |
 
 ### `agents/composer.py`
 
@@ -632,14 +632,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `skip_lives()` | 651 | 143 lines |
-| `resolve_mind()` | 477 | 70 lines |
-| `stretch_for_payload()` | 1102 | 46 lines |
-| `ask()` | 321 | 34 lines |
-| `judge_what_was_missing()` | 549 | 33 lines |
-| `widen_reactors_to_skip_far_end()` | 1070 | 30 lines |
-| `skip_block()` | 284 | 29 lines |
-| `_share()` | 808 | 25 lines |
+| `skip_lives()` | 666 | 143 lines |
+| `resolve_mind()` | 492 | 70 lines |
+| `stretch_for_payload()` | 1117 | 46 lines |
+| `ask()` | 335 | 35 lines |
+| `judge_what_was_missing()` | 564 | 33 lines |
+| `widen_reactors_to_skip_far_end()` | 1085 | 30 lines |
+| `skip_block()` | 298 | 29 lines |
+| `_share()` | 823 | 25 lines |
 
 ### `agents/storage.py`
 
@@ -814,7 +814,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 1143 | 982 lines |
+| `complete_validated_json()` | 1143 | 990 lines |
 | `_targeted_field_patch()` | 554 | 100 lines |
 | `note_provider_exchange()` | 829 | 68 lines |
 | `_read_answer()` | 449 | 61 lines |

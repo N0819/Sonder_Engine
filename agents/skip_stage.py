@@ -96,6 +96,20 @@ SKIP_PAYLOAD_ROWS = 48
 #: rule on caps.
 SKIP_ASK_WORKERS = 8
 
+#: The reasoning effort the skip question is asked at, overriding the mind's
+#: role setting for this one call (`providers.chat_complete`'s
+#: `reasoning_effort`). A day's schedule is a listing of what the mind does,
+#: written from its own payload, not a deliberation, and a thinking model
+#: bills its thinking as output. Measured 2026-10-22, the keeper's real skip
+#: question on glm-5.2 (the lighthouse's capture 158, the shipped card):
+#: the role's own effort 12,117 output tokens, 45 s, about 8.5 cents; "low"
+#: 5,400, 21 s; "off" 2,153, 10 s, about 1.5 cents -- the three answers
+#: equally in character and equally shaped (eight routine stretches, five to
+#: seven plans; "he will not condemn what he has not examined"). None leaves
+#: the role's setting in charge. Named per the owner's rule on caps; the
+#: owner asked for the skip's cost to come down (2026-10-22).
+SKIP_QUESTION_REASONING = "off"
+
 #: How much of a planned room's own `purpose` rides beside its name when the
 #: decision model is asked which room a mind's words mean: "bedroom" names
 #: "Elias's Room" only to a reader told it is one of the tower's bedrooms.
@@ -348,7 +362,8 @@ def ask(ctx, row, span, nonce=0):
     try:
         answer = _agent_json(built["role"], "character_skip", skip_card(name, ctx.language),
                              wire, temperature=built.get("temperature"),
-                             sampler=built.get("sampler"))
+                             sampler=built.get("sampler"),
+                             reasoning_effort=SKIP_QUESTION_REASONING)
     except Exception as exc:  # noqa: BLE001 -- the default day answers instead
         return None, f"no answer ({type(exc).__name__}: {str(exc)[:160]})"
     return (answer if isinstance(answer, dict) else None), None

@@ -1158,7 +1158,11 @@ def complete_validated_json(
     first_started=None,
     rung_system=None,
     prefix=None,
+    reasoning_effort=None,
 ) -> dict:
+    # `reasoning_effort` is a per-call override of the role's configured effort
+    # (`providers.chat_complete`), carried to every attempt this call makes;
+    # None leaves the role's setting in charge, exactly as before.
     # None means "the configured ceiling" (providers._clamp_max_tokens). This
     # used to be a hardcoded 16000, which made max_output_tokens a one-way
     # knob: the clamp only ever LOWERS, so raising the setting above 16000
@@ -1288,6 +1292,7 @@ def complete_validated_json(
             candidate_offset=0,
             json_schema=json_schema,
             response_format=response_format,
+            reasoning_effort=reasoning_effort,
             **closing,
         )
 
@@ -1297,6 +1302,7 @@ def complete_validated_json(
         shape = {"temperature": temperature, "max_tokens": max_tokens,
                  "sampler": sampler, "candidate_offset": 0,
                  "json_schema": json_schema, "response_format": response_format,
+                 "reasoning_effort": reasoning_effort,
                  **overrides}
         if _asked["prefixed"]:
             return chat_complete(role, _asked["system"], _asked["user"], **shape,
@@ -1772,6 +1778,7 @@ def complete_validated_json(
                 token_ceiling=token_ceiling,
                 json_schema=json_schema,
                 response_format=REBUILD_FORMAT,
+                reasoning_effort=reasoning_effort,
             )
         except Aborted:
             raise
@@ -1867,6 +1874,7 @@ def complete_validated_json(
                 token_ceiling=token_ceiling,
                 json_schema=json_schema,
                 response_format=REBUILD_FORMAT,
+                reasoning_effort=reasoning_effort,
             )
         except Aborted:
             raise

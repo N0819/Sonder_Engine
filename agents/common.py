@@ -3987,6 +3987,7 @@ def _agent_json(
     max_tokens=None,   # the configured ceiling; see complete_validated_json
     sampler=None,
     response_format=None,  # this call's own; see providers._role_json_mode
+    reasoning_effort=None,  # this call's own; None leaves the role's setting
     **tool_closing,
 ):
     """The STRICT validated-JSON path every state-mutating pipeline stage
@@ -4019,6 +4020,7 @@ def _agent_json(
         sampler=sampler,
         repair_attempts=1,
         response_format=response_format,
+        reasoning_effort=reasoning_effort,
         **{k: v for k, v in tool_closing.items()
            if k in ("history", "tools", "folded_payload", "first_raw", "first_started",
                     "rung_system", "prefix") and v is not None},
