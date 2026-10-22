@@ -280,8 +280,9 @@ def test_a_done_row_on_the_map_changes_what_it_worked_on(story, monkeypatch):
     encoder, the lamp it lit is lit and the clockwork it set on the pedestal
     stands there, in the scene the far end previews and in the scene the
     turn's whole commit writes -- under the beat's own (empty) diff. His row
-    with the player (`not_known`) is not told. Background work is held back:
-    queued, never run."""
+    with the player (`not_known`) is told as his own part (2026-10-22: a
+    `not_known` row is still the mind's own doing as far as it went).
+    Background work is held back: queued, never run."""
     from agents.skip_stage import far_end_for, onset_preview
     from core import jobs
     from core.db import wget
@@ -297,7 +298,8 @@ def test_a_done_row_on_the_map_changes_what_it_worked_on(story, monkeypatch):
         f"character:{story['ids'][ELIAS]}") == ELIAS]
     assert len(keeper) == 1
     told = keeper[0]["payload"]["prose"]
-    assert "lights the lamp at dusk" in told and "test-fits" not in told
+    assert "lights the lamp at dusk" in told
+    assert "test-fits" in told and "[own part]" in told
     worked = out["minds"][ELIAS]["worked"]
     assert len(worked["changes"]) == 2 and not worked["record"].get("failed")
     with onset_preview(far_end_for(ctx)):
@@ -343,11 +345,13 @@ def test_the_encoder_is_told_the_doing_and_never_the_why(story, monkeypatch):
 # Which rows count
 # --------------------------------------------------------------------------
 
-def test_failed_not_known_off_map_and_asleep_rows_change_nothing(story, monkeypatch):
-    """Only a `done` row on the map, awake, is told: a failed row did not come
-    off, a `not_known` row's outcome is not known, off the map the world holds
-    no thing, and a sleep is no work. A change filed under a row that was not
-    told has no time or place to stand at, and lands nowhere."""
+def test_failed_off_map_and_asleep_rows_change_nothing(story, monkeypatch):
+    """A `done` or `not_known` row on the map, awake, is told -- the second
+    tagged as the mind's own part: a failed row did not come off, off the
+    map the world holds no thing, and a sleep is no work. A change filed
+    under a row that was not told has no time or place to stand at, and
+    lands nowhere. (2026-10-22: a `not_known` row was untold until the live
+    lighthouse showed the lamp burning at seven in the morning.)"""
     t = SPAN["from_s"]
     log = [_row(t, t + 3600, "lamp_room", doing="oils the lamp bearings",
                 outcome="failed", reason="no_route"),
@@ -366,13 +370,14 @@ def test_failed_not_known_off_map_and_asleep_rows_change_nothing(story, monkeypa
             "letter": {"state": {"posted": True}}}}}]),
         ("stretch:3", [_set_down("crate", "the crate from the Board", "pedestal")])))
     told = calls[0]["payload"]["prose"].splitlines()
-    assert [line[1:line.index("]")] for line in told] == ["stretch:4"]
-    assert minds[ELIAS]["worked"]["record"]["unfiled"] == 4
+    assert [line[1:line.index("]")] for line in told] == ["stretch:1", "stretch:4"]
+    assert told[0].endswith("[own part]")
+    assert minds[ELIAS]["worked"]["record"]["unfiled"] == 3
     scene = _commit(ctx)
     assert scene["entities"]["lamp"]["state"]["lit"] is True
     assert "bearings" not in scene["entities"]["lamp"]["state"]
     assert "posted" not in scene["entities"]["letter"]["state"]
-    assert not (scene.get("stations") or {}).get("clockwork", {}).get("at")
+    assert (scene.get("stations") or {}).get("clockwork", {}).get("at") == "pedestal"
     assert not (scene.get("stations") or {}).get("crate", {}).get("at")
 
 
@@ -383,8 +388,6 @@ def test_a_mind_with_no_row_to_tell_is_asked_nothing(story, monkeypatch):
     t = SPAN["from_s"]
     keeper = [_row(t, t + 3600, "lamp_room", doing="oils the bearings",
                    outcome="failed", reason="no_route"),
-              _row(t + 3600, t + 7200, "lamp_room", doing="fits it with Rhona",
-                   outcome="not_known"),
               _row(t + 7200, t + 10800, away="the harbour", doing="walks the quay"),
               _row(t + 10800, t + 14400, "lamp_room", doing="sleeps", asleep=True)]
     other = [_row(t, t + 3600, "kitchen", doing="darns socks by the range")]
@@ -507,3 +510,26 @@ def test_two_minds_on_one_thing_apply_in_the_order_they_worked_it(
     assert packed is keeper_later
     on_pedestal = ((scene.get("stations") or {}).get("clockwork") or {}).get("at") == "pedestal"
     assert on_pedestal is not keeper_later
+
+
+def test_the_lamp_lit_at_dusk_and_put_out_at_dawn_ends_out(story, monkeypatch):
+    """Live, the lighthouse (2026-10-22, chat 3 turn 25): the keeper's dusk
+    "Lights the lamp" was `done` and told, his dawn "At first light,
+    extinguishes the lamp" was `not_known` (the plan named the player, a lens
+    was not to hand) and untold -- so at seven in the morning the world had
+    the lamp burning. Both are his own doing: both are told, the dawn one
+    tagged as going only so far, and the lamp ends out."""
+    t = SPAN["from_s"]
+    log = [_row(t, t + 3600, "lamp_room", doing="lights the lamp and winds the drum"),
+           dict(_row(t + 3600, t + 7200, "lamp_room",
+                     doing="at first light, extinguishes the lamp and cleans the chimney",
+                     outcome="not_known"), missing=["magnifying lens"])]
+    minds = {ELIAS: _mind(log)}
+    ctx, calls = _type(story, monkeypatch, minds, {
+        "lights the lamp": [_lit(True)],
+        "extinguishes the lamp": [_lit(False)]})
+    told = calls[0]["payload"]["prose"].splitlines()
+    assert [line[1:line.index("]")] for line in told] == ["stretch:0", "stretch:1"]
+    assert told[1].endswith("[partly: without magnifying lens]")
+    scene = _commit(ctx)
+    assert scene["entities"]["lamp"]["state"]["lit"] is False

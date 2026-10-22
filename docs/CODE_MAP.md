@@ -37,7 +37,7 @@
 | `agents/perception.py` | 9323 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 2180 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents`, `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.skip_stage`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/skip_stage.py` | 1224 |  | `core.db`, `world` |
-| `agents/skip_work.py` | 770 |  | `world` |
+| `agents/skip_work.py` | 793 |  | `world` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 3485 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -646,14 +646,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `within_reach()` | 539 | 77 lines |
-| `changes_of()` | 309 | 70 lines |
-| `type_the_work()` | 413 | 62 lines |
-| `work_payload()` | 236 | 57 lines |
-| `work_scene()` | 655 | 44 lines |
-| `things_changed()` | 701 | 38 lines |
-| `settle_work()` | 618 | 35 lines |
-| `type_mind()` | 381 | 30 lines |
+| `within_reach()` | 562 | 77 lines |
+| `changes_of()` | 332 | 70 lines |
+| `type_the_work()` | 436 | 62 lines |
+| `work_payload()` | 259 | 57 lines |
+| `work_scene()` | 678 | 44 lines |
+| `things_changed()` | 724 | 38 lines |
+| `settle_work()` | 641 | 35 lines |
+| `type_mind()` | 404 | 30 lines |
 
 ### `agents/storage.py`
 

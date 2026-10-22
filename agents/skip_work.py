@@ -146,17 +146,28 @@ def _words(text):
 
 def told_rows(log):
     """`[index]` -- the rows of one mind's LOG its own work is told from, in
-    time order: `done`, in a room the world holds (`room`, never `away`),
-    awake, with a doing of its own. A routine done on many days is told once,
-    on its last -- what it leaves a thing is the last day's -- and the last
-    `SKIP_WORK_ROWS` are kept."""
+    time order: `done` or `not_known`, in a room the world holds (`room`,
+    never `away`), awake, with a doing of its own. A routine done on many days
+    is told once, on its last -- what it leaves a thing is the last day's --
+    and the last `SKIP_WORK_ROWS` are kept.
+
+    A `not_known` ROW IS STILL THE MIND'S OWN DOING AS FAR AS IT WENT
+    (2026-10-22). It waited on someone else, or went without something; what
+    the mind's own hands did in it happened all the same, and `told_account`
+    tags it so the encoder records only that part. Measured live on the
+    lighthouse (chat 3 turn 25): telling `done` rows alone typed the keeper's
+    dusk "Lights the lamp" and never his dawn "At first light, extinguishes
+    the lamp" (`not_known`: the plan named the player beside him, and a lens
+    was not to hand) -- and the world showed the lamp burning at seven in
+    the morning. A `failed` row did not happen and is never told."""
     picked = {}
     for n, row in enumerate(log or ()):
         if not isinstance(row, dict):
             continue
         doing = _words(row.get("doing"))
-        if (row.get("outcome") != itin.OUTCOME_DONE or not row.get("room")
-                or row.get("away") or row.get("asleep") or not doing):
+        if (row.get("outcome") not in (itin.OUTCOME_DONE, itin.OUTCOME_NOT_KNOWN)
+                or not row.get("room") or row.get("away") or row.get("asleep")
+                or not doing):
             continue
         picked[(str(row["room"]), doing.casefold())] = n
     return sorted(picked.values())[-SKIP_WORK_ROWS:]
@@ -164,6 +175,17 @@ def told_rows(log):
 
 def event_id(n):
     return f"{EVENT_PREFIX}{n}"
+
+
+def _part_tag(row):
+    """A `not_known` row's tag, in the card's protocol words: `[partly:
+    without ...]` where it went without things not to hand, else `[own
+    part]` -- the mind's own doing in something whose outcome was not its
+    alone. A `done` row carries none."""
+    if row.get("outcome") != itin.OUTCOME_NOT_KNOWN:
+        return ""
+    missing = [_words(m) for m in (row.get("missing") or []) if _words(m)]
+    return f" [partly: without {', '.join(missing)}]" if missing else " [own part]"
 
 
 def told_account(name, log, told, scene):
@@ -179,7 +201,8 @@ def told_account(name, log, told, scene):
         row = log[n]
         room = str(row.get("room"))
         where = room_display_name(rooms.get(room), room)
-        lines.append(f"[{event_id(n)}] {where} ({room}) — {name}: {_words(row.get('doing'))}")
+        lines.append(f"[{event_id(n)}] {where} ({room}) — {name}: "
+                     f"{_words(row.get('doing'))}{_part_tag(row)}")
     return "\n".join(lines)
 
 
