@@ -602,6 +602,16 @@ def _cancel_jobs_the_restore_discards(chat_id, idx):
         cancel_discarded_predevelopment(chat_id, idx)
     except Exception:
         pass
+    # A skip beat's memories, written out of band behind its commit
+    # (`mind.skip_memories`): ONLY a job whose beat this restore takes back is
+    # stopped (`core.jobs.cancel_from` on the beat it read). One whose beat the
+    # restore keeps writes on -- its rows belong to that kept beat, and every
+    # write re-asks whether the beat still stands inside its own transaction.
+    try:
+        from persist.commit import cancel_discarded_skip_memories
+        cancel_discarded_skip_memories(chat_id, idx)
+    except Exception:
+        pass
     # The Writers' Room's beat-reading jobs joined the list with the review
     # of 2026-10-08, on consolidation's argument. A Dramaturge pass reads the
     # beat's narration and files proposals built on it; a fill answers the
@@ -1760,6 +1770,41 @@ def propagate_memory_summaries_to_checkpoints(chat_id, char_id=None):
                    (blob_text, checkpoint_id))
                 changed += 1
     return changed
+
+def carry_memories_forward(chat_id, turn_idx, replace, entries):
+    """Put memory rows written OUT OF BAND for beat `turn_idx`, after its
+    commit, into every checkpoint taken after that beat: each checkpoint's
+    `memories` loses the rows `replace(entry)` names and gains `entries`
+    (rows in `dump_chat_memories` shape). Returns how many checkpoints moved.
+
+    WHY A CHECKPOINT IS PATCHED AT ALL. Checkpoint N+1 is the world before
+    beat N+1, which is the world after beat N -- and a job scheduled at N's
+    commit tail (`mind.skip_memories`: a mind's memories of the skip beat N
+    passed over) belongs to beat N however late it lands. When the next
+    beat's checkpoint was taken before the job wrote, a reroll of that next
+    beat restored a bank without the rows and deleted them for good: the job
+    is not run again, because beat N is not committed again. Checkpoints
+    at or before N never gain them -- those are the worlds before the skip.
+
+    The caller holds the write transaction its rows were written in, so the
+    rows and every checkpoint's copy of them land, or roll back, together.
+    """
+    changed = 0
+    for row in q("SELECT id, blob FROM checkpoints WHERE chat_id=? AND turn_idx>?",
+                 (chat_id, int(turn_idx))):
+        try:
+            blob = json.loads(row["blob"])
+        except Exception:
+            logger.warning("checkpoint %s has invalid JSON; out-of-band memories "
+                           "not carried into it", row["id"])
+            continue
+        memories = [m for m in (blob.get("memories") or [])
+                    if not (isinstance(m, dict) and replace(m))]
+        blob["memories"] = memories + [dict(m) for m in entries or ()]
+        qi("UPDATE checkpoints SET blob=? WHERE id=?", (json.dumps(blob), row["id"]))
+        changed += 1
+    return changed
+
 
 def _carry_the_book_set(blob, fresh):
     """Carry the BOOK SET of `fresh` (the lore as it is now) into an older

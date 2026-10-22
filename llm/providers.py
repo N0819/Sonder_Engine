@@ -2077,6 +2077,18 @@ ROLES = [
     # host who wants the cheap patcher has to say so, on this row.
     "repair",
     "utility",
+    # The writer of a mind's memories of a time skip (`mind/skip_memories.py`):
+    # one call per mind, out of band after the skip beat's commit, turning its
+    # own lived log into first-person memories. NEVER in the turn pipeline.
+    # Its own row rather than `utility` or `character_mid` because the probe
+    # measured the model, not the job: on the same three records the cheap
+    # model (deepseek flash) held closest to the record -- 3-4 of 15 memories
+    # with a mild invention against about 7 of 15 for glm-5.2, at a tenth of
+    # the cost (DESIGN_THE_CAST_ACROSS_A_SKIP.md § 2.2). Unset, it follows
+    # `default` like every other row -- no hidden parent
+    # (`tests/test_provider_fallbacks.py`); on the owner's install that is
+    # the deepseek flash route `character_mid` also follows.
+    "skip_memory",
     "embeddings",
     # The Writers' Room's author (agents/story_planner.py): a tool-using
     # loop the room panel calls and the out-of-band fill job runs. NEVER in

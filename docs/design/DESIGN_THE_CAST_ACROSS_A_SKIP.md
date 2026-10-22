@@ -448,6 +448,12 @@ what a mind knows.
   `mind/character_jev.py` already maps notebook commitments to
   `project_ops`. This is phase 2. Today a skip is one beat to their ageing.
 
+*Built 2026-10-21 (`mind/skip_memories.py`; `Design.md`, "A mind remembers the days a
+skip passed over"): the job, the writer on its own `skip_memory` row, the count as a
+ceiling, the numbers floor, ONE of the three questions above (others' conduct -- the
+build spec's narrowing) with a rewrite and a drop, and the rows. What it leaves is
+`docs/UNBUILT_LIVING_WORLD.md` § 1.99d.*
+
 ### 4.7 The three questions § 1.99d left open
 
 1. **One call or one per character?** One per character.

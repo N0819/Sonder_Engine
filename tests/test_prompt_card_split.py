@@ -49,7 +49,13 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 290   # +2 (2026-10-20): `jev_questions.time` and
+PART_COUNT = 294   # +4 (2026-10-21): `prompts.skip_memory`,
+                   # `prompts.skip_memory_rewrite` and the two
+                   # decision-model questions that check a skip memory,
+                   # `jev_questions.skip_memory_others` and
+                   # `jev_questions.skip_memory_sentence`
+                   # (mind/skip_memories.py).
+                   # +2 (2026-10-20): `jev_questions.time` and
                    # `encoder.time`, the stretch a beat's account passes
                    # over ("that evening", "hours later"), owned again
                    # by the spatial owner (`world.mechanics.beat_time_block`).
@@ -363,11 +369,14 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
 
     pack = installed_language_packs()[language]
     card = pack.card(CARD)
-    # 39 since 2026-10-08: `room_sketch`, the fill's planting sketch. 38
+    # 41 since 2026-10-21: `skip_memory` and `skip_memory_rewrite`, the
+    # writer of a mind's memories of a time skip and its one rewrite pass
+    # (mind/skip_memories.py). 39 since 2026-10-08: `room_sketch`, the
+    # fill's planting sketch. 38
     # since 2026-10-07: `conversation_thread`. 38 since 2026-09-27:
     # `character_bare`, the bare character card; 37 the same day,
     # `character`, the full card, deleted with its contract.
-    assert len(card["prompts"]) == 39
+    assert len(card["prompts"]) == 41
     # The five hands survive as channel order (and the spatial hand's room
     # chunks); their cores went with the causal Director on 2026-09-27.
     assert len(card["specialists"]) == 5

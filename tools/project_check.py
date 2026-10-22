@@ -2924,6 +2924,10 @@ MEMORY_WRITERS = {
     "story/journey_history.py":
         "keys on hashes of the grounded memory content, independent of row ids",
     "web/app.py": "the manual add route passes no event_key, so it inserts",
+    "mind/skip_memories.py":
+        "keys skip:{turn_id}:{mind}:{n} on the skip beat's own turn_id, and "
+        "deletes that mind's rows for the beat (by turn_id) before writing; "
+        "a re-commit of the beat deletes them first (delete_turn_memories)",
 }
 
 #: `event_key` minted from the TURN ROW's id, which does not survive a copy.

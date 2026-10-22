@@ -3424,5 +3424,58 @@
     "_SENTENCE_END": ".",
     "_SENTENCE_ENDS": ".!?",
     "_ALREADY_KNOWN_SOURCE": "something you already knew, long before now -- where an older memory of yours says otherwise, this is how it truly was"
+  },
+  "mind.skip_memories": {
+    "_NUMBER_WORDS": {
+      "$type": "tuple",
+      "items": [
+        ["zero", 0],
+        ["one", 1],
+        ["two", 2],
+        ["three", 3],
+        ["four", 4],
+        ["five", 5],
+        ["six", 6],
+        ["seven", 7],
+        ["eight", 8],
+        ["nine", 9],
+        ["ten", 10],
+        ["eleven", 11],
+        ["twelve", 12],
+        ["thirteen", 13],
+        ["fourteen", 14],
+        ["fifteen", 15],
+        ["sixteen", 16],
+        ["seventeen", 17],
+        ["eighteen", 18],
+        ["nineteen", 19],
+        ["twenty", 20],
+        ["thirty", 30],
+        ["forty", 40],
+        ["fifty", 50],
+        ["sixty", 60],
+        ["seventy", 70],
+        ["eighty", 80],
+        ["ninety", 90]
+      ]
+    },
+    "_NUMBER_SCALES": {
+      "$type": "tuple",
+      "items": [
+        ["dozen", 12, "small"],
+        ["hundred", 100, "small"],
+        ["thousand", 1000, "big"],
+        ["million", 1000000, "big"],
+        ["billion", 1000000000, "big"]
+      ]
+    },
+    "_NUMBER_RUN": {
+      "$type": "regex",
+      "flags": 2,
+      "pattern": "\\b(?:seventeen|thirteen|fourteen|eighteen|nineteen|thousand|fifteen|sixteen|seventy|hundred|million|billion|eleven|twelve|twenty|thirty|eighty|ninety|three|seven|eight|forty|fifty|sixty|dozen|zero|four|five|nine|one|two|six|ten)(?:(?:[ \\t-]+|(?:(?<=hundred)|(?<=thousand)|(?<=million)|(?<=billion))\\s+and\\s+)(?:seventeen|thirteen|fourteen|eighteen|nineteen|thousand|fifteen|sixteen|seventy|hundred|million|billion|eleven|twelve|twenty|thirty|eighty|ninety|three|seven|eight|forty|fifty|sixty|dozen|zero|four|five|nine|one|two|six|ten))*\\b"
+    },
+    "_SKIP_MEMORY_LABELS": {
+      "afterwards": "What stayed with me:"
+    }
   }
 }

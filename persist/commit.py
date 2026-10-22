@@ -198,6 +198,8 @@ from persist.commit_memory import (_names_spoken_by, RECENT_TELLS_CAP, _durable_
 from persist.commit_memory_write import (_consolidate_committed_memories,
     MEMORY_CONSOLIDATION_JOB_KEY, schedule_memory_consolidation,
     MEMORY_TENSION_JOB_KEY, schedule_memory_tension_pass,
+    SKIP_MEMORIES_JOB_PREFIX, schedule_skip_memories,
+    cancel_discarded_skip_memories,
     commit_memories)
 # ---- end split facade ----
 
@@ -691,6 +693,20 @@ def _commit_all_locked(ctx, nonce):
     except Exception as exc:
         ctx.add_warning(f"memory consolidation scheduling failed: {exc}")
         results["memory_consolidation"] = {"error": str(exc)}
+
+    # A skip beat's memories (`mind.skip_memories`), on the same terms: each
+    # asked mind's own memories of the stretch the beat passed over, written
+    # from the COMMITTED `skip_lives` output by one writer call per mind and
+    # checked before they land. Out of band because the far end never waits
+    # for them -- its calls carried the log as payload this beat. None on a
+    # beat whose plan ran no such step. A failure is a warning, never a
+    # rollback.
+    try:
+        job = schedule_skip_memories(ctx)
+        results["skip_memories"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"skip memory scheduling failed: {exc}")
+        results["skip_memories"] = {"error": str(exc)}
 
     # Every live bubble's own beat, on the same terms: a whole pipeline turn
     # in a frame nobody is watching is not a cost the player may be asked to

@@ -4160,7 +4160,9 @@ What that leaves:
   cast member what they do over the skip, run their answers as the charter
   runs a day, place them where it leaves them, write their memories after.
   Proposed. Its phase 0 is built: the walk `a_walk_is_its_owners` refuses is
-  offered to its mind (`UNBUILT_PIPELINE.md` § 1.227).
+  offered to its mind (`UNBUILT_PIPELINE.md` § 1.227). So is its last step:
+  the memories are written (`mind/skip_memories.py`, 2026-10-21; its
+  residuals are §1.99d's).
 
 Extended again 2026-10-21 (the probe's F20, "a skip moves the sky one
 rung"): the clock moved by a skip and the weather did not follow it.

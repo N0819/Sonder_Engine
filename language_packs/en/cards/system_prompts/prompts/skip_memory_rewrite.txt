@@ -1,0 +1,5 @@
+ONE MORE PASS. `rewrite` holds memories already written from this record that went past what you were given, each with its `index` and its `flags`. Write each again as the same occasion, keeping everything in it that held:
+- a `number` flag is a number, a time on the clock or a count (`said`) that neither `record` nor `memory` holds: say what they hold instead, or say it without one;
+- an `others` flag is someone besides {name} speaking or acting beyond what `record` shows of them (`in` gives the words it was found in, when one place could be named): keep them only as the record has them.
+Answer with JSON only: {"episodes":[{"index":0,"rows":[0],"when":"","where":"","memory":"","consequence":"","valence":0.0,"arousal":0.0}]}
+`index` is the `index` of the memory it replaces.

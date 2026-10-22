@@ -48,7 +48,8 @@
     "narrator",
     "prose_director_interpret",
     "prose_director_resolve",
-    "scene_life"
+    "scene_life",
+    "skip_memory"
   ],
   "prompts": {
     "greeting_interpret": {
@@ -167,6 +168,12 @@
     },
     "room_sketch": {
       "$text": "prompts/room_sketch.txt"
+    },
+    "skip_memory": {
+      "$text": "prompts/skip_memory.txt"
+    },
+    "skip_memory_rewrite": {
+      "$text": "prompts/skip_memory_rewrite.txt"
     }
   },
   "specialists": {
@@ -425,6 +432,12 @@
     },
     "direction_neared": {
       "$text": "jev_questions/direction_neared.txt"
+    },
+    "skip_memory_others": {
+      "$text": "jev_questions/skip_memory_others.txt"
+    },
+    "skip_memory_sentence": {
+      "$text": "jev_questions/skip_memory_sentence.txt"
     },
     "conditions__awareness": {
       "$text": "jev_questions/conditions__awareness.txt"

@@ -1,0 +1,13 @@
+Write {name}'s own memories of a stretch of time that has just passed (`span`), as {name} would carry them: first person, in {name}'s own voice. `who` is {name}'s card; `memory` is what {name} remembers from before the stretch; `record` is what happened to {name} over it, one row an occasion: when it was (`when`: the day, counted from 0 for the day the stretch began, and the parts of that day it ran from and until), where {name} was (`where`), what {name} did as anyone watching would have seen it (`did`), whether {name} slept through it (`asleep`), who was there and what {name} saw them doing (`with`), the weather where {name} stood (`weather`), and whether it came off (`outcome`: `done`; `failed`, with its `reason`; or `not_known`, when the world has not shown {name} how it went).
+
+Hold to the record. Each occasion may have its texture -- the feel of the work, the cold, a passing thought, a small thing noticed on {name}'s own side -- but nothing the record and `memory` do not hold: about anyone else, about how anything turned out, or about the past.
+- People are in a memory only as the record has them: no one's words, looks, reactions or doings beyond it, a stranger's included.
+- Where the outcome is `not_known`, the memory stops at what {name} did; what came of it is not known, and the memory does not say.
+- What `failed` stays failed, as the record says; how {name} took that is theirs to remember.
+- The past is what `memory` and `who` hold; never a new detail of it.
+- A number, a time on the clock or a count is one the record or `memory` holds; where they hold none, the memory says it without one.
+
+Write up to {count} memories and at least one, each its own occasion -- the ones {name} would keep -- in order, 45-180 words each: where, who was there, what {name} wanted or did, how it went as far as the record says, and the detail that makes it this occasion and not any other. Do not write the routine over and over: one memory may hold the ordinary run of the days.
+
+Answer with JSON only: {"episodes":[{"rows":[0],"when":"","where":"","memory":"","consequence":"","valence":0.0,"arousal":0.0}]}
+`rows` holds the `n` of each record row the memory is made from. `consequence` is, in {name}'s own first person, what stayed changed, unsettled, learned or owed afterwards, a line. `valence` runs from -1 to 1, `arousal` from 0 to 1.

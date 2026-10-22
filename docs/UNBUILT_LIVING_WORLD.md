@@ -1348,6 +1348,50 @@ a live probe:
 
 Proposed, not built; the owner's questions are its § 6.
 
+**2026-10-21, later: the memories are built** (`mind/skip_memories.py`,
+`Design.md` "A mind remembers the days a skip passed over"; the stage that
+lives the skip and the town's charter are their own lanes). After a skip beat
+commits, one out-of-band job per beat writes each asked mind's memories of the
+stretch from its own committed log, card and memory, holds them to a numbers
+floor and one decision-model question per memory, rewrites a flagged one once
+and drops what still fails. What it leaves:
+
+- **The span's rows read after the far end's own.** The recent window orders
+  one beat's rows by row id (`recent_memory_buffer`), and the skip rows are
+  written after the beat's commit, so a mind reads the far end's memory first
+  and the days before it after; each row carries its own `when`. Ordering one
+  beat's rows by `encoded_at_seconds` would read them in the order they
+  happened; it changes a shared reader and is not done here.
+- **A summary window that closed at the skip beat misses them.**
+  Consolidation reads windows by turn index, and a window ending at the skip
+  beat that ran before the job landed never sees its rows. They stay in the
+  bank and in recall.
+- **Two of the design's three questions are not asked** (§ 4.6): an outcome
+  of the mind's own attempt the log does not give, and a past event `memory`
+  does not hold. The typed `outcome` (`not_known` stops a memory at the
+  attempt) and the card's clauses carry them, and the floor catches their
+  numbers; the build spec narrowed the model's part to one question, others'
+  conduct.
+- **The floor is lenient where a figure is small or not a figure.** A number
+  is held by any equal value in the sources, so "down two tins" stood beside a
+  record whose days run to 2; fractions and ordinals are not figures ("half a
+  millimetre" stood); in Japanese a bare 十 or 百 is a magnitude, not a figure
+  (十分 is "enough"), so a round count written that way is not checked.
+- **The record reads the parts of the day off the clock's anchor as it stands
+  when the job runs.** A label that re-anchors the clock between the skip and
+  the job would shift every `when`; the step output carries seconds, not the
+  anchor it was laid on.
+- **A flag the sentence question cannot place is kept**, and counted on the
+  job's result (`unlocalized`): the floor never guesses which sentence the
+  model meant.
+- **Unmeasured live:** the writer's `rows` field and the up-to count. The
+  probe's card asked for neither.
+- **Owner questions:** whether a skip memory should carry a lower credence
+  (`confidence`, which a mind does see) than a lived beat's, so a mind can say
+  "I think I spent most of that week at the forge" (the Writers' Room plan's
+  open question 3); and crediting the projects and intentions a stretch
+  served (§ 4.6's phase 2).
+
 <a id="unbuilt-1-99e"></a>
 
 ### 1.99e The three tiers, and the chatter already being thrown away

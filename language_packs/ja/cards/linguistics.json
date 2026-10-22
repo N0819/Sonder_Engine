@@ -4473,5 +4473,42 @@
     "_SENTENCE_END": "。",
     "_SENTENCE_ENDS": ".!?。！？",
     "_ALREADY_KNOWN_SOURCE": "ずっと以前から知っていたこと――あなたの古い記憶がこれと食い違うなら、本当はこうだった"
+  },
+  "mind.skip_memories": {
+    "_NUMBER_WORDS": {
+      "$type": "tuple",
+      "items": [
+        ["〇", 0],
+        ["零", 0],
+        ["一", 1],
+        ["二", 2],
+        ["三", 3],
+        ["四", 4],
+        ["五", 5],
+        ["六", 6],
+        ["七", 7],
+        ["八", 8],
+        ["九", 9]
+      ]
+    },
+    "_NUMBER_SCALES": {
+      "$type": "tuple",
+      "items": [
+        ["十", 10, "small"],
+        ["百", 100, "small"],
+        ["千", 1000, "small"],
+        ["万", 10000, "big"],
+        ["億", 100000000, "big"],
+        ["兆", 1000000000000, "big"]
+      ]
+    },
+    "_NUMBER_RUN": {
+      "$type": "regex",
+      "flags": 0,
+      "pattern": "[〇零一二三四五六七八九十百千万億兆]+"
+    },
+    "_SKIP_MEMORY_LABELS": {
+      "afterwards": "そのあと残ったこと："
+    }
   }
 }

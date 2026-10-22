@@ -163,6 +163,73 @@ def schedule_memory_consolidation(ctx):
                        base_turn=turn_idx)
 
 
+#: One job per skip beat: the key carries the turn id, so a second skip
+#: committed while the first beat's memories are still being written queues
+#: its own work rather than joining a job that will never read it
+#: (`core.jobs.submit` joins on the key).
+SKIP_MEMORIES_JOB_PREFIX = "skip_memories:"
+
+
+def schedule_skip_memories(ctx):
+    """Queue the memories of the stretch a skip beat passed over, out of band.
+
+    Returns the Job, or None on every beat whose plan ran no `skip_lives`
+    step with a mind that lived a stretch (`mind.skip_memories.
+    minds_to_remember`) -- which is nearly every beat. Called from the commit
+    tail AFTER the turn's facts are durable, on consolidation's terms: the
+    job snapshots the scalars it needs (chat, turn, frame, the story's
+    language) and never touches ctx after the turn returns, and it reads the
+    COMMITTED step output itself, so what it writes from is what the beat
+    committed and not what this ctx held. One writer call per mind
+    (`mind.skip_memories.run_skip_memories`); the far end never waits for
+    them, because each asked mind's own call that beat already carried its
+    log as payload.
+
+    A restore that takes this beat back stops the job
+    (`cancel_discarded_skip_memories`, from `persist/checkpoints.py`), and its
+    every write re-asks whether the beat still stands."""
+    from core import jobs
+    from mind.skip_memories import (SKIP_LIVES_STEP, minds_to_remember,
+                                    run_skip_memories)
+
+    if not minds_to_remember(ctx.get(SKIP_LIVES_STEP)):
+        return None
+    cid = ctx.chat.id
+    turn_id = ctx.turn.id
+    turn_idx = ctx.turn.idx
+    frame_id = ctx.turn.frame_id
+    language_id = story_language(cid)
+
+    def _produce(job):
+        # Fresh thread, fresh contextvars: the frame and the language pinned
+        # for every read and write below, as consolidation pins them.
+        from core.db import active_frame_id
+        from language_runtime import current_language_id
+        token = active_frame_id.set(frame_id)
+        language_token = current_language_id.set(language_id)
+        try:
+            return run_skip_memories(cid, turn_id, job=job, language=language_id)
+        finally:
+            current_language_id.reset(language_token)
+            active_frame_id.reset(token)
+
+    return jobs.submit(cid, SKIP_MEMORIES_JOB_PREFIX + str(turn_id), _produce,
+                       base_turn=turn_idx)
+
+
+def cancel_discarded_skip_memories(chat_id, idx):
+    """Stop every skip-memory job of this chat whose beat a restore to `idx`
+    takes back (`core.jobs.cancel_from`: a job reads only its own beat, the
+    one it was queued from). Returns how many were asked."""
+    from core import jobs
+    asked = 0
+    for job in jobs.active_jobs(chat_id):
+        if str(job.key).startswith(SKIP_MEMORIES_JOB_PREFIX):
+            if jobs.cancel_from(chat_id, job.key, idx) is not None:
+                asked += 1
+    return asked
+
+
 MEMORY_TENSION_JOB_KEY = "memory_tension"
 
 
