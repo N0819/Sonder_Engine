@@ -4138,6 +4138,12 @@ What that leaves:
   first question. Offline, the 48 hours now land in the afternoon two days on
   (15:06), where its account does not; only the new shape lands in the morning
   (08:33).
+  *Measured live, 2026-10-21 (the lighthouse replayed, chat 3 turn 25): the
+  encoder wrote BOTH -- `{days: 2, until_phase: "morning", duration_seconds:
+  172800}` -- and the length won. Fixed the same day: where a block names
+  where the skip lands, `solve_skip` solves that and sets a length beside it
+  aside. A length still stands alone, and beside a part of the day already
+  reached with no days counted.*
 - **The Director's prose can still narrate past the writer's time.** The
   prose author is shown no clock (the owner's ruling of 2026-10-04), and on
   the probe beat it ran the weather into the evening and full dark. The clock

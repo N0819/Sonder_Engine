@@ -253,6 +253,33 @@ class TestADayCountLandsOnAPartOfTheDay:
             "evening"]
         assert director_prose.unsolved_skips([_skip(dict(block))]) == []
 
+    def test_a_length_written_beside_where_the_skip_lands_is_set_aside(self):
+        """Live, 2026-10-21 (the lighthouse replayed, chat 3 turn 25): the
+        interpret encoder wrote the days twice, once as a length, and the
+        length won -- the cast lived to the afternoon two days on and the
+        beat ran on to 22:15. Where the block names where it lands, that
+        decides it."""
+        block = {"days": 2, "until_phase": "morning", "duration_seconds": 172800.0}
+        assert director_prose.solve_skip(block, PROBE_HOUR, 24.0) == \
+            TO_THE_SECOND_MORNING
+        assert block["duration_seconds"] == TO_THE_SECOND_MORNING
+        later = {"until_phase": "evening", "duration_seconds": 600.0}
+        assert director_prose.solve_skip(later, PROBE_HOUR, 24.0) == \
+            seconds_until(PROBE_HOUR, phase="evening")
+
+    def test_a_length_still_stands_alone_and_beside_a_part_already_reached(self):
+        assert director_prose.solve_skip({"duration_seconds": 3600.0},
+                                         PROBE_HOUR, 24.0) == 3600.0
+        # Already evening, no days: the length is the only word on how much
+        # time passes, so it stands.
+        block = {"until_phase": "evening", "duration_seconds": 7200.0}
+        assert director_prose.solve_skip(block, 20.0, 24.0) == 7200.0
+
+    def test_resolving_a_solved_block_from_the_same_hour_changes_nothing(self):
+        block = {"days": 2, "until_phase": "morning"}
+        first = director_prose.solve_skip(block, PROBE_HOUR, 24.0)
+        assert director_prose.solve_skip(block, PROBE_HOUR, 24.0) == first
+
     def test_days_is_a_key_every_reader_knows(self):
         assert "days" in TIME_METADATA_KEYS and "days" in TIME_DIFF_KEYS
         assert mechanics.skip_days({"days": 2}) == (True, 2)

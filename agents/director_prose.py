@@ -3916,23 +3916,44 @@ def solve_skip(block, hour_now, day_length):
     be solved (no time of day to solve from, a label naming none) the days
     still pass, and the part of the day is said where the solve was tried
     (`unsolved_skips`); a count that is not a whole number of days is said
-    there too, and the part of the day is solved without it."""
+    there too, and the part of the day is solved without it.
+
+    WHERE THE BLOCK NAMES WHERE THE SKIP LANDS, THAT DECIDES IT (2026-10-21).
+    A part of the day -- with its days, or one not yet reached -- is solved
+    from the clock, and a length written beside it is set aside: the card
+    never asks for both, and the length is the model's restatement of the
+    days. Measured live the same day (the lighthouse replayed, chat 3 turn
+    25): the interpret encoder wrote `{days: 2, until_phase: "morning",
+    duration_seconds: 172800}` for "Two days later ... all morning", the
+    length won, and the cast lived to the afternoon two days on while the
+    beat ran on to 22:15. A length still stands alone, and beside a part of
+    the day the clock already stands in with no days counted -- there it is
+    the only word on how much time passes. Re-solving a solved block from
+    the same hour gives the same span, so a repair's re-reading is
+    unchanged."""
     from world.day_cycle import seconds_until
     from world.mechanics import skip_days
     if not isinstance(block, dict):
         return None
+    stated = None
     if "duration_seconds" in block:
         try:
-            value = float(block.get("duration_seconds") or 0.0)
+            stated = float(block.get("duration_seconds") or 0.0)
         except (TypeError, ValueError):
-            return None
-        return max(0.0, value) if value == value else None
+            stated = None
+        if stated is not None and stated != stated:
+            stated = None
     phase = str(block.get("until_phase") or "").strip()
     count = skip_days(block)[1] or 0
     until = None
     if phase and hour_now is not None:
         until = seconds_until(float(hour_now), phase=phase, days=count,
                               day_length=day_length)
+    if until is not None and (until > 0 or count):
+        block["duration_seconds"] = until
+        return float(until)
+    if "duration_seconds" in block:
+        return max(0.0, stated) if stated is not None else None
     if until is None and count:
         until = round(count * float(day_length) * 3600.0, 1)
     if until is None:

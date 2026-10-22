@@ -22,7 +22,7 @@
 | `agents/director_layout.py` | 594 |  | — |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 3361 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 4750 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `agents/director_prose.py` | 4771 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `agents/director_reconcile.py` | 559 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1687 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 2986 |  | — |
@@ -452,7 +452,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 4256 | 361 lines |
+| `run()` | 4277 | 361 lines |
 | `a_walk_is_its_owners()` | 2069 | 205 lines |
 | `encode()` | 3561 | 151 lines |
 | `select_channels()` | 612 | 127 lines |
