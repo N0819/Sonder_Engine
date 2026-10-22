@@ -85,7 +85,7 @@ def criticality(charter, roster=None, ask=None):
 
 
 def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
-               reluctance=None):
+               reluctance=None, withheld=()):
     """One planning window: ``{post_key: body_key}`` plus what went unfilled.
 
     A body holds at most one post per window. Where two posts want the same
@@ -96,6 +96,13 @@ def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
     ``seed`` only breaks ties between equally-urgent posts, so a replay with
     the same seed produces the same watch and a different seed produces a
     different-but-legitimate one. Nothing here is otherwise random.
+
+    ``withheld`` are bodies already spoken for this window by something
+    other than the institution -- a mind's own declared day
+    (`charter_run.step`'s ``itinerary``). They are taken before the first
+    post is staffed, exactly as a body standing a more urgent post is, so the
+    bill is planned around them and a post only they could stand reads
+    ``contended``: somebody can, and is engaged elsewhere.
     """
     ranks = priority_rank(charter)
     posts = list(charter["posts"].values())
@@ -118,7 +125,7 @@ def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
     reluctance = reluctance or {}
     watch = {}
     unfilled = []
-    taken = set()
+    taken = {str(body) for body in (withheld or ())}
     for post in posts:
         candidates = [b for b in ask(post["requires"]) if b not in taken]
         if reach is not None:

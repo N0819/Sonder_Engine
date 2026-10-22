@@ -46,15 +46,16 @@ import hashlib
 import time
 
 from .charter_drift import advance_level, starving_input, supply_factor
-from .charter_model import (EXPERIENCE_CAP, normalize_charter,
-                            out_of_band)
+from .charter_model import (EXPERIENCE_CAP, authored_mind_bodies,
+                            normalize_charter, out_of_band)
 from .charter_plan import plan_watch, tended_upkeeps
 from .charter_politics import (
     attribute_blame, normalize_politics, regard_map, regard_pair,
     spend_reluctance)
 from .charter_roster import decay_roster, observe
-from .charter_space import (commons_places, frequented_places,
-                           people_neighbors, reach_map, refresh_reach)
+from .charter_space import (REACH_LIMIT, commons_places,
+                           frequented_places, people_neighbors, reach_map,
+                           refresh_reach)
 from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
 from .charter_mark import (BY_MARKS, DISGRACE_RELUCTANCE, advance_marks,
                            held_marks)
@@ -425,7 +426,7 @@ def _settle_commitments(commitments, state, kind, at_hours, note):
 
 
 def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
-         simulate_bound=False, neighbors=None, routes=None):
+         simulate_bound=False, neighbors=None, routes=None, itinerary=None):
     """Advance one planning window. Returns ``(charter, events)``.
 
     The charter is returned rather than mutated, so a caller may explore a
@@ -433,10 +434,34 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     checkpoint restore needs, and what a tick that mutated in place could not
     offer.
 
-    ``simulate_bound`` suspends the promotion exclusion below. It is for the
-    PRE-STORY catch-up only, and it exists because the exclusion was being
-    applied at a time when the thing it defers to does not yet exist. See the
-    note on `external`.
+    ``simulate_bound`` suspends the promotion exclusion below. ``True`` is
+    for the PRE-STORY catch-up only, and it exists because the exclusion was
+    being applied at a time when the thing it defers to does not yet exist.
+    See the note on `external`.
+
+    A COLLECTION of body keys lifts the exclusion for THOSE bodies alone, and
+    lifts less. It is the in-play case (`charter_skip.live_in_charter`: a
+    registered mind living through a declared time skip inside the town), and
+    in play the registered mind EXISTS: its knowledge, wants and memory are
+    the character tier's (`DESIGN_OFFSCREEN_SUPERSEDED.md` § 2). So a lifted
+    body walks, tires and stands in rooms where the town can see it -- the
+    charter owns where a person is and what they did -- and holds no claim,
+    feeling, judgment or mark here, and acts on nobody: to the town it is a
+    figure that moves. The run-wide ``True`` lifts cognition too because
+    before the story opens there is no mind yet to own it.
+
+    ``itinerary`` is ``{body_key: {"room": str or None, "asleep": bool}}``
+    for THIS window: the bodies whose own declared day speaks for the
+    window, and where it puts them. The institution's planners yield to it
+    -- the watch withholds the body, errands and homecomings pass it by --
+    and the body walks to ``room`` by the route the town's people walk,
+    searched without the planner's reach bound because the destination is
+    the body's, not the institution's; ``room`` of None holds it where it
+    stands (asleep where it lies, or away when the caller has taken it out of
+    the rooms). A body the itinerary does not name this window is the
+    institution's to run as it runs everyone: that is the needs-driven day
+    filling the itinerary's silences. Only a body the window may move is
+    directed, so an itinerary naming a frozen body does nothing.
     """
     charter = normalize_charter(charter)
     hours = max(0.0, float(hours))
@@ -487,8 +512,48 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # experiences, while the 39 unbound bodies around it averaged 4.4
     # experiences and knew 5.8 people each. The major character was the
     # emptiest body in its own institution.
-    external = set() if simulate_bound \
-        else set((charter.get("bindings") or {}).keys())
+    #
+    # WHOSE BODY THIS IS IS ASKED OF THE BODY, not of `bindings` alone
+    # (`charter_model.authored_mind_bodies`): a body reserved for a
+    # registered mind by its seat token and never bound is that mind's too,
+    # and stepping it here was a second simulation of a person the story
+    # already plays -- walked off by the watch while the scene held it
+    # elsewhere, the same hours lived twice. It matters most across a time
+    # skip, where the mind's own day is lived in `charter_skip` and the town's
+    # advance that follows the commit must not live it again.
+    #
+    # TWO SETS, because a per-body lift (above) lifts less than the run-wide
+    # one. `unminded` holds no claim, feeling or mark and acts on nobody;
+    # `external` additionally does not walk, tire or eat. Without a per-body
+    # lift they are the same set, and the window is what it always was.
+    if isinstance(simulate_bound, bool) or simulate_bound is None:
+        unminded = set() if simulate_bound else authored_mind_bodies(charter)
+        lifted = set()
+    else:
+        unminded = authored_mind_bodies(charter)
+        lifted = {str(key) for key in simulate_bound} & unminded
+    external = unminded - lifted
+    # The bodies whose own declared day speaks for this window. Only a body
+    # this window may move can be directed.
+    directed = {
+        str(key): dict(directive or {})
+        for key, directive in (itinerary or {}).items()
+        if str(key) in charter["bodies"] and str(key) not in external}
+    asleep = {key for key, directive in directed.items()
+              if directive.get("asleep")}
+    if directed:
+        # A WALK THE ITINERARY HAS OVERRULED STOPS where the body stands, so
+        # this window's credit is spent on the way the body declared rather
+        # than finishing a route the town set it on.
+        moved_bodies = dict(charter["bodies"])
+        for key, directive in directed.items():
+            rec = moved_bodies[key].get("walk")
+            if isinstance(rec, dict) and str(rec.get("target") or "") \
+                    != str(directive.get("room") or ""):
+                body = dict(moved_bodies[key])
+                body.pop("walk", None)
+                moved_bodies[key] = body
+        charter = dict(charter, bodies=moved_bodies)
     if reach is None and scene:
         # Recomputed here when a caller steps directly, and hoisted out by
         # `run` when it does not. Measured on the 500-hand fixture: 500 bodies
@@ -562,7 +627,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         reluctance[key] = weight
 
     plan = plan_watch(charter, horizon_hours=hours, seed=seed, reach=reach,
-                      reluctance=reluctance)
+                      reluctance=reluctance, withheld=set(directed))
     served = tended_upkeeps(charter, plan["watch"], fixed_bodies=external)
 
     # ONLY THE CHANGE IS AN EVENT, for posts exactly as for upkeeps. The rule
@@ -675,13 +740,34 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                          resting_phases=charter.get("resting_phases"),
                          social_phases=charter.get("social_phases"))
         moves = dict(homecomings(bodies, plan["watch"], visits), **visits)
-        if external:
+        if external or directed:
             moves = {body: place for body, place in moves.items()
-                     if body not in external}
+                     if body not in external and body not in directed}
         if moves:
             bodies, travelled, walked = walk(
                 bodies, moves, scene, travelled, cache=routes, hours=hours,
                 neighbors=neighbors, walked=walked)
+
+    # AND WHERE A MIND'S OWN DAY SPEAKS, THE BODY GOES WHERE IT SAID. Last in
+    # the movement phase and through the one generic mover, so it pays the
+    # same ground the watch and the errands pay, a shut door holds it where
+    # it stands (`charter_move._advance`), and a walk not finished this
+    # window carries into the next. Its route search is not the planner's:
+    # `REACH_LIMIT` bounds what the institution will post a body to, and a
+    # destination the body declared is not the institution's to bound, so
+    # the depth is the whole graph and the cache is this call's own (a
+    # route cache keys rooms alone, and the run's holds the bounded answers).
+    if directed:
+        heading = {key: str(directive.get("room") or "")
+                   for key, directive in directed.items()
+                   if str(directive.get("room") or "")}
+        if heading:
+            graph = (scene or {}).get("rooms") if isinstance(scene, dict) \
+                else None
+            bodies, travelled, walked = walk(
+                bodies, heading, scene, travelled, cache={}, hours=hours,
+                neighbors=neighbors, walked=walked,
+                limit=max(REACH_LIMIT, len(graph or ())))
 
     upkeeps = {}
     for key, upkeep in charter["upkeeps"].items():
@@ -796,6 +882,14 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     owned_bodies = (bodies if not external else
                     {key: body for key, body in bodies.items()
                      if key not in external})
+    # WHO HOLDS A HEAD HERE. The same map unless a body was lifted for this
+    # window (per-body `simulate_bound`): a lifted body's needs advance above
+    # with everybody's, and every reader from here down that witnesses,
+    # talks, reports, decides or feels takes this map, so it learns nothing,
+    # says nothing and is felt about by nobody's ledger but its own mind's.
+    minded_bodies = (owned_bodies if not lifted else
+                     {key: body for key, body in bodies.items()
+                      if key not in unminded})
     needs_after, unable, recovered = advance_needs(
         owned_needs, owned_bodies, movable_watch, upkeeps, hours,
         strain=strain_of(charter.get("feel")), toll=toll,
@@ -838,21 +932,21 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                     for key, held in (charter.get("minds") or {}).items()
                     if isinstance(held, dict)}
     minds = decay_minds(charter.get("minds") or {}, hours)
-    if external:
+    if unminded:
         minds = {holder: claims for holder, claims in minds.items()
-                 if holder not in external}
+                 if holder not in unminded}
     news_keys = set(charter.get("news_keys") or ())
     minds = decay_news(minds, hours, news_keys)
     # WITNESSED BEFORE ANYBODY TALKS, so this beat's news can travel in this
     # beat. Presence is the whole test -- a body standing where something
     # happened knows it, nobody else does, and it spreads only by being told.
-    minds, witnessed = witness(minds, owned_bodies, events, at + hours)
+    minds, witnessed = witness(minds, minded_bodies, events, at + hours)
     # Figures are seen wherever they stand, active place or not: laying eyes
     # on the traveller is perception, not beat-scale social detail, and it is
     # the same rule witnessing an event follows -- presence is the whole
     # test. What a body DOES about the sighting still waits for a scene.
     figures = dict(charter.get("figures") or {})
-    for body_key in external:
+    for body_key in unminded:
         body = bodies.get(body_key) or {}
         figures[body_key] = {
             "key": body_key,
@@ -861,17 +955,17 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                         "institutional_role": True},
         }
     if figures:
-        minds = sight_figures(minds, owned_bodies, figures, at + hours)
+        minds = sight_figures(minds, minded_bodies, figures, at + hours)
     if witnessed or news_keys:
         news_keys = news_keys_in(minds)
-    minds, told = converse(minds, owned_bodies, seed=seed,
+    minds, told = converse(minds, minded_bodies, seed=seed,
                            regard=regard_map(politics), at_hours=at + hours,
                            figures=figures)
     minds, formally_reported = report_to_superiors(
-        minds, plan["watch"], charter["posts"], owned_bodies,
+        minds, plan["watch"], charter["posts"], minded_bodies,
         naming=charter.get("naming"), at_hours=at + hours)
     told += formally_reported
-    roster = report_up(roster, minds, plan["watch"], owned_bodies,
+    roster = report_up(roster, minds, plan["watch"], minded_bodies,
                        standing=politics.get("standing"), at_hours=at + hours)
 
     # DECISIONS consume only reports that reached the authorised officeholder.
@@ -880,16 +974,16 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     late_event_start = len(events)
     decisions, issued = advance_decisions(
         charter.get("decisions"), minds, plan["watch"], charter["posts"],
-        owned_bodies, charter_key=charter["key"], at_hours=at + hours)
+        minded_bodies, charter_key=charter["key"], at_hours=at + hours)
     decisions, delivered_orders = deliver_orders(
-        decisions, plan["watch"], charter["posts"], owned_bodies)
+        decisions, plan["watch"], charter["posts"], minded_bodies)
     decisions, economy, decision_events = execute_orders(
         decisions, economy, at_hours=at + hours, posts=charter["posts"])
     for order in issued:
         source_body = str(plan["watch"].get(order["from_post"]) or "")
         events.append(_event(
             "institution_order_issued", at + hours,
-            (owned_bodies.get(source_body) or {}).get("place", ""),
+            (minded_bodies.get(source_body) or {}).get("place", ""),
             order_id=order["id"], action=order["action"],
             body=source_body, to_post=order["to_post"]))
     events.extend(decision_events)
@@ -901,7 +995,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # there and emits the call as an event where the office stands. One
     # window of lag, uniformly with orders and triggers.
     calls = mobilisation_calls(
-        charter, minds, plan["watch"], charter["posts"], owned_bodies,
+        charter, minds, plan["watch"], charter["posts"], minded_bodies,
         at_hours=at + hours)
     interventions = list(charter.get("interventions") or ())
     if calls:
@@ -913,7 +1007,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # later conversation. Without this second aperture orders existed only in
     # the institution's private register and the external world-event rail.
     minds, late_witnessed = witness(
-        minds, owned_bodies, events[late_event_start:], at + hours)
+        minds, minded_bodies, events[late_event_start:], at + hours)
     witnessed += late_witnessed
     if late_witnessed:
         news_keys = news_keys_in(minds)
@@ -928,7 +1022,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     checked = 0
     if news_keys:
         minds, checked = check_reports(
-            minds, owned_bodies, upkeeps, at + hours, news_keys)
+            minds, minded_bodies, upkeeps, at + hours, news_keys)
         if checked:
             news_keys = news_keys_in(minds)
 
@@ -969,10 +1063,12 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         normalize_practices(charter.get("practices")), at + hours)
     if active:
         in_focus = {k: b for k, b in bodies.items()
-                    if k not in external
+                    if k not in unminded
                     and str(b.get("place") or "") in active}
+        # A figure asleep where it lies is seen, and is nobody's to talk to.
         figs_in_focus = {k: f for k, f in figures.items()
-                         if str(f.get("place") or "") in active}
+                         if str(f.get("place") or "") in active
+                         and k not in asleep}
         practices.update(opportunities(
             in_focus, minds, needs_after, events, practices, at + hours,
             seed=seed, figures=figs_in_focus,
@@ -993,7 +1089,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         # rather than by how long it runs, which is the same rule the event
         # log has always been held to. Gossip stays where it belongs, on
         # screen.
-        in_focus = {k: b for k, b in bodies.items() if k not in external}
+        in_focus = {k: b for k, b in bodies.items() if k not in unminded}
         figs_in_focus = {}
         practices.update(opportunities(
             in_focus, minds, needs_after, events, practices, at + hours,
@@ -1102,7 +1198,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     to_witness = trigger_events + social_events
     if to_witness:
         minds, act_witnessed = witness(
-            minds, owned_bodies, to_witness, at + hours)
+            minds, minded_bodies, to_witness, at + hours)
         witnessed += act_witnessed
         if act_witnessed:
             news_keys = news_keys_in(minds)
@@ -1159,7 +1255,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # is set by `charter_predation` when harm lands at the guarded place.
     lapsed = [e for e in events if e.get("kind") == "mobilisation_lapsed"
               and e.get("false_alarm") and e.get("actor") in charter["bodies"]
-              and e.get("actor") not in external]
+              and e.get("actor") not in unminded]
     if lapsed:
         blame = dict(politics.get("blame") or {})
         for event in lapsed:
@@ -1169,7 +1265,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                                charter["posts"])
     disgraced = sorted(
         key for key, count in politics["blame"].items()
-        if int(count) > int(blame_before.get(key, 0)) and key not in external)
+        if int(count) > int(blame_before.get(key, 0)) and key not in unminded)
 
     # The service record: a window actually stood is a window remembered.
     # Keyed bodies x posts, so it grows with the shape of the institution
@@ -1198,7 +1294,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
             # marked 30% of the town at every window boundary, against 13
             # bodies ever newly raised across the whole year and 0.31% of
             # (body, window) pairs holding the mark as written.
-            if not held.get(post_key) and body_key not in external:
+            if not held.get(post_key) and body_key not in unminded:
                 posted.append(body_key)
             held[post_key] = held.get(post_key, 0) + 1
 
@@ -1212,17 +1308,17 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # land a different past, which is the byte-identical replay `TestReplay`
     # pins. `advance_marks` sorts again defensively and says why.
     #
-    # AND FILTERED BY `external`, the same exclusion needs, feel and minds
-    # carry: a promoted body's interior has exactly one owner, and Charter
+    # AND FILTERED BY `unminded`, the same exclusion feel and minds carry: a
+    # promoted body's interior has exactly one owner, and Charter
     # scoring a person it no longer owns is the thing the promotion purge
     # exists to prevent.
     aided = sorted((str(act["other"]), str(act["actor"])) for act in acts
                    if act.get("act") == "tend"
                    and str(act.get("other") or "") in bodies
-                   and str(act.get("other")) not in external)
+                   and str(act.get("other")) not in unminded)
     accused = sorted((subject, sorted(tellers)[0])
                      for subject, tellers in heard.items()
-                     if tellers and subject not in external)
+                     if tellers and subject not in unminded)
     # AND A TRIGGER MAY SET ONE. `set_mark` writes into THIS store rather
     # than into a second one of its own, which is the whole reason design 5
     # ships no `statuses` key: two stores of socially temporary facts can only
@@ -1232,14 +1328,14 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # same row, and `advance_marks` sorts the result for the same replay
     # reason it sorts the others.
     #
-    # `external` filters here too: a rule may not mark a body Charter no
+    # `unminded` filters here too: a rule may not mark a body Charter no
     # longer owns.
     if trigger_onsets:
         for kind, rows in sorted(trigger_onsets.items()):
             target = {"posted": posted, "aided": aided,
                       "accused": accused, "disgraced": disgraced}[kind]
             for body_key, by in rows:
-                if body_key not in bodies or body_key in external:
+                if body_key not in bodies or body_key in unminded:
                     continue
                 # THE SHAPE THE LIST ALREADY USES, which is not a nicety:
                 # `posted`/`disgraced` hold bare keys and `aided`/`accused`
@@ -1262,10 +1358,10 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # own needs, the state of the body's own place, and the transient
     # events there.
     owned_feel = (charter.get("feel") or {})
-    if external:
+    if unminded:
         owned_feel = {key: value for key, value in owned_feel.items()
-                      if key not in external}
-    feel = advance_feel(owned_feel, owned_bodies, needs_after,
+                      if key not in unminded}
+    feel = advance_feel(owned_feel, minded_bodies, needs_after,
                         movable_watch, charter["posts"], upkeeps, events,
                         hours, fresh_marks=fresh_marks)
 
@@ -1449,9 +1545,15 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
 
 
 def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False,
-        deadline=None):
+        deadline=None, windows=None):
     """Advance many windows. Returns ``(charter, events)``, or
     ``(charter, events, trace)`` when ``trace`` is set.
+
+    ``windows`` is the run's own cut of ``hours`` into windows, in hours and
+    in order, in place of equal ``window``-sized steps. A time skip is cut at
+    the story's parts of the day (`charter_skip.skip_windows`) so the town's
+    own advance lives the same windows, with the same seeds, as the minds
+    who lived the skip inside it (`charter_runtime.advance_snapshot`).
 
     ``deadline`` is an absolute ``time.monotonic()`` reading past which no
     further window is begun. IT IS A STOP, NOT A SKIP: the charter is handed
@@ -1502,8 +1604,16 @@ def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False,
                       neighbors=neighbors) if scene else None
     routes = {}
     where = {k: b["place"] for k, b in charter["bodies"].items()}
+    cuts = [float(cut) for cut in (windows or ()) if float(cut) > 0.0]
     while remaining > 0.0:
-        span = min(window, remaining)
+        if cuts:
+            # The cut is the run: a residue of float rounding past the last
+            # cut is left for the next advance, which reads the clock.
+            if index >= len(cuts):
+                break
+            span = min(cuts[index], remaining)
+        else:
+            span = min(window, remaining)
         now = {k: b["place"] for k, b in charter["bodies"].items()}
         if scene and now != where:
             moved = {k for k, place in now.items() if where.get(k) != place}

@@ -449,7 +449,47 @@ def body_of_an_authored_mind(charter, body_key, body=None):
     # the extras the institution grew around them were seen and spoken.
     # A named extra is an extra; only a mind's body is withheld from the
     # background stage, because a mind's own agent is already playing it.
-    return seed.startswith("cast:")
+    return seed.startswith(MIND_SEED_PREFIXES)
+
+
+#: THE SEAT TOKENS A REGISTERED MIND'S RESERVATION TAKES, and the only ones.
+#: The engine's own route seeds `character:<id>`
+#: (`charter_history.featured_resident_seed`, the form every generated town in
+#: the owner's corpus carries: chats 83, 84 and 115); a caller handing
+#: `generate_lived_location` its own `featured_residents` seeded `cast:<id>`
+#: (chat 95, above). This predicate read the second form alone, so a body the
+#: engine itself reserved for a registered character -- and had not yet
+#: bound -- was an anonymous extra here while its own agent played it.
+#: `authored:<hash>` (the Charter Planner's people) is deliberately absent:
+#: nobody plays those, so they are extras with names.
+MIND_SEED_PREFIXES = ("character:", "cast:")
+
+
+def mind_seed_char_id(seed):
+    """The registered character a featured-resident seed reserves its body
+    for, as an int, or None for a seed no mind holds (`MIND_SEED_PREFIXES`).
+
+    One reading of the seat token, so the predicate above and every caller
+    that looks a mind's body up by its seed (`charter_skip`) cannot disagree
+    about which bodies are a mind's."""
+    seed = str(seed or "").strip()
+    for prefix in MIND_SEED_PREFIXES:
+        if seed.startswith(prefix):
+            try:
+                return int(seed[len(prefix):])
+            except ValueError:
+                return None
+    return None
+
+
+def authored_mind_bodies(charter):
+    """Every body of this charter that an authored mind owns: bound, or
+    reserved by a mind's seat token (`body_of_an_authored_mind`). The set
+    `charter_run.step` keeps its hands off during play."""
+    charter = charter if isinstance(charter, dict) else {}
+    bodies = charter.get("bodies") or {}
+    return {str(key) for key, body in bodies.items()
+            if body_of_an_authored_mind(charter, key, body)}
 
 
 #: How many autobiographical rows one body may carry. This was 16, chosen when

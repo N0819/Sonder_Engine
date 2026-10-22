@@ -405,6 +405,14 @@ work as for every stage. It is never stored in charter `minds`, by § 2 of the
 superseded note: the charter owns where a person was and what they did, never
 what a mind knows.
 
+*Case (a) built 2026-10-21 (`world/charter_skip.live_in_charter`; `Design.md`, "A cast
+member lives a time skip inside the town's charter"): per-body `simulate_bound`
+lifting the body only, the itinerary the watch, errands and homecomings yield
+to, needs filling the silences, the LOG and far end, a scratch run that writes
+nothing -- and a time-skip beat's own town advance stepped on the same windows
+and seed, so the town the story stores is the one the minds lived in. What it
+leaves is `docs/UNBUILT_LIVING_WORLD.md` § 1.99d.*
+
 ### 4.5 The far end
 
 - **Each mind is placed** where its last stretch left it: a move by its own

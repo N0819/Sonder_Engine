@@ -3072,10 +3072,119 @@ def deliver_errands(registry):
     return delivered
 
 
+def charter_scene(cid, state, scene, frame_id=None):
+    """The room graph one charter walks this advance: the live scene, under
+    the charter's own structure skeleton where it has one. The live scene
+    owns the room graph; Charter retains background body positions but never
+    carries a competing adjacency map. ``scene`` without rooms leaves the
+    charter's own (None for an institution that is a single place)."""
+    if not (isinstance(scene, dict) and scene.get("rooms")):
+        return state.get("scene")
+    if state.get("structure"):
+        from world.structure import composed_scene, skeleton_rooms
+        return composed_scene(
+            skeleton_rooms(cid, state["structure"], frame_id), scene)
+    return copy.deepcopy(scene)
+
+
+def sync_minds_to_scene(state, scene, key):
+    """Put every body an authored mind owns where the scene stands it.
+    Mutates ``state``.
+
+    THE ONE BRIDGE BETWEEN TWO NAMESPACES, and it used to sit in a bare
+    `except Exception: pass`. It is the only line anywhere that asserts a
+    charter `place` and a scene room id are the same vocabulary; with bodies
+    walking the room graph that assertion is load-bearing, so a failure here
+    is logged with its cause, and a room the charter's own graph does not
+    contain is said out loud rather than written into `place` for the mover
+    to fail on silently next window. The catch-up still proceeds: one body's
+    stale place is not a reason to freeze the town.
+
+    Shared by the town's own advance (`advance_snapshot`) and a mind's skip
+    lived inside it (`charter_skip`), so both start a body from the same
+    room.
+    """
+    from world.spatial import room_of
+    charter_rooms = set((state.get("scene") or {}).get("rooms") or {})
+    # A BODY RESERVED FOR A MIND AND NEVER BOUND is that mind's too
+    # (`charter_model.authored_mind_bodies`), and `charter_run.step`
+    # keeps its hands off it for that reason; so it follows the scene
+    # here exactly as a bound one does, located by the authored
+    # person's own name, which is the reservation's `name`.
+    from world.charter_model import authored_mind_bodies
+    minds_here = dict(state.get("bindings") or {})
+    for body_key in sorted(authored_mind_bodies(state) - set(minds_here)):
+        minds_here[body_key] = {
+            "name": str((state["bodies"].get(body_key) or {}).get("name")
+                        or "")}
+    for body_key, binding in minds_here.items():
+        try:
+            room = (room_of(scene, binding.get("name"))
+                    or room_of(scene, binding.get("entity_id")))
+        except Exception as exc:
+            logger.warning(
+                "charter %s: bound body %s could not be located in "
+                "the scene (%s: %s); its place is not advanced",
+                key, body_key, type(exc).__name__, exc)
+            continue
+        if not room or body_key not in state["bodies"]:
+            continue
+        if charter_rooms and str(room) not in charter_rooms:
+            logger.warning(
+                "charter %s: bound body %s stands in scene room %r, "
+                "which the charter's graph does not contain; its "
+                "place is left at %r",
+                key, body_key, str(room),
+                state["bodies"][body_key].get("place"))
+            continue
+        if str(room) != str(state["bodies"][body_key].get("place") or ""):
+            # A station names a fixture or a cell of ONE room
+            # (`charter_place` rule i); a bound body's within-room
+            # position is the scene's own `stations` row anyway.
+            state["bodies"][body_key].pop("station", None)
+        state["bodies"][body_key]["place"] = str(room)
+        # A registered character walks under its own movement, so
+        # whatever route Charter had it on is over.
+        state["bodies"][body_key].pop("walk", None)
+
+
+def anchor_charter_day(state, previous_elapsed, story_day):
+    """THE STORY TELLS THE INSTITUTION WHEN IT IS. Mutates ``state``.
+
+    Charter hour ``clock_hours`` is story elapsed ``previous_elapsed`` by
+    construction (the two advance together), so the story's hour of the day
+    at that elapsed, less the charter's own count, is the hour its count
+    began at. Re-derived every advance rather than held across them, so a
+    re-anchored story clock (a declared time skip) reaches the town on its
+    next window instead of never. A story with no anchor (``story_day`` None)
+    leaves the charter's own field alone, which is None for every charter
+    that predates the cycle: no phase, no change.
+    """
+    if story_day is None:
+        return
+    before_hours = float(state.get("clock_hours") or 0.0)
+    anchor, length = story_day
+    state["day_anchor_hours"] = round(
+        (hour_of_day(previous_elapsed, anchor, length) - before_hours)
+        % length, 4)
+    state["day_length_hours"] = length
+
+
 def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                      cid, frame_id, scene=None, cancelled=None,
-                     budget_seconds=None):
+                     budget_seconds=None, context=None):
     """Advance a copied registry and compose stable scheduled-event rows.
+
+    ``context`` is what the beat IS (`CHARTER_BUDGET_SECONDS`' key). A
+    ``"time_skip"`` beat's span is stepped on the skip's own windows and
+    seed (`charter_skip.skip_windows`/`skip_seed`) rather than in equal
+    ``window_hours`` steps, because the cast who lived that skip inside the
+    town (`charter_skip.live_in_charter`) were run through exactly those
+    windows: stepped alike, the town this stores is the town they remember
+    -- measured on three owner registries, every resident at every window
+    edge of a 24-hour span, against 12 of 21 (chat 175), 7 of 10 (chat 115)
+    and 30 of 66 (chat 114) at the span's end when the town drew its own
+    windows and seed.
 
     ``budget_seconds`` is the wall clock this advance may spend -- one of
     `CHARTER_BUDGET_SECONDS`, None for unbounded. It is a STOP, not a skip:
@@ -3127,83 +3236,38 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
         if isinstance(scene, dict) and scene.get("rooms"):
             # The live scene owns the room graph. Charter retains background
             # body positions but never carries a competing adjacency map.
-            if state.get("structure"):
-                from world.structure import composed_scene, skeleton_rooms
-                state["scene"] = composed_scene(
-                    skeleton_rooms(cid, state["structure"], frame_id), scene)
-            else:
-                state["scene"] = copy.deepcopy(scene)
+            state["scene"] = charter_scene(cid, state, scene, frame_id)
             # Registered-character movement is authoritative.  A bound body
             # remains in Charter only as an institutional projection, and its
-            # place follows the scene instead of being advanced here.
-            #
-            # THE ONE BRIDGE BETWEEN TWO NAMESPACES, and it used to sit in a
-            # bare `except Exception: pass`. It is the only line anywhere
-            # that asserts a charter `place` and a scene room id are the same
-            # vocabulary; with bodies walking the room graph that assertion
-            # is load-bearing, so a failure here is logged with its cause,
-            # and a room the charter's own graph does not contain is said
-            # out loud rather than written into `place` for the mover to
-            # fail on silently next window. The catch-up still proceeds:
-            # one body's stale place is not a reason to freeze the town.
-            from world.spatial import room_of
-            charter_rooms = set((state["scene"] or {}).get("rooms") or {})
-            for body_key, binding in (state.get("bindings") or {}).items():
-                try:
-                    room = (room_of(scene, binding.get("name"))
-                            or room_of(scene, binding.get("entity_id")))
-                except Exception as exc:
-                    logger.warning(
-                        "charter %s: bound body %s could not be located in "
-                        "the scene (%s: %s); its place is not advanced",
-                        key, body_key, type(exc).__name__, exc)
-                    continue
-                if not room or body_key not in state["bodies"]:
-                    continue
-                if charter_rooms and str(room) not in charter_rooms:
-                    logger.warning(
-                        "charter %s: bound body %s stands in scene room %r, "
-                        "which the charter's graph does not contain; its "
-                        "place is left at %r",
-                        key, body_key, str(room),
-                        state["bodies"][body_key].get("place"))
-                    continue
-                if str(room) != str(state["bodies"][body_key].get("place") or ""):
-                    # A station names a fixture or a cell of ONE room
-                    # (`charter_place` rule i); a bound body's within-room
-                    # position is the scene's own `stations` row anyway.
-                    state["bodies"][body_key].pop("station", None)
-                state["bodies"][body_key]["place"] = str(room)
-                # A registered character walks under its own movement, so
-                # whatever route Charter had it on is over.
-                state["bodies"][body_key].pop("walk", None)
+            # place follows the scene instead of being advanced here
+            # (`sync_minds_to_scene`).
+            sync_minds_to_scene(state, scene, key)
         before_hours = float(state.get("clock_hours") or 0.0)
-        # THE STORY TELLS THE INSTITUTION WHEN IT IS. Charter hour
-        # `before_hours` is story elapsed `previous_elapsed` by construction
-        # (the two advance together below), so the story's hour of the day
-        # at that elapsed, less the charter's own count, is the hour its
-        # count began at. Re-derived every advance rather than held across
-        # them, so a re-anchored story clock (a declared time skip) reaches
-        # the town on its next window instead of never. A story with no
-        # anchor leaves the charter's own field alone, which is None for
-        # every charter that predates the cycle: no phase, no change.
-        _day = story_day
-        if _day is not None:
-            _anchor, _length = _day
-            state["day_anchor_hours"] = round(
-                (hour_of_day(previous_elapsed, _anchor, _length)
-                 - before_hours) % _length, 4)
-            state["day_length_hours"] = _length
+        # THE STORY TELLS THE INSTITUTION WHEN IT IS (`anchor_charter_day`).
+        anchor_charter_day(state, previous_elapsed, story_day)
         if together:
             prepared[key] = (state, advanced_hours, previous_elapsed,
                              before_hours, item)
             continue
-        state, events = run(
-            state, hours=advanced_hours,
-            window=item["window_hours"],
-            seed=int(stable_event_key(epoch_id, key)[-8:], 16),
-            deadline=deadline,
-        )
+        if context == "time_skip":
+            from world.charter_skip import skip_seed, skip_windows
+            edges = skip_windows(previous_elapsed,
+                                 previous_elapsed + advanced_hours * 3600.0,
+                                 story_day)
+            state, events = run(
+                state, hours=advanced_hours,
+                window=item["window_hours"],
+                seed=skip_seed(cid, key, previous_elapsed),
+                deadline=deadline,
+                windows=[(b - a) / 3600.0 for a, b in zip(edges, edges[1:])],
+            )
+        else:
+            state, events = run(
+                state, hours=advanced_hours,
+                window=item["window_hours"],
+                seed=int(stable_event_key(epoch_id, key)[-8:], 16),
+                deadline=deadline,
+            )
         item["state"] = state
         advanced_any = True
         # WHAT THE CHARTER ACTUALLY LIVED, read off its own clock rather
@@ -3731,7 +3795,7 @@ def schedule_charter_ticks(ctx, epoch=None):
         advanced, rows, produced = advance_snapshot(
             registry, elapsed_seconds=elapsed, epoch_id=beat_id,
             base_turn=base_turn, cid=cid, frame_id=frame_id, scene=scene,
-            cancelled=job.cancelled, budget_seconds=budget)
+            cancelled=job.cancelled, budget_seconds=budget, context=context)
         if job.cancelled.is_set():
             return {"advanced": 0, "events": 0, "cancelled": True}
         return land_snapshot(cid, frame_id, base_turn, beat_id, advanced,

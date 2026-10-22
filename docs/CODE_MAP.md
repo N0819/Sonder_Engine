@@ -181,21 +181,22 @@
 | `world/charter_log.py` | 521 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
-| `world/charter_model.py` | 931 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
-| `world/charter_move.py` | 674 |  | `world.charter_needs`, `world.charter_space` |
+| `world/charter_model.py` | 971 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
+| `world/charter_move.py` | 685 |  | `world.charter_needs`, `world.charter_space` |
 | `world/charter_needs.py` | 615 |  | `world.charter_model` |
 | `world/charter_news.py` | 565 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
 | `world/charter_observe.py` | 664 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
 | `world/charter_ops.py` | 384 |  | `world.charter_harm` |
 | `world/charter_place.py` | 671 |  | `world.charter_identity`, `world.charter_model`, `world.charter_move`, `world.spatial` |
-| `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
+| `world/charter_plan.py` | 234 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1203 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_needs`, `world.charter_politics`, `world.charter_social`, `world.charter_talk` |
 | `world/charter_predation.py` | 1063 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
 | `world/charter_promote.py` | 612 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
-| `world/charter_run.py` | 1530 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 5802 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_run.py` | 1640 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
+| `world/charter_runtime.py` | 5866 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_skip.py` | 1092 |  | `core.logging_utils` |
 | `world/charter_social.py` | 865 |  | `world.charter_politics` |
 | `world/charter_space.py` | 337 |  | `world.spatial` |
 | `world/charter_surface.py` | 364 |  | — |
@@ -2263,27 +2264,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 499 | 411 lines |
+| `normalize_charter()` | 539 | 411 lines |
 | `normalize_body()` | 231 | 162 lines |
 | `body_of_an_authored_mind()` | 395 | 58 lines |
 | `normalize_post()` | 144 | 45 lines |
 | `normalize_body_station()` | 191 | 38 lines |
 | `normalize_upkeep()` | 111 | 31 lines |
-| `_phase_set()` | 477 | 20 lines |
+| `_phase_set()` | 517 | 20 lines |
 | `_tags()` | 72 | 15 lines |
 
 ### `world/charter_move.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `errands()` | 411 | 122 lines |
-| `_advance()` | 235 | 57 lines |
+| `errands()` | 418 | 122 lines |
+| `_advance()` | 242 | 57 lines |
 | `edge_seconds()` | 112 | 47 lines |
-| `continue_walks()` | 294 | 41 lines |
-| `place_body()` | 596 | 39 lines |
-| `walk()` | 535 | 36 lines |
-| `_dispatch()` | 201 | 32 lines |
-| `relocate()` | 337 | 30 lines |
+| `continue_walks()` | 301 | 41 lines |
+| `walk()` | 542 | 40 lines |
+| `_dispatch()` | 201 | 39 lines |
+| `place_body()` | 607 | 39 lines |
+| `relocate()` | 344 | 30 lines |
 
 ### `world/charter_needs.py`
 
@@ -2354,8 +2355,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `plan_watch()` | 87 | 115 lines |
-| `tended_upkeeps()` | 204 | 24 lines |
+| `plan_watch()` | 87 | 122 lines |
+| `tended_upkeeps()` | 211 | 24 lines |
 | `criticality()` | 63 | 22 lines |
 | `_post_urgency()` | 25 | 17 lines |
 | `_assignable_cache()` | 44 | 17 lines |
@@ -2424,14 +2425,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 427 | 1022 lines |
-| `_record_coarse_experiences()` | 244 | 160 lines |
-| `run()` | 1451 | 80 lines |
-| `_remember_experience()` | 156 | 32 lines |
-| `_run_private_habits()` | 213 | 29 lines |
-| `_social_events()` | 111 | 25 lines |
-| `_record_social_experiences()` | 190 | 21 lines |
-| `_settle_commitments()` | 406 | 19 lines |
+| `step()` | 428 | 1117 lines |
+| `_record_coarse_experiences()` | 245 | 160 lines |
+| `run()` | 1547 | 94 lines |
+| `_remember_experience()` | 157 | 32 lines |
+| `_run_private_habits()` | 214 | 29 lines |
+| `_social_events()` | 112 | 25 lines |
+| `_record_social_experiences()` | 191 | 21 lines |
+| `_settle_commitments()` | 407 | 19 lines |
 
 ### `world/charter_runtime.py`
 
@@ -2439,12 +2440,25 @@
 |---|---:|---:|
 | `_plan_lived_location()` | 2023 | 254 lines |
 | `registry_warnings()` | 2603 | 233 lines |
-| `advance_snapshot()` | 3075 | 200 lines |
 | `_prepare_cast_histories()` | 1042 | 199 lines |
+| `advance_snapshot()` | 3173 | 166 lines |
 | `_generate_lived_location()` | 2337 | 163 lines |
-| `presence_view()` | 4972 | 163 lines |
+| `presence_view()` | 5036 | 163 lines |
 | `_remap_generated_town()` | 1739 | 144 lines |
-| `_voiced_presence()` | 4734 | 120 lines |
+| `_voiced_presence()` | 4798 | 120 lines |
+
+### `world/charter_skip.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `live_in_charter()` | 126 | 58 lines |
+| `skip_windows()` | 316 | 43 lines |
+| `_body_of_mind()` | 251 | 36 lines |
+| `_stretches()` | 196 | 31 lines |
+| `_a_way_exists()` | 1061 | 22 lines |
+| `_char_id_of()` | 229 | 20 lines |
+| `_charter_naming()` | 302 | 12 lines |
+| `_charter_places()` | 289 | 11 lines |
 
 ### `world/charter_social.py`
 

@@ -198,10 +198,16 @@ def en_route(body):
     return len(route) > 1 and int(rec.get("leg") or 0) < len(route) - 1
 
 
-def _dispatch(body, target, scene, cache, hours, neighbors=None):
+def _dispatch(body, target, scene, cache, hours, neighbors=None, limit=None):
     """Put ``body`` on a route to ``target``. Returns the body, or ``None``
     when there is no route (the caller leaves it where it stands: a
     charter's mistake must not be laundered into a movement).
+
+    ``limit`` is the route search's depth, `charter_space.REACH_LIMIT` when
+    None -- the planner's own bound, because it never posts a body further
+    than it can reach. A destination the BODY chose is not the planner's to
+    bound (`charter_run.step`'s ``itinerary``), and its caller widens this
+    with its own route cache, since `walk_route`'s cache keys rooms alone.
 
     A body already walking to this target keeps its route and its credit --
     it was advanced this window by `continue_walks` and is not paid twice. A
@@ -217,8 +223,9 @@ def _dispatch(body, target, scene, cache, hours, neighbors=None):
     # re-checks each leg against. A creature that can open doors decides on
     # a wider graph than `passable_path`'s, and planning on the narrower one
     # dropped the move silently.
+    widened = {} if limit is None else {"limit": int(limit)}
     route = walk_route(scene, origin, target, cache=cache,
-                       neighbors=neighbors) if scene else None
+                       neighbors=neighbors, **widened) if scene else None
     if scene and route is None:
         return None
     if not scene:
@@ -533,8 +540,11 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
 
 
 def walk(bodies, moves, scene, travelled=None, cache=None, hours=4.0,
-         neighbors=None, walked=None):
+         neighbors=None, walked=None, limit=None):
     """Apply ``{body: place}`` moves. Returns ``(bodies, travelled, walked)``.
+
+    ``limit`` widens the route search for moves a body chose itself
+    (`_dispatch`); None keeps the planner's reach.
 
     The one generic mover: postings, errands and homecomings all go through
     it, so a visit costs the same bookkeeping a posting does and no position
@@ -562,7 +572,8 @@ def walk(bodies, moves, scene, travelled=None, cache=None, hours=4.0,
             continue
         if str(body.get("place") or "") == target and not en_route(body):
             continue
-        dispatched = _dispatch(body, target, scene, cache, hours, neighbors)
+        dispatched = _dispatch(body, target, scene, cache, hours, neighbors,
+                               limit=limit)
         if dispatched is None:
             continue
         bodies[body_key] = _advance(body_key, dispatched, neighbors,

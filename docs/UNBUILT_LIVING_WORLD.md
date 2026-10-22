@@ -1392,6 +1392,38 @@ and drops what still fails. What it leaves:
   open question 3); and crediting the projects and intentions a stretch
   served (§ 4.6's phase 2).
 
+**2026-10-21, later: the town's half is built** (`Design.md`, "A cast
+member lives a time skip inside the town's charter";
+`world/charter_skip.live_in_charter`). The skip stage hands it one mind's
+resolved itinerary; it walks that day through the town and hands back the
+mind's LOG rows and far end. How it settles what this entry left open, for
+the town's half:
+- **"Seed it as Charter state ... hand the accumulated life back" is not
+  what was built, deliberately.** Nothing of the mind is seeded into the
+  charter and nothing is handed back through it: the run is a scratch copy,
+  dropped after, because a charter-held life of a registered mind is the
+  second representation `DESIGN_OFFSCREEN_SUPERSEDED.md` § 2 forbids. The
+  life comes back as the LOG (the stage's step output), and its memories are
+  the character tier's to write (`mind/skip_memories.py`). `simulate_bound` is per body now,
+  and in play it lifts the BODY only (walk, tire, be seen), never cognition.
+- **How projects and intentions seed the charter's wants:** they do not. The
+  itinerary is the projection (the mind's own answer), the charter's
+  planners yield to it wherever it speaks, and only its NEEDS run the body in
+  the silences. No want of the mind is ever restated in charter state.
+- **When the simulation contradicts the stated intent:** the stretch fails
+  with a typed reason (`no_route`, `shut_way`, `too_far`), the body stands
+  where the town held it, and the far end is where the run left it.
+
+Still open on this half: a mind whose own body stands a post (a featured
+resident) keeps it off the bill while the town's own advance, which holds
+that body where the commit stood it, may staff it (chat 115: 8 of 10
+residents end where the mind saw them; temporary enrolments match exactly);
+residents' talk among themselves can differ between two minds' records,
+each run alone; a creature registry's predation round is not stepped in the
+scratch run; and a mind's skip can reach only the institution graph it is
+enrolled in -- which on chat 114 is the world's own truth (its two
+structures are unjoined islands of rooms), not an artifact.
+
 <a id="unbuilt-1-99e"></a>
 
 ### 1.99e The three tiers, and the chatter already being thrown away
