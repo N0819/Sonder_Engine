@@ -579,9 +579,16 @@ def _sight_verdict(rel: dict) -> tuple:
 
 
 def _sight_line(rel: dict) -> bool:
-    """Is there a line of sight at all, ignoring light."""
+    """Is there a line of sight at all, ignoring light.
+
+    Not across an unbuilt frontier stub's join, whatever its barrier says:
+    the place lies that way, and nothing of it is built to be seen through a
+    doorway (`spatial_routing.spatial_rel` marks the relation
+    `frontier_join`; `spatial_barriers.frontier_joins`)."""
     if rel.get("same_room"):
         return True
+    if rel.get("frontier_join"):
+        return False
     return normalize_barrier(rel.get("barrier")) in _SIGHT_BARRIERS
 
 

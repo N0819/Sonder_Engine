@@ -23,6 +23,8 @@ from world.spatial import (
     _ROUTE_MEMORY_BARRIERS,
     door_cell,
     egocentric_frame,
+    frontier_join_of,
+    frontier_way,
     merge_scene_with_diff,
     neighbor_map,
     normalize_bearing,
@@ -2488,11 +2490,20 @@ def _declared_movers(interp, p_name):
     return {p_name if who in ("self", "player") else who}
 
 
-def _edge_to(rooms, here, step):
-    """The adjacency record for `here -> step`, or `{}` if the map has none."""
-    return next(
+def _edge_to(rooms, here, step, scene=None):
+    """The adjacency record for `here -> step`, or `{}` if the map has none.
+
+    Given the scene, an unbuilt frontier stub's join is read as the way it
+    really is, an unmeasured `far` way (`spatial.frontier_way`), so a walk
+    across it takes a long edge's beats rather than a doorway's breath; a
+    join across a medium is no step of a walk at all (the route never offers
+    it, `spatial.frontier_joins`)."""
+    edge = next(
         (e for e in ((rooms.get(here) or {}).get("adjacent") or [])
          if isinstance(e, dict) and e.get("to") == step), {})
+    if scene is not None and edge and frontier_join_of(scene, here, step):
+        return frontier_way(edge)
+    return edge
 
 
 def _still_crossing(distance, beats_spent):
@@ -2889,7 +2900,7 @@ def _travel_in_flight_view(sc, interp, p_name):
         if not step:
             continue
         distance = normalize_edge_distance(
-            _edge_to(rooms, here, step).get("distance"))
+            _edge_to(rooms, here, step, sc).get("distance"))
         entry = {
             "subject": subject,
             "destination": destination,
@@ -3041,7 +3052,7 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         # record so the beats already spent on this leg survive a reroll.
         # The body walks to the doorway meanwhile and waits there.
         distance = normalize_edge_distance(
-            _edge_to(rooms, here, step).get("distance"))
+            _edge_to(rooms, here, step, route_scene).get("distance"))
         spent = int(leg.get("edge_beats") or 0) + 1
         paces = paces_for(beat_seconds(ctx, sd))
         if _still_crossing(distance, spent):

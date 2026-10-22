@@ -1029,6 +1029,9 @@ def skeleton_rooms(cid, structure_key, frame_id=None):
             **planned_seed(planned),
             # And what it is MADE OF: the fixtures a body can reach.
             **planned_anchors(planned),
+            # And whether it is a space the plan holds open past the map's
+            # edge (`held_open_marks`), which its join is read by.
+            **held_open_marks(planned),
         }
     return {"rooms": rooms}
 
@@ -1628,6 +1631,9 @@ def materialize_planned_fringe(cid, scene):
             continue
         stubs.append(uid)
         room["name"] = name
+        # Held open while the registry holds it open, and no longer once a
+        # plan claims it (`held_open_marks`); the stored blob follows here.
+        _mark_held_open(room, spec)
         if str(spec.get("purpose") or ""):
             room["purpose"] = str(spec["purpose"])
         room.update(planned_geometry(spec))
@@ -1699,6 +1705,66 @@ def materialize_planned_fringe(cid, scene):
     return scene, added
 
 
+def held_open_marks(spec) -> dict:
+    """``{"provisional": True, "frontier_of": {...}}`` for a planned spec the
+    plan still holds OPEN -- a frontier stub `mint_frontier` made, which no
+    plan has claimed -- else ``{}``.
+
+    THE LIVE STUB SAYS SO TOO. The registry has always known which rooms are
+    spaces held open past the map's edge; the scene, which every sense and
+    every walk reads, did not, so its join to the room it hangs off was read
+    as the doorway the mint wrote (`spatial_barriers.frontier_joins`; the
+    lighthouse, chat 3 turn 25: "You are in The Mainland. Through the open
+    doorway is The Landing", thirteen kilometres of channel away). The two
+    marks are copied as the registry holds them and go when it stops holding
+    them: a claim rewrites the row without `provisional`, and a beat that
+    describes the room takes them off with the plan's other flags
+    (`settle_developed_stubs`)."""
+    if not isinstance(spec, dict) or not spec.get("provisional") \
+            or not isinstance(spec.get("frontier_of"), dict):
+        return {}
+    return {"provisional": True, "frontier_of": dict(spec["frontier_of"])}
+
+
+#: The marks `held_open_marks` lays on a live stub, taken off together.
+HELD_OPEN_FIELDS = ("provisional", "frontier_of")
+
+
+def _mark_held_open(room, spec):
+    """Lay `spec`'s held-open marks on the live `room`, or take them off where
+    the plan no longer holds it open: the registry says, the scene follows."""
+    for field in HELD_OPEN_FIELDS:
+        room.pop(field, None)
+    room.update(held_open_marks(spec))
+
+
+def lay_held_open_marks(cid, scene):
+    """Mark every prose-free planned stub the live `scene` holds as the
+    registry holds it -- a space held open past the map's edge, or not
+    (`held_open_marks`) -- in place; returns the ids marked held open.
+
+    Read as the beat opens (`story.scene.get_scene`, beside
+    `apply_solved_plans`) as well as at each commit (`materialize_planned_
+    fringe`), for the two moments the commit alone would miss: a scene stored
+    before the marks existed is read right the beat it is first read, and a
+    plan that claims the space between two commits is the built room's from
+    the next beat on. A room with prose is built and is not touched."""
+    rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
+    if not isinstance(rooms, dict) or not rooms:
+        return []
+    marked = []
+    for uid, (_name, spec) in _planned_specs(cid).items():
+        room = rooms.get(uid)
+        if not isinstance(room, dict) or not room.get("planned"):
+            continue
+        if str(room.get("desc") or room.get("description") or "").strip():
+            continue
+        _mark_held_open(room, spec)
+        if room.get("provisional"):
+            marked.append(str(uid))
+    return marked
+
+
 def _planned_stub(name, spec):
     """A planned room as the fringe mints it into the scene: its name, what
     it is for, its region, and what the plan measured and furnished, with no
@@ -1707,13 +1773,14 @@ def _planned_stub(name, spec):
     some hand describes it: a planned room reaching the live scene by the
     fringe is the same room `skeleton_rooms` lays out at the opening, and a
     measurement the plan stated is not the Director's to invent a second
-    time."""
+    time. A space the plan holds open says so (`held_open_marks`)."""
     stub = {
         "name": name, "adjacent": [],
         "planned": True, "purpose": str(spec.get("purpose") or ""),
         **planned_geometry(spec),
         **planned_seed(spec),
         **planned_anchors(spec),
+        **held_open_marks(spec),
     }
     if spec.get("structure"):
         stub["region"] = normalize_region_id(spec["structure"])
@@ -2479,6 +2546,10 @@ def settle_developed_stubs(scene):
         room.pop("planned", None)
         room.pop("purpose", None)
         room.pop("access", None)
+        # A space a beat has described is built: its join stands as written
+        # (`spatial_barriers.held_open_from`).
+        for field in HELD_OPEN_FIELDS:
+            room.pop(field, None)
         settled.append(str(rid))
     return settled
 
@@ -2746,6 +2817,9 @@ def prepare_frontier_expansion(cid, scene):
                 "name": new_spec["name"], "planned": True,
                 "purpose": new_spec["purpose"],
                 "adjacent": [dict(e) for e in new_spec["adjacent"]],
+                # A space held open, from the beat it is minted
+                # (`held_open_marks`): its join is the way it really is.
+                **held_open_marks(new_spec),
             }
             if structure_key:
                 rooms[new_uid]["region"] = normalize_region_id(structure_key)
@@ -3194,6 +3268,7 @@ __all__ = [
     "apply_solved_plans", "planned_anchors", "planned_seed",
     "HELD_PLACE_FIELDS", "hold_planned_fixtures", "planned_fixture_brief",
     "write_planned_layout",
+    "HELD_OPEN_FIELDS", "held_open_marks", "lay_held_open_marks",
     "apply_frontier_mutations", "claim_frontier_spaces",
     "composed_scene", "frontier_refusal", "frontier_spaces",
     "planned_geometry",

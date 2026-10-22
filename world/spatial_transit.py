@@ -938,6 +938,49 @@ def apply_transit_dock_edges(scene: dict) -> bool:
 _UNDER_WAY_PHASES = {"in_transit", "arriving"}
 
 
+#: A FLOOR NO BODY STANDS ON, as a room's own one-word `floor` says it: the
+#: room author writes what a floor is made of in one word
+#: (`prose_contract/layout_sort`), and this is the one such word that is no
+#: footing -- the water a vessel crosses. Read as `spatial_sound_field.
+#: FLOOR_IMPACT_DB` reads a floor word, and like that table a word it does
+#: not hold is footing: a room it misses is walked as it always was. ONE
+#: OWNER for two readers: the skip's executor keeps a walk off the water
+#: with it (`skip_itinerary.media`, lane B2, which imports this), and a
+#: frontier stub's join across the water is read by it
+#: (`spatial_barriers.frontier_joins`). Measured (2026-10-21): the control
+#: story's channel (`floor: water`, ways of 13 and 1.5 km) is the only room
+#: of the owner's stored scenes and the three probe stories whose floor is
+#: not footing. A guard on a typed field's value; the owner rules on it.
+MEDIUM_FLOORS = frozenset({"water"})
+
+
+def medium_rooms(scene: dict) -> set:
+    """`{room id}` -- the rooms that are a MEDIUM rather than a place to
+    stand: a room whose own `floor` is water (`MEDIUM_FLOORS`), and the space
+    a vessel under way moves through (its transit's `route_room` while the
+    phase is `_UNDER_WAY_PHASES`). A way across one is a vessel's. The one
+    reading: the skip's executor reads it as `skip_itinerary.media` (lane
+    B2, 2026-10-21), and a frontier stub's join is read by it
+    (`spatial_barriers.frontier_joins`)."""
+    scene = scene if isinstance(scene, dict) else {}
+    rooms = scene.get("rooms") or {}
+    if not isinstance(rooms, dict):
+        return set()
+    out = {str(rid) for rid, room in rooms.items()
+           if isinstance(room, dict)
+           and " ".join(str(room.get("floor") or "").split()).casefold() in MEDIUM_FLOORS}
+    for entity in (scene.get("entities") or {}).values():
+        transit = _transit_state(entity)
+        if not transit or str(transit.get("phase") or "").strip().casefold() \
+                not in _UNDER_WAY_PHASES:
+            continue
+        route = str(transit.get("route_room") or "").strip()
+        route = route if route in rooms else scene_room_id(scene, route)
+        if route and route in rooms:
+            out.add(str(route))
+    return out
+
+
 def _keys_filing(table: dict, eid, entity) -> list:
     """Every key `table` (positions, stations) files this entity under --
     its id, name or an alias, with `_positions_lookup`'s case, spacing and

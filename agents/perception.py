@@ -5967,6 +5967,30 @@ def _visible_openings(sc, name, room, *, sweep=False, gate=None,
         barrier = normalize_barrier(edge.get("barrier"))
         if barrier == "wall":
             continue
+        # AN UNBUILT FRONTIER STUB'S JOIN IS NO DOORWAY OF THIS ROOM, AND A
+        # FAR ONE IS STILL A WAY (`spatial.frontier_joins`; across a medium
+        # the join reaches no reader here at all). The place lies that way,
+        # so the view says the way goes on to it -- named, never seen
+        # through: no notes, no furniture, nothing past the join -- in the
+        # pack's own onward words (`composer._render_openings`). Seen
+        # through, it read "Through the open doorway is The Landing" from the
+        # mainland, thirteen kilometres of channel away (the lighthouse, chat
+        # 3 turn 25); left out, the owner's stories would stop telling a
+        # player where the Room's frontier goes on (2026-10-21). Offered
+        # whatever the observer faces: the join has no door to grade against
+        # the cone, so it answers as every boundary of an unmeasured room
+        # does.
+        if edge.get("frontier_join"):
+            from world.spatial import normalize_vertical
+            far_name = str((rooms.get(str(edge["to"])) or {}).get("name") or "").strip()
+            if far_name:
+                row = {"desc": " ".join(str(edge.get("name") or "").split())
+                       or _BARRIER_ANCHOR_DESC.get(barrier) or "the way through",
+                       "state": "onward", "room_name": far_name}
+                if normalize_vertical(edge.get("vertical")):
+                    row["vertical"] = normalize_vertical(edge.get("vertical"))
+                out.append(row)
+            continue
         to_room = str(edge["to"])
         if seen_doors is not None and door_anchor_id(to_room) not in seen_doors:
             continue

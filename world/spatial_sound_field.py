@@ -3187,10 +3187,16 @@ def _next_door(scene, a, b) -> bool:
     (`way_paces`); read as next door, a lighthouse's ground floor heard a
     mainland street `{open, far}` from it as the room beyond an opening
     (the control story, 2026-10-20, chat 1 idx 4)."""
+    from world.spatial_barriers import frontier_join_of
     from world.spatial_routing import is_long_way
     rooms = (scene or {}).get("rooms") or {}
     a, b = str(a or ""), str(b or "")
     if not a or not b or a == b:
+        return False
+    # Nor an unbuilt frontier stub and the room it hangs off: the place lies
+    # that way, across a medium or an unmeasured far way, never next door
+    # (`spatial_barriers.frontier_joins`).
+    if frontier_join_of(scene, a, b):
         return False
     for x, y in ((a, b), (b, a)):
         room = rooms.get(x) or {}
@@ -3268,8 +3274,19 @@ def far_field_way_paces(scene: dict) -> dict:
     if hit is not None and hit[0] is scene and hit[1] is rooms:
         return hit[2]
     ways: dict = {}
+    # An unbuilt frontier stub's join is priced as what it is: an unmeasured
+    # far way (`frontier_way`), or across a medium no way of its own -- the
+    # graph does not hold it (`spatial_barriers.frontier_joins`).
+    from world.spatial_barriers import FRONTIER_MEDIUM, frontier_joins, frontier_way
+    held = frontier_joins(scene)
     for room_id, room in rooms.items():
         for edge in (room.get("adjacent") or []) if isinstance(room, dict) else []:
+            join = held.get(frozenset((str(room_id), str(edge.get("to") or "")))) \
+                if held and isinstance(edge, dict) else ""
+            if join == FRONTIER_MEDIUM:
+                continue
+            if join:
+                edge = frontier_way(edge)
             if not isinstance(edge, dict) or not str(edge.get("distance") or "").strip():
                 continue
             other = str(edge.get("to") or "")
@@ -3367,6 +3384,20 @@ def _rooms_joined(scene, a, b) -> bool:
     return False
 
 
+def _stamp_far_path(scene, rel, o_room, t_room):
+    """`stamp_sound_relation`'s far-field stamp alone, for a pair the room
+    graph prices without a field: the loss over the room graph, whether a
+    shut thing stood on the way, and the listening room's quiet floor."""
+    far = far_path(scene, str(o_room or ""), str(t_room or ""))
+    if far is None:
+        return rel
+    rel["air"] = True
+    rel["far_loss_db"] = far["loss_db"]
+    rel["far_muffled"] = far["muffled"]
+    rel["floor_db"] = db_of_power(quiet_floor(scene, str(o_room)))
+    return rel
+
+
 def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
                          *, sound=None, observer_room=None,
                          target_room=None) -> dict:
@@ -3412,6 +3443,16 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     if sound is None:
         sound = sound_field(scene, observer, room=observer_room)
     if sound is None or sound.locate(observer, observer_room) is None:
+        # AN UNBUILT FRONTIER STUB'S JOIN IS PRICED AS THE WAY IT IS, laid
+        # out or not (`spatial_barriers.frontier_joins`). The room graph's
+        # loss is a room-level answer, and a space held open past the map's
+        # edge is never laid out -- so a listener standing in one, or beyond
+        # one, heard the room it hangs off through the edge model's opening,
+        # in full. The relation is new, so stamping it keeps every scene
+        # without a frontier join byte-identical.
+        if rel.get("frontier_join"):
+            _stamp_far_path(scene, rel, observer_room or room_of(scene, observer),
+                            target_room or room_of(scene, target))
         return rel
     from world.spatial_senses import rooms_adjacent
     o_room = str(observer_room or room_of(scene, observer) or "")

@@ -1754,6 +1754,10 @@ def sight_passes(scene, room_id, edge):
     this is the sight rule only."""
     if normalize_vertical(edge.get("vertical")):
         return None
+    # An unbuilt frontier stub's join is no doorway to lay a grid through
+    # (`spatial_barriers.frontier_joins`; `frontier_way` marks it).
+    if edge.get("frontier_join"):
+        return None
     barrier = normalize_barrier(edge.get("barrier"))
     if barrier not in _SIGHT_BARRIERS:
         return None

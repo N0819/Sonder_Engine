@@ -123,10 +123,15 @@ def edge_seconds(scene, here, nxt) -> float:
     if not isinstance(rooms, dict) or str(here) not in rooms:
         return town
     room = rooms.get(str(here)) or {}
-    from world.spatial import edge_metres
+    from world.spatial import edge_metres, frontier_join_of, frontier_way
+    # An unbuilt frontier stub's join is walked as the unmeasured far way it
+    # is, never at a doorway's price (`spatial.frontier_joins`).
+    held = frontier_join_of(scene, here, nxt)
     edge_paces = None
     for edge in room.get("adjacent") or ():
         if isinstance(edge, dict) and str(edge.get("to")) == str(nxt):
+            if held:
+                edge = frontier_way(edge)
             # A MEASURED crossing costs what it measures -- a pace is about
             # the metre here -- and a word what the table says (a plan keeps
             # its number since 2026-10-05, and "40 m" read as no word at all

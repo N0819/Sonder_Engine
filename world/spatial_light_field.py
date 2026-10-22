@@ -306,7 +306,10 @@ def light_passes(scene, room_id, edge):
     grilles unplaced because a grid cannot be walked into through them; a
     lamp behind a window lights this room all the same, and so does the lit
     room's floor through it. One grid derivation, three predicates
-    (`spatial_fov._placed_neighbours`)."""
+    (`spatial_fov._placed_neighbours`). Never through an unbuilt frontier
+    stub's join, which is no opening (`spatial_barriers.frontier_joins`)."""
+    if edge.get("frontier_join"):
+        return None
     barrier = normalize_barrier(edge.get("barrier"))
     return 1.0 if barrier in _SIGHT_BARRIERS else None
 

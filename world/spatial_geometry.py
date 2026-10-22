@@ -22,7 +22,8 @@ from world.spatial_orientation import (
 )
 
 from world.spatial_barriers import (WINDOW_BARRIERS, effective_adjacent,
-                                    normalize_barrier, resolve_edge)
+                                    frontier_joins, normalize_barrier,
+                                    resolve_edge)
 from world.spatial_containment import (_NEVER_STATIONED_KINDS,
                                        containment_conceals,
                                        scale_changed_names)
@@ -564,12 +565,19 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
     # -- the plan schema does not ask for one -- which was 38 of the 54
     # edges live on 2026-09-06. The guess decides which wall, and only that.
     derived = derived_edge_bearings(scene) if derive else {}
+    # AN UNBUILT FRONTIER STUB'S JOIN IS NO DOORWAY IN EITHER ROOM'S WALL
+    # (`spatial_barriers.frontier_joins`): it says the place lies that way,
+    # so it mints no `door:` anchor -- nothing to stand at, look through or
+    # place a neighbour by. Its walk, where it has one, is the far way's.
+    held = frontier_joins(scene)
     # Each edge as its readers see it: through the passage it names, when it
     # names one (`resolve_edge`, the passage record of DESIGN_ROOM_FIDELITY
     # §5), so the door anchor's barrier and width are the doorway's from
     # either side; per edge, byte for byte, when it does not.
     for edge in room.get("adjacent") or []:
         if isinstance(edge, dict) and edge.get("to"):
+            if held and frozenset((str(room_id), str(edge["to"]))) in held:
+                continue
             edge = resolve_edge(scene, edge)
             add(edge["to"], edge.get("barrier"),
                 normalize_bearing(edge.get("dir"))
@@ -582,6 +590,8 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
     # travel_bearing already applies.
     for other_id, other in rooms.items():
         if other_id == room_id or not isinstance(other, dict):
+            continue
+        if held and frozenset((str(room_id), str(other_id))) in held:
             continue
         for edge in other.get("adjacent") or []:
             if isinstance(edge, dict) and edge.get("to") == room_id:

@@ -6391,6 +6391,19 @@ def _render_openings(openings, here=""):
         total[desc] = total.get(desc, 0) + 1
     parts = []
     for opening, desc in rows:
+        # A WAY THAT GOES ON, NEVER A DOOR SEEN THROUGH (`perception.
+        # _visible_openings`' `onward` row: an unbuilt frontier stub's far
+        # join). The place is named and nothing past the join is described,
+        # in the words the pack already has for a way that goes on from here
+        # -- up, down, or on. It names no boundary, so it takes no ordinal
+        # from one beside it: said before the ordinals are counted out.
+        if str(opening.get("state") or "") == "onward":
+            room = str(opening.get("room_name") or "").strip()
+            if room:
+                parts.append(_cap(_en(
+                    {"up": "opening_onward_up", "down": "opening_onward_down"}.get(
+                        opening.get("vertical"), "opening_onward"), room=room)))
+            continue
         if total[desc] > 1:
             so_far[desc] = so_far.get(desc, 0) + 1
             if so_far[desc] > 1:

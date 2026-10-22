@@ -80,6 +80,9 @@ from world.spatial_barriers import (
     passage_direction, passage_id_for, passage_of, resolve_edge,
     route_memory_barrier, scene_passages, unresolved_barrier_words,
     WINDOW_BARRIERS,
+    # A frontier stub's join is the way it really is (2026-10-21).
+    FRONTIER_FAR, FRONTIER_MEDIUM, frontier_join_of, frontier_joins,
+    frontier_way, held_open_from,
 )
 
 
@@ -120,6 +123,8 @@ from world.spatial_transit import (
     _UNDER_WAY_PHASES,
     # ...at the vessel's own speed, where the story gave it one (2026-10-21).
     journey_pace, SPEED_UNIT_METRES_PER_SECOND, SPEED_UNITS, vessel_speed,
+    # ...and what a vessel crosses, which a frontier join may lie across.
+    MEDIUM_FLOORS, medium_rooms,
 )
 
 

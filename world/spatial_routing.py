@@ -9,9 +9,10 @@ from world.spatial_orientation import (normalize_bearing, normalize_vertical,
                                        opposite_bearing)
 
 from world.spatial_barriers import (_PASSABLE_BARRIERS, _ROUTE_MEMORY_BARRIERS,
-                              _SIGHT_BARRIERS,
-                              edge_admits, edge_passable, effective_adjacent, neighbor_map,
-                              normalize_barrier, resolve_edge)
+                              _SIGHT_BARRIERS, FRONTIER_FAR, FRONTIER_MEDIUM,
+                              edge_admits, edge_passable, effective_adjacent,
+                              frontier_join_of, frontier_joins, frontier_way,
+                              neighbor_map, normalize_barrier, resolve_edge)
 from world.spatial_containment import container_of
 from world.spatial_geometry import effective_room_size
 from world.spatial_light import _LIGHT_SIGHT, effective_light, light_blocks_sight
@@ -385,6 +386,14 @@ def spatial_rel(
 
     rooms = scene.get("rooms") or {}
 
+    # AN UNBUILT FRONTIER STUB'S JOIN IS THE WAY IT REALLY IS
+    # (`spatial_barriers.frontier_joins`): across a medium, the relation is
+    # the medium's; otherwise the join is an unmeasured far way. Neither is a
+    # line of sight (`frontier_join`, read by `spatial_senses._sight_line`).
+    held = frontier_join_of(scene, a_room, b_room)
+    if held == FRONTIER_MEDIUM:
+        return _across_the_medium(scene, a_room, b_room)
+
     for index, (source, target) in enumerate((
         (a_room, b_room),
         (b_room, a_room),
@@ -403,6 +412,8 @@ def spatial_rel(
             # observer's own edge and the far room's edge disagreeing), per
             # edge when it names none.
             edge = resolve_edge(scene, edge)
+            if held:
+                edge = frontier_way(edge)
             barrier = normalize_barrier(edge.get("barrier"))
             # `a_room` is the OBSERVER, and this loop reads their own side
             # first -- so the forward direction of a one-way window needs no
@@ -429,7 +440,7 @@ def spatial_rel(
                 elif index == 1 or _declares_one_way(rooms, target, source):
                     barrier = "wall"
 
-            return {
+            rel = {
                 "same_room": False,
                 "barrier": barrier,
                 # What the barrier is made of, carried through so hearing can
@@ -441,6 +452,9 @@ def spatial_rel(
                 # room from a lit one is still seeing nothing.
                 "light": effective_light(scene, b_room),
             }
+            if held:
+                rel["frontier_join"] = held
+            return rel
 
     locale_a, locale_b = room_locale(rooms.get(a_room)), room_locale(rooms.get(b_room))
     if locale_a and locale_b and locale_a != locale_b:
@@ -467,6 +481,53 @@ def spatial_rel(
         "same_room": False,
         "barrier": "separated",
         "distance": "far",
+    }
+
+
+def _across_the_medium(scene: dict, a_room, b_room) -> dict:
+    """`spatial_rel` for an unbuilt frontier stub and the room it hangs off
+    where a MEDIUM room joins both (`spatial_barriers.frontier_joins`): the
+    relation is the medium's own. Its ways to the two ends are what lies
+    between, so the distance is the longer of the two as each is written
+    (the lighthouse's channel: 1.5 km to the landing, 13 km to the mainland
+    -- `remote`, no air), and the nearest medium answers where two do. Never
+    a line of sight: the place beyond is not built to be seen
+    (`frontier_join`)."""
+    from world.spatial_transit import medium_rooms
+    rooms = scene.get("rooms") or {}
+    order = {tier: i for i, tier in enumerate(DISTANCE_TIERS)}
+
+    def leg(m, end):
+        # Only an AUTHORED distance is a claim, and where both sides write
+        # one the shorter stands (`spatial_sound_field.far_field_way_paces`'
+        # reading); a way written from neither side is a doorway's `near`.
+        edges = [e for x, y in ((m, end), (end, m))
+                 for e in ((rooms.get(x) or {}).get("adjacent") or ())
+                 if isinstance(e, dict) and str(e.get("to") or "") == str(y)]
+        if not edges:
+            return None
+        said = [normalize_edge_distance(e.get("distance")) for e in edges
+                if str(_distance_text(e.get("distance"))).strip()]
+        return min(said, key=order.get) if said else "near"
+
+    best, via = None, ""
+    for m in sorted(medium_rooms(scene)):
+        if m in (str(a_room), str(b_room)):
+            continue
+        legs = [leg(m, a_room), leg(m, b_room)]
+        if None in legs:
+            continue
+        farther = max(legs, key=order.get)
+        if best is None or order[farther] < order[best]:
+            best, via = farther, m
+    return {
+        "same_room": False,
+        "barrier": "open",
+        "material": "",
+        "distance": best or FRONTIER_FAR,
+        "light": effective_light(scene, b_room),
+        "frontier_join": FRONTIER_MEDIUM,
+        "across": via,
     }
 
 
@@ -733,8 +794,9 @@ def nearby_rooms(
     """
     rooms = scene.get("rooms") or {}
     # No barrier allowlist: this trims a PAYLOAD, and a room behind a locked
-    # door is still a room the beat may be about.
-    neighbors = neighbor_map(scene)
+    # door is still a room the beat may be about -- as is a place a frontier
+    # stub holds open that way, however far it lies (`relevance`).
+    neighbors = neighbor_map(scene, relevance=True)
 
     included = {r for r in (center_room_ids or []) if r}
     frontier = set(included)
@@ -1020,6 +1082,10 @@ def corridor_sightlines(scene, room_id):
     for edge in effective_adjacent(scene, room_id):
         if not edge.get("dir"):
             continue
+        # No line runs down an unbuilt frontier stub's join: the place lies
+        # that way, unbuilt (`spatial_barriers.frontier_joins`).
+        if edge.get("frontier_join"):
+            continue
         heading = str(edge["dir"]).lower()
         if not sees_across(rooms, room_id, edge.get("to"), edge.get("barrier")):
             continue
@@ -1068,6 +1134,7 @@ def corridor_sightlines(scene, room_id):
                 })
             straight = [e for e in onward
                         if str(e.get("dir") or "").lower() == heading
+                        and not e.get("frontier_join")
                         and sees_across(rooms, cur, e.get("to"), e.get("barrier"))]
             if len(onward) > 1:
                 terminus = "opening"      # a junction: the line stops being one line
@@ -1377,18 +1444,25 @@ def _onward_exits(scene, all_rooms, target_id, from_room):
     # nought is what raises `visibly_no_way_through`. Inventing a dead end is
     # the worse error of the two -- it argues against a real route.
     ways = {}
+    # A frontier join across a medium is no way out of the room it hangs off
+    # (`spatial_barriers.frontier_joins`); the medium's own way is.
+    held = frontier_joins(scene)
     for edge in (all_rooms.get(target_id) or {}).get("adjacent") or []:
         if not isinstance(edge, dict):
             continue
         if normalize_barrier(edge.get("barrier")) == "wall":
             continue
         dest = str(edge.get("to") or "")
+        if held.get(frozenset((str(target_id), dest))) == FRONTIER_MEDIUM:
+            continue
         if dest and dest != str(from_room):
             ways.setdefault(dest, normalize_bearing(edge.get("dir")))
     for other_id, other in all_rooms.items():
         if str(other_id) in (str(target_id), str(from_room)):
             continue
         if not isinstance(other, dict) or str(other_id) in ways:
+            continue
+        if held.get(frozenset((str(target_id), str(other_id)))) == FRONTIER_MEDIUM:
             continue
         for edge in other.get("adjacent") or []:
             if not isinstance(edge, dict) or str(edge.get("to")) != str(target_id):
@@ -1428,6 +1502,11 @@ def visible_adjacent_rooms(
 
     visible = []
     seen = set()
+    # AN UNBUILT FRONTIER STUB'S JOIN IS NOT SEEN THROUGH, either way: the
+    # place lies that way, and nothing of it is built to be seen
+    # (`spatial_barriers.frontier_joins`). What shows of it from afar is the
+    # landscape's and the vistas'.
+    held = frontier_joins(scene)
 
     # Forward adjacency: the current room explicitly points to another.
     current_room = all_rooms.get(room_id) or {}
@@ -1444,6 +1523,8 @@ def visible_adjacent_rooms(
             continue
 
         adjacent_id = edge.get("to")
+        if held and frozenset((str(room_id), str(adjacent_id or ""))) in held:
+            continue
         if _is_carried_interior(scene, adjacent_id):
             continue
         # From below, a window a storey up shows the window and who stands
@@ -1525,6 +1606,7 @@ def visible_adjacent_rooms(
 
             if (
                 edge.get("to") != room_id
+                or (held and frozenset((str(room_id), str(other_id))) in held)
                 # The reverse pass exists so a bidirectional doorway declared
                 # from one side is visible from both. A one-way window is the
                 # one edge where that generosity is wrong: it is declared in

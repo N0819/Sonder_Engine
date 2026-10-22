@@ -525,6 +525,18 @@ def get_scene(chat_id, chat=None):
         from core.logging_utils import logger
         logger.warning("solved plans not laid onto the stubs of chat %s: %s",
                        chat_id, exc)
+    # A SPACE THE PLAN HOLDS OPEN SAYS SO from the beat it is first read
+    # (`structure.lay_held_open_marks`): its join to the room it hangs off is
+    # then read as the way it really is (`spatial.frontier_joins`), on a
+    # scene stored before the marks existed and after a claim made between
+    # two commits alike.
+    try:
+        from world.structure import lay_held_open_marks
+        lay_held_open_marks(chat_id, sc)
+    except Exception as exc:  # a scene that cannot read its plan is a scene
+        from core.logging_utils import logger
+        logger.warning("held-open marks not laid onto the stubs of chat %s: %s",
+                       chat_id, exc)
     # THE WORLD AS THE BEAT OPENS, where a stage before this reader moved it
     # without writing it: a skip's far end (`agents/skip_stage.FarEnd`), laid
     # on for every reader of the beat after the skip, as the commit will lay

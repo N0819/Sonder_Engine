@@ -1732,6 +1732,16 @@ def compose_beat_scene(ctx):
     except Exception as _solved_exc:  # the stored scene still merges
         ctx.add_warning(
             f"a solved plan could not be laid onto its stubs: {_solved_exc}")
+    # ...and a space the plan holds open says so, as every reader of the beat
+    # read it (`structure.lay_held_open_marks`, which `get_scene` applies):
+    # its join to the room it hangs off is the way it really is, never a
+    # doorway (`spatial.frontier_joins`).
+    try:
+        from world.structure import lay_held_open_marks
+        lay_held_open_marks(cid, prev_scene)
+    except Exception as _held_exc:  # the stored scene still merges
+        ctx.add_warning(
+            f"held-open marks could not be laid onto the stubs: {_held_exc}")
     # A SKIP'S FAR END IS WHERE THIS BEAT BEGAN (`agents/skip_stage.py`):
     # every mind the stretch carried stands where its own last stretch left
     # it -- or is off the map -- and the beat's own diff lands on that, as

@@ -6,7 +6,7 @@ from typing import Optional
 
 from world.scene_memo import scene_memo
 from world.spatial_barriers import (
-    _SIGHT_BARRIERS, effective_adjacent, normalize_barrier)
+    _SIGHT_BARRIERS, effective_adjacent, frontier_joins, normalize_barrier)
 from world.spatial_geometry import (
     _DOOR_ANCHOR_PREFIX, door_anchor_id, effective_anchors, proximity_rel)
 from world.spatial_identity import (
@@ -534,11 +534,13 @@ def _light_crosses(scene: dict, a, b) -> bool:
     """Does an edge between rooms `a` and `b` let light across -- the same
     barriers sight crosses, which is what `spatial_light_field.light_passes`
     places a neighbour by. Either side's record of the edge answers
-    (`effective_adjacent`)."""
+    (`effective_adjacent`). Not an unbuilt frontier stub's join, which is no
+    opening (`spatial_barriers.frontier_joins`)."""
     if not a or not b or str(a) == str(b):
         return False
     for edge in effective_adjacent(scene, a) or ():
         if isinstance(edge, dict) and str(edge.get("to") or "") == str(b) \
+                and not edge.get("frontier_join") \
                 and normalize_barrier(edge.get("barrier")) in _SIGHT_BARRIERS:
             return True
     return False
@@ -789,10 +791,15 @@ def effective_light(scene: dict, room_id: str) -> str:
     if not isinstance(room, dict):
         return own
 
+    # No light spills across an unbuilt frontier stub's join, which is no
+    # opening (`spatial_barriers.frontier_joins`).
+    held = frontier_joins(scene)
     for edge in room.get("adjacent") or []:
         if not isinstance(edge, dict):
             continue
         if normalize_barrier(edge.get("barrier")) not in _SIGHT_BARRIERS:
+            continue
+        if held and frozenset((str(room_id), str(edge.get("to") or ""))) in held:
             continue
         if room_light(scene, edge.get("to")) in ("lit", "bright"):
             return "dim"

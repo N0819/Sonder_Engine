@@ -2652,6 +2652,85 @@ leaves:
     variance the old card shares, but it is the stranded-boat class arriving
     by another door, and worth watching.
 
+<a id="unbuilt-1-228"></a>
+
+### 1.228 A frontier stub's join was a doorway -- BUILT 2026-10-21, residuals open
+
+The lighthouse probe (control story, chat 2; its live replay, chat 3 turn 25):
+the mainland's frontier stub hung off the rock's landing by the mint's
+`open_door` with no distance, across 14.5 km of channel, and every reader took
+the doorway at its word -- "Through the open doorway is The Landing" from the
+mainland at the far end of a skip, a shout on the landing heard there in full,
+a walk of one step, a door on the map (`Design.md`: "A frontier stub's join
+says the place lies that way, never that a door opens onto it"). Until the
+place is built the join is now read as the way it is: across the medium where
+a medium room joins both ends, an unmeasured `far` way otherwise -- and a far
+join is SAID, never seen through: the view at either end tells the way goes on
+to the other ("From here the way goes on to The Supernatural Quarter.", "Up
+from here is Shaft Above."; all 32 far joins of the corpus), the Room's
+frontier being a space held open for exploring. What that leaves:
+
+- **A built place's join comes back as the mint wrote it.** Once a beat
+  describes the stub, or a plan claims it, the join stands as written -- and
+  unless a hand redeclares it, what is written is the mint's `open_door` with
+  no distance: the lighthouse's mainland, once described, would open on the
+  landing through a doorway across the channel again. PS8's rule ("an
+  opening, not a door", `structure.mint_frontier`) covers only the stub's
+  side; `prepare_frontier_expansion` still mints the holder's side
+  `open_door` (and its reference edge, and `claim_frontier_spaces`' direct
+  fill), and `_settle_stub_barriers` copies it back onto the stub's. The
+  owner's call: complete PS8 on the holder's side, or mint the join `{open,
+  far}` -- either changes every built frontier join's default.
+- **A Japanese view says nothing of the way going on.** The onward line is the
+  pack's own `opening_onward` (`ここから道は{room}へ続いている。`, and its up and
+  down forms), and the Japanese adapter renders no openings at all
+  (`language_adapters/japanese.py::_environment`; UNBUILT_PERCEPTION's light
+  field entry registers it): a Japanese page tells neither a doorway nor a way
+  going on, as before this fix.
+- **A body still walks onto the water by the medium's own ways.** With the
+  join gone, the mainland reaches the landing through the channel's `open`
+  ways (`passable_path`: the channel, then the landing). The skip refuses it
+  (`skip_itinerary.Ways`, `no_crossing`); an ordinary beat's walk and the
+  town's charter do not read `medium_rooms`. That is the medium's class, not
+  this one; the owner's call whether a walk should.
+- **Lane B2's skip-only refusal (`skip_itinerary.Ways`'s `frontier_joins`,
+  `skip_stage.frontier_stubs`).** For a join across a medium it is now
+  redundant: `charter_space.people_neighbors` and `neighbor_map` no longer
+  offer it, and the medium's own ways fail `no_crossing`. For a far join it is
+  STRICTER than this class -- the skip refuses with `no_route` a way this
+  class walks at a far way's price (`charter_move.edge_seconds`, 240 paces
+  now) -- and it reads the registry's `provisional` alone, so a stub a beat
+  has described is still refused there. The merge decides: drop the
+  refusal, or keep it as the skip's own policy and read `held_open_from`.
+- **One reading of the medium (2026-10-21).** `spatial_transit.medium_rooms`
+  and `MEDIUM_FLOORS` are the one owner; `skip_itinerary.media` and its
+  `MEDIUM_FLOORS` are the same objects, imported (lane B2's copy removed). The
+  guard on the floor word is the owner's to rule once.
+- **Three readers still read the raw join, deliberately or untested.** The
+  Writers' Room's map (`story/room_slice`, `structure.planned_topology`)
+  counts it a hop -- author knowledge, not a body's way; the weather's depth
+  (`weather.weather_depth`) still reads it as an opening onto the sky; and the
+  far layer's own graph (`landscape._build_graph`) still holds it, though in
+  the probe it went by the measured channel ("To the west, past the channel,
+  you can see The Landing").
+- **Scent still crosses it as it crosses every far way**
+  (`spatial_scent_field.scent_edges`: an `open` way passes half the air a
+  beat, whatever its length); the class here is sight, sound, a walk and the
+  map.
+- **A test's premise moved.** `tests/test_a_room_in_view_is_built_before_
+  anyone_walks_in.py::test_a_frontier_space_held_open_is_left_for_the_
+  writers_room` says a held-open stub "is in view through its opening like
+  any room"; in a live scene, which now carries the marks, it is not
+  (`visible_adjacent_rooms`), and the test passes because it builds its
+  scene by hand without them. Nothing built changes: `rooms_to_build`
+  excluded the stub either way.
+- **§1.166's skip residuals narrowed, not edited here.** "Nothing typed tells
+  a frontier across the sea from one across a gate": the channel's own
+  `floor: water`, joined to both ends, now does; the farmhouse's pasture reads
+  `far`. "The town's charter walks the same ways the stage no longer walks":
+  it no longer walks a join across a medium; it walks a far one at the far
+  price, and still walks the water itself.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

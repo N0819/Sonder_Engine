@@ -49,6 +49,12 @@ from __future__ import annotations
 
 import re
 
+# WHAT ONLY A VESSEL CROSSES HAS ONE READING, the spatial layer's
+# (`spatial_transit.MEDIUM_FLOORS`, `medium_rooms`): a frontier stub's join is
+# read by it too (`spatial_barriers.frontier_joins`), and two copies of one
+# guard on the floor word could drift apart with nothing reporting it.
+from world.spatial import MEDIUM_FLOORS, medium_rooms
+
 #: THE TRIGGER (owner's question 1 of the design note's § 6): the input's
 #: kept skip must pass at least this many story seconds before the cast are
 #: asked to live through it. Below it the ordinary beat covers the stretch.
@@ -148,17 +154,6 @@ FAILURE_REASONS = (REASON_NO_ROUTE, REASON_SHUT_WAY, REASON_TOO_FAR,
 #: stood (the memory writer reads `where_text` as where the stretch was).
 ROUTE_REASONS = (REASON_NO_ROUTE, REASON_SHUT_WAY, REASON_TOO_FAR,
                  REASON_NO_CROSSING)
-
-#: A FLOOR NO BODY STANDS ON, as a room's own `floor` word says it: the
-#: room author writes what a floor is made of in one word
-#: (`prose_contract/layout_sort`), and this is the one such word that is no
-#: footing. Read as `spatial_sound_field.FLOOR_IMPACT_DB` reads a floor
-#: word, and like that table a word it does not hold is footing -- a room it
-#: misses is walked as it always was. Measured (2026-10-21): the control
-#: story's channel (`floor: water`, edges of 13 and 1.5 km) is the only room
-#: of the owner's 144 stored scenes and the three probe stories whose floor
-#: is not footing. A guard on a typed field's value; the owner rules on it.
-MEDIUM_FLOORS = frozenset({"water"})
 
 #: How many things one decision-model question about a thing offers: what
 #: the mind has on it first, then the things and fixtures of the place it
@@ -987,30 +982,14 @@ def _transit_of(entity):
     return transit if isinstance(transit, dict) else None
 
 
-def media(scene):
-    """`{room id}` -- the rooms a body does not walk into, across or out of:
-    the space a vessel under way moves through (its transit's `route_room`,
-    the medium the engine names it -- the water, the sky, the shaft; see
-    `planning_needs`' `transit_route_unplanned`), and a room whose own floor
-    is water (`MEDIUM_FLOORS`). A way across either is a vessel's."""
-    from world.spatial import _UNDER_WAY_PHASES, scene_room_id
-    scene = scene if isinstance(scene, dict) else {}
-    rooms = scene.get("rooms") or {}
-    out = set()
-    for rid, room in rooms.items():
-        if isinstance(room, dict) and \
-                " ".join(str(room.get("floor") or "").split()).casefold() in MEDIUM_FLOORS:
-            out.add(str(rid))
-    for ent in (scene.get("entities") or {}).values():
-        transit = _transit_of(ent)
-        if not transit or str(transit.get("phase") or "").strip().casefold() \
-                not in _UNDER_WAY_PHASES:
-            continue
-        route = str(transit.get("route_room") or "").strip()
-        route = route if route in rooms else scene_room_id(scene, route)
-        if route in rooms:
-            out.add(str(route))
-    return out
+#: `{room id}` -- the rooms a body does not walk into, across or out of: the
+#: space a vessel under way moves through (its transit's `route_room`, the
+#: medium the engine names it -- the water, the sky, the shaft; see
+#: `planning_needs`' `transit_route_unplanned`), and a room whose own floor is
+#: water (`MEDIUM_FLOORS`). A way across either is a vessel's. The spatial
+#: layer's reading itself (`spatial.medium_rooms`), under the name the skip's
+#: executor has always called it by.
+media = medium_rooms
 
 
 def frontier_joins(stubs):

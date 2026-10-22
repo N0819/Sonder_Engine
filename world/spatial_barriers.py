@@ -594,8 +594,141 @@ def route_memory_barrier(value) -> bool:
 _AMBIENT_BARRIERS = {"open", "open_door", "bars"}
 
 
+# ---------------------------------------------------------------------------
+# A frontier stub's join: the place lies that way (2026-10-21)
+# ---------------------------------------------------------------------------
+
+#: What an unbuilt frontier stub's join is, read as the way it really is
+#: (`frontier_joins`). MEDIUM: the stub lies across a medium the world holds
+#: -- water, or the space a vessel under way moves through (`spatial_transit.
+#: medium_rooms`) -- joined to both ends, so the medium's own measured ways
+#: are the way and the join is none. FAR: the place lies that way at a
+#: distance nobody stated, an unmeasured `far` way (`frontier_way`).
+FRONTIER_MEDIUM = "medium"
+FRONTIER_FAR = "far"
+
+#: The barriers a frontier MINT writes on its join: `structure.mint_frontier`
+#: gives the stub's side `open`, `structure.prepare_frontier_expansion` the
+#: holder's `open_door`, and `structure._settle_stub_barriers` copies the
+#: holder's back onto the stub's. Neither says what stands between -- the
+#: mint's own words are "an opening, not a door". Any other barrier on a
+#: join was written by a hand, and it is the join's own typed word.
+_FRONTIER_MINT_BARRIERS = frozenset({"open", "open_door"})
+
+
+def held_open_from(room) -> str:
+    """The room an UNBUILT frontier stub hangs off, or "" for any other room.
+
+    A frontier stub is the plan holding a space open past the map's edge:
+    `structure.mint_frontier` mints it from an axis, `provisional`, with the
+    room it was minted off in `frontier_of.room`, and the fringe carries both
+    marks onto the live stub for as long as the registry says the space is
+    held open (`structure.materialize_planned_fringe`). It is BUILT, and this
+    answers "", once a plan claims it (the claim rewrites the row without
+    `provisional`) or a beat describes it (a `desc`; `structure.
+    settle_developed_stubs` takes the plan's flags off). Typed fields only."""
+    if not isinstance(room, dict) or not room.get("provisional") \
+            or not room.get("planned"):
+        return ""
+    if str(room.get("desc") or room.get("description") or "").strip():
+        return ""
+    origin = room.get("frontier_of")
+    return str(origin.get("room") or "").strip() if isinstance(origin, dict) else ""
+
+
+def frontier_joins(scene) -> dict:
+    """`{frozenset((stub, holder)): FRONTIER_MEDIUM | FRONTIER_FAR}` -- the
+    join of every unbuilt frontier stub (`held_open_from`) to the room it
+    hangs off, read as the way it really is.
+
+    A FRONTIER STUB STANDS FOR A PLACE BEYOND THE MAP'S EDGE. Its join says
+    the place lies that way; it does not say a door opens onto it -- yet the
+    mint writes it as one, `open_door` with no distance on the holder's side
+    and settled onto the stub's. Every reader then took the doorway at its
+    word. Measured on the lighthouse (control story, chat 2; its live replay,
+    chat 3 turn 25): the mainland's stub hangs off the rock's landing by that
+    join while the open water between them, `the_channel` (`floor: water`),
+    measures 1.5 km to the landing and 13 km to the mainland; at the far end
+    of a skip that left the boatman on the mainland his own view read "You
+    are in The Mainland. Through the open doorway is The Landing", a shout
+    on the landing reached him through it, and before lane B2 the skip
+    walked him home across the sea in ten minutes. B2 refused the join
+    inside the skip alone (`skip_itinerary.Ways`); sight, sound, ordinary
+    movement, routing and the map all still read a doorway.
+
+    So until the place is built the join is read as what it is, from typed
+    fields alone: ACROSS A MEDIUM where a medium room joins both ends -- the
+    stub lies past the water a vessel crosses, and the medium's own ways,
+    with their measures, are the way, so the join is no way of its own
+    (`neighbor_map`, `effective_adjacent` drop it; `spatial_rel` answers
+    across the medium); otherwise an UNMEASURED FAR WAY (`frontier_way`).
+    Either way nothing is seen or heard through it as a doorway, and no
+    doorway is drawn on it. Built -- claimed, or described -- the join
+    stands as written, and nothing here touches it.
+
+    One pass over the rooms; a scene with no held-open stub costs exactly
+    that and answers `{}`."""
+    rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
+    if not isinstance(rooms, dict):
+        return {}
+    stubs = {}
+    for rid, room in rooms.items():
+        holder = held_open_from(room)
+        if holder and holder != str(rid) and isinstance(rooms.get(holder), dict):
+            stubs[str(rid)] = holder
+    if not stubs:
+        return {}
+    # Every pair some way joins, declared from either side; a wall is no
+    # way, and a medium that only walls a room off is not between anything.
+    joined = set()
+    for rid, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or ():
+            if isinstance(edge, dict) and edge.get("to") \
+                    and normalize_barrier(resolve_edge(scene, edge).get("barrier")) != "wall":
+                joined.add(frozenset((str(rid), str(edge["to"]))))
+    from world.spatial_transit import medium_rooms
+    media = medium_rooms(scene)
+    out = {}
+    for stub, holder in stubs.items():
+        across = any(m not in (stub, holder)
+                     and frozenset((m, stub)) in joined
+                     and frozenset((m, holder)) in joined
+                     for m in media)
+        out[frozenset((stub, holder))] = FRONTIER_MEDIUM if across else FRONTIER_FAR
+    return out
+
+
+def frontier_join_of(scene, a, b, joins=None) -> str:
+    """FRONTIER_MEDIUM or FRONTIER_FAR where `a` and `b` are an unbuilt
+    frontier stub and the room it hangs off (`frontier_joins`), else ""."""
+    if not a or not b or str(a) == str(b):
+        return ""
+    joins = frontier_joins(scene) if joins is None else joins
+    return joins.get(frozenset((str(a), str(b))), "") if joins else ""
+
+
+def frontier_way(edge) -> dict:
+    """A frontier join as an UNMEASURED FAR WAY: a copy of `edge` (the scene
+    is never written by a read) whose barrier is `open` where the mint wrote
+    it (`_FRONTIER_MINT_BARRIERS`) and a hand's word where a hand wrote one,
+    whose `distance` is the one the edge states or else `far` -- the
+    normalizer's tier for a way that covers ground, which every reader of a
+    long way prices (`spatial_routing.LONG_WAY_TIERS`) -- and which says
+    what it is: `frontier_join`, read by the senses that look THROUGH a way
+    (sight, light), for which the place beyond is not built to be seen."""
+    out = dict(edge)
+    if normalize_barrier(edge.get("barrier")) in _FRONTIER_MINT_BARRIERS:
+        out["barrier"] = "open"
+    if edge.get("distance") in (None, "", {}, []):
+        out["distance"] = FRONTIER_FAR
+    out["frontier_join"] = FRONTIER_FAR
+    return out
+
+
 def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
-                 directional=False, crossable=None) -> dict:
+                 directional=False, crossable=None, relevance=False) -> dict:
     """{room_id: {rooms one step away}}, undirected, over the edges a caller
     is willing to cross.
 
@@ -632,9 +765,20 @@ def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
     for every edge that names no direction. See `passage_direction`: the
     direction is a FIELD, and the absence of a reciprocal edge has never been
     one.
+
+    An unbuilt frontier stub's join is read as the way it really is
+    (`frontier_joins`): no edge across a medium, an unmeasured far way
+    otherwise. `relevance` keeps it as declared, for the one walk that asks
+    what a beat may be ABOUT rather than what a body or a sense crosses
+    (`spatial_routing.nearby_rooms`, a stage's payload): a place that lies
+    that way is a place the beat may be about -- a boat bound for it, a road
+    that leaves for it -- wherever it lies.
     """
     rooms = scene.get("rooms") or {}
     neighbors: dict[str, set] = {}
+    # An unbuilt frontier stub's join is the way it really is: none across a
+    # medium, an unmeasured far way otherwise (`frontier_joins`).
+    held = {} if relevance else frontier_joins(scene)
     for room_id, room in rooms.items():
         if not isinstance(room, dict):
             continue
@@ -650,6 +794,11 @@ def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
             # passage record, `DESIGN_ROOM_FIDELITY.md` §5), per edge as
             # always when it does not.
             edge = resolve_edge(scene, edge)
+            join = held.get(frozenset((str(room_id), str(target)))) if held else ""
+            if join == FRONTIER_MEDIUM:
+                continue
+            if join:
+                edge = frontier_way(edge)
             if barriers is not None \
                     and normalize_barrier(edge.get("barrier")) not in barriers:
                 continue
@@ -795,17 +944,38 @@ def effective_adjacent(scene: dict, room_id) -> list:
     # holds, as it always was.
     own = [resolve_edge(scene, e) for e in ((room or {}).get("adjacent") or [])
            if isinstance(e, dict) and e.get("to")]
-    named = {str(e["to"]) for e in own}
+    # AN UNBUILT FRONTIER STUB'S JOIN IS THE WAY IT REALLY IS (`frontier_
+    # joins`): across a medium it is no way of this room's -- the medium's
+    # own ways are -- and otherwise an unmeasured far way, a copy marked
+    # `frontier_join`. Named either way, so the far side's echo of a join
+    # dropped here is not derived back in below.
+    held = frontier_joins(scene)
+    if held:
+        kept = []
+        for e in own:
+            join = held.get(frozenset((str(room_id), str(e["to"]))))
+            if join == FRONTIER_MEDIUM:
+                continue
+            kept.append(frontier_way(e) if join else e)
+        named = {str(e["to"]) for e in own}
+        own = kept
+    else:
+        named = {str(e["to"]) for e in own}
     out = list(own)
     for other_id, other in rooms.items():
         if str(other_id) == str(room_id) or str(other_id) in named \
                 or not isinstance(other, dict):
+            continue
+        join = held.get(frozenset((str(room_id), str(other_id)))) if held else ""
+        if join == FRONTIER_MEDIUM:
             continue
         for edge in other.get("adjacent") or []:
             if not isinstance(edge, dict) \
                     or str(edge.get("to")) != str(room_id):
                 continue
             edge = resolve_edge(scene, edge)
+            if join:
+                edge = frontier_way(edge)
             if normalize_barrier(edge.get("barrier")) == "wall":
                 continue
             derived = {k: v for k, v in edge.items()
